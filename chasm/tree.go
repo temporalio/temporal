@@ -327,12 +327,7 @@ func newTreeInitSearchAttributesAndMemo(
 	root *Node,
 	registry *Registry,
 ) error {
-	immutableContext := augmentContextForArchetypeID(
-		NewContext(context.Background(), root),
-		root.ArchetypeID(),
-		registry,
-	)
-
+	immutableContext := NewContext(context.Background(), root)
 	rootComponent, err := root.Component(immutableContext, ComponentRef{})
 	if err != nil {
 		return err
@@ -496,7 +491,7 @@ func (n *Node) validateAccessHelper(ctx Context) error {
 	}
 	componentValue, _ := n.value.(Component) //nolint:revive // unchecked-type-assertion
 
-	if componentValue.LifecycleState(AugmentContextForComponent(ctx, componentValue, n.registry)).IsClosed() {
+	if componentValue.LifecycleState(ctx).IsClosed() {
 		return errAccessCheckFailed
 	}
 
@@ -1446,12 +1441,7 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		TransitionCount:          n.backend.NextTransitionCount(),
 	}
 
-	immutableContext := augmentContextForArchetypeID(
-		NewContext(context.TODO(), n),
-		n.ArchetypeID(),
-		n.registry,
-	)
-
+	immutableContext := NewContext(context.TODO(), n)
 	rootLifecycleChanged, err := n.closeTransactionHandleRootLifecycleChange(immutableContext)
 	if err != nil {
 		return NodesMutation{}, err
@@ -2114,7 +2104,10 @@ func (n *Node) andAllChildren() iter.Seq2[[]string, *Node] {
 				return false
 			}
 			for _, child := range node.children {
-				if !walk(append(path, child.nodeName), child) {
+				childPath := make([]string, len(path)+1)
+				copy(childPath, path)
+				childPath[len(path)] = child.nodeName
+				if !walk(childPath, child) {
 					return false
 				}
 			}
@@ -2233,11 +2226,7 @@ func (n *Node) ApplyMutation(
 	//
 	// TODO: combine this with the logic in CloseTransactionForceUpdateVisibility
 	// right that force update logic only applies to the active cluster.
-	immutableContext := augmentContextForArchetypeID(
-		NewContext(context.Background(), n),
-		n.ArchetypeID(),
-		n.registry,
-	)
+	immutableContext := NewContext(context.TODO(), n)
 	rootComponent, err := n.root().Component(immutableContext, ComponentRef{})
 	if err != nil {
 		return err
@@ -2562,16 +2551,11 @@ func (n *Node) Terminate(
 		)
 	}
 
-	mutableContext := augmentContextForArchetypeID(
-		NewMutableContext(context.Background(), n.root()),
-		n.ArchetypeID(),
-		n.registry,
-	)
+	mutableContext := NewMutableContext(context.TODO(), n.root())
 	component, err := n.Component(mutableContext, ComponentRef{})
 	if err != nil {
 		return err
 	}
-
 	rootComponent, ok := component.(RootComponent)
 	if !ok {
 		return softassert.UnexpectedInternalErr(
@@ -3145,31 +3129,74 @@ func (n *Node) ValidateSideEffectTask(
 // ctx should have a CHASM engine already set.
 func (n *Node) ExecuteSideEffectTask(
 	ctx context.Context,
-	registry *Registry,
 	executionKey ExecutionKey,
 	chasmTask *tasks.ChasmTask,
 	validate func(NodeBackend, Context, Component) error,
-) (retErr error) {
+) error {
+	rt, err := n.lookupSideEffectTask(ctx, "ExecuteSideEffectTask", chasmTask)
+	if err != nil {
+		return err
+	}
+	return n.invokeSideEffectTaskFn(ctx, rt, executionKey, chasmTask, validate, rt.sideEffectTaskExecuteFn)
+}
 
+// ExecuteSideEffectDiscardTask executes the discard handler for the given ChasmTask. This is called on standby
+// clusters when a side effect task has been pending past the discard delay, allowing custom discard behavior
+// (e.g., spilling activity tasks to matching).
+func (n *Node) ExecuteSideEffectDiscardTask(
+	ctx context.Context,
+	executionKey ExecutionKey,
+	chasmTask *tasks.ChasmTask,
+	validate func(NodeBackend, Context, Component) error,
+) error {
+	rt, err := n.lookupSideEffectTask(ctx, "ExecuteSideEffectDiscardTask", chasmTask)
+	if err != nil {
+		return err
+	}
+	if !rt.HasDiscardHandler() {
+		return softassert.UnexpectedInternalErr(
+			n.logger,
+			"ExecuteSideEffectDiscardTask called on executor without SideEffectTaskDiscarder",
+			fmt.Errorf("%s", rt.fqType()))
+	}
+	return n.invokeSideEffectTaskFn(ctx, rt, executionKey, chasmTask, validate, rt.sideEffectTaskDiscardFn)
+}
+
+func (n *Node) lookupSideEffectTask(
+	ctx context.Context,
+	callerName string,
+	chasmTask *tasks.ChasmTask,
+) (*RegistrableTask, error) {
 	if engineFromContext(ctx) == nil {
-		return serviceerror.NewInternal("no CHASM engine set on context")
+		return nil, serviceerror.NewInternal("no CHASM engine set on context")
 	}
 
-	taskInfo := chasmTask.Info
-	taskTypeID := taskInfo.TypeId
-	registrableTask, ok := registry.TaskByID(taskTypeID)
+	taskTypeID := chasmTask.Info.TypeId
+	registrableTask, ok := n.registry.TaskByID(taskTypeID)
 	if !ok {
-		return softassert.UnexpectedInternalErr(
+		return nil, softassert.UnexpectedInternalErr(
 			n.logger,
 			"unknown task type id",
 			fmt.Errorf("%d", taskTypeID))
 	}
 	if registrableTask.isPureTask {
-		return softassert.UnexpectedInternalErr(
+		return nil, softassert.UnexpectedInternalErr(
 			n.logger,
-			"ExecuteSideEffectTask called on a Pure task, task type: ",
+			callerName+" called on a Pure task",
 			fmt.Errorf("%s", registrableTask.fqType()))
 	}
+	return registrableTask, nil
+}
+
+func (n *Node) invokeSideEffectTaskFn(
+	ctx context.Context,
+	registrableTask *RegistrableTask,
+	executionKey ExecutionKey,
+	chasmTask *tasks.ChasmTask,
+	validate func(NodeBackend, Context, Component) error,
+	taskFn func(context.Context, ComponentRef, TaskAttributes, any) error,
+) (retErr error) {
+	taskInfo := chasmTask.Info
 
 	defer func() {
 		if rec := recover(); rec != nil {
@@ -3212,12 +3239,7 @@ func (n *Node) ExecuteSideEffectTask(
 
 	defer log.CapturePanic(n.logger, &retErr)
 
-	return registrableTask.sideEffectTaskExecuteFn(
-		ctx,
-		ref,
-		taskAttributes,
-		taskValue.Interface(),
-	)
+	return taskFn(ctx, ref, taskAttributes, taskValue.Interface())
 }
 
 func (n *Node) ComponentByPath(

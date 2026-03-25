@@ -129,11 +129,11 @@ func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
 		ms historyi.MutableState,
 		_ historyi.ReleaseWorkflowContextFunc,
 	) (any, error) {
-		return validateChasmSideEffectTask(
-			ctx,
-			ms,
-			task,
-		)
+		valid, err := validateChasmSideEffectTask(ctx, ms, task)
+		if err != nil || !valid {
+			return nil, err
+		}
+		return ms.ChasmTree(), nil
 	}
 
 	chasmTaskType, _ := t.shardContext.ChasmRegistry().TaskFqnByID(task.Info.GetTypeId())
@@ -146,8 +146,39 @@ func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
 			task,
 			t.getCurrentTime,
 			t.config.ChasmStandbyTaskDiscardDelay(chasmTaskType),
-			t.checkExecutionStillExistsOnSourceBeforeDiscard,
+			t.discardChasmTask,
 		),
+	)
+}
+
+func (t *transferQueueStandbyTaskExecutor) discardChasmTask(
+	ctx context.Context,
+	taskInfo tasks.Task,
+	postActionInfo any,
+	logger log.Logger,
+) error {
+	if postActionInfo == nil {
+		return nil
+	}
+	chasmTree, ok := postActionInfo.(historyi.ChasmTree)
+	if !ok {
+		return serviceerror.NewInternal("postActionInfo is not a ChasmTree")
+	}
+	chasmTask, ok := taskInfo.(*tasks.ChasmTask)
+	if !ok {
+		return serviceerror.NewInternal("taskInfo is not a ChasmTask")
+	}
+
+	return discardChasmSideEffectTask(
+		ctx,
+		t.chasmEngine,
+		t.shardContext.ChasmRegistry(),
+		chasmTree,
+		chasmTask,
+		logger,
+		t.clusterName,
+		t.clientBean,
+		t.shardContext.GetNamespaceRegistry(),
 	)
 }
 

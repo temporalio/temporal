@@ -1384,8 +1384,8 @@ second per poller by one physical queue manager`,
 	)
 	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",
-		ConvertGradualChange(false),
-		StaticGradualChange(false),
+		ConvertGradualChange(true),
+		StaticGradualChange(true),
 		`Use priority-enabled TaskMatcher`,
 	)
 	MatchingEnableFairness = NewTaskQueueTypedSettingWithConverter(
@@ -1396,7 +1396,7 @@ second per poller by one physical queue manager`,
 	)
 	MatchingEnableMigration = NewTaskQueueBoolSetting(
 		"matching.enableMigration",
-		false,
+		true,
 		`Allows migration between v1 and v2 (fairness) task backlogs.`,
 	)
 	MatchingPriorityLevels = NewTaskQueueIntSetting(

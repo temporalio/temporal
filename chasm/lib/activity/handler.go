@@ -242,7 +242,7 @@ func (h *handler) DeleteActivityExecution(
 func (h *handler) TerminateActivityExecution(
 	ctx context.Context,
 	req *activitypb.TerminateActivityExecutionRequest,
-) (response *activitypb.TerminateActivityExecutionResponse, err error) {
+) (*activitypb.TerminateActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
 
 	ref := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
@@ -251,22 +251,14 @@ func (h *handler) TerminateActivityExecution(
 		RunID:       frontendReq.GetRunId(),
 	})
 
-	namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-
-	response, _, err = chasm.UpdateComponent(
+	_, _, err := chasm.UpdateComponent(
 		ctx,
 		ref,
-		(*Activity).handleTerminated,
-		terminateRequestEvent{
-			request: req,
-			MetricsHandlerBuilderParams: MetricsHandlerBuilderParams{
-				Handler:                     h.metricsHandler,
-				NamespaceName:               namespaceName.String(),
-				BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
-			},
+		(*Activity).Terminate,
+		chasm.TerminateComponentRequest{
+			Reason:    frontendReq.GetReason(),
+			Identity:  frontendReq.GetIdentity(),
+			RequestID: frontendReq.GetRequestId(),
 		},
 	)
 
@@ -274,7 +266,7 @@ func (h *handler) TerminateActivityExecution(
 		return nil, err
 	}
 
-	return response, nil
+	return &activitypb.TerminateActivityExecutionResponse{}, nil
 }
 
 // RequestCancelActivityExecution requests cancellation of an activity execution.
@@ -290,23 +282,11 @@ func (h *handler) RequestCancelActivityExecution(
 		RunID:       frontendReq.GetRunId(),
 	})
 
-	namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-
 	response, _, err = chasm.UpdateComponent(
 		ctx,
 		ref,
 		(*Activity).handleCancellationRequested,
-		requestCancelEvent{
-			request: req,
-			MetricsHandlerBuilderParams: MetricsHandlerBuilderParams{
-				Handler:                     h.metricsHandler,
-				NamespaceName:               namespaceName.String(),
-				BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
-			},
-		},
+		req,
 	)
 	if err != nil {
 		return nil, err

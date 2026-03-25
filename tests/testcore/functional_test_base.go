@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -92,13 +93,15 @@ type (
 	}
 	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
-		ServiceOptions         map[primitives.ServiceName][]fx.Option
-		DynamicConfigOverrides map[dynamicconfig.Key]any
-		ArchivalEnabled        bool
-		EnableMTLS             bool
-		FaultInjectionConfig   *config.FaultInjection
-		NumHistoryShards       int32
-		SharedCluster          bool
+		ServiceOptions                  map[primitives.ServiceName][]fx.Option
+		DynamicConfigOverrides          map[dynamicconfig.Key]any
+		ArchivalEnabled                 bool
+		EnableMTLS                      bool
+		FaultInjectionConfig            *config.FaultInjection
+		NumHistoryShards                int32
+		SharedCluster                   bool
+		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
+		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 	}
 	TestClusterOption func(params *TestClusterParams)
 )
@@ -164,6 +167,18 @@ func WithNumHistoryShards(n int32) TestClusterOption {
 func WithSharedCluster() TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.SharedCluster = true
+	}
+}
+
+func WithCustomHistoryArchiverFactory(factory provider.CustomHistoryArchiverFactory) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.CustomHistoryArchiverFactory = factory
+	}
+}
+
+func WithCustomVisibilityArchiverFactory(factory provider.CustomVisibilityArchiverFactory) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.CustomVisibilityArchiverFactory = factory
 	}
 }
 
@@ -268,11 +283,13 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		HistoryConfig: HistoryConfig{
 			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
 		},
-		DynamicConfigOverrides: params.DynamicConfigOverrides,
-		ServiceFxOptions:       params.ServiceOptions,
-		EnableMetricsCapture:   true,
-		EnableArchival:         params.ArchivalEnabled,
-		EnableMTLS:             params.EnableMTLS,
+		DynamicConfigOverrides:          params.DynamicConfigOverrides,
+		ServiceFxOptions:                params.ServiceOptions,
+		EnableMetricsCapture:            true,
+		EnableArchival:                  params.ArchivalEnabled,
+		EnableMTLS:                      params.EnableMTLS,
+		CustomHistoryArchiverFactory:    params.CustomHistoryArchiverFactory,
+		CustomVisibilityArchiverFactory: params.CustomVisibilityArchiverFactory,
 	}
 
 	// Apply configuration for shared clusters.

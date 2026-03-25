@@ -230,7 +230,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
-			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, readFn func(chasm.Context, chasm.Component, *chasm.Registry) error, opts ...chasm.TransitionOption) error {
+			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, readFn func(chasm.Context, chasm.Component) error, opts ...chasm.TransitionOption) error {
 				mockCtx := &chasm.MockContext{
 					HandleNow: func(component chasm.Component) time.Time {
 						return timeSource.Now()
@@ -239,14 +239,14 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 						return []byte{}, nil
 					},
 				}
-				return readFn(mockCtx, callback, chasmRegistry)
+				return readFn(mockCtx, callback)
 			})
 
 			mockEngine.EXPECT().UpdateComponent(
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
-			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error, opts ...chasm.TransitionOption) ([]any, error) {
+			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, opts ...chasm.TransitionOption) ([]any, error) {
 				mockCtx := &chasm.MockMutableContext{
 					MockContext: chasm.MockContext{
 						HandleNow: func(component chasm.Component) time.Time {
@@ -257,7 +257,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 						},
 					},
 				}
-				err := updateFn(mockCtx, callback, chasmRegistry)
+				err := updateFn(mockCtx, callback)
 				return nil, err
 			})
 
@@ -614,7 +614,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
-			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, readFn func(chasm.Context, chasm.Component, *chasm.Registry) error, opts ...chasm.TransitionOption) error {
+			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, readFn func(chasm.Context, chasm.Component) error, opts ...chasm.TransitionOption) error {
 				// Create a mock context
 				mockCtx := &chasm.MockContext{
 					HandleNow: func(component chasm.Component) time.Time {
@@ -633,14 +633,14 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				}
 
 				// Call the readFn with our callback
-				return readFn(mockCtx, callback, chasmRegistry)
+				return readFn(mockCtx, callback)
 			})
 
 			mockEngine.EXPECT().UpdateComponent(
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
-			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error, opts ...chasm.TransitionOption) ([]any, error) {
+			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, opts ...chasm.TransitionOption) ([]any, error) {
 				// Create a mock mutable context
 				mockCtx := &chasm.MockMutableContext{
 					MockContext: chasm.MockContext{
@@ -654,7 +654,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				}
 
 				// Call the updateFn with our callback
-				err := updateFn(mockCtx, callback, chasmRegistry)
+				err := updateFn(mockCtx, callback)
 				return nil, err
 			})
 
