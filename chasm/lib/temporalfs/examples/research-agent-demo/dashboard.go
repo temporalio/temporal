@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	maxFeedLines  = 12
+	maxFeedLines  = 24
 	refreshRate   = 200 * time.Millisecond
 	boxInnerWidth = 66
 
