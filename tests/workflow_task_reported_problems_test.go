@@ -84,7 +84,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 
 	s.shouldFail.Store(true)
 
-	s.Worker().RegisterWorkflow(s.simpleWorkflowWithShouldFail)
+	s.SdkWorker().RegisterWorkflow(s.simpleWorkflowWithShouldFail)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
@@ -126,7 +126,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Not
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	s.Worker().RegisterWorkflow(s.workflowWithSignalsThatFails)
+	s.SdkWorker().RegisterWorkflow(s.workflowWithSignalsThatFails)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
@@ -193,8 +193,8 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 
 	s.shouldFail.Store(true)
 
-	s.Worker().RegisterWorkflow(s.workflowWithActivity)
-	s.Worker().RegisterActivity(s.simpleActivity)
+	s.SdkWorker().RegisterWorkflow(s.workflowWithActivity)
+	s.SdkWorker().RegisterActivity(s.simpleActivity)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
@@ -237,7 +237,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Dyn
 	defer cleanup()
 	s.shouldFail.Store(true)
 
-	s.Worker().RegisterWorkflow(s.simpleWorkflowWithShouldFail)
+	s.SdkWorker().RegisterWorkflow(s.simpleWorkflowWithShouldFail)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),

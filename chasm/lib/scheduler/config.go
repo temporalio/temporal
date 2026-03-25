@@ -50,6 +50,11 @@ var (
 		`The upper bound on how long a service call can take before being timed out.`,
 	)
 
+	// SentinelIdleTime is how long a CHASM sentinel reserves the schedule ID
+	// before auto-closing via the idle task mechanism. Matches the dummy
+	// workflow's duration.
+	SentinelIdleTime = 15 * time.Minute
+
 	DefaultTweakables = Tweakables{
 		DefaultCatchupWindow:              365 * 24 * time.Hour,
 		MinCatchupWindow:                  10 * time.Second,

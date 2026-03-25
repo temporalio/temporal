@@ -175,7 +175,7 @@ func (d *matchingTaskStoreV1) GetTasks(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailablef("GetTasks operation failed. Error: %v", err)
+		return nil, gocql.ConvertError("GetTasks", err)
 	}
 	return response, nil
 }

@@ -491,17 +491,41 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		suggestContinueAsNewReasons = append(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_UPDATES)
 	}
 
-	// checking whether targetDeploymentVersion == nil means that we won't send the targetDeploymentVersionChanged=true
-	// to workflows that are about to transition to the target version. This is good because if their transition succeeds,
-	// they don't need to CaN-with-upgrade to start using the new version.
 	var targetDeploymentVersionChanged bool
 	if m.ms.config.EnableSendTargetVersionChanged(m.ms.namespaceEntry.Name().String()) &&
-		m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED &&
-		targetDeploymentVersion != nil {
-		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion != nil &&
-			(currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||
-				currentDeploymentVersion.SeriesName != targetDeploymentVersion.DeploymentName) {
+		m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+
+		// effectiveDeploymentVersion may be nil if the workflow is on an unversioned build;
+		// in that case proto getters return zero values and we correctly fall through to signal.
+		effectiveDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(m.ms.GetEffectiveDeployment())
+
+		switch {
+		// 1. Override active — operator controls version, don't signal. Clear any stale declined/notified state so that
+		// when/if the operator removes the override, we re-calculate the declined/notified state and appropriately fire the
+		// signal to upgrade to the version.
+		case m.ms.executionInfo.GetVersioningInfo().GetVersioningOverride() != nil:
+			m.ms.executionInfo.DeclinedTargetVersionUpgrade = nil
+			m.ms.executionInfo.LastNotifiedTargetVersion = nil
+		// 2. AutoUpgrade — will transition naturally, no CaN needed.
+		case m.ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
+		// Rest of the checks are guaranteed to have the Workflow's Effective Versioning Behavior to be Pinned in nature.
+		// 3. Already on target — nothing changed. Clear any stale declined/notified state.
+		case effectiveDeploymentVersion.GetBuildId() == targetDeploymentVersion.GetBuildId() &&
+			effectiveDeploymentVersion.GetDeploymentName() == targetDeploymentVersion.GetDeploymentName():
+			// TODO (Shivam): Revision number mechanics to strengthen this check
+			m.ms.executionInfo.DeclinedTargetVersionUpgrade = nil
+			m.ms.executionInfo.LastNotifiedTargetVersion = nil
+		// 4. Previously declined upgrade — target unchanged since the decline.
+		case m.ms.executionInfo.GetDeclinedTargetVersionUpgrade() != nil &&
+			m.ms.executionInfo.GetDeclinedTargetVersionUpgrade().GetDeploymentVersion().GetBuildId() == targetDeploymentVersion.GetBuildId() &&
+			m.ms.executionInfo.GetDeclinedTargetVersionUpgrade().GetDeploymentVersion().GetDeploymentName() == targetDeploymentVersion.GetDeploymentName():
+		default:
+			// Otherwise — target changed + did not decline to upgrade on CaN/retry. Signal the SDK.
 			targetDeploymentVersionChanged = true
+			m.ms.executionInfo.LastNotifiedTargetVersion = &persistencespb.LastNotifiedTargetVersion{
+				DeploymentVersion: targetDeploymentVersion,
+			}
+			m.ms.executionInfo.DeclinedTargetVersionUpgrade = nil
 		}
 	}
 	// emit metric

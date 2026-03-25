@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -234,7 +236,6 @@ func (s *ChasmTestSuite) TestListExecutions() {
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
 				Query:         visQuery,
@@ -288,7 +289,6 @@ func (s *ChasmTestSuite) TestListExecutions() {
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
 				Query:         visQuery + " AND PayloadTotalCount > 0",
@@ -319,7 +319,6 @@ func (s *ChasmTestSuite) TestListExecutions() {
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   s.NamespaceID().String(),
 				NamespaceName: s.Namespace().String(),
 				PageSize:      10,
 				Query:         visQuery + " AND ExecutionStatus = 'Completed' AND PayloadTotalCount > 0",
@@ -400,7 +399,6 @@ func (s *ChasmTestSuite) TestCountExecutions_GroupBy() {
 			countResp, err = chasm.CountExecutions[*tests.PayloadStore](
 				ctx,
 				&chasm.CountExecutionsRequest{
-					NamespaceID:   string(s.NamespaceID()),
 					NamespaceName: s.Namespace().String(),
 					Query:         "GROUP BY `ExecutionStatus`",
 				},
@@ -430,7 +428,6 @@ func (s *ChasmTestSuite) TestCountExecutions_GroupBy() {
 	_, err = chasm.CountExecutions[*tests.PayloadStore](
 		ctx,
 		&chasm.CountExecutionsRequest{
-			NamespaceID:   string(s.NamespaceID()),
 			NamespaceName: s.Namespace().String(),
 			Query:         "GROUP BY `PayloadTotalCount`",
 		},
@@ -576,13 +573,73 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   s.NamespaceID().String(),
 				NamespaceName: s.Namespace().String(),
 				PageSize:      10,
 				Query:         visQuery,
 			})
 			s.NoError(err)
 			return len(resp.Executions) == 0
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+}
+
+func (s *ChasmTestSuite) TestDeletePayloadStore_RunningExecution() {
+	tv := testvars.New(s.T())
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	_, err := tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID:      s.NamespaceID(),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		},
+	)
+	s.NoError(err)
+
+	visQuery := fmt.Sprintf("WorkflowId = '%s'", storeID)
+
+	// Wait for visibility record to appear.
+	s.EventuallyWithT(
+		func(t *assert.CollectT) {
+			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
+				NamespaceName: s.Namespace().String(),
+				PageSize:      10,
+				Query:         visQuery,
+			})
+			require.NoError(t, err)
+			assert.Len(t, resp.Executions, 1)
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+
+	err = tests.DeletePayloadStoreHandler(
+		ctx,
+		tests.DeletePayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+			Reason:      "test deletion",
+			Identity:    "test-identity",
+		},
+	)
+	s.NoError(err)
+
+	// Validate execution is fully deleted (both mutable state and visibility record).
+	s.EventuallyWithT(
+		func(t *assert.CollectT) {
+			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
+				NamespaceName: s.Namespace().String(),
+				PageSize:      10,
+				Query:         visQuery,
+			})
+			require.NoError(t, err)
+			assert.Empty(t, resp.Executions)
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
@@ -615,7 +672,6 @@ func (s *ChasmTestSuite) TestListExecutions_ExecutionStatusAsAlias() {
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
 				Query:         visQuery,
@@ -651,7 +707,6 @@ func (s *ChasmTestSuite) TestListExecutions_ExecutionStatusAsAlias() {
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
 				Query:         visQueryCanceled,
@@ -691,7 +746,6 @@ func (s *ChasmTestSuite) TestTaskQueuePreallocatedSearchAttribute() {
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
 				Query:         visQuery,
@@ -742,7 +796,6 @@ func (s *ChasmTestSuite) TestMutableStateRebuilder() {
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
 				Query:         visQuery,

@@ -14,6 +14,7 @@ type (
 		validateFn              validateFn
 		pureTaskExecuteFn       pureTaskExecuteFn
 		sideEffectTaskExecuteFn sideEffectTaskExecuteFn
+		sideEffectTaskDiscardFn sideEffectTaskDiscardFn
 		isPureTask              bool
 
 		// Those two fields are initialized when the component is registered to a library.
@@ -26,15 +27,25 @@ type (
 	validateFn              func(Context, any, TaskAttributes, any, *Registry) (bool, error)
 	pureTaskExecuteFn       func(MutableContext, any, TaskAttributes, any, *Registry) error
 	sideEffectTaskExecuteFn func(context.Context, ComponentRef, TaskAttributes, any) error
+	sideEffectTaskDiscardFn func(context.Context, ComponentRef, TaskAttributes, any) error
 )
 
-// NOTE: C is not Component but any.
+// NewRegistrableSideEffectTask creates a new registrable side-effect task. NOTE: C is not Component but any.
+// If the executor also implements SideEffectTaskDiscarder, the framework will call Discard instead of silently
+// discarding the task on standby clusters after the discard delay.
 func NewRegistrableSideEffectTask[C any, T any](
 	taskType string,
 	validator TaskValidator[C, T],
 	executor SideEffectTaskExecutor[C, T],
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
+	var discardFn sideEffectTaskDiscardFn
+	if discarder, ok := any(executor).(SideEffectTaskDiscarder[T]); ok {
+		discardFn = func(ctx context.Context, ref ComponentRef, attrs TaskAttributes, task any) error {
+			return discarder.Discard(ctx, ref, attrs, task.(T))
+		}
+	}
+
 	return newRegistrableTask(
 		taskType,
 		reflect.TypeFor[T](),
@@ -47,7 +58,7 @@ func NewRegistrableSideEffectTask[C any, T any](
 			registry *Registry,
 		) (bool, error) {
 			return validator.Validate(
-				AugmentContextForComponent(ctx, component, registry),
+				ctx,
 				component.(C),
 				taskAttrs,
 				taskData.(T),
@@ -63,6 +74,7 @@ func NewRegistrableSideEffectTask[C any, T any](
 			return executor.Execute(ctx, componentRef, taskAttrs, taskData.(T))
 		},
 		false,
+		discardFn,
 		opts...,
 	)
 }
@@ -85,7 +97,7 @@ func NewRegistrablePureTask[C any, T any](
 			registry *Registry,
 		) (bool, error) {
 			return validator.Validate(
-				AugmentContextForComponent(ctx, component, registry),
+				ctx,
 				component.(C),
 				taskAttrs,
 				taskData.(T),
@@ -99,7 +111,7 @@ func NewRegistrablePureTask[C any, T any](
 			registry *Registry,
 		) error {
 			return executor.Execute(
-				AugmentContextForComponent(ctx, component, registry),
+				ctx,
 				component.(C),
 				taskAttrs,
 				taskData.(T),
@@ -107,6 +119,7 @@ func NewRegistrablePureTask[C any, T any](
 		},
 		nil, // sideEffectTaskExecuteFn is not used for pure tasks
 		true,
+		nil, // sideEffectTaskDiscardFn is not used for pure tasks
 		opts...,
 	)
 }
@@ -118,6 +131,7 @@ func newRegistrableTask(
 	pureTaskExecuteFn pureTaskExecuteFn,
 	sideEffectTaskExecuteFn sideEffectTaskExecuteFn,
 	isPureTask bool,
+	sideEffectTaskDiscardFn sideEffectTaskDiscardFn,
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
 	rt := &RegistrableTask{
@@ -127,6 +141,7 @@ func newRegistrableTask(
 		validateFn:              validateFn,
 		pureTaskExecuteFn:       pureTaskExecuteFn,
 		sideEffectTaskExecuteFn: sideEffectTaskExecuteFn,
+		sideEffectTaskDiscardFn: sideEffectTaskDiscardFn,
 		isPureTask:              isPureTask,
 	}
 
@@ -154,6 +169,12 @@ func (rt *RegistrableTask) registerToLibrary(
 // GoType returns the reflect.Type of the task's Go struct.
 func (rt *RegistrableTask) GoType() reflect.Type {
 	return rt.goType
+}
+
+// HasDiscardHandler returns true if the task's executor implements SideEffectTaskDiscarder, meaning it has custom
+// discard behavior for standby clusters.
+func (rt *RegistrableTask) HasDiscardHandler() bool {
+	return rt.sideEffectTaskDiscardFn != nil
 }
 
 // fqType returns the fully qualified name of the task, which is a combination of
