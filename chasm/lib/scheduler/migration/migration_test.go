@@ -34,7 +34,7 @@ func newTestSchedule() *schedulepb.Schedule {
 	}
 }
 
-func TestLegacyToSchedulerMigrationState(t *testing.T) {
+func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 	now := time.Now().UTC()
 	state := &schedulespb.InternalState{
 		Namespace:         "test-ns",
@@ -75,11 +75,15 @@ func TestLegacyToSchedulerMigrationState(t *testing.T) {
 			},
 		},
 	}
-	searchAttrs := map[string]*commonpb.Payload{"Attr": {Data: []byte("value")}}
-	memo := map[string]*commonpb.Payload{"Memo": {Data: []byte("memo")}}
+	searchAttrs := &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{"Attr": {Data: []byte("value")}}}
+	memo := &commonpb.Memo{Fields: map[string]*commonpb.Payload{"Memo": {Data: []byte("memo")}}}
 
-	migrationState := LegacyToSchedulerMigrationState(newTestSchedule(), info, state, searchAttrs, memo, now)
+	req := LegacyToCreateFromMigrationStateRequest(newTestSchedule(), info, state, searchAttrs, memo, now)
 
+	require.NotNil(t, req)
+	require.Equal(t, "test-ns-id", req.NamespaceId)
+
+	migrationState := req.State
 	// Scheduler state
 	require.NotNil(t, migrationState)
 	require.NotNil(t, migrationState.SchedulerState)
@@ -109,6 +113,7 @@ func TestLegacyToSchedulerMigrationState(t *testing.T) {
 			running++
 			require.Equal(t, "wf-1", start.WorkflowId)
 			require.Equal(t, "run-1", start.RunId)
+			require.False(t, start.HasCallback)
 		case start.Completed != nil:
 			completed++
 			require.Equal(t, "wf-2", start.WorkflowId)
@@ -136,8 +141,8 @@ func TestLegacyToSchedulerMigrationState(t *testing.T) {
 	require.Equal(t, "last failure", migrationState.LastCompletionResult.Failure.Message)
 
 	// Search attributes and memo
-	require.Equal(t, searchAttrs, migrationState.SearchAttributes)
-	require.Equal(t, memo, migrationState.Memo)
+	require.Equal(t, searchAttrs.GetIndexedFields(), migrationState.SearchAttributes)
+	require.Equal(t, memo.GetFields(), migrationState.Memo)
 }
 
 func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
@@ -207,15 +212,7 @@ func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
 		Failure: &failurepb.Failure{Message: "last failure"},
 	}
 
-	migrationState := &schedulerpb.SchedulerMigrationState{
-		SchedulerState:       scheduler,
-		GeneratorState:       generator,
-		InvokerState:         invoker,
-		Backfillers:          backfillers,
-		LastCompletionResult: lastCompletion,
-	}
-
-	args := SchedulerMigrationStateToLegacyStartScheduleArgs(migrationState, now)
+	args := CHASMToLegacyStartScheduleArgs(scheduler, generator, invoker, backfillers, lastCompletion, nil, nil, now)
 
 	require.Equal(t, "ns-id", args.State.NamespaceId)
 	require.Equal(t, "sched-id", args.State.ScheduleId)

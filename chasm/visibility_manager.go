@@ -42,7 +42,6 @@ type ExecutionInfo[M proto.Message] struct {
 }
 
 type ListExecutionsRequest struct {
-	NamespaceID   string
 	NamespaceName string
 	Query         string
 	PageSize      int
@@ -55,7 +54,6 @@ type ListExecutionsResponse[M proto.Message] struct {
 }
 
 type CountExecutionsRequest struct {
-	NamespaceID   string
 	NamespaceName string
 	Query         string
 }

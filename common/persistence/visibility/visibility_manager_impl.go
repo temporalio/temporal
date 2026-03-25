@@ -204,7 +204,7 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 		chasmAliasedSAs = make(map[string]chasm.VisibilityValue)
 	}
 	if exec.TaskQueue != "" {
-		chasmAliasedSAs[sadefs.TaskQueue] = chasm.VisibilityValueString(exec.TaskQueue)
+		chasmAliasedSAs[sadefs.TaskQueue] = chasm.VisibilityValueKeyword(exec.TaskQueue)
 	}
 
 	customAliasedSAs, err := searchattribute.AliasFields(
@@ -585,14 +585,8 @@ func aliasChasmSearchAttributes(
 // After Decode, the types should be correct, so simple type detection is sufficient.
 func convertToVisibilityValue(value any) chasm.VisibilityValue {
 	switch val := value.(type) {
-	case int:
-		return chasm.VisibilityValueInt64(int64(val))
-	case int32:
-		return chasm.VisibilityValueInt64(int64(val))
 	case int64:
 		return chasm.VisibilityValueInt64(val)
-	case float32:
-		return chasm.VisibilityValueFloat64(float64(val))
 	case float64:
 		return chasm.VisibilityValueFloat64(val)
 	case bool:
@@ -604,13 +598,11 @@ func convertToVisibilityValue(value any) chasm.VisibilityValue {
 		if parsedTime, err := time.Parse(time.RFC3339, val); err == nil {
 			return chasm.VisibilityValueTime(parsedTime)
 		}
-		return chasm.VisibilityValueString(val)
-	case []byte:
-		return chasm.VisibilityValueByteSlice(val)
+		return chasm.VisibilityValueKeyword(val)
 	case []string:
 		return chasm.VisibilityValueStringSlice(val)
 	default:
 		// Return as string if type is unknown
-		return chasm.VisibilityValueString(fmt.Sprintf("%v", val))
+		return chasm.VisibilityValueKeyword(fmt.Sprintf("%v", val))
 	}
 }

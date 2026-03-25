@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"go.temporal.io/api/serviceerror"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 )
@@ -67,7 +66,7 @@ func (d *userDataStore) UpdateTaskQueueUserData(
 	ctx context.Context,
 	request *p.InternalUpdateTaskQueueUserDataRequest,
 ) error {
-	batch := d.Session.NewBatch(gocql.UnloggedBatch).WithContext(ctx)
+	batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 
 	for taskQueue, update := range request.Updates {
 		if update.Version == 0 {
@@ -167,7 +166,7 @@ func (d *userDataStore) ListTaskQueueUserDataEntries(ctx context.Context, reques
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailablef("ListTaskQueueUserDataEntries operation failed. Error: %v", err)
+		return nil, gocql.ConvertError("ListTaskQueueUserDataEntries", err)
 	}
 	return response, nil
 }
@@ -201,7 +200,7 @@ func (d *userDataStore) GetTaskQueuesByBuildId(ctx context.Context, request *p.G
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailablef("GetTaskQueuesByBuildId operation failed. Error: %v", err)
+		return nil, gocql.ConvertError("GetTaskQueuesByBuildId", err)
 	}
 	return taskQueues, nil
 }

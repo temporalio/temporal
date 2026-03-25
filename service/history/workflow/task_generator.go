@@ -13,7 +13,6 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
@@ -276,11 +275,6 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 // This method returns an error when the GetNamespaceByID call fails with anything other than
 // serviceerror.NamespaceNotFound.
 func (r *TaskGeneratorImpl) getRetention() (time.Duration, error) {
-	// For standalone activities, use 1 day retention
-	if r.mutableState.ChasmTree().ArchetypeID() == activity.ArchetypeID {
-		return 24 * time.Hour, nil
-	}
-
 	retention := defaultWorkflowRetention
 	executionInfo := r.mutableState.GetExecutionInfo()
 	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
@@ -842,13 +836,11 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 			activityIDs,
 			targetClusters,
 		)...)
-		if r.config.EnableNexus() {
-			taskEquivalents = append(taskEquivalents, &tasks.SyncHSMTask{
-				WorkflowKey: workflowKey,
-				// TaskID and VisibilityTimestamp are set by shard
-				TargetClusters: targetClusters,
-			})
-		}
+		taskEquivalents = append(taskEquivalents, &tasks.SyncHSMTask{
+			WorkflowKey: workflowKey,
+			// TaskID and VisibilityTimestamp are set by shard
+			TargetClusters: targetClusters,
+		})
 	}
 
 	if r.mutableState.IsTransitionHistoryEnabled() &&

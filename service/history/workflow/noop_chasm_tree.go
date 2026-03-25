@@ -25,6 +25,10 @@ func (*noopChasmTree) Snapshot(*persistencespb.VersionedTransition) chasm.NodesS
 	return chasm.NodesSnapshot{}
 }
 
+func (*noopChasmTree) ApplySystemMutation(chasm.NodesMutation) error {
+	return nil
+}
+
 func (*noopChasmTree) ApplyMutation(chasm.NodesMutation) error {
 	return nil
 }
@@ -78,7 +82,15 @@ func (*noopChasmTree) ComponentByPath(chasm.Context, []string) (chasm.Component,
 
 func (*noopChasmTree) ExecuteSideEffectTask(
 	ctx context.Context,
-	registry *chasm.Registry,
+	executionKey chasm.ExecutionKey,
+	task *tasks.ChasmTask,
+	validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
+) error {
+	return nil
+}
+
+func (*noopChasmTree) ExecuteSideEffectDiscardTask(
+	ctx context.Context,
 	executionKey chasm.ExecutionKey,
 	task *tasks.ChasmTask,
 	validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,

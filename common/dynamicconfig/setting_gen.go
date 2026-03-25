@@ -19,6 +19,7 @@ const (
 	PrecedenceShardID
 	PrecedenceTaskType
 	PrecedenceDestination
+	PrecedenceChasmTaskType
 )
 
 type GlobalBoolSetting = GlobalTypedSetting[bool]
@@ -140,6 +141,23 @@ func GetBoolPropertyFnFilteredByDestination(value bool) BoolPropertyFnWithDestin
 	return GetTypedPropertyFnFilteredByDestination(value)
 }
 
+type ChasmTaskTypeBoolSetting = ChasmTaskTypeTypedSetting[bool]
+type ChasmTaskTypeBoolConstrainedDefaultSetting = ChasmTaskTypeTypedConstrainedDefaultSetting[bool]
+
+func NewChasmTaskTypeBoolSetting(key string, def bool, description string) ChasmTaskTypeBoolSetting {
+	return NewChasmTaskTypeTypedSettingWithConverter[bool](key, convertBool, def, description)
+}
+
+func NewChasmTaskTypeBoolSettingWithConstrainedDefault(key string, cdef []TypedConstrainedValue[bool], description string) ChasmTaskTypeBoolConstrainedDefaultSetting {
+	return NewChasmTaskTypeTypedSettingWithConstrainedDefault[bool](key, convertBool, cdef, description)
+}
+
+type BoolPropertyFnWithChasmTaskTypeFilter = TypedPropertyFnWithChasmTaskTypeFilter[bool]
+
+func GetBoolPropertyFnFilteredByChasmTaskType(value bool) BoolPropertyFnWithChasmTaskTypeFilter {
+	return GetTypedPropertyFnFilteredByChasmTaskType(value)
+}
+
 type GlobalIntSetting = GlobalTypedSetting[int]
 type GlobalIntConstrainedDefaultSetting = GlobalTypedConstrainedDefaultSetting[int]
 
@@ -257,6 +275,23 @@ type IntPropertyFnWithDestinationFilter = TypedPropertyFnWithDestinationFilter[i
 
 func GetIntPropertyFnFilteredByDestination(value int) IntPropertyFnWithDestinationFilter {
 	return GetTypedPropertyFnFilteredByDestination(value)
+}
+
+type ChasmTaskTypeIntSetting = ChasmTaskTypeTypedSetting[int]
+type ChasmTaskTypeIntConstrainedDefaultSetting = ChasmTaskTypeTypedConstrainedDefaultSetting[int]
+
+func NewChasmTaskTypeIntSetting(key string, def int, description string) ChasmTaskTypeIntSetting {
+	return NewChasmTaskTypeTypedSettingWithConverter[int](key, convertInt, def, description)
+}
+
+func NewChasmTaskTypeIntSettingWithConstrainedDefault(key string, cdef []TypedConstrainedValue[int], description string) ChasmTaskTypeIntConstrainedDefaultSetting {
+	return NewChasmTaskTypeTypedSettingWithConstrainedDefault[int](key, convertInt, cdef, description)
+}
+
+type IntPropertyFnWithChasmTaskTypeFilter = TypedPropertyFnWithChasmTaskTypeFilter[int]
+
+func GetIntPropertyFnFilteredByChasmTaskType(value int) IntPropertyFnWithChasmTaskTypeFilter {
+	return GetTypedPropertyFnFilteredByChasmTaskType(value)
 }
 
 type GlobalFloatSetting = GlobalTypedSetting[float64]
@@ -378,6 +413,23 @@ func GetFloatPropertyFnFilteredByDestination(value float64) FloatPropertyFnWithD
 	return GetTypedPropertyFnFilteredByDestination(value)
 }
 
+type ChasmTaskTypeFloatSetting = ChasmTaskTypeTypedSetting[float64]
+type ChasmTaskTypeFloatConstrainedDefaultSetting = ChasmTaskTypeTypedConstrainedDefaultSetting[float64]
+
+func NewChasmTaskTypeFloatSetting(key string, def float64, description string) ChasmTaskTypeFloatSetting {
+	return NewChasmTaskTypeTypedSettingWithConverter[float64](key, convertFloat, def, description)
+}
+
+func NewChasmTaskTypeFloatSettingWithConstrainedDefault(key string, cdef []TypedConstrainedValue[float64], description string) ChasmTaskTypeFloatConstrainedDefaultSetting {
+	return NewChasmTaskTypeTypedSettingWithConstrainedDefault[float64](key, convertFloat, cdef, description)
+}
+
+type FloatPropertyFnWithChasmTaskTypeFilter = TypedPropertyFnWithChasmTaskTypeFilter[float64]
+
+func GetFloatPropertyFnFilteredByChasmTaskType(value float64) FloatPropertyFnWithChasmTaskTypeFilter {
+	return GetTypedPropertyFnFilteredByChasmTaskType(value)
+}
+
 type GlobalStringSetting = GlobalTypedSetting[string]
 type GlobalStringConstrainedDefaultSetting = GlobalTypedConstrainedDefaultSetting[string]
 
@@ -495,6 +547,23 @@ type StringPropertyFnWithDestinationFilter = TypedPropertyFnWithDestinationFilte
 
 func GetStringPropertyFnFilteredByDestination(value string) StringPropertyFnWithDestinationFilter {
 	return GetTypedPropertyFnFilteredByDestination(value)
+}
+
+type ChasmTaskTypeStringSetting = ChasmTaskTypeTypedSetting[string]
+type ChasmTaskTypeStringConstrainedDefaultSetting = ChasmTaskTypeTypedConstrainedDefaultSetting[string]
+
+func NewChasmTaskTypeStringSetting(key string, def string, description string) ChasmTaskTypeStringSetting {
+	return NewChasmTaskTypeTypedSettingWithConverter[string](key, convertString, def, description)
+}
+
+func NewChasmTaskTypeStringSettingWithConstrainedDefault(key string, cdef []TypedConstrainedValue[string], description string) ChasmTaskTypeStringConstrainedDefaultSetting {
+	return NewChasmTaskTypeTypedSettingWithConstrainedDefault[string](key, convertString, cdef, description)
+}
+
+type StringPropertyFnWithChasmTaskTypeFilter = TypedPropertyFnWithChasmTaskTypeFilter[string]
+
+func GetStringPropertyFnFilteredByChasmTaskType(value string) StringPropertyFnWithChasmTaskTypeFilter {
+	return GetTypedPropertyFnFilteredByChasmTaskType(value)
 }
 
 type GlobalDurationSetting = GlobalTypedSetting[time.Duration]
@@ -616,6 +685,23 @@ func GetDurationPropertyFnFilteredByDestination(value time.Duration) DurationPro
 	return GetTypedPropertyFnFilteredByDestination(value)
 }
 
+type ChasmTaskTypeDurationSetting = ChasmTaskTypeTypedSetting[time.Duration]
+type ChasmTaskTypeDurationConstrainedDefaultSetting = ChasmTaskTypeTypedConstrainedDefaultSetting[time.Duration]
+
+func NewChasmTaskTypeDurationSetting(key string, def time.Duration, description string) ChasmTaskTypeDurationSetting {
+	return NewChasmTaskTypeTypedSettingWithConverter[time.Duration](key, convertDuration, def, description)
+}
+
+func NewChasmTaskTypeDurationSettingWithConstrainedDefault(key string, cdef []TypedConstrainedValue[time.Duration], description string) ChasmTaskTypeDurationConstrainedDefaultSetting {
+	return NewChasmTaskTypeTypedSettingWithConstrainedDefault[time.Duration](key, convertDuration, cdef, description)
+}
+
+type DurationPropertyFnWithChasmTaskTypeFilter = TypedPropertyFnWithChasmTaskTypeFilter[time.Duration]
+
+func GetDurationPropertyFnFilteredByChasmTaskType(value time.Duration) DurationPropertyFnWithChasmTaskTypeFilter {
+	return GetTypedPropertyFnFilteredByChasmTaskType(value)
+}
+
 type GlobalMapSetting = GlobalTypedSetting[map[string]any]
 type GlobalMapConstrainedDefaultSetting = GlobalTypedConstrainedDefaultSetting[map[string]any]
 
@@ -733,6 +819,23 @@ type MapPropertyFnWithDestinationFilter = TypedPropertyFnWithDestinationFilter[m
 
 func GetMapPropertyFnFilteredByDestination(value map[string]any) MapPropertyFnWithDestinationFilter {
 	return GetTypedPropertyFnFilteredByDestination(value)
+}
+
+type ChasmTaskTypeMapSetting = ChasmTaskTypeTypedSetting[map[string]any]
+type ChasmTaskTypeMapConstrainedDefaultSetting = ChasmTaskTypeTypedConstrainedDefaultSetting[map[string]any]
+
+func NewChasmTaskTypeMapSetting(key string, def map[string]any, description string) ChasmTaskTypeMapSetting {
+	return NewChasmTaskTypeTypedSettingWithConverter[map[string]any](key, convertMap, def, description)
+}
+
+func NewChasmTaskTypeMapSettingWithConstrainedDefault(key string, cdef []TypedConstrainedValue[map[string]any], description string) ChasmTaskTypeMapConstrainedDefaultSetting {
+	return NewChasmTaskTypeTypedSettingWithConstrainedDefault[map[string]any](key, convertMap, cdef, description)
+}
+
+type MapPropertyFnWithChasmTaskTypeFilter = TypedPropertyFnWithChasmTaskTypeFilter[map[string]any]
+
+func GetMapPropertyFnFilteredByChasmTaskType(value map[string]any) MapPropertyFnWithChasmTaskTypeFilter {
+	return GetTypedPropertyFnFilteredByChasmTaskType(value)
 }
 
 type GlobalTypedSetting[T any] setting[T, func()]
@@ -1727,6 +1830,142 @@ func (s DestinationTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collecti
 
 func GetTypedPropertyFnFilteredByDestination[T any](value T) TypedPropertyFnWithDestinationFilter[T] {
 	return func(namespace string, destination string) T {
+		return value
+	}
+}
+
+type ChasmTaskTypeTypedSetting[T any] setting[T, func(chasmTaskType string)]
+type ChasmTaskTypeTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T, func(chasmTaskType string)]
+
+// NewChasmTaskTypeTypedSetting creates a setting that uses mapstructure to handle complex structured
+// values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
+// when using non-empty maps or slices as defaults, the result may not be what you want.
+func NewChasmTaskTypeTypedSetting[T any](key string, def T, description string) ChasmTaskTypeTypedSetting[T] {
+	// Warn on any shared structure used with ConvertStructure, even though we handle it by deep copying.
+	warnDefaultSharedStructure(key, def)
+	// If even deep copy won't even work, we should panic early. Do that by calling deep copy once here.
+	_ = deepCopyForMapstructure(def)
+
+	s := ChasmTaskTypeTypedSetting[T]{
+		key:         MakeKey(key),
+		def:         def,
+		convert:     ConvertStructure[T](def),
+		description: description,
+	}
+	register(s)
+	return s
+}
+
+// NewChasmTaskTypeTypedSettingWithConverter creates a setting with a custom converter function.
+func NewChasmTaskTypeTypedSettingWithConverter[T any](key string, convert func(any) (T, error), def T, description string) ChasmTaskTypeTypedSetting[T] {
+	s := ChasmTaskTypeTypedSetting[T]{
+		key:         MakeKey(key),
+		def:         def,
+		convert:     convert,
+		description: description,
+	}
+	register(s)
+	return s
+}
+
+// NewChasmTaskTypeTypedSettingWithConstrainedDefault creates a setting with a compound default value.
+func NewChasmTaskTypeTypedSettingWithConstrainedDefault[T any](key string, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) ChasmTaskTypeTypedConstrainedDefaultSetting[T] {
+	s := ChasmTaskTypeTypedConstrainedDefaultSetting[T]{
+		key:         MakeKey(key),
+		cdef:        cdef,
+		convert:     convert,
+		description: description,
+	}
+	register(s)
+	return s
+}
+
+func (s ChasmTaskTypeTypedSetting[T]) Key() Key               { return s.key }
+func (s ChasmTaskTypeTypedSetting[T]) Precedence() Precedence { return PrecedenceChasmTaskType }
+func (s ChasmTaskTypeTypedSetting[T]) Validate(v any) error {
+	_, err := s.convert(v)
+	return err
+}
+
+func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
+func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceChasmTaskType }
+func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Validate(v any) error {
+	_, err := s.convert(v)
+	return err
+}
+
+func (s ChasmTaskTypeTypedSetting[T]) WithDefault(v T) ChasmTaskTypeTypedSetting[T] {
+	newS := s
+	newS.def = v
+	return newS
+}
+
+type TypedPropertyFnWithChasmTaskTypeFilter[T any] func(chasmTaskType string) T
+
+func (s ChasmTaskTypeTypedSetting[T]) Get(c *Collection) TypedPropertyFnWithChasmTaskTypeFilter[T] {
+	return func(chasmTaskType string) T {
+		prec := []Constraints{{ChasmTaskType: chasmTaskType}, {}}
+		return matchAndConvert(
+			c,
+			s.key,
+			s.def,
+			s.convert,
+			prec,
+		)
+	}
+}
+
+func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Get(c *Collection) TypedPropertyFnWithChasmTaskTypeFilter[T] {
+	return func(chasmTaskType string) T {
+		prec := []Constraints{{ChasmTaskType: chasmTaskType}, {}}
+		return matchAndConvertWithConstrainedDefault(
+			c,
+			s.key,
+			s.cdef,
+			s.convert,
+			prec,
+		)
+	}
+}
+
+type TypedSubscribableWithChasmTaskTypeFilter[T any] func(chasmTaskType string, callback func(T)) (v T, cancel func())
+
+func (s ChasmTaskTypeTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithChasmTaskTypeFilter[T] {
+	return func(chasmTaskType string, callback func(T)) (T, func()) {
+		prec := []Constraints{{ChasmTaskType: chasmTaskType}, {}}
+		return subscribe(c, s.key, s.def, s.convert, prec, callback)
+	}
+}
+
+func (s ChasmTaskTypeTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
+	dispatchUpdate(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
+}
+
+func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribableWithChasmTaskTypeFilter[T] {
+	return func(chasmTaskType string, callback func(T)) (T, func()) {
+		prec := []Constraints{{ChasmTaskType: chasmTaskType}, {}}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+
+func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
+	dispatchUpdateWithConstrainedDefault(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
+}
+
+func GetTypedPropertyFnFilteredByChasmTaskType[T any](value T) TypedPropertyFnWithChasmTaskTypeFilter[T] {
+	return func(chasmTaskType string) T {
 		return value
 	}
 }

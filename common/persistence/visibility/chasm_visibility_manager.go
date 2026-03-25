@@ -13,6 +13,7 @@ import (
 
 type ChasmVisibilityManager struct {
 	registry      *chasm.Registry
+	nsRegistry    namespace.Registry
 	visibilityMgr manager.VisibilityManager
 }
 
@@ -20,19 +21,22 @@ var _ chasm.VisibilityManager = (*ChasmVisibilityManager)(nil)
 
 func NewChasmVisibilityManager(
 	registry *chasm.Registry,
+	nsRegistry namespace.Registry,
 	visibilityMgr manager.VisibilityManager,
 ) *ChasmVisibilityManager {
 	return &ChasmVisibilityManager{
 		registry:      registry,
+		nsRegistry:    nsRegistry,
 		visibilityMgr: visibilityMgr,
 	}
 }
 
 func ChasmVisibilityManagerProvider(
 	registry *chasm.Registry,
+	nsRegistry namespace.Registry,
 	visibilityMgr manager.VisibilityManager,
 ) chasm.VisibilityManager {
-	return NewChasmVisibilityManager(registry, visibilityMgr)
+	return NewChasmVisibilityManager(registry, nsRegistry, visibilityMgr)
 }
 
 // ListExecutions implements the Engine interface for visibility queries.
@@ -46,9 +50,14 @@ func (e *ChasmVisibilityManager) ListExecutions(
 		return nil, serviceerror.NewInternal("unknown chasm component type: " + archetypeType.String())
 	}
 
+	namespaceID, err := e.nsRegistry.GetNamespaceID(namespace.Name(request.NamespaceName))
+	if err != nil {
+		return nil, err
+	}
+
 	visReq := &manager.ListChasmExecutionsRequest{
 		ArchetypeID:   archetypeID,
-		NamespaceID:   namespace.ID(request.NamespaceID),
+		NamespaceID:   namespaceID,
 		Namespace:     namespace.Name(request.NamespaceName),
 		PageSize:      request.PageSize,
 		NextPageToken: request.NextPageToken,
@@ -69,9 +78,14 @@ func (e *ChasmVisibilityManager) CountExecutions(
 		return nil, serviceerror.NewInternal("unknown chasm component type: " + archetypeType.String())
 	}
 
+	namespaceID, err := e.nsRegistry.GetNamespaceID(namespace.Name(request.NamespaceName))
+	if err != nil {
+		return nil, err
+	}
+
 	visReq := &manager.CountChasmExecutionsRequest{
 		ArchetypeID: archetypeID,
-		NamespaceID: namespace.ID(request.NamespaceID),
+		NamespaceID: namespaceID,
 		Namespace:   namespace.Name(request.NamespaceName),
 		Query:       request.Query,
 	}

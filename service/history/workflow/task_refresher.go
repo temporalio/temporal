@@ -68,10 +68,8 @@ func (r *TaskRefresherImpl) Refresh(
 	mutableState historyi.MutableState,
 	shouldSkipGeneratingCloseTransferTask bool,
 ) error {
-	if r.shard.GetConfig().EnableNexus() {
-		// Invalidate all tasks generated for this mutable state before the refresh.
-		mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
-	}
+	// Invalidate all tasks generated for this mutable state before the refresh.
+	mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
 
 	if err := r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil, shouldSkipGeneratingCloseTransferTask); err != nil {
 		return err
