@@ -2,6 +2,7 @@ package updateactivityoptions
 
 import (
 	"context"
+	"strings"
 
 	activitypb "go.temporal.io/api/activity/v1"
 	commandpb "go.temporal.io/api/command/v1"
@@ -15,6 +16,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/api"
@@ -79,6 +82,38 @@ func Invoke(
 
 	if err != nil {
 		return nil, err
+	}
+
+	targetingMethod := "type"
+	if _, ok := updateRequest.GetActivity().(*workflowservice.UpdateActivityOptionsRequest_Id); ok {
+		targetingMethod = "id"
+	}
+	if ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.NamespaceId)); err == nil {
+		metrics.ActivityUpdateOptionsRequests.With(shardContext.GetMetricsHandler().WithTags(
+			metrics.NamespaceTag(ns.Name().String()),
+			metrics.ActivityTargetingMethodTag(targetingMethod),
+		)).Record(1)
+	}
+
+	logger := shardContext.GetLogger()
+	if updateRequest.RestoreOriginal {
+		logger.Info("updateactivityoptions: activity options restored to original",
+			tag.WorkflowNamespaceID(request.GetNamespaceId()),
+			tag.WorkflowID(updateRequest.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(updateRequest.GetExecution().GetRunId()),
+		)
+	} else if mask := updateRequest.GetUpdateMask(); mask != nil {
+		updatedFields := util.ParseFieldMask(mask)
+		fields := make([]string, 0, len(updatedFields))
+		for f := range updatedFields {
+			fields = append(fields, f)
+		}
+		logger.Info("updateactivityoptions: activity options updated",
+			tag.WorkflowNamespaceID(request.GetNamespaceId()),
+			tag.WorkflowID(updateRequest.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(updateRequest.GetExecution().GetRunId()),
+			tag.NewStringTag("updated_fields", strings.Join(fields, ",")),
+		)
 	}
 
 	return response, err
