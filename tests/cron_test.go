@@ -422,7 +422,7 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 		panic("shouldn't get here")
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	// Because of rounding in GetBackoffForNextSchedule, we'll tend to stay aligned to whatever
 	// phase we start in relative to second boundaries, but drift slightly later within the second

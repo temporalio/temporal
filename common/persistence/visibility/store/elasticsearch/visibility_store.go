@@ -1043,7 +1043,7 @@ func (s *VisibilityStore) ParseESDoc(
 		fieldType, err := combinedTypeMap.GetType(fieldName)
 		if err != nil {
 			// Silently ignore ErrInvalidName because it indicates an unknown field in an Elasticsearch document.
-			if errors.Is(err, searchattribute.ErrInvalidName) {
+			if errors.Is(err, sadefs.ErrInvalidName) {
 				continue
 			}
 			metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
@@ -1190,7 +1190,7 @@ func (s *VisibilityStore) parseCountGroupByResponse(
 			if err != nil {
 				return fmt.Errorf("unable to parse value %v: %w", bucket["key"], err)
 			}
-			payload, err := searchattribute.EncodeValue(value, groupByTypes[index])
+			payload, err := sadefs.EncodeValue(value, groupByTypes[index])
 			if err != nil {
 				return fmt.Errorf("unable to encode value %v: %w", value, err)
 			}

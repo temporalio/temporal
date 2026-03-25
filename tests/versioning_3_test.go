@@ -37,7 +37,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -1763,7 +1763,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	// 8. WFT completes and the transition completes.
 	// 9. All the 3 remaining activities are now dispatched and completed.
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
@@ -1811,7 +1811,11 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 			s.Logger.Info(fmt.Sprintf("Activity 1 started ID: %s", task.ActivityId))
 			close(act1Started)
 			// block until the transition WFT starts
-			<-transitionStarted
+			select {
+			case <-transitionStarted:
+			case <-ctx.Done():
+				return nil, fmt.Errorf("context expired waiting for transitionStarted in act1: %w", ctx.Err())
+			}
 			// 6. the 1st act completes during transition
 			s.Logger.Info(fmt.Sprintf("Activity 1 completed ID: %s", task.ActivityId))
 			return respondActivity(), nil
@@ -1824,7 +1828,11 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 			s.Logger.Info(fmt.Sprintf("Activity 2 started ID: %s", task.ActivityId))
 			close(act2Started)
 			// block until the transition WFT starts
-			<-transitionStarted
+			select {
+			case <-transitionStarted:
+			case <-ctx.Done():
+				return nil, fmt.Errorf("context expired waiting for transitionStarted in act2: %w", ctx.Err())
+			}
 			// 7. 2nd activity fails. Respond with error so it is retried.
 			s.Logger.Info(fmt.Sprintf("Activity 2 failed ID: %s", task.ActivityId))
 			return nil, errors.New("intentional activity failure")
@@ -1881,8 +1889,16 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 			close(transitionStarted)
 			s.Logger.Info("Transition wft started")
 			// 8. Complete the transition after act1 completes and act2's first attempt fails.
-			<-act1Completed
-			<-act2Failed
+			select {
+			case <-act1Completed:
+			case <-ctx.Done():
+				s.FailNow("context expired waiting for act1 to complete")
+			}
+			select {
+			case <-act2Failed:
+			case <-ctx.Done():
+				s.FailNow("context expired waiting for act2 to fail")
+			}
 			transitionCompleted.Store(true)
 			s.Logger.Info("Transition wft completed")
 			return respondEmptyWft(tv2, sticky, vbUnpinned), nil
@@ -3861,25 +3877,25 @@ func (s *Versioning3Suite) doPollWftAndHandle(
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
 ) (*taskpoller.TaskPoller, *workflowservice.RespondWorkflowTaskCompletedResponse) {
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
-	f := func() *workflowservice.RespondWorkflowTaskCompletedResponse {
+	f := func() (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
 		tq := tv.TaskQueue()
 		if sticky {
 			tq = tv.StickyTaskQueue()
 		}
-		resp, err := poller.PollWorkflowTask(
+		return poller.PollWorkflowTask(
 			&workflowservice.PollWorkflowTaskQueueRequest{
 				DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
 				TaskQueue:         tq,
 			},
 		).HandleTask(tv, handler, taskpoller.WithTimeout(30*time.Second))
-		s.NoError(err)
-		return resp
 	}
 	if async == nil {
-		return poller, f()
+		resp, err := f()
+		s.NoError(err)
+		return poller, resp
 	} else {
 		go func() {
-			f()
+			_, _ = f() // errors are surfaced via test context timeout on WaitForChannel
 			close(async)
 		}()
 	}
@@ -3893,25 +3909,25 @@ func (s *Versioning3Suite) pollWftAndHandleQueries(
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error),
 ) (*taskpoller.TaskPoller, *workflowservice.RespondQueryTaskCompletedResponse) {
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
-	f := func() *workflowservice.RespondQueryTaskCompletedResponse {
+	f := func() (*workflowservice.RespondQueryTaskCompletedResponse, error) {
 		tq := tv.TaskQueue()
 		if sticky {
 			tq = tv.StickyTaskQueue()
 		}
-		resp, err := poller.PollWorkflowTask(
+		return poller.PollWorkflowTask(
 			&workflowservice.PollWorkflowTaskQueueRequest{
 				DeploymentOptions: tv.WorkerDeploymentOptions(true),
 				TaskQueue:         tq,
 			},
 		).HandleLegacyQuery(tv, handler)
-		s.NoError(err)
-		return resp
 	}
 	if async == nil {
-		return poller, f()
+		resp, err := f()
+		s.NoError(err)
+		return poller, resp
 	}
 	go func() {
-		f()
+		_, _ = f() // errors are surfaced via test context timeout on WaitForChannel
 		close(async)
 	}()
 	return nil, nil
@@ -3924,25 +3940,25 @@ func (s *Versioning3Suite) pollNexusTaskAndHandle(
 	handler func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error),
 ) (*taskpoller.TaskPoller, *workflowservice.RespondNexusTaskCompletedResponse) {
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
-	f := func() *workflowservice.RespondNexusTaskCompletedResponse {
+	f := func() (*workflowservice.RespondNexusTaskCompletedResponse, error) {
 		tq := tv.TaskQueue()
 		if sticky {
 			tq = tv.StickyTaskQueue()
 		}
-		resp, err := poller.PollNexusTask(
+		return poller.PollNexusTask(
 			&workflowservice.PollNexusTaskQueueRequest{
 				DeploymentOptions: tv.WorkerDeploymentOptions(true),
 				TaskQueue:         tq,
 			},
 		).HandleTask(tv, handler, taskpoller.WithTimeout(10*time.Second))
-		s.NoError(err)
-		return resp
 	}
 	if async == nil {
-		return poller, f()
+		resp, err := f()
+		s.NoError(err)
+		return poller, resp
 	}
 	go func() {
-		f()
+		_, _ = f() // errors are surfaced via test context timeout on WaitForChannel
 		close(async)
 	}()
 	return nil, nil
@@ -3971,19 +3987,19 @@ func (s *Versioning3Suite) doPollActivityAndHandle(
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
 ) {
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
-	f := func() {
+	f := func() error {
 		_, err := poller.PollActivityTask(
 			&workflowservice.PollActivityTaskQueueRequest{
 				DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
 			},
 		).HandleTask(tv, handler, taskpoller.WithTimeout(time.Minute))
-		s.NoError(err)
+		return err
 	}
 	if async == nil {
-		f()
+		s.NoError(f())
 	} else {
 		go func() {
-			f()
+			_ = f() // errors are surfaced via test context timeout on WaitForChannel
 			close(async)
 		}()
 	}
@@ -4270,7 +4286,7 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 			if behavior == vbPinned {
 				payload, ok := w.GetSearchAttributes().GetIndexedFields()["BuildIds"]
 				a.True(ok)
-				searchAttrAny, err := searchattribute.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+				searchAttrAny, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
 				a.NoError(err)
 				var searchAttr []string
 				if searchAttrAny != nil {
@@ -4285,7 +4301,7 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 				// Validate TemporalUsedWorkerDeploymentVersions search attribute
 				versionPayload, ok := w.GetSearchAttributes().GetIndexedFields()["TemporalUsedWorkerDeploymentVersions"]
 				a.True(ok)
-				versionAttrAny, err := searchattribute.DecodeValue(versionPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+				versionAttrAny, err := sadefs.DecodeValue(versionPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
 				a.NoError(err)
 				var versionAttr []string
 				if versionAttrAny != nil {

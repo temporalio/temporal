@@ -126,6 +126,48 @@ func (h *handler) CreateFromMigrationState(ctx context.Context, req *schedulerpb
 	return &schedulerpb.CreateFromMigrationStateResponse{}, err
 }
 
+func (h *handler) CreateSentinel(ctx context.Context, req *schedulerpb.CreateSentinelRequest) (resp *schedulerpb.CreateSentinelResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	_, err = chasm.StartExecution(
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: req.NamespaceId,
+			BusinessID:  req.ScheduleId,
+		},
+		CreateSentinelFn,
+		req,
+	)
+
+	var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
+	if errors.As(err, &alreadyStartedErr) {
+		// If a sentinel already exists, succeed idempotently.
+		// If a real scheduler exists, fail.
+		_, readErr := chasm.ReadComponent(
+			ctx,
+			chasm.NewComponentRef[*Scheduler](
+				chasm.ExecutionKey{
+					NamespaceID: req.NamespaceId,
+					BusinessID:  req.ScheduleId,
+				},
+			),
+			func(s *Scheduler, ctx chasm.Context, _ *struct{}) (*struct{}, error) {
+				if s.IsSentinel() {
+					return nil, nil
+				}
+				return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", req.ScheduleId)
+			},
+			(*struct{})(nil),
+		)
+		return &schedulerpb.CreateSentinelResponse{}, readErr
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &schedulerpb.CreateSentinelResponse{}, nil
+}
+
 func (h *handler) UpdateSchedule(ctx context.Context, req *schedulerpb.UpdateScheduleRequest) (resp *schedulerpb.UpdateScheduleResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 
@@ -172,6 +214,23 @@ func (h *handler) DeleteSchedule(ctx context.Context, req *schedulerpb.DeleteSch
 			},
 		),
 		(*Scheduler).Delete,
+		req,
+	)
+	return resp, err
+}
+
+func (h *handler) MigrateToWorkflow(ctx context.Context, req *schedulerpb.MigrateToWorkflowRequest) (resp *schedulerpb.MigrateToWorkflowResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	resp, _, err = chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*Scheduler](
+			chasm.ExecutionKey{
+				NamespaceID: req.NamespaceId,
+				BusinessID:  req.ScheduleId,
+			},
+		),
+		(*Scheduler).MigrateToWorkflow,
 		req,
 	)
 	return resp, err

@@ -615,6 +615,53 @@ func TestModifiedActivityTimeouts(t *testing.T) {
 	}
 }
 
+func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		req := &workflowservice.DeleteActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+		}
+		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		require.NoError(t, err)
+	})
+
+	t.Run("SuccessWithRunID", func(t *testing.T) {
+		req := &workflowservice.DeleteActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RunId:      "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+		}
+		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		require.NoError(t, err)
+	})
+
+	t.Run("EmptyActivityID", func(t *testing.T) {
+		req := &workflowservice.DeleteActivityExecutionRequest{
+			ActivityId: "",
+		}
+		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
+
+	t.Run("ActivityIDTooLong", func(t *testing.T) {
+		req := &workflowservice.DeleteActivityExecutionRequest{
+			ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)),
+		}
+		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
+
+	t.Run("InvalidRunID", func(t *testing.T) {
+		req := &workflowservice.DeleteActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RunId:      "not-a-valid-uuid",
+		}
+		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
+}
+
 func getDefaultRetrySettings(_ string) retrypolicy.DefaultRetrySettings {
 	return retrypolicy.DefaultRetrySettings{
 		InitialInterval:            time.Second,

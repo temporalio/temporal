@@ -48,8 +48,8 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success() 
 
 	internalWorkflow := newInternalWorkflow()
 
-	s.Worker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
-	s.Worker().RegisterActivity(internalWorkflow.ActivityFunc)
+	s.SdkWorker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
+	s.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
 
 	workflowRun1 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
 	workflowRun2 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
@@ -176,8 +176,8 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success_Pr
 
 	internalWorkflow := newInternalWorkflow()
 
-	s.Worker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
-	s.Worker().RegisterActivity(internalWorkflow.ActivityFunc)
+	s.SdkWorker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
+	s.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
 
 	workflowRun1 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
 	workflowRun2 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
@@ -304,8 +304,8 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_DontResetA
 
 	internalWorkflow := newInternalWorkflow()
 
-	s.Worker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
-	s.Worker().RegisterActivity(internalWorkflow.ActivityFunc)
+	s.SdkWorker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
+	s.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
 
 	workflowRun1 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
 	workflowRun2 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)

@@ -963,7 +963,6 @@ func (s *TaskQueueSuite) TestTaskDispatchLatencyMetric_Nexus() {
 
 func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(s *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, forwardDelay time.Duration)) {
 	baseOpts := []testcore.TestOption{
-		testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 3),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingEmitTaskDispatchLatencyAtPoll, true),
 	}
@@ -1500,4 +1499,43 @@ func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
 		s.NotEqual(tv.WorkerIdentity(), poller.GetIdentity(),
 			"poller should be removed from DescribeTaskQueue after shutdown")
 	}
+
+	// Verify that subsequent polls from the same worker are rejected immediately
+	// (the shutdown worker cache prevents zombie re-polls from stealing tasks).
+	// Use a long timeout so we can distinguish "rejected quickly" from "timed out".
+	rePollTimeout := 5 * time.Minute
+
+	// Workflow poll should be rejected immediately.
+	wfStart := time.Now()
+	rePollCtx, rePollCancel := context.WithTimeout(ctx, rePollTimeout)
+	defer rePollCancel()
+	rePollResp, err := s.FrontendClient().PollWorkflowTaskQueue(rePollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         s.Namespace().String(),
+		TaskQueue:         tv.TaskQueue(),
+		Identity:          tv.WorkerIdentity(),
+		WorkerInstanceKey: workerInstanceKey,
+	})
+	s.NoError(err)
+	s.NotNil(rePollResp)
+	s.Empty(rePollResp.GetTaskToken(), "re-poll from shutdown worker should return empty response")
+	// TODO: Replace timing assertion with an explicit poll response field indicating
+	// shutdown rejection, so we don't rely on timing to distinguish cache rejection
+	// from natural poll timeout. Requires adding a field to PollWorkflowTaskQueueResponse
+	// and PollActivityTaskQueueResponse in the public API proto.
+	s.Less(time.Since(wfStart), 2*time.Minute, "workflow re-poll should be rejected quickly, not wait for timeout")
+
+	// Activity poll should also be rejected immediately.
+	actStart := time.Now()
+	actCtx, actCancel := context.WithTimeout(ctx, rePollTimeout)
+	defer actCancel()
+	actResp, err := s.FrontendClient().PollActivityTaskQueue(actCtx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace:         s.Namespace().String(),
+		TaskQueue:         tv.TaskQueue(),
+		Identity:          tv.WorkerIdentity(),
+		WorkerInstanceKey: workerInstanceKey,
+	})
+	s.NoError(err)
+	s.NotNil(actResp)
+	s.Empty(actResp.GetTaskToken(), "activity re-poll from shutdown worker should return empty response")
+	s.Less(time.Since(actStart), 2*time.Minute, "activity re-poll should be rejected quickly, not wait for timeout")
 }

@@ -142,7 +142,7 @@ func myWorkflow(workflow.Context) (string, error) {
 func (s *DLQSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
 
-	s.Worker().RegisterWorkflow(myWorkflow)
+	s.SdkWorker().RegisterWorkflow(myWorkflow)
 
 	s.deleteBlockCh = make(chan any)
 	close(s.deleteBlockCh)
