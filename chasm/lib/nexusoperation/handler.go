@@ -92,7 +92,7 @@ func (h *handler) RequestCancelNexusOperation(
 		ctx,
 		ref,
 		func(o *Operation, ctx chasm.MutableContext, req *nexusoperationpb.RequestCancelNexusOperationRequest) (*nexusoperationpb.RequestCancelNexusOperationResponse, error) {
-			if err := o.handleCancellationRequested(ctx, &nexusoperationpb.CancellationState{
+			if err := o.requestCancel(ctx, &nexusoperationpb.CancellationState{
 				RequestId: req.GetFrontendRequest().GetRequestId(),
 				Identity:  req.GetFrontendRequest().GetIdentity(),
 				Reason:    req.GetFrontendRequest().GetReason(),

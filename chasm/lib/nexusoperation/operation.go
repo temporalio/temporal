@@ -142,7 +142,7 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) erro
 	}))
 }
 
-func (o *Operation) handleCancellationRequested(
+func (o *Operation) requestCancel(
 	ctx chasm.MutableContext,
 	req *nexusoperationpb.CancellationState,
 ) error {
