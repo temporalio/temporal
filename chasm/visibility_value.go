@@ -1,6 +1,7 @@
 package chasm
 
 import (
+	"fmt"
 	"slices"
 	"time"
 
@@ -131,4 +132,34 @@ func isVisibilityValueEqual(v1, v2 VisibilityValue) bool {
 		return false
 	}
 	return v1.Equal(v2)
+}
+
+// visibilityValueFromPayload decoded payload based on type set in its metadata.
+func visibilityValueFromPayload(payload *commonpb.Payload) (VisibilityValue, error) {
+	value, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, false)
+	if err != nil {
+		return nil, err
+	}
+
+	switch val := value.(type) {
+	case int64:
+		return VisibilityValueInt64(val), nil
+	case float64:
+		return VisibilityValueFloat64(val), nil
+	case bool:
+		return VisibilityValueBool(val), nil
+	case time.Time:
+		return VisibilityValueTime(val), nil
+	case string:
+		// Try to parse as datetime first
+		if parsedTime, err := time.Parse(time.RFC3339, val); err == nil {
+			return VisibilityValueTime(parsedTime), nil
+		}
+		return VisibilityValueKeyword(val), nil
+	case []string:
+		return VisibilityValueStringSlice(val), nil
+	default:
+		// this should never happen given that DecodeValue did not return an error
+		return nil, fmt.Errorf("unexpected search attribute value type %T", value)
+	}
 }

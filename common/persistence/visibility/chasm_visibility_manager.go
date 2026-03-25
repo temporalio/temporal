@@ -4,8 +4,8 @@ import (
 	"context"
 	"reflect"
 
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -44,7 +44,7 @@ func (e *ChasmVisibilityManager) ListExecutions(
 	ctx context.Context,
 	archetypeType reflect.Type,
 	request *chasm.ListExecutionsRequest,
-) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
+) (*visibilityservice.ListChasmExecutionsResponse, error) {
 	archetypeID, ok := e.registry.ArchetypeIDOf(archetypeType)
 	if !ok {
 		return nil, serviceerror.NewInternal("unknown chasm component type: " + archetypeType.String())
@@ -55,11 +55,11 @@ func (e *ChasmVisibilityManager) ListExecutions(
 		return nil, err
 	}
 
-	visReq := &manager.ListChasmExecutionsRequest{
-		ArchetypeID:   archetypeID,
-		NamespaceID:   namespaceID,
-		Namespace:     namespace.Name(request.NamespaceName),
-		PageSize:      request.PageSize,
+	visReq := &visibilityservice.ListChasmExecutionsRequest{
+		ArchetypeId:   archetypeID,
+		NamespaceId:   namespaceID.String(),
+		Namespace:     request.NamespaceName,
+		PageSize:      int32(request.PageSize),
 		NextPageToken: request.NextPageToken,
 		Query:         request.Query,
 	}
@@ -72,7 +72,7 @@ func (e *ChasmVisibilityManager) CountExecutions(
 	ctx context.Context,
 	archetypeType reflect.Type,
 	request *chasm.CountExecutionsRequest,
-) (*chasm.CountExecutionsResponse, error) {
+) (*visibilityservice.CountChasmExecutionsResponse, error) {
 	archetypeID, ok := e.registry.ArchetypeIDOf(archetypeType)
 	if !ok {
 		return nil, serviceerror.NewInternal("unknown chasm component type: " + archetypeType.String())
@@ -83,10 +83,10 @@ func (e *ChasmVisibilityManager) CountExecutions(
 		return nil, err
 	}
 
-	visReq := &manager.CountChasmExecutionsRequest{
-		ArchetypeID: archetypeID,
-		NamespaceID: namespaceID,
-		Namespace:   namespace.Name(request.NamespaceName),
+	visReq := &visibilityservice.CountChasmExecutionsRequest{
+		ArchetypeId: archetypeID,
+		NamespaceId: namespaceID.String(),
+		Namespace:   request.NamespaceName,
 		Query:       request.Query,
 	}
 
