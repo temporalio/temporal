@@ -2106,7 +2106,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 						deploymentData.UnversionedRampData = vd
 
 					}
-				} else if idx := worker_versioning.FindDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
+				} else if idx := worker_versioning.FindOldDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
 					old := deploymentData.Versions[idx]
 					if old.GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
 						continue
@@ -2128,19 +2128,17 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					clearVersionFromRoutingConfig(workerDeploymentData, nil, vd)
 				}
 			} else if v := req.GetForgetVersion(); v != nil {
-				if idx := worker_versioning.FindDeploymentVersion(deploymentData, v); idx >= 0 {
+				// Go through the new and old deployment data format for this deployment and remove the version if present.
+				workerDeploymentData := deploymentData.GetDeploymentsData()[v.GetDeploymentName()]
+				deleted := removeDeploymentVersions(
+					deploymentData,
+					v.GetDeploymentName(),
+					workerDeploymentData,
+					[]string{v.GetBuildId()},
+					/* removeOldFormat */ true,
+				)
+				if deleted {
 					changed = true
-					deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
-
-					// Go through the new deployment data format for this deployment and remove the version if present.
-					workerDeploymentData := deploymentData.GetDeploymentsData()[v.GetDeploymentName()]
-					_ = removeDeploymentVersions(
-						deploymentData,
-						v.GetDeploymentName(),
-						workerDeploymentData,
-						[]string{v.GetBuildId()},
-						/* removeOldFormat */ false,
-					)
 				}
 			} else {
 

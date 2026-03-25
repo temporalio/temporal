@@ -450,7 +450,6 @@ message SyncDeploymentUserDataRequest {
     //     aip.dev/not-precedent: Not following Google API format --)
     map<string, temporal.server.api.deployment.v1.WorkerDeploymentVersionData> upsert_versions_data = 11;
     // List of build ids to forget from task queue.
-    // Deprecated. Use upsert_versions_data with deleted=true.
     repeated string forget_versions = 12;
 }
 
