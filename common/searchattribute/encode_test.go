@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 func Test_Encode_Success(t *testing.T) {
@@ -222,7 +223,7 @@ func Test_Decode_Error(t *testing.T) {
 
 	vals, err := Decode(sa, nil, true)
 	r.Error(err)
-	r.ErrorIs(err, ErrInvalidType)
+	r.ErrorIs(err, sadefs.ErrInvalidType)
 	r.Len(vals, 3)
 	r.Nil(vals["key1"])
 	r.Nil(vals["key2"])

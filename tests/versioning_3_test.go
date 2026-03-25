@@ -37,7 +37,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -3877,25 +3877,25 @@ func (s *Versioning3Suite) doPollWftAndHandle(
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
 ) (*taskpoller.TaskPoller, *workflowservice.RespondWorkflowTaskCompletedResponse) {
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
-	f := func() *workflowservice.RespondWorkflowTaskCompletedResponse {
+	f := func() (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
 		tq := tv.TaskQueue()
 		if sticky {
 			tq = tv.StickyTaskQueue()
 		}
-		resp, err := poller.PollWorkflowTask(
+		return poller.PollWorkflowTask(
 			&workflowservice.PollWorkflowTaskQueueRequest{
 				DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
 				TaskQueue:         tq,
 			},
 		).HandleTask(tv, handler, taskpoller.WithTimeout(30*time.Second))
-		s.NoError(err)
-		return resp
 	}
 	if async == nil {
-		return poller, f()
+		resp, err := f()
+		s.NoError(err)
+		return poller, resp
 	} else {
 		go func() {
-			f()
+			_, _ = f() // errors are surfaced via test context timeout on WaitForChannel
 			close(async)
 		}()
 	}
@@ -3909,25 +3909,25 @@ func (s *Versioning3Suite) pollWftAndHandleQueries(
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error),
 ) (*taskpoller.TaskPoller, *workflowservice.RespondQueryTaskCompletedResponse) {
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
-	f := func() *workflowservice.RespondQueryTaskCompletedResponse {
+	f := func() (*workflowservice.RespondQueryTaskCompletedResponse, error) {
 		tq := tv.TaskQueue()
 		if sticky {
 			tq = tv.StickyTaskQueue()
 		}
-		resp, err := poller.PollWorkflowTask(
+		return poller.PollWorkflowTask(
 			&workflowservice.PollWorkflowTaskQueueRequest{
 				DeploymentOptions: tv.WorkerDeploymentOptions(true),
 				TaskQueue:         tq,
 			},
 		).HandleLegacyQuery(tv, handler)
-		s.NoError(err)
-		return resp
 	}
 	if async == nil {
-		return poller, f()
+		resp, err := f()
+		s.NoError(err)
+		return poller, resp
 	}
 	go func() {
-		f()
+		_, _ = f() // errors are surfaced via test context timeout on WaitForChannel
 		close(async)
 	}()
 	return nil, nil
@@ -3940,25 +3940,25 @@ func (s *Versioning3Suite) pollNexusTaskAndHandle(
 	handler func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error),
 ) (*taskpoller.TaskPoller, *workflowservice.RespondNexusTaskCompletedResponse) {
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
-	f := func() *workflowservice.RespondNexusTaskCompletedResponse {
+	f := func() (*workflowservice.RespondNexusTaskCompletedResponse, error) {
 		tq := tv.TaskQueue()
 		if sticky {
 			tq = tv.StickyTaskQueue()
 		}
-		resp, err := poller.PollNexusTask(
+		return poller.PollNexusTask(
 			&workflowservice.PollNexusTaskQueueRequest{
 				DeploymentOptions: tv.WorkerDeploymentOptions(true),
 				TaskQueue:         tq,
 			},
 		).HandleTask(tv, handler, taskpoller.WithTimeout(10*time.Second))
-		s.NoError(err)
-		return resp
 	}
 	if async == nil {
-		return poller, f()
+		resp, err := f()
+		s.NoError(err)
+		return poller, resp
 	}
 	go func() {
-		f()
+		_, _ = f() // errors are surfaced via test context timeout on WaitForChannel
 		close(async)
 	}()
 	return nil, nil
@@ -3987,19 +3987,19 @@ func (s *Versioning3Suite) doPollActivityAndHandle(
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
 ) {
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
-	f := func() {
+	f := func() error {
 		_, err := poller.PollActivityTask(
 			&workflowservice.PollActivityTaskQueueRequest{
 				DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
 			},
 		).HandleTask(tv, handler, taskpoller.WithTimeout(time.Minute))
-		s.NoError(err)
+		return err
 	}
 	if async == nil {
-		f()
+		s.NoError(f())
 	} else {
 		go func() {
-			f()
+			_ = f() // errors are surfaced via test context timeout on WaitForChannel
 			close(async)
 		}()
 	}
@@ -4286,7 +4286,7 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 			if behavior == vbPinned {
 				payload, ok := w.GetSearchAttributes().GetIndexedFields()["BuildIds"]
 				a.True(ok)
-				searchAttrAny, err := searchattribute.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+				searchAttrAny, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
 				a.NoError(err)
 				var searchAttr []string
 				if searchAttrAny != nil {
@@ -4301,7 +4301,7 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 				// Validate TemporalUsedWorkerDeploymentVersions search attribute
 				versionPayload, ok := w.GetSearchAttributes().GetIndexedFields()["TemporalUsedWorkerDeploymentVersions"]
 				a.True(ok)
-				versionAttrAny, err := searchattribute.DecodeValue(versionPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+				versionAttrAny, err := sadefs.DecodeValue(versionPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
 				a.NoError(err)
 				var versionAttr []string
 				if versionAttrAny != nil {

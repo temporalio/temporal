@@ -1384,8 +1384,8 @@ second per poller by one physical queue manager`,
 	)
 	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",
-		ConvertGradualChange(false),
-		StaticGradualChange(false),
+		ConvertGradualChange(true),
+		StaticGradualChange(true),
 		`Use priority-enabled TaskMatcher`,
 	)
 	MatchingEnableFairness = NewTaskQueueTypedSettingWithConverter(
@@ -1396,7 +1396,7 @@ second per poller by one physical queue manager`,
 	)
 	MatchingEnableMigration = NewTaskQueueBoolSetting(
 		"matching.enableMigration",
-		false,
+		true,
 		`Allows migration between v1 and v2 (fairness) task backlogs.`,
 	)
 	MatchingPriorityLevels = NewTaskQueueIntSetting(
@@ -2809,6 +2809,13 @@ that task will be sent to DLQ.`,
 		false,
 		`EnableCHASMSchedulerCreation controls whether new schedules are created using the CHASM (V2) implementation
 instead of the existing (V1) implementation.`,
+	)
+
+	EnableCHASMSchedulerRouting = NewNamespaceBoolSetting(
+		"history.enableCHASMSchedulerRouting",
+		false,
+		`EnableCHASMSchedulerRouting controls whether schedule RPCs are routed to the CHASM (V2) implementation
+first (with fallback to V1), excluding CreateSchedule.`,
 	)
 
 	EnableCHASMSchedulerMigration = NewNamespaceBoolSetting(

@@ -124,7 +124,6 @@ func (e *outboundQueueActiveTaskExecutor) executeChasmSideEffectTask(
 	err = executeChasmSideEffectTask(
 		ctx,
 		e.chasmEngine,
-		e.shardContext.ChasmRegistry(),
 		tree,
 		task,
 	)

@@ -46,7 +46,7 @@ type (
 	TaskQueueExpectationsByType map[enumspb.TaskQueueType]TaskQueueExpectations
 )
 
-func newTaskQueueStatsSuite(t *testing.T, env testcore.Env, usePriMatcher bool) *taskQueueStatsSuite {
+func newTaskQueueStatsSuite(env testcore.Env, usePriMatcher bool) *taskQueueStatsSuite {
 	return &taskQueueStatsSuite{
 		Env:             env,
 		usePriMatcher:   usePriMatcher,
@@ -79,7 +79,7 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 	// Tests WITHOUT RunTestWithMatchingBehavior
 	t.Run("TestDescribeTaskQueue_NonRoot", func(t *testing.T) {
 		env := testcore.NewEnv(t, baseOpts...)
-		s := newTaskQueueStatsSuite(t, env, usePriMatcher)
+		s := newTaskQueueStatsSuite(env, usePriMatcher)
 		s.testDescribeTaskQueueNonRoot()
 	})
 
@@ -91,7 +91,7 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 			testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond),
 		)
 		env := testcore.NewEnv(t, opts...)
-		s := newTaskQueueStatsSuite(t, env, usePriMatcher)
+		s := newTaskQueueStatsSuite(env, usePriMatcher)
 		s.publishConsumeWorkflowTasksValidateStats(0, false)
 	})
 
@@ -101,7 +101,7 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 			testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Hour),
 		)
 		env := testcore.NewEnv(t, opts...)
-		s := newTaskQueueStatsSuite(t, env, usePriMatcher)
+		s := newTaskQueueStatsSuite(env, usePriMatcher)
 		s.testAddMultipleTasksValidateStatsCached()
 	})
 
@@ -155,7 +155,7 @@ func runSuiteWithMatchingBehaviors(
 	subtest func(s *taskQueueStatsSuite),
 ) {
 	runWithMatchingBehaviors(t, baseOpts, func(env *testcore.TestEnv, behavior testcore.MatchingBehavior) {
-		s := newTaskQueueStatsSuite(t, env, usePriMatcher)
+		s := newTaskQueueStatsSuite(env, usePriMatcher)
 		subtest(s)
 	})
 }
