@@ -1,7 +1,7 @@
 # Syntax is here:
 # https://docs.github.com/en/github/creating-cloning-and-archiving-repositories/about-code-owners#codeowners-syntax
 
-*                @temporalio/server @temporalio/cgs
+*                @temporalio/server @temporalio/cgs @temporalio/nexus
 
 # CHASM
 
