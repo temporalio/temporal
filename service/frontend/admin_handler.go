@@ -642,9 +642,11 @@ func (adh *AdminHandler) getSearchAttributesSQL(
 	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
 	customSearchAttributes := make(map[string]enumspb.IndexedValueType)
 	for field, tp := range searchAttributes.Custom() {
-		if alias, ok := fieldToAliasMap[field]; ok {
-			customSearchAttributes[alias] = tp
+		alias := field
+		if mappedAlias, ok := fieldToAliasMap[field]; ok {
+			alias = mappedAlias
 		}
+		customSearchAttributes[alias] = tp
 	}
 	return &adminservice.GetSearchAttributesResponse{
 		CustomAttributes: customSearchAttributes,

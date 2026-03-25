@@ -226,7 +226,7 @@ func (m *MetadataStore) UpdateNamespace(
 	defer func() { _ = iter.Close() }()
 
 	if !applied {
-		return serviceerror.NewUnavailable("UpdateNamespace operation failed because of conditional failure.")
+		return &p.ConditionFailedError{Msg: "UpdateNamespace operation failed because of conditional failure."}
 	}
 
 	return nil

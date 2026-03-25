@@ -131,6 +131,9 @@ func NewNoopMapper() Mapper {
 }
 
 func NewTestMapperProvider(customMapper Mapper) MapperProvider {
+	if customMapper == nil {
+		customMapper = NewNoopMapper()
+	}
 	return NewMapperProvider(customMapper, nil, NewTestProvider())
 }
 

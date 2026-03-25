@@ -195,6 +195,8 @@ func NewWorkflowHandler(
 			nsreplication.NewReplicator(namespaceReplicationQueue, logger),
 			archivalMetadata,
 			archiverProvider,
+			clusterMetadataManager,
+			visibilityMgr,
 			timeSource,
 			config,
 		),

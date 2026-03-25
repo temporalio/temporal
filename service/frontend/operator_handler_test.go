@@ -504,6 +504,12 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes() {
 	)
 	s.NoError(err)
 	s.NotNil(resp)
+	expected := searchattribute.TestNameTypeMap().Custom()
+	for field, alias := range searchattribute.TestAliases {
+		expected[alias] = expected[field]
+		delete(expected, field)
+	}
+	s.Equal(expected, resp.CustomAttributes)
 
 	s.mockResource.SearchAttributesManager.EXPECT().
 		GetSearchAttributes(testIndexName, true).
@@ -511,6 +517,36 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes() {
 	resp, err = handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
 	s.Error(err)
 	s.Nil(resp)
+}
+
+func (s *operatorHandlerSuite) Test_ListSearchAttributes_FallsBackToFieldNamesWhenNamespaceAliasesAreStale() {
+	handler := s.handler
+	ctx := context.Background()
+
+	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
+	s.mockResource.ClientFactory.EXPECT().
+		NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
+		Return(nil, s.mockResource.GetFrontendClient(), nil).
+		AnyTimes()
+	s.mockResource.FrontendClient.EXPECT().
+		DescribeNamespace(gomock.Any(), &workflowservice.DescribeNamespaceRequest{Namespace: testNamespace}).
+		Return(
+			&workflowservice.DescribeNamespaceResponse{
+				Config: &namespacepb.NamespaceConfig{CustomSearchAttributeAliases: map[string]string{}},
+			},
+			nil,
+		)
+	s.mockResource.SearchAttributesManager.EXPECT().
+		GetSearchAttributes(testIndexName, true).
+		Return(searchattribute.TestNameTypeMap(), nil)
+
+	resp, err := handler.ListSearchAttributes(
+		ctx,
+		&operatorservice.ListSearchAttributesRequest{Namespace: testNamespace},
+	)
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Equal(searchattribute.TestNameTypeMap().Custom(), resp.CustomAttributes)
 }
 
 func (s *operatorHandlerSuite) Test_RemoveSearchAttributes() {
