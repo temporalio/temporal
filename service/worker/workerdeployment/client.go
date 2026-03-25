@@ -1213,16 +1213,6 @@ func (d *ClientImpl) CreateWorkerDeploymentVersion(
 		return err
 	}
 
-	// Ensure the deployment exists.
-	_, err = d.queryCreateRequestID(ctx, namespaceEntry, deploymentName)
-	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
-			return serviceerror.NewNotFound(fmt.Sprintf(ErrWorkerDeploymentNotFound, deploymentName))
-		}
-		return err
-	}
-
 	version := worker_versioning.WorkerDeploymentVersionToStringV31(&deploymentspb.WorkerDeploymentVersion{
 		DeploymentName: deploymentName,
 		BuildId:        buildID,
@@ -1253,6 +1243,10 @@ func (d *ClientImpl) CreateWorkerDeploymentVersion(
 		updateRequest,
 	)
 	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return serviceerror.NewNotFound(fmt.Sprintf(ErrWorkerDeploymentNotFound, deploymentName))
+		}
 		return err
 	}
 	if failure := outcome.GetFailure(); failure != nil {

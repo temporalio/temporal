@@ -157,7 +157,10 @@ func ValidateWorkerDeploymentVersionComputeConfig(config *computepb.ComputeConfi
 	catchAllGroup := ""
 	seen := make(map[enumspb.TaskQueueType]string) // task queue type -> scaling group name
 
-	for name, group := range groups {
+	names := workflow.DeterministicKeys(groups)
+
+	for _, name := range names {
+		group := groups[name]
 		types := group.GetTaskQueueTypes()
 		if len(types) == 0 {
 			// Empty list means all types — only one such group is allowed.
