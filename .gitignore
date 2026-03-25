@@ -25,6 +25,7 @@
 /tctl*
 /tdbg
 /fairsim
+/research-agent-demo
 
 # proto images
 /proto/image.bin

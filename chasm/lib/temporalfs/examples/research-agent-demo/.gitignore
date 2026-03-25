@@ -1,0 +1,7 @@
+# Compiled binary
+research-agent-demo
+
+# Generated artifacts
+*.html
+demo-output.md
+demo-plan.md

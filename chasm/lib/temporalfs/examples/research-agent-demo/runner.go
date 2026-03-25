@@ -28,6 +28,7 @@ type RunConfig struct {
 	FailureRate float64
 	Seed        int64
 	TaskQueue   string
+	Continuous  bool // keep running until cancelled
 }
 
 // RunStats tracks aggregate statistics across all workflows.
@@ -53,15 +54,21 @@ type Runner struct {
 
 // NewRunner creates a runner that will start workflows against the given Temporal client.
 func NewRunner(client sdkclient.Client, store *DemoStore, config RunConfig) *Runner {
+	bufSize := config.Workflows * 5
+	if config.Continuous {
+		bufSize = config.Concurrency * 10
+	}
 	return &Runner{
 		client:  client,
 		store:   store,
 		config:  config,
-		EventCh: make(chan WorkflowEvent, config.Workflows*5),
+		EventCh: make(chan WorkflowEvent, bufSize),
 	}
 }
 
-// Run starts all workflows and waits for completion. It respects context cancellation.
+// Run starts workflows and waits for completion. In continuous mode, it keeps
+// starting new workflows until the context is cancelled, then waits for in-flight
+// workflows to finish. In fixed mode, it runs exactly config.Workflows workflows.
 func (r *Runner) Run(ctx context.Context) error {
 	sem := make(chan struct{}, r.config.Concurrency)
 	var wg sync.WaitGroup
@@ -72,7 +79,13 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 	rng := rand.New(rand.NewSource(seed))
 
-	for i := range r.config.Workflows {
+	limit := r.config.Workflows
+	if r.config.Continuous {
+		limit = 0 // no limit
+	}
+
+loop:
+	for i := 0; limit == 0 || i < limit; i++ {
 		if ctx.Err() != nil {
 			break
 		}
@@ -94,15 +107,28 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 
 		wg.Add(1)
-		sem <- struct{}{} // acquire semaphore
 		r.stats.Started.Add(1)
+
+		// Acquire semaphore — in continuous mode, also check for cancellation.
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			wg.Done()
+			r.stats.Started.Add(-1)
+			break loop
+		}
 
 		go func() {
 			defer wg.Done()
-			defer func() { <-sem }() // release semaphore
-
+			defer func() { <-sem }()
 			r.runOne(ctx, params)
 		}()
+	}
+
+	if r.config.Continuous {
+		// Wait for in-flight workflows to finish.
+		fmt.Printf("\n  Waiting for %d in-flight workflows to complete...\n",
+			r.stats.Started.Load()-r.stats.Completed.Load()-r.stats.Failed.Load())
 	}
 
 	wg.Wait()

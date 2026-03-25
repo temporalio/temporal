@@ -119,15 +119,27 @@ func (d *Dashboard) render() {
 	snapshots := d.runner.stats.Snapshots.Load()
 	retries := d.runner.stats.Retries.Load()
 
-	pct := 0
-	if d.total > 0 {
-		pct = completed * 100 / d.total
-	}
-
 	// Progress bar (40 chars wide).
 	barWidth := 40
-	filled := barWidth * completed / max(d.total, 1)
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
+	var bar, progressLabel string
+	if d.total > 0 {
+		pct := completed * 100 / d.total
+		filled := barWidth * completed / d.total
+		bar = strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
+		progressLabel = fmt.Sprintf("%d/%d  %d%%", completed, d.total, pct)
+	} else {
+		// Continuous mode — animate a cycling bar.
+		pos := int(time.Since(d.startTime).Seconds()*4) % barWidth
+		chars := make([]byte, barWidth)
+		for i := range chars {
+			chars[i] = '-'
+		}
+		for i := range 4 {
+			chars[(pos+i)%barWidth] = '='
+		}
+		bar = string(chars)
+		progressLabel = fmt.Sprintf("%d completed  ∞", completed)
+	}
 
 	// Throughput.
 	elapsedMin := elapsed.Seconds() / 60.0
@@ -146,9 +158,9 @@ func (d *Dashboard) render() {
 	fmt.Fprintf(&b, "║                                                                  ║\n")
 
 	// Progress bar.
-	fmt.Fprintf(&b, "║  Progress  [%s%s%s]  %s%d/%d  %d%%%s      ║\n",
+	fmt.Fprintf(&b, "║  Progress  [%s%s%s]  %s%-18s%s   ║\n",
 		colorCyan, bar, colorReset,
-		colorBold, completed, d.total, pct, colorReset)
+		colorBold, progressLabel, colorReset)
 	fmt.Fprintf(&b, "║                                                                  ║\n")
 
 	// Status counts.

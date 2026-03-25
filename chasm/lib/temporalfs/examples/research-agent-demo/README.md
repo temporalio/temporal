@@ -28,18 +28,70 @@ by a shared PebbleDB instance.
 
 ## Quick Start
 
+The easiest way to run the demo is with the included script, which handles
+building, starting the Temporal dev server, running workflows, and generating
+the report:
+
+```bash
+cd chasm/lib/temporalfs/examples/research-agent-demo
+./run-demo.sh
+```
+
+For continuous mode (runs until Ctrl+C):
+
+```bash
+./run-demo.sh --continuous
+```
+
+Customize the run:
+
+```bash
+./run-demo.sh --workflows 500 --concurrency 100 --failure-rate 2.0
+```
+
+### Manual Setup
+
+If you prefer to run each step yourself:
+
 ```bash
 # Terminal 1: Start the Temporal dev server
 temporal server start-dev
 
-# Terminal 2: Run the demo (200 workflows, live dashboard)
+# Terminal 2: Run the demo in continuous mode (runs until Ctrl+C)
 cd chasm/lib/temporalfs/examples/research-agent-demo
+go run . run --continuous --concurrency 50
+```
+
+Or run a fixed number of workflows:
+
+```bash
 go run . run --workflows 200 --concurrency 50
 ```
 
 The live terminal dashboard shows real-time progress, retry counts, throughput
 metrics, and an activity feed. Open http://localhost:8233 to see workflows in the
 Temporal UI.
+
+## `run-demo.sh` — End-to-End Script
+
+The `run-demo.sh` script automates the full demo: build, start Temporal dev
+server (if not already running), run workflows, show workflow counts, browse a
+sample filesystem, and generate the HTML report.
+
+```
+./run-demo.sh [flags]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--workflows` | 200 | Number of workflows (ignored in continuous mode) |
+| `--concurrency` | 50 | Max concurrent workflows |
+| `--failure-rate` | 1.0 | Failure rate multiplier (0 = none, 2 = double) |
+| `--seed` | 12345 | Random seed |
+| `--data-dir` | /tmp/tfs-demo | PebbleDB data directory |
+| `--continuous` | | Run continuously until Ctrl+C |
+
+The script cleans up the Temporal dev server on exit.
 
 ## Commands
 
@@ -59,6 +111,8 @@ go run . run [flags]
 | `--task-queue` | research-demo | Temporal task queue name |
 | `--temporal-addr` | localhost:7233 | Temporal server address |
 | `--no-dashboard` | false | Disable live terminal dashboard |
+| `--continuous` | false | Run continuously until Ctrl+C, then generate report |
+| `--report` | | Auto-generate HTML report on completion (path) |
 
 ### `report` — Generate HTML report
 
@@ -93,7 +147,17 @@ temporal server start-dev
 cd chasm/lib/temporalfs/examples/research-agent-demo
 ```
 
-### Run (2-3 minutes)
+### Run — Continuous Mode (recommended for live demos)
+
+```bash
+go run . run --continuous --concurrency 50
+```
+
+This opens the Temporal UI in your browser and keeps running workflows until you
+press Ctrl+C. On shutdown it waits for in-flight workflows and auto-generates an
+HTML report.
+
+### Run — Fixed Mode (2-3 minutes)
 
 ```bash
 go run . run --workflows 200 --concurrency 50
@@ -107,7 +171,7 @@ While running:
 ### After Completion
 
 ```bash
-# Generate and open HTML report
+# Generate and open HTML report (fixed mode — continuous mode does this automatically)
 go run . report --output demo-report.html
 open demo-report.html
 
@@ -163,3 +227,4 @@ temporal server start-dev
 | `dashboard.go` | Live ANSI terminal dashboard (no external deps) |
 | `report.go` | Post-run HTML report generator |
 | `store.go` | Shared PebbleDB wrapper + manifest management |
+| `run-demo.sh` | End-to-end demo script (build, server, run, report) |

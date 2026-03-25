@@ -12,6 +12,7 @@ SEED=12345
 DATA_DIR="/tmp/tfs-demo"
 TEMPORAL_ADDR="localhost:7233"
 TEMPORAL_PID=""
+CONTINUOUS=""
 
 # Parse flags.
 while [[ $# -gt 0 ]]; do
@@ -21,8 +22,9 @@ while [[ $# -gt 0 ]]; do
     --failure-rate) FAILURE_RATE="$2"; shift 2 ;;
     --seed)         SEED="$2"; shift 2 ;;
     --data-dir)     DATA_DIR="$2"; shift 2 ;;
+    --continuous)   CONTINUOUS="true"; shift ;;
     -h|--help)
-      echo "Usage: $0 [--workflows N] [--concurrency N] [--failure-rate F] [--seed S] [--data-dir DIR]"
+      echo "Usage: $0 [--workflows N] [--concurrency N] [--failure-rate F] [--seed S] [--data-dir DIR] [--continuous]"
       exit 0
       ;;
     *) echo "Unknown flag: $1"; exit 1 ;;
@@ -94,19 +96,30 @@ fi
 echo -e "  Temporal UI: ${CYAN}http://localhost:8233${RESET}"
 
 # ─────────────────────────────────────────────────────────────
-step "Step 3: Run ${WORKFLOWS} research agent workflows"
+if [[ -n "$CONTINUOUS" ]]; then
+  step "Step 3: Run research agent workflows (continuous mode — Ctrl+C to stop)"
+else
+  step "Step 3: Run ${WORKFLOWS} research agent workflows"
+fi
 
 rm -rf "$DATA_DIR"
 echo -e "  ${DIM}Workflows: ${WORKFLOWS}  Concurrency: ${CONCURRENCY}  Failure rate: ${FAILURE_RATE}  Seed: ${SEED}${RESET}"
 echo ""
 
-"$DEMO_BIN" run \
-  --workflows "$WORKFLOWS" \
-  --concurrency "$CONCURRENCY" \
-  --failure-rate "$FAILURE_RATE" \
-  --seed "$SEED" \
-  --data-dir "$DATA_DIR" \
+RUN_FLAGS=(
+  --concurrency "$CONCURRENCY"
+  --failure-rate "$FAILURE_RATE"
+  --seed "$SEED"
+  --data-dir "$DATA_DIR"
   --no-dashboard
+)
+if [[ -n "$CONTINUOUS" ]]; then
+  RUN_FLAGS+=(--continuous)
+else
+  RUN_FLAGS+=(--workflows "$WORKFLOWS")
+fi
+
+"$DEMO_BIN" run "${RUN_FLAGS[@]}"
 
 # ─────────────────────────────────────────────────────────────
 step "Step 4: Temporal workflow list"
