@@ -86,8 +86,17 @@ func cmdRun(args []string) {
 	}
 	defer c.Close()
 
-	// Start worker.
-	activities := &Activities{baseStore: store.Base()}
+	// Create runner first so activities can share its stats.
+	runner := NewRunner(c, store, RunConfig{
+		Workflows:   *workflows,
+		Concurrency: *concurrency,
+		FailureRate: *failureRate,
+		Seed:        *seed,
+		TaskQueue:   *taskQueue,
+	})
+
+	// Start worker with shared stats for real-time retry tracking.
+	activities := &Activities{baseStore: store.Base(), stats: &runner.stats}
 	w := worker.New(c, *taskQueue, worker.Options{
 		MaxConcurrentActivityExecutionSize: *concurrency,
 	})
@@ -97,15 +106,6 @@ func cmdRun(args []string) {
 		log.Fatalf("Failed to start worker: %v", err)
 	}
 	defer w.Stop()
-
-	// Create runner.
-	runner := NewRunner(c, store, RunConfig{
-		Workflows:   *workflows,
-		Concurrency: *concurrency,
-		FailureRate: *failureRate,
-		Seed:        *seed,
-		TaskQueue:   *taskQueue,
-	})
 
 	// Start dashboard.
 	if !*noDashboard {

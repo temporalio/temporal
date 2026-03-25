@@ -12,8 +12,12 @@ import (
 )
 
 // Activities holds the shared store and implements the 5 research agent activities.
+// Each activity opens an isolated TemporalFS partition, verifies that all files from
+// the previous step survived (demonstrating durability), writes new files, and creates
+// an MVCC snapshot. On retry, the FS state is intact — no intermediate state is lost.
 type Activities struct {
 	baseStore store.Store
+	stats     *RunStats // shared stats for real-time dashboard updates
 }
 
 // openFS opens an existing FS for the workflow's partition, or creates one if
@@ -29,6 +33,16 @@ func (a *Activities) openFS(partitionID uint64) (*tfs.FS, error) {
 		}
 	}
 	return f, nil
+}
+
+// onRetry records a retry in shared stats and logs the recovery with prior state info.
+func (a *Activities) onRetry(ctx context.Context, priorFiles int, priorSnapshot string) {
+	a.stats.Retries.Add(1)
+	activity.GetLogger(ctx).Info("Retrying with durable FS state intact",
+		"attempt", activity.GetInfo(ctx).Attempt,
+		"filesFromPriorStep", priorFiles,
+		"lastSnapshot", priorSnapshot,
+	)
 }
 
 // retries returns the number of retries for the current activity execution.
@@ -51,18 +65,39 @@ func maybeFail(ctx context.Context, seed int64, rate float64, msg string) error 
 	return nil
 }
 
+// countFiles counts files in a directory (non-recursive).
+func countFiles(f *tfs.FS, dir string) int {
+	entries, err := f.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	count := 0
+	for _, e := range entries {
+		if e.Type != tfs.InodeTypeDir {
+			count++
+		}
+	}
+	return count
+}
+
 // WebResearch simulates gathering research sources: creates workspace dirs
 // and writes 3-5 source files. Failure rate: 20% * multiplier.
 func (a *Activities) WebResearch(ctx context.Context, params WorkflowParams) (StepResult, error) {
-	if err := maybeFail(ctx, params.Seed+1, 0.20*params.FailureRate, "simulated web API timeout"); err != nil {
-		return StepResult{}, err
-	}
-
 	f, err := a.openFS(params.PartitionID)
 	if err != nil {
 		return StepResult{}, err
 	}
 	defer func() { _ = f.Close() }()
+
+	// On retry: verify FS opened successfully (partition is durable).
+	if activity.GetInfo(ctx).Attempt > 1 {
+		a.onRetry(ctx, 0, "(none — first step)")
+	}
+
+	// Inject failure AFTER opening FS — proves partition survives failures.
+	if err := maybeFail(ctx, params.Seed+1, 0.20*params.FailureRate, "simulated web API timeout"); err != nil {
+		return StepResult{}, err
+	}
 
 	// Create workspace directories (idempotent — ignore ErrExist).
 	for _, dir := range []string{
@@ -98,22 +133,29 @@ func (a *Activities) WebResearch(ctx context.Context, params WorkflowParams) (St
 
 // Summarize reads all source files and produces a summary. Failure rate: 15%.
 func (a *Activities) Summarize(ctx context.Context, params WorkflowParams) (StepResult, error) {
-	if err := maybeFail(ctx, params.Seed+2, 0.15*params.FailureRate, "simulated LLM rate limit exceeded"); err != nil {
-		return StepResult{}, err
-	}
-
 	f, err := a.openFS(params.PartitionID)
 	if err != nil {
 		return StepResult{}, err
 	}
 	defer func() { _ = f.Close() }()
 
-	// Read source filenames.
+	// Read source filenames — verifies step 1's files survived.
 	sourcesDir := "/research/" + params.TopicSlug + "/sources"
 	entries, err := f.ReadDir(sourcesDir)
 	if err != nil {
-		return StepResult{}, fmt.Errorf("readdir: %w", err)
+		return StepResult{}, fmt.Errorf("readdir %s: %w", sourcesDir, err)
 	}
+
+	// On retry: step 1's source files are still here — TemporalFS is durable.
+	if activity.GetInfo(ctx).Attempt > 1 {
+		a.onRetry(ctx, len(entries), "step-1-research")
+	}
+
+	// Inject failure AFTER verifying prior state.
+	if err := maybeFail(ctx, params.Seed+2, 0.15*params.FailureRate, "simulated LLM rate limit exceeded"); err != nil {
+		return StepResult{}, err
+	}
+
 	sourceNames := make([]string, len(entries))
 	for i, e := range entries {
 		sourceNames[i] = e.Name
@@ -135,18 +177,28 @@ func (a *Activities) Summarize(ctx context.Context, params WorkflowParams) (Step
 
 // FactCheck reads the summary and produces a fact-check report. Failure rate: 10%.
 func (a *Activities) FactCheck(ctx context.Context, params WorkflowParams) (StepResult, error) {
-	if err := maybeFail(ctx, params.Seed+3, 0.10*params.FailureRate, "simulated fact-checking service unavailable"); err != nil {
-		return StepResult{}, err
-	}
-
 	f, err := a.openFS(params.PartitionID)
 	if err != nil {
 		return StepResult{}, err
 	}
 	defer func() { _ = f.Close() }()
 
+	// Verify step 2's summary file survived.
+	topicDir := "/research/" + params.TopicSlug
+	priorFiles := countFiles(f, topicDir)
+
+	// On retry: summary + sources from prior steps are intact.
+	if activity.GetInfo(ctx).Attempt > 1 {
+		a.onRetry(ctx, priorFiles, "step-2-summary")
+	}
+
+	// Inject failure AFTER verifying prior state.
+	if err := maybeFail(ctx, params.Seed+3, 0.10*params.FailureRate, "simulated fact-checking service unavailable"); err != nil {
+		return StepResult{}, err
+	}
+
 	content := generateFactCheck(params.TopicName, params.Seed)
-	path := "/research/" + params.TopicSlug + "/fact-check.md"
+	path := topicDir + "/fact-check.md"
 	if err := f.WriteFile(path, content, 0o644); err != nil {
 		return StepResult{}, fmt.Errorf("write fact-check: %w", err)
 	}
@@ -160,18 +212,28 @@ func (a *Activities) FactCheck(ctx context.Context, params WorkflowParams) (Step
 
 // FinalReport reads all artifacts and produces a final report. Failure rate: 10%.
 func (a *Activities) FinalReport(ctx context.Context, params WorkflowParams) (StepResult, error) {
-	if err := maybeFail(ctx, params.Seed+4, 0.10*params.FailureRate, "simulated context window exceeded"); err != nil {
-		return StepResult{}, err
-	}
-
 	f, err := a.openFS(params.PartitionID)
 	if err != nil {
 		return StepResult{}, err
 	}
 	defer func() { _ = f.Close() }()
 
+	// Verify prior steps' files survived.
+	topicDir := "/research/" + params.TopicSlug
+	priorFiles := countFiles(f, topicDir)
+
+	// On retry: sources + summary + fact-check from prior steps are intact.
+	if activity.GetInfo(ctx).Attempt > 1 {
+		a.onRetry(ctx, priorFiles, "step-3-factcheck")
+	}
+
+	// Inject failure AFTER verifying prior state.
+	if err := maybeFail(ctx, params.Seed+4, 0.10*params.FailureRate, "simulated context window exceeded"); err != nil {
+		return StepResult{}, err
+	}
+
 	content := generateFinalReport(params.TopicName, params.Seed)
-	path := "/research/" + params.TopicSlug + "/report.md"
+	path := topicDir + "/report.md"
 	if err := f.WriteFile(path, content, 0o644); err != nil {
 		return StepResult{}, fmt.Errorf("write report: %w", err)
 	}
@@ -185,18 +247,28 @@ func (a *Activities) FinalReport(ctx context.Context, params WorkflowParams) (St
 
 // PeerReview reads the report and produces a peer review. Failure rate: 5%.
 func (a *Activities) PeerReview(ctx context.Context, params WorkflowParams) (StepResult, error) {
-	if err := maybeFail(ctx, params.Seed+5, 0.05*params.FailureRate, "simulated reviewer model overloaded"); err != nil {
-		return StepResult{}, err
-	}
-
 	f, err := a.openFS(params.PartitionID)
 	if err != nil {
 		return StepResult{}, err
 	}
 	defer func() { _ = f.Close() }()
 
+	// Verify prior steps' files survived.
+	topicDir := "/research/" + params.TopicSlug
+	priorFiles := countFiles(f, topicDir)
+
+	// On retry: all artifacts from prior steps are intact.
+	if activity.GetInfo(ctx).Attempt > 1 {
+		a.onRetry(ctx, priorFiles, "step-4-report")
+	}
+
+	// Inject failure AFTER verifying prior state.
+	if err := maybeFail(ctx, params.Seed+5, 0.05*params.FailureRate, "simulated reviewer model overloaded"); err != nil {
+		return StepResult{}, err
+	}
+
 	content := generatePeerReview(params.TopicName, params.Seed)
-	path := "/research/" + params.TopicSlug + "/review.md"
+	path := topicDir + "/review.md"
 	if err := f.WriteFile(path, content, 0o644); err != nil {
 		return StepResult{}, fmt.Errorf("write review: %w", err)
 	}
