@@ -56,6 +56,10 @@ func ConvertError(
 		}
 	}
 
+	if e, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
+		return e
+	}
+
 	return serviceerror.NewUnavailablef("operation %v encountered %v", operation, err.Error())
 }
 

@@ -18,7 +18,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/util"
@@ -29,13 +28,6 @@ import (
 
 type PollerScalingIntegSuite struct {
 	testcore.FunctionalTestBase
-}
-
-func (s *PollerScalingIntegSuite) mustToPayload(v any) *commonpb.Payload {
-	conv := converter.GetDefaultDataConverter()
-	payload, err := conv.ToPayload(v)
-	s.NoError(err)
-	return payload
 }
 
 func TestPollerScalingFunctionalSuite(t *testing.T) {
@@ -117,7 +109,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 						Endpoint:  endpointName,
 						Service:   "service",
 						Operation: "operation",
-						Input:     s.mustToPayload("input"),
+						Input:     testcore.MustToPayload(s.T(), "input"),
 					},
 				},
 			},
@@ -152,7 +144,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 	})
 	s.NoError(err)
 	s.NotNil(actResp.PollerScalingDecision)
-	s.Assert().GreaterOrEqual(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
+	s.GreaterOrEqual(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
 
 	nexusResp, err := feClient.PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
 		Namespace: s.Namespace().String(),
@@ -204,7 +196,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingDecisionsAreSeenProbabilistic
 
 	// We must have seen at least a handful of non-nil scaling decisions
 	nonNilDecisions := util.FilterSlice(allScaleDecisions, func(d *taskqueuepb.PollerScalingDecision) bool { return d != nil })
-	s.Assert().GreaterOrEqual(len(nonNilDecisions), 3)
+	s.GreaterOrEqual(len(nonNilDecisions), 3)
 }
 
 // The following tests verify poller scaling decisions work with worker-versioning based concepts.

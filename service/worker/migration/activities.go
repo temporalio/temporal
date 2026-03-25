@@ -7,7 +7,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/pkg/errors"
 	commonpb "go.temporal.io/api/common/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
@@ -383,6 +382,7 @@ func (a *activities) generateWorkflowReplicationTask(
 				RunId:      execution.RunID,
 			},
 			Archetype:      archetype,
+			ArchetypeId:    execution.ArchetypeID,
 			TargetClusters: targetClusters,
 		})
 		if err != nil {
@@ -781,6 +781,7 @@ func (a *activities) verifySingleReplicationTask(
 			RunId:      execution.RunID,
 		},
 		Archetype:       archetype,
+		ArchetypeId:     execution.ArchetypeID,
 		SkipForceReload: true,
 	})
 	a.forceReplicationMetricsHandler.Timer(metrics.VerifyDescribeMutableStateLatency.Name()).Record(time.Since(s))
@@ -810,7 +811,7 @@ func (a *activities) verifySingleReplicationTask(
 
 		return verifyResult{
 			status: notVerified,
-		}, errors.WithMessage(err, "failed to describe workflow from the remote cluster")
+		}, fmt.Errorf("failed to describe workflow from the remote cluster: %w", err)
 	}
 }
 

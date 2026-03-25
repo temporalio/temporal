@@ -115,8 +115,8 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 
 	workflowFn := s.makeWorkflowFunc(activityFunction)
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFunction)
 
 	wfId := testcore.RandomizeStr("wfid-" + s.T().Name())
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -183,8 +183,8 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhileRunning() {
 
 	workflowFn := s.makeWorkflowFunc(activityFunction)
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFunction)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        s.tv.WorkflowID(),
@@ -266,8 +266,8 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 
 	workflowFn := s.makeWorkflowFunc(activityFunction)
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFunction)
 
 	wfId := testcore.RandomizeStr("wf_id-" + s.T().Name())
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -282,7 +282,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(description.PendingActivities))
+		require.Len(t, description.PendingActivities, 1)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, description.PendingActivities[0].State)
 		require.Equal(t, int32(1), startedActivityCount.Load())
 	}, 5*time.Second, 200*time.Millisecond)
@@ -347,8 +347,8 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 
 	workflowFn := s.makeWorkflowFunc(activityFunction)
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFunction)
 
 	wfId := testcore.RandomizeStr("wf_id-" + s.T().Name())
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -493,8 +493,8 @@ func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {
 		return ret, err
 	}
 
-	s.Worker().RegisterActivity(activityFn)
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	wfId := "functional-test-heartbeat-details-after-reset"
 	workflowOptions := sdkclient.StartWorkflowOptions{

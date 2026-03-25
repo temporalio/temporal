@@ -224,6 +224,7 @@ func (s *registryWatchSuite) TestWatchEvents() {
 	s.Equal("initial-namespace", events[0].ns.Name().String())
 	s.Equal(int64(1), events[0].ns.NotificationVersion())
 	s.False(events[0].deleted)
+	s.InEpsilon(float64(1), s.capture.Snapshot()[metrics.TotalNamespaces.Name()][0].Value, 0.01)
 
 	// --- Create event ---
 	watchCh <- &persistence.NamespaceWatchEvent{
@@ -244,6 +245,7 @@ func (s *registryWatchSuite) TestWatchEvents() {
 	s.Len(events, 2)
 	s.Equal("created-via-watch", events[1].ns.Name().String())
 	s.False(events[1].deleted)
+	s.InEpsilon(float64(2), s.capture.Snapshot()[metrics.TotalNamespaces.Name()][1].Value, 0.01)
 
 	// --- Update event (change active cluster to trigger state change callback) ---
 	ns1UpdatedRecord := s.newNamespaceResponse(ns1ID, "initial-namespace", cluster.TestAlternativeClusterName, 3)
@@ -269,6 +271,7 @@ func (s *registryWatchSuite) TestWatchEvents() {
 	s.Equal(int64(3), events[2].ns.NotificationVersion())
 	s.Equal(cluster.TestAlternativeClusterName, events[2].ns.ActiveClusterName(namespace.EmptyBusinessID))
 	s.False(events[2].deleted)
+	s.InEpsilon(float64(2), s.capture.Snapshot()[metrics.TotalNamespaces.Name()][2].Value, 0.01) // update doesn't change count
 
 	// --- Delete event ---
 	watchCh <- &persistence.NamespaceWatchEvent{
@@ -301,7 +304,9 @@ func (s *registryWatchSuite) TestWatchEvents() {
 	s.True(events[3].deleted)
 
 	// Verify refresh latency metric was recorded (1 initial refresh).
-	s.Len(s.capture.Snapshot()[metrics.NamespaceRegistryRefreshLatency.Name()], 1)
+	snap := s.capture.Snapshot()
+	s.Len(snap[metrics.NamespaceRegistryRefreshLatency.Name()], 1)
+	s.InEpsilon(float64(1), snap[metrics.TotalNamespaces.Name()][3].Value, 0.01) // after delete: 1 namespace remains
 }
 
 // TestWatchStaleUpdateIgnored verifies that update events with a NotificationVersion
@@ -996,6 +1001,7 @@ func (s *registryWatchSuite) TestWatchEmptyInitialRefresh() {
 
 	// Verify no callbacks fired (no namespaces)
 	s.Equal(int32(0), tracker.getCount())
+	s.Zero(s.capture.Snapshot()[metrics.TotalNamespaces.Name()][0].Value)
 
 	// Verify GetNamespace returns not found
 	_, err := s.registry.GetNamespaceWithOptions(
@@ -1019,6 +1025,7 @@ func (s *registryWatchSuite) TestWatchEmptyInitialRefresh() {
 	ns, err := s.registry.GetNamespace("new-namespace")
 	s.NoError(err)
 	s.Equal(nsID, ns.ID())
+	s.InEpsilon(float64(1), s.capture.Snapshot()[metrics.TotalNamespaces.Name()][1].Value, 0.01)
 }
 
 // TestWatchUpdateForUnknownNamespace verifies that an update event for a namespace
