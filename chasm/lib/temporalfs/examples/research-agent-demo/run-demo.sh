@@ -108,7 +108,6 @@ RUN_FLAGS=(
   --failure-rate "$FAILURE_RATE"
   --seed "$SEED"
   --data-dir "$DATA_DIR"
-  --no-dashboard
 )
 if [[ -n "$CONTINUOUS" ]]; then
   RUN_FLAGS+=(--continuous)

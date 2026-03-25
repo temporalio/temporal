@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"time"
 
 	tfs "github.com/temporalio/temporal-fs/pkg/fs"
 	"github.com/temporalio/temporal-fs/pkg/store"
@@ -17,7 +18,26 @@ import (
 // an MVCC snapshot. On retry, the FS state is intact — no intermediate state is lost.
 type Activities struct {
 	baseStore store.Store
-	stats     *RunStats // shared stats for real-time dashboard updates
+	stats     *RunStats               // shared stats for real-time dashboard updates
+	eventCh   chan<- WorkflowEvent     // per-activity events for the dashboard
+}
+
+// emitEvent sends a dashboard event for the current activity step.
+func (a *Activities) emitEvent(ctx context.Context, params WorkflowParams, stepIndex int, stepName, state string) {
+	if a.eventCh == nil {
+		return
+	}
+	select {
+	case a.eventCh <- WorkflowEvent{
+		TopicSlug: params.TopicSlug,
+		StepIndex: stepIndex,
+		StepName:  stepName,
+		State:     state,
+		Attempt:   int(activity.GetInfo(ctx).Attempt),
+		Timestamp: time.Now(),
+	}:
+	default: // don't block if channel is full
+	}
 }
 
 // openFS opens an existing FS for the workflow's partition.
@@ -78,6 +98,7 @@ func countFiles(f *tfs.FS, dir string) int {
 // WebResearch simulates gathering research sources: creates workspace dirs
 // and writes 3-5 source files. Failure rate: 20% * multiplier.
 func (a *Activities) WebResearch(ctx context.Context, params WorkflowParams) (StepResult, error) {
+	a.emitEvent(ctx, params, 0, "WebResearch", "started")
 	f, err := a.openFS(params.PartitionID)
 	if err != nil {
 		return StepResult{}, err
@@ -86,6 +107,7 @@ func (a *Activities) WebResearch(ctx context.Context, params WorkflowParams) (St
 
 	// On retry: verify FS opened successfully (partition is durable).
 	if activity.GetInfo(ctx).Attempt > 1 {
+		a.emitEvent(ctx, params, 0, "WebResearch", "retrying")
 		a.onRetry(ctx, 0, "(none — first step)")
 	}
 
@@ -123,11 +145,13 @@ func (a *Activities) WebResearch(ctx context.Context, params WorkflowParams) (St
 	}
 
 	result.Retries = retries(ctx)
+	a.emitEvent(ctx, params, 0, "WebResearch", "completed")
 	return result, nil
 }
 
 // Summarize reads all source files and produces a summary. Failure rate: 15%.
 func (a *Activities) Summarize(ctx context.Context, params WorkflowParams) (StepResult, error) {
+	a.emitEvent(ctx, params, 1, "Summarize", "started")
 	f, err := a.openFS(params.PartitionID)
 	if err != nil {
 		return StepResult{}, err
@@ -143,6 +167,7 @@ func (a *Activities) Summarize(ctx context.Context, params WorkflowParams) (Step
 
 	// On retry: step 1's source files are still here — TemporalFS is durable.
 	if activity.GetInfo(ctx).Attempt > 1 {
+		a.emitEvent(ctx, params, 1, "Summarize", "retrying")
 		a.onRetry(ctx, len(entries), "step-1-research")
 	}
 
@@ -167,11 +192,13 @@ func (a *Activities) Summarize(ctx context.Context, params WorkflowParams) (Step
 		return StepResult{}, fmt.Errorf("snapshot: %w", err)
 	}
 
+	a.emitEvent(ctx, params, 1, "Summarize", "completed")
 	return StepResult{FilesCreated: 1, BytesWritten: int64(len(content)), Retries: retries(ctx)}, nil
 }
 
 // FactCheck reads the summary and produces a fact-check report. Failure rate: 10%.
 func (a *Activities) FactCheck(ctx context.Context, params WorkflowParams) (StepResult, error) {
+	a.emitEvent(ctx, params, 2, "FactCheck", "started")
 	f, err := a.openFS(params.PartitionID)
 	if err != nil {
 		return StepResult{}, err
@@ -184,6 +211,7 @@ func (a *Activities) FactCheck(ctx context.Context, params WorkflowParams) (Step
 
 	// On retry: summary + sources from prior steps are intact.
 	if activity.GetInfo(ctx).Attempt > 1 {
+		a.emitEvent(ctx, params, 2, "FactCheck", "retrying")
 		a.onRetry(ctx, priorFiles, "step-2-summary")
 	}
 
@@ -202,11 +230,13 @@ func (a *Activities) FactCheck(ctx context.Context, params WorkflowParams) (Step
 		return StepResult{}, fmt.Errorf("snapshot: %w", err)
 	}
 
+	a.emitEvent(ctx, params, 2, "FactCheck", "completed")
 	return StepResult{FilesCreated: 1, BytesWritten: int64(len(content)), Retries: retries(ctx)}, nil
 }
 
 // FinalReport reads all artifacts and produces a final report. Failure rate: 10%.
 func (a *Activities) FinalReport(ctx context.Context, params WorkflowParams) (StepResult, error) {
+	a.emitEvent(ctx, params, 3, "FinalReport", "started")
 	f, err := a.openFS(params.PartitionID)
 	if err != nil {
 		return StepResult{}, err
@@ -219,6 +249,7 @@ func (a *Activities) FinalReport(ctx context.Context, params WorkflowParams) (St
 
 	// On retry: sources + summary + fact-check from prior steps are intact.
 	if activity.GetInfo(ctx).Attempt > 1 {
+		a.emitEvent(ctx, params, 3, "FinalReport", "retrying")
 		a.onRetry(ctx, priorFiles, "step-3-factcheck")
 	}
 
@@ -237,11 +268,13 @@ func (a *Activities) FinalReport(ctx context.Context, params WorkflowParams) (St
 		return StepResult{}, fmt.Errorf("snapshot: %w", err)
 	}
 
+	a.emitEvent(ctx, params, 3, "FinalReport", "completed")
 	return StepResult{FilesCreated: 1, BytesWritten: int64(len(content)), Retries: retries(ctx)}, nil
 }
 
 // PeerReview reads the report and produces a peer review. Failure rate: 5%.
 func (a *Activities) PeerReview(ctx context.Context, params WorkflowParams) (StepResult, error) {
+	a.emitEvent(ctx, params, 4, "PeerReview", "started")
 	f, err := a.openFS(params.PartitionID)
 	if err != nil {
 		return StepResult{}, err
@@ -254,6 +287,7 @@ func (a *Activities) PeerReview(ctx context.Context, params WorkflowParams) (Ste
 
 	// On retry: all artifacts from prior steps are intact.
 	if activity.GetInfo(ctx).Attempt > 1 {
+		a.emitEvent(ctx, params, 4, "PeerReview", "retrying")
 		a.onRetry(ctx, priorFiles, "step-4-report")
 	}
 
@@ -272,5 +306,6 @@ func (a *Activities) PeerReview(ctx context.Context, params WorkflowParams) (Ste
 		return StepResult{}, fmt.Errorf("snapshot: %w", err)
 	}
 
+	a.emitEvent(ctx, params, 4, "PeerReview", "completed")
 	return StepResult{FilesCreated: 1, BytesWritten: int64(len(content)), Retries: retries(ctx)}, nil
 }

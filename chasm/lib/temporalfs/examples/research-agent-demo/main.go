@@ -109,7 +109,7 @@ func cmdRun(args []string) {
 	})
 
 	// Start worker with shared stats for real-time retry tracking.
-	activities := &Activities{baseStore: store.Base(), stats: &runner.stats}
+	activities := &Activities{baseStore: store.Base(), stats: &runner.stats, eventCh: runner.EventCh}
 	w := worker.New(c, *taskQueue, worker.Options{
 		MaxConcurrentActivityExecutionSize: *concurrency,
 	})
