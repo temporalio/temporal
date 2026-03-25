@@ -171,6 +171,11 @@ func (r *Runner) runOne(ctx context.Context, params WorkflowParams) {
 		TaskQueue: r.config.TaskQueue,
 	}, ResearchWorkflow, params)
 	if err != nil {
+		// Context cancellation (Ctrl+C) is not a failure — just stop tracking.
+		if ctx.Err() != nil {
+			r.stats.Started.Add(-1)
+			return
+		}
 		r.stats.Failed.Add(1)
 		r.EventCh <- WorkflowEvent{
 			TopicSlug: params.TopicSlug,
@@ -182,6 +187,12 @@ func (r *Runner) runOne(ctx context.Context, params WorkflowParams) {
 
 	var result WorkflowResult
 	if err := run.Get(ctx, &result); err != nil {
+		// Context cancellation (Ctrl+C) means we stopped waiting, not that
+		// the workflow failed. Don't count these as failures.
+		if ctx.Err() != nil {
+			r.stats.Started.Add(-1)
+			return
+		}
 		r.stats.Failed.Add(1)
 		_ = r.store.UpdateWorkflowResult(params.TopicSlug, result, true)
 		r.EventCh <- WorkflowEvent{
