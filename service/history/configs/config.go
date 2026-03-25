@@ -396,8 +396,8 @@ type Config struct {
 
 	WorkflowIdReuseMinimalInterval           dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	EnableWorkflowIdReuseStartTimeValidation dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	WorkflowIDStartRPSPerInstance            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	WorkflowIDStartBurstRatio                dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	WorkflowIDReuseRate            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowIDReuseBurstRatio                dynamicconfig.FloatPropertyFnWithNamespaceFilter
 
 	HealthPersistenceLatencyFailure dynamicconfig.FloatPropertyFn
 	HealthPersistenceErrorRatio     dynamicconfig.FloatPropertyFn
@@ -775,8 +775,8 @@ func NewConfig(
 		SendRawWorkflowHistory:                   dynamicconfig.SendRawWorkflowHistory.Get(dc),
 		WorkflowIdReuseMinimalInterval:           dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
 		EnableWorkflowIdReuseStartTimeValidation: dynamicconfig.EnableWorkflowIdReuseStartTimeValidation.Get(dc),
-		WorkflowIDStartRPSPerInstance:            dynamicconfig.WorkflowIDStartRPSPerInstance.Get(dc),
-		WorkflowIDStartBurstRatio:                dynamicconfig.WorkflowIDStartBurstRatio.Get(dc),
+		WorkflowIDReuseRate:            dynamicconfig.WorkflowIDReuseRate.Get(dc),
+		WorkflowIDReuseBurstRatio:                dynamicconfig.WorkflowIDReuseBurstRatio.Get(dc),
 
 		HealthPersistenceLatencyFailure: dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
 		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),

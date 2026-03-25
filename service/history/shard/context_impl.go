@@ -2264,11 +2264,11 @@ func (s *ContextImpl) EndpointRegistry() chasm.EndpointRegistry {
 }
 
 func (s *ContextImpl) GetWorkflowIDReuseRL(namespaceID namespace.ID, workflowID string) quotas.RateLimiter {
-	rps := s.config.WorkflowIDStartRPSPerInstance(namespaceID.String())
+	rps := s.config.WorkflowIDReuseRate(namespaceID.String())
 	if rps <= 0 {
 		return nil
 	}
-	burst := max(1, int(float64(rps)*s.config.WorkflowIDStartBurstRatio(namespaceID.String())))
+	burst := max(1, int(float64(rps)*s.config.WorkflowIDReuseBurstRatio(namespaceID.String())))
 	key := namespaceID.String() + "/" + workflowID
 	existing := s.workflowIDRateLimiters.Get(key)
 	if existing == nil {
