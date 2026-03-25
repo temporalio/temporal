@@ -84,6 +84,22 @@ func (r *Runner) Run(ctx context.Context) error {
 		limit = 0 // no limit
 	}
 
+	// Pre-create all FS partitions before starting any workflows.
+	// This ensures all superblocks and root inodes exist in PebbleDB before
+	// any concurrent activity reads/writes, avoiding visibility issues.
+	if !r.config.Continuous {
+		for i := 0; i < limit; i++ {
+			topic := TopicForIndex(i)
+			partitionID := uint64(i + 1)
+			if err := r.store.CreatePartition(partitionID); err != nil {
+				return fmt.Errorf("create partition for %s: %w", topic.Slug, err)
+			}
+			if err := r.store.RegisterWorkflow(partitionID, topic); err != nil {
+				return fmt.Errorf("register workflow %s: %w", topic.Slug, err)
+			}
+		}
+	}
+
 loop:
 	for i := 0; limit == 0 || i < limit; i++ {
 		if ctx.Err() != nil {
@@ -93,9 +109,14 @@ loop:
 		topic := TopicForIndex(i)
 		partitionID := uint64(i + 1) // must be >0
 
-		// Register in manifest for report/browse.
-		if err := r.store.RegisterWorkflow(partitionID, topic); err != nil {
-			return fmt.Errorf("register workflow %s: %w", topic.Slug, err)
+		// In continuous mode, create partitions on the fly.
+		if r.config.Continuous {
+			if err := r.store.CreatePartition(partitionID); err != nil {
+				return fmt.Errorf("create partition for %s: %w", topic.Slug, err)
+			}
+			if err := r.store.RegisterWorkflow(partitionID, topic); err != nil {
+				return fmt.Errorf("register workflow %s: %w", topic.Slug, err)
+			}
 		}
 
 		params := WorkflowParams{

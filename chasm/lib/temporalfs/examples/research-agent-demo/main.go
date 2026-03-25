@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"syscall"
+	"time"
 
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
@@ -57,7 +58,7 @@ func cmdRun(args []string) {
 	failureRate := fs.Float64("failure-rate", 1.0, "Failure rate multiplier (0=none, 2=double)")
 	dataDir := fs.String("data-dir", "/tmp/tfs-demo", "PebbleDB data directory")
 	seed := fs.Int64("seed", 0, "Random seed (0=random)")
-	taskQueue := fs.String("task-queue", "research-demo", "Temporal task queue name")
+	taskQueue := fs.String("task-queue", "", "Temporal task queue name (default: research-demo-<timestamp>)")
 	temporalAddr := fs.String("temporal-addr", "localhost:7233", "Temporal server address")
 	noDashboard := fs.Bool("no-dashboard", false, "Disable live dashboard")
 	continuous := fs.Bool("continuous", false, "Run continuously until Ctrl+C, then generate report")
@@ -90,6 +91,12 @@ func cmdRun(args []string) {
 		log.Fatalf("Failed to connect to Temporal: %v", err)
 	}
 	defer c.Close()
+
+	// Use a unique task queue per run to avoid stale activity task interference
+	// from previous runs on the same Temporal server.
+	if *taskQueue == "" {
+		*taskQueue = fmt.Sprintf("research-demo-%d", time.Now().UnixMilli())
+	}
 
 	// Create runner first so activities can share its stats.
 	runner := NewRunner(c, store, RunConfig{

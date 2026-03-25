@@ -20,17 +20,12 @@ type Activities struct {
 	stats     *RunStats // shared stats for real-time dashboard updates
 }
 
-// openFS opens an existing FS for the workflow's partition, or creates one if
-// it doesn't exist yet (first activity, first attempt).
+// openFS opens an existing FS for the workflow's partition.
 func (a *Activities) openFS(partitionID uint64) (*tfs.FS, error) {
 	s := store.NewPrefixedStore(a.baseStore, partitionID)
 	f, err := tfs.Open(s)
 	if err != nil {
-		// If the FS doesn't exist yet, create it.
-		f, err = tfs.Create(s, tfs.Options{ChunkSize: 64 * 1024})
-		if err != nil {
-			return nil, fmt.Errorf("create fs: %w", err)
-		}
+		return nil, fmt.Errorf("open fs: %w", err)
 	}
 	return f, nil
 }
@@ -87,7 +82,7 @@ func (a *Activities) WebResearch(ctx context.Context, params WorkflowParams) (St
 	if err != nil {
 		return StepResult{}, err
 	}
-	defer func() { _ = f.Close() }()
+	defer f.Close()
 
 	// On retry: verify FS opened successfully (partition is durable).
 	if activity.GetInfo(ctx).Attempt > 1 {
@@ -137,7 +132,7 @@ func (a *Activities) Summarize(ctx context.Context, params WorkflowParams) (Step
 	if err != nil {
 		return StepResult{}, err
 	}
-	defer func() { _ = f.Close() }()
+	defer f.Close()
 
 	// Read source filenames — verifies step 1's files survived.
 	sourcesDir := "/research/" + params.TopicSlug + "/sources"
@@ -181,7 +176,7 @@ func (a *Activities) FactCheck(ctx context.Context, params WorkflowParams) (Step
 	if err != nil {
 		return StepResult{}, err
 	}
-	defer func() { _ = f.Close() }()
+	defer f.Close()
 
 	// Verify step 2's summary file survived.
 	topicDir := "/research/" + params.TopicSlug
@@ -216,7 +211,7 @@ func (a *Activities) FinalReport(ctx context.Context, params WorkflowParams) (St
 	if err != nil {
 		return StepResult{}, err
 	}
-	defer func() { _ = f.Close() }()
+	defer f.Close()
 
 	// Verify prior steps' files survived.
 	topicDir := "/research/" + params.TopicSlug
@@ -251,7 +246,7 @@ func (a *Activities) PeerReview(ctx context.Context, params WorkflowParams) (Ste
 	if err != nil {
 		return StepResult{}, err
 	}
-	defer func() { _ = f.Close() }()
+	defer f.Close()
 
 	// Verify prior steps' files survived.
 	topicDir := "/research/" + params.TopicSlug

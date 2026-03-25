@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	tfs "github.com/temporalio/temporal-fs/pkg/fs"
 	"github.com/temporalio/temporal-fs/pkg/store"
 	pebblestore "github.com/temporalio/temporal-fs/pkg/store/pebble"
 )
@@ -109,6 +110,23 @@ func (ds *DemoStore) LoadManifest() ([]ManifestEntry, error) {
 		return nil, fmt.Errorf("unmarshal manifest: %w", err)
 	}
 	return entries, nil
+}
+
+// CreatePartition pre-creates a TemporalFS partition so the superblock exists
+// before any Temporal activity tries to open it. This avoids race conditions
+// under concurrent PebbleDB access where Open() may not see a recently
+// committed superblock from a different goroutine.
+func (ds *DemoStore) CreatePartition(partitionID uint64) error {
+	s := store.NewPrefixedStore(ds.base, partitionID)
+	// Try to open first — partition may already exist from a prior run.
+	f, err := tfs.Open(s)
+	if err != nil {
+		f, err = tfs.Create(s, tfs.Options{ChunkSize: 64 * 1024})
+		if err != nil {
+			return fmt.Errorf("create partition %d: %w", partitionID, err)
+		}
+	}
+	return f.Close()
 }
 
 // Close closes the underlying PebbleDB.
