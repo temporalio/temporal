@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
 )
 
@@ -157,18 +158,29 @@ loop:
 	return nil
 }
 
+// emitEvent sends a workflow event without blocking. If the channel is full
+// the event is dropped to avoid stalling goroutines that hold the semaphore.
+func (r *Runner) emitEvent(ev WorkflowEvent) {
+	select {
+	case r.EventCh <- ev:
+	default:
+	}
+}
+
 func (r *Runner) runOne(ctx context.Context, params WorkflowParams) {
 	workflowID := "research-" + params.TopicSlug
 
-	r.EventCh <- WorkflowEvent{
+	r.emitEvent(WorkflowEvent{
 		TopicSlug: params.TopicSlug,
 		State:     "started",
 		Timestamp: time.Now(),
-	}
+	})
 
 	run, err := r.client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        workflowID,
 		TaskQueue: r.config.TaskQueue,
+		// Terminate stale workflows from previous runs that share the same ID.
+		WorkflowIDConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 	}, ResearchWorkflow, params)
 	if err != nil {
 		// Context cancellation (Ctrl+C) is not a failure — just stop tracking.
@@ -177,11 +189,11 @@ func (r *Runner) runOne(ctx context.Context, params WorkflowParams) {
 			return
 		}
 		r.stats.Failed.Add(1)
-		r.EventCh <- WorkflowEvent{
+		r.emitEvent(WorkflowEvent{
 			TopicSlug: params.TopicSlug,
 			State:     "failed",
 			Timestamp: time.Now(),
-		}
+		})
 		return
 	}
 
@@ -195,11 +207,11 @@ func (r *Runner) runOne(ctx context.Context, params WorkflowParams) {
 		}
 		r.stats.Failed.Add(1)
 		_ = r.store.UpdateWorkflowResult(params.TopicSlug, result, true)
-		r.EventCh <- WorkflowEvent{
+		r.emitEvent(WorkflowEvent{
 			TopicSlug: params.TopicSlug,
 			State:     "failed",
 			Timestamp: time.Now(),
-		}
+		})
 		return
 	}
 
@@ -210,11 +222,11 @@ func (r *Runner) runOne(ctx context.Context, params WorkflowParams) {
 	r.stats.Retries.Add(int64(result.Retries))
 	_ = r.store.UpdateWorkflowResult(params.TopicSlug, result, false)
 
-	r.EventCh <- WorkflowEvent{
+	r.emitEvent(WorkflowEvent{
 		TopicSlug: params.TopicSlug,
 		StepIndex: 4,
 		StepName:  "PeerReview",
 		State:     "completed",
 		Timestamp: time.Now(),
-	}
+	})
 }
