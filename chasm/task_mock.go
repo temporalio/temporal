@@ -83,8 +83,17 @@ func (mr *MockSideEffectTaskHandlerMockRecorder[C, T]) Validate(arg0, arg1, arg2
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockSideEffectTaskHandler[C, T])(nil).Validate), arg0, arg1, arg2, arg3)
 }
 
-// sideEffectTaskHandler implements the unexported interface method.
-func (m *MockSideEffectTaskHandler[C, T]) sideEffectTaskHandler() {}
+// sideEffectTaskHandler mocks base method.
+func (m *MockSideEffectTaskHandler[C, T]) sideEffectTaskHandler() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "sideEffectTaskHandler")
+}
+
+// sideEffectTaskHandler indicates an expected call of sideEffectTaskHandler.
+func (mr *MockSideEffectTaskHandlerMockRecorder[C, T]) sideEffectTaskHandler() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "sideEffectTaskHandler", reflect.TypeOf((*MockSideEffectTaskHandler[C, T])(nil).sideEffectTaskHandler))
+}
 
 // MockPureTaskHandler is a mock of PureTaskHandler interface.
 type MockPureTaskHandler[C any, T any] struct {
@@ -139,8 +148,17 @@ func (mr *MockPureTaskHandlerMockRecorder[C, T]) Validate(arg0, arg1, arg2, arg3
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockPureTaskHandler[C, T])(nil).Validate), arg0, arg1, arg2, arg3)
 }
 
-// pureTaskHandler implements the unexported interface method.
-func (m *MockPureTaskHandler[C, T]) pureTaskHandler() {}
+// pureTaskHandler mocks base method.
+func (m *MockPureTaskHandler[C, T]) pureTaskHandler() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "pureTaskHandler")
+}
+
+// pureTaskHandler indicates an expected call of pureTaskHandler.
+func (mr *MockPureTaskHandlerMockRecorder[C, T]) pureTaskHandler() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "pureTaskHandler", reflect.TypeOf((*MockPureTaskHandler[C, T])(nil).pureTaskHandler))
+}
 
 // MockTaskValidator is a mock of TaskValidator interface.
 type MockTaskValidator[C any, T any] struct {

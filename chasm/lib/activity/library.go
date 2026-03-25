@@ -77,7 +77,7 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 type library struct {
 	componentOnlyLibrary
 
-	handler                            *handler
+	handler                           *handler
 	activityDispatchTaskHandler       *activityDispatchTaskHandler
 	scheduleToStartTimeoutTaskHandler *scheduleToStartTimeoutTaskHandler
 	scheduleToCloseTimeoutTaskHandler *scheduleToCloseTimeoutTaskHandler
@@ -96,8 +96,8 @@ func newLibrary(
 	namespaceRegistry namespace.Registry,
 ) *library {
 	return &library{
-		componentOnlyLibrary:               *newComponentOnlyLibrary(config, namespaceRegistry),
-		handler:                            handler,
+		componentOnlyLibrary:              *newComponentOnlyLibrary(config, namespaceRegistry),
+		handler:                           handler,
 		activityDispatchTaskHandler:       activityDispatchTaskHandler,
 		scheduleToStartTimeoutTaskHandler: scheduleToStartTimeoutTaskHandler,
 		scheduleToCloseTimeoutTaskHandler: scheduleToCloseTimeoutTaskHandler,

@@ -39,7 +39,7 @@ func NewLibrary(
 	MigrateToWorkflowTaskHandler *SchedulerMigrateToWorkflowTaskHandler,
 ) *Library {
 	return &Library{
-		handler:                          handler,
+		handler:                         handler,
 		SchedulerIdleTaskHandler:        SchedulerIdleTaskHandler,
 		SchedulerCallbacksTaskHandler:   SchedulerCallbacksTaskHandler,
 		GeneratorTaskHandler:            GeneratorTaskHandler,

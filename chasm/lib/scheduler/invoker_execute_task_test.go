@@ -23,7 +23,7 @@ import (
 // invokerExecuteTestEnv extends testEnv with mock clients for invoker execute tests.
 type invokerExecuteTestEnv struct {
 	*testEnv
-	handler           *scheduler.InvokerExecuteTaskHandler
+	handler            *scheduler.InvokerExecuteTaskHandler
 	mockFrontendClient *workflowservicemock.MockWorkflowServiceClient
 	mockHistoryClient  *historyservicemock.MockHistoryServiceClient
 }
@@ -45,7 +45,7 @@ func newInvokerExecuteTestEnv(t *testing.T) *invokerExecuteTestEnv {
 
 	return &invokerExecuteTestEnv{
 		testEnv:            env,
-		handler:           handler,
+		handler:            handler,
 		mockFrontendClient: mockFrontendClient,
 		mockHistoryClient:  mockHistoryClient,
 	}
