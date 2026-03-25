@@ -126,11 +126,16 @@ func cmdRun(args []string) {
 		dashTotal = 0
 	}
 
-	// Start dashboard.
+	// Start dashboard or drain events to prevent channel blocking.
 	if !*noDashboard {
 		dash := NewDashboard(runner, dashTotal)
 		dash.Start()
 		defer dash.Wait()
+	} else {
+		go func() {
+			for range runner.EventCh {
+			}
+		}()
 	}
 
 	if *continuous {
