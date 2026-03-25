@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
 )
 
@@ -168,7 +167,9 @@ func (r *Runner) emitEvent(ev WorkflowEvent) {
 }
 
 func (r *Runner) runOne(ctx context.Context, params WorkflowParams) {
-	workflowID := "research-" + params.TopicSlug
+	// Include task queue (which has a per-run timestamp) to avoid ID
+	// collisions with workflows from previous runs on the same server.
+	workflowID := r.config.TaskQueue + "-" + params.TopicSlug
 
 	r.emitEvent(WorkflowEvent{
 		TopicSlug: params.TopicSlug,
@@ -179,8 +180,6 @@ func (r *Runner) runOne(ctx context.Context, params WorkflowParams) {
 	run, err := r.client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        workflowID,
 		TaskQueue: r.config.TaskQueue,
-		// Terminate stale workflows from previous runs that share the same ID.
-		WorkflowIDConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 	}, ResearchWorkflow, params)
 	if err != nil {
 		// Context cancellation (Ctrl+C) is not a failure — just stop tracking.
