@@ -12,7 +12,6 @@ import (
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	workflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // registerEvents registers all event definitions (handlers) for nexus operations.
@@ -53,21 +52,7 @@ type baseNexusEventDefinition struct {
 	nexusProcessor *chasm.NexusEndpointProcessor
 }
 
-// getOperation looks up a Nexus operation from the workflow by its scheduled event ID.
-func getOperation(
-	ctx chasm.MutableContext,
-	wf *chasmworkflow.Workflow,
-	scheduledEventID int64,
-) (*nexusoperation.Operation, error) {
-	field, ok := wf.Operations[scheduledEventID]
-	if !ok {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("nexus operation not found for scheduled event ID %d", scheduledEventID))
-	}
-	return field.Get(ctx), nil
-}
-
-// ScheduledEventDefinition
-
+// ScheduledEventDefinition handles the NexusOperationScheduled history event.
 type ScheduledEventDefinition struct {
 	baseNexusEventDefinition
 }
@@ -92,11 +77,6 @@ func (d ScheduledEventDefinition) Type() enumspb.EventType {
 func (d ScheduledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
 	attrs := event.GetNexusOperationScheduledEventAttributes()
 
-	scheduledTime := event.GetEventTime()
-	if scheduledTime == nil {
-		scheduledTime = timestamppb.Now()
-	}
-
 	parentData, err := anypb.New(&workflowpb.NexusOperationParentData{
 		ScheduledEventId:      event.GetEventId(),
 		ScheduledEventBatchId: attrs.GetWorkflowTaskCompletedEventId(),
@@ -110,7 +90,7 @@ func (d ScheduledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkf
 		Endpoint:               attrs.GetEndpoint(),
 		Service:                attrs.GetService(),
 		Operation:              attrs.GetOperation(),
-		ScheduledTime:          scheduledTime,
+		ScheduledTime:          event.GetEventTime(),
 		ScheduleToStartTimeout: attrs.GetScheduleToStartTimeout(),
 		StartToCloseTimeout:    attrs.GetStartToCloseTimeout(),
 		ScheduleToCloseTimeout: attrs.GetScheduleToCloseTimeout(),
@@ -133,8 +113,7 @@ func (d ScheduledEventDefinition) CherryPick(_ chasm.MutableContext, _ *chasmwor
 	return chasmworkflow.ErrEventNotCherryPickable
 }
 
-// CancelRequestedEventDefinition
-
+// CancelRequestedEventDefinition handles the NexusOperationCancelRequested history event.
 type CancelRequestedEventDefinition struct {
 	baseNexusEventDefinition
 }
@@ -180,8 +159,7 @@ func (d CancelRequestedEventDefinition) CherryPick(_ chasm.MutableContext, _ *ch
 	return chasmworkflow.ErrEventNotCherryPickable
 }
 
-// CancelRequestCompletedEventDefinition
-
+// CancelRequestCompletedEventDefinition handles the NexusOperationCancelRequestCompleted history event.
 type CancelRequestCompletedEventDefinition struct {
 	baseNexusEventDefinition
 }
@@ -205,10 +183,11 @@ func (d CancelRequestCompletedEventDefinition) Type() enumspb.EventType {
 
 func (d CancelRequestCompletedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
 	attrs := event.GetNexusOperationCancelRequestCompletedEventAttributes()
-	op, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
-	if err != nil {
-		return err
+	field, ok := wf.Operations[attrs.GetScheduledEventId()]
+	if !ok {
+		return serviceerror.NewNotFound(fmt.Sprintf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId()))
 	}
+	op := field.Get(ctx)
 
 	cancellation, ok := op.Cancellation.TryGet(ctx)
 	if !ok {
@@ -225,8 +204,7 @@ func (d CancelRequestCompletedEventDefinition) CherryPick(ctx chasm.MutableConte
 	return d.Apply(ctx, wf, event)
 }
 
-// CancelRequestFailedEventDefinition
-
+// CancelRequestFailedEventDefinition handles the NexusOperationCancelRequestFailed history event.
 type CancelRequestFailedEventDefinition struct {
 	baseNexusEventDefinition
 }
@@ -250,10 +228,11 @@ func (d CancelRequestFailedEventDefinition) Type() enumspb.EventType {
 
 func (d CancelRequestFailedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
 	attrs := event.GetNexusOperationCancelRequestFailedEventAttributes()
-	op, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
-	if err != nil {
-		return err
+	field, ok := wf.Operations[attrs.GetScheduledEventId()]
+	if !ok {
+		return serviceerror.NewNotFound(fmt.Sprintf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId()))
 	}
+	op := field.Get(ctx)
 
 	cancellation, ok := op.Cancellation.TryGet(ctx)
 	if !ok {
@@ -270,8 +249,7 @@ func (d CancelRequestFailedEventDefinition) CherryPick(ctx chasm.MutableContext,
 	return d.Apply(ctx, wf, event)
 }
 
-// StartedEventDefinition
-
+// StartedEventDefinition handles the NexusOperationStarted history event.
 type StartedEventDefinition struct {
 	baseNexusEventDefinition
 }
@@ -295,10 +273,13 @@ func (d StartedEventDefinition) Type() enumspb.EventType {
 
 func (d StartedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
 	attrs := event.GetNexusOperationStartedEventAttributes()
-	op, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
-	if err != nil {
-		return err
+	field, ok := wf.Operations[attrs.GetScheduledEventId()]
+	if !ok {
+		return serviceerror.NewNotFound(fmt.Sprintf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId()))
 	}
+	op := field.Get(ctx)
+
+	// TODO: Store event.Links on the Operation for standalone mode, where links won't be available via history.
 
 	if err := nexusoperation.TransitionStarted.Apply(op, ctx, nexusoperation.EventStarted{
 		OperationToken: attrs.GetOperationToken(),
@@ -324,8 +305,7 @@ func (d StartedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmwo
 	return d.Apply(ctx, wf, event)
 }
 
-// CompletedEventDefinition
-
+// CompletedEventDefinition handles the NexusOperationCompleted history event.
 type CompletedEventDefinition struct {
 	baseNexusEventDefinition
 }
@@ -349,10 +329,11 @@ func (d CompletedEventDefinition) Type() enumspb.EventType {
 
 func (d CompletedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
 	attrs := event.GetNexusOperationCompletedEventAttributes()
-	op, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
-	if err != nil {
-		return err
+	field, ok := wf.Operations[attrs.GetScheduledEventId()]
+	if !ok {
+		return serviceerror.NewNotFound(fmt.Sprintf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId()))
 	}
+	op := field.Get(ctx)
 
 	if err := nexusoperation.TransitionSucceeded.Apply(op, ctx, nexusoperation.EventSucceeded{}); err != nil {
 		return err
@@ -368,8 +349,7 @@ func (d CompletedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasm
 	return d.Apply(ctx, wf, event)
 }
 
-// FailedEventDefinition
-
+// FailedEventDefinition handles the NexusOperationFailed history event.
 type FailedEventDefinition struct {
 	baseNexusEventDefinition
 }
@@ -393,10 +373,11 @@ func (d FailedEventDefinition) Type() enumspb.EventType {
 
 func (d FailedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
 	attrs := event.GetNexusOperationFailedEventAttributes()
-	op, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
-	if err != nil {
-		return err
+	field, ok := wf.Operations[attrs.GetScheduledEventId()]
+	if !ok {
+		return serviceerror.NewNotFound(fmt.Sprintf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId()))
 	}
+	op := field.Get(ctx)
 
 	if err := nexusoperation.TransitionFailed.Apply(op, ctx, nexusoperation.EventFailed{}); err != nil {
 		return err
@@ -412,8 +393,7 @@ func (d FailedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmwor
 	return d.Apply(ctx, wf, event)
 }
 
-// CanceledEventDefinition
-
+// CanceledEventDefinition handles the NexusOperationCanceled history event.
 type CanceledEventDefinition struct {
 	baseNexusEventDefinition
 }
@@ -437,10 +417,11 @@ func (d CanceledEventDefinition) Type() enumspb.EventType {
 
 func (d CanceledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
 	attrs := event.GetNexusOperationCanceledEventAttributes()
-	op, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
-	if err != nil {
-		return err
+	field, ok := wf.Operations[attrs.GetScheduledEventId()]
+	if !ok {
+		return serviceerror.NewNotFound(fmt.Sprintf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId()))
 	}
+	op := field.Get(ctx)
 
 	if err := nexusoperation.TransitionCanceled.Apply(op, ctx, nexusoperation.EventCanceled{}); err != nil {
 		return err
@@ -456,8 +437,7 @@ func (d CanceledEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmw
 	return d.Apply(ctx, wf, event)
 }
 
-// TimedOutEventDefinition
-
+// TimedOutEventDefinition handles the NexusOperationTimedOut history event.
 type TimedOutEventDefinition struct {
 	baseNexusEventDefinition
 }
@@ -481,10 +461,11 @@ func (d TimedOutEventDefinition) Type() enumspb.EventType {
 
 func (d TimedOutEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
 	attrs := event.GetNexusOperationTimedOutEventAttributes()
-	op, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
-	if err != nil {
-		return err
+	field, ok := wf.Operations[attrs.GetScheduledEventId()]
+	if !ok {
+		return serviceerror.NewNotFound(fmt.Sprintf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId()))
 	}
+	op := field.Get(ctx)
 
 	if err := nexusoperation.TransitionTimedOut.Apply(op, ctx, nexusoperation.EventTimedOut{}); err != nil {
 		return err
