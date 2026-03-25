@@ -1085,9 +1085,6 @@ func (c *hrsuTestCluster) pollWorkflowResult(ctx context.Context, runId string) 
 	}
 
 	c.t.s.Len(allEvents, 1)
-	if len(allEvents) == 0 {
-		return nil
-	}
 	return allEvents[0]
 }
 
