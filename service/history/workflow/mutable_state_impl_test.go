@@ -6151,45 +6151,60 @@ func (s *mutableStateSuite) TestSetContextMetadata() {
 	s.Equal(taskQueue, tq)
 }
 
-func (s *mutableStateSuite) TestCloseTransaction_PrincipalStamped_RegularEvents() {
-	namespaceEntry := tests.GlobalNamespaceEntry
-	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+func (s *mutableStateSuite) TestCloseTransaction_PrincipalStamped() {
+	for _, tc := range []struct {
+		name   string
+		policy historyi.TransactionPolicy
+	}{
+		{"Active", historyi.TransactionPolicyActive},
+		{"Passive", historyi.TransactionPolicyPassive},
+	} {
+		s.Run(tc.name, func() {
+			namespaceEntry := tests.GlobalNamespaceEntry
+			s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
-	dbState := s.buildWorkflowMutableState()
-	dbState.BufferedEvents = nil
+			dbState := s.buildWorkflowMutableState()
+			dbState.BufferedEvents = nil
 
-	var err error
-	s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
-	s.NoError(err)
-	err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
-	s.NoError(err)
+			var err error
+			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
+			s.NoError(err)
+			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
+			s.NoError(err)
 
-	// Complete the workflow task to generate events in workflowEventsSeq.
-	workflowTaskInfo := s.mutableState.GetStartedWorkflowTask()
-	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
-		workflowTaskInfo,
-		&workflowservice.RespondWorkflowTaskCompletedRequest{},
-		workflowTaskCompletionLimits,
-	)
-	s.NoError(err)
+			// Complete the workflow task to generate events in workflowEventsSeq.
+			workflowTaskInfo := s.mutableState.GetStartedWorkflowTask()
+			_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+				workflowTaskInfo,
+				&workflowservice.RespondWorkflowTaskCompletedRequest{},
+				workflowTaskCompletionLimits,
+			)
+			s.NoError(err)
 
-	// Close the transaction with a principal in context.
-	principal := &commonpb.Principal{Type: "user", Name: "alice"}
-	ctx := headers.SetPrincipal(context.Background(), principal)
-	_, eventsSeq, err := s.mutableState.CloseTransactionAsMutation(ctx, historyi.TransactionPolicyActive)
-	s.NoError(err)
+			// Close the transaction with a principal in context.
+			principal := &commonpb.Principal{Type: "user", Name: "alice"}
+			ctx := headers.SetPrincipal(context.Background(), principal)
+			_, eventsSeq, err := s.mutableState.CloseTransactionAsMutation(ctx, tc.policy)
+			s.NoError(err)
 
-	// All events should be stamped with the caller's principal.
-	s.NotEmpty(eventsSeq)
-	for _, we := range eventsSeq {
-		for _, event := range we.Events {
-			s.Equal("user", event.Principal.GetType(), "event %s should have principal type 'user'", event.EventType)
-			s.Equal("alice", event.Principal.GetName(), "event %s should have principal name 'alice'", event.EventType)
-		}
+			s.NotEmpty(eventsSeq)
+			for _, we := range eventsSeq {
+				for _, event := range we.Events {
+					if tc.policy == historyi.TransactionPolicyActive {
+						// Active: all events should be stamped with the caller's principal.
+						s.Equal("user", event.Principal.GetType(), "event %s should have principal type 'user'", event.EventType)
+						s.Equal("alice", event.Principal.GetName(), "event %s should have principal name 'alice'", event.EventType)
+					} else {
+						// Passive: events must not be stamped
+						s.Nil(event.Principal, "event %s should not have principal stamped in passive mode", event.EventType)
+					}
+				}
+			}
+		})
 	}
 }
 
-func (s *mutableStateSuite) TestCloseTransaction_PrincipalPreserved_FlushedBufferEvents() {
+func (s *mutableStateSuite) TestCloseTransaction_PrincipalPreserved() {
 	namespaceEntry := tests.GlobalNamespaceEntry
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
