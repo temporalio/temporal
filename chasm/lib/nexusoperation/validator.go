@@ -84,19 +84,18 @@ func validateAndNormalizeStartRequest(
 	saValidator *searchattribute.Validator,
 ) error {
 	ns := req.GetNamespace()
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	} else if len(req.GetRequestId()) > config.MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgumentf("request_id exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRequestId()), config.MaxIDLengthLimit())
+	}
 	if req.GetOperationId() == "" {
 		return serviceerror.NewInvalidArgument("operation_id is required")
 	}
 	if len(req.GetOperationId()) > config.MaxIDLengthLimit() {
 		return serviceerror.NewInvalidArgumentf("operation_id exceeds length limit. Length=%d Limit=%d",
 			len(req.GetOperationId()), config.MaxIDLengthLimit())
-	}
-	if req.GetRequestId() == "" {
-		req.RequestId = uuid.NewString()
-	}
-	if len(req.GetRequestId()) > config.MaxIDLengthLimit() {
-		return serviceerror.NewInvalidArgumentf("request_id exceeds length limit. Length=%d Limit=%d",
-			len(req.GetRequestId()), config.MaxIDLengthLimit())
 	}
 	if len(req.GetIdentity()) > config.MaxIDLengthLimit() {
 		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
@@ -154,7 +153,7 @@ func validateAndNormalizeStartRequest(
 	return nil
 }
 
-func validateDescribeNexusOperationExecutionRequest(req *workflowservice.DescribeNexusOperationExecutionRequest, config *Config) error {
+func validateAndNormalizeDescribeRequest(req *workflowservice.DescribeNexusOperationExecutionRequest, config *Config) error {
 	if req.GetOperationId() == "" {
 		return serviceerror.NewInvalidArgument("operation_id is required")
 	}
@@ -170,17 +169,19 @@ func validateDescribeNexusOperationExecutionRequest(req *workflowservice.Describ
 	return nil
 }
 
-func validateRequestCancelNexusOperationExecutionRequest(req *workflowservice.RequestCancelNexusOperationExecutionRequest, config *Config, logger log.Logger) error {
+func validateAndNormalizeCancelRequest(req *workflowservice.RequestCancelNexusOperationExecutionRequest, config *Config, logger log.Logger) error {
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	} else if len(req.GetRequestId()) > config.MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgumentf("request_id exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRequestId()), config.MaxIDLengthLimit())
+	}
 	if req.GetOperationId() == "" {
 		return serviceerror.NewInvalidArgument("operation_id is required")
 	}
 	if len(req.GetOperationId()) > config.MaxIDLengthLimit() {
 		return serviceerror.NewInvalidArgumentf("operation_id exceeds length limit. Length=%d Limit=%d",
 			len(req.GetOperationId()), config.MaxIDLengthLimit())
-	}
-	if len(req.GetRequestId()) > config.MaxIDLengthLimit() {
-		return serviceerror.NewInvalidArgumentf("request_id exceeds length limit. Length=%d Limit=%d",
-			len(req.GetRequestId()), config.MaxIDLengthLimit())
 	}
 	if len(req.GetRunId()) > config.MaxIDLengthLimit() {
 		return serviceerror.NewInvalidArgumentf("run_id exceeds length limit. Length=%d Limit=%d",
@@ -207,17 +208,19 @@ func validateRequestCancelNexusOperationExecutionRequest(req *workflowservice.Re
 	return nil
 }
 
-func validateTerminateNexusOperationExecutionRequest(req *workflowservice.TerminateNexusOperationExecutionRequest, config *Config, logger log.Logger) error {
+func validateAndNormalizeTerminateRequest(req *workflowservice.TerminateNexusOperationExecutionRequest, config *Config, logger log.Logger) error {
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	} else if len(req.GetRequestId()) > config.MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgumentf("request_id exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRequestId()), config.MaxIDLengthLimit())
+	}
 	if req.GetOperationId() == "" {
 		return serviceerror.NewInvalidArgument("operation_id is required")
 	}
 	if len(req.GetOperationId()) > config.MaxIDLengthLimit() {
 		return serviceerror.NewInvalidArgumentf("operation_id exceeds length limit. Length=%d Limit=%d",
 			len(req.GetOperationId()), config.MaxIDLengthLimit())
-	}
-	if len(req.GetRequestId()) > config.MaxIDLengthLimit() {
-		return serviceerror.NewInvalidArgumentf("request_id exceeds length limit. Length=%d Limit=%d",
-			len(req.GetRequestId()), config.MaxIDLengthLimit())
 	}
 	if len(req.GetRunId()) > config.MaxIDLengthLimit() {
 		return serviceerror.NewInvalidArgumentf("run_id exceeds length limit. Length=%d Limit=%d",
