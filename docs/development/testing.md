@@ -46,6 +46,30 @@ Use `//parallelize:ignore` to opt your test out of it.
 Functional tests in `tests/` using `testcore.NewEnv(t)` will always use `t.Parallel()`;
 unless the `MustRunSequential` option is passed.
 
+### Struct Assertions
+
+Prefer asserting entire structs over individual fields since it's exhaustive and will catch newly added fields. Use `Equal` or `protorequire.ProtoEqual` for protos:
+
+```go
+protorequire.ProtoEqual(t, &workflowpb.WorkflowExecutionInfo{
+    WorkflowId: "test-workflow-id",
+    // ...all fields
+}, info)
+```
+
+For dynamic fields (e.g. timestamps, IDs), echo the actual value back into the expected struct, then assert the field individually:
+
+```go
+protorequire.ProtoEqual(t, &workflowpb.WorkflowExecutionInfo{
+		WorkflowId: "test-workflow-id",
+    RequestId:  info.GetRequestId(),
+    // ...
+}, info)
+require.NotEmpty(t, info.GetRequestId())
+```
+
+Field-by-field assertions are fine when a test is intentionally focused on a few specific fields.
+
 ## Test helpers
 
 Test helpers can be found in the [common/testing](../../common/testing) package.
