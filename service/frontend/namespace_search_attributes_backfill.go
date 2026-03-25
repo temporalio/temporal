@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -79,22 +80,10 @@ func updateSingleNamespaceSearchAttributeMappings(
 	clusterCustomSearchAttributes map[string]enumspb.IndexedValueType,
 	logger log.Logger,
 ) error {
-	fieldToAliasMap := nsDetail.Namespace.Config.CustomSearchAttributeAliases
-	if fieldToAliasMap == nil {
-		fieldToAliasMap = make(map[string]string)
-	}
-
-	upsertFieldToAliasMap := make(map[string]string)
-	for fieldName, fieldType := range clusterCustomSearchAttributes {
-		if sadefs.IsPreallocatedCSAFieldName(fieldName, fieldType) {
-			continue
-		}
-		if _, ok := fieldToAliasMap[fieldName]; ok {
-			continue
-		}
-		upsertFieldToAliasMap[fieldName] = fieldName
-	}
-
+	upsertFieldToAliasMap := buildIdentitySearchAttributeAliases(
+		nsDetail.Namespace.Config.CustomSearchAttributeAliases,
+		clusterCustomSearchAttributes,
+	)
 	if len(upsertFieldToAliasMap) == 0 {
 		return nil
 	}
@@ -107,10 +96,38 @@ func updateSingleNamespaceSearchAttributeMappings(
 		},
 	})
 	if err != nil {
+		if isNamespaceSearchAttributeBackfillConflict(err) {
+			logger.Info("Skipped namespace search attribute backfill because namespace detail changed concurrently",
+				tag.WorkflowNamespace(nsName),
+				tag.Error(err))
+			return nil
+		}
 		return fmt.Errorf("failed to update namespace search attribute mappings: %w", err)
 	}
 	logger.Info("Created identity mappings for namespace search attributes",
 		tag.WorkflowNamespace(nsName),
 		tag.Number(int64(len(upsertFieldToAliasMap))))
 	return nil
+}
+
+func buildIdentitySearchAttributeAliases(
+	fieldToAliasMap map[string]string,
+	clusterCustomSearchAttributes map[string]enumspb.IndexedValueType,
+) map[string]string {
+	upsertFieldToAliasMap := make(map[string]string)
+	for fieldName, fieldType := range clusterCustomSearchAttributes {
+		if sadefs.IsPreallocatedCSAFieldName(fieldName, fieldType) {
+			continue
+		}
+		if _, ok := fieldToAliasMap[fieldName]; ok {
+			continue
+		}
+		upsertFieldToAliasMap[fieldName] = fieldName
+	}
+	return upsertFieldToAliasMap
+}
+
+func isNamespaceSearchAttributeBackfillConflict(err error) bool {
+	var conditionFailed *persistence.ConditionFailedError
+	return errors.As(err, &conditionFailed)
 }
