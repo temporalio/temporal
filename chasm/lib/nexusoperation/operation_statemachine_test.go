@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -496,14 +497,24 @@ func TestTransitionTerminated(t *testing.T) {
 			require.NoError(t, err)
 
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_TERMINATED, operation.Status)
-			require.Equal(t, "terminate-request-id", operation.TerminateState.GetRequestId())
-			require.Equal(t, "test-identity", operation.TerminateState.GetIdentity())
+			protorequire.ProtoEqual(t, &nexusoperationpb.NexusOperationTerminateState{
+				RequestId: "terminate-request-id",
+				Identity:  "test-identity",
+			}, operation.TerminateState)
 
 			// Verify outcome failure is set with terminated info and reason as message.
-			outcome := operation.Outcome.Get(ctx)
-			require.NotNil(t, outcome.GetFailed())
-			require.Equal(t, "test reason", outcome.GetFailed().GetFailure().GetMessage())
-			require.NotNil(t, outcome.GetFailed().GetFailure().GetTerminatedFailureInfo())
+			protorequire.ProtoEqual(t, &nexusoperationpb.OperationOutcome{
+				Variant: &nexusoperationpb.OperationOutcome_Failed_{
+					Failed: &nexusoperationpb.OperationOutcome_Failed{
+						Failure: &failurepb.Failure{
+							Message: "test reason",
+							FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+								TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
+							},
+						},
+					},
+				},
+			}, operation.Outcome.Get(ctx))
 
 			// Terminal state - no tasks should be emitted
 			require.Empty(t, ctx.Tasks)

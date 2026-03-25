@@ -123,9 +123,9 @@ func (h *handler) TerminateNexusOperation(
 		ref,
 		func(o *Operation, ctx chasm.MutableContext, req *nexusoperationpb.TerminateNexusOperationRequest) (*nexusoperationpb.TerminateNexusOperationResponse, error) {
 			if _, err := o.Terminate(ctx, chasm.TerminateComponentRequest{
-				Reason:    req.GetFrontendRequest().GetReason(),
-				Identity:  req.GetFrontendRequest().GetIdentity(),
 				RequestID: req.GetFrontendRequest().GetRequestId(),
+				Identity:  req.GetFrontendRequest().GetIdentity(),
+				Reason:    req.GetFrontendRequest().GetReason(),
 			}); err != nil {
 				return nil, err
 			}
