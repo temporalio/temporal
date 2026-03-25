@@ -322,9 +322,19 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 		name   string
 		mutate func(*workflowservice.RequestCancelNexusOperationExecutionRequest)
 		errMsg string
+		check  func(*testing.T, *workflowservice.RequestCancelNexusOperationExecutionRequest)
 	}{
 		{
 			name: "valid request",
+		},
+		{
+			name: "request_id - defaults empty to UUID",
+			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
+				r.RequestId = ""
+			},
+			check: func(t *testing.T, r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
+				require.Len(t, r.RequestId, 36) // UUID length
+			},
 		},
 		{
 			name: "operation_id - required",
@@ -391,6 +401,9 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
+			if tc.check != nil {
+				tc.check(t, validReq)
+			}
 		})
 	}
 }
@@ -407,9 +420,19 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 		name   string
 		mutate func(*workflowservice.TerminateNexusOperationExecutionRequest)
 		errMsg string
+		check  func(*testing.T, *workflowservice.TerminateNexusOperationExecutionRequest)
 	}{
 		{
 			name: "valid request",
+		},
+		{
+			name: "request_id - defaults empty to UUID",
+			mutate: func(r *workflowservice.TerminateNexusOperationExecutionRequest) {
+				r.RequestId = ""
+			},
+			check: func(t *testing.T, r *workflowservice.TerminateNexusOperationExecutionRequest) {
+				require.Len(t, r.RequestId, 36) // UUID length
+			},
 		},
 		{
 			name: "operation_id - required",
@@ -475,6 +498,9 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 				require.Contains(t, err.Error(), tc.errMsg)
 			} else {
 				require.NoError(t, err)
+			}
+			if tc.check != nil {
+				tc.check(t, validReq)
 			}
 		})
 	}

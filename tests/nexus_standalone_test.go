@@ -228,7 +228,7 @@ func TestRequestCancelNexusOperationExecution(t *testing.T) {
 		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING, descResp.GetInfo().GetStatus())
 	})
 
-	// TODO: Enable once cancel and terminate are fully implemented.
+	// TODO: Enable once cancel is fully implemented.
 	t.Run("AlreadyCanceled", func(t *testing.T) {
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		endpointName := createNexusEndpoint(s)
