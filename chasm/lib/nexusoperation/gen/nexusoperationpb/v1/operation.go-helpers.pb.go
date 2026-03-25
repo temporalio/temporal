@@ -81,6 +81,43 @@ func (this *NexusOperationTerminateState) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type OperationOutcome to the protobuf v3 wire format
+func (val *OperationOutcome) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type OperationOutcome from the protobuf v3 wire format
+func (val *OperationOutcome) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *OperationOutcome) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two OperationOutcome values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *OperationOutcome) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *OperationOutcome
+	switch t := that.(type) {
+	case *OperationOutcome:
+		that1 = t
+	case OperationOutcome:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type CancellationState to the protobuf v3 wire format
 func (val *CancellationState) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -165,6 +202,7 @@ var (
 		"Failed":      5,
 		"Canceled":    6,
 		"TimedOut":    7,
+		"Terminated":  8,
 	}
 )
 

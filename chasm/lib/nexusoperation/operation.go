@@ -62,6 +62,9 @@ type Operation struct {
 	// Cancellation is a child component that manages sending the cancel request to the Nexus endpoint.
 	Cancellation chasm.Field[*Cancellation]
 
+	// Outcome stores the terminal outcome of the operation.
+	Outcome chasm.Field[*nexusoperationpb.OperationOutcome]
+
 	// Visibility holds custom search attributes for this operation.
 	Visibility chasm.Field[*chasm.Visibility]
 }
@@ -91,6 +94,7 @@ func newStandaloneOperation(
 		UserMetadata: frontendReq.GetUserMetadata(),
 		Identity:     frontendReq.GetIdentity(),
 	})
+	op.Outcome = chasm.NewDataField(ctx, &nexusoperationpb.OperationOutcome{})
 	op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibilityWithData(
 		ctx,
 		frontendReq.GetSearchAttributes().GetIndexedFields(),
@@ -109,7 +113,8 @@ func (o *Operation) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 		return chasm.LifecycleStateCompleted
 	case nexusoperationpb.OPERATION_STATUS_FAILED,
 		nexusoperationpb.OPERATION_STATUS_CANCELED,
-		nexusoperationpb.OPERATION_STATUS_TIMED_OUT:
+		nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
+		nexusoperationpb.OPERATION_STATUS_TERMINATED:
 		return chasm.LifecycleStateFailed
 	default:
 		return chasm.LifecycleStateRunning
@@ -191,7 +196,7 @@ func (o *Operation) Terminate(
 		return chasm.TerminateComponentResponse{}, nil
 	}
 
-	return chasm.TerminateComponentResponse{}, serviceerror.NewUnimplemented("not implemented")
+	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(o, ctx, EventTerminated{Request: req})
 }
 
 // SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface.
@@ -209,19 +214,33 @@ func (o *Operation) buildDescribeResponse(
 	ctx chasm.Context,
 	req *nexusoperationpb.DescribeNexusOperationRequest,
 ) (*nexusoperationpb.DescribeNexusOperationResponse, error) {
-	var input *commonpb.Payload
+	resp := &workflowservice.DescribeNexusOperationExecutionResponse{
+		RunId: ctx.ExecutionKey().RunID,
+		Info:  o.buildExecutionInfo(ctx),
+		// TODO: Add LongPollToken support.
+	}
+
+	// Include input, if requested
 	if req.GetFrontendRequest().GetIncludeInput() {
-		input = o.RequestData.Get(ctx).GetInput()
+		resp.Input = o.RequestData.Get(ctx).GetInput()
+	}
+
+	// Include output, if available and requested
+	if req.GetFrontendRequest().GetIncludeOutcome() && o.LifecycleState(ctx).IsClosed() {
+		outcome := o.Outcome.Get(ctx)
+		if successful := outcome.GetSuccessful(); successful != nil {
+			resp.Outcome = &workflowservice.DescribeNexusOperationExecutionResponse_Result{
+				Result: successful.GetResult(),
+			}
+		} else if failure := outcome.GetFailed().GetFailure(); failure != nil {
+			resp.Outcome = &workflowservice.DescribeNexusOperationExecutionResponse_Failure{
+				Failure: failure,
+			}
+		}
 	}
 
 	return &nexusoperationpb.DescribeNexusOperationResponse{
-		FrontendResponse: &workflowservice.DescribeNexusOperationExecutionResponse{
-			RunId: ctx.ExecutionKey().RunID,
-			Info:  o.buildExecutionInfo(ctx),
-			Input: input,
-			// TODO: Add Outcome
-			// TODO: Add LongPollToken support.
-		},
+		FrontendResponse: resp,
 	}, nil
 }
 
@@ -296,6 +315,8 @@ func operationExecutionStatus(status nexusoperationpb.OperationStatus) enumspb.N
 		return enumspb.NEXUS_OPERATION_EXECUTION_STATUS_CANCELED
 	case nexusoperationpb.OPERATION_STATUS_TIMED_OUT:
 		return enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TIMED_OUT
+	case nexusoperationpb.OPERATION_STATUS_TERMINATED:
+		return enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TERMINATED
 	default:
 		return enumspb.NEXUS_OPERATION_EXECUTION_STATUS_UNSPECIFIED
 	}

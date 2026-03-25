@@ -69,6 +69,24 @@ message OperationState {
 message NexusOperationTerminateState {
   // Request ID used to deduplicate terminate requests.
   string request_id = 1;
+  // The identity of the client who requested termination.
+  string identity = 2;
+}
+
+message OperationOutcome {
+    message Successful {
+        //
+        temporal.api.common.v1.Payload result = 1;
+    }
+
+    message Failed {
+        temporal.api.failure.v1.Failure failure = 1;
+    }
+
+    oneof variant {
+        Successful successful = 1;
+        Failed failed = 2;
+    }
 }
 
 enum OperationStatus {
@@ -91,6 +109,8 @@ enum OperationStatus {
   // Operation timed out - exceeded the user supplied schedule-to-close timeout.
   // Any attempts to complete the operation in this status will be ignored.
     OPERATION_STATUS_TIMED_OUT = 7;
+  // Operation was terminated by user request.
+    OPERATION_STATUS_TERMINATED = 8;
 }
 
 message CancellationState {

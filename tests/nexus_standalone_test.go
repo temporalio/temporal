@@ -332,10 +332,7 @@ func TestRequestCancelNexusOperationExecution(t *testing.T) {
 func TestTerminateNexusOperationExecution(t *testing.T) {
 	t.Parallel()
 
-	// TODO: Enable once terminate is fully implemented for standalone Nexus operations.
 	t.Run("Terminate", func(t *testing.T) {
-		t.Skip("Terminate not yet fully implemented for standalone Nexus operations")
-
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		endpointName := createNexusEndpoint(s)
 
@@ -357,18 +354,20 @@ func TestTerminateNexusOperationExecution(t *testing.T) {
 
 		// Verify state after terminate.
 		descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
-			OperationId: "test-op",
-			RunId:       startResp.RunId,
+			Namespace:      s.Namespace().String(),
+			OperationId:    "test-op",
+			RunId:          startResp.RunId,
+			IncludeOutcome: true,
 		})
 		s.NoError(err)
-		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_FAILED, descResp.GetInfo().GetStatus())
+		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TERMINATED, descResp.GetInfo().GetStatus())
+		failure := descResp.GetFailure()
+		s.NotNil(failure)
+		s.Equal("test termination", failure.GetMessage())
+		s.NotNil(failure.GetTerminatedFailureInfo())
 	})
 
-	// TODO: Enable once terminate is fully implemented for standalone Nexus operations.
 	t.Run("AlreadyTerminated", func(t *testing.T) {
-		t.Skip("Terminate not yet fully implemented for standalone Nexus operations")
-
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		endpointName := createNexusEndpoint(s)
 
@@ -441,20 +440,17 @@ func TestTerminateNexusOperationExecution(t *testing.T) {
 		})
 		s.NoError(err)
 
-		// Verify state changed to failed (terminate overrides cancel).
+		// Verify state changed to terminated (terminate overrides cancel request).
 		descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
 			Namespace:   s.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 		})
 		s.NoError(err)
-		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_FAILED, descResp.GetInfo().GetStatus())
+		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TERMINATED, descResp.GetInfo().GetStatus())
 	})
 
-	// TODO: Enable once terminate is fully implemented for standalone Nexus operations.
 	t.Run("NotFound", func(t *testing.T) {
-		t.Skip("Terminate not yet fully implemented for standalone Nexus operations")
-
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 
 		_, err := s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{

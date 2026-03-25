@@ -19,7 +19,8 @@ var (
 )
 
 func newTestOperation() *Operation {
-	return &Operation{
+	ctx := &chasm.MockMutableContext{}
+	op := &Operation{
 		OperationState: &nexusoperationpb.OperationState{
 			Status:                 nexusoperationpb.OPERATION_STATUS_UNSPECIFIED,
 			EndpointId:             "endpoint-id",
@@ -32,6 +33,8 @@ func newTestOperation() *Operation {
 			Attempt:                0,
 		},
 	}
+	op.Outcome = chasm.NewDataField(ctx, &nexusoperationpb.OperationOutcome{})
+	return op
 }
 
 func TestTransitionScheduled(t *testing.T) {
@@ -440,6 +443,67 @@ func TestTransitionTimedOut(t *testing.T) {
 			require.NoError(t, err)
 
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, operation.Status)
+
+			// Terminal state - no tasks should be emitted
+			require.Empty(t, ctx.Tasks)
+		})
+	}
+}
+
+func TestTransitionTerminated(t *testing.T) {
+	testCases := []struct {
+		name        string
+		startStatus nexusoperationpb.OperationStatus
+	}{
+		{
+			name:        "terminated from scheduled",
+			startStatus: nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+		},
+		{
+			name:        "terminated from started",
+			startStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
+		},
+		{
+			name:        "terminated from backing off",
+			startStatus: nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+		},
+		{
+			name:        "terminated from canceled",
+			startStatus: nexusoperationpb.OPERATION_STATUS_CANCELED,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{
+				MockContext: chasm.MockContext{
+					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+				},
+			}
+
+			operation := newTestOperation()
+			operation.Status = tc.startStatus
+
+			event := EventTerminated{
+				Request: chasm.TerminateComponentRequest{
+					RequestID: "terminate-request-id",
+					Reason:    "test reason",
+					Identity:  "test-identity",
+				},
+			}
+
+			err := TransitionTerminated.Apply(operation, ctx, event)
+			require.NoError(t, err)
+
+			require.Equal(t, nexusoperationpb.OPERATION_STATUS_TERMINATED, operation.Status)
+			require.Equal(t, "terminate-request-id", operation.TerminateState.GetRequestId())
+			require.Equal(t, "test-identity", operation.TerminateState.GetIdentity())
+
+			// Verify outcome failure is set with terminated info and reason as message.
+			outcome := operation.Outcome.Get(ctx)
+			require.NotNil(t, outcome.GetFailed())
+			require.Equal(t, "test reason", outcome.GetFailed().GetFailure().GetMessage())
+			require.NotNil(t, outcome.GetFailed().GetFailure().GetTerminatedFailureInfo())
 
 			// Terminal state - no tasks should be emitted
 			require.Empty(t, ctx.Tasks)
