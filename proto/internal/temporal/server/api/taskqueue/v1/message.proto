@@ -61,9 +61,11 @@ message InternalTaskQueueStatus {
     // Draining means that this status is from a queue that is being drained to
     // migrate from v1 to v2 tasks persistence (or backwards).
     bool draining = 10;
-    // Drained means that this queue has an empty backlog (at this point in time).
-    // Used for partition scaling.
-    bool drained = 11;
+    // BacklogDrained means this queue has an empty backlog at the time this status
+    // was generated. This is inherently racy — new tasks may arrive after this
+    // check. Consumers must use version-based validation (see scaleManager) to
+    // ensure correctness.
+    bool backlog_drained = 11;
 }
 
 message TaskQueueVersionInfoInternal {
