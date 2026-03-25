@@ -1344,7 +1344,7 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 	)
 	MatchingDeploymentWorkflowVersion = NewNamespaceIntSetting(
 		"matching.deploymentWorkflowVersion",
-		0,
+		2,
 		`MatchingDeploymentWorkflowVersion controls what version of the logic should the manager workflows use.`,
 	)
 	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
