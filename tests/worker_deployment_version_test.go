@@ -63,11 +63,6 @@ var (
 	testRandomMetadataValue = []byte("random metadata value")
 )
 
-func TestDeploymentVersionSuiteV0(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.InitialVersion, useV32: true})
-}
-
 func TestDeploymentVersionSuiteV2(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber, useV32: true})
