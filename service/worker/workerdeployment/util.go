@@ -87,11 +87,11 @@ const (
 	errVersionIsDraining          = "errVersionIsDraining"
 	errVersionHasPollers          = "errVersionHasPollersSuffix"
 
-	errFailedPrecondition                = "FailedPrecondition"
-	errInvalidComputeConfig              = "errInvalidComputeConfig"
+	errFailedPrecondition   = "FailedPrecondition"
+	errInvalidComputeConfig = "errInvalidComputeConfig"
 
-	ErrMultipleCatchAllScalingGroups     = "scaling groups %q and %q both cover all task queue types; at most one scaling group can have an empty task queue types list"
-	ErrOverlappingTaskQueueType          = "task queue type %v is covered by both scaling group %q and %q"
+	ErrMultipleCatchAllScalingGroups = "scaling groups %q and %q both cover all task queue types; at most one scaling group can have an empty task queue types list"
+	ErrOverlappingTaskQueueType      = "task queue type %v is covered by both scaling group %q and %q"
 
 	ErrVersionIsDraining         = "version '%s' cannot be deleted since it is draining"
 	ErrVersionHasPollers         = "version '%s' cannot be deleted since it has active pollers"

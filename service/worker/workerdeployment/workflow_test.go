@@ -37,7 +37,7 @@ func TestWorkerDeploymentSuiteV2(t *testing.T) {
 
 func (s *WorkerDeploymentSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
-	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
+	s.env = s.NewTestWorkflowEnvironment()
 	s.env.RegisterWorkflowWithOptions(s.getDeploymentWorkflowFunc(), workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
 
 	// Initialize an empty ClientImpl to use its helper methods
@@ -1666,7 +1666,7 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeploymentVersion_MaxVersionsLi
 	existingVersion := tv.WithBuildIDNumber(2).DeploymentVersionString()
 
 	// Use a custom workflow function with maxVersions=1
-	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
+	s.env = s.NewTestWorkflowEnvironment()
 	s.env.RegisterWorkflowWithOptions(func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
 		workflowVersionGetter := func() DeploymentWorkflowVersion {
 			return s.workflowVersion

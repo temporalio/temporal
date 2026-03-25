@@ -3383,7 +3383,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 		})
 		a.NoError(err)
 		a.NotNil(descResp.GetWorkerDeploymentVersionInfo())
-		a.Equal(tv.DeploymentVersionString(), descResp.GetWorkerDeploymentVersionInfo().GetVersion())
+		a.Equal(tv.DeploymentVersionStringV32(), worker_versioning.ExternalWorkerDeploymentVersionToString(descResp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion()))
 		a.NotNil(descResp.GetWorkerDeploymentVersionInfo().GetCreateTime())
 		a.True(proto.Equal(computeConfig, descResp.GetWorkerDeploymentVersionInfo().GetComputeConfig()))
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED, descResp.GetWorkerDeploymentVersionInfo().GetStatus())
@@ -3397,8 +3397,8 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 			DeploymentName: deploymentName,
 		})
 		a.NoError(err)
-		a.Equal(1, len(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()))
-		a.Equal(tv.DeploymentVersionString(), descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetVersion())
+		a.Len(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries(), 1)
+		a.Equal(tv.DeploymentVersionStringV32(), worker_versioning.ExternalWorkerDeploymentVersionToString(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetDeploymentVersion()))
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED, descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetStatus())
 	}, 10*time.Second, 500*time.Millisecond)
 }
@@ -3475,8 +3475,8 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_ThenPoll_Task
 			DeploymentName: deploymentName,
 		})
 		a.NoError(err)
-		a.Equal(1, len(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()))
-		a.Equal(tv.DeploymentVersionString(), descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetVersion())
+		a.Len(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries(), 1)
+		a.Equal(tv.DeploymentVersionStringV32(), worker_versioning.ExternalWorkerDeploymentVersionToString(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetDeploymentVersion()))
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetStatus())
 	}, 10*time.Second, 500*time.Millisecond)
 }
@@ -3720,7 +3720,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_MultipleVersi
 			DeploymentName: deploymentName,
 		})
 		a.NoError(err)
-		a.Equal(2, len(descResp.GetWorkerDeploymentInfo().GetVersionSummaries()))
+		a.Len(descResp.GetWorkerDeploymentInfo().GetVersionSummaries(), 2)
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Verify compute configs via DescribeWorkerDeploymentVersion

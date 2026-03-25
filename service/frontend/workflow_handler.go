@@ -207,16 +207,16 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionComputeConfig(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest,
 ) (*workflowservice.UpdateWorkerDeploymentVersionComputeConfigResponse, error) {
-	//TODO implement me
-	panic("implement me")
+	// TODO implement me
+	return nil, serviceerror.NewUnimplemented("UpdateWorkerDeploymentVersionComputeConfig not implemented")
 }
 
 func (wh *WorkflowHandler) ValidateWorkerDeploymentVersionComputeConfig(
 	ctx context.Context,
 	request *workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest,
 ) (*workflowservice.ValidateWorkerDeploymentVersionComputeConfigResponse, error) {
-	//TODO implement me
-	panic("implement me")
+	// TODO implement me
+	return nil, serviceerror.NewUnimplemented("ValidateWorkerDeploymentVersionComputeConfig not implemented")
 }
 
 // NewWorkflowHandler creates a gRPC handler for workflowservice
