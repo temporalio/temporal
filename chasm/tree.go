@@ -206,6 +206,7 @@ type (
 		GetWorkflowKey() definition.WorkflowKey
 		AddTasks(...tasks.Task)
 		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
+		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 		HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool) bool
 		DeleteCHASMPureTasks(maxScheduledTime time.Time)
 		UpdateWorkflowStateStatus(

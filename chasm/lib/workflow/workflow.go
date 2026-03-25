@@ -8,13 +8,16 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	workflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/service/history/historybuilder"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -306,6 +309,56 @@ func (w *Workflow) RemoveNexusOperation(key int64) {
 // PendingNexusOperationCount returns the number of pending Nexus operations in the workflow.
 func (w *Workflow) PendingNexusOperationCount() int {
 	return len(w.Operations)
+}
+
+// GetNexusOperationInvocationData loads invocation data from the scheduled history event.
+func (w *Workflow) GetNexusOperationInvocationData(
+	ctx chasm.Context,
+	op *nexusoperation.Operation,
+) (nexusoperation.InvocationData, error) {
+	parentData := &workflowpb.NexusOperationParentData{}
+	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
+		return nexusoperation.InvocationData{}, serviceerror.NewFailedPreconditionf(
+			"failed to unmarshal nexus operation parent data: %v", err,
+		)
+	}
+
+	token, err := proto.Marshal(&tokenspb.HistoryEventRef{
+		EventId:      parentData.GetScheduledEventId(),
+		EventBatchId: parentData.GetScheduledEventBatchId(),
+	})
+	if err != nil {
+		return nexusoperation.InvocationData{}, serviceerror.NewInternalf(
+			"failed to marshal history event ref: %v", err,
+		)
+	}
+
+	event, err := w.MSPointer.LoadHistoryEvent(ctx, token)
+	if err != nil {
+		return nexusoperation.InvocationData{}, err
+	}
+
+	attrs := event.GetNexusOperationScheduledEventAttributes()
+	execKey := ctx.ExecutionKey()
+	nsEntry := ctx.NamespaceEntry()
+
+	nexusLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+		Namespace:  nsEntry.Name().String(),
+		WorkflowId: execKey.BusinessID,
+		RunId:      execKey.RunID,
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventId:   event.GetEventId(),
+				EventType: event.GetEventType(),
+			},
+		},
+	})
+
+	return nexusoperation.InvocationData{
+		Input:     attrs.GetInput(),
+		Header:    attrs.GetNexusHeader(),
+		NexusLink: nexusLink,
+	}, nil
 }
 
 func (w *Workflow) GetNexusCompletion(

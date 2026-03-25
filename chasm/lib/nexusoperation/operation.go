@@ -1,6 +1,7 @@
 package nexusoperation
 
 import (
+	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
@@ -18,6 +19,17 @@ var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancel
 // ErrOperationAlreadyCompleted is returned when trying to cancel an operation that has already completed.
 var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation already completed")
 
+// InvocationData contains data loaded from the scheduled history event that is needed to invoke
+// a Nexus operation. This data is not stored on the Operation component itself.
+type InvocationData struct {
+	// Input is the operation input payload.
+	Input *commonpb.Payload
+	// Header contains the Nexus headers for the operation.
+	Header map[string]string
+	// NexusLink is the link to the workflow event that scheduled this operation.
+	NexusLink nexus.Link
+}
+
 // OperationStore defines the interface that must be implemented by any parent component that wants to manage Nexus operations.
 // It's the responsibility of the parrent component to apply the appropriate state transitions to the operation.
 type OperationStore interface {
@@ -26,6 +38,8 @@ type OperationStore interface {
 	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation, result *commonpb.Payload, links []*commonpb.Link) error
+	// GetNexusOperationInvocationData loads invocation data (Input, Header, NexusLink) from the scheduled history event.
+	GetNexusOperationInvocationData(ctx chasm.Context, operation *Operation) (InvocationData, error)
 }
 
 // Operation is a CHASM component that represents a Nexus operation.
@@ -95,6 +109,16 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) erro
 	}
 
 	return nil
+}
+
+// GetInvocationData loads invocation data from the store or returns an error if no store is present.
+func (o *Operation) GetInvocationData(ctx chasm.Context) (InvocationData, error) {
+	store, ok := o.Store.TryGet(ctx)
+	if !ok {
+		// TODO: In case of a standalone operation, load this data from the operation state.
+		return InvocationData{}, serviceerror.NewInternal("no store available to load invocation data")
+	}
+	return store.GetNexusOperationInvocationData(ctx, o)
 }
 
 // OnStarted applies the started transition or delegates to the store if one is present.
