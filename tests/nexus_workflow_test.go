@@ -69,7 +69,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 			if service != "service" {
-				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, `expected service to equal "service"`)
+				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, `expected service to equal "service"`)
 			}
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
@@ -77,7 +77,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 			if !firstCancelSeen {
 				// Fail cancel request once to test NexusOperationCancelRequestFailed event is recorded and request is retried.
 				firstCancelSeen = true
-				return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "intentional non-retyrable cancel error for test")
+				return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "intentional non-retyrable cancel error for test")
 			}
 			return nil
 		},
@@ -2057,17 +2057,17 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 	op := nexus.NewSyncOperation("op", func(ctx context.Context, outcome string, soo nexus.StartOperationOptions) (nexus.NoValue, error) {
 		switch outcome {
 		case "fail-handler-internal":
-			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional internal error")
+			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional internal error")
 		case "fail-handler-app-error":
 			return nil, temporal.NewApplicationError("app error", "TestError", "details")
 		case "fail-handler-bad-request":
-			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "bad request")
+			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "bad request")
 		case "fail-operation":
-			return nil, nexus.NewOperationFailedError("some error")
+			return nil, nexus.NewOperationFailedErrorf("some error")
 		case "fail-operation-app-error":
 			return nil, temporal.NewNonRetryableApplicationError("app error", "TestError", nil, "details")
 		}
-		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unexpected outcome: %s", outcome)
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unexpected outcome: %s", outcome)
 	})
 	s.NoError(svc.Register(op))
 
@@ -2095,9 +2095,7 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, pendingErr, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
-				var appErr *temporal.ApplicationError
-				require.ErrorAs(t, handlerErr.Cause, &appErr)
-				require.Equal(t, "intentional internal error", appErr.Message())
+				require.Equal(t, "intentional internal error", handlerErr.Message)
 			},
 		},
 		{
@@ -2125,9 +2123,7 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, opErr, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
-				var appErr *temporal.ApplicationError
-				require.ErrorAs(t, handlerErr.Cause, &appErr)
-				require.Equal(t, "bad request", appErr.Message())
+				require.Equal(t, "bad request", handlerErr.Message)
 			},
 		},
 		{
