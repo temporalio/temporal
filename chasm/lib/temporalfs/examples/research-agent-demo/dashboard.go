@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	maxFeedLines = 12
-	refreshRate  = 200 * time.Millisecond
+	maxFeedLines  = 12
+	refreshRate   = 200 * time.Millisecond
+	boxInnerWidth = 66
 
 	colorReset  = "\033[0m"
 	colorGreen  = "\033[32m"
@@ -22,6 +23,35 @@ const (
 	cursorHome  = "\033[H"
 	clearScreen = "\033[2J"
 )
+
+// visibleLen returns the display width of a string, ignoring ANSI escape sequences.
+func visibleLen(s string) int {
+	inEsc := false
+	n := 0
+	for _, r := range s {
+		if r == '\033' {
+			inEsc = true
+			continue
+		}
+		if inEsc {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+				inEsc = false
+			}
+			continue
+		}
+		n++
+	}
+	return n
+}
+
+// boxLine wraps content in ║...║, auto-padding to boxInnerWidth visible chars.
+func boxLine(content string) string {
+	pad := boxInnerWidth - visibleLen(content)
+	if pad < 0 {
+		pad = 0
+	}
+	return "║" + content + strings.Repeat(" ", pad) + "║\n"
+}
 
 // FeedEntry is a single line in the live activity feed.
 type FeedEntry struct {
@@ -109,6 +139,7 @@ func (d *Dashboard) Wait() {
 }
 
 func (d *Dashboard) render() {
+	border := strings.Repeat("═", boxInnerWidth)
 	elapsed := time.Since(d.startTime).Round(time.Second)
 	started := int(d.runner.stats.Started.Load())
 	completed := int(d.runner.stats.Completed.Load())
@@ -119,8 +150,8 @@ func (d *Dashboard) render() {
 	snapshots := d.runner.stats.Snapshots.Load()
 	retries := d.runner.stats.Retries.Load()
 
-	// Progress bar (40 chars wide).
-	barWidth := 40
+	// Progress bar (30 chars wide to fit in box).
+	barWidth := 30
 	var bar, progressLabel string
 	if d.total > 0 {
 		pct := completed * 100 / d.total
@@ -138,7 +169,7 @@ func (d *Dashboard) render() {
 			chars[(pos+i)%barWidth] = '='
 		}
 		bar = string(chars)
-		progressLabel = fmt.Sprintf("%d completed  ∞", completed)
+		progressLabel = fmt.Sprintf("%d completed", completed)
 	}
 
 	// Throughput.
@@ -152,38 +183,38 @@ func (d *Dashboard) render() {
 	b.WriteString(cursorHome)
 
 	// Header.
-	fmt.Fprintf(&b, "%s╔══════════════════════════════════════════════════════════════════╗%s\n", colorBold, colorReset)
-	fmt.Fprintf(&b, "%s║  TemporalFS Research Agent Demo                  Elapsed: %5s ║%s\n", colorBold, elapsed, colorReset)
-	fmt.Fprintf(&b, "%s╠══════════════════════════════════════════════════════════════════╣%s\n", colorBold, colorReset)
-	fmt.Fprintf(&b, "║                                                                  ║\n")
+	fmt.Fprintf(&b, "%s╔%s╗%s\n", colorBold, border, colorReset)
+	b.WriteString(boxLine(fmt.Sprintf("  %sTemporalFS Research Agent Demo%s                  Elapsed: %5s", colorBold, colorReset, elapsed)))
+	fmt.Fprintf(&b, "%s╠%s╣%s\n", colorBold, border, colorReset)
+	b.WriteString(boxLine(""))
 
 	// Progress bar.
-	fmt.Fprintf(&b, "║  Progress  [%s%s%s]  %s%-18s%s   ║\n",
+	b.WriteString(boxLine(fmt.Sprintf("  Progress  [%s%s%s]  %s%s%s",
 		colorCyan, bar, colorReset,
-		colorBold, progressLabel, colorReset)
-	fmt.Fprintf(&b, "║                                                                  ║\n")
+		colorBold, progressLabel, colorReset)))
+	b.WriteString(boxLine(""))
 
 	// Status counts.
-	fmt.Fprintf(&b, "║  %sRunning: %-4d%s  %sCompleted: %-4d%s  %sRetrying: %-4d%s  %sFailed: %d%s    ║\n",
+	b.WriteString(boxLine(fmt.Sprintf("  %sRunning: %-4d%s  %sCompleted: %-4d%s  %sRetries: %-4d%s  %sFailed: %d%s",
 		colorYellow, running, colorReset,
 		colorGreen, completed, colorReset,
 		colorRed, retries, colorReset,
-		colorRed, failed, colorReset)
-	fmt.Fprintf(&b, "║                                                                  ║\n")
+		colorRed, failed, colorReset)))
+	b.WriteString(boxLine(""))
 
 	// Throughput section.
-	fmt.Fprintf(&b, "║  %s── Throughput ─────────────────────────────────────────────────%s ║\n", colorDim, colorReset)
-	fmt.Fprintf(&b, "║  Workflows/min: %s%-6.0f%s  Files: %s%-6d%s  Snapshots: %s%-6d%s        ║\n",
+	b.WriteString(boxLine(fmt.Sprintf("  %s── Throughput ──────────────────────────────────────────────────%s", colorDim, colorReset)))
+	b.WriteString(boxLine(fmt.Sprintf("  Workflows/min: %s%-6.0f%s  Files: %s%-6d%s  Snapshots: %s%-6d%s",
 		colorCyan, wfPerMin, colorReset,
 		colorCyan, files, colorReset,
-		colorCyan, snapshots, colorReset)
-	fmt.Fprintf(&b, "║  Data written: %s%-10s%s  Total retries: %s%-6d%s                 ║\n",
+		colorCyan, snapshots, colorReset)))
+	b.WriteString(boxLine(fmt.Sprintf("  Data written: %s%-10s%s  Total retries: %s%-6d%s",
 		colorCyan, humanBytes(bytes), colorReset,
-		colorCyan, retries, colorReset)
-	fmt.Fprintf(&b, "║                                                                  ║\n")
+		colorCyan, retries, colorReset)))
+	b.WriteString(boxLine(""))
 
 	// Live activity feed.
-	fmt.Fprintf(&b, "║  %s── Live Activity Feed ────────────────────────────────────────%s ║\n", colorDim, colorReset)
+	b.WriteString(boxLine(fmt.Sprintf("  %s── Live Activity Feed ──────────────────────────────────────────%s", colorDim, colorReset)))
 
 	d.mu.Lock()
 	feed := make([]FeedEntry, len(d.feed))
@@ -196,16 +227,16 @@ func (d *Dashboard) render() {
 			icon, color := stateIcon(e.State)
 			slug := truncate(e.TopicSlug, 24)
 			step := truncate(e.StepName, 14)
-			fmt.Fprintf(&b, "║  %s%s %-24s  %-14s  %-7s %s%s   ║\n",
-				color, icon, slug, step, e.State, e.StepIdx, colorReset)
+			b.WriteString(boxLine(fmt.Sprintf("  %s%s %-24s  %-14s  %-7s %s%s",
+				color, icon, slug, step, e.State, e.StepIdx, colorReset)))
 		} else {
-			fmt.Fprintf(&b, "║                                                                  ║\n")
+			b.WriteString(boxLine(""))
 		}
 	}
 
-	fmt.Fprintf(&b, "║                                                                  ║\n")
-	fmt.Fprintf(&b, "║  Temporal UI: %shttp://localhost:8233%s                              ║\n", colorCyan, colorReset)
-	fmt.Fprintf(&b, "%s╚══════════════════════════════════════════════════════════════════╝%s\n", colorBold, colorReset)
+	b.WriteString(boxLine(""))
+	b.WriteString(boxLine(fmt.Sprintf("  Temporal UI: %shttp://localhost:8233%s", colorCyan, colorReset)))
+	fmt.Fprintf(&b, "%s╚%s╝%s\n", colorBold, border, colorReset)
 
 	fmt.Fprint(os.Stdout, b.String())
 }

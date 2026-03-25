@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	sdkclient "go.temporal.io/sdk/client"
+	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/worker"
 )
 
@@ -76,6 +78,21 @@ func cmdRun(args []string) {
 		cancel()
 	}()
 
+	// Redirect all logs to a file so the dashboard isn't buried.
+	if err := os.MkdirAll(*dataDir, 0o755); err != nil {
+		log.Fatalf("Failed to create data dir: %v", err)
+	}
+	logPath := filepath.Join(*dataDir, "demo.log")
+	logFile, err := os.Create(logPath)
+	if err != nil {
+		log.Fatalf("Failed to create log file: %v", err)
+	}
+	defer logFile.Close()
+	log.SetOutput(logFile)
+	sdkLogger := sdklog.NewStructuredLogger(slog.New(slog.NewTextHandler(logFile, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	})))
+
 	// Open shared PebbleDB.
 	store, err := NewDemoStore(*dataDir)
 	if err != nil {
@@ -86,6 +103,7 @@ func cmdRun(args []string) {
 	// Connect to Temporal.
 	c, err := sdkclient.Dial(sdkclient.Options{
 		HostPort: *temporalAddr,
+		Logger:   sdkLogger,
 	})
 	if err != nil {
 		log.Fatalf("Failed to connect to Temporal: %v", err)
@@ -145,7 +163,8 @@ func cmdRun(args []string) {
 		fmt.Printf("Starting %d research workflows (concurrency=%d, failure-rate=%.1f)\n",
 			*workflows, *concurrency, *failureRate)
 	}
-	fmt.Printf("Temporal UI: http://localhost:8233\n\n")
+	fmt.Printf("Temporal UI: http://localhost:8233\n")
+	fmt.Printf("Logs: %s\n\n", logPath)
 
 	// Open Temporal UI in browser for continuous mode.
 	if *continuous {
