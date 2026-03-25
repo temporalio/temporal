@@ -37,7 +37,6 @@ func (v commandValidator) IsValidPayloadSize(size int) bool {
 	return size <= v.maxPayloadSize
 }
 
-
 type testContext struct {
 	chasmCtx        *chasm.MockMutableContext
 	wf              *chasmworkflow.Workflow

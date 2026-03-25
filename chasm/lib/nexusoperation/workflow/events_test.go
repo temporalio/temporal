@@ -45,6 +45,8 @@ func TestCherryPick(t *testing.T) {
 			newStartedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor()),
 			newCompletedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor()),
 			newCancelRequestedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor()),
+			newCancelRequestCompletedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor()),
+			newCancelRequestFailedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor()),
 			newCanceledEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor()),
 			newFailedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor()),
 			newTimedOutEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor()),
@@ -199,64 +201,60 @@ func TestTerminalStatesDeletion(t *testing.T) {
 }
 
 func TestScheduledEventDefinitionApply(t *testing.T) {
-	t.Run("creates operation from event attributes", func(t *testing.T) {
-		tcx := newTestContext(t, defaultConfig)
+	tcx := newTestContext(t, defaultConfig)
 
-		def := newScheduledEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
-		event := &historypb.HistoryEvent{
-			EventId:   int64(10),
-			EventTime: timestamppb.Now(),
-			Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
-				NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
-					Endpoint:                     "endpoint",
-					EndpointId:                   "endpoint-id",
-					Service:                      "service",
-					Operation:                    "op",
-					ScheduleToCloseTimeout:       durationpb.New(time.Hour),
-					RequestId:                    "request-id",
-					WorkflowTaskCompletedEventId: 1,
-				},
+	def := newScheduledEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
+	event := &historypb.HistoryEvent{
+		EventId:   int64(10),
+		EventTime: timestamppb.Now(),
+		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
+				Endpoint:                     "endpoint",
+				EndpointId:                   "endpoint-id",
+				Service:                      "service",
+				Operation:                    "op",
+				ScheduleToCloseTimeout:       durationpb.New(time.Hour),
+				RequestId:                    "request-id",
+				WorkflowTaskCompletedEventId: 1,
 			},
-		}
+		},
+	}
 
-		err := def.Apply(tcx.chasmCtx, tcx.wf, event)
-		require.NoError(t, err)
+	err := def.Apply(tcx.chasmCtx, tcx.wf, event)
+	require.NoError(t, err)
 
-		field, ok := tcx.wf.Operations[event.EventId]
-		require.True(t, ok)
-		op := field.Get(tcx.chasmCtx)
-		require.Equal(t, "endpoint", op.GetEndpoint())
-		require.Equal(t, "endpoint-id", op.GetEndpointId())
-		require.Equal(t, "service", op.GetService())
-		require.Equal(t, "op", op.GetOperation())
-		require.Equal(t, "request-id", op.GetRequestId())
-		require.Equal(t, int32(1), op.GetAttempt())
-	})
+	field, ok := tcx.wf.Operations[event.EventId]
+	require.True(t, ok)
+	op := field.Get(tcx.chasmCtx)
+	require.Equal(t, "endpoint", op.GetEndpoint())
+	require.Equal(t, "endpoint-id", op.GetEndpointId())
+	require.Equal(t, "service", op.GetService())
+	require.Equal(t, "op", op.GetOperation())
+	require.Equal(t, "request-id", op.GetRequestId())
+	require.Equal(t, int32(1), op.GetAttempt())
 }
 
 func TestStartedEventDefinitionApply(t *testing.T) {
-	t.Run("transitions operation to started", func(t *testing.T) {
-		tcx := newTestContext(t, defaultConfig)
-		event, key := scheduleOperation(t, tcx)
+	tcx := newTestContext(t, defaultConfig)
+	event, key := scheduleOperation(t, tcx)
 
-		def := newStartedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
-		err := def.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
-			EventTime: timestamppb.Now(),
-			Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
-				NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
-					ScheduledEventId: event.EventId,
-					OperationToken:   "test-token",
-				},
+	def := newStartedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
+	err := def.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
+		EventTime: timestamppb.Now(),
+		Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
+			NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
+				ScheduledEventId: event.EventId,
+				OperationToken:   "test-token",
 			},
-		})
-		require.NoError(t, err)
-
-		field, ok := tcx.wf.Operations[key]
-		require.True(t, ok)
-		op := field.Get(tcx.chasmCtx)
-		require.Equal(t, nexusoperationpb.OPERATION_STATUS_STARTED, op.Status)
-		require.Equal(t, "test-token", op.GetOperationToken())
+		},
 	})
+	require.NoError(t, err)
+
+	field, ok := tcx.wf.Operations[key]
+	require.True(t, ok)
+	op := field.Get(tcx.chasmCtx)
+	require.Equal(t, nexusoperationpb.OPERATION_STATUS_STARTED, op.Status)
+	require.Equal(t, "test-token", op.GetOperationToken())
 }
 
 func TestCancelRequestedEventDefinitionApply(t *testing.T) {
@@ -301,53 +299,51 @@ func TestCancelRequestedEventDefinitionApply(t *testing.T) {
 }
 
 func TestCancelRequestCompletedEventDefinitionApply(t *testing.T) {
-	t.Run("transitions cancellation to succeeded", func(t *testing.T) {
-		tcx := newTestContext(t, defaultConfig)
-		event, key := scheduleOperation(t, tcx)
+	tcx := newTestContext(t, defaultConfig)
+	event, key := scheduleOperation(t, tcx)
 
-		// First, request cancellation.
-		cancelDef := newCancelRequestedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
-		err := cancelDef.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
-			EventId:   int64(20),
-			EventTime: timestamppb.Now(),
-			Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
-				NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
-					ScheduledEventId: event.EventId,
-				},
+	// First, request cancellation.
+	cancelDef := newCancelRequestedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
+	err := cancelDef.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
+		EventId:   int64(20),
+		EventTime: timestamppb.Now(),
+		Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
+			NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
+				ScheduledEventId: event.EventId,
 			},
-		})
-		require.NoError(t, err)
-
-		// Transition the operation to STARTED so the cancellation gets scheduled.
-		startDef := newStartedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
-		err = startDef.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
-			EventTime: timestamppb.Now(),
-			Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
-				NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
-					ScheduledEventId: event.EventId,
-					OperationToken:   "token",
-				},
-			},
-		})
-		require.NoError(t, err)
-
-		// Now complete the cancel request.
-		completedDef := newCancelRequestCompletedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
-		err = completedDef.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
-			EventTime: timestamppb.Now(),
-			Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestCompletedEventAttributes{
-				NexusOperationCancelRequestCompletedEventAttributes: &historypb.NexusOperationCancelRequestCompletedEventAttributes{
-					ScheduledEventId: event.EventId,
-				},
-			},
-		})
-		require.NoError(t, err)
-
-		field, ok := tcx.wf.Operations[key]
-		require.True(t, ok)
-		op := field.Get(tcx.chasmCtx)
-		cancellation, hasCancellation := op.Cancellation.TryGet(tcx.chasmCtx)
-		require.True(t, hasCancellation)
-		require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_SUCCEEDED, cancellation.StateMachineState())
+		},
 	})
+	require.NoError(t, err)
+
+	// Transition the operation to STARTED so the cancellation gets scheduled.
+	startDef := newStartedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
+	err = startDef.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
+		EventTime: timestamppb.Now(),
+		Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
+			NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
+				ScheduledEventId: event.EventId,
+				OperationToken:   "token",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Now complete the cancel request.
+	completedDef := newCancelRequestCompletedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
+	err = completedDef.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
+		EventTime: timestamppb.Now(),
+		Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestCompletedEventAttributes{
+			NexusOperationCancelRequestCompletedEventAttributes: &historypb.NexusOperationCancelRequestCompletedEventAttributes{
+				ScheduledEventId: event.EventId,
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	field, ok := tcx.wf.Operations[key]
+	require.True(t, ok)
+	op := field.Get(tcx.chasmCtx)
+	cancellation, hasCancellation := op.Cancellation.TryGet(tcx.chasmCtx)
+	require.True(t, hasCancellation)
+	require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_SUCCEEDED, cancellation.StateMachineState())
 }

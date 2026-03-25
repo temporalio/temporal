@@ -1,8 +1,10 @@
 package nexusoperation
 
 import (
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common/backoff"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -46,13 +48,30 @@ var transitionCancellationRescheduled = chasm.NewTransition(
 
 // EventCancellationAttemptFailed is triggered when a cancellation attempt is failed with a retryable error.
 type EventCancellationAttemptFailed struct {
+	Failure     *failurepb.Failure
+	RetryPolicy backoff.RetryPolicy
 }
 
 var transitionCancellationAttemptFailed = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{nexusoperationpb.CANCELLATION_STATUS_SCHEDULED},
 	nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationAttemptFailed) error {
-		// TODO: implement backing off logic similar to operation's transitionAttemptFailed
+		currentTime := ctx.Now(c)
+
+		c.Attempt++
+		c.LastAttemptCompleteTime = timestamppb.New(currentTime)
+		c.LastAttemptFailure = event.Failure
+
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(c.Attempt), nil)
+		nextAttemptScheduleTime := currentTime.Add(nextDelay)
+		c.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
+
+		ctx.AddTask(c, chasm.TaskAttributes{
+			ScheduledTime: nextAttemptScheduleTime,
+		}, &nexusoperationpb.CancellationBackoffTask{
+			Attempt: c.Attempt,
+		})
+
 		return nil
 	},
 )
