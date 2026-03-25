@@ -1113,7 +1113,7 @@ var (
 	ActivityUnpauseRequests       = NewCounterDef("activity_unpause_requests")
 	ActivityResetRequests         = NewCounterDef("activity_reset_requests")
 	ActivityUpdateOptionsRequests = NewCounterDef("activity_update_options_requests")
-	ExternalPayloadUploadSize = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
+	ExternalPayloadUploadSize     = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
 
 	// Deadlock detector metrics
 	DDSuspectedDeadlocks                 = NewCounterDef("dd_suspected_deadlocks")
