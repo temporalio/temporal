@@ -67,6 +67,7 @@ message OperationState {
 }
 
 message NexusOperationTerminateState {
+  // Request ID used to deduplicate terminate requests.
   string request_id = 1;
 }
 
