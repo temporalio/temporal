@@ -402,8 +402,9 @@ func (x *OperationState) GetTerminateState() *NexusOperationTerminateState {
 }
 
 type NexusOperationTerminateState struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Request ID used to deduplicate terminate requests.
+	RequestId     string `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
