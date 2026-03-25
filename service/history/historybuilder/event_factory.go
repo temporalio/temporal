@@ -485,6 +485,7 @@ func (b EventFactory) CreateContinuedAsNewEvent(
 		LastCompletionResult:         command.LastCompletionResult,
 		// Filter nil values here rather than in the API layer because not all
 		// creation paths go through the frontend (continue-as-new, child workflows, replication).
+		// This CaN event is created on the source workflow, so we need to filter nil values here.
 		Memo:             payload.FilterNilMemo(command.Memo),
 		SearchAttributes: payload.FilterNilSearchAttributes(command.SearchAttributes),
 		InheritBuildId:   command.InheritBuildId, //nolint:staticcheck // SA1019: worker versioning v0.2
@@ -854,6 +855,7 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 			CronSchedule:                 command.CronSchedule,
 			// Filter nil values here rather than in the API layer because not all
 			// creation paths go through the frontend (continue-as-new, child workflows, replication).
+			// This CaN event is created on the parent workflow, so we need to filter nil values here.
 			Memo:              payload.FilterNilMemo(command.Memo),
 			SearchAttributes:  payload.FilterNilSearchAttributes(command.SearchAttributes),
 			ParentClosePolicy: command.GetParentClosePolicy(),
