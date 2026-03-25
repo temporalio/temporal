@@ -1264,8 +1264,12 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 			s.pollActivityAndHandle(tv2, nil,
 				func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 					// Activity should not start until the transition is completed
-					s.True(transitionCompleted.Load())
-					s.NotNil(task)
+					if !transitionCompleted.Load() {
+						return nil, errors.New("activity started before transition completed")
+					}
+					if task == nil {
+						return nil, errors.New("task is nil")
+					}
 					s.Logger.Info(fmt.Sprintf("Remaining activity completed ID: %s", task.ActivityId))
 					return respondActivity(), nil
 				})
@@ -1968,7 +1972,6 @@ func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 		if errors.As(err, &notFound) {
 			return false
 		}
-		s.NoError(err)
 		return err == nil
 	}, 60*time.Second, 500*time.Millisecond)
 }
@@ -1986,7 +1989,6 @@ func (s *Versioning3Suite) unsetCurrentDeployment(tv *testvars.TestVars) {
 		if errors.As(err, &notFound) {
 			return false
 		}
-		s.NoError(err)
 		return err == nil
 	}, 60*time.Second, 500*time.Millisecond)
 }
@@ -2021,7 +2023,6 @@ func (s *Versioning3Suite) setRampingDeployment(
 		if errors.As(err, &notFound) {
 			return false
 		}
-		s.NoError(err)
 		return err == nil
 	}, 60*time.Second, 500*time.Millisecond)
 }
@@ -2651,9 +2652,9 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 		}
 	}
 	f, err := tqid.NewTaskQueueFamily(s.NamespaceID().String(), tv.TaskQueue().GetName())
+	s.NoError(err)
 	s.Eventually(func() bool {
 		for pt := range remaining {
-			s.NoError(err)
 			partition := f.TaskQueue(pt.tp).NormalPartition(pt.part)
 			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility
 			// here so that we can target activity queues.
@@ -2664,7 +2665,9 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 					TaskQueue:     partition.RpcName(),
 					TaskQueueType: partition.TaskType(),
 				})
-			s.NoError(err)
+			if err != nil {
+				return false
+			}
 			perTypes := res.GetUserData().GetData().GetPerType()
 			if perTypes != nil {
 				deps := perTypes[int32(pt.tp)].GetDeploymentData().GetDeployments()

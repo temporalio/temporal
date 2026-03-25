@@ -72,6 +72,8 @@ func (s *DeploymentVersionSuite) SetupSuite() {
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key():                1000,
 		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance.Key(): 1,
 		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key():                               1000,
+		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():                                        1,
+		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key():                                       1,
 
 		// Reduce the chance of hitting max batch job limit in tests
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): maxConcurrentBatchOperations,

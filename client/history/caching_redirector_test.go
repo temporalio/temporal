@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
@@ -397,8 +398,9 @@ func (s *cachingRedirectorSuite) TestStaleTTL() {
 		defer r.mu.RUnlock()
 		entry := r.mu.cache[shardID]
 		return !entry.staleAt.IsZero()
-	}, 4*staleTTL, staleTTL)
+	}, 4*staleTTL, 10*time.Millisecond)
 
+	// Wait for the stale TTL to expire so clientForShardID re-resolves the shard owner.
 	s.resolver.EXPECT().
 		Lookup(convert.Int32ToString(shardID)).
 		Return(membership.NewHostInfoFromAddress(string(testAddr2)), nil).
@@ -411,7 +413,12 @@ func (s *cachingRedirectorSuite) TestStaleTTL() {
 		resetConnectBackoff(clientConn2).
 		Times(1)
 
-	cli, err = r.clientForShardID(shardID)
-	s.NoError(err)
-	s.Equal(mockClient2, cli)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		cli, err = r.clientForShardID(shardID)
+		assert.NoError(t, err)
+		// Use == for pointer identity (not reflect.DeepEqual) since mock types have
+		// cyclic recorder references that make DeepEqual incorrectly return true for
+		// distinct mock instances.
+		assert.True(t, cli == mockClient2, "expected mockClient2, got %v", cli)
+	}, 4*staleTTL, 10*time.Millisecond)
 }
