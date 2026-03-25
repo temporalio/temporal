@@ -111,7 +111,7 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeployment_Idempotent() {
 	existingConflictToken := []byte("existing-token")
 
 	// Send two identical CreateWorkerDeployment updates
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		s.env.RegisterDelayedCallback(func() {
 			s.env.UpdateWorkflow(CreateWorkerDeployment, "", &testsuite.TestUpdateCallback{
 				OnReject: func(err error) {
@@ -1478,7 +1478,7 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeploymentVersion_Idempotent() 
 	s.env.OnActivity(a.StartWorkerDeploymentVersionWorkflow, mock.Anything, mock.Anything).Return(nil).Once()
 
 	// Send two identical CreateWorkerDeploymentVersion updates
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		s.env.RegisterDelayedCallback(func() {
 			s.env.UpdateWorkflow(CreateWorkerDeploymentVersion, "", &testsuite.TestUpdateCallback{
 				OnReject: func(err error) {
