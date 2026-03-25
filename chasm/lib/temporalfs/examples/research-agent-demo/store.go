@@ -12,10 +12,16 @@ import (
 const manifestKey = "__demo_manifest__"
 
 // ManifestEntry records the mapping from partition ID to topic for the report/browse commands.
+// After workflow completion, result fields are populated for the HTML report.
 type ManifestEntry struct {
-	PartitionID uint64 `json:"partition_id"`
-	TopicName   string `json:"topic_name"`
-	TopicSlug   string `json:"topic_slug"`
+	PartitionID  uint64 `json:"partition_id"`
+	TopicName    string `json:"topic_name"`
+	TopicSlug    string `json:"topic_slug"`
+	FilesCreated int    `json:"files_created,omitempty"`
+	BytesWritten int64  `json:"bytes_written,omitempty"`
+	Retries      int    `json:"retries,omitempty"`
+	Completed    bool   `json:"completed,omitempty"`
+	Failed       bool   `json:"failed,omitempty"`
 }
 
 // DemoStore wraps a shared PebbleDB and provides per-workflow isolated stores.
@@ -63,6 +69,27 @@ func (ds *DemoStore) RegisterWorkflow(partitionID uint64, topic TopicEntry) erro
 		TopicName:   topic.Name,
 		TopicSlug:   topic.Slug,
 	})
+	data, err := json.Marshal(ds.manifest)
+	ds.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	return ds.base.Set([]byte(manifestKey), data)
+}
+
+// UpdateWorkflowResult updates a manifest entry with the workflow's result data.
+func (ds *DemoStore) UpdateWorkflowResult(topicSlug string, result WorkflowResult, failed bool) error {
+	ds.mu.Lock()
+	for i := range ds.manifest {
+		if ds.manifest[i].TopicSlug == topicSlug {
+			ds.manifest[i].FilesCreated = result.FilesCreated
+			ds.manifest[i].BytesWritten = result.BytesWritten
+			ds.manifest[i].Retries = result.Retries
+			ds.manifest[i].Completed = !failed
+			ds.manifest[i].Failed = failed
+			break
+		}
+	}
 	data, err := json.Marshal(ds.manifest)
 	ds.mu.Unlock()
 	if err != nil {

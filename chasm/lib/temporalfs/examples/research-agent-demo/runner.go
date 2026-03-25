@@ -136,6 +136,7 @@ func (r *Runner) runOne(ctx context.Context, params WorkflowParams) {
 	var result WorkflowResult
 	if err := run.Get(ctx, &result); err != nil {
 		r.stats.Failed.Add(1)
+		_ = r.store.UpdateWorkflowResult(params.TopicSlug, result, true)
 		r.EventCh <- WorkflowEvent{
 			TopicSlug: params.TopicSlug,
 			State:     "failed",
@@ -149,6 +150,7 @@ func (r *Runner) runOne(ctx context.Context, params WorkflowParams) {
 	r.stats.BytesWritten.Add(result.BytesWritten)
 	r.stats.Snapshots.Add(int64(result.SnapshotCount))
 	r.stats.Retries.Add(int64(result.Retries))
+	_ = r.store.UpdateWorkflowResult(params.TopicSlug, result, false)
 
 	r.EventCh <- WorkflowEvent{
 		TopicSlug: params.TopicSlug,

@@ -14,12 +14,13 @@ import (
 
 // ReportData is the top-level data structure for the HTML report template.
 type ReportData struct {
-	GeneratedAt string
-	TotalWFs    int
-	TotalFiles  int
-	TotalSnaps  int
-	TotalBytes  string
-	Workflows   []ReportWorkflow
+	GeneratedAt  string
+	TotalWFs     int
+	TotalFiles   int
+	TotalSnaps   int
+	TotalBytes   string
+	TotalRetries int
+	Workflows    []ReportWorkflow
 }
 
 // ReportWorkflow describes one workflow's filesystem state for the report.
@@ -30,6 +31,8 @@ type ReportWorkflow struct {
 	Snapshots  []ReportSnapshot
 	FileCount  int
 	TotalBytes int64
+	Retries    int
+	Status     string // "completed", "failed"
 }
 
 // ReportFile represents a file in a workflow's filesystem.
@@ -61,9 +64,15 @@ func generateHTMLReport(ds *DemoStore, outputPath string) error {
 			continue // skip broken partitions
 		}
 
+		status := "completed"
+		if entry.Failed {
+			status = "failed"
+		}
 		wf := ReportWorkflow{
 			TopicName: entry.TopicName,
 			TopicSlug: entry.TopicSlug,
+			Retries:   entry.Retries,
+			Status:    status,
 		}
 
 		// Collect files.
@@ -90,6 +99,7 @@ func generateHTMLReport(ds *DemoStore, outputPath string) error {
 		data.Workflows = append(data.Workflows, wf)
 		data.TotalFiles += wf.FileCount
 		data.TotalSnaps += len(wf.Snapshots)
+		data.TotalRetries += wf.Retries
 		data.TotalBytes = humanBytes(int64(totalBytesAll(data.Workflows)))
 
 		_ = f.Close()
@@ -201,6 +211,8 @@ var reportTemplate = template.Must(template.New("report").Parse(`<!DOCTYPE html>
   .file-content { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 12px; margin-top: 8px; white-space: pre-wrap; font-family: monospace; font-size: 0.8em; max-height: 300px; overflow-y: auto; }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75em; font-weight: 600; }
   .badge-green { background: rgba(63,185,80,0.2); color: var(--green); }
+  .badge-yellow { background: rgba(210,153,34,0.2); color: var(--yellow); }
+  .badge-red { background: rgba(248,81,73,0.2); color: var(--red); }
   .badge-blue { background: rgba(88,166,255,0.2); color: var(--accent); }
   footer { margin-top: 40px; text-align: center; color: #484f58; font-size: 0.85em; }
 </style>
@@ -213,12 +225,13 @@ var reportTemplate = template.Must(template.New("report").Parse(`<!DOCTYPE html>
   <div class="stat-card"><div class="stat-value">{{.TotalWFs}}</div><div class="stat-label">Workflows</div></div>
   <div class="stat-card"><div class="stat-value">{{.TotalFiles}}</div><div class="stat-label">Files Created</div></div>
   <div class="stat-card"><div class="stat-value">{{.TotalSnaps}}</div><div class="stat-label">Snapshots</div></div>
+  <div class="stat-card"><div class="stat-value">{{.TotalRetries}}</div><div class="stat-label">Retries Survived</div></div>
   <div class="stat-card"><div class="stat-value">{{.TotalBytes}}</div><div class="stat-label">Data Written</div></div>
 </div>
 
 <h2>Workflow Summary</h2>
 <table>
-  <thead><tr><th>Topic</th><th>Files</th><th>Size</th><th>Snapshots</th></tr></thead>
+  <thead><tr><th>Topic</th><th>Files</th><th>Size</th><th>Snapshots</th><th>Retries</th><th>Status</th></tr></thead>
   <tbody>
   {{range .Workflows}}
   <tr>
@@ -226,6 +239,8 @@ var reportTemplate = template.Must(template.New("report").Parse(`<!DOCTYPE html>
     <td>{{.FileCount}}</td>
     <td>{{.TotalBytes}} B</td>
     <td><span class="badge badge-green">{{len .Snapshots}} snapshots</span></td>
+    <td>{{if .Retries}}<span class="badge badge-yellow">{{.Retries}} retries</span>{{else}}<span class="badge badge-green">0</span>{{end}}</td>
+    <td>{{if eq .Status "failed"}}<span class="badge badge-red">failed</span>{{else}}<span class="badge badge-green">completed</span>{{end}}</td>
   </tr>
   {{end}}
   </tbody>
