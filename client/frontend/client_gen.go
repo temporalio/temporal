@@ -669,6 +669,16 @@ func (c *clientImpl) ResetActivity(
 	return c.client.ResetActivity(ctx, request, opts...)
 }
 
+func (c *clientImpl) ResetActivityExecution(
+	ctx context.Context,
+	request *workflowservice.ResetActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ResetActivityExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ResetActivityExecution(ctx, request, opts...)
+}
+
 func (c *clientImpl) ResetStickyTaskQueue(
 	ctx context.Context,
 	request *workflowservice.ResetStickyTaskQueueRequest,
@@ -977,6 +987,16 @@ func (c *clientImpl) UnpauseWorkflowExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.UnpauseWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) UpdateActivityExecutionOptions(
+	ctx context.Context,
+	request *workflowservice.UpdateActivityExecutionOptionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateActivityExecutionOptions(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateActivityOptions(

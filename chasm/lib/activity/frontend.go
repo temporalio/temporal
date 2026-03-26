@@ -30,6 +30,10 @@ type FrontendHandler interface {
 	ListActivityExecutions(context.Context, *workflowservice.ListActivityExecutionsRequest) (*workflowservice.ListActivityExecutionsResponse, error)
 	RequestCancelActivityExecution(context.Context, *workflowservice.RequestCancelActivityExecutionRequest) (*workflowservice.RequestCancelActivityExecutionResponse, error)
 	TerminateActivityExecution(context.Context, *workflowservice.TerminateActivityExecutionRequest) (*workflowservice.TerminateActivityExecutionResponse, error)
+	PauseActivityExecution(context.Context, *workflowservice.PauseActivityExecutionRequest) (*workflowservice.PauseActivityExecutionResponse, error)
+	UnpauseActivityExecution(context.Context, *workflowservice.UnpauseActivityExecutionRequest) (*workflowservice.UnpauseActivityExecutionResponse, error)
+	ResetActivityExecution(context.Context, *workflowservice.ResetActivityExecutionRequest) (*workflowservice.ResetActivityExecutionResponse, error)
+	UpdateActivityExecutionOptions(context.Context, *workflowservice.UpdateActivityExecutionOptionsRequest) (*workflowservice.UpdateActivityExecutionOptionsResponse, error)
 	IsStandaloneActivityEnabled(namespaceName string) bool
 }
 
@@ -368,6 +372,166 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 	}
 
 	return &workflowservice.RequestCancelActivityExecutionResponse{}, nil
+}
+
+func (h *frontendHandler) PauseActivityExecution(
+	ctx context.Context,
+	req *workflowservice.PauseActivityExecutionRequest,
+) (*workflowservice.PauseActivityExecutionResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityDisabled
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO seankane: do we want a request ID to dedupe?
+	// if req.GetRequestId() == "" {
+	// 	// Since this mutates the request, we clone it first so that any retries use the original request.
+	// 	req = common.CloneProto(req)
+	// 	req.RequestId = uuid.NewString()
+	// }
+
+	if err := validatePauseActivityExecutionRequest(
+		req,
+		h.config.MaxIDLengthLimit(),
+		h.config.BlobSizeLimitError,
+		h.config.BlobSizeLimitWarn,
+		h.logger); err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.PauseActivityExecution(ctx, &activitypb.PauseActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.PauseActivityExecutionResponse{}, nil
+}
+
+func (h *frontendHandler) UnpauseActivityExecution(
+	ctx context.Context,
+	req *workflowservice.UnpauseActivityExecutionRequest,
+) (*workflowservice.UnpauseActivityExecutionResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityDisabled
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO seankane: do we want a request ID to dedupe?
+	// if req.GetRequestId() == "" {
+	// 	// Since this mutates the request, we clone it first so that any retries use the original request.
+	// 	req = common.CloneProto(req)
+	// 	req.RequestId = uuid.NewString()
+	// }
+
+	if err := validateUnpauseActivityExecutionRequest(
+		req,
+		h.config.MaxIDLengthLimit(),
+		h.config.BlobSizeLimitError,
+		h.config.BlobSizeLimitWarn,
+		h.logger); err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.UnpauseActivityExecution(ctx, &activitypb.UnpauseActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UnpauseActivityExecutionResponse{}, nil
+}
+
+func (h *frontendHandler) ResetActivityExecution(
+	ctx context.Context,
+	req *workflowservice.ResetActivityExecutionRequest,
+) (*workflowservice.ResetActivityExecutionResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityDisabled
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO seankane: do we want a request ID to dedupe?
+	// if req.GetRequestId() == "" {
+	// 	// Since this mutates the request, we clone it first so that any retries use the original request.
+	// 	req = common.CloneProto(req)
+	// 	req.RequestId = uuid.NewString()
+	// }
+
+	if err := validateResetActivityExecutionRequest(
+		req,
+		h.config.MaxIDLengthLimit(),
+		h.config.BlobSizeLimitError,
+		h.config.BlobSizeLimitWarn,
+		h.logger); err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.ResetActivityExecution(ctx, &activitypb.ResetActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.ResetActivityExecutionResponse{}, nil
+}
+
+func (h *frontendHandler) UpdateActivityExecutionOptions(
+	ctx context.Context,
+	req *workflowservice.UpdateActivityExecutionOptionsRequest,
+) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityDisabled
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO seankane: do we want a request ID to dedupe?
+	// if req.GetRequestId() == "" {
+	// 	// Since this mutates the request, we clone it first so that any retries use the original request.
+	// 	req = common.CloneProto(req)
+	// 	req.RequestId = uuid.NewString()
+	// }
+
+	if err := validateUpdateActivityExecutionOptionsRequest(
+		req,
+		h.config.MaxIDLengthLimit(),
+		h.config.BlobSizeLimitError,
+		h.config.BlobSizeLimitWarn,
+		h.logger); err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.UpdateActivityExecutionOptions(ctx, &activitypb.UpdateActivityExecutionOptionsRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateActivityExecutionOptionsResponse{}, nil
 }
 
 func (h *frontendHandler) validateAndPopulateStartRequest(

@@ -99,6 +99,12 @@ type (
 		PauseWorkflowExecution(ctx context.Context, request *historyservice.PauseWorkflowExecutionRequest) (*historyservice.PauseWorkflowExecutionResponse, error)
 		UnpauseWorkflowExecution(ctx context.Context, request *historyservice.UnpauseWorkflowExecutionRequest) (*historyservice.UnpauseWorkflowExecutionResponse, error)
 
+		// New activity execution interfaces
+		PauseActivityExecution(ctx context.Context, request *historyservice.PauseActivityExecutionRequest) (*historyservice.PauseActivityExecutionResponse, error)
+		UnpauseActivityExecution(ctx context.Context, request *historyservice.UnpauseActivityExecutionRequest) (*historyservice.UnpauseActivityExecutionResponse, error)
+		ResetActivityExecution(ctx context.Context, request *historyservice.ResetActivityExecutionRequest) (*historyservice.ResetActivityExecutionResponse, error)
+		UpdateActivityExecutionOptions(ctx context.Context, request *historyservice.UpdateActivityExecutionOptionsRequest) (*historyservice.UpdateActivityExecutionOptionsResponse, error)
+
 		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTasks(tasks map[tasks.Category][]tasks.Task)
 		NotifyChasmExecution(executionKey chasm.ExecutionKey, componentRef []byte)

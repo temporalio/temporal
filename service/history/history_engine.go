@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/service/history/api/listtasks"
 	"go.temporal.io/server/service/history/api/multioperation"
 	"go.temporal.io/server/service/history/api/pauseactivity"
+	"go.temporal.io/server/service/history/api/pauseactivityexecution"
 	"go.temporal.io/server/service/history/api/pauseworkflow"
 	"go.temporal.io/server/service/history/api/pollupdate"
 	"go.temporal.io/server/service/history/api/queryworkflow"
@@ -64,6 +65,7 @@ import (
 	"go.temporal.io/server/service/history/api/replicationadmin"
 	"go.temporal.io/server/service/history/api/requestcancelworkflow"
 	"go.temporal.io/server/service/history/api/resetactivity"
+	"go.temporal.io/server/service/history/api/resetactivityexecution"
 	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
 	"go.temporal.io/server/service/history/api/resetworkflow"
 	"go.temporal.io/server/service/history/api/respondactivitytaskcanceled"
@@ -77,7 +79,9 @@ import (
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/terminateworkflow"
 	"go.temporal.io/server/service/history/api/unpauseactivity"
+	"go.temporal.io/server/service/history/api/unpauseactivityexecution"
 	"go.temporal.io/server/service/history/api/unpauseworkflow"
+	"go.temporal.io/server/service/history/api/updateactivityexecutionoptions"
 	"go.temporal.io/server/service/history/api/updateactivityoptions"
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	"go.temporal.io/server/service/history/api/updateworkflowoptions"
@@ -1137,4 +1141,50 @@ func (e *historyEngineImpl) UnpauseWorkflowExecution(
 	req *historyservice.UnpauseWorkflowExecutionRequest,
 ) (resp *historyservice.UnpauseWorkflowExecutionResponse, retError error) {
 	return unpauseworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) PauseActivityExecution(
+	ctx context.Context,
+	req *historyservice.PauseActivityExecutionRequest,
+) (resp *historyservice.PauseActivityExecutionResponse, retError error) {
+	if req.GetFrontendRequest().GetWorkflowId() == "" {
+		_, retError = e.PauseActivity(ctx, &historyservice.PauseActivityRequest{})
+		return &historyservice.PauseActivityExecutionResponse{}, retError
+	}
+	return pauseactivityexecution.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) UnpauseActivityExecution(
+	ctx context.Context,
+	req *historyservice.UnpauseActivityExecutionRequest,
+) (resp *historyservice.UnpauseActivityExecutionResponse, retError error) {
+	if req.GetFrontendRequest().GetWorkflowId() == "" {
+		_, retError = e.UnpauseActivity(ctx, &historyservice.UnpauseActivityRequest{})
+		return &historyservice.UnpauseActivityExecutionResponse{}, retError
+	}
+	return unpauseactivityexecution.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) ResetActivityExecution(
+	ctx context.Context,
+	req *historyservice.ResetActivityExecutionRequest,
+) (resp *historyservice.ResetActivityExecutionResponse, retError error) {
+	if req.GetFrontendRequest().GetWorkflowId() == "" {
+		_, retError = e.ResetActivity(ctx, &historyservice.ResetActivityRequest{})
+		return &historyservice.ResetActivityExecutionResponse{}, retError
+	}
+	return resetactivityexecution.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) UpdateActivityExecutionOptions(
+	ctx context.Context,
+	req *historyservice.UpdateActivityExecutionOptionsRequest,
+) (resp *historyservice.UpdateActivityExecutionOptionsResponse, retError error) {
+	if req.GetFrontendRequest().GetWorkflowId() == "" {
+		updateResp, retError := e.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{})
+		return &historyservice.UpdateActivityExecutionOptionsResponse{
+			ActivityOptions: updateResp.GetActivityOptions(),
+		}, retError
+	}
+	return updateactivityexecutionoptions.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
 }

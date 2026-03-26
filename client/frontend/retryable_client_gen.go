@@ -1001,6 +1001,21 @@ func (c *retryableClient) ResetActivity(
 	return resp, err
 }
 
+func (c *retryableClient) ResetActivityExecution(
+	ctx context.Context,
+	request *workflowservice.ResetActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ResetActivityExecutionResponse, error) {
+	var resp *workflowservice.ResetActivityExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ResetActivityExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ResetStickyTaskQueue(
 	ctx context.Context,
 	request *workflowservice.ResetStickyTaskQueueRequest,
@@ -1460,6 +1475,21 @@ func (c *retryableClient) UnpauseWorkflowExecution(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.UnpauseWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) UpdateActivityExecutionOptions(
+	ctx context.Context,
+	request *workflowservice.UpdateActivityExecutionOptionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
+	var resp *workflowservice.UpdateActivityExecutionOptionsResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateActivityExecutionOptions(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

@@ -376,6 +376,34 @@ func (a *Activity) Terminate(
 	})
 }
 
+func (a *Activity) PauseActivityExecution(
+	ctx chasm.MutableContext,
+	req *activitypb.PauseActivityExecutionRequest,
+) (*activitypb.PauseActivityExecutionResponse, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (a *Activity) UnpauseActivityExecution(
+	ctx chasm.MutableContext,
+	req *activitypb.UnpauseActivityExecutionRequest,
+) (*activitypb.UnpauseActivityExecutionResponse, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (a *Activity) ResetActivityExecution(
+	ctx chasm.MutableContext,
+	req *activitypb.ResetActivityExecutionRequest,
+) (*activitypb.ResetActivityExecutionResponse, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (a *Activity) UpdateActivityExecutionOptions(
+	ctx chasm.MutableContext,
+	req *activitypb.UpdateActivityExecutionOptionsRequest,
+) (*activitypb.UpdateActivityExecutionOptionsResponse, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 // getOrCreateLastHeartbeat retrieves the last heartbeat state, initializing it if not present. The heartbeat is lazily created
 // to avoid unnecessary writes when heartbeats are not used.
 func (a *Activity) getOrCreateLastHeartbeat(ctx chasm.MutableContext) *activitypb.ActivityHeartbeatState {

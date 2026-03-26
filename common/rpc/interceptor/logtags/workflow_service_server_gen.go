@@ -336,6 +336,14 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		}
 	case *workflowservice.ResetActivityResponse:
 		return nil
+	case *workflowservice.ResetActivityExecutionRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowId()),
+			tag.ActivityID(r.GetActivityId()),
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.ResetActivityExecutionResponse:
+		return nil
 	case *workflowservice.ResetStickyTaskQueueRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
@@ -513,6 +521,14 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 			tag.WorkflowRunID(r.GetRunId()),
 		}
 	case *workflowservice.UnpauseWorkflowExecutionResponse:
+		return nil
+	case *workflowservice.UpdateActivityExecutionOptionsRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowId()),
+			tag.ActivityID(r.GetActivityId()),
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.UpdateActivityExecutionOptionsResponse:
 		return nil
 	case *workflowservice.UpdateActivityOptionsRequest:
 		return []tag.Tag{

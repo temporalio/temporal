@@ -9356,10 +9356,10 @@ func (x *UpdateActivityOptionsResponse) GetActivityOptions() *v123.ActivityOptio
 type UpdateActivityExecutionOptionsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Namespace ID of the workflow which scheduled this activity
-	NamespaceId   string                                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	UpdateRequest *v1.UpdateActivityExecutionOptionsRequest `protobuf:"bytes,2,opt,name=update_request,json=updateRequest,proto3" json:"update_request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	NamespaceId     string                                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	FrontendRequest *v1.UpdateActivityExecutionOptionsRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *UpdateActivityExecutionOptionsRequest) Reset() {
@@ -9399,9 +9399,9 @@ func (x *UpdateActivityExecutionOptionsRequest) GetNamespaceId() string {
 	return ""
 }
 
-func (x *UpdateActivityExecutionOptionsRequest) GetUpdateRequest() *v1.UpdateActivityExecutionOptionsRequest {
+func (x *UpdateActivityExecutionOptionsRequest) GetFrontendRequest() *v1.UpdateActivityExecutionOptionsRequest {
 	if x != nil {
-		return x.UpdateRequest
+		return x.FrontendRequest
 	}
 	return nil
 }
@@ -11487,10 +11487,10 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12d\n" +
 	"\x0eupdate_request\x18\x02 \x01(\v2=.temporal.api.workflowservice.v1.UpdateActivityOptionsRequestR\rupdateRequest:*\x92\xc4\x03&*$update_request.execution.workflow_id\"u\n" +
 	"\x1dUpdateActivityOptionsResponse\x12T\n" +
-	"\x10activity_options\x18\x01 \x01(\v2).temporal.api.activity.v1.ActivityOptionsR\x0factivityOptions\"\xdb\x01\n" +
+	"\x10activity_options\x18\x01 \x01(\v2).temporal.api.activity.v1.ActivityOptionsR\x0factivityOptions\"\xe1\x01\n" +
 	"%UpdateActivityExecutionOptionsRequest\x12!\n" +
-	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12m\n" +
-	"\x0eupdate_request\x18\x02 \x01(\v2F.temporal.api.workflowservice.v1.UpdateActivityExecutionOptionsRequestR\rupdateRequest: \x92\xc4\x03\x1c*\x1aupdate_request.workflow_id\"~\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12q\n" +
+	"\x10frontend_request\x18\x02 \x01(\v2F.temporal.api.workflowservice.v1.UpdateActivityExecutionOptionsRequestR\x0ffrontendRequest:\"\x92\xc4\x03\x1e*\x1cfrontend_request.workflow_id\"~\n" +
 	"&UpdateActivityExecutionOptionsResponse\x12T\n" +
 	"\x10activity_options\x18\x01 \x01(\v2).temporal.api.activity.v1.ActivityOptionsR\x0factivityOptions\"\xc9\x01\n" +
 	"\x14PauseActivityRequest\x12!\n" +
@@ -12095,7 +12095,7 @@ var file_temporal_server_api_historyservice_v1_request_response_proto_depIdxs = 
 	275, // 234: temporal.server.api.historyservice.v1.SyncWorkflowStateResponse.versioned_transition_artifact:type_name -> temporal.server.api.replication.v1.VersionedTransitionArtifact
 	276, // 235: temporal.server.api.historyservice.v1.UpdateActivityOptionsRequest.update_request:type_name -> temporal.api.workflowservice.v1.UpdateActivityOptionsRequest
 	277, // 236: temporal.server.api.historyservice.v1.UpdateActivityOptionsResponse.activity_options:type_name -> temporal.api.activity.v1.ActivityOptions
-	278, // 237: temporal.server.api.historyservice.v1.UpdateActivityExecutionOptionsRequest.update_request:type_name -> temporal.api.workflowservice.v1.UpdateActivityExecutionOptionsRequest
+	278, // 237: temporal.server.api.historyservice.v1.UpdateActivityExecutionOptionsRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.UpdateActivityExecutionOptionsRequest
 	277, // 238: temporal.server.api.historyservice.v1.UpdateActivityExecutionOptionsResponse.activity_options:type_name -> temporal.api.activity.v1.ActivityOptions
 	279, // 239: temporal.server.api.historyservice.v1.PauseActivityRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.PauseActivityRequest
 	280, // 240: temporal.server.api.historyservice.v1.PauseActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.PauseActivityExecutionRequest

@@ -1492,7 +1492,7 @@ func (c *clientImpl) UpdateActivityExecutionOptions(
 	request *historyservice.UpdateActivityExecutionOptionsRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.UpdateActivityExecutionOptionsResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetUpdateRequest().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowId())
 	var response *historyservice.UpdateActivityExecutionOptionsResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error

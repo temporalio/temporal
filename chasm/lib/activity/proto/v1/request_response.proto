@@ -5,6 +5,7 @@ package temporal.server.chasm.lib.activity.proto.v1;
 option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
 
 import "temporal/api/workflowservice/v1/request_response.proto";
+import "temporal/api/activity/v1/message.proto";
 
 message StartActivityExecutionRequest {
     string namespace_id = 1;
@@ -97,4 +98,6 @@ message UpdateActivityExecutionOptionsRequest {
 }
 
 message UpdateActivityExecutionOptionsResponse {
+    // Activity options after an update
+    temporal.api.activity.v1.ActivityOptions activity_options = 1;
 }

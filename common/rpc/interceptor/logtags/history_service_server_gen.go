@@ -464,9 +464,9 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		return nil
 	case *historyservice.UpdateActivityExecutionOptionsRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetUpdateRequest().GetWorkflowId()),
-			tag.ActivityID(r.GetUpdateRequest().GetActivityId()),
-			tag.WorkflowRunID(r.GetUpdateRequest().GetRunId()),
+			tag.WorkflowID(r.GetFrontendRequest().GetWorkflowId()),
+			tag.ActivityID(r.GetFrontendRequest().GetActivityId()),
+			tag.WorkflowRunID(r.GetFrontendRequest().GetRunId()),
 		}
 	case *historyservice.UpdateActivityExecutionOptionsResponse:
 		return nil

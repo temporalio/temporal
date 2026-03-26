@@ -11,6 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	v11 "go.temporal.io/api/activity/v1"
 	v1 "go.temporal.io/api/workflowservice/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -892,9 +893,11 @@ func (x *UpdateActivityExecutionOptionsRequest) GetFrontendRequest() *v1.UpdateA
 }
 
 type UpdateActivityExecutionOptionsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Activity options after an update
+	ActivityOptions *v11.ActivityOptions `protobuf:"bytes,1,opt,name=activity_options,json=activityOptions,proto3" json:"activity_options,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *UpdateActivityExecutionOptionsResponse) Reset() {
@@ -927,11 +930,18 @@ func (*UpdateActivityExecutionOptionsResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{19}
 }
 
+func (x *UpdateActivityExecutionOptionsResponse) GetActivityOptions() *v11.ActivityOptions {
+	if x != nil {
+		return x.ActivityOptions
+	}
+	return nil
+}
+
 var File_temporal_server_chasm_lib_activity_proto_v1_request_response_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"Btemporal/server/chasm/lib/activity/proto/v1/request_response.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a6temporal/api/workflowservice/v1/request_response.proto\"\xad\x01\n" +
+	"Btemporal/server/chasm/lib/activity/proto/v1/request_response.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a&temporal/api/activity/v1/message.proto\"\xad\x01\n" +
 	"\x1dStartActivityExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12i\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2>.temporal.api.workflowservice.v1.StartActivityExecutionRequestR\x0ffrontendRequest\"\x8e\x01\n" +
@@ -973,8 +983,9 @@ const file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_ra
 	"\x1eResetActivityExecutionResponse\"\xbd\x01\n" +
 	"%UpdateActivityExecutionOptionsRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12q\n" +
-	"\x10frontend_request\x18\x02 \x01(\v2F.temporal.api.workflowservice.v1.UpdateActivityExecutionOptionsRequestR\x0ffrontendRequest\"(\n" +
-	"&UpdateActivityExecutionOptionsResponseBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
+	"\x10frontend_request\x18\x02 \x01(\v2F.temporal.api.workflowservice.v1.UpdateActivityExecutionOptionsRequestR\x0ffrontendRequest\"~\n" +
+	"&UpdateActivityExecutionOptionsResponse\x12T\n" +
+	"\x10activity_options\x18\x01 \x01(\v2).temporal.api.activity.v1.ActivityOptionsR\x0factivityOptionsBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescOnce sync.Once
@@ -1023,6 +1034,7 @@ var file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_goTy
 	(*v1.UnpauseActivityExecutionRequest)(nil),       // 30: temporal.api.workflowservice.v1.UnpauseActivityExecutionRequest
 	(*v1.ResetActivityExecutionRequest)(nil),         // 31: temporal.api.workflowservice.v1.ResetActivityExecutionRequest
 	(*v1.UpdateActivityExecutionOptionsRequest)(nil), // 32: temporal.api.workflowservice.v1.UpdateActivityExecutionOptionsRequest
+	(*v11.ActivityOptions)(nil),                      // 33: temporal.api.activity.v1.ActivityOptions
 }
 var file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_depIdxs = []int32{
 	20, // 0: temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.StartActivityExecutionRequest
@@ -1038,11 +1050,12 @@ var file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_depI
 	30, // 10: temporal.server.chasm.lib.activity.proto.v1.UnpauseActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.UnpauseActivityExecutionRequest
 	31, // 11: temporal.server.chasm.lib.activity.proto.v1.ResetActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.ResetActivityExecutionRequest
 	32, // 12: temporal.server.chasm.lib.activity.proto.v1.UpdateActivityExecutionOptionsRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.UpdateActivityExecutionOptionsRequest
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	33, // 13: temporal.server.chasm.lib.activity.proto.v1.UpdateActivityExecutionOptionsResponse.activity_options:type_name -> temporal.api.activity.v1.ActivityOptions
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_init() }

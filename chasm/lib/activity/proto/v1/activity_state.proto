@@ -40,6 +40,10 @@ enum ActivityExecutionStatus {
     // Additionally, after all retries are exhausted for start-to-close or heartbeat timeouts, the activity will also
     // transition to timed out status.
     ACTIVITY_EXECUTION_STATUS_TIMED_OUT = 8;
+    // The activity is paused and will not be rescheduled until it is unpaused.
+    // If the activity is currently running and subsequently fails, it will not be rescheduled.
+    // If the activity is running and finishes successfully, it will transition to completed.
+    ACTIVITY_EXECUTION_STATUS_PAUSED = 9;
 }
 
 message ActivityState {
@@ -90,6 +94,9 @@ message ActivityState {
 
     // Set if the activity was terminated
     ActivityTerminateState terminate_state = 12;
+
+    // Set if the activity is paused. Cleared on unpause.
+    ActivityPauseState pause_info = 13;
 }
 
 message ActivityCancelState {
@@ -101,6 +108,15 @@ message ActivityCancelState {
 
 message ActivityTerminateState {
   string request_id = 1;
+}
+
+message ActivityPauseState {
+    // Time the activity was paused.
+    google.protobuf.Timestamp pause_time = 1;
+    // Identity of the caller who initiated the pause.
+    string identity = 2;
+    // Optional human-readable reason for the pause.
+    string reason = 3;
 }
 
 message ActivityAttemptState {

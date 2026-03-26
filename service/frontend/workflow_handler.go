@@ -6604,6 +6604,202 @@ func (wh *WorkflowHandler) ResetActivity(
 	return &workflowservice.ResetActivityResponse{}, nil
 }
 
+func (wh *WorkflowHandler) UpdateActivityExecutionOptions(
+	ctx context.Context,
+	request *workflowservice.UpdateActivityExecutionOptionsRequest,
+) (_ *workflowservice.UpdateActivityExecutionOptionsResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetActivityId() == "" {
+		return nil, errActivityIDNotSet
+	}
+	if err := priorities.Validate(request.GetActivityOptions().GetPriority()); err != nil {
+		return nil, err
+	}
+
+	if request.GetWorkflowId() != "" {
+		resp, err := wh.UpdateActivityOptions(ctx, &workflowservice.UpdateActivityOptionsRequest{
+			Namespace: request.GetNamespace(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: request.GetWorkflowId(),
+				RunId:      request.GetRunId(),
+			},
+			Identity:        request.GetIdentity(),
+			ActivityOptions: request.GetActivityOptions(),
+			UpdateMask:      request.GetUpdateMask(),
+			Activity:        &workflowservice.UpdateActivityOptionsRequest_Id{Id: request.GetActivityId()},
+			RestoreOriginal: request.GetRestoreOriginal(),
+		})
+		return &workflowservice.UpdateActivityExecutionOptionsResponse{
+			ActivityOptions: resp.ActivityOptions,
+		}, err
+	}
+
+	response, err := wh.FrontendHandler.UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+		Namespace:       request.GetNamespace(),
+		WorkflowId:      request.GetWorkflowId(),
+		ActivityId:      request.GetActivityId(),
+		RunId:           request.GetRunId(),
+		Identity:        request.GetIdentity(),
+		ActivityOptions: request.GetActivityOptions(),
+		UpdateMask:      request.GetUpdateMask(),
+		RestoreOriginal: request.GetRestoreOriginal(),
+		ResourceId:      request.GetResourceId(),
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateActivityExecutionOptionsResponse{
+		ActivityOptions: response.ActivityOptions,
+	}, nil
+}
+
+func (wh *WorkflowHandler) PauseActivityExecution(
+	ctx context.Context,
+	request *workflowservice.PauseActivityExecutionRequest,
+) (_ *workflowservice.PauseActivityExecutionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetActivityId() == "" {
+		return nil, errActivityIDNotSet
+	}
+
+	if request.GetWorkflowId() != "" {
+		_, err := wh.PauseActivity(ctx, &workflowservice.PauseActivityRequest{
+			Namespace: request.GetNamespace(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: request.GetWorkflowId(),
+				RunId:      request.GetRunId(),
+			},
+			Identity: request.GetIdentity(),
+			Activity: &workflowservice.PauseActivityRequest_Id{Id: request.GetActivityId()},
+			Reason:   request.GetReason(),
+		})
+		return &workflowservice.PauseActivityExecutionResponse{}, err
+	}
+
+	_, err := wh.FrontendHandler.PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+		Namespace:  request.GetNamespace(),
+		WorkflowId: request.GetWorkflowId(),
+		ActivityId: request.GetActivityId(),
+		RunId:      request.GetRunId(),
+		Identity:   request.GetIdentity(),
+		Reason:     request.GetReason(),
+		ResourceId: request.GetResourceId(),
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.PauseActivityExecutionResponse{}, nil
+}
+
+func (wh *WorkflowHandler) UnpauseActivityExecution(
+	ctx context.Context, request *workflowservice.UnpauseActivityExecutionRequest,
+) (_ *workflowservice.UnpauseActivityExecutionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetActivityId() == "" {
+		return nil, errActivityIDNotSet
+	}
+
+	if request.GetWorkflowId() != "" {
+		_, err := wh.UnpauseActivity(ctx, &workflowservice.UnpauseActivityRequest{
+			Namespace: request.GetNamespace(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: request.GetWorkflowId(),
+				RunId:      request.GetRunId(),
+			},
+			Identity:       request.GetIdentity(),
+			Activity:       &workflowservice.UnpauseActivityRequest_Id{Id: request.GetActivityId()},
+			ResetAttempts:  request.GetResetAttempts(),
+			ResetHeartbeat: request.GetResetHeartbeat(),
+			Jitter:         request.GetJitter(),
+		})
+		return &workflowservice.UnpauseActivityExecutionResponse{}, err
+	}
+
+	_, err := wh.FrontendHandler.UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+		Namespace:      request.GetNamespace(),
+		WorkflowId:     request.GetWorkflowId(),
+		ActivityId:     request.GetActivityId(),
+		RunId:          request.GetRunId(),
+		Identity:       request.GetIdentity(),
+		ResetAttempts:  request.GetResetAttempts(),
+		ResetHeartbeat: request.GetResetHeartbeat(),
+		Reason:         request.GetReason(),
+		Jitter:         request.GetJitter(),
+		ResourceId:     request.GetResourceId(),
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UnpauseActivityExecutionResponse{}, nil
+}
+
+func (wh *WorkflowHandler) ResetActivityExecution(
+	ctx context.Context, request *workflowservice.ResetActivityExecutionRequest,
+) (_ *workflowservice.ResetActivityExecutionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetActivityId() == "" {
+		return nil, errActivityIDNotSet
+	}
+
+	if request.GetWorkflowId() != "" {
+		_, err := wh.ResetActivity(ctx, &workflowservice.ResetActivityRequest{
+			Namespace: request.GetNamespace(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: request.GetWorkflowId(),
+				RunId:      request.GetRunId(),
+			},
+			Identity:               request.GetIdentity(),
+			Activity:               &workflowservice.ResetActivityRequest_Id{Id: request.GetActivityId()},
+			ResetHeartbeat:         request.GetResetHeartbeat(),
+			KeepPaused:             request.GetKeepPaused(),
+			Jitter:                 request.GetJitter(),
+			RestoreOriginalOptions: request.GetRestoreOriginalOptions(),
+		})
+		return &workflowservice.ResetActivityExecutionResponse{}, err
+	}
+
+	_, err := wh.FrontendHandler.ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+		Namespace:              request.GetNamespace(),
+		WorkflowId:             request.GetWorkflowId(),
+		ActivityId:             request.GetActivityId(),
+		RunId:                  request.GetRunId(),
+		Identity:               request.GetIdentity(),
+		ResetHeartbeat:         request.GetResetHeartbeat(),
+		KeepPaused:             request.GetKeepPaused(),
+		Jitter:                 request.GetJitter(),
+		RestoreOriginalOptions: request.GetRestoreOriginalOptions(),
+		ResourceId:             request.GetResourceId(),
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.ResetActivityExecutionResponse{}, nil
+}
+
 func (wh *WorkflowHandler) CreateWorkflowRule(
 	ctx context.Context,
 	request *workflowservice.CreateWorkflowRuleRequest,

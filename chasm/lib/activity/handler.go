@@ -3,6 +3,7 @@ package activity
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -293,4 +294,32 @@ func (h *handler) RequestCancelActivityExecution(
 	}
 
 	return response, nil
+}
+
+func (h *handler) PauseActivityExecution(
+	ctx context.Context,
+	req *activitypb.PauseActivityExecutionRequest,
+) (*activitypb.PauseActivityExecutionResponse, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (h *handler) UnpauseActivityExecution(
+	ctx context.Context,
+	req *activitypb.UnpauseActivityExecutionRequest,
+) (*activitypb.UnpauseActivityExecutionResponse, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (h *handler) ResetActivityExecution(
+	ctx context.Context,
+	req *activitypb.ResetActivityExecutionRequest,
+) (*activitypb.ResetActivityExecutionResponse, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (h *handler) UpdateActivityExecutionOptions(
+	ctx context.Context,
+	req *activitypb.UpdateActivityExecutionOptionsRequest,
+) (*activitypb.UpdateActivityExecutionOptionsResponse, error) {
+	return nil, fmt.Errorf("not implemented")
 }

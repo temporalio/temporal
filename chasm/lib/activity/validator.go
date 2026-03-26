@@ -435,3 +435,175 @@ func validateTerminateActivityExecutionRequest(
 
 	return nil
 }
+
+func validatePauseActivityExecutionRequest(
+	req *workflowservice.PauseActivityExecutionRequest,
+	maxIDLengthLimit int,
+	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	logger log.Logger,
+) error {
+	if req.GetActivityId() == "" {
+		return serviceerror.NewInvalidArgument("activity ID is required")
+	}
+
+	if len(req.GetActivityId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("activity ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetActivityId()), maxIDLengthLimit)
+	}
+
+	// TODO seankane: do we want a request ID to dedupe?
+	// if len(req.GetRequestId()) > maxIDLengthLimit {
+	// 	return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+	// 		len(req.GetRequestId()), maxIDLengthLimit)
+	// }
+
+	if len(req.GetIdentity()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
+	}
+
+	if runID := req.GetRunId(); runID != "" {
+		_, err := uuid.Parse(runID)
+		if err != nil {
+			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
+		}
+	}
+
+	err := validateBlobSize(
+		req.GetActivityId(),
+		"PauseActivityExecution",
+		blobSizeLimitError,
+		blobSizeLimitWarn,
+		len(req.GetReason()),
+		logger,
+		req.GetNamespace())
+	if err != nil {
+		return serviceerror.NewInvalidArgument("reason exceeds length limit")
+	}
+
+	return nil
+}
+
+func validateUnpauseActivityExecutionRequest(
+	req *workflowservice.UnpauseActivityExecutionRequest,
+	maxIDLengthLimit int,
+	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	logger log.Logger,
+) error {
+	if req.GetActivityId() == "" {
+		return serviceerror.NewInvalidArgument("activity ID is required")
+	}
+
+	if len(req.GetActivityId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("activity ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetActivityId()), maxIDLengthLimit)
+	}
+
+	// TODO seankane: do we want a request ID to dedupe?
+	// if len(req.GetRequestId()) > maxIDLengthLimit {
+	// 	return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+	// 		len(req.GetRequestId()), maxIDLengthLimit)
+	// }
+
+	if len(req.GetIdentity()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
+	}
+
+	if runID := req.GetRunId(); runID != "" {
+		_, err := uuid.Parse(runID)
+		if err != nil {
+			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
+		}
+	}
+
+	err := validateBlobSize(
+		req.GetActivityId(),
+		"UnpauseActivityExecution",
+		blobSizeLimitError,
+		blobSizeLimitWarn,
+		len(req.GetReason()),
+		logger,
+		req.GetNamespace())
+	if err != nil {
+		return serviceerror.NewInvalidArgument("reason exceeds length limit")
+	}
+
+	return nil
+}
+
+func validateResetActivityExecutionRequest(
+	req *workflowservice.ResetActivityExecutionRequest,
+	maxIDLengthLimit int,
+	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	logger log.Logger,
+) error {
+	if req.GetActivityId() == "" {
+		return serviceerror.NewInvalidArgument("activity ID is required")
+	}
+
+	if len(req.GetActivityId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("activity ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetActivityId()), maxIDLengthLimit)
+	}
+
+	// TODO seankane: do we want a request ID to dedupe?
+	// if len(req.GetRequestId()) > maxIDLengthLimit {
+	// 	return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+	// 		len(req.GetRequestId()), maxIDLengthLimit)
+	// }
+
+	if len(req.GetIdentity()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
+	}
+
+	if runID := req.GetRunId(); runID != "" {
+		_, err := uuid.Parse(runID)
+		if err != nil {
+			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
+		}
+	}
+
+	return nil
+}
+
+func validateUpdateActivityExecutionOptionsRequest(
+	req *workflowservice.UpdateActivityExecutionOptionsRequest,
+	maxIDLengthLimit int,
+	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	logger log.Logger,
+) error {
+	if req.GetActivityId() == "" {
+		return serviceerror.NewInvalidArgument("activity ID is required")
+	}
+
+	if len(req.GetActivityId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("activity ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetActivityId()), maxIDLengthLimit)
+	}
+
+	// TODO seankane: do we want a request ID to dedupe?
+	// if len(req.GetRequestId()) > maxIDLengthLimit {
+	// 	return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+	// 		len(req.GetRequestId()), maxIDLengthLimit)
+	// }
+
+	if len(req.GetIdentity()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
+	}
+
+	if runID := req.GetRunId(); runID != "" {
+		_, err := uuid.Parse(runID)
+		if err != nil {
+			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
+		}
+	}
+
+	return nil
+}
