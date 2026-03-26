@@ -53,16 +53,12 @@ var (
 
 func TestNameTypeMap() NameTypeMap {
 	csa := maps.Clone(sqlCustomSearchAttributes)
-	return NameTypeMap{
-		customSearchAttributes: csa,
-	}
+	return NewNameTypeMap(csa)
 }
 
 func TestEsNameTypeMap() NameTypeMap {
 	csa := maps.Clone(esCustomSearchAttributes)
-	return NameTypeMap{
-		customSearchAttributes: csa,
-	}
+	return NewNameTypeMap(csa)
 }
 
 func TestEsNameTypeMapWithScheduleID() NameTypeMap {
@@ -147,5 +143,5 @@ func NewTestMapperProvider(customMapper Mapper) MapperProvider {
 }
 
 func NewNameTypeMapStub(attributes map[string]enumspb.IndexedValueType) NameTypeMap {
-	return NameTypeMap{customSearchAttributes: attributes}
+	return NewNameTypeMap(attributes)
 }

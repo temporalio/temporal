@@ -414,7 +414,7 @@ func MutableStateToGetResponse(
 		InheritedBuildId:             mutableState.GetInheritedBuildId(),
 		MostRecentWorkerVersionStamp: mostRecentWorkerVersionStamp,
 		TransitionHistory:            transitionhistory.CopyVersionedTransitions(mutableState.GetExecutionInfo().TransitionHistory),
-		VersioningInfo:               mutableState.GetExecutionInfo().VersioningInfo,
+		VersioningInfo:               common.CloneProto(mutableState.GetExecutionInfo().VersioningInfo),
 		TransientOrSpeculativeTasks:  transientOrSpeculativeTasks,
 	}, nil
 }

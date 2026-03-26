@@ -58,6 +58,7 @@ const (
 	toUnversioned                                  = "to_unversioned"
 	queryTypeTag                                   = "query_type"
 	namespaceAllValue                              = "all"
+	activityTargetingMethod                        = "activity_targeting_method"
 	unknownValue                                   = "_unknown_"
 	totalMetricSuffix                              = "_total"
 	tagExcludedValue                               = "_tag_excluded_"
@@ -205,6 +206,11 @@ func ActivityTypeTag(value string) Tag {
 	return Tag{Key: activityType, Value: value}
 }
 
+// ActivityTargetingMethodTag returns a tag indicating how the activity was targeted: "id" or "type".
+func ActivityTargetingMethodTag(value string) Tag {
+	return Tag{Key: activityTargetingMethod, Value: value}
+}
+
 // CommandTypeTag returns a new command type tag.
 func CommandTypeTag(value string) Tag {
 	if len(value) == 0 {
@@ -319,6 +325,10 @@ func VisibilityIndexNameTag(value string) Tag {
 
 func WorkerPluginNameTag(value string) Tag {
 	return Tag{Key: WorkerPluginNameTagName, Value: value}
+}
+
+func WorkerStorageDriverTypeTag(value string) Tag {
+	return Tag{Key: WorkerStorageDriverTypeTagName, Value: value}
 }
 
 // VersionedTag represents whether a loaded task queue manager represents a specific version set or build ID or not.

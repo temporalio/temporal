@@ -330,7 +330,9 @@ func (v *Visibility) generateTask(
 	)
 }
 
-type visibilityTaskHandler struct{}
+type visibilityTaskHandler struct {
+	SideEffectTaskHandlerBase[*persistencespb.ChasmVisibilityTaskData]
+}
 
 var defaultVisibilityTaskHandler = &visibilityTaskHandler{}
 
@@ -350,5 +352,5 @@ func (v *visibilityTaskHandler) Execute(
 	_ *persistencespb.ChasmVisibilityTaskData,
 ) error {
 	//nolint:forbidigo
-	panic("chasm visibilityTaskExecutor should not be called directly")
+	panic("chasm visibilityTaskHandler should not be called directly")
 }

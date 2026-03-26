@@ -32,10 +32,11 @@ type (
 
 		lock sync.Mutex
 
-		readPending  bool
-		backoffTimer *time.Timer
-		retrier      backoff.Retrier
-		addRetries   *semaphore.Weighted
+		readPending     bool
+		backoffTimer    *time.Timer
+		retrier         backoff.Retrier
+		throttleRetrier backoff.Retrier
+		addRetries      *semaphore.Weighted
 
 		backlogAge       backlogAgeTracker
 		outstandingTasks treemap.Map // fairLevel -> *internalTask if unacked, or nil if acked
@@ -90,7 +91,15 @@ func newFairTaskReader(
 		subqueue:   subqueue,
 		logger:     backlogMgr.logger,
 		retrier: backoff.NewRetrier(
-			common.CreateReadTaskRetryPolicy(),
+			backoff.NewExponentialRetryPolicy(50*time.Millisecond).
+				WithMaximumInterval(10*time.Second).
+				WithExpirationInterval(backoff.NoInterval),
+			clock.NewRealTimeSource(),
+		),
+		throttleRetrier: backoff.NewRetrier(
+			backoff.NewExponentialRetryPolicy(2*time.Second).
+				WithMaximumInterval(30*time.Second).
+				WithExpirationInterval(backoff.NoInterval),
 			clock.NewRealTimeSource(),
 		),
 		backlogAge: newBacklogAgeTracker(),
@@ -258,13 +267,14 @@ func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) er
 		if tr.backlogMgr.signalIfFatal(err) || common.IsContextCanceledErr(err) {
 			// don't retry
 		} else if common.IsResourceExhausted(err) {
-			tr.retryReadAfter(taskReaderThrottleRetryDelay)
+			tr.retryReadAfter(tr.throttleRetrier.NextBackOff(err))
 		} else {
 			tr.retryReadAfter(tr.retrier.NextBackOff(err))
 		}
 		return err
 	}
 	tr.retrier.Reset()
+	tr.throttleRetrier.Reset()
 
 	// If we got less than we asked for, we know we hit the end.
 	// If there was a concurrent write such that we incorrectly think we hit the end here,

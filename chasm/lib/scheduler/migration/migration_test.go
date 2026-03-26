@@ -113,6 +113,7 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 			running++
 			require.Equal(t, "wf-1", start.WorkflowId)
 			require.Equal(t, "run-1", start.RunId)
+			require.False(t, start.HasCallback)
 		case start.Completed != nil:
 			completed++
 			require.Equal(t, "wf-2", start.WorkflowId)
@@ -211,15 +212,7 @@ func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
 		Failure: &failurepb.Failure{Message: "last failure"},
 	}
 
-	migrationState := &schedulerpb.SchedulerMigrationState{
-		SchedulerState:       scheduler,
-		GeneratorState:       generator,
-		InvokerState:         invoker,
-		Backfillers:          backfillers,
-		LastCompletionResult: lastCompletion,
-	}
-
-	args := SchedulerMigrationStateToLegacyStartScheduleArgs(migrationState, now)
+	args := CHASMToLegacyStartScheduleArgs(scheduler, generator, invoker, backfillers, lastCompletion, nil, nil, now)
 
 	require.Equal(t, "ns-id", args.State.NamespaceId)
 	require.Equal(t, "sched-id", args.State.ScheduleId)

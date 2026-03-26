@@ -42,12 +42,12 @@ func (n nexusInvocation) WrapError(result invocationResult, err error) error {
 func (n nexusInvocation) Invoke(
 	ctx context.Context,
 	ns *namespace.Namespace,
-	e InvocationTaskExecutor,
+	h InvocationTaskHandler,
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
-	if e.httpTraceProvider != nil {
-		traceLogger := log.With(e.logger,
+	if h.httpTraceProvider != nil {
+		traceLogger := log.With(h.logger,
 			tag.WorkflowNamespace(ns.Name().String()),
 			tag.Operation("CompleteNexusOperation"),
 			tag.String("destination", taskAttr.Destination),
@@ -56,13 +56,13 @@ func (n nexusInvocation) Invoke(
 			tag.AttemptStart(time.Now().UTC()),
 			tag.Attempt(n.attempt),
 		)
-		if trace := e.httpTraceProvider.NewTrace(n.attempt, traceLogger); trace != nil {
+		if trace := h.httpTraceProvider.NewTrace(n.attempt, traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
 		}
 	}
 
 	client := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
-		HTTPCaller: e.httpCallerProvider(queuescommon.NamespaceIDAndDestination{
+		HTTPCaller: h.httpCallerProvider(queuescommon.NamespaceIDAndDestination{
 			NamespaceID: ns.ID().String(),
 			Destination: taskAttr.Destination,
 		}),
@@ -77,12 +77,12 @@ func (n nexusInvocation) Invoke(
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(taskAttr.Destination)
 	outcomeTag := metrics.OutcomeTag(outcomeTag(ctx, err))
-	e.metricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, outcomeTag)
-	e.metricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, outcomeTag)
+	h.metricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, outcomeTag)
+	h.metricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, outcomeTag)
 
 	if err != nil {
 		retryable := isRetryableCallError(err)
-		e.logger.Error("Callback request failed", tag.Error(err), tag.Bool("retryable", retryable))
+		h.logger.Error("Callback request failed", tag.Error(err), tag.Bool("retryable", retryable))
 		if retryable {
 			return invocationResultRetry{err}
 		}

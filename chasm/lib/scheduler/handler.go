@@ -3,12 +3,14 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 )
 
@@ -77,11 +79,6 @@ func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateSch
 
 // CreateFromMigrationState creates a CHASM schedule from migrated V1 state.
 // Used during migration from workflow-backed schedules to CHASM schedules.
-//
-// TODO: attach completion callbacks to running workflows migrated from V1.
-// TODO: handle sentinel key that may exist if EnableCHASMSchedulerCreation was
-// enabled when the schedule was originally created. The existing CHASM component
-// must be replaced with the migrated state.
 func (h *handler) CreateFromMigrationState(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) (resp *schedulerpb.CreateFromMigrationStateResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 
@@ -98,9 +95,9 @@ func (h *handler) CreateFromMigrationState(ctx context.Context, req *schedulerpb
 
 	var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
 	if errors.As(err, &alreadyStartedErr) {
-		// Check if the existing schedule is a sentinel.
-		// TODO: if sentinel, replace it with the migrated schedule from the request
-		// instead of returning ErrSentinel.
+		// Check if the existing schedule is a sentinel. Sentinels are
+		// auto-deleted SentinelIdleTime after schedule creation; the
+		// V1 schedule will keep retrying migration until it expires.
 		_, readErr := chasm.ReadComponent(
 			ctx,
 			chasm.NewComponentRef[*Scheduler](
@@ -118,12 +115,61 @@ func (h *handler) CreateFromMigrationState(ctx context.Context, req *schedulerpb
 			(*struct{})(nil),
 		)
 		if readErr != nil {
-			return nil, readErr // Returns ErrSentinel (404) if sentinel
+			if errors.Is(readErr, ErrSentinel) {
+				h.logger.Warn(
+					fmt.Sprintf("Migration blocked by sentinel schedule; sentinel will auto-delete %v after schedule creation", SentinelIdleTime),
+					tag.NewStringTag("schedule-id", scheduleID),
+				)
+				return nil, ErrSentinelBlocked
+			}
+			return nil, readErr
 		}
 		return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", scheduleID)
 	}
 
 	return &schedulerpb.CreateFromMigrationStateResponse{}, err
+}
+
+func (h *handler) CreateSentinel(ctx context.Context, req *schedulerpb.CreateSentinelRequest) (resp *schedulerpb.CreateSentinelResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	_, err = chasm.StartExecution(
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: req.NamespaceId,
+			BusinessID:  req.ScheduleId,
+		},
+		CreateSentinelFn,
+		req,
+	)
+
+	var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
+	if errors.As(err, &alreadyStartedErr) {
+		// If a sentinel already exists, succeed idempotently.
+		// If a real scheduler exists, fail.
+		_, readErr := chasm.ReadComponent(
+			ctx,
+			chasm.NewComponentRef[*Scheduler](
+				chasm.ExecutionKey{
+					NamespaceID: req.NamespaceId,
+					BusinessID:  req.ScheduleId,
+				},
+			),
+			func(s *Scheduler, ctx chasm.Context, _ *struct{}) (*struct{}, error) {
+				if s.IsSentinel() {
+					return nil, nil
+				}
+				return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", req.ScheduleId)
+			},
+			(*struct{})(nil),
+		)
+		return &schedulerpb.CreateSentinelResponse{}, readErr
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &schedulerpb.CreateSentinelResponse{}, nil
 }
 
 func (h *handler) UpdateSchedule(ctx context.Context, req *schedulerpb.UpdateScheduleRequest) (resp *schedulerpb.UpdateScheduleResponse, err error) {
@@ -174,6 +220,26 @@ func (h *handler) DeleteSchedule(ctx context.Context, req *schedulerpb.DeleteSch
 		(*Scheduler).Delete,
 		req,
 	)
+	return resp, err
+}
+
+func (h *handler) MigrateToWorkflow(ctx context.Context, req *schedulerpb.MigrateToWorkflowRequest) (resp *schedulerpb.MigrateToWorkflowResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	resp, _, err = chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*Scheduler](
+			chasm.ExecutionKey{
+				NamespaceID: req.NamespaceId,
+				BusinessID:  req.ScheduleId,
+			},
+		),
+		(*Scheduler).MigrateToWorkflow,
+		req,
+	)
+	if errors.Is(err, ErrSentinel) {
+		return nil, ErrSentinelBlocked
+	}
 	return resp, err
 }
 

@@ -57,7 +57,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Sticky() {
 		return msg, nil
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	id := "test-query-sticky"
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -107,7 +107,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		}
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	id := "test-query-consistent"
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -149,7 +149,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
 		})
 		return nil
 	}
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	testCases := []struct {
 		testName       string
@@ -207,7 +207,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 	// stop the worker, so the workflow won't be started before query
-	s.Worker().Stop()
+	s.SdkWorker().Stop()
 
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		status := "initialized"
@@ -286,7 +286,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 		panic("Workflow failed")
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	id := "test-query-failed-workflow-task"
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -344,7 +344,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_WithRawHistoryBytesToMatchingServ
 	s.OverrideDynamicConfig(dynamicconfig.SendRawHistoryBytesToMatchingService, true)
 
 	// Stop the default worker, so we can control sticky behavior
-	s.Worker().Stop()
+	s.SdkWorker().Stop()
 
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		status := "initialized"

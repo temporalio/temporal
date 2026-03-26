@@ -163,7 +163,6 @@ func Invoke(
 		baseRebuildLastEventVersion,
 		baseNextEventID,
 		resetRunID,
-		request.GetRequestId(),
 		baseWorkflow,
 		ndc.NewWorkflow(
 			shardContext.GetClusterMetadata(),

@@ -16,8 +16,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func newProcessBufferExecutor(env *testEnv) *scheduler.InvokerProcessBufferTaskExecutor {
-	return scheduler.NewInvokerProcessBufferTaskExecutor(scheduler.InvokerTaskExecutorOptions{
+func newProcessBufferHandler(env *testEnv) *scheduler.InvokerProcessBufferTaskHandler {
+	return scheduler.NewInvokerProcessBufferTaskHandler(scheduler.InvokerTaskHandlerOptions{
 		Config:         defaultConfig(),
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     env.Logger,
@@ -64,8 +64,8 @@ func runProcessBufferTestCase(t *testing.T, env *testEnv, c *processBufferTestCa
 	// Set LastProcessedTime to current time to ensure time checks pass.
 	invoker.LastProcessedTime = timestamppb.New(env.TimeSource.Now())
 
-	executor := newProcessBufferExecutor(env)
-	err := executor.Execute(ctx, invoker, chasm.TaskAttributes{}, &schedulerpb.InvokerProcessBufferTask{})
+	handler := newProcessBufferHandler(env)
+	err := handler.Execute(ctx, invoker, chasm.TaskAttributes{}, &schedulerpb.InvokerProcessBufferTask{})
 	require.NoError(t, err)
 	require.NoError(t, env.CloseTransaction())
 

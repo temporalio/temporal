@@ -6,7 +6,9 @@ ARG TARGETARCH
 
 RUN apk add --no-cache \
     ca-certificates \
-    tzdata && addgroup -g 1000 temporal && \
+    tzdata && \
+    apk upgrade --no-cache zlib && \
+    addgroup -g 1000 temporal && \
     adduser -u 1000 -G temporal -D temporal
 
 # Copy all admin tool binaries:

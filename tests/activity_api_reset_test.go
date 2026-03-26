@@ -115,8 +115,8 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 
 	workflowFn := s.makeWorkflowFunc(activityFunction)
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFunction)
 
 	wfId := testcore.RandomizeStr("wfid-" + s.T().Name())
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -183,8 +183,8 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhileRunning() {
 
 	workflowFn := s.makeWorkflowFunc(activityFunction)
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFunction)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        s.tv.WorkflowID(),
@@ -266,8 +266,8 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 
 	workflowFn := s.makeWorkflowFunc(activityFunction)
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFunction)
 
 	wfId := testcore.RandomizeStr("wf_id-" + s.T().Name())
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -347,8 +347,8 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 
 	workflowFn := s.makeWorkflowFunc(activityFunction)
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFunction)
 
 	wfId := testcore.RandomizeStr("wf_id-" + s.T().Name())
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -493,8 +493,8 @@ func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {
 		return ret, err
 	}
 
-	s.Worker().RegisterActivity(activityFn)
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	wfId := "functional-test-heartbeat-details-after-reset"
 	workflowOptions := sdkclient.StartWorkflowOptions{
