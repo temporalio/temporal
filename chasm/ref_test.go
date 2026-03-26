@@ -98,3 +98,36 @@ func (s *componentRefSuite) TestSerializeDeserialize() {
 	s.Equal(ref.ExecutionKey, deserializedRef.ExecutionKey)
 	s.Equal(ref.componentPath, deserializedRef.componentPath)
 }
+
+func (s *componentRefSuite) TestResetToBusinessID() {
+	ref := ComponentRef{
+		ExecutionKey: ExecutionKey{
+			NamespaceID: primitives.NewUUID().String(),
+			BusinessID:  primitives.NewUUID().String(),
+			RunID:       primitives.NewUUID().String(),
+		},
+		archetypeID: 42,
+		executionLastUpdateVT: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: rand.Int63(),
+			TransitionCount:          rand.Int63(),
+		},
+		componentPath: []string{"root", "child"},
+		componentInitialVT: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: rand.Int63(),
+			TransitionCount:          rand.Int63(),
+		},
+	}
+
+	expected := ComponentRef{
+		ExecutionKey: ExecutionKey{
+			NamespaceID: ref.NamespaceID,
+			BusinessID:  ref.BusinessID,
+		},
+		archetypeID:   42,
+		componentPath: []string{"root", "child"},
+	}
+
+	ref.ResetToBusinessID()
+
+	s.Equal(expected, ref)
+}

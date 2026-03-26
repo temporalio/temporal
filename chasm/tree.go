@@ -328,7 +328,7 @@ func newTreeInitSearchAttributesAndMemo(
 	registry *Registry,
 ) error {
 	immutableContext := NewContext(context.Background(), root)
-	rootComponent, err := root.Component(immutableContext, ComponentRef{})
+	rootComponent, err := root.Component(immutableContext, ComponentRef{}, ConsistencyLevelExecution)
 	if err != nil {
 		return err
 	}
@@ -402,6 +402,7 @@ func (n *Node) setValueState(state valueState) {
 func (n *Node) Component(
 	chasmContext Context,
 	ref ComponentRef,
+	consistencyLevel ConsistencyLevel,
 ) (Component, error) {
 	// Archetype is already validated before this method is called.
 	// (when the mutable state is loaded, in chasm engine implementation)
@@ -411,11 +412,17 @@ func (n *Node) Component(
 		return nil, errComponentNotFound
 	}
 
-	if ref.componentInitialVT != nil && transitionhistory.Compare(
-		ref.componentInitialVT,
-		node.serializedNode.Metadata.InitialVersionedTransition,
-	) != 0 {
-		return nil, errComponentNotFound
+	switch consistencyLevel {
+	case ConsistencyLevelBusinessID:
+		// Loosest level: skip the initial VT check — the component
+		// is identified by path only (business-level logic handles deduplication).
+	case ConsistencyLevelComponent, ConsistencyLevelExecution:
+		if ref.componentInitialVT != nil && transitionhistory.Compare(
+			ref.componentInitialVT,
+			node.serializedNode.Metadata.InitialVersionedTransition,
+		) != 0 {
+			return nil, errComponentNotFound
+		}
 	}
 
 	validationContext := NewContext(chasmContext.goContext(), node)
@@ -1536,7 +1543,7 @@ func (n *Node) closeTransactionHandleRootLifecycleChange(
 		)
 	}
 
-	rootComponent, err := n.Component(immutableContext, ComponentRef{})
+	rootComponent, err := n.Component(immutableContext, ComponentRef{}, ConsistencyLevelExecution)
 	if err != nil {
 		return false, err
 	}
@@ -1579,7 +1586,7 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 
 	needUpdate := rootLifecycleChanged
 
-	rootComponent, err := n.Component(immutableContext, ComponentRef{})
+	rootComponent, err := n.Component(immutableContext, ComponentRef{}, ConsistencyLevelExecution)
 	if err != nil {
 		return err
 	}
@@ -1628,7 +1635,7 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 		return nil
 	}
 
-	visComponent, err := visibilityNode.Component(immutableContext, ComponentRef{})
+	visComponent, err := visibilityNode.Component(immutableContext, ComponentRef{}, ConsistencyLevelExecution)
 	if err != nil {
 		return err
 	}
@@ -2227,7 +2234,7 @@ func (n *Node) ApplyMutation(
 	// TODO: combine this with the logic in CloseTransactionForceUpdateVisibility
 	// right that force update logic only applies to the active cluster.
 	immutableContext := NewContext(context.TODO(), n)
-	rootComponent, err := n.root().Component(immutableContext, ComponentRef{})
+	rootComponent, err := n.root().Component(immutableContext, ComponentRef{}, ConsistencyLevelExecution)
 	if err != nil {
 		return err
 	}
@@ -2527,17 +2534,31 @@ func (n *Node) IsStateDirty() bool {
 
 func (n *Node) IsStale(
 	ref ComponentRef,
+	consistencyLevel ConsistencyLevel,
 ) error {
-	// The point of this method to access the private executionLastUpdateVT field in componentRef,
-	// and avoid exposing it in the public CHASM interface.
-	if ref.executionLastUpdateVT == nil {
+	switch consistencyLevel {
+	case ConsistencyLevelBusinessID:
+		// Loosest level: skip all VT checks, component is matched by path only.
 		return nil
+	case ConsistencyLevelComponent:
+		// Check only the component's initial VT against transition history.
+		if ref.componentInitialVT == nil {
+			return nil
+		}
+		return transitionhistory.StalenessCheck(
+			n.backend.GetExecutionInfo().TransitionHistory,
+			ref.componentInitialVT,
+		)
+	default:
+		// ConsistencyLevelExecution (strongest): check the execution last update VT.
+		if ref.executionLastUpdateVT == nil {
+			return nil
+		}
+		return transitionhistory.StalenessCheck(
+			n.backend.GetExecutionInfo().TransitionHistory,
+			ref.executionLastUpdateVT,
+		)
 	}
-
-	return transitionhistory.StalenessCheck(
-		n.backend.GetExecutionInfo().TransitionHistory,
-		ref.executionLastUpdateVT,
-	)
 }
 
 func (n *Node) Terminate(
@@ -2552,7 +2573,7 @@ func (n *Node) Terminate(
 	}
 
 	mutableContext := NewMutableContext(context.TODO(), n.root())
-	component, err := n.Component(mutableContext, ComponentRef{})
+	component, err := n.Component(mutableContext, ComponentRef{}, ConsistencyLevelExecution)
 	if err != nil {
 		return err
 	}
@@ -2986,7 +3007,7 @@ func (n *Node) ExecutePureTask(
 	}
 
 	executionContext := NewMutableContext(progressIntentCtx, n)
-	component, err := n.Component(executionContext, ComponentRef{})
+	component, err := n.Component(executionContext, ComponentRef{}, ConsistencyLevelExecution)
 	if err != nil {
 		return false, err
 	}

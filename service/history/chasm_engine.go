@@ -234,7 +234,7 @@ func (e *ChasmEngine) updateWithStartExecution(
 		return chasm.EngineUpdateWithStartExecutionResult{}, serviceerror.NewUnimplemented("setting runID is not supported for UpdateWithStartExecution")
 	}
 
-	_, executionLease, err := e.getExecutionLease(ctx, executionRef)
+	_, executionLease, err := e.getExecutionLease(ctx, &executionRef, chasm.ConsistencyLevelExecution)
 	switch err.(type) {
 	case nil:
 		defer func() {
@@ -305,7 +305,7 @@ func (e *ChasmEngine) updateExecution(
 	actualRef := executionRef
 	actualRef.RunID = workflowKey.RunID
 
-	serializedRef, err := e.applyUpdateWithLease(ctx, shardContext, executionLease, actualRef, updateFn)
+	serializedRef, err := e.applyUpdateWithLease(ctx, shardContext, executionLease, actualRef, updateFn, chasm.ConsistencyLevelExecution)
 	if err != nil {
 		return chasm.ExecutionKey{}, nil, err
 	}
@@ -352,6 +352,7 @@ func (e *ChasmEngine) applyUpdateWithLease(
 	executionLease api.WorkflowLease,
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
+	consistencyLevel chasm.ConsistencyLevel,
 ) ([]byte, error) {
 	mutableState := executionLease.GetMutableState()
 	chasmTree, ok := mutableState.ChasmTree().(*chasm.Node)
@@ -364,7 +365,7 @@ func (e *ChasmEngine) applyUpdateWithLease(
 	}
 
 	mutableContext := chasm.NewMutableContext(ctx, chasmTree)
-	component, err := chasmTree.Component(mutableContext, ref)
+	component, err := chasmTree.Component(mutableContext, ref, consistencyLevel)
 	if err != nil {
 		return nil, err
 	}
@@ -454,7 +455,7 @@ func (e *ChasmEngine) UpdateComponent(
 	opts ...chasm.TransitionOption,
 ) ([]byte, error) {
 	options := e.constructTransitionOptions(opts...)
-	result, err := e.updateComponent(ctx, ref, updateFn)
+	result, err := e.updateComponent(ctx, ref, updateFn, options.ConsistencyLevel)
 	return result, e.convertError(err, ref, options.RequestID)
 }
 
@@ -462,8 +463,9 @@ func (e *ChasmEngine) updateComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
+	consistencyLevel chasm.ConsistencyLevel,
 ) (updatedRef []byte, retError error) {
-	shardContext, executionLease, err := e.getExecutionLease(ctx, ref)
+	shardContext, executionLease, err := e.getExecutionLease(ctx, &ref, consistencyLevel)
 	if err != nil {
 		return nil, err
 	}
@@ -472,7 +474,7 @@ func (e *ChasmEngine) updateComponent(
 		executionLease.GetReleaseFn()(retError)
 	}()
 
-	return e.applyUpdateWithLease(ctx, shardContext, executionLease, ref, updateFn)
+	return e.applyUpdateWithLease(ctx, shardContext, executionLease, ref, updateFn, consistencyLevel)
 }
 
 // DeleteExecution deletes a CHASM execution. If the execution is still running on the active
@@ -491,7 +493,7 @@ func (e *ChasmEngine) deleteExecution(
 	ref chasm.ComponentRef,
 	request chasm.DeleteExecutionRequest,
 ) (retError error) {
-	shardContext, executionLease, err := e.getExecutionLease(ctx, ref)
+	shardContext, executionLease, err := e.getExecutionLease(ctx, &ref, chasm.ConsistencyLevelExecution)
 	if err != nil {
 		return err
 	}
@@ -562,15 +564,16 @@ func (e *ChasmEngine) ReadComponent(
 	opts ...chasm.TransitionOption,
 ) error {
 	options := e.constructTransitionOptions(opts...)
-	return e.convertError(e.readComponent(ctx, ref, readFn), ref, options.RequestID)
+	return e.convertError(e.readComponent(ctx, ref, readFn, options.ConsistencyLevel), ref, options.RequestID)
 }
 
 func (e *ChasmEngine) readComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	readFn func(chasm.Context, chasm.Component) error,
+	consistencyLevel chasm.ConsistencyLevel,
 ) error {
-	_, executionLease, err := e.getExecutionLease(ctx, ref)
+	_, executionLease, err := e.getExecutionLease(ctx, &ref, consistencyLevel)
 	if err != nil {
 		return err
 	}
@@ -590,7 +593,7 @@ func (e *ChasmEngine) readComponent(
 	}
 
 	chasmContext := chasm.NewContext(ctx, chasmTree)
-	component, err := chasmTree.Component(chasmContext, ref)
+	component, err := chasmTree.Component(chasmContext, ref, consistencyLevel)
 	if err != nil {
 		return err
 	}
@@ -618,7 +621,7 @@ func (e *ChasmEngine) PollComponent(
 	opts ...chasm.TransitionOption,
 ) ([]byte, error) {
 	options := e.constructTransitionOptions(opts...)
-	result, err := e.pollComponent(ctx, requestRef, monotonicPredicate)
+	result, err := e.pollComponent(ctx, requestRef, monotonicPredicate, options.ConsistencyLevel)
 	return result, e.convertError(err, requestRef, options.RequestID)
 }
 
@@ -626,6 +629,7 @@ func (e *ChasmEngine) pollComponent(
 	ctx context.Context,
 	requestRef chasm.ComponentRef,
 	monotonicPredicate func(chasm.Context, chasm.Component) (bool, error),
+	consistencyLevel chasm.ConsistencyLevel,
 ) (retRef []byte, retError error) {
 
 	var ch <-chan struct{}
@@ -637,13 +641,13 @@ func (e *ChasmEngine) pollComponent(
 	}()
 
 	checkPredicateOrSubscribe := func() ([]byte, error) {
-		_, executionLease, err := e.getExecutionLease(ctx, requestRef)
+		_, executionLease, err := e.getExecutionLease(ctx, &requestRef, consistencyLevel)
 		if err != nil {
 			return nil, err
 		}
 		defer executionLease.GetReleaseFn()(nil) //nolint:revive
 
-		ref, err := e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease)
+		ref, err := e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease, consistencyLevel)
 		if err != nil {
 			return nil, err
 		}
@@ -685,6 +689,7 @@ func (e *ChasmEngine) predicateSatisfied(
 	predicate func(chasm.Context, chasm.Component) (bool, error),
 	ref chasm.ComponentRef,
 	executionLease api.WorkflowLease,
+	consistencyLevel chasm.ConsistencyLevel,
 ) ([]byte, error) {
 	chasmTree, ok := executionLease.GetMutableState().ChasmTree().(*chasm.Node)
 	if !ok {
@@ -696,7 +701,7 @@ func (e *ChasmEngine) predicateSatisfied(
 	}
 
 	chasmContext := chasm.NewContext(ctx, chasmTree)
-	component, err := chasmTree.Component(chasmContext, ref)
+	component, err := chasmTree.Component(chasmContext, ref, consistencyLevel)
 	if err != nil {
 		return nil, err
 	}
@@ -1083,9 +1088,10 @@ func (e *ChasmEngine) getShardContext(
 // supplied component reference.
 func (e *ChasmEngine) getExecutionLease(
 	ctx context.Context,
-	ref chasm.ComponentRef,
+	ref *chasm.ComponentRef,
+	consistencyLevel chasm.ConsistencyLevel,
 ) (historyi.ShardContext, api.WorkflowLease, error) {
-	shardContext, err := e.getShardContext(ref)
+	shardContext, err := e.getShardContext(*ref)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1114,7 +1120,7 @@ func (e *ChasmEngine) getExecutionLease(
 		ctx,
 		nil,
 		func(mutableState historyi.MutableState) bool {
-			err := mutableState.ChasmTree().IsStale(ref)
+			err := mutableState.ChasmTree().IsStale(*ref, consistencyLevel)
 			needReload = errors.Is(err, consts.ErrStaleState)
 			if !needReload {
 				// Reference itself might be stale.
@@ -1143,47 +1149,68 @@ func (e *ChasmEngine) getExecutionLease(
 		return nil, nil, predicateErr
 	}
 
-	if !needReload {
-		return shardContext, executionLease, nil
-	}
-
-	// Mutable state was previously detected as stale and got reloaded,
-	// do a final check to ensure mutable state is not stale after reload.
-	err = executionLease.GetMutableState().ChasmTree().IsStale(ref)
-	if err != nil {
-		logger := log.With(shardContext.GetLogger(),
-			tag.WorkflowNamespaceID(ref.NamespaceID),
-			tag.WorkflowID(ref.BusinessID),
-			tag.WorkflowRunID(ref.RunID),
-		)
-
-		if errors.Is(err, consts.ErrStaleState) {
-			// This could happen when there's a replication lag upon force failover,
-			// and caller is using the reference from the original cluster in the
-			// new cluster before replication catches up.
-			//
-			// This could also happen due to data loss in the database,
-			// but we can't really distinguish the two cases here, so always return
-			// a retryable error here.
-			//
-			// TODO: consider adding a clusterID field to the generated token to distinguish
-			// the two cases.
-			logger.Warn(
-				"stale state after mutable state reload, could due to force namespace failover or data loss",
-				tag.Error(err),
+	if needReload {
+		// Mutable state was previously detected as stale and got reloaded,
+		// do a final check to ensure mutable state is not stale after reload.
+		err = executionLease.GetMutableState().ChasmTree().IsStale(*ref, consistencyLevel)
+		if err != nil {
+			logger := log.With(shardContext.GetLogger(),
+				tag.WorkflowNamespaceID(ref.NamespaceID),
+				tag.WorkflowID(ref.BusinessID),
+				tag.WorkflowRunID(ref.RunID),
 			)
 
-			executionLease.GetReleaseFn()(nil)
-			return nil, nil, serviceerror.NewUnavailablef("stale state, please retry")
-		}
+			if errors.Is(err, consts.ErrStaleState) {
+				// This could happen when there's a replication lag upon force failover,
+				// and caller is using the reference from the original cluster in the
+				// new cluster before replication catches up.
+				//
+				// This could also happen due to data loss in the database,
+				// but we can't really distinguish the two cases here, so always return
+				// a retryable error here.
+				//
+				// TODO: consider adding a clusterID field to the generated token to distinguish
+				// the two cases.
+				logger.Warn(
+					"stale state after mutable state reload, could due to force namespace failover or data loss",
+					tag.Error(err),
+				)
 
-		// Stale reference case is already handled above.
+				executionLease.GetReleaseFn()(nil)
+				return nil, nil, serviceerror.NewUnavailablef("stale state, please retry")
+			}
+
+			// Stale reference case is already handled above.
+			executionLease.GetReleaseFn()(nil)
+			return nil, nil, softassert.UnexpectedInternalErr(
+				logger,
+				"Unexpected stale reference in final execution staleness check",
+				err,
+			)
+		}
+	}
+
+	// For ConsistencyLevelBusinessID: if the referenced run is closed, release its
+	// lease and fall back to the latest open execution for this business ID. The
+	// token carries the original run ID for the fast-path cache hit, but when that
+	// run turns out to be closed we strip VTs and re-resolve.
+	if consistencyLevel == chasm.ConsistencyLevelBusinessID &&
+		!executionLease.GetMutableState().IsWorkflowExecutionRunning() {
 		executionLease.GetReleaseFn()(nil)
-		return nil, nil, softassert.UnexpectedInternalErr(
-			logger,
-			"Unexpected stale reference in final execution staleness check",
-			err,
+		ref.ResetToBusinessID()
+		// ref.RunID has been cleared by ResetToBusinessID, so the consistency checker
+		// will resolve the current run via GetCurrentChasmRunID (fast CDS cache path).
+		newLease, err := consistencyChecker.GetChasmLease(
+			ctx,
+			nil,
+			definition.NewWorkflowKey(ref.NamespaceID, ref.BusinessID, ref.RunID),
+			archetypeID,
+			lockPriority,
 		)
+		if err != nil {
+			return nil, nil, err
+		}
+		return shardContext, newLease, nil
 	}
 
 	return shardContext, executionLease, nil

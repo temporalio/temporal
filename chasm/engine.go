@@ -65,6 +65,25 @@ type DeleteExecutionRequest struct {
 	TerminateComponentRequest
 }
 
+// ConsistencyLevel controls how strictly a [ComponentRef] is validated
+// against the current execution state. Ordered from strongest to loosest.
+type ConsistencyLevel int
+
+const (
+	// ConsistencyLevelExecution is the default. Validates [ComponentRef.executionLastUpdateVT].
+	ConsistencyLevelExecution ConsistencyLevel = iota
+	// ConsistencyLevelComponent validates only [ComponentRef.componentInitialVT].
+	// Use when the token may have been generated before a failover changed the
+	// execution-level VT, but the component itself is still valid on the current branch.
+	ConsistencyLevelComponent
+	// ConsistencyLevelBusinessID skips all [VersionedTransition] checks and matches
+	// by [ComponentRef.componentPath] only. Falls back to the latest open run if the
+	// referenced [ComponentRef.RunID] points to a closed execution.
+	// Use when the original run may have been reset: the operation should target the
+	// same component in the new run, matched by path and deduplicated by request ID.
+	ConsistencyLevelBusinessID
+)
+
 type BusinessIDReusePolicy int
 
 const (
@@ -82,10 +101,11 @@ const (
 )
 
 type TransitionOptions struct {
-	ReusePolicy    BusinessIDReusePolicy
-	ConflictPolicy BusinessIDConflictPolicy
-	RequestID      string
-	Speculative    bool
+	ReusePolicy      BusinessIDReusePolicy
+	ConflictPolicy   BusinessIDConflictPolicy
+	RequestID        string
+	Speculative      bool
+	ConsistencyLevel ConsistencyLevel
 }
 
 type TransitionOption func(*TransitionOptions)
@@ -105,7 +125,7 @@ type TransitionOption func(*TransitionOptions)
 //   - Created: Indicates whether a new execution was actually created. When false,
 //     the execution already existed (based on the [BusinessIDReusePolicy] and
 //     [BusinessIDConflictPolicy] configured via [WithBusinessIDPolicy]), and the
-//     existing execution was returned instead.
+//     existing execution was returned instead.chasm_engine.go:234
 type StartExecutionResult struct {
 	ExecutionKey ExecutionKey
 	ExecutionRef []byte
@@ -169,6 +189,16 @@ func WithRequestID(
 ) TransitionOption {
 	return func(opts *TransitionOptions) {
 		opts.RequestID = requestID
+	}
+}
+
+// WithConsistencyLevel sets the consistency level used when resolving a component reference.
+// See [ConsistencyLevel] for details on each level.
+func WithConsistencyLevel(
+	level ConsistencyLevel,
+) TransitionOption {
+	return func(opts *TransitionOptions) {
+		opts.ConsistencyLevel = level
 	}
 }
 

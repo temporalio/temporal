@@ -54,6 +54,18 @@ type ComponentRef struct {
 	validationFn func(NodeBackend, Context, Component, *Registry) error
 }
 
+// ResetToBusinessID prepares a ComponentRef for cross-run resolution by clearing all
+// versioned transition fields. After this call, the ref identifies a component solely
+// by its path within the execution tree. The RunID is also cleared so that the framework
+// will resolve the ref against the latest open execution for the business ID.
+// This is used internally when ConsistencyLevelBusinessID is in effect and the original
+// run is closed.
+func (r *ComponentRef) ResetToBusinessID() {
+	r.RunID = ""
+	r.executionLastUpdateVT = nil
+	r.componentInitialVT = nil
+}
+
 // NewComponentRef creates a new ComponentRef with a registered root component go type.
 //
 // In V1, if you don't have a ref,

@@ -119,7 +119,7 @@ func (s *fieldSuite) TestFieldGetComponent() {
 
 	chasmContext := NewMutableContext(context.Background(), node)
 
-	c, err := node.Component(chasmContext, ComponentRef{componentPath: rootPath})
+	c, err := node.Component(chasmContext, ComponentRef{componentPath: rootPath}, ConsistencyLevelExecution)
 	s.NoError(err)
 	s.NotNil(c)
 
@@ -216,7 +216,7 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 
 	// Get components from tree to mark nodes as needing sync.
 
-	rootComponentInterface, err := rootNode.Component(ctx, ComponentRef{})
+	rootComponentInterface, err := rootNode.Component(ctx, ComponentRef{}, ConsistencyLevelExecution)
 	s.NoError(err)
 	rootComponent = rootComponentInterface.(*TestComponent)
 	sc1 = rootComponent.SubComponent1.Get(ctx)
@@ -293,7 +293,7 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	s.NoError(err)
 
 	// Get components from tree to mark nodes as needing sync.
-	rootComponentInterface, err := rootNode.Component(ctx, ComponentRef{})
+	rootComponentInterface, err := rootNode.Component(ctx, ComponentRef{}, ConsistencyLevelExecution)
 	s.NoError(err)
 	rootComponent = rootComponentInterface.(*TestComponent)
 
@@ -308,7 +308,7 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	// otherwise those nodes will not be marked as dirty.
 
 	ctx2 := NewMutableContext(context.Background(), rootNode)
-	rootComponentInterface, err = rootNode.Component(ctx2, ComponentRef{})
+	rootComponentInterface, err = rootNode.Component(ctx2, ComponentRef{}, ConsistencyLevelExecution)
 	s.NoError(err)
 
 	rootComponent = rootComponentInterface.(*TestComponent)
@@ -372,7 +372,7 @@ func (s *fieldSuite) TestUnresolvableDeferredPointerError() {
 	s.NoError(err)
 
 	// Get component from tree to mark node as needing sync.
-	rootComponentInterface, err := rootNode.Component(ctx, ComponentRef{})
+	rootComponentInterface, err := rootNode.Component(ctx, ComponentRef{}, ConsistencyLevelExecution)
 	s.NoError(err)
 	rootComponent = rootComponentInterface.(*TestComponent)
 

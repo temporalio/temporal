@@ -29,7 +29,7 @@ type backfillTestCase struct {
 
 func runBackfillTestCase(t *testing.T, env *testEnv, c *backfillTestCase) {
 	ctx := env.MutableContext()
-	schedComponent, err := env.Node.Component(ctx, chasm.ComponentRef{})
+	schedComponent, err := env.Node.Component(ctx, chasm.ComponentRef{}, chasm.ConsistencyLevelExecution)
 	require.NoError(t, err)
 	sched := schedComponent.(*scheduler.Scheduler)
 	invoker := sched.Invoker.Get(ctx)
@@ -229,7 +229,7 @@ func TestBackfillTask_PartialFill(t *testing.T) {
 	}
 
 	ctx := env.MutableContext()
-	schedComponent, err := env.Node.Component(ctx, chasm.ComponentRef{})
+	schedComponent, err := env.Node.Component(ctx, chasm.ComponentRef{}, chasm.ConsistencyLevelExecution)
 	require.NoError(t, err)
 	sched := schedComponent.(*scheduler.Scheduler)
 	backfiller := sched.NewRangeBackfiller(ctx, request)
@@ -241,7 +241,7 @@ func TestBackfillTask_PartialFill(t *testing.T) {
 
 	// Backfiller should still exist (not complete).
 	ctx = env.MutableContext()
-	schedComponent, err = env.Node.Component(ctx, chasm.ComponentRef{})
+	schedComponent, err = env.Node.Component(ctx, chasm.ComponentRef{}, chasm.ConsistencyLevelExecution)
 	require.NoError(t, err)
 	sched = schedComponent.(*scheduler.Scheduler)
 	_, ok := sched.Backfillers[backfiller.BackfillId].TryGet(ctx)

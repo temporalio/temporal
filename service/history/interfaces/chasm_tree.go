@@ -47,7 +47,7 @@ type ChasmTree interface {
 		ctx context.Context,
 		task *tasks.ChasmTask,
 	) (bool, error)
-	IsStale(chasm.ComponentRef) error
-	Component(chasm.Context, chasm.ComponentRef) (chasm.Component, error)
+	IsStale(chasm.ComponentRef, chasm.ConsistencyLevel) error
+	Component(chasm.Context, chasm.ComponentRef, chasm.ConsistencyLevel) (chasm.Component, error)
 	ComponentByPath(chasm.Context, []string) (chasm.Component, error)
 }
