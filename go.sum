@@ -320,8 +320,8 @@ github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd h1:TRLaZ9cD/w
 github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
 github.com/modern-go/reflect2 v1.0.2 h1:xBagoLtFs94CBntxluKeaWgTMpvLxC4ur3nMaC9Gz0M=
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
-github.com/moedash/temporal-zfs v1.2.0 h1:7J2HH+55Xfpz23nMnoGrnNdZ1WXKLUxdCCctlpOq1do=
-github.com/moedash/temporal-zfs v1.2.0/go.mod h1:9WYzE+Lvb01sifVCa7NOY4MrzyLX/Oq54UUKGwVQjOc=
+github.com/moedash/temporal-zfs v1.3.0 h1:HZSLnS9PuYCPdbvbHN3DkOUQFpXbmeLHc7TEaJiJSlw=
+github.com/moedash/temporal-zfs v1.3.0/go.mod h1:9WYzE+Lvb01sifVCa7NOY4MrzyLX/Oq54UUKGwVQjOc=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/ncruces/go-strftime v1.0.0 h1:HMFp8mLCTPp341M/ZnA4qaf7ZlsbTc+miZjCLOFAw7w=
