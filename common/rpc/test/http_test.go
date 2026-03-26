@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc"
@@ -44,6 +45,7 @@ func TestCreateLocalFrontendHTTPClient_UsingMembership(t *testing.T) {
 		nil,
 		map[primitives.ServiceName][]grpc.DialOption{},
 		monitor,
+		common.NewMockListenerProvider(ctrl),
 	)
 
 	client, err := fact.CreateLocalFrontendHTTPClient()
@@ -57,6 +59,7 @@ func TestCreateLocalFrontendHTTPClient_UsingMembership(t *testing.T) {
 }
 
 func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort(t *testing.T) {
+	ctrl := gomock.NewController(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 	}))
@@ -76,6 +79,7 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort(t *testing.T) {
 		nil,
 		map[primitives.ServiceName][]grpc.DialOption{},
 		nil, // monitor should not be used
+		common.NewMockListenerProvider(ctrl),
 	)
 
 	client, err := fact.CreateLocalFrontendHTTPClient()
@@ -89,6 +93,7 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort(t *testing.T) {
 }
 
 func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort_AndTLS(t *testing.T) {
+	ctrl := gomock.NewController(t)
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 	}))
@@ -109,6 +114,7 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort_AndTLS(t *testing.T) {
 		nil,
 		map[primitives.ServiceName][]grpc.DialOption{},
 		nil, // monitor should not be used
+		common.NewMockListenerProvider(ctrl),
 	)
 
 	client, err := fact.CreateLocalFrontendHTTPClient()
