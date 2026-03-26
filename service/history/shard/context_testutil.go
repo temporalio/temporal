@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -152,7 +151,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		namespaceRegistry:       registry,
 		stateMachineRegistry:    hsm.NewRegistry(),
 		chasmRegistry:           chasm.NewRegistry(t.GetLogger()),
-		workflowIDRateLimiters:  cache.New(10000, &cache.Options{TTL: 60 * time.Second}),
+		workflowIDRateLimiters:  cache.New(workflowIDRateLimiterCacheSize, &cache.Options{TTL: workflowIDRateLimiterCacheTTL}),
 		persistenceShardManager: t.GetShardManager(),
 		clientBean:              t.GetClientBean(),
 		saProvider:              t.GetSearchAttributesProvider(),

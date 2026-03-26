@@ -247,7 +247,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 ) (retError error) {
 
 	if transactionPolicy == historyi.TransactionPolicyActive {
-		if rl := shardContext.GetWorkflowIDReuseRL(
+		if rl := shardContext.WorkflowIDReuseRL(
 			namespace.ID(c.workflowKey.NamespaceID),
 			c.workflowKey.WorkflowID,
 		); rl != nil && !rl.Allow() {
@@ -548,7 +548,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
 		if *newWorkflowTransactionPolicy == historyi.TransactionPolicyActive {
 			execInfo := newMutableState.GetExecutionInfo()
-			if rl := shardContext.GetWorkflowIDReuseRL(
+			if rl := shardContext.WorkflowIDReuseRL(
 				namespace.ID(execInfo.NamespaceId),
 				execInfo.WorkflowId,
 			); rl != nil && !rl.Allow() {

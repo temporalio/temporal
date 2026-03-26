@@ -396,7 +396,7 @@ type Config struct {
 
 	WorkflowIdReuseMinimalInterval           dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	EnableWorkflowIdReuseStartTimeValidation dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	WorkflowIDReuseRate            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowIDReuseRate                      dynamicconfig.IntPropertyFnWithNamespaceFilter
 	WorkflowIDReuseBurstRatio                dynamicconfig.FloatPropertyFnWithNamespaceFilter
 
 	HealthPersistenceLatencyFailure dynamicconfig.FloatPropertyFn

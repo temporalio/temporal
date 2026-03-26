@@ -6,7 +6,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/configs"
 	"go.uber.org/mock/gomock"
 
@@ -39,63 +38,63 @@ func (s *workflowIDRateLimiterSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *workflowIDRateLimiterSuite) TestGetWorkflowIDReuseRL_Disabled() {
-	// rps=0 means disabled; GetWorkflowIDReuseRL should return nil
+func (s *workflowIDRateLimiterSuite) TestWorkflowIDReuseRL_Disabled() {
+	// rps=0 means disabled; WorkflowIDReuseRL should return nil
 	s.shard.config.WorkflowIDReuseRate = func(_ string) int { return 0 }
 	nsID := namespace.ID("test-ns-id")
-	s.Nil(s.shard.GetWorkflowIDReuseRL(nsID, "wf-id"))
+	s.Nil(s.shard.WorkflowIDReuseRL(nsID, "wf-id"))
 }
 
-func (s *workflowIDRateLimiterSuite) TestGetWorkflowIDReuseRL_AllowsUnderLimit() {
+func (s *workflowIDRateLimiterSuite) TestWorkflowIDReuseRL_AllowsUnderLimit() {
 	// 10 RPS with burst=10: first 10 calls to Allow() should succeed
 	s.shard.config.WorkflowIDReuseRate = func(_ string) int { return 10 }
 	nsID := namespace.ID("test-ns-id")
-	rl := s.shard.GetWorkflowIDReuseRL(nsID, "wf-id")
+	rl := s.shard.WorkflowIDReuseRL(nsID, "wf-id")
 	s.NotNil(rl)
 	for i := 0; i < 10; i++ {
 		s.True(rl.Allow())
 	}
 }
 
-func (s *workflowIDRateLimiterSuite) TestGetWorkflowIDReuseRL_BlocksOverLimit() {
+func (s *workflowIDRateLimiterSuite) TestWorkflowIDReuseRL_BlocksOverLimit() {
 	// 1 RPS with burst=1: second Allow() should return false
 	s.shard.config.WorkflowIDReuseRate = func(_ string) int { return 1 }
 	nsID := namespace.ID("test-ns-id")
-	rl := s.shard.GetWorkflowIDReuseRL(nsID, "wf-id")
+	rl := s.shard.WorkflowIDReuseRL(nsID, "wf-id")
 	s.NotNil(rl)
 	s.True(rl.Allow())
 	s.False(rl.Allow())
 }
 
-func (s *workflowIDRateLimiterSuite) TestGetWorkflowIDReuseRL_IndependentWorkflowIDs() {
+func (s *workflowIDRateLimiterSuite) TestWorkflowIDReuseRL_IndependentWorkflowIDs() {
 	// Different workflow IDs should have independent rate limiters
 	s.shard.config.WorkflowIDReuseRate = func(_ string) int { return 1 }
 	nsID := namespace.ID("test-ns-id")
-	rl1 := s.shard.GetWorkflowIDReuseRL(nsID, "wf-id-1")
-	rl2 := s.shard.GetWorkflowIDReuseRL(nsID, "wf-id-2")
+	rl1 := s.shard.WorkflowIDReuseRL(nsID, "wf-id-1")
+	rl2 := s.shard.WorkflowIDReuseRL(nsID, "wf-id-2")
 	s.True(rl1.Allow())
 	// rl1 is exhausted, but rl2 should still allow
 	s.True(rl2.Allow())
 }
 
-func (s *workflowIDRateLimiterSuite) TestGetWorkflowIDReuseRL_IndependentNamespaces() {
+func (s *workflowIDRateLimiterSuite) TestWorkflowIDReuseRL_IndependentNamespaces() {
 	// Same workflow ID in different namespaces should have independent rate limiters
 	s.shard.config.WorkflowIDReuseRate = func(_ string) int { return 1 }
 	ns1 := namespace.ID("ns-1")
 	ns2 := namespace.ID("ns-2")
-	rl1 := s.shard.GetWorkflowIDReuseRL(ns1, "wf-id")
-	rl2 := s.shard.GetWorkflowIDReuseRL(ns2, "wf-id")
+	rl1 := s.shard.WorkflowIDReuseRL(ns1, "wf-id")
+	rl2 := s.shard.WorkflowIDReuseRL(ns2, "wf-id")
 	s.True(rl1.Allow())
 	// rl1 is exhausted, but rl2 should still allow
 	s.True(rl2.Allow())
 }
 
-func (s *workflowIDRateLimiterSuite) TestGetWorkflowIDReuseRL_BurstRatio() {
+func (s *workflowIDRateLimiterSuite) TestWorkflowIDReuseRL_BurstRatio() {
 	// rps=2, ratio=3 → burst=6; first 6 Allow() calls should succeed
 	s.shard.config.WorkflowIDReuseRate = func(_ string) int { return 2 }
 	s.shard.config.WorkflowIDReuseBurstRatio = func(_ string) float64 { return 3.0 }
 	nsID := namespace.ID("test-ns-id")
-	rl := s.shard.GetWorkflowIDReuseRL(nsID, "wf-id")
+	rl := s.shard.WorkflowIDReuseRL(nsID, "wf-id")
 	s.NotNil(rl)
 	for i := 0; i < 6; i++ {
 		s.True(rl.Allow(), "expected Allow() on call %d", i+1)
@@ -103,14 +102,14 @@ func (s *workflowIDRateLimiterSuite) TestGetWorkflowIDReuseRL_BurstRatio() {
 	s.False(rl.Allow(), "expected Allow() to be false after burst exhausted")
 }
 
-func (s *workflowIDRateLimiterSuite) TestGetWorkflowIDReuseRL_BurstUpdatesOnConfigChange() {
+func (s *workflowIDRateLimiterSuite) TestWorkflowIDReuseRL_BurstUpdatesOnConfigChange() {
 	// Start with rps=2, ratio=1 (burst=2), then change ratio to 3 (burst=6).
 	s.shard.config.WorkflowIDReuseRate = func(_ string) int { return 2 }
 	s.shard.config.WorkflowIDReuseBurstRatio = func(_ string) float64 { return 1.0 }
 	nsID := namespace.ID("test-ns-id")
-	s.shard.GetWorkflowIDReuseRL(nsID, "wf-id") // populate cache
+	s.shard.WorkflowIDReuseRL(nsID, "wf-id") // populate cache
 
 	s.shard.config.WorkflowIDReuseBurstRatio = func(_ string) float64 { return 3.0 }
-	rl := s.shard.GetWorkflowIDReuseRL(nsID, "wf-id") // should update burst to 6
-	s.Equal(6, rl.(*quotas.RateLimiterImpl).Burst())
+	rl := s.shard.WorkflowIDReuseRL(nsID, "wf-id") // should update burst to 6
+	s.Equal(6, rl.Burst())
 }

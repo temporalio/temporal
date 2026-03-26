@@ -74,6 +74,9 @@ const (
 	queueMetricUpdateInterval = 5 * time.Minute
 
 	pendingMaxReplicationTaskID = math.MaxInt64
+
+	workflowIDRateLimiterCacheSize = 10000
+	workflowIDRateLimiterCacheTTL  = 60 * time.Second
 )
 
 var (
@@ -2152,7 +2155,7 @@ func newContext(
 		stateMachineRegistry:    stateMachineRegistry,
 		chasmRegistry:           chasmRegistry,
 		endpointRegistry:        endpointRegistry,
-		workflowIDRateLimiters:  cache.New(10000, &cache.Options{TTL: 60 * time.Second}),
+		workflowIDRateLimiters:  cache.New(workflowIDRateLimiterCacheSize, &cache.Options{TTL: workflowIDRateLimiterCacheTTL}),
 	}
 	shardContext.taskKeyManager = newTaskKeyManager(
 		shardContext.taskCategoryRegistry,
@@ -2263,7 +2266,7 @@ func (s *ContextImpl) EndpointRegistry() chasm.EndpointRegistry {
 	return s.endpointRegistry
 }
 
-func (s *ContextImpl) GetWorkflowIDReuseRL(namespaceID namespace.ID, workflowID string) quotas.RateLimiter {
+func (s *ContextImpl) WorkflowIDReuseRL(namespaceID namespace.ID, workflowID string) quotas.RateLimiter {
 	rps := s.config.WorkflowIDReuseRate(namespaceID.String())
 	if rps <= 0 {
 		return nil
