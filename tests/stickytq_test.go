@@ -21,7 +21,7 @@ func TestStickyTqTestSuite(t *testing.T) {
 	t.Parallel()
 	t.Run("TestStickyTimeout_NonTransientWorkflowTask", func(t *testing.T) {
 		s := testcore.NewEnv(t)
-		stickyTqTestStickyTimeout_NonTransientWorkflowTask(s)
+		stickyTqTestStickyTimeoutNonTransientWorkflowTask(s)
 	})
 	t.Run("TestStickyTaskqueueResetThenTimeout", func(t *testing.T) {
 		s := testcore.NewEnv(t)
@@ -29,7 +29,7 @@ func TestStickyTqTestSuite(t *testing.T) {
 	})
 }
 
-func stickyTqTestStickyTimeout_NonTransientWorkflowTask(s *testcore.TestEnv) {
+func stickyTqTestStickyTimeoutNonTransientWorkflowTask(s *testcore.TestEnv) {
 	id := "functional-sticky-timeout-non-transient-workflow-task"
 	wt := "functional-sticky-timeout-non-transient-command-type"
 	tl := "functional-sticky-timeout-non-transient-workflow-taskqueue"
