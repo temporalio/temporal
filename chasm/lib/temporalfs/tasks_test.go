@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	tfs "github.com/temporalio/temporal-fs/pkg/fs"
+	tzfs "github.com/temporalio/temporal-zfs/pkg/fs"
 	"go.temporal.io/server/chasm"
 	temporalfspb "go.temporal.io/server/chasm/lib/temporalfs/gen/temporalfspb/v1"
 	"go.temporal.io/server/common/log"
@@ -34,12 +34,12 @@ func newRunningFilesystem() *Filesystem {
 	}
 }
 
-// initTestFS creates a temporal-fs filesystem in the store provider for the given namespace/filesystem.
+// initTestFS creates a temporal-zfs filesystem in the store provider for the given namespace/filesystem.
 func initTestFS(t *testing.T, provider *PebbleStoreProvider, nsID, fsID string) {
 	t.Helper()
 	s, err := provider.GetStore(0, nsID, fsID)
 	require.NoError(t, err)
-	f, err := tfs.Create(s, tfs.Options{})
+	f, err := tzfs.Create(s, tzfs.Options{})
 	require.NoError(t, err)
 	_ = f.Close()
 }
@@ -185,7 +185,7 @@ func TestQuotaCheckExecute_WithWrites(t *testing.T) {
 	// Create FS, write data, and keep the FS open — metrics accumulate in-memory.
 	s, err := provider.GetStore(0, nsID, fsID)
 	require.NoError(t, err)
-	f, err := tfs.Create(s, tfs.Options{})
+	f, err := tzfs.Create(s, tzfs.Options{})
 	require.NoError(t, err)
 
 	err = f.WriteFile("/test.txt", []byte("hello world"), 0o644)

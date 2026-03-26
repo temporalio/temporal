@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	tfs "github.com/temporalio/temporal-fs/pkg/fs"
+	tzfs "github.com/temporalio/temporal-zfs/pkg/fs"
 	temporalfspb "go.temporal.io/server/chasm/lib/temporalfs/gen/temporalfspb/v1"
 	"go.temporal.io/server/common/log"
 )
@@ -30,11 +30,11 @@ func TestFilesystemLifecycle_EndToEnd(t *testing.T) {
 	require.EqualValues(t, 1, attrResp.Attr.InodeId)
 	require.Positive(t, attrResp.Attr.Mode, "root inode should have a mode set")
 
-	// 3. Create a file via temporal-fs, then write/read via handler.
+	// 3. Create a file via temporal-zfs, then write/read via handler.
 	//    (WriteChunks requires an existing inode, so we create a file first.)
 	s, err := provider.GetStore(0, nsID, fsID)
 	require.NoError(t, err)
-	f, openErr := tfs.Open(s)
+	f, openErr := tzfs.Open(s)
 	require.NoError(t, openErr)
 	err = f.WriteFile("/hello.txt", []byte("seed"), 0o644)
 	require.NoError(t, err)

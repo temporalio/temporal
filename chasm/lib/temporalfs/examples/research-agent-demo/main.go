@@ -58,7 +58,7 @@ func cmdRun(args []string) {
 	workflows := fs.Int("workflows", 200, "Number of research workflows to run (ignored in continuous mode)")
 	concurrency := fs.Int("concurrency", 50, "Max concurrent workflows")
 	failureRate := fs.Float64("failure-rate", 1.0, "Failure rate multiplier (0=none, 2=double)")
-	dataDir := fs.String("data-dir", "/tmp/tfs-demo", "PebbleDB data directory")
+	dataDir := fs.String("data-dir", "/tmp/tzfs-demo", "PebbleDB data directory")
 	seed := fs.Int64("seed", 0, "Random seed (0=random)")
 	taskQueue := fs.String("task-queue", "", "Temporal task queue name (default: research-demo-<timestamp>)")
 	temporalAddr := fs.String("temporal-addr", "localhost:7233", "Temporal server address")
@@ -219,7 +219,7 @@ func openBrowser(url string) {
 
 func cmdReport(args []string) {
 	fs := flag.NewFlagSet("report", flag.ExitOnError)
-	dataDir := fs.String("data-dir", "/tmp/tfs-demo", "PebbleDB data directory")
+	dataDir := fs.String("data-dir", "/tmp/tzfs-demo", "PebbleDB data directory")
 	output := fs.String("output", "demo-report.html", "Output HTML file")
 	_ = fs.Parse(args)
 
@@ -237,7 +237,7 @@ func cmdReport(args []string) {
 
 func cmdBrowse(args []string) {
 	fs := flag.NewFlagSet("browse", flag.ExitOnError)
-	dataDir := fs.String("data-dir", "/tmp/tfs-demo", "PebbleDB data directory")
+	dataDir := fs.String("data-dir", "/tmp/tzfs-demo", "PebbleDB data directory")
 	topic := fs.String("topic", "", "Topic slug to browse (required)")
 	_ = fs.Parse(args)
 

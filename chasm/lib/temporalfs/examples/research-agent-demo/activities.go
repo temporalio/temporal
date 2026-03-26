@@ -7,8 +7,8 @@ import (
 	"math/rand"
 	"time"
 
-	tfs "github.com/temporalio/temporal-fs/pkg/fs"
-	"github.com/temporalio/temporal-fs/pkg/store"
+	tzfs "github.com/temporalio/temporal-zfs/pkg/fs"
+	"github.com/temporalio/temporal-zfs/pkg/store"
 	"go.temporal.io/sdk/activity"
 )
 
@@ -41,9 +41,9 @@ func (a *Activities) emitEvent(ctx context.Context, params WorkflowParams, stepI
 }
 
 // openFS opens an existing FS for the workflow's partition.
-func (a *Activities) openFS(partitionID uint64) (*tfs.FS, error) {
+func (a *Activities) openFS(partitionID uint64) (*tzfs.FS, error) {
 	s := store.NewPrefixedStore(a.baseStore, partitionID)
-	f, err := tfs.Open(s)
+	f, err := tzfs.Open(s)
 	if err != nil {
 		return nil, fmt.Errorf("open fs: %w", err)
 	}
@@ -81,14 +81,14 @@ func maybeFail(ctx context.Context, seed int64, rate float64, msg string) error 
 }
 
 // countFiles counts files in a directory (non-recursive).
-func countFiles(f *tfs.FS, dir string) int {
+func countFiles(f *tzfs.FS, dir string) int {
 	entries, err := f.ReadDir(dir)
 	if err != nil {
 		return 0
 	}
 	count := 0
 	for _, e := range entries {
-		if e.Type != tfs.InodeTypeDir {
+		if e.Type != tzfs.InodeTypeDir {
 			count++
 		}
 	}
@@ -122,7 +122,7 @@ func (a *Activities) WebResearch(ctx context.Context, params WorkflowParams) (St
 		"/research/" + params.TopicSlug,
 		"/research/" + params.TopicSlug + "/sources",
 	} {
-		if mkErr := f.Mkdir(dir, 0o755); mkErr != nil && !errors.Is(mkErr, tfs.ErrExist) {
+		if mkErr := f.Mkdir(dir, 0o755); mkErr != nil && !errors.Is(mkErr, tzfs.ErrExist) {
 			return StepResult{}, fmt.Errorf("mkdir %s: %w", dir, mkErr)
 		}
 	}
@@ -140,7 +140,7 @@ func (a *Activities) WebResearch(ctx context.Context, params WorkflowParams) (St
 	}
 
 	// Snapshot after this step.
-	if _, err := f.CreateSnapshot("step-1-research"); err != nil && !errors.Is(err, tfs.ErrExist) {
+	if _, err := f.CreateSnapshot("step-1-research"); err != nil && !errors.Is(err, tzfs.ErrExist) {
 		return StepResult{}, fmt.Errorf("snapshot: %w", err)
 	}
 
@@ -188,7 +188,7 @@ func (a *Activities) Summarize(ctx context.Context, params WorkflowParams) (Step
 		return StepResult{}, fmt.Errorf("write summary: %w", err)
 	}
 
-	if _, err := f.CreateSnapshot("step-2-summary"); err != nil && !errors.Is(err, tfs.ErrExist) {
+	if _, err := f.CreateSnapshot("step-2-summary"); err != nil && !errors.Is(err, tzfs.ErrExist) {
 		return StepResult{}, fmt.Errorf("snapshot: %w", err)
 	}
 
@@ -226,7 +226,7 @@ func (a *Activities) FactCheck(ctx context.Context, params WorkflowParams) (Step
 		return StepResult{}, fmt.Errorf("write fact-check: %w", err)
 	}
 
-	if _, err := f.CreateSnapshot("step-3-factcheck"); err != nil && !errors.Is(err, tfs.ErrExist) {
+	if _, err := f.CreateSnapshot("step-3-factcheck"); err != nil && !errors.Is(err, tzfs.ErrExist) {
 		return StepResult{}, fmt.Errorf("snapshot: %w", err)
 	}
 
@@ -264,7 +264,7 @@ func (a *Activities) FinalReport(ctx context.Context, params WorkflowParams) (St
 		return StepResult{}, fmt.Errorf("write report: %w", err)
 	}
 
-	if _, err := f.CreateSnapshot("step-4-report"); err != nil && !errors.Is(err, tfs.ErrExist) {
+	if _, err := f.CreateSnapshot("step-4-report"); err != nil && !errors.Is(err, tzfs.ErrExist) {
 		return StepResult{}, fmt.Errorf("snapshot: %w", err)
 	}
 
@@ -302,7 +302,7 @@ func (a *Activities) PeerReview(ctx context.Context, params WorkflowParams) (Ste
 		return StepResult{}, fmt.Errorf("write review: %w", err)
 	}
 
-	if _, err := f.CreateSnapshot("step-5-review"); err != nil && !errors.Is(err, tfs.ErrExist) {
+	if _, err := f.CreateSnapshot("step-5-review"); err != nil && !errors.Is(err, tzfs.ErrExist) {
 		return StepResult{}, fmt.Errorf("snapshot: %w", err)
 	}
 

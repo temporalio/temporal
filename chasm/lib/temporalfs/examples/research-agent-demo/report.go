@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	tfs "github.com/temporalio/temporal-fs/pkg/fs"
-	"github.com/temporalio/temporal-fs/pkg/store"
+	tzfs "github.com/temporalio/temporal-zfs/pkg/fs"
+	"github.com/temporalio/temporal-zfs/pkg/store"
 )
 
 // ReportData is the top-level data structure for the HTML report template.
@@ -59,7 +59,7 @@ func generateHTMLReport(ds *DemoStore, outputPath string) error {
 
 	for _, entry := range manifest {
 		s := store.NewPrefixedStore(ds.Base(), entry.PartitionID)
-		f, err := tfs.Open(s)
+		f, err := tzfs.Open(s)
 		if err != nil {
 			continue // skip broken partitions
 		}
@@ -124,7 +124,7 @@ func totalBytesAll(wfs []ReportWorkflow) int64 {
 	return total
 }
 
-func collectFiles(f *tfs.FS, dir string) []ReportFile {
+func collectFiles(f *tzfs.FS, dir string) []ReportFile {
 	var files []ReportFile
 	entries, err := f.ReadDir(dir)
 	if err != nil {
@@ -132,7 +132,7 @@ func collectFiles(f *tfs.FS, dir string) []ReportFile {
 	}
 	for _, e := range entries {
 		path := dir + "/" + e.Name
-		if e.Type == tfs.InodeTypeDir {
+		if e.Type == tzfs.InodeTypeDir {
 			files = append(files, collectFiles(f, path)...)
 		} else {
 			data, err := f.ReadFile(path)
@@ -153,7 +153,7 @@ func collectFiles(f *tfs.FS, dir string) []ReportFile {
 	return files
 }
 
-func collectFilePaths(f *tfs.FS, dir string) []string {
+func collectFilePaths(f *tzfs.FS, dir string) []string {
 	var paths []string
 	entries, err := f.ReadDir(dir)
 	if err != nil {
@@ -161,7 +161,7 @@ func collectFilePaths(f *tfs.FS, dir string) []string {
 	}
 	for _, e := range entries {
 		path := dir + "/" + e.Name
-		if e.Type == tfs.InodeTypeDir {
+		if e.Type == tzfs.InodeTypeDir {
 			paths = append(paths, collectFilePaths(f, path)...)
 		} else {
 			paths = append(paths, path)
@@ -298,7 +298,7 @@ func browseWorkflow(ds *DemoStore, topicSlug string) {
 	}
 
 	s := store.NewPrefixedStore(ds.Base(), entry.PartitionID)
-	f, err := tfs.Open(s)
+	f, err := tzfs.Open(s)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to open filesystem: %v\n", err)
 		os.Exit(1)
@@ -320,7 +320,7 @@ func browseWorkflow(ds *DemoStore, topicSlug string) {
 	}
 }
 
-func printTree(f *tfs.FS, dir string, indent string) {
+func printTree(f *tzfs.FS, dir string, indent string) {
 	entries, err := f.ReadDir(dir)
 	if err != nil {
 		return
@@ -333,7 +333,7 @@ func printTree(f *tfs.FS, dir string, indent string) {
 			connector = "└── "
 		}
 
-		if e.Type == tfs.InodeTypeDir {
+		if e.Type == tzfs.InodeTypeDir {
 			fmt.Printf("%s%s%s📁 %s%s\n", indent, connector, colorYellow, e.Name, colorReset)
 			childIndent := indent + "│   "
 			if isLast {

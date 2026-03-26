@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	tfs "github.com/temporalio/temporal-fs/pkg/fs"
+	tzfs "github.com/temporalio/temporal-zfs/pkg/fs"
 	temporalfspb "go.temporal.io/server/chasm/lib/temporalfs/gen/temporalfspb/v1"
 	"go.temporal.io/server/common/log"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -65,7 +65,7 @@ func TestCreateFS_DefaultChunkSize(t *testing.T) {
 
 func TestInodeToAttr(t *testing.T) {
 	now := time.Now()
-	inode := &tfs.Inode{
+	inode := &tzfs.Inode{
 		ID:        42,
 		Size:      1024,
 		Mode:      0o644,
@@ -91,7 +91,7 @@ func TestInodeToAttr(t *testing.T) {
 
 func TestMapFSError(t *testing.T) {
 	require.NoError(t, mapFSError(nil))
-	require.Error(t, mapFSError(tfs.ErrNotFound))
+	require.Error(t, mapFSError(tzfs.ErrNotFound))
 }
 
 func TestGetattr(t *testing.T) {
@@ -115,10 +115,10 @@ func TestReadWriteChunks(t *testing.T) {
 	nsID, fsID := "ns-1", "fs-1"
 	initHandlerFS(t, h, nsID, fsID)
 
-	// Create a file via temporal-fs directly so we have an inode to read/write.
+	// Create a file via temporal-zfs directly so we have an inode to read/write.
 	s, err := provider.GetStore(0, nsID, fsID)
 	require.NoError(t, err)
-	f, err := tfs.Open(s)
+	f, err := tzfs.Open(s)
 	require.NoError(t, err)
 	err = f.WriteFile("/test.txt", []byte("initial"), 0o644)
 	require.NoError(t, err)

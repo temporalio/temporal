@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	tfs "github.com/temporalio/temporal-fs/pkg/fs"
-	"github.com/temporalio/temporal-fs/pkg/store"
-	pebblestore "github.com/temporalio/temporal-fs/pkg/store/pebble"
+	tzfs "github.com/temporalio/temporal-zfs/pkg/fs"
+	"github.com/temporalio/temporal-zfs/pkg/store"
+	pebblestore "github.com/temporalio/temporal-zfs/pkg/store/pebble"
 )
 
 const manifestKey = "__demo_manifest__"
@@ -119,9 +119,9 @@ func (ds *DemoStore) LoadManifest() ([]ManifestEntry, error) {
 func (ds *DemoStore) CreatePartition(partitionID uint64) error {
 	s := store.NewPrefixedStore(ds.base, partitionID)
 	// Try to open first — partition may already exist from a prior run.
-	f, err := tfs.Open(s)
+	f, err := tzfs.Open(s)
 	if err != nil {
-		f, err = tfs.Create(s, tfs.Options{ChunkSize: 64 * 1024})
+		f, err = tzfs.Create(s, tzfs.Options{ChunkSize: 64 * 1024})
 		if err != nil {
 			return fmt.Errorf("create partition %d: %w", partitionID, err)
 		}

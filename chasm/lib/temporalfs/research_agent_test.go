@@ -28,8 +28,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/temporalio/temporal-fs/pkg/failpoint"
-	tfs "github.com/temporalio/temporal-fs/pkg/fs"
+	"github.com/temporalio/temporal-zfs/pkg/failpoint"
+	tzfs "github.com/temporalio/temporal-zfs/pkg/fs"
 	temporalfspb "go.temporal.io/server/chasm/lib/temporalfs/gen/temporalfspb/v1"
 )
 
@@ -255,7 +255,7 @@ quantum computers remain years away, but near-term applications are emerging.
 
 	s, err := provider.GetStore(0, nsID, fsID)
 	require.NoError(t, err)
-	f, err := tfs.Open(s)
+	f, err := tzfs.Open(s)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, f.Close()) }()
 
@@ -269,7 +269,7 @@ quantum computers remain years away, but near-term applications are emerging.
 	assert.Equal(t, sourcesV1, snap1Sources, "snapshot 1 should have sources v1")
 
 	_, err = snap1FS.ReadFile("/research/quantum-computing/analysis.md")
-	require.ErrorIs(t, err, tfs.ErrNotFound, "snapshot 1 should NOT have analysis.md")
+	require.ErrorIs(t, err, tzfs.ErrNotFound, "snapshot 1 should NOT have analysis.md")
 
 	snap1Entries, err := snap1FS.ReadDir("/research/quantum-computing")
 	require.NoError(t, err)
@@ -285,7 +285,7 @@ quantum computers remain years away, but near-term applications are emerging.
 	assert.Equal(t, sourcesV2, snap2Sources, "snapshot 2 should have sources v2")
 
 	_, err = snap2FS.ReadFile("/research/quantum-computing/report.md")
-	require.ErrorIs(t, err, tfs.ErrNotFound, "snapshot 2 should NOT have report.md")
+	require.ErrorIs(t, err, tzfs.ErrNotFound, "snapshot 2 should NOT have report.md")
 
 	snap2Entries, err := snap2FS.ReadDir("/research/quantum-computing")
 	require.NoError(t, err)
@@ -385,7 +385,7 @@ func TestResearchAgent_HandlerCrashRecovery(t *testing.T) {
 	// Verify: step 1 snapshot intact via library.
 	s, err := provider.GetStore(0, nsID, fsID)
 	require.NoError(t, err)
-	f, err := tfs.Open(s)
+	f, err := tzfs.Open(s)
 	require.NoError(t, err)
 
 	snap1, err := f.OpenSnapshot("step-1-sources")
@@ -397,7 +397,7 @@ func TestResearchAgent_HandlerCrashRecovery(t *testing.T) {
 
 	// No step-2 snapshot should exist.
 	_, err = f.OpenSnapshot("step-2-analysis")
-	require.ErrorIs(t, err, tfs.ErrSnapshotNotFound)
+	require.ErrorIs(t, err, tzfs.ErrSnapshotNotFound)
 	require.NoError(t, f.Close())
 
 	// ─── Recovery: retry step 2 successfully ─────────────────────────────

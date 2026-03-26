@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	tfs "github.com/temporalio/temporal-fs/pkg/fs"
+	tzfs "github.com/temporalio/temporal-zfs/pkg/fs"
 	"go.temporal.io/server/chasm"
 	temporalfspb "go.temporal.io/server/chasm/lib/temporalfs/gen/temporalfspb/v1"
 	"go.temporal.io/server/common/log"
@@ -45,14 +45,14 @@ func (e *chunkGCTaskExecutor) Execute(
 		return e.rescheduleGC(ctx, fs, task.GetLastProcessedTxnId())
 	}
 
-	f, err := tfs.Open(s)
+	f, err := tzfs.Open(s)
 	if err != nil {
 		_ = s.Close()
 		e.logger.Error("GC: failed to open FS", tag.Error(err))
 		return e.rescheduleGC(ctx, fs, task.GetLastProcessedTxnId())
 	}
 
-	gcStats := f.RunGC(tfs.GCConfig{
+	gcStats := f.RunGC(tzfs.GCConfig{
 		BatchSize:         100,
 		MaxChunksPerRound: 10000,
 	})
@@ -157,7 +157,7 @@ func (e *quotaCheckTaskExecutor) Execute(
 		return err
 	}
 
-	f, err := tfs.Open(s)
+	f, err := tzfs.Open(s)
 	if err != nil {
 		_ = s.Close()
 		e.logger.Error("QuotaCheck: failed to open FS", tag.Error(err))

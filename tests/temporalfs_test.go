@@ -15,7 +15,7 @@ package tests
 //	go test ./tests/ -run TestTemporalFS -v -count 1
 //
 // Architecture: FunctionalTestBase → HistoryService(TemporalFS HistoryModule) →
-// PebbleStoreProvider → store.Store → tfs.FS
+// PebbleStoreProvider → store.Store → tzfs.FS
 
 import (
 	"context"
@@ -24,7 +24,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	tfs "github.com/temporalio/temporal-fs/pkg/fs"
+	tzfs "github.com/temporalio/temporal-zfs/pkg/fs"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/chasm/lib/temporalfs"
@@ -77,7 +77,7 @@ func (s *TemporalFSTestSuite) TestResearchAgent_RealServer() {
 	store, err := s.storeProvider.GetStore(1, s.NamespaceID().String(), "research-agent-fs")
 	s.NoError(err)
 
-	f, err := tfs.Create(store, tfs.Options{})
+	f, err := tzfs.Create(store, tzfs.Options{})
 	s.NoError(err)
 	defer func() { s.NoError(f.Close()) }()
 
@@ -137,7 +137,7 @@ func (s *TemporalFSTestSuite) TestResearchAgent_RealServer() {
 	assert.Equal(t, sourcesV1, snap1Sources, "snapshot 1 should have sources.md v1")
 
 	_, err = snap1FS.ReadFile("/research/quantum-computing/analysis.md")
-	s.ErrorIs(err, tfs.ErrNotFound, "snapshot 1 should NOT have analysis.md")
+	s.ErrorIs(err, tzfs.ErrNotFound, "snapshot 1 should NOT have analysis.md")
 
 	snap1Entries, err := snap1FS.ReadDir("/research/quantum-computing")
 	s.NoError(err)
@@ -154,7 +154,7 @@ func (s *TemporalFSTestSuite) TestResearchAgent_RealServer() {
 	assert.Equal(t, sourcesV2, snap2Sources, "snapshot 2 should have sources.md v2")
 
 	_, err = snap2FS.ReadFile("/research/quantum-computing/report.md")
-	s.ErrorIs(err, tfs.ErrNotFound, "snapshot 2 should NOT have report.md")
+	s.ErrorIs(err, tzfs.ErrNotFound, "snapshot 2 should NOT have report.md")
 
 	snap2Entries, err := snap2FS.ReadDir("/research/quantum-computing")
 	s.NoError(err)
@@ -206,7 +206,7 @@ func (s *TemporalFSTestSuite) TestResearchAgent_Workflow() {
 	store, err := s.storeProvider.GetStore(1, s.NamespaceID().String(), "research-wf-fs")
 	s.NoError(err)
 
-	f, err := tfs.Create(store, tfs.Options{})
+	f, err := tzfs.Create(store, tzfs.Options{})
 	s.NoError(err)
 	defer func() { s.NoError(f.Close()) }()
 

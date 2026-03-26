@@ -6,7 +6,7 @@ import (
 	"math"
 	"time"
 
-	tfs "github.com/temporalio/temporal-fs/pkg/fs"
+	tzfs "github.com/temporalio/temporal-zfs/pkg/fs"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
@@ -48,14 +48,14 @@ func newHandler(config *Config, logger log.Logger, storeProvider FSStoreProvider
 }
 
 // openFS obtains a store for the given filesystem and opens an fs.FS on it.
-// The caller owns the returned *tfs.FS and must call f.Close() which also
+// The caller owns the returned *tzfs.FS and must call f.Close() which also
 // closes the underlying store. On error, all resources are cleaned up internally.
-func (h *handler) openFS(shardID int32, namespaceID, filesystemID string) (*tfs.FS, error) {
+func (h *handler) openFS(shardID int32, namespaceID, filesystemID string) (*tzfs.FS, error) {
 	s, err := h.storeProvider.GetStore(shardID, namespaceID, filesystemID)
 	if err != nil {
 		return nil, mapFSError(err)
 	}
-	f, err := tfs.Open(s)
+	f, err := tzfs.Open(s)
 	if err != nil {
 		_ = s.Close()
 		return nil, mapFSError(err)
@@ -64,9 +64,9 @@ func (h *handler) openFS(shardID int32, namespaceID, filesystemID string) (*tfs.
 }
 
 // createFS initializes a new filesystem in the store.
-// The caller owns the returned *tfs.FS and must call f.Close() which also
+// The caller owns the returned *tzfs.FS and must call f.Close() which also
 // closes the underlying store. On error, all resources are cleaned up internally.
-func (h *handler) createFS(shardID int32, namespaceID, filesystemID string, config *temporalfspb.FilesystemConfig) (*tfs.FS, error) {
+func (h *handler) createFS(shardID int32, namespaceID, filesystemID string, config *temporalfspb.FilesystemConfig) (*tzfs.FS, error) {
 	s, err := h.storeProvider.GetStore(shardID, namespaceID, filesystemID)
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (h *handler) createFS(shardID int32, namespaceID, filesystemID string, conf
 		chunkSize = config.GetChunkSize()
 	}
 
-	f, err := tfs.Create(s, tfs.Options{ChunkSize: chunkSize})
+	f, err := tzfs.Create(s, tzfs.Options{ChunkSize: chunkSize})
 	if err != nil {
 		_ = s.Close()
 		return nil, err
@@ -247,7 +247,7 @@ func (h *handler) DetachWorkflow(
 	return &temporalfspb.DetachWorkflowResponse{}, nil
 }
 
-// FS operations — these use temporal-fs inode-based APIs.
+// FS operations — these use temporal-zfs inode-based APIs.
 
 func (h *handler) Lookup(_ context.Context, req *temporalfspb.LookupRequest) (*temporalfspb.LookupResponse, error) {
 	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
@@ -333,7 +333,7 @@ func (h *handler) Setattr(_ context.Context, req *temporalfspb.SetattrRequest) (
 	}, nil
 }
 
-func (h *handler) applyUtimens(f *tfs.FS, inodeID uint64, valid uint32, attr *temporalfspb.InodeAttr) error {
+func (h *handler) applyUtimens(f *tzfs.FS, inodeID uint64, valid uint32, attr *temporalfspb.InodeAttr) error {
 	if valid&setattrAtime == 0 && valid&setattrMtime == 0 {
 		return nil
 	}
@@ -639,23 +639,23 @@ func (h *handler) CreateSnapshot(_ context.Context, req *temporalfspb.CreateSnap
 }
 
 // modeToInodeType extracts the inode type from POSIX mode bits.
-func modeToInodeType(mode uint32) tfs.InodeType {
+func modeToInodeType(mode uint32) tzfs.InodeType {
 	switch mode & 0xF000 {
 	case 0x1000:
-		return tfs.InodeTypeFIFO
+		return tzfs.InodeTypeFIFO
 	case 0x2000:
-		return tfs.InodeTypeCharDev
+		return tzfs.InodeTypeCharDev
 	case 0x6000:
-		return tfs.InodeTypeBlockDev
+		return tzfs.InodeTypeBlockDev
 	case 0xC000:
-		return tfs.InodeTypeSocket
+		return tzfs.InodeTypeSocket
 	default:
-		return tfs.InodeTypeFile
+		return tzfs.InodeTypeFile
 	}
 }
 
-// inodeToAttr converts a temporal-fs Inode to the proto InodeAttr.
-func inodeToAttr(inode *tfs.Inode) *temporalfspb.InodeAttr {
+// inodeToAttr converts a temporal-zfs Inode to the proto InodeAttr.
+func inodeToAttr(inode *tzfs.Inode) *temporalfspb.InodeAttr {
 	return &temporalfspb.InodeAttr{
 		InodeId:  inode.ID,
 		FileSize: inode.Size,
@@ -669,27 +669,27 @@ func inodeToAttr(inode *tfs.Inode) *temporalfspb.InodeAttr {
 	}
 }
 
-// mapFSError converts temporal-fs errors to appropriate gRPC service errors.
+// mapFSError converts temporal-zfs errors to appropriate gRPC service errors.
 func mapFSError(err error) error {
 	if err == nil {
 		return nil
 	}
 	switch {
-	case errors.Is(err, tfs.ErrNotFound), errors.Is(err, tfs.ErrSnapshotNotFound):
+	case errors.Is(err, tzfs.ErrNotFound), errors.Is(err, tzfs.ErrSnapshotNotFound):
 		return serviceerror.NewNotFound(err.Error())
-	case errors.Is(err, tfs.ErrExist):
+	case errors.Is(err, tzfs.ErrExist):
 		return serviceerror.NewAlreadyExists(err.Error())
-	case errors.Is(err, tfs.ErrPermission), errors.Is(err, tfs.ErrNotPermitted):
+	case errors.Is(err, tzfs.ErrPermission), errors.Is(err, tzfs.ErrNotPermitted):
 		return serviceerror.NewPermissionDenied(err.Error(), "")
-	case errors.Is(err, tfs.ErrInvalidPath), errors.Is(err, tfs.ErrInvalidRename), errors.Is(err, tfs.ErrNameTooLong):
+	case errors.Is(err, tzfs.ErrInvalidPath), errors.Is(err, tzfs.ErrInvalidRename), errors.Is(err, tzfs.ErrNameTooLong):
 		return serviceerror.NewInvalidArgument(err.Error())
-	case errors.Is(err, tfs.ErrNoSpace), errors.Is(err, tfs.ErrTooManyLinks):
+	case errors.Is(err, tzfs.ErrNoSpace), errors.Is(err, tzfs.ErrTooManyLinks):
 		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT, err.Error())
-	case errors.Is(err, tfs.ErrNotDir), errors.Is(err, tfs.ErrIsDir),
-		errors.Is(err, tfs.ErrNotEmpty), errors.Is(err, tfs.ErrNotSymlink),
-		errors.Is(err, tfs.ErrReadOnly), errors.Is(err, tfs.ErrLockConflict):
+	case errors.Is(err, tzfs.ErrNotDir), errors.Is(err, tzfs.ErrIsDir),
+		errors.Is(err, tzfs.ErrNotEmpty), errors.Is(err, tzfs.ErrNotSymlink),
+		errors.Is(err, tzfs.ErrReadOnly), errors.Is(err, tzfs.ErrLockConflict):
 		return serviceerror.NewFailedPrecondition(err.Error())
-	case errors.Is(err, tfs.ErrClosed), errors.Is(err, tfs.ErrVersionMismatch):
+	case errors.Is(err, tzfs.ErrClosed), errors.Is(err, tzfs.ErrVersionMismatch):
 		return serviceerror.NewUnavailable(err.Error())
 	default:
 		return err

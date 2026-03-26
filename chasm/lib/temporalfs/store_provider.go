@@ -1,7 +1,7 @@
 package temporalfs
 
 import (
-	"github.com/temporalio/temporal-fs/pkg/store"
+	"github.com/temporalio/temporal-zfs/pkg/store"
 )
 
 // FSStoreProvider is the pluggable interface for FS storage backends.

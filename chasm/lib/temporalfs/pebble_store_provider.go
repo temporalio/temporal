@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/temporalio/temporal-fs/pkg/store"
-	pebblestore "github.com/temporalio/temporal-fs/pkg/store/pebble"
+	"github.com/temporalio/temporal-zfs/pkg/store"
+	pebblestore "github.com/temporalio/temporal-zfs/pkg/store/pebble"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
 
-// PebbleStoreProvider implements FSStoreProvider using PebbleDB via temporal-fs.
+// PebbleStoreProvider implements FSStoreProvider using PebbleDB via temporal-zfs.
 // A single PebbleDB instance is used for all filesystem storage (lazy-created).
 // Individual filesystem executions are isolated via PrefixedStore.
 type PebbleStoreProvider struct {
