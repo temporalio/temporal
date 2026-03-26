@@ -893,3 +893,91 @@ func TestScheduleMigrationV2ToV1RoutingFallback(t *testing.T) {
 	})
 	require.NoError(t, err)
 }
+
+// TestScheduleDeleteThenDescribeViaSchedulerClient verifies that after deleting
+// a CHASM schedule, describing it via the scheduler client returns NotFound.
+func TestScheduleDeleteThenDescribeViaSchedulerClient(t *testing.T) {
+	env := testcore.NewEnv(
+		t,
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
+	)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sched-delete-then-describe")
+	wid := testcore.RandomizeStr("sched-delete-describe-wf")
+	wt := testcore.RandomizeStr("sched-delete-describe-wt")
+	tq := testcore.RandomizeStr("tq")
+
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	// Create CHASM schedule directly via scheduler client.
+	_, err := env.GetTestCluster().SchedulerClient().CreateSchedule(
+		ctx,
+		&schedulerpb.CreateScheduleRequest{
+			NamespaceId: nsID,
+			FrontendRequest: &workflowservice.CreateScheduleRequest{
+				Namespace:  nsName,
+				ScheduleId: sid,
+				Schedule: &schedulepb.Schedule{
+					Spec: &schedulepb.ScheduleSpec{
+						Interval: []*schedulepb.IntervalSpec{
+							{Interval: durationpb.New(1 * time.Hour)},
+						},
+					},
+					Action: &schedulepb.ScheduleAction{
+						Action: &schedulepb.ScheduleAction_StartWorkflow{
+							StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+								WorkflowId:   wid,
+								WorkflowType: &commonpb.WorkflowType{Name: wt},
+								TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+							},
+						},
+					},
+				},
+				Identity:  "test",
+				RequestId: testcore.RandomizeStr("request-id"),
+			},
+		},
+	)
+	require.NoError(t, err)
+
+	// Verify it exists.
+	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(
+		ctx,
+		&schedulerpb.DescribeScheduleRequest{
+			NamespaceId:     nsID,
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+		},
+	)
+	require.NoError(t, err)
+
+	// Delete via scheduler client.
+	_, err = env.GetTestCluster().SchedulerClient().DeleteSchedule(
+		ctx,
+		&schedulerpb.DeleteScheduleRequest{
+			NamespaceId: nsID,
+			FrontendRequest: &workflowservice.DeleteScheduleRequest{
+				Namespace:  nsName,
+				ScheduleId: sid,
+				Identity:   "test",
+			},
+		},
+	)
+	require.NoError(t, err)
+
+	// Describe via scheduler client should return NotFound.
+	var notFoundErr *serviceerror.NotFound
+	require.Eventually(t, func() bool {
+		_, descErr := env.GetTestCluster().SchedulerClient().DescribeSchedule(
+			ctx,
+			&schedulerpb.DescribeScheduleRequest{
+				NamespaceId:     nsID,
+				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+			},
+		)
+		return errors.As(descErr, &notFoundErr)
+	}, 5*time.Second, 5*time.Millisecond)
+}
