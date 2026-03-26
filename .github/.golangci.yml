@@ -175,6 +175,13 @@ linters:
         text: "time.Now"
         linters:
           - forbidigo
+      # Example/demo apps under chasm/lib are not library code — exclude from
+      # strict chasm/lib rules (forbidigo, deep-exit, errcheck, complexity, etc.).
+      - path: chasm/lib/.*/examples/
+        linters:
+          - forbidigo
+          - errcheck
+          - revive
       # Cassandra timestamp rules only apply to cassandra persistence package
       - path-except: common/persistence/cassandra/.*\.go$
         text: "Unix|UnixMilli|UnixNano"
