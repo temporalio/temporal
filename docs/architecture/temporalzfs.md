@@ -1,15 +1,15 @@
 > [!WARNING]
-> All documentation pertains to the [CHASM-based](https://github.com/temporalio/temporal/blob/main/docs/architecture/chasm.md) TemporalFS implementation, which is not yet generally available.
+> All documentation pertains to the [CHASM-based](https://github.com/temporalio/temporal/blob/main/docs/architecture/chasm.md) TemporalZFS implementation, which is not yet generally available.
 
-This page documents the internal architecture of TemporalFS, a durable versioned filesystem for AI agent workflows. The target audience is server developers maintaining or operating the TemporalFS implementation. Readers should already have an understanding of [CHASM terminology](https://github.com/temporalio/temporal/blob/main/docs/architecture/chasm.md).
+This page documents the internal architecture of TemporalZFS, a durable versioned filesystem for AI agent workflows. The target audience is server developers maintaining or operating the TemporalZFS implementation. Readers should already have an understanding of [CHASM terminology](https://github.com/temporalio/temporal/blob/main/docs/architecture/chasm.md).
 
 ### Introduction
 
-TemporalFS is implemented as a [CHASM](https://github.com/temporalio/temporal/blob/main/docs/architecture/chasm.md) library, with all related implementation code located in [`chasm/lib/temporalzfs`](https://github.com/temporalio/temporal/tree/main/chasm/lib/temporalzfs). Each filesystem is backed by an execution whose root component is a [`Filesystem`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalzfs/filesystem.go).
+TemporalZFS is implemented as a [CHASM](https://github.com/temporalio/temporal/blob/main/docs/architecture/chasm.md) library, with all related implementation code located in [`chasm/lib/temporalzfs`](https://github.com/temporalio/temporal/tree/main/chasm/lib/temporalzfs). Each filesystem is backed by an execution whose root component is a [`Filesystem`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalzfs/filesystem.go).
 
 FS layer data (inodes, chunks, directory entries) is stored in a dedicated store managed by an [`FSStoreProvider`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalzfs/store_provider.go), not as CHASM Fields. Only FS metadata (config, stats, lifecycle status) lives in CHASM state. This separation keeps the CHASM execution lightweight while allowing the FS data layer to scale independently.
 
-The FS operations are powered by the [`temporal-fs`](https://github.com/temporalio/temporal-fs) library, which provides a transactional copy-on-write filesystem backed by PebbleDB.
+The FS operations are powered by the [`temporal-zfs`](https://github.com/temporalio/temporal-zfs) library, which provides a transactional copy-on-write filesystem backed by PebbleDB.
 
 ```mermaid
 classDiagram
@@ -78,9 +78,9 @@ Five task types are registered in the [`library`](https://github.com/temporalio/
 
 | Task | Type | Description |
 |------|------|-------------|
-| **ChunkGC** | Periodic timer | Runs `temporal-fs` garbage collection (`f.RunGC()`) to process tombstones and delete orphaned chunks. Reschedules itself at the configured `gc_interval`. Updates `TransitionCount` and `ChunkCount` in stats. |
+| **ChunkGC** | Periodic timer | Runs `temporal-zfs` garbage collection (`f.RunGC()`) to process tombstones and delete orphaned chunks. Reschedules itself at the configured `gc_interval`. Updates `TransitionCount` and `ChunkCount` in stats. |
 | **ManifestCompact** | Placeholder | Reserved for future per-filesystem PebbleDB compaction triggers. Currently a no-op since compaction operates at the shard level. |
-| **QuotaCheck** | On-demand | Reads `temporal-fs` metrics to update `FSStats` (total size, file count, dir count). Logs a warning if the filesystem exceeds its configured `max_size` quota. |
+| **QuotaCheck** | On-demand | Reads `temporal-zfs` metrics to update `FSStats` (total size, file count, dir count). Logs a warning if the filesystem exceeds its configured `max_size` quota. |
 | **OwnerCheckTask** | Periodic timer | Checks if owner workflows still exist via `WorkflowExistenceChecker`. Uses a not-found counter with threshold of 2 (must miss twice before removal) to avoid transient false positives. Removes owners that are confirmed gone. Transitions filesystem to DELETED when all owners are removed. Reschedules at `owner_check_interval`. |
 | **DataCleanupTask** | Side-effect | Runs after filesystem transitions to DELETED. Calls `FSStoreProvider.DeleteStore()` to remove all filesystem data. On failure, reschedules with exponential backoff (capped at 30 minutes). |
 
@@ -88,7 +88,7 @@ ChunkGC, ManifestCompact, QuotaCheck, and OwnerCheckTask validators check that t
 
 ### Storage Architecture
 
-TemporalFS uses a pluggable storage interface so that OSS and SaaS deployments can use different backends without changing the FS layer or CHASM archetype.
+TemporalZFS uses a pluggable storage interface so that OSS and SaaS deployments can use different backends without changing the FS layer or CHASM archetype.
 
 ```
 ┌─────────────────────────────────────┐
@@ -112,18 +112,18 @@ TemporalFS uses a pluggable storage interface so that OSS and SaaS deployments c
 **`CDSStoreProvider`** (SaaS, in `saas-temporal`):
 - Implements `FSStoreProvider` via `fx.Decorate`, replacing `PebbleStoreProvider`.
 - Backed by Walker: uses `rpcEngine` (wrapping Walker `ShardClient` RPCs) adapted to `store.Store`.
-- Data isolated via `ShardspaceTemporalFS`, a `tfs\x00` key prefix, and per-filesystem `PrefixedStore` partitions.
+- Data isolated via `ShardspaceTemporalZFS`, a `tzfs\x00` key prefix, and per-filesystem `PrefixedStore` partitions.
 - See [`cds/doc/temporalzfs.md`](https://github.com/temporalio/saas-temporal/blob/main/cds/doc/temporalzfs.md) in `saas-temporal` for the full CDS integration architecture.
 
 ### gRPC Service
 
-The [`TemporalFSService`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalzfs/proto/v1/service.proto) defines 22 RPCs for filesystem operations. The [`handler`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalzfs/handler.go) implements these using CHASM APIs for lifecycle and `temporal-fs` APIs for FS operations.
+The [`TemporalZFSService`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalzfs/proto/v1/service.proto) defines 22 RPCs for filesystem operations. The [`handler`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalzfs/handler.go) implements these using CHASM APIs for lifecycle and `temporal-zfs` APIs for FS operations.
 
 **Lifecycle RPCs:**
 
-| RPC | CHASM API | temporal-fs API |
+| RPC | CHASM API | temporal-zfs API |
 |-----|-----------|-----------------|
-| `CreateFilesystem` | `chasm.StartExecution` | `tfs.Create()` |
+| `CreateFilesystem` | `chasm.StartExecution` | `tzfs.Create()` |
 | `GetFilesystemInfo` | `chasm.ReadComponent` | — |
 | `ArchiveFilesystem` | `chasm.UpdateComponent` | — |
 | `AttachWorkflow` | `chasm.UpdateComponent` | — |
@@ -131,9 +131,9 @@ The [`TemporalFSService`](https://github.com/temporalio/temporal/blob/main/chasm
 
 `AttachWorkflow` adds an owner workflow ID to the filesystem (deduplicated). `DetachWorkflow` removes one; if no owners remain, the filesystem transitions to DELETED.
 
-**FS operation RPCs** (all use inode-based `ByID` methods from `temporal-fs`):
+**FS operation RPCs** (all use inode-based `ByID` methods from `temporal-zfs`):
 
-| RPC | temporal-fs API |
+| RPC | temporal-zfs API |
 |-----|-----------------|
 | `Getattr` | `f.StatByID()` |
 | `Setattr` | `f.ChmodByID()`, `f.ChownByID()`, `f.UtimensByID()` |
@@ -154,16 +154,16 @@ The [`TemporalFSService`](https://github.com/temporalio/temporal/blob/main/chasm
 | `Statfs` | `f.GetQuota()`, `f.ChunkSize()` |
 | `CreateSnapshot` | `f.CreateSnapshot()` |
 
-The handler pattern for FS operations is: get store via `FSStoreProvider` → open `tfs.FS` → execute operation → close FS (which also closes the store). On error, `openFS`/`createFS` close the store internally before returning. The CHASM execution is only accessed for lifecycle operations (create, archive, get info).
+The handler pattern for FS operations is: get store via `FSStoreProvider` → open `tzfs.FS` → execute operation → close FS (which also closes the store). On error, `openFS`/`createFS` close the store internally before returning. The CHASM execution is only accessed for lifecycle operations (create, archive, get info).
 
 ### WAL Integration (SaaS)
 
 In the SaaS deployment, writes go through a WAL pipeline for durability:
 
 ```
-temporal-fs write → walEngine → LP WAL → ack → stateTracker buffer
+temporal-zfs write → walEngine → LP WAL → ack → stateTracker buffer
                                                       ↓
-                                              tfsFlusher (500ms tick)
+                                              tzfsFlusher (500ms tick)
                                                       ↓
                                               rpcEngine → Walker RPCs
                                                       ↓
@@ -171,9 +171,9 @@ temporal-fs write → walEngine → LP WAL → ack → stateTracker buffer
 ```
 
 - **`walEngine`**: Implements `Engine` by routing reads to `rpcEngine` (Walker) and writes through the LP WAL. Each write is serialized as a `WALLogTFSData` record and awaits acknowledgement before buffering in the state tracker.
-- **`tfsStateTracker`**: Buffers acknowledged WAL ops in memory, ordered by log ID. The flusher drains this buffer.
-- **`tfsFlusher`**: Runs a dedicated goroutine that drains buffered ops every 500ms and writes them to Walker via `rpcEngine`, then advances the `TEMPORALFS_RECOVERY_WATERMARK`. On shutdown, performs a final flush with a 5s timeout.
-- **`tfsWALRecoverer`**: On shard acquisition, replays WAL records between the recovery watermark and the WAL head to rebuild the state tracker buffer.
+- **`tzfsStateTracker`**: Buffers acknowledged WAL ops in memory, ordered by log ID. The flusher drains this buffer.
+- **`tzfsFlusher`**: Runs a dedicated goroutine that drains buffered ops every 500ms and writes them to Walker via `rpcEngine`, then advances the `TEMPORALZFS_RECOVERY_WATERMARK`. On shutdown, performs a final flush with a 5s timeout.
+- **`tzfsWALRecoverer`**: On shard acquisition, replays WAL records between the recovery watermark and the WAL head to rebuild the state tracker buffer.
 
 ### FX Wiring
 
@@ -186,7 +186,7 @@ The module is included in [`service/history/fx.go`](https://github.com/temporali
 
 ### Owner Lifecycle & GC
 
-TemporalFS uses a belt-and-suspenders approach for garbage collection when owner workflows are deleted:
+TemporalZFS uses a belt-and-suspenders approach for garbage collection when owner workflows are deleted:
 
 - **Pull path (OwnerCheckTask)**: Periodic safety net. Checks if each owner workflow still exists and removes confirmed-gone owners. Transitions to DELETED when all owners are removed, which triggers DataCleanupTask.
 - **Push path (PostDeleteHook)**: Fast path. A `PostDeleteHook` on the workflow delete manager calls `DetachWorkflow` when a workflow is deleted. OSS implementation is a noop (relies on pull path). SaaS overrides via `fx.Decorate` to query visibility for owned filesystems.
@@ -198,7 +198,7 @@ TemporalFS uses a belt-and-suspenders approach for garbage collection when owner
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `temporalzfs.enabled` | `false` | Namespace-level toggle for TemporalFS |
+| `temporalzfs.enabled` | `false` | Namespace-level toggle for TemporalZFS |
 | Default chunk size | 256 KB | Size of file data chunks |
 | Default max size | 1 GB | Per-filesystem storage quota |
 | Default max files | 100,000 | Per-filesystem inode quota |

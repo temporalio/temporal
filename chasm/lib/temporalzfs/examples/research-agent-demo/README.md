@@ -88,7 +88,7 @@ sample filesystem, and generate the HTML report.
 | `--concurrency` | 50 | Max concurrent workflows |
 | `--failure-rate` | 1.0 | Failure rate multiplier (0 = none, 2 = double) |
 | `--seed` | 12345 | Random seed |
-| `--data-dir` | /tmp/tfs-demo | PebbleDB data directory |
+| `--data-dir` | /tmp/tzfs-demo | PebbleDB data directory |
 | `--continuous` | | Run continuously until Ctrl+C |
 
 The script cleans up the Temporal dev server on exit.
@@ -106,7 +106,7 @@ go run . run [flags]
 | `--workflows` | 200 | Number of research workflows to run |
 | `--concurrency` | 50 | Max concurrent workflows |
 | `--failure-rate` | 1.0 | Failure rate multiplier (0 = none, 2 = double) |
-| `--data-dir` | /tmp/tfs-demo | PebbleDB data directory |
+| `--data-dir` | /tmp/tzfs-demo | PebbleDB data directory |
 | `--seed` | 0 | Random seed (0 = random) |
 | `--task-queue` | research-demo | Temporal task queue name |
 | `--temporal-addr` | localhost:7233 | Temporal server address |
@@ -117,7 +117,7 @@ go run . run [flags]
 ### `report` — Generate HTML report
 
 ```bash
-go run . report --data-dir /tmp/tfs-demo --output demo-report.html
+go run . report --data-dir /tmp/tzfs-demo --output demo-report.html
 open demo-report.html
 ```
 
@@ -129,7 +129,7 @@ Produces a self-contained HTML file with:
 ### `browse` — Inspect a workflow's filesystem
 
 ```bash
-go run . browse --data-dir /tmp/tfs-demo --topic quantum-computing
+go run . browse --data-dir /tmp/tzfs-demo --topic quantum-computing
 ```
 
 Prints the directory tree for a specific workflow's TemporalZFS partition, including

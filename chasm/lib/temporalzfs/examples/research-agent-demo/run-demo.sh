@@ -9,7 +9,7 @@ WORKFLOWS=200
 CONCURRENCY=50
 FAILURE_RATE=1.0
 SEED=12345
-DATA_DIR="/tmp/tfs-demo"
+DATA_DIR="/tmp/tzfs-demo"
 TEMPORAL_ADDR="localhost:7233"
 TEMPORAL_PID=""
 CONTINUOUS=""
@@ -158,4 +158,4 @@ echo -e "  ${DIM}To browse another topic:${RESET}"
 echo "    $DEMO_BIN browse --data-dir $DATA_DIR --topic <slug>"
 echo ""
 echo -e "  ${DIM}To re-run with the live dashboard:${RESET}"
-echo "    $DEMO_BIN run --workflows $WORKFLOWS --concurrency $CONCURRENCY --data-dir /tmp/tfs-demo-live"
+echo "    $DEMO_BIN run --workflows $WORKFLOWS --concurrency $CONCURRENCY --data-dir /tmp/tzfs-demo-live"
