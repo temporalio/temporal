@@ -299,6 +299,7 @@ func nexusFailureMetadataToApplicationFailureInfo(failure nexus.Failure) (*failu
 	}
 	return &failurepb.Failure_ApplicationFailureInfo{
 		ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type:    "NexusFailure",
 			Details: payloads,
 		},
 	}, nil

@@ -920,7 +920,7 @@ func TestTaskGeneratorImpl_GenerateDirtySubStateMachineTasks_TrimsTimersForDelet
 	require.Empty(t, ms.GetExecutionInfo().StateMachineTimers) // Timer should be trimmed
 }
 
-func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ActivityRetention(t *testing.T) {
+func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ChasmComponentRetention(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
@@ -930,25 +930,36 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ActivityRetention(t *t
 	testCases := []struct {
 		name                   string
 		archetypeID            chasm.ArchetypeID
-		namespaceRetention     time.Duration
 		expectedMinRetention   time.Duration
 		expectedMaxRetention   time.Duration
 		setupNamespaceRegistry func(*namespace.MockRegistry)
 	}{
 		{
-			name:                 "standalone activity uses 1 day retention",
+			name:                 "standalone activity uses namespace retention",
 			archetypeID:          activity.ArchetypeID,
-			namespaceRetention:   90 * 24 * time.Hour, // 90 days namespace retention
-			expectedMinRetention: 24 * time.Hour,      // Activity should use 1 day
-			expectedMaxRetention: 24*time.Hour + retentionJitterDuration*2,
+			expectedMinRetention: 90 * 24 * time.Hour,
+			expectedMaxRetention: 90*24*time.Hour + retentionJitterDuration*2,
 			setupNamespaceRegistry: func(nr *namespace.MockRegistry) {
-				// Namespace registry should not be called for activities
+				namespaceConfig := &persistencespb.NamespaceConfig{
+					Retention: durationpb.New(90 * 24 * time.Hour),
+				}
+				namespaceEntry := namespace.NewGlobalNamespaceForTest(
+					&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()},
+					namespaceConfig,
+					&persistencespb.NamespaceReplicationConfig{
+						ActiveClusterName: cluster.TestCurrentClusterName,
+						Clusters: []string{
+							cluster.TestCurrentClusterName,
+						},
+					},
+					tests.Version,
+				)
+				nr.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
 			},
 		},
 		{
 			name:                 "workflow uses namespace retention",
 			archetypeID:          chasm.WorkflowArchetypeID,
-			namespaceRetention:   7 * 24 * time.Hour, // 7 days namespace retention
 			expectedMinRetention: 7 * 24 * time.Hour,
 			expectedMaxRetention: 7*24*time.Hour + retentionJitterDuration*2,
 			setupNamespaceRegistry: func(nr *namespace.MockRegistry) {
@@ -972,7 +983,6 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ActivityRetention(t *t
 		{
 			name:                 "scheduler uses namespace retention",
 			archetypeID:          chasm.SchedulerArchetypeID,
-			namespaceRetention:   30 * 24 * time.Hour, // 30 days namespace retention
 			expectedMinRetention: 30 * 24 * time.Hour,
 			expectedMaxRetention: 30*24*time.Hour + retentionJitterDuration*2,
 			setupNamespaceRegistry: func(nr *namespace.MockRegistry) {

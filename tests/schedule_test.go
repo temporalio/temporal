@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/metadata"
@@ -75,6 +76,7 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestResetWithAdditionalCallback_HSMCallbacks", func(t *testing.T) { testResetWithAdditionalCallback(t, newContext, false) })
 	t.Run("TestResetWithAdditionalCallback_ChasmCallbacks", func(t *testing.T) { testResetWithAdditionalCallback(t, newContext, true) })
 	t.Run("TestMigrationCallbackAttach", func(t *testing.T) { testMigrationCallbackAttach(t, newContext) })
+	t.Run("TestCreatesWorkflowSentinel", func(t *testing.T) { testCreatesWorkflowSentinel(t, newContext) })
 }
 
 func TestScheduleV1(t *testing.T) {
@@ -87,6 +89,7 @@ func TestScheduleV1(t *testing.T) {
 	t.Run("TestListBeforeRun", func(t *testing.T) { testListBeforeRun(t, newContext) })
 	t.Run("TestRateLimit", func(t *testing.T) { testRateLimit(t, newContext) })
 	t.Run("TestNextTimeCache", func(t *testing.T) { testNextTimeCache(t, newContext) })
+	t.Run("TestCreatesCHASMSentinel", func(t *testing.T) { testCreatesCHASMSentinel(t, newContext) })
 }
 
 func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
@@ -1442,6 +1445,156 @@ func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, en
 	case <-time.After(10 * time.Second):
 		s.Fail("timeout waiting for second callback to be delivered")
 	}
+}
+
+// testCreatesWorkflowSentinel tests that creating a CHASM schedule also starts a
+// dummy workflow to reserve the schedule ID in the V1 workflow ID-space.
+func testCreatesWorkflowSentinel(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+
+	sid := testcore.RandomizeStr("sid")
+	wid := testcore.RandomizeStr("wid")
+	wt := testcore.RandomizeStr("wt")
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   testcore.RandomizeStr("identity"),
+		RequestId:  testcore.RandomizeStr("request-id"),
+	})
+	s.NoError(err)
+
+	// Verify the dummy workflow was created to reserve the V1 workflow ID.
+	sentinelWfID := scheduler.WorkflowIDPrefix + sid
+	var descResp *workflowservice.DescribeWorkflowExecutionResponse
+	s.Eventually(func() bool {
+		descResp, err = s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: sentinelWfID},
+		})
+		return err == nil
+	}, 15*time.Second, 500*time.Millisecond, "dummy sentinel workflow should exist")
+	s.Equal(dummy.DummyWFTypeName, descResp.WorkflowExecutionInfo.Type.Name)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
+
+	// Verify visibility shows exactly one schedule (not the dummy workflow).
+	getScheduleEntryFromVisibility(s, sid, newContext, nil)
+	listResp, err := s.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+		Namespace:       s.Namespace().String(),
+		MaximumPageSize: 5,
+	})
+	s.NoError(err)
+	s.Len(listResp.Schedules, 1)
+
+	countResp, err := s.FrontendClient().CountSchedules(ctx, &workflowservice.CountSchedulesRequest{
+		Namespace: s.Namespace().String(),
+	})
+	s.NoError(err)
+	s.Equal(int64(1), countResp.Count)
+}
+
+// testCreatesCHASMSentinel tests that creating a V1 schedule also creates a
+// CHASM sentinel to reserve the schedule ID in the CHASM execution space.
+func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+
+	sid := testcore.RandomizeStr("sid")
+	wid := testcore.RandomizeStr("wid")
+	wt := testcore.RandomizeStr("wt")
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   testcore.RandomizeStr("identity"),
+		RequestId:  testcore.RandomizeStr("request-id"),
+	})
+	s.NoError(err)
+
+	// Verify a CHASM sentinel was created to reserve the schedule ID.
+	// DescribeSchedule should return NotFound, as well as CreateSentinel
+	nsID := s.NamespaceID().String()
+	s.Eventually(func() bool {
+		_, descErr := s.GetTestCluster().SchedulerClient().DescribeSchedule(
+			ctx,
+			&schedulerpb.DescribeScheduleRequest{
+				NamespaceId:     nsID,
+				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: s.Namespace().String(), ScheduleId: sid},
+			},
+		)
+		var notFoundErr *serviceerror.NotFound
+		if !errors.As(descErr, &notFoundErr) {
+			return false
+		}
+
+		// A CHASM CreateSchedule should also fail with NotFound because
+		// the sentinel blocks it.
+		_, createErr := s.GetTestCluster().SchedulerClient().CreateSchedule(
+			ctx,
+			&schedulerpb.CreateScheduleRequest{
+				NamespaceId: nsID,
+				FrontendRequest: &workflowservice.CreateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: sid,
+					RequestId:  testcore.RandomizeStr("test-sentinel-check"),
+					Schedule:   schedule,
+				},
+			},
+		)
+		return errors.As(createErr, &notFoundErr)
+	}, 15*time.Second, 500*time.Millisecond, "CHASM sentinel should exist for V1 schedule")
+
+	// Verify visibility shows exactly one schedule (not the sentinel).
+	getScheduleEntryFromVisibility(s, sid, newContext, nil)
+	listResp, err := s.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+		Namespace:       s.Namespace().String(),
+		MaximumPageSize: 5,
+	})
+	s.NoError(err)
+	s.Len(listResp.Schedules, 1)
+
+	countResp, err := s.FrontendClient().CountSchedules(ctx, &workflowservice.CountSchedulesRequest{
+		Namespace: s.Namespace().String(),
+	})
+	s.NoError(err)
+	s.Equal(int64(1), countResp.Count)
 }
 
 func testCreateScheduleAlreadyExists(t *testing.T, newContext contextFactory) {

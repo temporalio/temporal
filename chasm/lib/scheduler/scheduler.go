@@ -90,6 +90,7 @@ var (
 	ErrTooManyBackfillers    = serviceerror.NewFailedPrecondition("too many concurrent backfillers")
 	ErrInvalidQuery          = serviceerror.NewInvalidArgument("missing or invalid query")
 	ErrSentinel              = serviceerror.NewNotFound("schedule is a sentinel")
+	ErrSentinelBlocked       = serviceerror.NewUnavailable("schedule is a sentinel; please retry after sentinel expires")
 	ErrMigrationPending      = serviceerror.NewUnavailable("schedule has a pending migration to workflow; please retry later")
 )
 
@@ -137,22 +138,42 @@ func NewScheduler(
 }
 
 // NewSentinel returns a sentinel CHASM scheduler that exists only to reserve
-// the schedule ID. Sentinels have no sub-components and return NotFound
-// on all API operations.
+// the schedule ID. Sentinels have no sub-components (other than Info for idle
+// tracking) and return NotFound on all API operations. An idle task auto-closes
+// the sentinel after SentinelIdleTime.
 func NewSentinel(
 	ctx chasm.MutableContext,
 	namespace, namespaceID, scheduleID string,
 ) *Scheduler {
-	return &Scheduler{
+	s := &Scheduler{
 		SchedulerState: &schedulerpb.SchedulerState{
 			Namespace:     namespace,
 			NamespaceId:   namespaceID,
 			ScheduleId:    scheduleID,
 			Sentinel:      true,
 			ConflictToken: scheduler.InitialConflictToken,
+			Info:          &schedulepb.ScheduleInfo{},
 		},
 		cacheConflictToken: scheduler.InitialConflictToken,
 	}
+	s.Info.CreateTime = timestamppb.New(ctx.Now(s))
+
+	ctx.AddTask(s, chasm.TaskAttributes{
+		ScheduledTime: ctx.Now(s).Add(SentinelIdleTime),
+	}, &schedulerpb.SchedulerIdleTask{
+		IdleTimeTotal: durationpb.New(SentinelIdleTime),
+	})
+
+	return s
+}
+
+// CreateSentinelFn is the chasm.StartExecution factory for creating sentinel
+// schedulers. Used by the V1 path to reserve the CHASM key space.
+func CreateSentinelFn(
+	ctx chasm.MutableContext,
+	req *schedulerpb.CreateSentinelRequest,
+) (*Scheduler, error) {
+	return NewSentinel(ctx, req.Namespace, req.NamespaceId, req.ScheduleId), nil
 }
 
 // IsSentinel returns true if this is a sentinel scheduler.
@@ -428,12 +449,15 @@ func (s *Scheduler) getIdleExpiration(
 	// The idle timer to close off the component is started only for schedules with
 	// no more work to do. Paused schedules are held open indefinitely.
 	if idleTime == 0 ||
-		s.Schedule.State.Paused ||
+		s.GetSchedule().GetState().GetPaused() ||
 		(!nextWakeup.IsZero() && s.useScheduledAction(false)) ||
 		s.hasMoreAllowAllBackfills(ctx) {
 		return time.Time{}, false
 	}
 
+	if s.IsSentinel() {
+		return s.Info.GetCreateTime().AsTime().Add(idleTime), true
+	}
 	return s.getLastEventTime(ctx).Add(idleTime), true
 }
 

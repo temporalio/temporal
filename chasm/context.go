@@ -32,7 +32,7 @@ type Context interface {
 	// Value returns the value associated with this context for key. The behavior is the same as context.Context.Value().
 	// Use WithContextValues RegistrableComponentOption to set key values pair for a component upon registration.
 	// Registered key-value pairs will automatically be added to the Context whenever framework accesses the component.
-	// Alternatively, use ContextWithValue() to manually set values on Context.
+	// Alternatively, use ContextWithValue() to manually set values on Context which will take precedence over registered ones.
 	Value(key any) any
 
 	// Intent() OperationIntent
@@ -50,7 +50,7 @@ type MutableContext interface {
 	Context
 
 	// AddTask adds a task to be emitted as part of the current transaction.
-	// The task is associated with the given component and will be invoked via the registered executor for the given task
+	// The task is associated with the given component and will be invoked via the registered handler for the given task
 	// referencing the component.
 	AddTask(Component, TaskAttributes, any)
 
@@ -145,7 +145,11 @@ func (c *immutableCtx) MetricsHandler() metrics.Handler {
 }
 
 func (c *immutableCtx) Value(key any) any {
-	return c.goContext().Value(key)
+	if v := c.goContext().Value(key); v != nil {
+		return v
+	}
+
+	return c.root.registry.componentContextValue(key)
 }
 
 func (c *immutableCtx) withValue(key any, value any) Context {
@@ -197,36 +201,4 @@ func (c *mutableCtx) withValue(key any, value any) Context {
 func ContextWithValue[C Context](c C, key any, value any) C {
 	//nolint:revive // unchecked-type-assertion
 	return any(c.withValue(key, value)).(C)
-}
-
-// AugmentContextForComponent returns a new Context with all context values
-// associated with the given component in the registry added.
-// This method should only be used by CHASM framework internal code,
-// NOT CHASM library developers.
-func AugmentContextForComponent[C Context](
-	ctx C,
-	component any,
-	registry *Registry,
-) C {
-	rc, ok := registry.componentFor(component)
-	if ok {
-		for key, value := range rc.contextValues {
-			ctx = ContextWithValue(ctx, key, value)
-		}
-	}
-	return ctx
-}
-
-func augmentContextForArchetypeID[C Context](
-	ctx C,
-	archetypeID ArchetypeID,
-	registry *Registry,
-) C {
-	rc, ok := registry.ComponentByID(archetypeID)
-	if ok {
-		for key, value := range rc.contextValues {
-			ctx = ContextWithValue(ctx, key, value)
-		}
-	}
-	return ctx
 }
