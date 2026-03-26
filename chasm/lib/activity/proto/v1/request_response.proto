@@ -101,4 +101,5 @@ message UpdateActivityExecutionOptionsRequest {
 }
 
 message UpdateActivityExecutionOptionsResponse {
+    temporal.api.workflowservice.v1.UpdateActivityExecutionOptionsResponse frontend_response = 1;
 }
