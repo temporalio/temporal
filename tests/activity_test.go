@@ -698,6 +698,7 @@ func TestActivityTestSuite(t *testing.T) {
 		var signalErr, cancelWtErr error
 		cancelCh := make(chan struct{})
 		go func() {
+			defer close(cancelCh)
 			s.Logger.Info("Trying to cancel the task in a different thread")
 			// Send signal so that worker can send an activity cancel
 			_, signalErr = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
@@ -710,11 +711,13 @@ func TestActivityTestSuite(t *testing.T) {
 				Input:      nil,
 				Identity:   identity,
 			})
+			if signalErr != nil {
+				return
+			}
 
 			scheduleActivity = false
 			requestCancellation = true
 			_, cancelWtErr = poller.PollAndProcessWorkflowTask()
-			close(cancelCh)
 		}()
 
 		s.Logger.Info("Start activity.")
@@ -722,7 +725,13 @@ func TestActivityTestSuite(t *testing.T) {
 		s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
 		s.Logger.Info("Waiting for cancel to complete.", tag.WorkflowRunID(we.RunId))
-		<-cancelCh
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		select {
+		case <-cancelCh:
+		case <-ctx.Done():
+			s.Fail("timed out waiting for activity cancellation")
+		}
 		s.NoError(signalErr)
 		s.NoError(cancelWtErr)
 		s.True(activityCanceled, "Activity was not cancelled.")
@@ -913,7 +922,7 @@ func TestActivityTestSuite(t *testing.T) {
 			panic("Unexpected workflow state")
 		}
 
-		testCtx, testCancel := context.WithCancel(context.Background())
+		testCtx, testCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer testCancel()
 
 		activityStartedSignal := make(chan bool) // Used by activity channel to signal the start so that the test can verify empty identity.
@@ -982,15 +991,27 @@ func TestActivityTestSuite(t *testing.T) {
 				},
 			})
 		}
-		<-activityStartedSignal // wait for the activity to start
+		select {
+		case <-activityStartedSignal: // wait for the activity to start
+		case <-testCtx.Done():
+			s.Fail("timed out waiting for activity to start")
+		}
 
 		// Verify that the worker identity is empty.
 		descRespBeforeHeartbeat, err := describeWorkflowExecution()
 		s.NoError(err)
 		s.Empty(descRespBeforeHeartbeat.PendingActivities[0].LastWorkerIdentity)
 
-		heartbeatSignalChan <- true // ask the activity to send a heartbeat.
-		<-heartbeatSignalChan       // wait for the heartbeat to be sent (to prevent the test from racing to describe the workflow before the heartbeat is sent)
+		select {
+		case heartbeatSignalChan <- true: // ask the activity to send a heartbeat.
+		case <-testCtx.Done():
+			s.Fail("timed out sending heartbeat signal")
+		}
+		select {
+		case <-heartbeatSignalChan: // wait for the heartbeat to be sent
+		case <-testCtx.Done():
+			s.Fail("timed out waiting for heartbeat to be sent")
+		}
 
 		// Verify that the worker identity is set now.
 		descRespAfterHeartbeat, err := describeWorkflowExecution()
@@ -998,8 +1019,16 @@ func TestActivityTestSuite(t *testing.T) {
 		s.Equal(workerIdentity, descRespAfterHeartbeat.PendingActivities[0].LastWorkerIdentity)
 
 		// unblock the activity task
-		endActivityTask <- true
-		<-activityDone
+		select {
+		case endActivityTask <- true:
+		case <-testCtx.Done():
+			s.Fail("timed out unblocking activity task")
+		}
+		select {
+		case <-activityDone:
+		case <-testCtx.Done():
+			s.Fail("timed out waiting for activity to complete")
+		}
 		s.True(activityPollErr == nil || errors.Is(activityPollErr, testcore.ErrNoTasks))
 
 		// ensure that the workflow is complete.
