@@ -693,7 +693,13 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildTerminated() 
 	// resetting the new workflow execution after child initiation.
 	resetRequest.RequestId = "reset-request-2"
 	resetRequest.WorkflowExecution.RunId = firstRun.GetRunID()
-	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIdAfterChildInit(ctx, wfID, firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
+	// Wait until the parent WFT that acknowledged ChildWorkflowExecutionStarted is in
+	// history; without this wait there is a race between seeing ChildWorkflowExecutionStarted
+	// and the worker completing that WFT, which returns 0 and causes reset to fail.
+	s.Eventually(func() bool {
+		resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIdAfterChildInit(ctx, wfID, firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
+		return resetRequest.WorkflowTaskFinishEventId != 0
+	}, 5*time.Second, 100*time.Millisecond)
 	resp, err := s.SdkClient().ResetWorkflowExecution(context.Background(), resetRequest)
 	s.NoError(err)
 
