@@ -1321,9 +1321,8 @@ func (d *ClientImpl) StartWorkerDeploymentVersion(
 	}
 
 	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
-	args := d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry)
+	args := d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED)
 	args.VersionState.ComputeConfig = computeConfig
-	args.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(args)
 	if err != nil {
 		return err
@@ -1497,7 +1496,7 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 	}
 
 	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
-	input, err := sdk.PreferProtoDataConverter.ToPayloads(d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry))
+	input, err := sdk.PreferProtoDataConverter.ToPayloads(d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE))
 	if err != nil {
 		return nil, err
 	}
@@ -1978,6 +1977,7 @@ func (d *ClientImpl) getSyncBatchSize() int32 {
 func (d *ClientImpl) makeVersionWorkflowArgs(
 	deploymentName, buildID string,
 	namespaceEntry *namespace.Namespace,
+	initialStatus enumspb.WorkerDeploymentVersionStatus,
 ) *deploymentspb.WorkerDeploymentVersionWorkflowArgs {
 	return &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
 		NamespaceName: namespaceEntry.Name().String(),
@@ -1995,6 +1995,7 @@ func (d *ClientImpl) makeVersionWorkflowArgs(
 			DrainageInfo:      &deploymentpb.VersionDrainageInfo{}, // not draining or drained
 			Metadata:          nil,
 			SyncBatchSize:     d.getSyncBatchSize(),
+			Status:            initialStatus,
 		},
 	}
 }

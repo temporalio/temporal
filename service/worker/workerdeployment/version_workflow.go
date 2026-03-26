@@ -186,6 +186,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	if d.VersionState.GetCreateTime() == nil {
 		d.VersionState.CreateTime = timestamppb.New(workflow.Now(ctx))
 	}
+	// TODO: remove this after next release because now the status should always be set at start.
 	if d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_UNSPECIFIED {
 		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
 	}
