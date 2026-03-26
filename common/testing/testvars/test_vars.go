@@ -282,20 +282,14 @@ func (tv *TestVars) DeploymentVersionTransition() *workflowpb.DeploymentVersionT
 	return ret
 }
 
-func (tv *TestVars) VersioningOverridePinned(useV32 bool) *workflowpb.VersioningOverride {
-	if useV32 {
-		return &workflowpb.VersioningOverride{
-			Override: &workflowpb.VersioningOverride_Pinned{
-				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  tv.ExternalDeploymentVersion(),
-				},
-			},
-		}
-	}
+func (tv *TestVars) VersioningOverridePinned() *workflowpb.VersioningOverride {
 	return &workflowpb.VersioningOverride{
-		Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-		PinnedVersion: tv.DeploymentVersionString(),
+		Override: &workflowpb.VersioningOverride_Pinned{
+			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				Version:  tv.ExternalDeploymentVersion(),
+			},
+		},
 	}
 }
 
