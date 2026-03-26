@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -23,16 +22,19 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-type DescribeTestSuite struct {
-	testcore.FunctionalTestBase
-}
-
 func TestDescribeTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(DescribeTestSuite))
+	t.Run("TestDescribeWorkflowExecution", func(t *testing.T) {
+		s := testcore.NewEnv(t)
+		describeTestDescribeWorkflowExecution(s)
+	})
+	t.Run("TestDescribeTaskQueue", func(t *testing.T) {
+		s := testcore.NewEnv(t)
+		describeTestDescribeTaskQueue(s)
+	})
 }
 
-func (s *DescribeTestSuite) TestDescribeWorkflowExecution() {
+func describeTestDescribeWorkflowExecution(s *testcore.TestEnv) {
 	id := "functional-describe-wfe-test"
 	wt := "functional-describe-wfe-test-type"
 	tq := "functional-describe-wfe-test-taskqueue"
@@ -189,7 +191,7 @@ func (s *DescribeTestSuite) TestDescribeWorkflowExecution() {
 	s.Equal(int64(11), wfInfo.HistoryLength) // WorkflowTaskStarted, WorkflowTaskCompleted, WorkflowCompleted
 }
 
-func (s *DescribeTestSuite) TestDescribeTaskQueue() {
+func describeTestDescribeTaskQueue(s *testcore.TestEnv) {
 	workflowID := "functional-get-poller-history"
 	wt := "functional-get-poller-history-type"
 	tl := "functional-get-poller-history-taskqueue"
