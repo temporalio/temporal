@@ -1282,10 +1282,11 @@ func (pm *taskQueuePartitionManagerImpl) emitZeroLogicalBacklogForQueue(version 
 	if !pm.config.BreakdownMetricsByTaskQueue() || !pm.config.BreakdownMetricsByPartition() {
 		return
 	}
+	deploymentName, buildID := parseDeploymentFromVersionKey(version.MetricsTagValue())
 	handler := pm.metricsHandler.WithTags(
 		metrics.WorkerVersionTag(version.MetricsTagValue(), pm.config.BreakdownMetricsByBuildID()),
-		metrics.WorkerDeploymentNameTag(version.Deployment().GetSeriesName(), pm.config.BreakdownMetricsByBuildID()),
-		metrics.WorkerDeploymentBuildIDTag(version.Deployment().GetBuildId(), pm.config.BreakdownMetricsByBuildID()),
+		metrics.WorkerDeploymentNameTag(deploymentName, pm.config.BreakdownMetricsByBuildID()),
+		metrics.WorkerDeploymentBuildIDTag(buildID, pm.config.BreakdownMetricsByBuildID()),
 	)
 	for pri := range pq.GetStatsByPriority(false) {
 		metrics.ApproximateBacklogCount.With(handler).Record(0, metrics.MatchingTaskPriorityTag(pri))
@@ -1297,7 +1298,7 @@ func (pm *taskQueuePartitionManagerImpl) emitZeroLogicalBacklogForQueue(version 
 // string used as the map key in DescribeTaskQueuePartitionResponse.VersionsInfoInternal.
 // The key format is "deploymentName:buildId" for V3 deployment-based versions, or empty for
 // unversioned queues. Returns empty strings when the delimiter is not found (unversioned or
-// V2 version-set keys), which the tag functions map to "__unversioned__".
+// V2 version-set keys).
 func parseDeploymentFromVersionKey(versionKey string) (deploymentName, buildID string) {
 	if name, id, found := strings.Cut(versionKey, worker_versioning.WorkerDeploymentVersionDelimiter); found {
 		return name, id
