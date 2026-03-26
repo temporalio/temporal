@@ -149,6 +149,7 @@ type (
 		visibilityManager             manager.VisibilityManager
 		nexusEndpointClient           *nexusEndpointClient
 		nexusEndpointsOwnershipLostCh chan struct{}
+		nexusEndpointsOwnershipMu     sync.RWMutex
 		saMapperProvider              searchattribute.MapperProvider
 		saProvider                    searchattribute.Provider
 		metricsHandler                metrics.Handler
@@ -2750,8 +2751,10 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 
 func (e *matchingEngineImpl) checkNexusEndpointsOwnership() (bool, <-chan struct{}, error) {
 	// Get the channel before checking the condition to prevent the channel from being closed while we're running this
-	// check.
+	// check. Use the lock to protect the read, as notifyNexusEndpointsOwnershipChange may concurrently replace it.
+	e.nexusEndpointsOwnershipMu.RLock()
 	ch := e.nexusEndpointsOwnershipLostCh
+	e.nexusEndpointsOwnershipMu.RUnlock()
 	self := e.hostInfoProvider.HostInfo().Identity()
 	owner, err := e.serviceResolver.Lookup(nexusEndpointsTablePartitionRoutingKey)
 	if err != nil {
@@ -2769,8 +2772,10 @@ func (e *matchingEngineImpl) notifyNexusEndpointsOwnershipChange() {
 		return
 	}
 	if !isOwner {
+		e.nexusEndpointsOwnershipMu.Lock()
 		close(e.nexusEndpointsOwnershipLostCh)
 		e.nexusEndpointsOwnershipLostCh = make(chan struct{})
+		e.nexusEndpointsOwnershipMu.Unlock()
 	}
 	e.nexusEndpointClient.notifyOwnershipChanged(isOwner)
 }
