@@ -446,26 +446,12 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	create bool,
 	loadCause loadCause,
 ) (retPM taskQueuePartitionManager, retCreated bool, retErr error) {
-	var newPM *taskQueuePartitionManagerImpl
-
 	defer func() {
 		if retErr != nil || retPM == nil {
 			return
 		}
-
 		if retErr = retPM.WaitUntilInitialized(ctx); retErr != nil {
 			e.unloadTaskQueuePartition(retPM, unloadCauseInitError)
-			return
-		}
-
-		if retCreated {
-			// Whenever a root partition is loaded, we need to force all child partitions to load.
-			// If there is a backlog of tasks on any child partitions, force loading will ensure
-			// that they can forward their tasks the poller which caused the root partition to be
-			// loaded. These partitions could be managed by this matchingEngineImpl, but are most
-			// likely not. We skip checking and just make gRPC requests to force loading them all.
-			// Note that if retCreated is true, retPM must be newPM, so we can use newPM here.
-			newPM.ForceLoadAllChildPartitions()
 		}
 	}()
 
@@ -486,6 +472,7 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		return nil, false, err
 	}
 
+	var newPM *taskQueuePartitionManagerImpl
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, namespaceEntry.Name())
 	tqConfig.loadCause = loadCause
 	logger, throttledLogger, metricsHandler := e.loggerAndMetricsForPartition(namespaceEntry, partition, tqConfig)
@@ -3617,6 +3604,10 @@ func (e *matchingEngineImpl) UpdateFairnessState(
 		return nil, err
 	}
 	return &matchingservice.UpdateFairnessStateResponse{}, nil
+}
+
+func (e *matchingEngineImpl) newTaskTracker() *taskTracker {
+	return newTaskTracker(e.timeSource, 5*time.Second, 30*time.Second)
 }
 
 // migrateOldFormatVersions moves versions present in the given deployment from the

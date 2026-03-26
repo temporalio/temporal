@@ -88,7 +88,12 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Pull, tag, and push image
+      - name: Install crane
+        run: |
+          curl -sL https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_x86_64.tar.gz | tar xz crane
+          sudo mv crane /usr/local/bin/
+
+      - name: Promote image
         uses: actions/github-script@v8
         env:
           SOURCE_TAG: ${{ needs.validate-inputs.outputs.source-tag-safe }}
@@ -100,23 +105,16 @@ jobs:
             const sourceTag = process.env.SOURCE_TAG;
             const targetTags = JSON.parse(process.env.TARGET_TAGS);
             const imageName = process.env.IMAGE_NAME;
+            const source = `temporaliotest/${imageName}:${sourceTag}`;
 
             core.info(`Promoting ${imageName} image...`);
-            core.info(`  From: temporaliotest/${imageName}:${sourceTag}`);
+            core.info(`  From: ${source}`);
             core.info(`  To: ${targetTags.map(t => `temporalio/${imageName}:${t}`).join(', ')}`);
 
-            // Pull from test registry
-            core.info('Pulling source image...');
-            execSync(`docker pull temporaliotest/${imageName}:${sourceTag}`, { stdio: 'inherit' });
-
-            // Tag for each target tag
-            for (const targetTag of targetTags) {
-              core.info(`Tagging as temporalio/${imageName}:${targetTag}`);
-              execSync(`docker tag temporaliotest/${imageName}:${sourceTag} temporalio/${imageName}:${targetTag}`, { stdio: 'inherit' });
+            for (const tag of targetTags) {
+              const target = `temporalio/${imageName}:${tag}`;
+              core.info(`Copying ${source} -> ${target}`);
+              execSync(`crane copy ${source} ${target}`, { stdio: 'inherit' });
             }
 
-            // Push all tags at once
-            core.info('Pushing all tags to production registry...');
-            execSync(`docker push --all-tags temporalio/${imageName}`, { stdio: 'inherit' });
-
-            core.info(`✓ ${imageName} image promoted successfully to all tags`);
+            core.info(`${imageName} image promoted successfully to all tags`);

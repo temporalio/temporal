@@ -20,8 +20,8 @@ import (
 type HTTPCaller func(*http.Request) (*http.Response, error)
 type HTTPCallerProvider func(common.NamespaceIDAndDestination) HTTPCaller
 
-func NewInvocationTaskExecutor(opts InvocationTaskExecutorOptions) *InvocationTaskExecutor {
-	return &InvocationTaskExecutor{
+func NewInvocationTaskHandler(opts InvocationTaskHandlerOptions) *InvocationTaskHandler {
+	return &InvocationTaskHandler{
 		config:             opts.Config,
 		namespaceRegistry:  opts.NamespaceRegistry,
 		metricsHandler:     opts.MetricsHandler,
@@ -32,7 +32,7 @@ func NewInvocationTaskExecutor(opts InvocationTaskExecutorOptions) *InvocationTa
 	}
 }
 
-type InvocationTaskExecutorOptions struct {
+type InvocationTaskHandlerOptions struct {
 	fx.In
 
 	Config             *Config
@@ -44,7 +44,8 @@ type InvocationTaskExecutorOptions struct {
 	HistoryClient      resource.HistoryClient
 }
 
-type InvocationTaskExecutor struct {
+type InvocationTaskHandler struct {
+	chasm.SideEffectTaskHandlerBase[*callbackspb.InvocationTask]
 	config             *Config
 	namespaceRegistry  namespace.Registry
 	metricsHandler     metrics.Handler
@@ -54,15 +55,15 @@ type InvocationTaskExecutor struct {
 	historyClient      resource.HistoryClient
 }
 
-func (e InvocationTaskExecutor) Execute(ctx context.Context, ref chasm.ComponentRef, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) error {
-	return e.Invoke(ctx, ref, attrs, task)
+func (h InvocationTaskHandler) Execute(ctx context.Context, ref chasm.ComponentRef, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) error {
+	return h.Invoke(ctx, ref, attrs, task)
 }
 
-func (e InvocationTaskExecutor) Validate(ctx chasm.Context, cb *Callback, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) (bool, error) {
+func (h InvocationTaskHandler) Validate(ctx chasm.Context, cb *Callback, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) (bool, error) {
 	return cb.Attempt == task.Attempt && cb.Status == callbackspb.CALLBACK_STATUS_SCHEDULED, nil
 }
 
-// invocationResult is a marker for the callbackInvokable.Invoke result to indicate to the executor how to handle the
+// invocationResult is a marker for the callbackInvokable.Invoke result to indicate to the handler how to handle the
 // invocation outcome.
 type invocationResult interface {
 	// A marker for all possible implementations.
@@ -103,19 +104,19 @@ func (r invocationResultRetry) error() error {
 
 type callbackInvokable interface {
 	// Invoke executes the callback logic and returns the invocation result.
-	Invoke(ctx context.Context, ns *namespace.Namespace, e InvocationTaskExecutor, task *callbackspb.InvocationTask, taskAttr chasm.TaskAttributes) invocationResult
-	// WrapError provides each variant the opportunity to wrap the error returned by the task executor for, e.g. to
+	Invoke(ctx context.Context, ns *namespace.Namespace, h InvocationTaskHandler, task *callbackspb.InvocationTask, taskAttr chasm.TaskAttributes) invocationResult
+	// WrapError provides each variant the opportunity to wrap the error returned by the task handler for, e.g. to
 	// trigger the circuit breaker.
 	WrapError(result invocationResult, err error) error
 }
 
-func (e InvocationTaskExecutor) Invoke(
+func (h InvocationTaskHandler) Invoke(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	taskAttr chasm.TaskAttributes,
 	task *callbackspb.InvocationTask,
 ) error {
-	ns, err := e.namespaceRegistry.GetNamespaceByID(namespace.ID(ref.NamespaceID))
+	ns, err := h.namespaceRegistry.GetNamespaceByID(namespace.ID(ref.NamespaceID))
 	if err != nil {
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
@@ -132,30 +133,31 @@ func (e InvocationTaskExecutor) Invoke(
 
 	callCtx, cancel := context.WithTimeout(
 		ctx,
-		e.config.RequestTimeout(ns.Name().String(), taskAttr.Destination),
+		h.config.RequestTimeout(ns.Name().String(), taskAttr.Destination),
 	)
 	defer cancel()
 
-	result := invokable.Invoke(callCtx, ns, e, task, taskAttr)
+	result := invokable.Invoke(callCtx, ns, h, task, taskAttr)
 	_, _, saveErr := chasm.UpdateComponent(
 		ctx,
 		ref,
 		(*Callback).saveResult,
 		saveResultInput{
 			result:      result,
-			retryPolicy: e.config.RetryPolicy(),
+			retryPolicy: h.config.RetryPolicy(),
 		},
 	)
 	return invokable.WrapError(result, saveErr)
 }
 
-type BackoffTaskExecutor struct {
+type BackoffTaskHandler struct {
+	chasm.PureTaskHandlerBase
 	config         *Config
 	metricsHandler metrics.Handler
 	logger         log.Logger
 }
 
-type BackoffTaskExecutorOptions struct {
+type BackoffTaskHandlerOptions struct {
 	fx.In
 
 	Config         *Config
@@ -163,8 +165,8 @@ type BackoffTaskExecutorOptions struct {
 	Logger         log.Logger
 }
 
-func NewBackoffTaskExecutor(opts BackoffTaskExecutorOptions) *BackoffTaskExecutor {
-	return &BackoffTaskExecutor{
+func NewBackoffTaskHandler(opts BackoffTaskHandlerOptions) *BackoffTaskHandler {
+	return &BackoffTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
 		logger:         opts.Logger,
@@ -173,7 +175,7 @@ func NewBackoffTaskExecutor(opts BackoffTaskExecutorOptions) *BackoffTaskExecuto
 
 // Execute transitions the callback from BACKING_OFF to SCHEDULED state
 // and generates an InvocationTask for the next attempt.
-func (e *BackoffTaskExecutor) Execute(
+func (h *BackoffTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	callback *Callback,
 	taskAttrs chasm.TaskAttributes,
@@ -182,7 +184,7 @@ func (e *BackoffTaskExecutor) Execute(
 	return TransitionRescheduled.Apply(callback, ctx, EventRescheduled{})
 }
 
-func (e *BackoffTaskExecutor) Validate(
+func (h *BackoffTaskHandler) Validate(
 	ctx chasm.Context,
 	callback *Callback,
 	taskAttr chasm.TaskAttributes,
