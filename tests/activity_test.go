@@ -695,11 +695,12 @@ func TestActivityTestSuite(t *testing.T) {
 		_, err := poller.PollAndProcessWorkflowTask()
 		s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
+		var signalErr, cancelWtErr error
 		cancelCh := make(chan struct{})
 		go func() {
 			s.Logger.Info("Trying to cancel the task in a different thread")
 			// Send signal so that worker can send an activity cancel
-			_, err1 := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+			_, signalErr = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 				Namespace: s.Namespace().String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: id,
@@ -709,12 +710,10 @@ func TestActivityTestSuite(t *testing.T) {
 				Input:      nil,
 				Identity:   identity,
 			})
-			assert.NoError(s.T(), err1)
 
 			scheduleActivity = false
 			requestCancellation = true
-			_, err2 := poller.PollAndProcessWorkflowTask()
-			assert.NoError(s.T(), err2)
+			_, cancelWtErr = poller.PollAndProcessWorkflowTask()
 			close(cancelCh)
 		}()
 
@@ -724,6 +723,8 @@ func TestActivityTestSuite(t *testing.T) {
 
 		s.Logger.Info("Waiting for cancel to complete.", tag.WorkflowRunID(we.RunId))
 		<-cancelCh
+		s.NoError(signalErr)
+		s.NoError(cancelWtErr)
 		s.True(activityCanceled, "Activity was not cancelled.")
 		s.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.RunId))
 	})
@@ -912,12 +913,23 @@ func TestActivityTestSuite(t *testing.T) {
 			panic("Unexpected workflow state")
 		}
 
+		testCtx, testCancel := context.WithCancel(context.Background())
+		defer testCancel()
+
 		activityStartedSignal := make(chan bool) // Used by activity channel to signal the start so that the test can verify empty identity.
 		heartbeatSignalChan := make(chan bool)   // Activity task sends heartbeat when signaled on this chan. It also signals back on the same chan after sending the heartbeat.
 		endActivityTask := make(chan bool)       // Activity task completes when signaled on this chan. This is to force the task to be in pending state.
 		atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-			activityStartedSignal <- true // signal the start of activity task.
-			<-heartbeatSignalChan         // wait for signal before sending heartbeat.
+			select {
+			case activityStartedSignal <- true: // signal the start of activity task.
+			case <-testCtx.Done():
+				return nil, false, testCtx.Err()
+			}
+			select {
+			case <-heartbeatSignalChan: // wait for signal before sending heartbeat.
+			case <-testCtx.Done():
+				return nil, false, testCtx.Err()
+			}
 			_, err := s.FrontendClient().RecordActivityTaskHeartbeat(testcore.NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 				Namespace: s.Namespace().String(),
 				TaskToken: task.TaskToken,
@@ -925,9 +937,16 @@ func TestActivityTestSuite(t *testing.T) {
 				Identity:  workerIdentity, // explicitly set the worker identity in the heartbeat request
 			})
 			s.NoError(err)
-			heartbeatSignalChan <- true // signal that the heartbeat is sent.
-
-			<-endActivityTask // wait for signal before completing the task
+			select {
+			case heartbeatSignalChan <- true: // signal that the heartbeat is sent.
+			case <-testCtx.Done():
+				return nil, false, testCtx.Err()
+			}
+			select {
+			case <-endActivityTask: // wait for signal before completing the task
+			case <-testCtx.Done():
+				return nil, false, testCtx.Err()
+			}
 			return payloads.EncodeString("Activity Result"), false, nil
 		}
 
@@ -947,9 +966,11 @@ func TestActivityTestSuite(t *testing.T) {
 		s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
 		// execute activity task which waits for signal before sending heartbeat.
+		var activityPollErr error
+		activityDone := make(chan struct{})
 		go func() {
-			err := poller.PollAndProcessActivityTask(false)
-			s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
+			activityPollErr = poller.PollAndProcessActivityTask(false)
+			close(activityDone)
 		}()
 
 		describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
@@ -978,6 +999,8 @@ func TestActivityTestSuite(t *testing.T) {
 
 		// unblock the activity task
 		endActivityTask <- true
+		<-activityDone
+		s.True(activityPollErr == nil || errors.Is(activityPollErr, testcore.ErrNoTasks))
 
 		// ensure that the workflow is complete.
 		_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
@@ -1407,6 +1430,7 @@ func TestActivityClientTestSuite(t *testing.T) {
 			case 1:
 				time.Sleep(activityTimeout / 2)     //nolint:forbidigo
 				err = errors.New("retryable-error") //nolint:err113
+			default:
 			}
 
 			if activityExecutedCount > 0 {
