@@ -145,6 +145,10 @@ var (
 		"PauseActivity":                         {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"UnpauseActivity":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"ResetActivity":                         {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
+		"PauseActivityExecution":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
+		"UnpauseActivityExecution":              {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
+		"ResetActivityExecution":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
+		"UpdateActivityExecutionOptions":        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"UpdateWorkflowExecutionOptions":        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"DescribeDeployment":                    {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone}, // [cleanup-wv-pre-release]
 		"ListDeployments":                       {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone}, // [cleanup-wv-pre-release]
