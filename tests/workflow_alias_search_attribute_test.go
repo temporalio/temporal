@@ -104,7 +104,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
 		WorkflowType:       tv.WorkflowType(),
 		TaskQueue:          tv.TaskQueue(),
 		Identity:           tv.WorkerIdentity(),
-		VersioningOverride: tv.VersioningOverridePinned(true),
+		VersioningOverride: tv.VersioningOverridePinned(),
 		SearchAttributes:   sa,
 	}
 	return s.FrontendClient().StartWorkflowExecution(ctx, request)

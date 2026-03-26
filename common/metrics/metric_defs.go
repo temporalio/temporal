@@ -666,6 +666,7 @@ var (
 	TlsCertsExpired                          = NewGaugeDef("certificates_expired")
 	TlsCertsExpiring                         = NewGaugeDef("certificates_expiring")
 	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
+	NamespaceRateLimitWaitLatency            = NewTimerDef("namespace_rate_limit_poll_wait_latency")
 	EventBlobSize                            = NewBytesHistogramDef("event_blob_size")
 	BlobSizeError                            = NewCounterDef(
 		"blob_size_error",
@@ -1108,8 +1109,12 @@ var (
 	ExecutionQueueSchedulerTaskLatency    = NewTimerDef("execution_queue_scheduler_task_latency")
 	ExecutionQueueSchedulerQueueWaitTime  = NewTimerDef("execution_queue_scheduler_queue_wait_time")
 
-	PausedActivitiesCounter   = NewCounterDef("paused_activities")
-	ExternalPayloadUploadSize = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
+	PausedActivitiesCounter       = NewCounterDef("paused_activities")
+	ActivityPauseRequests         = NewCounterDef("activity_pause_requests")
+	ActivityUnpauseRequests       = NewCounterDef("activity_unpause_requests")
+	ActivityResetRequests         = NewCounterDef("activity_reset_requests")
+	ActivityUpdateOptionsRequests = NewCounterDef("activity_update_options_requests")
+	ExternalPayloadUploadSize     = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
 
 	// Deadlock detector metrics
 	DDSuspectedDeadlocks                 = NewCounterDef("dd_suspected_deadlocks")

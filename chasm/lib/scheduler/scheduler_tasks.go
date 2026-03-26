@@ -21,23 +21,24 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type SchedulerIdleTaskExecutorOptions struct {
+type SchedulerIdleTaskHandlerOptions struct {
 	fx.In
 
 	Config *Config
 }
 
-type SchedulerIdleTaskExecutor struct {
+type SchedulerIdleTaskHandler struct {
+	chasm.PureTaskHandlerBase
 	config *Config
 }
 
-func NewSchedulerIdleTaskExecutor(opts SchedulerIdleTaskExecutorOptions) *SchedulerIdleTaskExecutor {
-	return &SchedulerIdleTaskExecutor{
+func NewSchedulerIdleTaskHandler(opts SchedulerIdleTaskHandlerOptions) *SchedulerIdleTaskHandler {
+	return &SchedulerIdleTaskHandler{
 		config: opts.Config,
 	}
 }
 
-func (r *SchedulerIdleTaskExecutor) Execute(
+func (r *SchedulerIdleTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	scheduler *Scheduler,
 	_ chasm.TaskAttributes,
@@ -47,7 +48,7 @@ func (r *SchedulerIdleTaskExecutor) Execute(
 	return nil
 }
 
-func (r *SchedulerIdleTaskExecutor) Validate(
+func (r *SchedulerIdleTaskHandler) Validate(
 	ctx chasm.Context,
 	scheduler *Scheduler,
 	taskAttrs chasm.TaskAttributes,
@@ -65,7 +66,7 @@ func (r *SchedulerIdleTaskExecutor) Validate(
 	return !scheduler.Closed, nil
 }
 
-type SchedulerCallbacksTaskExecutorOptions struct {
+type SchedulerCallbacksTaskHandlerOptions struct {
 	fx.In
 
 	Config         *Config
@@ -73,14 +74,15 @@ type SchedulerCallbacksTaskExecutorOptions struct {
 	FrontendClient workflowservice.WorkflowServiceClient
 }
 
-type SchedulerCallbacksTaskExecutor struct {
+type SchedulerCallbacksTaskHandler struct {
+	chasm.SideEffectTaskHandlerBase[*schedulerpb.SchedulerCallbacksTask]
 	config         *Config
 	historyClient  resource.HistoryClient
 	frontendClient workflowservice.WorkflowServiceClient
 }
 
-func NewSchedulerCallbacksTaskExecutor(opts SchedulerCallbacksTaskExecutorOptions) *SchedulerCallbacksTaskExecutor {
-	return &SchedulerCallbacksTaskExecutor{
+func NewSchedulerCallbacksTaskHandler(opts SchedulerCallbacksTaskHandlerOptions) *SchedulerCallbacksTaskHandler {
+	return &SchedulerCallbacksTaskHandler{
 		config:         opts.Config,
 		historyClient:  opts.HistoryClient,
 		frontendClient: opts.FrontendClient,
@@ -94,7 +96,7 @@ type watchResult struct {
 	completed *schedulespb.CompletedResult
 }
 
-func (r *SchedulerCallbacksTaskExecutor) Execute(
+func (r *SchedulerCallbacksTaskHandler) Execute(
 	ctx context.Context,
 	schedulerRef chasm.ComponentRef,
 	_ chasm.TaskAttributes,
@@ -172,7 +174,7 @@ func (r *SchedulerCallbacksTaskExecutor) Execute(
 // watchRunningStart will attach a Nexus completion callback to a running
 // BufferedStart. If the start's workflow has already closed, the start is updated
 // to indicate it has completed. Intended for migration/anti-entropy cases.
-func (r *SchedulerCallbacksTaskExecutor) watchRunningStart(
+func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 	ctx context.Context,
 	scheduler *Scheduler,
 	start *schedulespb.BufferedStart,
@@ -254,7 +256,7 @@ func (r *SchedulerCallbacksTaskExecutor) watchRunningStart(
 	return &watchResult{}, nil
 }
 
-func (r *SchedulerCallbacksTaskExecutor) Validate(
+func (r *SchedulerCallbacksTaskHandler) Validate(
 	ctx chasm.Context,
 	scheduler *Scheduler,
 	taskAttrs chasm.TaskAttributes,

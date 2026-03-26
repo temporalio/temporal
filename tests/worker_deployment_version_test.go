@@ -65,12 +65,7 @@ var (
 	testRandomMetadataValue = []byte("random metadata value")
 )
 
-func TestDeploymentVersionSuiteV0(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.InitialVersion, useV32: true})
-}
-
-func TestDeploymentVersionSuiteV2(t *testing.T) {
+func TestDeploymentVersionSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber, useV32: true})
 }
@@ -1095,7 +1090,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetCurrentV
 	pollerCancel1()
 
 	// Start a workflow on task_queue_1 to increase the add rate
-	s.startWorkflow(tv1, tv1.VersioningOverridePinned(s.useV32))
+	s.startWorkflow(tv1, tv1.VersioningOverridePinned())
 
 	// SetCurrent tv2
 	err = s.setCurrent(tv2, false)
@@ -1153,7 +1148,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetRampingV
 	pollerCancel1()
 
 	// Start a workflow on task_queue_1 to increase the add rate
-	s.startWorkflow(tv1, tv1.VersioningOverridePinned(s.useV32))
+	s.startWorkflow(tv1, tv1.VersioningOverridePinned())
 
 	// SetRampingVersion to tv2
 	err = s.setRamping(tv2, 0)
