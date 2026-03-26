@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -18,16 +17,19 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-type StickyTqTestSuite struct {
-	testcore.FunctionalTestBase
-}
-
 func TestStickyTqTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(StickyTqTestSuite))
+	t.Run("TestStickyTimeout_NonTransientWorkflowTask", func(t *testing.T) {
+		s := testcore.NewEnv(t)
+		stickyTqTestStickyTimeout_NonTransientWorkflowTask(s)
+	})
+	t.Run("TestStickyTaskqueueResetThenTimeout", func(t *testing.T) {
+		s := testcore.NewEnv(t)
+		stickyTqTestStickyTaskqueueResetThenTimeout(s)
+	})
 }
 
-func (s *StickyTqTestSuite) TestStickyTimeout_NonTransientWorkflowTask() {
+func stickyTqTestStickyTimeout_NonTransientWorkflowTask(s *testcore.TestEnv) {
 	id := "functional-sticky-timeout-non-transient-workflow-task"
 	wt := "functional-sticky-timeout-non-transient-command-type"
 	tl := "functional-sticky-timeout-non-transient-workflow-taskqueue"
@@ -223,7 +225,7 @@ WaitForStickyTimeoutLoop:
  19 WorkflowExecutionCompleted // Workflow has completed`, events)
 }
 
-func (s *StickyTqTestSuite) TestStickyTaskqueueResetThenTimeout() {
+func stickyTqTestStickyTaskqueueResetThenTimeout(s *testcore.TestEnv) {
 	id := "functional-reset-sticky-fire-schedule-to-start-timeout"
 	wt := "functional-reset-sticky-fire-schedule-to-start-timeout-type"
 	tl := "functional-reset-sticky-fire-schedule-to-start-timeout-taskqueue"
@@ -334,7 +336,7 @@ WaitForStickyTimeoutLoop:
   5 MarkerRecorded
   6 WorkflowExecutionSignaled
   7 WorkflowTaskScheduled
-  8 WorkflowTaskTimedOut {"TimeoutType":2} // enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START 
+  8 WorkflowTaskTimedOut {"TimeoutType":2} // enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START
   9 WorkflowTaskScheduled`, events)
 				stickyTimeout = true
 				break WaitForStickyTimeoutLoop
