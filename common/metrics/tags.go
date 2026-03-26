@@ -193,19 +193,15 @@ func WorkerVersionTag(version string, versionBreakdown bool) Tag {
 }
 
 func WorkerDeploymentNameTag(deploymentName string, versionBreakdown bool) Tag {
-	if deploymentName == "" {
-		deploymentName = "__unversioned__"
-	} else if !versionBreakdown {
-		deploymentName = "__versioned__"
+	if !versionBreakdown {
+		deploymentName = ""
 	}
 	return Tag{Key: workerDeploymentName, Value: deploymentName}
 }
 
 func WorkerDeploymentBuildIDTag(buildID string, versionBreakdown bool) Tag {
-	if buildID == "" {
-		buildID = "__unversioned__"
-	} else if !versionBreakdown {
-		buildID = "__versioned__"
+	if !versionBreakdown {
+		buildID = ""
 	}
 	return Tag{Key: workerDeploymentBuildID, Value: buildID}
 }
