@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestScheduleMigrationV2AlreadyExists(t *testing.T) {
@@ -753,4 +754,142 @@ func TestCHASMScheduleDescribeAfterDisablingCreationAndMigration(t *testing.T) {
 		}
 		return false
 	}, 10*time.Second, 200*time.Millisecond)
+}
+
+// TestScheduleMigrationV2ToV1RoutingFallback verifies that after migrating a
+// CHASM schedule to V1, frontend operations with CHASM routing enabled fall
+// through to the V1 workflow stack when the CHASM scheduler returns ErrClosed.
+func TestScheduleMigrationV2ToV1RoutingFallback(t *testing.T) {
+	env := testcore.NewEnv(
+		t,
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
+	)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sched-v2-to-v1-routing")
+	wid := testcore.RandomizeStr("sched-v2-to-v1-routing-wf")
+	wt := testcore.RandomizeStr("sched-v2-to-v1-routing-wt")
+	tq := testcore.RandomizeStr("tq")
+
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+	sched := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	// Create CHASM schedule directly.
+	_, err := env.GetTestCluster().SchedulerClient().CreateSchedule(
+		ctx,
+		&schedulerpb.CreateScheduleRequest{
+			NamespaceId: nsID,
+			FrontendRequest: &workflowservice.CreateScheduleRequest{
+				Namespace:  nsName,
+				ScheduleId: sid,
+				Schedule:   sched,
+				Identity:   "test",
+				RequestId:  testcore.RandomizeStr("request-id"),
+			},
+		},
+	)
+	require.NoError(t, err)
+
+	// Migrate from V2 (CHASM) to V1 (workflow).
+	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+		Identity:   "test",
+		RequestId:  testcore.RandomizeStr("request-id"),
+	})
+	require.NoError(t, err)
+
+	// Wait for the CHASM scheduler to be closed after migration.
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	require.Eventually(t, func() bool {
+		_, chasmErr := env.GetTestCluster().SchedulerClient().DescribeSchedule(
+			ctx,
+			&schedulerpb.DescribeScheduleRequest{
+				NamespaceId:     nsID,
+				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+			},
+		)
+		return errors.As(chasmErr, &failedPreconditionErr)
+	}, 10*time.Second, 500*time.Millisecond)
+
+	// Wait for the V1 workflow to be running and query handlers registered.
+	require.Eventually(t, func() bool {
+		_, descErr := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  nsName,
+			ScheduleId: sid,
+		})
+		return descErr == nil
+	}, 30*time.Second, 500*time.Millisecond)
+
+	// With CHASM routing still enabled, DescribeSchedule through the frontend
+	// should succeed by falling through from the closed CHASM schedule to V1.
+	descResp, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, descResp.GetSchedule())
+	require.Equal(t, wt, descResp.GetSchedule().GetAction().GetStartWorkflow().GetWorkflowType().GetName())
+	// The schedule was created unpaused; migration should preserve that state
+	// (not the temporary migration-imposed pause).
+	require.False(t, descResp.GetSchedule().GetState().GetPaused())
+
+	// ListScheduleMatchingTimes should also fall through to V1.
+	now := time.Now().UTC()
+	matchResp, err := env.FrontendClient().ListScheduleMatchingTimes(ctx, &workflowservice.ListScheduleMatchingTimesRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		StartTime:  timestamppb.New(now),
+		EndTime:    timestamppb.New(now.Add(5 * time.Hour)),
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, matchResp.GetStartTime())
+
+	// PatchSchedule (pause) should also fall through to V1.
+	_, err = env.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Patch: &schedulepb.SchedulePatch{
+			Pause: "pausing via routing fallback test",
+		},
+		Identity: "test",
+	})
+	require.NoError(t, err)
+
+	// Verify the pause took effect on V1. The patch is delivered as a signal,
+	// so the workflow needs time to process it.
+	require.Eventually(t, func() bool {
+		descResp, err = env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  nsName,
+			ScheduleId: sid,
+		})
+		return err == nil && descResp.GetSchedule().GetState().GetPaused()
+	}, 10*time.Second, 500*time.Millisecond)
+
+	// DeleteSchedule should also fall through to V1.
+	_, err = env.FrontendClient().DeleteSchedule(ctx, &workflowservice.DeleteScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Identity:   "test",
+	})
+	require.NoError(t, err)
 }

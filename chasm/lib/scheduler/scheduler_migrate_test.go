@@ -141,6 +141,84 @@ func TestPatch_PauseAllowedDuringMigration(t *testing.T) {
 	require.True(t, sched.Schedule.State.Paused)
 }
 
+func TestDescribe_ClosedReturnsErrClosed(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+	sched.Closed = true
+
+	_, err := sched.Describe(ctx, &schedulerpb.DescribeScheduleRequest{
+		NamespaceId:     namespaceID,
+		FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: namespace, ScheduleId: scheduleID},
+	}, nil)
+
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPreconditionErr)
+	require.ErrorIs(t, err, scheduler.ErrClosed)
+}
+
+func TestListMatchingTimes_ClosedReturnsErrClosed(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+	sched.Closed = true
+
+	_, err := sched.ListMatchingTimes(ctx, &schedulerpb.ListScheduleMatchingTimesRequest{
+		NamespaceId:     namespaceID,
+		FrontendRequest: &workflowservice.ListScheduleMatchingTimesRequest{Namespace: namespace, ScheduleId: scheduleID},
+	}, nil)
+
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPreconditionErr)
+	require.ErrorIs(t, err, scheduler.ErrClosed)
+}
+
+func TestUpdate_ClosedReturnsErrClosed(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+	sched.Closed = true
+
+	_, err := sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.UpdateScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+			Schedule:   defaultSchedule(),
+		},
+	})
+
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPreconditionErr)
+	require.ErrorIs(t, err, scheduler.ErrClosed)
+}
+
+func TestPatch_ClosedReturnsErrClosed(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+	sched.Closed = true
+
+	_, err := sched.Patch(ctx, &schedulerpb.PatchScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.PatchScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+			Patch:      &schedulepb.SchedulePatch{Pause: "test"},
+		},
+	})
+
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPreconditionErr)
+	require.ErrorIs(t, err, scheduler.ErrClosed)
+}
+
+func TestMigrateToWorkflow_ClosedReturnsErrClosed(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+	sched.Closed = true
+
+	_, err := sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
+		NamespaceId: namespaceID,
+		ScheduleId:  scheduleID,
+	})
+
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPreconditionErr)
+	require.ErrorIs(t, err, scheduler.ErrClosed)
+}
+
 func TestUpdate_RejectedDuringMigration(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
 
