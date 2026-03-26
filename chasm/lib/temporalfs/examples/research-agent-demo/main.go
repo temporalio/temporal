@@ -39,7 +39,7 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Fprintf(os.Stderr, `TemporalFS Research Agent Demo
+	fmt.Fprintf(os.Stderr, `TemporalZFS Research Agent Demo
 
 Usage:
   research-agent-demo <command> [flags]

@@ -7,7 +7,7 @@ import (
 
 var _ chasm.RootComponent = (*Filesystem)(nil)
 
-// Filesystem is the root CHASM component for the TemporalFS archetype.
+// Filesystem is the root CHASM component for the TemporalZFS archetype.
 // FS layer data (inodes, chunks, directory entries) is stored in a dedicated
 // store managed by FSStoreProvider, not as CHASM Fields. Only FS metadata
 // (config, stats, lifecycle) lives in CHASM state.

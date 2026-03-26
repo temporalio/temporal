@@ -26,7 +26,7 @@ type PebbleStoreProvider struct {
 }
 
 // NewPebbleStoreProvider creates a new PebbleStoreProvider.
-// dataDir is the root directory for TemporalFS PebbleDB data.
+// dataDir is the root directory for TemporalZFS PebbleDB data.
 func NewPebbleStoreProvider(dataDir string, logger log.Logger) *PebbleStoreProvider {
 	return &PebbleStoreProvider{
 		dataDir: dataDir,

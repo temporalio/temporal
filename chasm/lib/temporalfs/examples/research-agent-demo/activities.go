@@ -13,7 +13,7 @@ import (
 )
 
 // Activities holds the shared store and implements the 5 research agent activities.
-// Each activity opens an isolated TemporalFS partition, verifies that all files from
+// Each activity opens an isolated TemporalZFS partition, verifies that all files from
 // the previous step survived (demonstrating durability), writes new files, and creates
 // an MVCC snapshot. On retry, the FS state is intact — no intermediate state is lost.
 type Activities struct {
@@ -165,7 +165,7 @@ func (a *Activities) Summarize(ctx context.Context, params WorkflowParams) (Step
 		return StepResult{}, fmt.Errorf("readdir %s: %w", sourcesDir, err)
 	}
 
-	// On retry: step 1's source files are still here — TemporalFS is durable.
+	// On retry: step 1's source files are still here — TemporalZFS is durable.
 	if activity.GetInfo(ctx).Attempt > 1 {
 		a.emitEvent(ctx, params, 1, "Summarize", "retrying")
 		a.onRetry(ctx, len(entries), "step-1-research")

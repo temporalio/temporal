@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# TemporalFS Research Agent Demo — end-to-end runner
+# TemporalZFS Research Agent Demo — end-to-end runner
 # Usage: ./run-demo.sh [--workflows N] [--concurrency N] [--failure-rate F] [--seed S]
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

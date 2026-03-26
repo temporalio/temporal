@@ -12,7 +12,7 @@ var (
 	Enabled = dynamicconfig.NewNamespaceBoolSetting(
 		"temporalfs.enabled",
 		false,
-		`Toggles TemporalFS functionality on the server.`,
+		`Toggles TemporalZFS functionality on the server.`,
 	)
 )
 

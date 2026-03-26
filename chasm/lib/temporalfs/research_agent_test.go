@@ -1,8 +1,8 @@
 package temporalfs
 
 // TestResearchAgent_HandlerLevel demonstrates a multi-step AI research agent
-// through the TemporalFS gRPC handler API, mirroring how a Temporal activity
-// would interact with TemporalFS in an OSS deployment.
+// through the TemporalZFS gRPC handler API, mirroring how a Temporal activity
+// would interact with TemporalZFS in an OSS deployment.
 //
 // Scenario: An AI agent researches "Quantum Computing" in 3 iterations:
 //

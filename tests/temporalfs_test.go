@@ -1,20 +1,20 @@
 package tests
 
-// TestTemporalFS_ResearchAgent exercises TemporalFS through a real Temporal
-// server with CHASM enabled. It injects the TemporalFS fx module into the
+// TestTemporalZFS_ResearchAgent exercises TemporalZFS through a real Temporal
+// server with CHASM enabled. It injects the TemporalZFS fx module into the
 // history service, extracts the FSStoreProvider via fx.Populate, and creates
 // a real filesystem backed by PebbleDB through the full server wiring.
 //
-// This verifies that the TemporalFS fx module correctly wires into the CHASM
+// This verifies that the TemporalZFS fx module correctly wires into the CHASM
 // registry, the PebbleStoreProvider functions correctly under the server's
 // lifecycle, and the full FS API (Mkdir, WriteFile, ReadFile, CreateSnapshot,
 // OpenSnapshot, ReadDir, ListSnapshots) works end-to-end.
 //
 // Run:
 //
-//	go test ./tests/ -run TestTemporalFS -v -count 1
+//	go test ./tests/ -run TestTemporalZFS -v -count 1
 //
-// Architecture: FunctionalTestBase → HistoryService(TemporalFS HistoryModule) →
+// Architecture: FunctionalTestBase → HistoryService(TemporalZFS HistoryModule) →
 // PebbleStoreProvider → store.Store → tzfs.FS
 
 import (
@@ -35,22 +35,22 @@ import (
 	"go.uber.org/fx"
 )
 
-type TemporalFSTestSuite struct {
+type TemporalZFSTestSuite struct {
 	testcore.FunctionalTestBase //nolint:forbidigo // NewEnv doesn't support WithFxOptionsForService needed for fx.Populate
 	storeProvider               temporalfs.FSStoreProvider
 }
 
-func TestTemporalFS(t *testing.T) {
+func TestTemporalZFS(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(TemporalFSTestSuite))
+	suite.Run(t, new(TemporalZFSTestSuite))
 }
 
-func (s *TemporalFSTestSuite) SetupSuite() {
+func (s *TemporalZFSTestSuite) SetupSuite() {
 	s.SetupSuiteWithCluster( //nolint:forbidigo // NewEnv doesn't support WithFxOptionsForService
 		testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
 			dynamicconfig.EnableChasm.Key(): true,
 		}),
-		// TemporalFS HistoryModule is already registered in service/history/fx.go.
+		// TemporalZFS HistoryModule is already registered in service/history/fx.go.
 		// We only need fx.Populate to extract the FSStoreProvider from the graph.
 		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Populate(&s.storeProvider),
@@ -58,13 +58,13 @@ func (s *TemporalFSTestSuite) SetupSuite() {
 	)
 }
 
-func (s *TemporalFSTestSuite) TearDownSuite() {
+func (s *TemporalZFSTestSuite) TearDownSuite() {
 	s.FunctionalTestBase.TearDownSuite() //nolint:forbidigo // NewEnv doesn't support WithFxOptionsForService
 }
 
 // TestResearchAgent_RealServer runs the 3-iteration research agent scenario
-// through a real Temporal server's TemporalFS subsystem.
-func (s *TemporalFSTestSuite) TestResearchAgent_RealServer() {
+// through a real Temporal server's TemporalZFS subsystem.
+func (s *TemporalZFSTestSuite) TestResearchAgent_RealServer() {
 	t := s.T()
 
 	// Content for each iteration.
@@ -189,12 +189,12 @@ func (s *TemporalFSTestSuite) TestResearchAgent_RealServer() {
 
 // TestResearchAgent_Workflow runs the research agent as a real Temporal workflow
 // with activities. Each step of the research agent is an activity that operates
-// on TemporalFS. The workflow orchestrates the 3 steps sequentially. After the
+// on TemporalZFS. The workflow orchestrates the 3 steps sequentially. After the
 // workflow completes, the test verifies MVCC snapshot isolation.
 //
 // This demonstrates the real-world pattern: a Temporal workflow orchestrating
 // an AI agent whose activities read/write a durable versioned filesystem.
-func (s *TemporalFSTestSuite) TestResearchAgent_Workflow() {
+func (s *TemporalZFSTestSuite) TestResearchAgent_Workflow() {
 	t := s.T()
 
 	sourcesV1 := []byte("# Sources v1\n1. Feynman (1982)\n2. Shor (1994)\n")

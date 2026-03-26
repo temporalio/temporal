@@ -184,7 +184,7 @@ func (d *Dashboard) render() {
 
 	// Header.
 	fmt.Fprintf(&b, "%s╔%s╗%s\n", colorBold, border, colorReset)
-	b.WriteString(boxLine(fmt.Sprintf("  %sTemporalFS Research Agent Demo%s                  Elapsed: %5s", colorBold, colorReset, elapsed)))
+	b.WriteString(boxLine(fmt.Sprintf("  %sTemporalZFS Research Agent Demo%s                  Elapsed: %5s", colorBold, colorReset, elapsed)))
 	fmt.Fprintf(&b, "%s╠%s╣%s\n", colorBold, border, colorReset)
 	b.WriteString(boxLine(""))
 

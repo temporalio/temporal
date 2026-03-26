@@ -183,7 +183,7 @@ var reportTemplate = template.Must(template.New("report").Parse(`<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>TemporalFS Demo Report</title>
+<title>TemporalZFS Demo Report</title>
 <style>
   :root { --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #c9d1d9;
     --accent: #58a6ff; --green: #3fb950; --yellow: #d29922; --red: #f85149; }
@@ -218,7 +218,7 @@ var reportTemplate = template.Must(template.New("report").Parse(`<!DOCTYPE html>
 </style>
 </head>
 <body>
-<h1>TemporalFS Research Agent Demo</h1>
+<h1>TemporalZFS Research Agent Demo</h1>
 <p class="subtitle">Generated {{.GeneratedAt}}</p>
 
 <div class="stats">
@@ -270,7 +270,7 @@ var reportTemplate = template.Must(template.New("report").Parse(`<!DOCTYPE html>
 </details>
 {{end}}
 
-<footer>Powered by TemporalFS — Durable Filesystem for AI Agent Workflows</footer>
+<footer>Powered by TemporalZFS — Durable Filesystem for AI Agent Workflows</footer>
 </body>
 </html>`))
 

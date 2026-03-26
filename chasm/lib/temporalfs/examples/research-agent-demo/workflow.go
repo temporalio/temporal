@@ -33,7 +33,7 @@ type WorkflowResult struct {
 }
 
 // ResearchWorkflow chains 5 activities to research a topic, each producing
-// files and an MVCC snapshot in the workflow's isolated TemporalFS partition.
+// files and an MVCC snapshot in the workflow's isolated TemporalZFS partition.
 func ResearchWorkflow(ctx workflow.Context, params WorkflowParams) (WorkflowResult, error) {
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 60 * time.Second,

@@ -1,8 +1,8 @@
-# TemporalFS Research Agent Demo
+# TemporalZFS Research Agent Demo
 
-A scale demo of AI research agent workflows using TemporalFS — a durable, versioned
+A scale demo of AI research agent workflows using TemporalZFS — a durable, versioned
 filesystem for agent workflows. Each workflow simulates a 5-step research pipeline
-that writes files and MVCC snapshots through TemporalFS, with injected random failures
+that writes files and MVCC snapshots through TemporalZFS, with injected random failures
 handled automatically by Temporal's retry mechanism.
 
 ## What It Does
@@ -18,7 +18,7 @@ Each workflow runs 5 activities in sequence:
 | 5 | **PeerReview** | `review.md` | 5% |
 
 After each step, a named MVCC snapshot is created (e.g., `step-1-research`,
-`step-2-summary`). Every workflow gets its own isolated TemporalFS partition backed
+`step-2-summary`). Every workflow gets its own isolated TemporalZFS partition backed
 by a shared PebbleDB instance.
 
 ## Prerequisites
@@ -132,7 +132,7 @@ Produces a self-contained HTML file with:
 go run . browse --data-dir /tmp/tfs-demo --topic quantum-computing
 ```
 
-Prints the directory tree for a specific workflow's TemporalFS partition, including
+Prints the directory tree for a specific workflow's TemporalZFS partition, including
 file sizes and snapshot names.
 
 ## Demo Script
@@ -204,7 +204,7 @@ temporal server start-dev
 |  (terminal TUI)   |     |  Worker (activities)       |
 +-------------------+     |  - 5 activities per wf     |
                           |  - Random failure injection |
-                          |  - TemporalFS file I/O     |
+                          |  - TemporalZFS file I/O     |
                           +------------+---------------+
                                        |
                           +------------v---------------+

@@ -112,7 +112,7 @@ func (ds *DemoStore) LoadManifest() ([]ManifestEntry, error) {
 	return entries, nil
 }
 
-// CreatePartition pre-creates a TemporalFS partition so the superblock exists
+// CreatePartition pre-creates a TemporalZFS partition so the superblock exists
 // before any Temporal activity tries to open it. This avoids race conditions
 // under concurrent PebbleDB access where Open() may not see a recently
 // committed superblock from a different goroutine.
