@@ -9,12 +9,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/testing/nettest"
 	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/mock/gomock"
 	"gopkg.in/yaml.v3"
@@ -49,11 +51,6 @@ const (
 )
 
 var (
-	rpcTestCfgDefault = &config.RPC{
-		GRPCPort:       0,
-		MembershipPort: 7600,
-		BindOnIP:       localhostIPv4,
-	}
 	serverCfgInsecure = &config.Global{
 		Membership: config.Membership{
 			MaxJoinDuration:  5,
@@ -150,16 +147,16 @@ func (s *RingpopSuite) TestInvalidBroadcastAddress() {
 func newTestRingpopFactory(
 	serviceName primitives.ServiceName,
 	logger log.Logger,
-	rpcConfig *config.RPC,
 	tlsProvider encryption.TLSConfigProvider,
 	dc *dynamicconfig.Collection,
+	listenerProvider common.ListenerProvider,
 ) *factory {
 	return &factory{
-		ServiceName: serviceName,
-		Logger:      logger,
-		RPCConfig:   rpcConfig,
-		TLSFactory:  tlsProvider,
-		DC:          dc,
+		ServiceName:      serviceName,
+		Logger:           logger,
+		TLSFactory:       tlsProvider,
+		DC:               dc,
+		listenerProvider: listenerProvider,
 	}
 }
 
@@ -205,7 +202,7 @@ func runRingpopTLSTest(s *suite.Suite, serverA *factory, serverB *factory) error
 func (s *RingpopSuite) setupInternodeRingpop() {
 	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
-	s.insecureFactory = newTestRingpopFactory("tester", s.logger, rpcTestCfgDefault, provider, dynamicconfig.NewNoopCollection())
+	s.insecureFactory = newTestRingpopFactory("tester", s.logger, provider, dynamicconfig.NewNoopCollection(), s.newListenerProvider())
 	s.NotNil(s.insecureFactory)
 
 	serverTLS := &config.Global{
@@ -222,24 +219,25 @@ func (s *RingpopSuite) setupInternodeRingpop() {
 		},
 	}
 
-	rpcCfgA := &config.RPC{GRPCPort: 0, MembershipPort: 7600, BindOnIP: localhostIPv4}
-	rpcCfgB := &config.RPC{GRPCPort: 0, MembershipPort: 7601, BindOnIP: localhostIPv4}
-
 	dc := dynamicconfig.NewCollection(dynamicconfig.StaticClient(map[dynamicconfig.Key]any{
 		dynamicconfig.EnableRingpopTLS.Key(): true,
 	}), s.logger)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(mutualTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
-	s.mutualTLSFactoryA = newTestRingpopFactory("tester-A", s.logger, rpcCfgA, provider, dc)
+	s.mutualTLSFactoryA = newTestRingpopFactory("tester-A", s.logger, provider, dc, s.newListenerProvider())
 	s.NotNil(s.mutualTLSFactoryA)
-	s.mutualTLSFactoryB = newTestRingpopFactory("tester-B", s.logger, rpcCfgB, provider, dc)
+	s.mutualTLSFactoryB = newTestRingpopFactory("tester-B", s.logger, provider, dc, s.newListenerProvider())
 	s.NotNil(s.mutualTLSFactoryB)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(serverTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
-	s.serverTLSFactoryA = newTestRingpopFactory("tester-A", s.logger, rpcCfgA, provider, dc)
+	s.serverTLSFactoryA = newTestRingpopFactory("tester-A", s.logger, provider, dc, s.newListenerProvider())
 	s.NotNil(s.serverTLSFactoryA)
-	s.serverTLSFactoryB = newTestRingpopFactory("tester-B", s.logger, rpcCfgB, provider, dc)
+	s.serverTLSFactoryB = newTestRingpopFactory("tester-B", s.logger, provider, dc, s.newListenerProvider())
 	s.NotNil(s.serverTLSFactoryB)
+}
+
+func (s *RingpopSuite) newListenerProvider() common.ListenerProvider {
+	return nettest.NewTestListenerProvider(s.T())
 }
