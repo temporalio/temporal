@@ -3606,6 +3606,10 @@ func (e *matchingEngineImpl) UpdateFairnessState(
 	return &matchingservice.UpdateFairnessStateResponse{}, nil
 }
 
+func (e *matchingEngineImpl) newTaskTracker() *taskTracker {
+	return newTaskTracker(e.timeSource, 5*time.Second, 30*time.Second)
+}
+
 // migrateOldFormatVersions moves versions present in the given deployment from the
 // deprecated old-format slice into the new per-deployment map.
 //
