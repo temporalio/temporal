@@ -3,7 +3,6 @@ package workflow
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"testing"
 	"time"
 
@@ -36,10 +35,6 @@ type commandValidator struct {
 
 func (v commandValidator) IsValidPayloadSize(size int) bool {
 	return size <= v.maxPayloadSize
-}
-
-func operationKey(eventID int64) string {
-	return strconv.FormatInt(eventID, 10)
 }
 
 type testContext struct {
@@ -584,8 +579,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 		require.Equal(t, cAttrs.NexusHeader, eAttrs.NexusHeader)
 		require.Equal(t, int64(1), eAttrs.WorkflowTaskCompletedEventId)
 
-		key := operationKey(event.EventId)
-		opField, ok := tcx.wf.Operations[key]
+		opField, ok := tcx.wf.Operations[event.EventId]
 		require.True(t, ok)
 		op := opField.Get(tcx.chasmCtx)
 		require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, op.Status)
@@ -692,7 +686,7 @@ func TestHandleCancelCommand(t *testing.T) {
 		event := tcx.history.Events[0]
 
 		// TODO: Complete the operation using CHASM equivalent of CompletedEventDefinition.
-		tcx.wf.RemoveNexusOperation(operationKey(event.EventId))
+		tcx.wf.RemoveNexusOperation(event.EventId)
 
 		// Try to cancel - should fail since operation is completed/deleted.
 		err = tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{
@@ -727,7 +721,7 @@ func TestHandleCancelCommand(t *testing.T) {
 		event := tcx.history.Events[0]
 
 		// TODO: Complete the operation using CHASM equivalent of CompletedEventDefinition.
-		tcx.wf.RemoveNexusOperation(operationKey(event.EventId))
+		tcx.wf.RemoveNexusOperation(event.EventId)
 
 		// Try to cancel - should succeed because there's a buffered completion.
 		err = tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{
@@ -758,8 +752,7 @@ func TestHandleCancelCommand(t *testing.T) {
 
 		// TODO: Replace with CHASM equivalent of ScheduledEventDefinition.Apply().
 		event := tcx.history.Events[0]
-		key := operationKey(event.EventId)
-		op := tcx.wf.Operations[key].Get(tcx.chasmCtx)
+		op := tcx.wf.Operations[event.EventId].Get(tcx.chasmCtx)
 		op.SetStateMachineState(nexusoperationpb.OPERATION_STATUS_SCHEDULED)
 
 		userMetadata := &sdkpb.UserMetadata{
@@ -784,7 +777,7 @@ func TestHandleCancelCommand(t *testing.T) {
 		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.NoError(t, err)
 
-		opField, operationFound := tcx.wf.Operations[key]
+		opField, operationFound := tcx.wf.Operations[event.EventId]
 		require.True(t, operationFound)
 
 		require.Len(t, tcx.history.Events, 2)
@@ -809,7 +802,7 @@ func TestHandleCancelCommand(t *testing.T) {
 func TestOperationNodeDeletionOnTerminalEvents(t *testing.T) {
 	t.Skip("requires CHASM operation lifecycle implementation")
 
-	scheduleOperation := func(t *testing.T, tcx testContext) (scheduledEvent *historypb.HistoryEvent, nodeID string) {
+	scheduleOperation := func(t *testing.T, tcx testContext) (scheduledEvent *historypb.HistoryEvent, nodeID int64) {
 		err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 100}, &commandpb.Command{
 			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
@@ -823,7 +816,7 @@ func TestOperationNodeDeletionOnTerminalEvents(t *testing.T) {
 		require.Len(t, tcx.history.Events, 1)
 		scheduledEvent = tcx.history.Events[0]
 
-		nodeID = operationKey(scheduledEvent.EventId)
+		nodeID = scheduledEvent.EventId
 		_, ok := tcx.wf.Operations[nodeID]
 		require.True(t, ok)
 		return
@@ -836,7 +829,7 @@ func TestOperationNodeDeletionOnTerminalEvents(t *testing.T) {
 		eventType enumspb.EventType,
 		eventAttr any,
 	) {
-		nodeID := operationKey(scheduledEventID)
+		nodeID := scheduledEventID
 
 		event := &historypb.HistoryEvent{
 			Version:   1,
