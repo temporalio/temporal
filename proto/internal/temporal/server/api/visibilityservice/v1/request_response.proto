@@ -1,49 +1,49 @@
 syntax = "proto3";
 
 package temporal.server.api.visibilityservice.v1;
-option go_package = "go.temporal.io/server/api/visibilityservice/v1;visibilityservice";
 
 // visibilityservice does not have a corresponding gRPC service.
 // The following request/response types are used by VisibilityManager.
-
 import "temporal/api/common/v1/message.proto";
 import "temporal/server/api/chasm/v1/message.proto";
 
+option go_package = "go.temporal.io/server/api/visibilityservice/v1;visibilityservice";
+
 message ListChasmExecutionsRequest {
-    // (-- api-linter: core::0141::forbidden-types=disabled --)
-    uint32 archetype_id = 1;
-    string namespace_id = 2;
-    string namespace = 3;
-    string query = 4;
-    // Maximum number of executions per page
-    int32 page_size = 5;
-    // Token to continue reading next page of executions.
-    // Pass in empty slice for first page.
-    bytes next_page_token = 6;
+  // (-- api-linter: core::0141::forbidden-types=disabled --)
+  uint32 archetype_id = 1;
+  string namespace_id = 2;
+  string namespace = 3;
+  string query = 4;
+  // Maximum number of executions per page
+  int32 page_size = 5;
+  // Token to continue reading next page of executions.
+  // Pass in empty slice for first page.
+  bytes next_page_token = 6;
 }
 
 message ListChasmExecutionsResponse {
-    repeated temporal.server.api.chasm.v1.VisibilityExecutionInfo executions = 1;
-    bytes next_page_token = 2;
+  repeated temporal.server.api.chasm.v1.VisibilityExecutionInfo executions = 1;
+  bytes next_page_token = 2;
 }
 
 message CountChasmExecutionsRequest {
-    // (-- api-linter: core::0141::forbidden-types=disabled --)
-    uint32 archetype_id = 1;
-    string namespace_id = 2;
-    string namespace = 3;
-    string query = 4;
+  // (-- api-linter: core::0141::forbidden-types=disabled --)
+  uint32 archetype_id = 1;
+  string namespace_id = 2;
+  string namespace = 3;
+  string query = 4;
 }
 
 message CountChasmExecutionsResponse {
-    int64 count = 1;
+  int64 count = 1;
 
-    // `groups` contains the groups if the request is grouping by a field.
-    // The list might not be complete, and the counts of each group are approximations.
-    repeated AggregationGroup groups = 2;
+  // `groups` contains the groups if the request is grouping by a field.
+  // The list might not be complete, and the counts of each group are approximations.
+  repeated AggregationGroup groups = 2;
 
-    message AggregationGroup {
-        repeated temporal.api.common.v1.Payload group_values = 1;
-        int64 count = 2;
-    }
+  message AggregationGroup {
+    repeated temporal.api.common.v1.Payload group_values = 1;
+    int64 count = 2;
+  }
 }
