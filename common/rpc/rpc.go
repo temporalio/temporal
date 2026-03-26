@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -32,9 +31,10 @@ var _ common.RPCFactory = (*RPCFactory)(nil)
 
 // RPCFactory is an implementation of common.RPCFactory interface
 type RPCFactory struct {
-	config         *config.Config
-	serviceName    primitives.ServiceName
-	logger         log.Logger
+	config      *config.Config
+	serviceName primitives.ServiceName
+	logger      log.Logger
+
 	metricsHandler metrics.Handler
 
 	frontendURL       string
@@ -56,8 +56,7 @@ type RPCFactory struct {
 	EnableInternodeClientKeepalive bool
 }
 
-// NewFactory builds a new RPCFactory
-// conforming to the underlying configuration
+// NewFactory builds a new RPCFactory conforming to the underlying configuration.
 func NewFactory(
 	cfg *config.Config,
 	sName primitives.ServiceName,
@@ -71,6 +70,7 @@ func NewFactory(
 	commonDialOptions []grpc.DialOption,
 	perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption,
 	monitor membership.Monitor,
+	listenerProvider common.ListenerProvider,
 ) *RPCFactory {
 	f := &RPCFactory{
 		config:                cfg,
@@ -86,7 +86,7 @@ func NewFactory(
 		perServiceDialOptions: perServiceDialOptions,
 		monitor:               monitor,
 	}
-	f.grpcListener = sync.OnceValue(f.createGRPCListener)
+	f.grpcListener = sync.OnceValue(listenerProvider.GetGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
 	f.interNodeGrpcConnections = cache.NewSimple(nil)
 	return f
@@ -159,19 +159,6 @@ func (d *RPCFactory) GetInternodeClientTlsConfig() (*tls.Config, error) {
 // GetGRPCListener returns cached dispatcher for gRPC inbound or creates one
 func (d *RPCFactory) GetGRPCListener() net.Listener {
 	return d.grpcListener()
-}
-
-func (d *RPCFactory) createGRPCListener() net.Listener {
-	rpcConfig := d.config.Services[string(d.serviceName)].RPC
-	hostAddress := net.JoinHostPort(getListenIP(&rpcConfig, d.logger).String(), convert.IntToString(rpcConfig.GRPCPort))
-
-	grpcListener, err := net.Listen("tcp", hostAddress)
-	if err != nil || grpcListener == nil || grpcListener.Addr() == nil {
-		d.logger.Fatal("Failed to start gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
-	}
-
-	d.logger.Info("Created gRPC listener", tag.Service(d.serviceName), tag.Address(hostAddress))
-	return grpcListener
 }
 
 func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
