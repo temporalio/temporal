@@ -810,6 +810,7 @@ func (c *TemporalImpl) newRPCFactory(
 			},
 		},
 	}
+	listenerProvider := rpc.NewConfigListenerProvider(cfg, sn, logger)
 	return rpc.NewFactory(
 		cfg,
 		sn,
@@ -823,6 +824,7 @@ func (c *TemporalImpl) newRPCFactory(
 		options,
 		map[primitives.ServiceName][]grpc.DialOption{},
 		monitor,
+		listenerProvider,
 	), nil
 }
 
