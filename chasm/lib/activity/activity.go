@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -127,6 +128,15 @@ func NewStandaloneActivity(
 			HeartbeatTimeout:       request.GetHeartbeatTimeout(),
 			RetryPolicy:            request.GetRetryPolicy(),
 			Priority:               request.Priority,
+			OriginalOptions: &apiactivitypb.ActivityOptions{
+				TaskQueue:              request.GetTaskQueue(),
+				ScheduleToCloseTimeout: request.GetScheduleToCloseTimeout(),
+				ScheduleToStartTimeout: request.GetScheduleToStartTimeout(),
+				StartToCloseTimeout:    request.GetStartToCloseTimeout(),
+				HeartbeatTimeout:       request.GetHeartbeatTimeout(),
+				RetryPolicy:            request.GetRetryPolicy(),
+				Priority:               request.GetPriority(),
+			},
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
 		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
@@ -374,6 +384,189 @@ func (a *Activity) Terminate(
 		metricsHandler: metricsHandler,
 		fromStatus:     a.GetStatus(),
 	})
+}
+
+func (a *Activity) UpdateActivityExecutionOptions(
+	ctx chasm.MutableContext,
+	req *activitypb.UpdateActivityExecutionOptionsRequest,
+) (*activitypb.UpdateActivityExecutionOptionsResponse, error) {
+	frontendReq := req.GetFrontendRequest()
+	if frontendReq.GetUpdateMask() != nil && frontendReq.GetRestoreOriginal() {
+		return nil, serviceerror.NewInvalidArgument("Both UpdateMask and RestoreOriginal are provided")
+	}
+	if !frontendReq.GetRestoreOriginal() {
+		if frontendReq.GetActivityOptions() == nil {
+			return nil, serviceerror.NewInvalidArgument("ActivityOptions are not provided")
+		}
+		if frontendReq.GetUpdateMask() == nil {
+			return nil, serviceerror.NewInvalidArgument("UpdateMask is not provided")
+		}
+	}
+
+	if req.GetFrontendRequest().GetRestoreOriginal() {
+		ogOptions := a.GetOriginalOptions()
+		a.TaskQueue = ogOptions.GetTaskQueue()
+		a.ScheduleToCloseTimeout = ogOptions.GetScheduleToCloseTimeout()
+		a.ScheduleToStartTimeout = ogOptions.GetScheduleToStartTimeout()
+		a.StartToCloseTimeout = ogOptions.GetStartToCloseTimeout()
+		a.HeartbeatTimeout = ogOptions.GetHeartbeatTimeout()
+		a.RetryPolicy = ogOptions.GetRetryPolicy()
+		a.Priority = ogOptions.GetPriority()
+	} else {
+		if err := a.mergeActivityOptions(frontendReq); err != nil {
+			return nil, err
+		}
+	}
+
+	attempt := a.LastAttempt.Get(ctx)
+	attempt.Stamp++
+
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
+		// Re dispatch this activity
+		retryTime := attemptScheduleTimeForRetry(attempt)
+		var dispatchAttrs chasm.TaskAttributes
+		if retryTime != nil {
+			// in backoff, future retry time
+			dispatchAttrs.ScheduledTime = retryTime.AsTime()
+		}
+		ctx.AddTask(
+			a,
+			dispatchAttrs,
+			&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()},
+		)
+
+		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+			schedToStart := ctx.Now(a).Add(timeout)
+			if retryTime != nil {
+				schedToStart = retryTime.AsTime().Add(timeout)
+			}
+			ctx.AddTask(
+				a,
+				chasm.TaskAttributes{ScheduledTime: schedToStart},
+				&activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()},
+			)
+		}
+	}
+
+	return &activitypb.UpdateActivityExecutionOptionsResponse{
+		FrontendResponse: &workflowservice.UpdateActivityExecutionOptionsResponse{
+			ActivityOptions: &apiactivitypb.ActivityOptions{
+				TaskQueue:              a.GetTaskQueue(),
+				ScheduleToCloseTimeout: a.GetScheduleToCloseTimeout(),
+				ScheduleToStartTimeout: a.GetScheduleToStartTimeout(),
+				StartToCloseTimeout:    a.GetStartToCloseTimeout(),
+				HeartbeatTimeout:       a.GetHeartbeatTimeout(),
+				RetryPolicy:            a.GetRetryPolicy(),
+				Priority:               a.GetPriority(),
+			},
+		},
+	}, nil
+}
+
+func (a *Activity) mergeActivityOptions(
+	req *workflowservice.UpdateActivityExecutionOptionsRequest,
+) error {
+	opts := req.GetActivityOptions()
+	updateFields := util.ParseFieldMask(req.GetUpdateMask())
+
+	if _, ok := updateFields["taskQueue.name"]; ok {
+		if opts.GetTaskQueue() == nil {
+			return serviceerror.NewInvalidArgument("TaskQueue is not provided")
+		}
+		if a.TaskQueue == nil {
+			a.TaskQueue = opts.GetTaskQueue()
+		} else {
+			a.TaskQueue.Name = opts.GetTaskQueue().GetName()
+		}
+	}
+
+	if _, ok := updateFields["scheduleToCloseTimeout"]; ok {
+		a.ScheduleToCloseTimeout = opts.GetScheduleToCloseTimeout()
+	}
+
+	if _, ok := updateFields["scheduleToStartTimeout"]; ok {
+		a.ScheduleToStartTimeout = opts.GetScheduleToStartTimeout()
+	}
+
+	if _, ok := updateFields["startToCloseTimeout"]; ok {
+		a.StartToCloseTimeout = opts.GetStartToCloseTimeout()
+	}
+
+	if _, ok := updateFields["heartbeatTimeout"]; ok {
+		a.HeartbeatTimeout = opts.GetHeartbeatTimeout()
+	}
+
+	if _, ok := updateFields["priority"]; ok {
+		a.Priority = opts.GetPriority()
+	}
+
+	if _, ok := updateFields["priority.priorityKey"]; ok {
+		if opts.GetPriority() == nil {
+			return serviceerror.NewInvalidArgument("Priority is not provided")
+		}
+		if a.Priority == nil {
+			a.Priority = &commonpb.Priority{}
+		}
+		a.Priority.PriorityKey = opts.GetPriority().GetPriorityKey()
+	}
+
+	if _, ok := updateFields["priority.fairnessKey"]; ok {
+		if opts.GetPriority() == nil {
+			return serviceerror.NewInvalidArgument("Priority is not provided")
+		}
+		if a.Priority == nil {
+			a.Priority = &commonpb.Priority{}
+		}
+		a.Priority.FairnessKey = opts.GetPriority().GetFairnessKey()
+	}
+
+	if _, ok := updateFields["priority.fairnessWeight"]; ok {
+		if opts.GetPriority() == nil {
+			return serviceerror.NewInvalidArgument("Priority is not provided")
+		}
+		if a.Priority == nil {
+			a.Priority = &commonpb.Priority{}
+		}
+		a.Priority.FairnessWeight = opts.GetPriority().GetFairnessWeight()
+	}
+
+	if a.RetryPolicy == nil {
+		a.RetryPolicy = &commonpb.RetryPolicy{}
+	}
+
+	if _, ok := updateFields["retryPolicy"]; ok {
+		a.RetryPolicy = opts.GetRetryPolicy()
+	}
+
+	if _, ok := updateFields["retryPolicy.initialInterval"]; ok {
+		if opts.GetRetryPolicy() == nil {
+			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
+		}
+		a.RetryPolicy.InitialInterval = opts.GetRetryPolicy().GetInitialInterval()
+	}
+
+	if _, ok := updateFields["retryPolicy.backoffCoefficient"]; ok {
+		if opts.GetRetryPolicy() == nil {
+			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
+		}
+		a.RetryPolicy.BackoffCoefficient = opts.GetRetryPolicy().GetBackoffCoefficient()
+	}
+
+	if _, ok := updateFields["retryPolicy.maximumInterval"]; ok {
+		if opts.GetRetryPolicy() == nil {
+			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
+		}
+		a.RetryPolicy.MaximumInterval = opts.GetRetryPolicy().GetMaximumInterval()
+	}
+
+	if _, ok := updateFields["retryPolicy.maximumAttempts"]; ok {
+		if opts.GetRetryPolicy() == nil {
+			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
+		}
+		a.RetryPolicy.MaximumAttempts = opts.GetRetryPolicy().GetMaximumAttempts()
+	}
+
+	return nil
 }
 
 // getOrCreateLastHeartbeat retrieves the last heartbeat state, initializing it if not present. The heartbeat is lazily created

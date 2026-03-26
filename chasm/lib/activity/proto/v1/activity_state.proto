@@ -6,6 +6,7 @@ option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;act
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
+import "temporal/api/activity/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
@@ -90,6 +91,9 @@ message ActivityState {
 
     // Set if the activity was terminated
     ActivityTerminateState terminate_state = 12;
+
+    // Options for the first scheduled attempt to support `restore_original`
+    temporal.api.activity.v1.ActivityOptions original_options = 13;
 }
 
 message ActivityCancelState {

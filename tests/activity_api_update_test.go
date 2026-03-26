@@ -449,3 +449,305 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 		})
 	}
 }
+
+// TestActivityUpdateExecutionOptionsApi tests the new UpdateActivityExecutionOptions RPC
+// on workflow activities (workflow_id != ""), verifying it behaves identically to the
+// existing UpdateActivityOptions RPC.
+func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
+	t.Parallel()
+
+	t.Run("TestActivityUpdateExecutionOptionsApi_ChangeRetryInterval", func(t *testing.T) {
+		s := testcore.NewEnv(t, testcore.WithSdkWorker())
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		activityUpdated := make(chan struct{})
+
+		var startedActivityCount atomic.Int32
+		activityFunction := func() (string, error) {
+			startedActivityCount.Add(1)
+			if startedActivityCount.Load() == 1 {
+				return "", errors.New("bad-luck-please-retry")
+			}
+			s.WaitForChannel(ctx, activityUpdated)
+			return "done!", nil
+		}
+
+		workflowFn := makeActivityUpdateWorkflowFunc(activityFunction, 30*time.Minute, 10*time.Minute)
+		s.SdkWorker().RegisterWorkflow(workflowFn)
+		s.SdkWorker().RegisterActivity(activityFunction)
+
+		workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			ID:        activityUpdateWorkflowID,
+			TaskQueue: s.WorkerTaskQueue(),
+		}, workflowFn)
+		s.NoError(err)
+
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			require.NoError(t, err)
+			require.Len(t, description.GetPendingActivities(), 1)
+			require.Equal(t, int32(1), startedActivityCount.Load())
+		}, 10*time.Second, 500*time.Millisecond)
+
+		resp, err := s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: workflowRun.GetID(),
+			RunId:      workflowRun.GetRunID(),
+			ActivityId: "activity-id",
+			ActivityOptions: &activitypb.ActivityOptions{
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval: durationpb.New(1 * time.Second),
+				},
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}},
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+
+		activityUpdated <- struct{}{}
+
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			require.NoError(t, err)
+			require.Empty(t, description.GetPendingActivities())
+			require.Equal(t, int32(2), startedActivityCount.Load())
+		}, 3*time.Second, 100*time.Millisecond)
+
+		var out string
+		err = workflowRun.Get(ctx, &out)
+		s.NoError(err)
+	})
+
+	t.Run("TestActivityUpdateExecutionOptionsApi_ChangeScheduleToClose", func(t *testing.T) {
+		s := testcore.NewEnv(t, testcore.WithSdkWorker())
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		var startedActivityCount atomic.Int32
+		activityFunction := func() (string, error) {
+			startedActivityCount.Add(1)
+			if startedActivityCount.Load() == 1 {
+				return "", errors.New("bad-luck-please-retry")
+			}
+			return "done!", nil
+		}
+
+		workflowFn := makeActivityUpdateWorkflowFunc(activityFunction, 30*time.Minute, 10*time.Minute)
+		s.SdkWorker().RegisterWorkflow(workflowFn)
+		s.SdkWorker().RegisterActivity(activityFunction)
+
+		workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			ID:        activityUpdateWorkflowID,
+			TaskQueue: s.WorkerTaskQueue(),
+		}, workflowFn)
+		s.NoError(err)
+
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			require.NoError(t, err)
+			require.Len(t, description.GetPendingActivities(), 1)
+			require.Equal(t, int32(1), startedActivityCount.Load())
+		}, 2*time.Second, 200*time.Millisecond)
+
+		resp, err := s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: workflowRun.GetID(),
+			RunId:      workflowRun.GetRunID(),
+			ActivityId: "activity-id",
+			ActivityOptions: &activitypb.ActivityOptions{
+				ScheduleToCloseTimeout: durationpb.New(1 * time.Second),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout"}},
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			require.NoError(t, err)
+			require.Empty(t, description.GetPendingActivities())
+			require.Equal(t, int32(1), startedActivityCount.Load())
+		}, 2*time.Second, 200*time.Millisecond)
+
+		var out string
+		err = workflowRun.Get(ctx, &out)
+		var activityError *temporal.ActivityError
+		s.ErrorAs(err, &activityError)
+		s.Equal(enumspb.RETRY_STATE_TIMEOUT, activityError.RetryState())
+		var timeoutError *temporal.TimeoutError
+		s.ErrorAs(activityError, &timeoutError)
+		s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutError.TimeoutType())
+		s.Equal(int32(1), startedActivityCount.Load())
+	})
+
+	t.Run("TestActivityUpdateExecutionOptionsApi_ChangeScheduleToCloseAndRetry", func(t *testing.T) {
+		s := testcore.NewEnv(t, testcore.WithSdkWorker())
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		var startedActivityCount atomic.Int32
+		activityFunction := func() (string, error) {
+			startedActivityCount.Add(1)
+			if startedActivityCount.Load() == 1 {
+				return "", errors.New("bad-luck-please-retry")
+			}
+			return "done!", nil
+		}
+
+		scheduleToCloseTimeout := 8 * time.Second
+		workflowFn := makeActivityUpdateWorkflowFunc(activityFunction, scheduleToCloseTimeout, 5*time.Second)
+		s.SdkWorker().RegisterWorkflow(workflowFn)
+		s.SdkWorker().RegisterActivity(activityFunction)
+
+		workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			ID:        activityUpdateWorkflowID,
+			TaskQueue: s.WorkerTaskQueue(),
+		}, workflowFn)
+		s.NoError(err)
+
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			require.NotZero(t, startedActivityCount.Load())
+		}, 2*time.Second, 200*time.Millisecond)
+
+		newScheduleToCloseTimeout := 10 * time.Second
+		resp, err := s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: workflowRun.GetID(),
+			RunId:      workflowRun.GetRunID(),
+			ActivityId: "activity-id",
+			ActivityOptions: &activitypb.ActivityOptions{
+				ScheduleToCloseTimeout: durationpb.New(newScheduleToCloseTimeout),
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval: durationpb.New(1 * time.Second),
+				},
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout", "retry_policy.initial_interval"}},
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Equal(int64(newScheduleToCloseTimeout.Seconds()), resp.GetActivityOptions().ScheduleToCloseTimeout.GetSeconds())
+		s.Equal(int64(scheduleToCloseTimeout.Seconds()), resp.GetActivityOptions().StartToCloseTimeout.GetSeconds())
+
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			require.NoError(t, err)
+			require.Empty(t, description.GetPendingActivities())
+			require.Equal(t, int32(2), startedActivityCount.Load())
+		}, 5*time.Second, 200*time.Millisecond)
+
+		var out string
+		err = workflowRun.Get(ctx, &out)
+		s.NoError(err)
+	})
+
+	t.Run("TestActivityUpdateExecutionOptionsApi_ResetDefaultOptions", func(t *testing.T) {
+		s := testcore.NewEnv(t, testcore.WithSdkWorker())
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		activityUpdated := make(chan struct{})
+
+		var startedActivityCount atomic.Int32
+		activityFunction := func() (string, error) {
+			startedActivityCount.Add(1)
+			if startedActivityCount.Load() == 1 {
+				return "", errors.New("bad-luck-please-retry")
+			}
+			s.WaitForChannel(ctx, activityUpdated)
+			return "done!", nil
+		}
+
+		workflowFn := makeActivityUpdateWorkflowFunc(activityFunction, 30*time.Minute, 10*time.Minute)
+		s.SdkWorker().RegisterWorkflow(workflowFn)
+		s.SdkWorker().RegisterActivity(activityFunction)
+
+		workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			ID:        activityUpdateWorkflowID,
+			TaskQueue: s.WorkerTaskQueue(),
+		}, workflowFn)
+		s.NoError(err)
+
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			require.NoError(t, err)
+			require.Len(t, description.GetPendingActivities(), 1)
+			require.Equal(t, int32(1), startedActivityCount.Load())
+		}, 10*time.Second, 500*time.Millisecond)
+
+		// Update max attempts to 1000.
+		resp, err := s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: workflowRun.GetID(),
+			RunId:      workflowRun.GetRunID(),
+			ActivityId: "activity-id",
+			ActivityOptions: &activitypb.ActivityOptions{
+				RetryPolicy: &commonpb.RetryPolicy{
+					MaximumAttempts: 1000,
+				},
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.maximum_attempts"}},
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			require.NoError(t, err)
+			require.Len(t, description.PendingActivities, 1)
+			require.Equal(t, int32(1000), description.PendingActivities[0].GetActivityOptions().GetRetryPolicy().GetMaximumAttempts())
+		}, 3*time.Second, 200*time.Millisecond)
+
+		// Reset to original options.
+		resp, err = s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       s.Namespace().String(),
+			WorkflowId:      workflowRun.GetID(),
+			RunId:           workflowRun.GetRunID(),
+			ActivityId:      "activity-id",
+			RestoreOriginal: true,
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			require.NoError(t, err)
+			require.Len(t, description.PendingActivities, 1)
+			require.Equal(t, int32(defaultMaximumAttempts), description.PendingActivities[0].GetActivityOptions().GetRetryPolicy().GetMaximumAttempts())
+		}, 3*time.Second, 200*time.Millisecond)
+
+		// Update retry interval to unblock the second attempt.
+		resp, err = s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: workflowRun.GetID(),
+			RunId:      workflowRun.GetRunID(),
+			ActivityId: "activity-id",
+			ActivityOptions: &activitypb.ActivityOptions{
+				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval: durationpb.New(1 * time.Second),
+				},
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout", "retry_policy.initial_interval"}},
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+
+		activityUpdated <- struct{}{}
+
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			require.NoError(t, err)
+			require.Empty(t, description.GetPendingActivities())
+			require.Equal(t, int32(2), startedActivityCount.Load())
+		}, 3*time.Second, 100*time.Millisecond)
+
+		var out string
+		err = workflowRun.Get(ctx, &out)
+		s.NoError(err)
+	})
+}

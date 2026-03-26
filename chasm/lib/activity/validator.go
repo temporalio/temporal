@@ -365,6 +365,42 @@ func validateRequestCancelActivityExecutionRequest(
 	return nil
 }
 
+func validateUpdateActivityExecutionOptionsRequest(
+	req *workflowservice.UpdateActivityExecutionOptionsRequest,
+	maxIDLengthLimit int,
+	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	logger log.Logger,
+) error {
+	if req.GetActivityId() == "" {
+		return serviceerror.NewInvalidArgument("activity ID is required")
+	}
+
+	if len(req.GetActivityId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("activity ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetActivityId()), maxIDLengthLimit)
+	}
+
+	// if len(req.GetRequestId()) > maxIDLengthLimit {
+	// 	return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+	// 		len(req.GetRequestId()), maxIDLengthLimit)
+	// }
+
+	if len(req.GetIdentity()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
+	}
+
+	if runID := req.GetRunId(); runID != "" {
+		_, err := uuid.Parse(runID)
+		if err != nil {
+			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
+		}
+	}
+
+	return nil
+}
+
 func validateDeleteActivityExecutionRequest(
 	req *workflowservice.DeleteActivityExecutionRequest,
 	maxIDLengthLimit int,
