@@ -157,16 +157,8 @@ func testDeletedScheduleOperations(t *testing.T, newContext contextFactory) {
 		return errors.As(descErr, &notFoundErr)
 	}, 10*time.Second, 200*time.Millisecond)
 
-	// Note: UpdateSchedule is not tested here because CHASM returns ErrClosed
-	// while V1 silently accepts the signal on the sentinel workflow. The CHASM
-	// behavior is covered by TestScheduleUpdateAfterDelete.
-
-	// Note: PatchSchedule is not tested here for the same reason as Update —
-	// V1 silently accepts the signal on the sentinel workflow.
-
-	// Note: DeleteSchedule is not tested here because CHASM delete is
-	// idempotent (sets Closed=true again) while V1 terminates the workflow
-	// which then returns NotFound.
+	// Update, Patch, and Delete behave differently across CHASM and V1,
+	// so they are not tested here. See TestScheduleUpdateAfterDelete.
 }
 
 func testBasics(t *testing.T, newContext contextFactory) {
