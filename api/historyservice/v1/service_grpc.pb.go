@@ -89,9 +89,13 @@ const (
 	HistoryService_DeepHealthCheck_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/DeepHealthCheck"
 	HistoryService_SyncWorkflowState_FullMethodName                      = "/temporal.server.api.historyservice.v1.HistoryService/SyncWorkflowState"
 	HistoryService_UpdateActivityOptions_FullMethodName                  = "/temporal.server.api.historyservice.v1.HistoryService/UpdateActivityOptions"
+	HistoryService_UpdateActivityExecutionOptions_FullMethodName         = "/temporal.server.api.historyservice.v1.HistoryService/UpdateActivityExecutionOptions"
 	HistoryService_PauseActivity_FullMethodName                          = "/temporal.server.api.historyservice.v1.HistoryService/PauseActivity"
+	HistoryService_PauseActivityExecution_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/PauseActivityExecution"
 	HistoryService_UnpauseActivity_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/UnpauseActivity"
+	HistoryService_UnpauseActivityExecution_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/UnpauseActivityExecution"
 	HistoryService_ResetActivity_FullMethodName                          = "/temporal.server.api.historyservice.v1.HistoryService/ResetActivity"
+	HistoryService_ResetActivityExecution_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/ResetActivityExecution"
 	HistoryService_PauseWorkflowExecution_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/PauseWorkflowExecution"
 	HistoryService_UnpauseWorkflowExecution_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/UnpauseWorkflowExecution"
 	HistoryService_StartNexusOperation_FullMethodName                    = "/temporal.server.api.historyservice.v1.HistoryService/StartNexusOperation"
@@ -323,7 +327,12 @@ type HistoryServiceClient interface {
 	// UpdateActivityOptions is called by the client to update the options of an activity
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
+	// Deprecated. Use UpdateActivityExecutionOptions
 	UpdateActivityOptions(ctx context.Context, in *UpdateActivityOptionsRequest, opts ...grpc.CallOption) (*UpdateActivityOptionsResponse, error)
+	// UpdateActivityExecutionOptions is called by the client to update the options of an activity
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	UpdateActivityExecutionOptions(ctx context.Context, in *UpdateActivityExecutionOptionsRequest, opts ...grpc.CallOption) (*UpdateActivityExecutionOptionsResponse, error)
 	// PauseActivity pauses the execution of an activity specified by its ID.
 	// Returns a `NotFound` error if there is no pending activity with the provided ID.
 	//
@@ -344,7 +353,29 @@ type HistoryServiceClient interface {
 	// - The activity should respond to the cancellation accordingly.
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
+	// Deprecated. Use PauseActivityExecution
 	PauseActivity(ctx context.Context, in *PauseActivityRequest, opts ...grpc.CallOption) (*PauseActivityResponse, error)
+	// PauseActivityExecution pauses the execution of an activity specified by its ID.
+	// Returns a `NotFound` error if there is no pending activity with the provided ID.
+	//
+	// Pausing an activity means:
+	//   - If the activity is currently waiting for a retry or is running and subsequently fails,
+	//     it will not be rescheduled until it is unpause.
+	//   - If the activity is already paused, calling this method will have no effect.
+	//   - If the activity is running and finishes successfully, the activity will be completed.
+	//   - If the activity is running and finishes with failure:
+	//   - if there is no retry left - the activity will be completed.
+	//   - if there are more retries left - the activity will be paused.
+	//
+	// For long-running activities:
+	// - activities in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.
+	// - The activity should respond to the cancellation accordingly.
+	// For long-running activities:
+	// - activity in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.
+	// - The activity should respond to the cancellation accordingly.
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	PauseActivityExecution(ctx context.Context, in *PauseActivityExecutionRequest, opts ...grpc.CallOption) (*PauseActivityExecutionResponse, error)
 	// UnpauseActivity unpauses the execution of an activity specified by its ID.
 	//
 	// If activity is not paused, this call will have no effect.
@@ -359,7 +390,23 @@ type HistoryServiceClient interface {
 	// Returns a `NotFound` error if there is no pending activity with the provided ID.
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
+	// Deprecated. Use UnpauseActivityExecution
 	UnpauseActivity(ctx context.Context, in *UnpauseActivityRequest, opts ...grpc.CallOption) (*UnpauseActivityResponse, error)
+	// UnpauseActivityRequest unpauses the execution of an activity specified by its ID.
+	//
+	// If activity is not paused, this call will have no effect.
+	// If the activity is waiting for retry, it will be scheduled immediately (* see 'jitter' flag).
+	// Once the activity is unpause, all timeout timers will be regenerated.
+	//
+	// Flags:
+	// 'jitter': the activity will be scheduled at a random time within the jitter duration.
+	// 'reset_attempts': the number of attempts will be reset.
+	// 'reset_heartbeat': the activity heartbeat timer and heartbeats will be reset.
+	//
+	// Returns a `NotFound` error if there is no pending activity with the provided ID.
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	UnpauseActivityExecution(ctx context.Context, in *UnpauseActivityExecutionRequest, opts ...grpc.CallOption) (*UnpauseActivityExecutionResponse, error)
 	// ResetActivity resets the execution of an activity specified by its ID.
 	//
 	// Resetting an activity means:
@@ -378,7 +425,27 @@ type HistoryServiceClient interface {
 	// Returns a `NotFound` error if there is no pending activity with the provided ID.
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
+	// Deprecated. Use ResetActivityExecutionRequest
 	ResetActivity(ctx context.Context, in *ResetActivityRequest, opts ...grpc.CallOption) (*ResetActivityResponse, error)
+	// ResetActivityExecution resets the execution of an activity specified by its ID.
+	//
+	// Resetting an activity means:
+	//   - number of attempts will be reset to 0.
+	//   - activity timeouts will be reset.
+	//   - if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:
+	//     it will be scheduled immediately (* see 'jitter' flag),
+	//
+	// Flags:
+	//
+	// 'jitter': the activity will be scheduled at a random time within the jitter duration.
+	// If the activity currently paused it will be unpause, unless 'keep_paused' flag is provided.
+	// 'reset_heartbeats': the activity heartbeat timer and heartbeats will be reset.
+	// 'keep_paused': if the activity is paused, it will remain paused.
+	//
+	// Returns a `NotFound` error if there is no pending activity with the provided ID.
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	ResetActivityExecution(ctx context.Context, in *ResetActivityExecutionRequest, opts ...grpc.CallOption) (*ResetActivityExecutionResponse, error)
 	// PauseWorkflowExecution pauses the workflow execution specified in the request.
 	PauseWorkflowExecution(ctx context.Context, in *PauseWorkflowExecutionRequest, opts ...grpc.CallOption) (*PauseWorkflowExecutionResponse, error)
 	// UnpauseWorkflowExecution unpauses the workflow execution specified in the request.
@@ -1040,9 +1107,27 @@ func (c *historyServiceClient) UpdateActivityOptions(ctx context.Context, in *Up
 	return out, nil
 }
 
+func (c *historyServiceClient) UpdateActivityExecutionOptions(ctx context.Context, in *UpdateActivityExecutionOptionsRequest, opts ...grpc.CallOption) (*UpdateActivityExecutionOptionsResponse, error) {
+	out := new(UpdateActivityExecutionOptionsResponse)
+	err := c.cc.Invoke(ctx, HistoryService_UpdateActivityExecutionOptions_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *historyServiceClient) PauseActivity(ctx context.Context, in *PauseActivityRequest, opts ...grpc.CallOption) (*PauseActivityResponse, error) {
 	out := new(PauseActivityResponse)
 	err := c.cc.Invoke(ctx, HistoryService_PauseActivity_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) PauseActivityExecution(ctx context.Context, in *PauseActivityExecutionRequest, opts ...grpc.CallOption) (*PauseActivityExecutionResponse, error) {
+	out := new(PauseActivityExecutionResponse)
+	err := c.cc.Invoke(ctx, HistoryService_PauseActivityExecution_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1058,9 +1143,27 @@ func (c *historyServiceClient) UnpauseActivity(ctx context.Context, in *UnpauseA
 	return out, nil
 }
 
+func (c *historyServiceClient) UnpauseActivityExecution(ctx context.Context, in *UnpauseActivityExecutionRequest, opts ...grpc.CallOption) (*UnpauseActivityExecutionResponse, error) {
+	out := new(UnpauseActivityExecutionResponse)
+	err := c.cc.Invoke(ctx, HistoryService_UnpauseActivityExecution_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *historyServiceClient) ResetActivity(ctx context.Context, in *ResetActivityRequest, opts ...grpc.CallOption) (*ResetActivityResponse, error) {
 	out := new(ResetActivityResponse)
 	err := c.cc.Invoke(ctx, HistoryService_ResetActivity_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) ResetActivityExecution(ctx context.Context, in *ResetActivityExecutionRequest, opts ...grpc.CallOption) (*ResetActivityExecutionResponse, error) {
+	out := new(ResetActivityExecutionResponse)
+	err := c.cc.Invoke(ctx, HistoryService_ResetActivityExecution_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1328,7 +1431,12 @@ type HistoryServiceServer interface {
 	// UpdateActivityOptions is called by the client to update the options of an activity
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
+	// Deprecated. Use UpdateActivityExecutionOptions
 	UpdateActivityOptions(context.Context, *UpdateActivityOptionsRequest) (*UpdateActivityOptionsResponse, error)
+	// UpdateActivityExecutionOptions is called by the client to update the options of an activity
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	UpdateActivityExecutionOptions(context.Context, *UpdateActivityExecutionOptionsRequest) (*UpdateActivityExecutionOptionsResponse, error)
 	// PauseActivity pauses the execution of an activity specified by its ID.
 	// Returns a `NotFound` error if there is no pending activity with the provided ID.
 	//
@@ -1349,7 +1457,29 @@ type HistoryServiceServer interface {
 	// - The activity should respond to the cancellation accordingly.
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
+	// Deprecated. Use PauseActivityExecution
 	PauseActivity(context.Context, *PauseActivityRequest) (*PauseActivityResponse, error)
+	// PauseActivityExecution pauses the execution of an activity specified by its ID.
+	// Returns a `NotFound` error if there is no pending activity with the provided ID.
+	//
+	// Pausing an activity means:
+	//   - If the activity is currently waiting for a retry or is running and subsequently fails,
+	//     it will not be rescheduled until it is unpause.
+	//   - If the activity is already paused, calling this method will have no effect.
+	//   - If the activity is running and finishes successfully, the activity will be completed.
+	//   - If the activity is running and finishes with failure:
+	//   - if there is no retry left - the activity will be completed.
+	//   - if there are more retries left - the activity will be paused.
+	//
+	// For long-running activities:
+	// - activities in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.
+	// - The activity should respond to the cancellation accordingly.
+	// For long-running activities:
+	// - activity in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.
+	// - The activity should respond to the cancellation accordingly.
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	PauseActivityExecution(context.Context, *PauseActivityExecutionRequest) (*PauseActivityExecutionResponse, error)
 	// UnpauseActivity unpauses the execution of an activity specified by its ID.
 	//
 	// If activity is not paused, this call will have no effect.
@@ -1364,7 +1494,23 @@ type HistoryServiceServer interface {
 	// Returns a `NotFound` error if there is no pending activity with the provided ID.
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
+	// Deprecated. Use UnpauseActivityExecution
 	UnpauseActivity(context.Context, *UnpauseActivityRequest) (*UnpauseActivityResponse, error)
+	// UnpauseActivityRequest unpauses the execution of an activity specified by its ID.
+	//
+	// If activity is not paused, this call will have no effect.
+	// If the activity is waiting for retry, it will be scheduled immediately (* see 'jitter' flag).
+	// Once the activity is unpause, all timeout timers will be regenerated.
+	//
+	// Flags:
+	// 'jitter': the activity will be scheduled at a random time within the jitter duration.
+	// 'reset_attempts': the number of attempts will be reset.
+	// 'reset_heartbeat': the activity heartbeat timer and heartbeats will be reset.
+	//
+	// Returns a `NotFound` error if there is no pending activity with the provided ID.
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	UnpauseActivityExecution(context.Context, *UnpauseActivityExecutionRequest) (*UnpauseActivityExecutionResponse, error)
 	// ResetActivity resets the execution of an activity specified by its ID.
 	//
 	// Resetting an activity means:
@@ -1383,7 +1529,27 @@ type HistoryServiceServer interface {
 	// Returns a `NotFound` error if there is no pending activity with the provided ID.
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
+	// Deprecated. Use ResetActivityExecutionRequest
 	ResetActivity(context.Context, *ResetActivityRequest) (*ResetActivityResponse, error)
+	// ResetActivityExecution resets the execution of an activity specified by its ID.
+	//
+	// Resetting an activity means:
+	//   - number of attempts will be reset to 0.
+	//   - activity timeouts will be reset.
+	//   - if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:
+	//     it will be scheduled immediately (* see 'jitter' flag),
+	//
+	// Flags:
+	//
+	// 'jitter': the activity will be scheduled at a random time within the jitter duration.
+	// If the activity currently paused it will be unpause, unless 'keep_paused' flag is provided.
+	// 'reset_heartbeats': the activity heartbeat timer and heartbeats will be reset.
+	// 'keep_paused': if the activity is paused, it will remain paused.
+	//
+	// Returns a `NotFound` error if there is no pending activity with the provided ID.
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	ResetActivityExecution(context.Context, *ResetActivityExecutionRequest) (*ResetActivityExecutionResponse, error)
 	// PauseWorkflowExecution pauses the workflow execution specified in the request.
 	PauseWorkflowExecution(context.Context, *PauseWorkflowExecutionRequest) (*PauseWorkflowExecutionResponse, error)
 	// UnpauseWorkflowExecution unpauses the workflow execution specified in the request.
@@ -1606,14 +1772,26 @@ func (UnimplementedHistoryServiceServer) SyncWorkflowState(context.Context, *Syn
 func (UnimplementedHistoryServiceServer) UpdateActivityOptions(context.Context, *UpdateActivityOptionsRequest) (*UpdateActivityOptionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptions not implemented")
 }
+func (UnimplementedHistoryServiceServer) UpdateActivityExecutionOptions(context.Context, *UpdateActivityExecutionOptionsRequest) (*UpdateActivityExecutionOptionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityExecutionOptions not implemented")
+}
 func (UnimplementedHistoryServiceServer) PauseActivity(context.Context, *PauseActivityRequest) (*PauseActivityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PauseActivity not implemented")
+}
+func (UnimplementedHistoryServiceServer) PauseActivityExecution(context.Context, *PauseActivityExecutionRequest) (*PauseActivityExecutionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PauseActivityExecution not implemented")
 }
 func (UnimplementedHistoryServiceServer) UnpauseActivity(context.Context, *UnpauseActivityRequest) (*UnpauseActivityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnpauseActivity not implemented")
 }
+func (UnimplementedHistoryServiceServer) UnpauseActivityExecution(context.Context, *UnpauseActivityExecutionRequest) (*UnpauseActivityExecutionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnpauseActivityExecution not implemented")
+}
 func (UnimplementedHistoryServiceServer) ResetActivity(context.Context, *ResetActivityRequest) (*ResetActivityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResetActivity not implemented")
+}
+func (UnimplementedHistoryServiceServer) ResetActivityExecution(context.Context, *ResetActivityExecutionRequest) (*ResetActivityExecutionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResetActivityExecution not implemented")
 }
 func (UnimplementedHistoryServiceServer) PauseWorkflowExecution(context.Context, *PauseWorkflowExecutionRequest) (*PauseWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PauseWorkflowExecution not implemented")
@@ -2890,6 +3068,24 @@ func _HistoryService_UpdateActivityOptions_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_UpdateActivityExecutionOptions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateActivityExecutionOptionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).UpdateActivityExecutionOptions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_UpdateActivityExecutionOptions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).UpdateActivityExecutionOptions(ctx, req.(*UpdateActivityExecutionOptionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HistoryService_PauseActivity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PauseActivityRequest)
 	if err := dec(in); err != nil {
@@ -2904,6 +3100,24 @@ func _HistoryService_PauseActivity_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HistoryServiceServer).PauseActivity(ctx, req.(*PauseActivityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_PauseActivityExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseActivityExecutionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).PauseActivityExecution(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_PauseActivityExecution_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).PauseActivityExecution(ctx, req.(*PauseActivityExecutionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2926,6 +3140,24 @@ func _HistoryService_UnpauseActivity_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_UnpauseActivityExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnpauseActivityExecutionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).UnpauseActivityExecution(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_UnpauseActivityExecution_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).UnpauseActivityExecution(ctx, req.(*UnpauseActivityExecutionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HistoryService_ResetActivity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ResetActivityRequest)
 	if err := dec(in); err != nil {
@@ -2940,6 +3172,24 @@ func _HistoryService_ResetActivity_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HistoryServiceServer).ResetActivity(ctx, req.(*ResetActivityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_ResetActivityExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResetActivityExecutionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).ResetActivityExecution(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_ResetActivityExecution_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).ResetActivityExecution(ctx, req.(*ResetActivityExecutionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -3296,16 +3546,32 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _HistoryService_UpdateActivityOptions_Handler,
 		},
 		{
+			MethodName: "UpdateActivityExecutionOptions",
+			Handler:    _HistoryService_UpdateActivityExecutionOptions_Handler,
+		},
+		{
 			MethodName: "PauseActivity",
 			Handler:    _HistoryService_PauseActivity_Handler,
+		},
+		{
+			MethodName: "PauseActivityExecution",
+			Handler:    _HistoryService_PauseActivityExecution_Handler,
 		},
 		{
 			MethodName: "UnpauseActivity",
 			Handler:    _HistoryService_UnpauseActivity_Handler,
 		},
 		{
+			MethodName: "UnpauseActivityExecution",
+			Handler:    _HistoryService_UnpauseActivityExecution_Handler,
+		},
+		{
 			MethodName: "ResetActivity",
 			Handler:    _HistoryService_ResetActivity_Handler,
+		},
+		{
+			MethodName: "ResetActivityExecution",
+			Handler:    _HistoryService_ResetActivityExecution_Handler,
 		},
 		{
 			MethodName: "PauseWorkflowExecution",
