@@ -156,6 +156,7 @@ func (s *WorkflowHandlerSuite) SetupTest() {
 	s.tokenSerializer = tasktoken.NewSerializer()
 
 	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName}).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(false).AnyTimes()
 	s.mockExecutionManager.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()
 }
 
