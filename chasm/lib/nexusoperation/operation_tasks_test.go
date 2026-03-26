@@ -9,7 +9,7 @@ import (
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 )
 
-func TestBackoffTaskExecutor_Validate(t *testing.T) {
+func TestBackoffTaskHandler_Validate(t *testing.T) {
 	testCases := []struct {
 		name     string
 		status   nexusoperationpb.OperationStatus
@@ -54,7 +54,7 @@ func TestBackoffTaskExecutor_Validate(t *testing.T) {
 		},
 	}
 
-	executor := &OperationBackoffTaskExecutor{}
+	executor := &OperationBackoffTaskHandler{}
 	ctx := &chasm.MockContext{}
 
 	for _, tc := range testCases {
@@ -70,7 +70,7 @@ func TestBackoffTaskExecutor_Validate(t *testing.T) {
 	}
 }
 
-func TestBackoffTaskExecutor_Execute(t *testing.T) {
+func TestBackoffTaskHandler_Execute(t *testing.T) {
 	ctx := &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
 			HandleNow: func(chasm.Component) time.Time { return defaultTime },
@@ -81,7 +81,7 @@ func TestBackoffTaskExecutor_Execute(t *testing.T) {
 	op.Status = nexusoperationpb.OPERATION_STATUS_BACKING_OFF
 	op.Attempt = 2
 
-	executor := &OperationBackoffTaskExecutor{}
+	executor := &OperationBackoffTaskHandler{}
 	err := executor.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.InvocationBackoffTask{Attempt: 2})
 	require.NoError(t, err)
 
@@ -92,7 +92,7 @@ func TestBackoffTaskExecutor_Execute(t *testing.T) {
 	require.True(t, ok, "expected InvocationTask")
 }
 
-func TestScheduleToStartTimeoutTaskExecutor_Validate(t *testing.T) {
+func TestScheduleToStartTimeoutTaskHandler_Validate(t *testing.T) {
 	testCases := []struct {
 		name     string
 		status   nexusoperationpb.OperationStatus
@@ -125,7 +125,7 @@ func TestScheduleToStartTimeoutTaskExecutor_Validate(t *testing.T) {
 		},
 	}
 
-	executor := &OperationScheduleToStartTimeoutTaskExecutor{}
+	executor := &OperationScheduleToStartTimeoutTaskHandler{}
 	ctx := &chasm.MockContext{}
 
 	for _, tc := range testCases {
@@ -140,7 +140,7 @@ func TestScheduleToStartTimeoutTaskExecutor_Validate(t *testing.T) {
 	}
 }
 
-func TestScheduleToStartTimeoutTaskExecutor_Execute(t *testing.T) {
+func TestScheduleToStartTimeoutTaskHandler_Execute(t *testing.T) {
 	ctx := &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
 			HandleNow: func(chasm.Component) time.Time { return defaultTime },
@@ -150,7 +150,7 @@ func TestScheduleToStartTimeoutTaskExecutor_Execute(t *testing.T) {
 	op := newTestOperation()
 	op.Status = nexusoperationpb.OPERATION_STATUS_SCHEDULED
 
-	executor := &OperationScheduleToStartTimeoutTaskExecutor{}
+	executor := &OperationScheduleToStartTimeoutTaskHandler{}
 	err := executor.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.ScheduleToStartTimeoutTask{})
 	require.NoError(t, err)
 
@@ -158,7 +158,7 @@ func TestScheduleToStartTimeoutTaskExecutor_Execute(t *testing.T) {
 	require.Empty(t, ctx.Tasks)
 }
 
-func TestStartToCloseTimeoutTaskExecutor_Validate(t *testing.T) {
+func TestStartToCloseTimeoutTaskHandler_Validate(t *testing.T) {
 	testCases := []struct {
 		name     string
 		status   nexusoperationpb.OperationStatus
@@ -191,7 +191,7 @@ func TestStartToCloseTimeoutTaskExecutor_Validate(t *testing.T) {
 		},
 	}
 
-	executor := &OperationStartToCloseTimeoutTaskExecutor{}
+	executor := &OperationStartToCloseTimeoutTaskHandler{}
 	ctx := &chasm.MockContext{}
 
 	for _, tc := range testCases {
@@ -206,7 +206,7 @@ func TestStartToCloseTimeoutTaskExecutor_Validate(t *testing.T) {
 	}
 }
 
-func TestStartToCloseTimeoutTaskExecutor_Execute(t *testing.T) {
+func TestStartToCloseTimeoutTaskHandler_Execute(t *testing.T) {
 	ctx := &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
 			HandleNow: func(chasm.Component) time.Time { return defaultTime },
@@ -216,7 +216,7 @@ func TestStartToCloseTimeoutTaskExecutor_Execute(t *testing.T) {
 	op := newTestOperation()
 	op.Status = nexusoperationpb.OPERATION_STATUS_STARTED
 
-	executor := &OperationStartToCloseTimeoutTaskExecutor{}
+	executor := &OperationStartToCloseTimeoutTaskHandler{}
 	err := executor.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.StartToCloseTimeoutTask{})
 	require.NoError(t, err)
 
@@ -224,7 +224,7 @@ func TestStartToCloseTimeoutTaskExecutor_Execute(t *testing.T) {
 	require.Empty(t, ctx.Tasks)
 }
 
-func TestScheduleToCloseTimeoutTaskExecutor_Validate(t *testing.T) {
+func TestScheduleToCloseTimeoutTaskHandler_Validate(t *testing.T) {
 	testCases := []struct {
 		name     string
 		status   nexusoperationpb.OperationStatus
@@ -267,7 +267,7 @@ func TestScheduleToCloseTimeoutTaskExecutor_Validate(t *testing.T) {
 		},
 	}
 
-	executor := &OperationScheduleToCloseTimeoutTaskExecutor{}
+	executor := &OperationScheduleToCloseTimeoutTaskHandler{}
 	ctx := &chasm.MockContext{}
 
 	for _, tc := range testCases {
@@ -282,7 +282,7 @@ func TestScheduleToCloseTimeoutTaskExecutor_Validate(t *testing.T) {
 	}
 }
 
-func TestScheduleToCloseTimeoutTaskExecutor_Execute(t *testing.T) {
+func TestScheduleToCloseTimeoutTaskHandler_Execute(t *testing.T) {
 	ctx := &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
 			HandleNow: func(chasm.Component) time.Time { return defaultTime },
@@ -292,7 +292,7 @@ func TestScheduleToCloseTimeoutTaskExecutor_Execute(t *testing.T) {
 	op := newTestOperation()
 	op.Status = nexusoperationpb.OPERATION_STATUS_SCHEDULED
 
-	executor := &OperationScheduleToCloseTimeoutTaskExecutor{}
+	executor := &OperationScheduleToCloseTimeoutTaskHandler{}
 	err := executor.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.ScheduleToCloseTimeoutTask{})
 	require.NoError(t, err)
 
