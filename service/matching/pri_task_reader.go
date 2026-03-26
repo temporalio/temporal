@@ -149,7 +149,8 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 		tr.SignalTaskLoading()
 	}
 
-	tr.backlogMgr.db.updateAckLevelAndBacklogStats(tr.subqueue, tr.ackLevel, -numAcked, tr.backlogAge.oldestTime())
+	tr.backlogMgr.db.updateAckLevelAndBacklogStats(
+		tr.subqueue, tr.ackLevel, -numAcked, tr.backlogAge.oldestTime(), tr.isDrainedLocked())
 }
 
 // nolint:revive // can simplify later
@@ -426,6 +427,10 @@ func (tr *priTaskReader) getLoadedTasks() int {
 func (tr *priTaskReader) isDrained() bool {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
+	return tr.isDrainedLocked()
+}
+
+func (tr *priTaskReader) isDrainedLocked() bool {
 	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel(tr.subqueue)
 	return tr.readLevel >= maxReadLevel && tr.outstandingTasks.Empty()
 }

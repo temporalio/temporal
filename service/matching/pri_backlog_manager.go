@@ -135,8 +135,9 @@ func (c *priBacklogManagerImpl) Stop() {
 	c.subqueueLock.Lock()
 	for i, r := range c.subqueues {
 		_, ackLevel := r.getLevels()
-		// oldestTime can be time.Time{} here since countDelta is 0
-		c.db.updateAckLevelAndBacklogStats(subqueueIndex(i), ackLevel, 0, time.Time{})
+		// If we pass 0 for countDelta, oldestTime is unused, so just use time.Time{}.
+		// We can safely pass false for isDrained, that just avoids resetting backlog count.
+		c.db.updateAckLevelAndBacklogStats(subqueueIndex(i), ackLevel, 0, time.Time{}, false)
 	}
 	c.subqueueLock.Unlock()
 
