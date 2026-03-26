@@ -28,7 +28,7 @@ func TestActivityApiBatchResetClientTestSuite(t *testing.T) {
 	t.Run("TestActivityBatchReset_Failed", testActivityBatchResetFailed)
 }
 
-func createBatchResetWorkflow(s *testcore.TestEnv, ctx context.Context, workflowFn WorkflowFunction) sdkclient.WorkflowRun {
+func createBatchResetWorkflow(ctx context.Context, s *testcore.TestEnv, workflowFn WorkflowFunction) sdkclient.WorkflowRun {
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
 		TaskQueue: s.WorkerTaskQueue(),
@@ -51,8 +51,8 @@ func testActivityBatchResetSuccess(t *testing.T) {
 	s.SdkWorker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
 	s.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
 
-	workflowRun1 := createBatchResetWorkflow(s, ctx, internalWorkflow.WorkflowFunc)
-	workflowRun2 := createBatchResetWorkflow(s, ctx, internalWorkflow.WorkflowFunc)
+	workflowRun1 := createBatchResetWorkflow(ctx, s, internalWorkflow.WorkflowFunc)
+	workflowRun2 := createBatchResetWorkflow(ctx, s, internalWorkflow.WorkflowFunc)
 
 	// wait for activity to start in both workflows
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -181,8 +181,8 @@ func testActivityBatchResetSuccessProtobuf(t *testing.T) {
 	s.SdkWorker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
 	s.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
 
-	workflowRun1 := createBatchResetWorkflow(s, ctx, internalWorkflow.WorkflowFunc)
-	workflowRun2 := createBatchResetWorkflow(s, ctx, internalWorkflow.WorkflowFunc)
+	workflowRun1 := createBatchResetWorkflow(ctx, s, internalWorkflow.WorkflowFunc)
+	workflowRun2 := createBatchResetWorkflow(ctx, s, internalWorkflow.WorkflowFunc)
 
 	// wait for activity to start in both workflows
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -311,8 +311,8 @@ func testActivityBatchResetDontResetAttempts(t *testing.T) {
 	s.SdkWorker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
 	s.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
 
-	workflowRun1 := createBatchResetWorkflow(s, ctx, internalWorkflow.WorkflowFunc)
-	workflowRun2 := createBatchResetWorkflow(s, ctx, internalWorkflow.WorkflowFunc)
+	workflowRun1 := createBatchResetWorkflow(ctx, s, internalWorkflow.WorkflowFunc)
+	workflowRun2 := createBatchResetWorkflow(ctx, s, internalWorkflow.WorkflowFunc)
 
 	// wait for activity to start in both workflows
 	s.EventuallyWithT(func(t *assert.CollectT) {
