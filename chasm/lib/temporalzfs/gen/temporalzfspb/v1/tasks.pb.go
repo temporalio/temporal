@@ -243,19 +243,19 @@ var File_temporal_server_chasm_lib_temporalzfs_proto_v1_tasks_proto protoreflect
 
 const file_temporal_server_chasm_lib_temporalzfs_proto_v1_tasks_proto_rawDesc = "" +
 	"\n" +
-	"9temporal/server/chasm/lib/temporalzfs/proto/v1/tasks.proto\x12-temporal.server.chasm.lib.temporalzfs.proto.v1\"@\n" +
+	":temporal/server/chasm/lib/temporalzfs/proto/v1/tasks.proto\x12.temporal.server.chasm.lib.temporalzfs.proto.v1\"@\n" +
 	"\vChunkGCTask\x121\n" +
 	"\x15last_processed_txn_id\x18\x01 \x01(\x04R\x12lastProcessedTxnId\"A\n" +
 	"\x13ManifestCompactTask\x12*\n" +
 	"\x11checkpoint_txn_id\x18\x01 \x01(\x04R\x0fcheckpointTxnId\"\x10\n" +
-	"\x0eQuotaCheckTask\"\xd0\x01\n" +
-	"\x0eOwnerCheckTask\x12{\n" +
-	"\x10not_found_counts\x18\x01 \x03(\v2Q.temporal.server.chasm.lib.temporalzfs.proto.v1.OwnerCheckTask.NotFoundCountsEntryR\x0enotFoundCounts\x1aA\n" +
+	"\x0eQuotaCheckTask\"\xd1\x01\n" +
+	"\x0eOwnerCheckTask\x12|\n" +
+	"\x10not_found_counts\x18\x01 \x03(\v2R.temporal.server.chasm.lib.temporalzfs.proto.v1.OwnerCheckTask.NotFoundCountsEntryR\x0enotFoundCounts\x1aA\n" +
 	"\x13NotFoundCountsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x05R\x05value:\x028\x01\"+\n" +
 	"\x0fDataCleanupTask\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattemptBJZHgo.temporal.io/server/chasm/lib/temporalzfs/gen/temporalzfspb;temporalzfspbb\x06proto3"
+	"\aattempt\x18\x01 \x01(\x05R\aattemptBMZKgo.temporal.io/server/chasm/lib/temporalzfs/gen/temporalzfspb;temporalzfspbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_temporalzfs_proto_v1_tasks_proto_rawDescOnce sync.Once

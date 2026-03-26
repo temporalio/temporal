@@ -78,7 +78,7 @@ else
   temporal server start-dev --port 7233 --ui-port 8233 2>/dev/null &
   TEMPORAL_PID=$!
   # Wait for server to be ready.
-  for i in $(seq 1 30); do
+  for _ in $(seq 1 30); do
     if temporal workflow list --address "$TEMPORAL_ADDR" >/dev/null 2>&1; then
       break
     fi

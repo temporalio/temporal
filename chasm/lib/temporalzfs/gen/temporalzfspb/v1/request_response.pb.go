@@ -2829,21 +2829,21 @@ var File_temporal_server_chasm_lib_temporalzfs_proto_v1_request_response_proto p
 
 const file_temporal_server_chasm_lib_temporalzfs_proto_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"Dtemporal/server/chasm/lib/temporalzfs/proto/v1/request_response.proto\x12-temporal.server.chasm.lib.temporalzfs.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a9temporal/server/chasm/lib/temporalzfs/proto/v1/state.proto\"\x87\x02\n" +
+	"Etemporal/server/chasm/lib/temporalzfs/proto/v1/request_response.proto\x12.temporal.server.chasm.lib.temporalzfs.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a:temporal/server/chasm/lib/temporalzfs/proto/v1/state.proto\"\x88\x02\n" +
 	"\x17CreateFilesystemRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
 	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\x12,\n" +
-	"\x12owner_workflow_ids\x18\x06 \x03(\tR\x10ownerWorkflowIds\x12W\n" +
-	"\x06config\x18\x04 \x01(\v2?.temporal.server.chasm.lib.temporalzfs.proto.v1.FilesystemConfigR\x06config\x12\x1d\n" +
+	"\x12owner_workflow_ids\x18\x06 \x03(\tR\x10ownerWorkflowIds\x12X\n" +
+	"\x06config\x18\x04 \x01(\v2@.temporal.server.chasm.lib.temporalzfs.proto.v1.FilesystemConfigR\x06config\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x05 \x01(\tR\trequestId\"1\n" +
 	"\x18CreateFilesystemResponse\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\"b\n" +
 	"\x18GetFilesystemInfoRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
-	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\"\x88\x01\n" +
-	"\x19GetFilesystemInfoResponse\x12T\n" +
-	"\x05state\x18\x01 \x01(\v2>.temporal.server.chasm.lib.temporalzfs.proto.v1.FilesystemStateR\x05state\x12\x15\n" +
+	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\"\x89\x01\n" +
+	"\x19GetFilesystemInfoResponse\x12U\n" +
+	"\x05state\x18\x01 \x01(\v2?.temporal.server.chasm.lib.temporalzfs.proto.v1.FilesystemStateR\x05state\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\"b\n" +
 	"\x18ArchiveFilesystemRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
@@ -2853,10 +2853,10 @@ const file_temporal_server_chasm_lib_temporalzfs_proto_v1_request_response_proto
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
 	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\x12&\n" +
 	"\x0fparent_inode_id\x18\x03 \x01(\x04R\rparentInodeId\x12\x12\n" +
-	"\x04name\x18\x04 \x01(\tR\x04name\"y\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\"z\n" +
 	"\x0eLookupResponse\x12\x19\n" +
-	"\binode_id\x18\x01 \x01(\x04R\ainodeId\x12L\n" +
-	"\x04attr\x18\x02 \x01(\v28.temporal.server.chasm.lib.temporalzfs.proto.v1.InodeAttrR\x04attr\"\xab\x01\n" +
+	"\binode_id\x18\x01 \x01(\x04R\ainodeId\x12M\n" +
+	"\x04attr\x18\x02 \x01(\v29.temporal.server.chasm.lib.temporalzfs.proto.v1.InodeAttrR\x04attr\"\xab\x01\n" +
 	"\x11ReadChunksRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
 	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\x12\x19\n" +
@@ -2878,16 +2878,16 @@ const file_temporal_server_chasm_lib_temporalzfs_proto_v1_request_response_proto
 	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\x12&\n" +
 	"\x0fparent_inode_id\x18\x03 \x01(\x04R\rparentInodeId\x12\x12\n" +
 	"\x04name\x18\x04 \x01(\tR\x04name\x12\x12\n" +
-	"\x04mode\x18\x05 \x01(\rR\x04mode\"x\n" +
+	"\x04mode\x18\x05 \x01(\rR\x04mode\"y\n" +
 	"\rMkdirResponse\x12\x19\n" +
-	"\binode_id\x18\x01 \x01(\x04R\ainodeId\x12L\n" +
-	"\x04attr\x18\x02 \x01(\v28.temporal.server.chasm.lib.temporalzfs.proto.v1.InodeAttrR\x04attr\"s\n" +
+	"\binode_id\x18\x01 \x01(\x04R\ainodeId\x12M\n" +
+	"\x04attr\x18\x02 \x01(\v29.temporal.server.chasm.lib.temporalzfs.proto.v1.InodeAttrR\x04attr\"s\n" +
 	"\x0eReadDirRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
 	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\x12\x19\n" +
-	"\binode_id\x18\x03 \x01(\x04R\ainodeId\"d\n" +
-	"\x0fReadDirResponse\x12Q\n" +
-	"\aentries\x18\x01 \x03(\v27.temporal.server.chasm.lib.temporalzfs.proto.v1.DirEntryR\aentries\"\x93\x01\n" +
+	"\binode_id\x18\x03 \x01(\x04R\ainodeId\"e\n" +
+	"\x0fReadDirResponse\x12R\n" +
+	"\aentries\x18\x01 \x03(\v28.temporal.server.chasm.lib.temporalzfs.proto.v1.DirEntryR\aentries\"\x93\x01\n" +
 	"\rUnlinkRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
 	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\x12&\n" +
@@ -2911,17 +2911,17 @@ const file_temporal_server_chasm_lib_temporalzfs_proto_v1_request_response_proto
 	"\x0eGetattrRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
 	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\x12\x19\n" +
-	"\binode_id\x18\x03 \x01(\x04R\ainodeId\"_\n" +
-	"\x0fGetattrResponse\x12L\n" +
-	"\x04attr\x18\x01 \x01(\v28.temporal.server.chasm.lib.temporalzfs.proto.v1.InodeAttrR\x04attr\"\xd7\x01\n" +
+	"\binode_id\x18\x03 \x01(\x04R\ainodeId\"`\n" +
+	"\x0fGetattrResponse\x12M\n" +
+	"\x04attr\x18\x01 \x01(\v29.temporal.server.chasm.lib.temporalzfs.proto.v1.InodeAttrR\x04attr\"\xd8\x01\n" +
 	"\x0eSetattrRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
 	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\x12\x19\n" +
-	"\binode_id\x18\x03 \x01(\x04R\ainodeId\x12L\n" +
-	"\x04attr\x18\x04 \x01(\v28.temporal.server.chasm.lib.temporalzfs.proto.v1.InodeAttrR\x04attr\x12\x14\n" +
-	"\x05valid\x18\x05 \x01(\rR\x05valid\"_\n" +
-	"\x0fSetattrResponse\x12L\n" +
-	"\x04attr\x18\x01 \x01(\v28.temporal.server.chasm.lib.temporalzfs.proto.v1.InodeAttrR\x04attr\"\x8f\x01\n" +
+	"\binode_id\x18\x03 \x01(\x04R\ainodeId\x12M\n" +
+	"\x04attr\x18\x04 \x01(\v29.temporal.server.chasm.lib.temporalzfs.proto.v1.InodeAttrR\x04attr\x12\x14\n" +
+	"\x05valid\x18\x05 \x01(\rR\x05valid\"`\n" +
+	"\x0fSetattrResponse\x12M\n" +
+	"\x04attr\x18\x01 \x01(\v29.temporal.server.chasm.lib.temporalzfs.proto.v1.InodeAttrR\x04attr\"\x8f\x01\n" +
 	"\x0fTruncateRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
 	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\x12\x19\n" +
@@ -2933,18 +2933,18 @@ const file_temporal_server_chasm_lib_temporalzfs_proto_v1_request_response_proto
 	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\x12\x19\n" +
 	"\binode_id\x18\x03 \x01(\x04R\ainodeId\x12-\n" +
 	"\x13new_parent_inode_id\x18\x04 \x01(\x04R\x10newParentInodeId\x12\x19\n" +
-	"\bnew_name\x18\x05 \x01(\tR\anewName\"\\\n" +
-	"\fLinkResponse\x12L\n" +
-	"\x04attr\x18\x01 \x01(\v28.temporal.server.chasm.lib.temporalzfs.proto.v1.InodeAttrR\x04attr\"\xac\x01\n" +
+	"\bnew_name\x18\x05 \x01(\tR\anewName\"]\n" +
+	"\fLinkResponse\x12M\n" +
+	"\x04attr\x18\x01 \x01(\v29.temporal.server.chasm.lib.temporalzfs.proto.v1.InodeAttrR\x04attr\"\xac\x01\n" +
 	"\x0eSymlinkRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
 	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\x12&\n" +
 	"\x0fparent_inode_id\x18\x03 \x01(\x04R\rparentInodeId\x12\x12\n" +
 	"\x04name\x18\x04 \x01(\tR\x04name\x12\x16\n" +
-	"\x06target\x18\x05 \x01(\tR\x06target\"z\n" +
+	"\x06target\x18\x05 \x01(\tR\x06target\"{\n" +
 	"\x0fSymlinkResponse\x12\x19\n" +
-	"\binode_id\x18\x01 \x01(\x04R\ainodeId\x12L\n" +
-	"\x04attr\x18\x02 \x01(\v28.temporal.server.chasm.lib.temporalzfs.proto.v1.InodeAttrR\x04attr\"t\n" +
+	"\binode_id\x18\x01 \x01(\x04R\ainodeId\x12M\n" +
+	"\x04attr\x18\x02 \x01(\v29.temporal.server.chasm.lib.temporalzfs.proto.v1.InodeAttrR\x04attr\"t\n" +
 	"\x0fReadlinkRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
 	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\x12\x19\n" +
@@ -2957,20 +2957,20 @@ const file_temporal_server_chasm_lib_temporalzfs_proto_v1_request_response_proto
 	"\x0fparent_inode_id\x18\x03 \x01(\x04R\rparentInodeId\x12\x12\n" +
 	"\x04name\x18\x04 \x01(\tR\x04name\x12\x12\n" +
 	"\x04mode\x18\x05 \x01(\rR\x04mode\x12\x14\n" +
-	"\x05flags\x18\x06 \x01(\rR\x05flags\"}\n" +
+	"\x05flags\x18\x06 \x01(\rR\x05flags\"~\n" +
 	"\x12CreateFileResponse\x12\x19\n" +
-	"\binode_id\x18\x01 \x01(\x04R\ainodeId\x12L\n" +
-	"\x04attr\x18\x02 \x01(\v28.temporal.server.chasm.lib.temporalzfs.proto.v1.InodeAttrR\x04attr\"\xb8\x01\n" +
+	"\binode_id\x18\x01 \x01(\x04R\ainodeId\x12M\n" +
+	"\x04attr\x18\x02 \x01(\v29.temporal.server.chasm.lib.temporalzfs.proto.v1.InodeAttrR\x04attr\"\xb8\x01\n" +
 	"\fMknodRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
 	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\x12&\n" +
 	"\x0fparent_inode_id\x18\x03 \x01(\x04R\rparentInodeId\x12\x12\n" +
 	"\x04name\x18\x04 \x01(\tR\x04name\x12\x12\n" +
 	"\x04mode\x18\x05 \x01(\rR\x04mode\x12\x10\n" +
-	"\x03dev\x18\x06 \x01(\rR\x03dev\"x\n" +
+	"\x03dev\x18\x06 \x01(\rR\x03dev\"y\n" +
 	"\rMknodResponse\x12\x19\n" +
-	"\binode_id\x18\x01 \x01(\x04R\ainodeId\x12L\n" +
-	"\x04attr\x18\x02 \x01(\v28.temporal.server.chasm.lib.temporalzfs.proto.v1.InodeAttrR\x04attr\"W\n" +
+	"\binode_id\x18\x01 \x01(\x04R\ainodeId\x12M\n" +
+	"\x04attr\x18\x02 \x01(\v29.temporal.server.chasm.lib.temporalzfs.proto.v1.InodeAttrR\x04attr\"W\n" +
 	"\rStatfsRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
 	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\"\xca\x01\n" +
@@ -3014,7 +3014,7 @@ const file_temporal_server_chasm_lib_temporalzfs_proto_v1_request_response_proto
 	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\x12\x1f\n" +
 	"\vworkflow_id\x18\x03 \x01(\tR\n" +
 	"workflowId\"\x18\n" +
-	"\x16DetachWorkflowResponseBJZHgo.temporal.io/server/chasm/lib/temporalzfs/gen/temporalzfspb;temporalzfspbb\x06proto3"
+	"\x16DetachWorkflowResponseBMZKgo.temporal.io/server/chasm/lib/temporalzfs/gen/temporalzfspb;temporalzfspbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_temporalzfs_proto_v1_request_response_proto_rawDescOnce sync.Once

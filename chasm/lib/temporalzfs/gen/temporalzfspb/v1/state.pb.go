@@ -352,11 +352,11 @@ var File_temporal_server_chasm_lib_temporalzfs_proto_v1_state_proto protoreflect
 
 const file_temporal_server_chasm_lib_temporalzfs_proto_v1_state_proto_rawDesc = "" +
 	"\n" +
-	"9temporal/server/chasm/lib/temporalzfs/proto/v1/state.proto\x12-temporal.server.chasm.lib.temporalzfs.proto.v1\x1a\x1egoogle/protobuf/duration.proto\"\x83\x03\n" +
-	"\x0fFilesystemState\x12W\n" +
-	"\x06status\x18\x01 \x01(\x0e2?.temporal.server.chasm.lib.temporalzfs.proto.v1.FilesystemStatusR\x06status\x12W\n" +
-	"\x06config\x18\x02 \x01(\v2?.temporal.server.chasm.lib.temporalzfs.proto.v1.FilesystemConfigR\x06config\x12L\n" +
-	"\x05stats\x18\x03 \x01(\v26.temporal.server.chasm.lib.temporalzfs.proto.v1.FSStatsR\x05stats\x12\"\n" +
+	":temporal/server/chasm/lib/temporalzfs/proto/v1/state.proto\x12.temporal.server.chasm.lib.temporalzfs.proto.v1\x1a\x1egoogle/protobuf/duration.proto\"\x86\x03\n" +
+	"\x0fFilesystemState\x12X\n" +
+	"\x06status\x18\x01 \x01(\x0e2@.temporal.server.chasm.lib.temporalzfs.proto.v1.FilesystemStatusR\x06status\x12X\n" +
+	"\x06config\x18\x02 \x01(\v2@.temporal.server.chasm.lib.temporalzfs.proto.v1.FilesystemConfigR\x06config\x12M\n" +
+	"\x05stats\x18\x03 \x01(\v27.temporal.server.chasm.lib.temporalzfs.proto.v1.FSStatsR\x05stats\x12\"\n" +
 	"\rnext_inode_id\x18\x04 \x01(\x04R\vnextInodeId\x12\x1e\n" +
 	"\vnext_txn_id\x18\x05 \x01(\x04R\tnextTxnId\x12,\n" +
 	"\x12owner_workflow_ids\x18\a \x03(\tR\x10ownerWorkflowIds\"\xbc\x02\n" +
@@ -384,7 +384,7 @@ const file_temporal_server_chasm_lib_temporalzfs_proto_v1_state_proto_rawDesc = 
 	"\x1dFILESYSTEM_STATUS_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19FILESYSTEM_STATUS_RUNNING\x10\x01\x12\x1e\n" +
 	"\x1aFILESYSTEM_STATUS_ARCHIVED\x10\x02\x12\x1d\n" +
-	"\x19FILESYSTEM_STATUS_DELETED\x10\x03BJZHgo.temporal.io/server/chasm/lib/temporalzfs/gen/temporalzfspb;temporalzfspbb\x06proto3"
+	"\x19FILESYSTEM_STATUS_DELETED\x10\x03BMZKgo.temporal.io/server/chasm/lib/temporalzfs/gen/temporalzfspb;temporalzfspbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_temporalzfs_proto_v1_state_proto_rawDescOnce sync.Once
