@@ -897,7 +897,7 @@ func newTaskContext(
 	return context.WithTimeout(ctx, timeout)
 }
 
-func getReplicaitonCallerInfo(priority enumsspb.TaskPriority) headers.CallerInfo {
+func getReplicationCallerInfo(priority enumsspb.TaskPriority) headers.CallerInfo {
 	switch priority {
 	case enumsspb.TASK_PRIORITY_LOW:
 		return headers.SystemPreemptableCallerInfo

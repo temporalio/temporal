@@ -66,15 +66,6 @@ type (
 		// throttledNamespaceIDs stores a map[string]struct{} of namespace IDs that the
 		// receiver has reported as throttled; updated on each SyncReplicationState ACK.
 		throttledNamespaceIDs atomic.Value
-		// throttledCatchupStart is the task ID of the first THROTTLED task skipped during a
-		// flow control pause. Non-zero means a catchup is pending. Only accessed by the HIGH
-		// sender goroutine so no synchronization is needed.
-		throttledCatchupStart      int64
-		// throttledCatchupNamespaces is the snapshot of throttled namespace IDs taken when
-		// throttledCatchupStart was first set. The catchup must only re-send tasks from these
-		// namespaces — tasks for other namespaces were sent normally as HIGH and must not be
-		// duplicated. The atomic.Value stores an immutable map so the snapshot is safe to hold.
-		throttledCatchupNamespaces map[string]struct{}
 	}
 )
 
@@ -133,10 +124,12 @@ func (s *StreamSenderImpl) Start() {
 	}
 
 	if s.isTieredStackEnabled {
-		// High Priority sender is used for live traffic
-		// Low Priority sender is used for force replication closed workflow
+		// High Priority sender is used for live traffic.
+		// Low Priority sender is used for force replication of closed workflows.
+		// Throttled Priority sender handles tasks for namespaces the receiver has back-pressured.
 		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_HIGH), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
 		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_LOW), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
+		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_THROTTLED), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
 	} else {
 		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_UNSPECIFIED), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
 	}
@@ -262,53 +255,22 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		if attr.HighPriorityState == nil || attr.LowPriorityState == nil {
 			return NewStreamError("streamSender encountered unsupported SyncReplicationState", nil)
 		}
+		// Throttled watermark falls back to the high watermark when the receiver has not
+		// yet sent a ThrottledPriorityState (e.g. older receiver versions or first connect).
+		throttledWatermark := attr.GetHighPriorityState().GetInclusiveLowWatermark()
+		if tp := attr.GetThrottledPriorityState(); tp != nil {
+			throttledWatermark = tp.GetInclusiveLowWatermark()
+		}
 		readerState = &persistencespb.QueueReaderState{
 			Scopes: []*persistencespb.QueueSliceScope{
-				// index 0 is for overall low watermark. In tiered stack it is Min(LowWatermark-high priority, LowWatermark-low priority)
-				{
-					Range: &persistencespb.QueueSliceRange{
-						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(attr.GetInclusiveLowWatermark()),
-						),
-						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(math.MaxInt64),
-						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
-				// index 1 is for high priority
-				{
-					Range: &persistencespb.QueueSliceRange{
-						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(attr.GetHighPriorityState().GetInclusiveLowWatermark()),
-						),
-						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(math.MaxInt64),
-						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
-				// index 2 is for low priority
-				{
-					Range: &persistencespb.QueueSliceRange{
-						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(attr.GetLowPriorityState().GetInclusiveLowWatermark()),
-						),
-						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(math.MaxInt64),
-						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
+				// index 0: overall low watermark — Min(high, low, throttled) in tiered stack
+				makeUniversalQueueSliceScope(attr.GetInclusiveLowWatermark()),
+				// index 1: high priority
+				makeUniversalQueueSliceScope(attr.GetHighPriorityState().GetInclusiveLowWatermark()),
+				// index 2: low priority
+				makeUniversalQueueSliceScope(attr.GetLowPriorityState().GetInclusiveLowWatermark()),
+				// index 3: throttled priority
+				makeUniversalQueueSliceScope(throttledWatermark),
 			},
 		}
 	case false:
@@ -317,21 +279,8 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		}
 		readerState = &persistencespb.QueueReaderState{
 			Scopes: []*persistencespb.QueueSliceScope{
-				// in single stack, index 0 is for overall low watermark
-				{
-					Range: &persistencespb.QueueSliceRange{
-						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(attr.GetInclusiveLowWatermark()),
-						),
-						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(math.MaxInt64),
-						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
+				// index 0: overall low watermark (single stack)
+				makeUniversalQueueSliceScope(attr.GetInclusiveLowWatermark()),
 			},
 		}
 	}
@@ -411,26 +360,29 @@ func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, e
 }
 
 func (s *StreamSenderImpl) getSendCatchupBeginInclusiveWatermark(readerState *persistencespb.QueueReaderState, priority enumsspb.TaskPriority) int64 {
+	// Scope layout: [0]=overall, [1]=high, [2]=low, [3]=throttled.
+	// Older reader states may have fewer scopes (e.g. single-stack has only [0], the
+	// previous tiered format had [0,1,2]). Fall back to index 0 (overall watermark)
+	// when the expected scope does not exist — it is always Min of all per-lane watermarks
+	// so it is a safe, conservative starting point.
 	getReaderScopesIndex := func(priority enumsspb.TaskPriority) int {
 		switch priority {
 		case enumsspb.TASK_PRIORITY_HIGH:
-			/*
-				this is to handle the case when switch from single stack to tiered stack, the reader state is still in old format.
-				In this case, it is safe to use the overall low watermark as the beginInclusiveWatermark, as long as we always guarantee
-				the overall low watermark is Min(lowPriorityLowWatermark, highPriorityLowWatermark)
-			*/
-			if len(readerState.Scopes) != 3 {
+			if len(readerState.Scopes) < 2 {
 				return 0
 			}
 			return 1
 		case enumsspb.TASK_PRIORITY_LOW:
-			if len(readerState.Scopes) != 3 {
+			if len(readerState.Scopes) < 3 {
 				return 0
 			}
 			return 2
-		case enumsspb.TASK_PRIORITY_UNSPECIFIED:
-			return 0
-		default:
+		case enumsspb.TASK_PRIORITY_THROTTLED:
+			if len(readerState.Scopes) < 4 {
+				return 0
+			}
+			return 3
+		default: // UNSPECIFIED and anything else
 			return 0
 		}
 	}
@@ -454,15 +406,6 @@ func (s *StreamSenderImpl) sendLive(
 			return err
 		}
 		beginInclusiveWatermark = endExclusiveWatermark
-		// If THROTTLED tasks were skipped during a pause, run a catchup once the lane
-		// resumes so those tasks are delivered before the HIGH reader advances further.
-		if priority == enumsspb.TASK_PRIORITY_HIGH &&
-			s.throttledCatchupStart > 0 &&
-			!s.flowController.IsPaused(enumsspb.TASK_PRIORITY_THROTTLED) {
-			if err := s.sendThrottledCatchup(s.throttledCatchupStart, beginInclusiveWatermark); err != nil {
-				return err
-			}
-		}
 		if !syncStatusTimer.Stop() {
 			select {
 			case <-syncStatusTimer.C:
@@ -514,7 +457,7 @@ func (s *StreamSenderImpl) sendTasks(
 		})
 	}
 
-	callerInfo := getReplicaitonCallerInfo(priority)
+	callerInfo := getReplicationCallerInfo(priority)
 	ctx := headers.SetCallerInfo(s.server.Context(), callerInfo)
 	iter, err := s.historyEngine.GetReplicationTasksIter(
 		ctx,
@@ -555,48 +498,11 @@ Loop:
 			}
 			skipCount = 0
 		}
-		// In tiered-stack mode, resolve the effective priority for this task.
-		// The HIGH loop handles both HIGH and THROTTLED tasks (THROTTLED tasks originate from
-		// the HIGH task reader). The LOW loop handles only always-LOW tasks.
-		// In single-stack mode (UNSPECIFIED), priority is passed through unchanged.
-		taskPriority := priority
-		if priority != enumsspb.TASK_PRIORITY_UNSPECIFIED {
-			taskPriority = s.getEffectiveTaskPriority(item)
-			// HIGH loop: skip only always-LOW tasks (e.g. SyncWorkflowStateTask); THROTTLED tasks
-			// originate from the HIGH reader and are intentionally sent within this loop at reduced
-			// priority, so they are NOT skipped here.
-			if priority == enumsspb.TASK_PRIORITY_HIGH && taskPriority == enumsspb.TASK_PRIORITY_LOW {
-				continue Loop
-			}
-			// LOW loop: skip anything that isn't always-LOW (including THROTTLED, which the HIGH
-			// loop handles so the LOW reader doesn't double-send it).
-			if priority == enumsspb.TASK_PRIORITY_LOW && taskPriority != enumsspb.TASK_PRIORITY_LOW {
-				continue Loop
-			}
-		}
-		if !s.shouldProcessTask(item) {
+		taskPriority, skip := s.resolveTaskPriorityForLoop(priority, item)
+		if skip {
 			continue Loop
 		}
-		// Non-blocking THROTTLED skip: if this task has been demoted to THROTTLED and the
-		// THROTTLED flow control lane is currently paused, skip it so the HIGH goroutine
-		// is not blocked. On the first skip, send an anchor beacon so the receiver's
-		// THROTTLED tracker holds the synthetic HIGH watermark back to this task ID —
-		// preventing the sender from reading past it on reconnect. A catchup pass will
-		// re-send the skipped tasks once the lane resumes.
-		if s.isTieredStackEnabled &&
-			taskPriority == enumsspb.TASK_PRIORITY_THROTTLED &&
-			s.flowController.IsPaused(enumsspb.TASK_PRIORITY_THROTTLED) {
-			if s.throttledCatchupStart == 0 {
-				s.throttledCatchupStart = item.GetTaskID()
-				// Snapshot the throttled namespace set so the catchup re-sends only
-				// tasks that were actually skipped. Tasks for other namespaces were
-				// already sent as HIGH and must not be duplicated.
-				m, _ := s.throttledNamespaceIDs.Load().(map[string]struct{})
-				s.throttledCatchupNamespaces = m
-				if err := s.sendThrottledAnchor(item.GetTaskID(), item.GetVisibilityTime()); err != nil {
-					return err
-				}
-			}
+		if !s.shouldProcessTask(item) {
 			continue Loop
 		}
 		metrics.ReplicationTaskLoadLatency.With(s.metrics).Record(
@@ -631,11 +537,7 @@ Loop:
 			if s.isTieredStackEnabled {
 				// THROTTLED tasks use the THROTTLED flow control lane so backpressure
 				// from throttled-namespace backlogs does not affect the HIGH lane.
-				waitPriority := priority
-				if taskPriority == enumsspb.TASK_PRIORITY_THROTTLED {
-					waitPriority = enumsspb.TASK_PRIORITY_THROTTLED
-				}
-				if err := s.flowController.Wait(s.server.Context(), waitPriority); err != nil {
+				if err := s.flowController.Wait(s.server.Context(), taskPriority); err != nil {
 					if errors.Is(err, context.Canceled) {
 						return err
 					}
@@ -685,13 +587,7 @@ Loop:
 			return nil
 		}
 
-		retryPolicy := backoff.NewExponentialRetryPolicy(s.config.ReplicationStreamSenderErrorRetryWait()).
-			WithBackoffCoefficient(s.config.ReplicationStreamSenderErrorRetryBackoffCoefficient()).
-			WithMaximumInterval(s.config.ReplicationStreamSenderErrorRetryMaxInterval()).
-			WithMaximumAttempts(s.config.ReplicationStreamSenderErrorRetryMaxAttempts()).
-			WithExpirationInterval(s.config.ReplicationStreamSenderErrorRetryExpiration())
-
-		err = backoff.ThrottleRetry(operation, retryPolicy, isRetryableError)
+		err = backoff.ThrottleRetry(operation, s.newSendRetryPolicy(), isRetryableError)
 		metrics.ReplicationTaskSendAttempt.With(s.metrics).Record(
 			attempt,
 			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
@@ -727,138 +623,6 @@ Loop:
 			},
 		},
 	})
-}
-
-// sendThrottledAnchor sends an empty THROTTLED-priority batch with ExclusiveHighWatermark=taskID
-// to the receiver. This anchors the receiver's THROTTLED tracker so the synthetic HIGH watermark
-// (min of HIGH and THROTTLED trackers) does not advance past unacknowledged THROTTLED tasks.
-func (s *StreamSenderImpl) sendThrottledAnchor(taskID int64, visibilityTime time.Time) error {
-	return s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
-		Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
-			Messages: &replicationspb.WorkflowReplicationMessages{
-				ExclusiveHighWatermark:     taskID,
-				ExclusiveHighWatermarkTime: timestamppb.New(visibilityTime),
-				Priority:                   enumsspb.TASK_PRIORITY_THROTTLED,
-			},
-		},
-	})
-}
-
-// sendThrottledCatchup re-reads tasks in [start, end) and sends originally-HIGH tasks
-// as THROTTLED priority to fill the gap left by skipping them during a THROTTLED pause.
-// It uses non-blocking pause checks so a re-pause mid-catchup updates throttledCatchupStart
-// and returns immediately without blocking the HIGH sender goroutine. On full completion it
-// clears throttledCatchupStart.
-func (s *StreamSenderImpl) sendThrottledCatchup(start, end int64) error {
-	if start >= end {
-		s.throttledCatchupStart = 0
-		s.throttledCatchupNamespaces = nil
-		return nil
-	}
-	s.logger.Info("starting THROTTLED catchup", tag.NewInt64("start", start), tag.NewInt64("end", end))
-
-	callerInfo := getReplicaitonCallerInfo(enumsspb.TASK_PRIORITY_THROTTLED)
-	ctx := headers.SetCallerInfo(s.server.Context(), callerInfo)
-	iter, err := s.historyEngine.GetReplicationTasksIter(ctx, string(s.clientShardKey.ClusterID), start, end)
-	if err != nil {
-		return err
-	}
-
-	for iter.HasNext() {
-		if s.shutdownChan.IsShutdown() {
-			return nil
-		}
-		item, err := iter.Next()
-		if err != nil {
-			return fmt.Errorf("sendThrottledCatchup unable to get next replication task: %w", err)
-		}
-		// Only re-send tasks that (a) are originally HIGH priority and (b) belong to a
-		// namespace that was throttled when the skip occurred. Tasks for other namespaces
-		// were sent normally as HIGH during the pause and must not be duplicated.
-		// Always-LOW tasks (e.g. SyncWorkflowStateTask) are served by the LOW reader.
-		if s.getTaskPriority(item) != enumsspb.TASK_PRIORITY_HIGH {
-			continue
-		}
-		if _, wasThrottled := s.throttledCatchupNamespaces[item.GetNamespaceID()]; !wasThrottled {
-			continue
-		}
-		if !s.shouldProcessTask(item) {
-			continue
-		}
-		// Non-blocking re-pause check: if THROTTLED paused again, update the catchup start
-		// and send a new anchor beacon so the synthetic HIGH watermark stays correct,
-		// then return so the HIGH goroutine is not blocked.
-		if s.flowController.IsPaused(enumsspb.TASK_PRIORITY_THROTTLED) {
-			if s.throttledCatchupStart != item.GetTaskID() {
-				s.throttledCatchupStart = item.GetTaskID()
-				if err := s.sendThrottledAnchor(item.GetTaskID(), item.GetVisibilityTime()); err != nil {
-					return err
-				}
-			}
-			s.logger.Info("THROTTLED catchup interrupted by re-pause", tag.NewInt64("taskID", item.GetTaskID()))
-			return nil
-		}
-
-		var attempt int64
-		operation := func() error {
-			attempt++
-			startTime := time.Now().UTC()
-			defer func() {
-				metrics.ReplicationTaskGenerationLatency.With(s.metrics).Record(
-					time.Since(startTime),
-					metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
-					metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-					metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
-					metrics.ReplicationTaskPriorityTag(enumsspb.TASK_PRIORITY_THROTTLED),
-				)
-			}()
-			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_THROTTLED)
-			if err != nil {
-				return err
-			}
-			if task == nil {
-				return nil
-			}
-			task.Priority = enumsspb.TASK_PRIORITY_THROTTLED
-			if err := s.flowController.Wait(s.server.Context(), enumsspb.TASK_PRIORITY_THROTTLED); err != nil {
-				if errors.Is(err, context.Canceled) {
-					return err
-				}
-			}
-			return s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
-				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
-					Messages: &replicationspb.WorkflowReplicationMessages{
-						ReplicationTasks:           []*replicationspb.ReplicationTask{task},
-						ExclusiveHighWatermark:     task.SourceTaskId + 1,
-						ExclusiveHighWatermarkTime: task.VisibilityTime,
-						Priority:                   enumsspb.TASK_PRIORITY_THROTTLED,
-					},
-				},
-			})
-		}
-
-		retryPolicy := backoff.NewExponentialRetryPolicy(s.config.ReplicationStreamSenderErrorRetryWait()).
-			WithBackoffCoefficient(s.config.ReplicationStreamSenderErrorRetryBackoffCoefficient()).
-			WithMaximumInterval(s.config.ReplicationStreamSenderErrorRetryMaxInterval()).
-			WithMaximumAttempts(s.config.ReplicationStreamSenderErrorRetryMaxAttempts()).
-			WithExpirationInterval(s.config.ReplicationStreamSenderErrorRetryExpiration())
-		err = backoff.ThrottleRetry(operation, retryPolicy, isRetryableError)
-		metrics.ReplicationTaskSendAttempt.With(s.metrics).Record(
-			attempt,
-			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
-			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
-			metrics.ReplicationTaskPriorityTag(enumsspb.TASK_PRIORITY_THROTTLED),
-		)
-		if err != nil {
-			return fmt.Errorf("sendThrottledCatchup failed to send task: %v, cause: %w", item, err)
-		}
-	}
-
-	s.logger.Info("THROTTLED catchup complete", tag.NewInt64("start", start), tag.NewInt64("end", end))
-	s.throttledCatchupStart = 0
-	s.throttledCatchupNamespaces = nil
-	return nil
 }
 
 func (s *StreamSenderImpl) sendToStream(payload *historyservice.StreamWorkflowReplicationMessagesResponse) error {
@@ -931,6 +695,53 @@ func (s *StreamSenderImpl) getEffectiveTaskPriority(task tasks.Task) enumsspb.Ta
 		}
 	}
 	return p
+}
+
+// resolveTaskPriorityForLoop returns the effective priority for item and whether
+// the task should be skipped in a loop running at loopPriority.
+//   - HIGH loop:      sends only HIGH tasks; skips LOW and THROTTLED (each has its own goroutine).
+//   - LOW loop:       sends only always-LOW tasks (e.g. SyncWorkflowStateTask); skips everything else.
+//   - THROTTLED loop: sends tasks whose effective priority is THROTTLED (HIGH-base tasks for
+//     namespaces the receiver has back-pressured); idles when no namespaces are throttled.
+//   - UNSPECIFIED loop (single-stack): sends all tasks unchanged.
+func (s *StreamSenderImpl) resolveTaskPriorityForLoop(loopPriority enumsspb.TaskPriority, item tasks.Task) (enumsspb.TaskPriority, bool) {
+	if loopPriority == enumsspb.TASK_PRIORITY_UNSPECIFIED {
+		return loopPriority, false
+	}
+	effective := s.getEffectiveTaskPriority(item)
+	switch loopPriority {
+	case enumsspb.TASK_PRIORITY_HIGH:
+		return effective, effective != enumsspb.TASK_PRIORITY_HIGH
+	case enumsspb.TASK_PRIORITY_LOW:
+		return effective, effective != enumsspb.TASK_PRIORITY_LOW
+	case enumsspb.TASK_PRIORITY_THROTTLED:
+		return effective, effective != enumsspb.TASK_PRIORITY_THROTTLED
+	default:
+		return effective, false
+	}
+}
+
+func (s *StreamSenderImpl) newSendRetryPolicy() backoff.RetryPolicy {
+	return backoff.NewExponentialRetryPolicy(s.config.ReplicationStreamSenderErrorRetryWait()).
+		WithBackoffCoefficient(s.config.ReplicationStreamSenderErrorRetryBackoffCoefficient()).
+		WithMaximumInterval(s.config.ReplicationStreamSenderErrorRetryMaxInterval()).
+		WithMaximumAttempts(s.config.ReplicationStreamSenderErrorRetryMaxAttempts()).
+		WithExpirationInterval(s.config.ReplicationStreamSenderErrorRetryExpiration())
+}
+
+// makeUniversalQueueSliceScope returns a QueueSliceScope that covers [watermark, MaxInt64)
+// with a universal predicate (matches all task types).
+func makeUniversalQueueSliceScope(watermark int64) *persistencespb.QueueSliceScope {
+	return &persistencespb.QueueSliceScope{
+		Range: &persistencespb.QueueSliceRange{
+			InclusiveMin: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(watermark)),
+			ExclusiveMax: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(math.MaxInt64)),
+		},
+		Predicate: &persistencespb.Predicate{
+			PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+			Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+		},
+	}
 }
 
 func (s *StreamSenderImpl) getTaskTargetCluster(task tasks.Task) []string {

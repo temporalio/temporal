@@ -78,7 +78,7 @@ func (e *ExecutableSyncHSMTask) Execute() error {
 	}
 	e.MarkExecutionStart()
 
-	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
+	callerInfo := getReplicationCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
 		callerInfo,
@@ -132,7 +132,7 @@ func (e *ExecutableSyncHSMTask) HandleErr(err error) error {
 		e.MarkTaskDuplicated()
 		return nil
 	}
-	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
+	callerInfo := getReplicationCallerInfo(e.GetPriority())
 	switch retryErr := err.(type) {
 	case nil, *serviceerror.NotFound:
 		return nil
