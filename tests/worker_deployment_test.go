@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -3803,11 +3802,6 @@ func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_Success() {
 	deploymentName := tv.DeploymentSeries()
 	requestID := tv.Any().String()
 	identity := tv.Any().String()
-	computeConfig := &computepb.ComputeConfig{
-		Provider: &computepb.ComputeProvider{
-			Type: "test",
-		},
-	}
 
 	// Create a new worker deployment
 	resp, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
@@ -3815,7 +3809,6 @@ func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_Success() {
 		DeploymentName: deploymentName,
 		Identity:       identity,
 		RequestId:      requestID,
-		ComputeConfig:  computeConfig,
 	})
 
 	s.NoError(err)
@@ -3834,7 +3827,6 @@ func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_Success() {
 	s.Equal(identity, descResp.WorkerDeploymentInfo.LastModifierIdentity)
 	s.NotNil(descResp.WorkerDeploymentInfo.CreateTime)
 	s.Empty(descResp.WorkerDeploymentInfo.VersionSummaries) // No versions initially
-	s.ProtoEqual(computeConfig, descResp.WorkerDeploymentInfo.ComputeConfig)
 }
 
 func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_Idempotent() {
@@ -4038,18 +4030,11 @@ func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_AfterDelete_CanRecrea
 	})
 	s.NoError(err)
 
-	computeConfig := &computepb.ComputeConfig{
-		Provider: &computepb.ComputeProvider{
-			Type: "test",
-		},
-	}
-
 	// Should be able to create a deployment with the same name again
 	resp2, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: deploymentName,
 		RequestId:      requestID2,
-		ComputeConfig:  computeConfig,
 	})
 	s.NoError(err)
 	s.NotNil(resp2)
@@ -4066,7 +4051,6 @@ func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_AfterDelete_CanRecrea
 	s.Equal(deploymentName, descResp.WorkerDeploymentInfo.Name)
 	s.NotNil(descResp.WorkerDeploymentInfo.CreateTime)
 	s.Empty(descResp.WorkerDeploymentInfo.VersionSummaries) // No versions initially
-	s.ProtoEqual(computeConfig, descResp.WorkerDeploymentInfo.ComputeConfig)
 }
 
 // Name is used by testvars. We use a shortened test name in variables so that physical task queue IDs

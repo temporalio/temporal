@@ -66,10 +66,19 @@ type Client interface {
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		deploymentName string,
-		computeConfig *computepb.ComputeConfig,
 		identity string,
 		requestID string,
 	) ([]byte, error)
+
+	CreateWorkerDeploymentVersion(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		deploymentName string,
+		buildID string,
+		identity string,
+		requestID string,
+		computeConfig *computepb.ComputeConfig,
+	) error
 
 	SetCurrentVersion(
 		ctx context.Context,
@@ -148,6 +157,7 @@ type Client interface {
 		deploymentName, buildID string,
 		identity string,
 		requestID string,
+		computeConfig *computepb.ComputeConfig,
 	) error
 
 	// Used internally by the Worker Deployment workflow in its SyncWorkerDeploymentVersion Activity
@@ -1050,7 +1060,6 @@ func (d *ClientImpl) CreateWorkerDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deploymentName string,
-	computeConfig *computepb.ComputeConfig,
 	identity string,
 	requestID string,
 ) (_ []byte, retErr error) {
@@ -1094,7 +1103,6 @@ func (d *ClientImpl) CreateWorkerDeployment(
 			SyncBatchSize:        d.getSyncBatchSize(),
 			CreateRequestId:      requestID,
 			LastModifierIdentity: identity,
-			ComputeConfig:        computeConfig,
 		},
 	})
 	if err != nil {
@@ -1102,9 +1110,8 @@ func (d *ClientImpl) CreateWorkerDeployment(
 	}
 
 	updateArgs, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.CreateWorkerDeploymentArgs{
-		Identity:      identity,
-		RequestId:     requestID,
-		ComputeConfig: computeConfig,
+		Identity:  identity,
+		RequestId: requestID,
 	})
 	if err != nil {
 		return nil, err
@@ -1185,6 +1192,79 @@ func (d *ClientImpl) ensureWorkerDeploymentDoesNotExist(
 	return nil, serviceerror.NewAlreadyExists(fmt.Sprintf(ErrWorkerDeploymentAlreadyExists, deploymentName))
 }
 
+func (d *ClientImpl) CreateWorkerDeploymentVersion(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName string,
+	buildID string,
+	identity string,
+	requestID string,
+	computeConfig *computepb.ComputeConfig,
+) (retErr error) {
+	//revive:disable-next-line:defer
+	defer d.convertAndRecordError("CreateWorkerDeploymentVersion", deploymentName, &retErr, namespaceEntry.Name(), identity)()
+
+	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
+	if err != nil {
+		return err
+	}
+	err = validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, buildID, d.maxIDLengthLimit())
+	if err != nil {
+		return err
+	}
+
+	version := worker_versioning.WorkerDeploymentVersionToStringV31(&deploymentspb.WorkerDeploymentVersion{
+		DeploymentName: deploymentName,
+		BuildId:        buildID,
+	})
+
+	workflowID := GenerateDeploymentWorkflowID(deploymentName)
+
+	updateArgs, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.CreateWorkerDeploymentVersionArgs{
+		Identity:      identity,
+		RequestId:     requestID,
+		Version:       version,
+		ComputeConfig: computeConfig,
+	})
+	if err != nil {
+		return err
+	}
+
+	updateRequest := &updatepb.Request{
+		Input: &updatepb.Input{Name: CreateWorkerDeploymentVersion, Args: updateArgs},
+		Meta:  &updatepb.Meta{UpdateId: "_create_version_" + requestID, Identity: identity},
+	}
+
+	outcome, err := updateWorkflow(
+		ctx,
+		d.historyClient,
+		namespaceEntry,
+		workflowID,
+		updateRequest,
+	)
+	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return serviceerror.NewNotFound(fmt.Sprintf(ErrWorkerDeploymentNotFound, deploymentName))
+		}
+		return err
+	}
+	if failure := outcome.GetFailure(); failure != nil {
+		if failure.GetApplicationFailureInfo().GetType() == errVersionAlreadyExists {
+			return serviceerror.NewAlreadyExists(fmt.Sprintf(ErrWorkerDeploymentVersionAlreadyExists, version))
+		}
+		if failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
+			return newResourceExhaustedError(failure.GetMessage())
+		}
+		if failure.GetApplicationFailureInfo().GetType() == errInvalidComputeConfig {
+			return serviceerror.NewInvalidArgument(failure.GetMessage())
+		}
+		return serviceerror.NewInternalf("create deployment version failed: %s", failure.Message)
+	}
+
+	return nil
+}
+
 func (d *ClientImpl) StartWorkerDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
@@ -1226,6 +1306,7 @@ func (d *ClientImpl) StartWorkerDeploymentVersion(
 	deploymentName, buildID string,
 	identity string,
 	requestID string,
+	computeConfig *computepb.ComputeConfig,
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("StartWorkerDeploymentVersion", deploymentName, &retErr, namespaceEntry.Name(), identity)()
@@ -1240,7 +1321,9 @@ func (d *ClientImpl) StartWorkerDeploymentVersion(
 	}
 
 	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
-	input, err := sdk.PreferProtoDataConverter.ToPayloads(d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry))
+	args := d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED)
+	args.VersionState.ComputeConfig = computeConfig
+	input, err := sdk.PreferProtoDataConverter.ToPayloads(args)
 	if err != nil {
 		return err
 	}
@@ -1413,7 +1496,7 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 	}
 
 	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
-	input, err := sdk.PreferProtoDataConverter.ToPayloads(d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry))
+	input, err := sdk.PreferProtoDataConverter.ToPayloads(d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE))
 	if err != nil {
 		return nil, err
 	}
@@ -1535,6 +1618,7 @@ func versionStateToVersionInfo(
 		TaskQueueInfos:     infos,
 		DrainageInfo:       drainageInfo,
 		Metadata:           state.Metadata,
+		ComputeConfig:      state.ComputeConfig,
 	}
 }
 
@@ -1625,7 +1709,6 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 	workerDeploymentInfo.Name = deploymentName
 	workerDeploymentInfo.CreateTime = state.CreateTime
 	workerDeploymentInfo.RoutingConfig = state.RoutingConfig
-	workerDeploymentInfo.ComputeConfig = state.ComputeConfig
 	workerDeploymentInfo.LastModifierIdentity = state.LastModifierIdentity
 	workerDeploymentInfo.ManagerIdentity = state.ManagerIdentity
 	if len(state.PropagatingRevisions) > 0 {
@@ -1894,6 +1977,7 @@ func (d *ClientImpl) getSyncBatchSize() int32 {
 func (d *ClientImpl) makeVersionWorkflowArgs(
 	deploymentName, buildID string,
 	namespaceEntry *namespace.Namespace,
+	initialStatus enumspb.WorkerDeploymentVersionStatus,
 ) *deploymentspb.WorkerDeploymentVersionWorkflowArgs {
 	return &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
 		NamespaceName: namespaceEntry.Name().String(),
@@ -1911,6 +1995,7 @@ func (d *ClientImpl) makeVersionWorkflowArgs(
 			DrainageInfo:      &deploymentpb.VersionDrainageInfo{}, // not draining or drained
 			Metadata:          nil,
 			SyncBatchSize:     d.getSyncBatchSize(),
+			Status:            initialStatus,
 		},
 	}
 }

@@ -186,6 +186,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	if d.VersionState.GetCreateTime() == nil {
 		d.VersionState.CreateTime = timestamppb.New(workflow.Now(ctx))
 	}
+	// TODO: remove this after next release because now the status should always be set at start.
 	if d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_UNSPECIFIED {
 		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
 	}
@@ -605,6 +606,12 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	}
 
 	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = &deploymentspb.TaskQueueVersionData{}
+
+	// Transition from CREATED to INACTIVE once a poller registers a task queue.
+	if d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED {
+		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
+		// deployment workflow updates the status in version summary to INACTIVE
+	}
 
 	if withRevisionNumbers && args.GetRoutingConfig() != nil {
 		// Still need to check RoutingConfig not being nil because of edge cases during enabling dynamic config.

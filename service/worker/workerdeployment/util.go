@@ -8,6 +8,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -46,6 +47,7 @@ const (
 	UpdateVersionMetadata             = "update-version-metadata"       // for Worker Deployment Version wfs
 	RegisterWorkerInWorkerDeployment  = "register-worker-in-deployment" // for Worker Deployment wfs
 	CreateWorkerDeployment            = "create-deployment"             // for Worker Deployment wfs
+	CreateWorkerDeploymentVersion     = "create-deployment-version"     // for Worker Deployment wfs
 	SetCurrentVersion                 = "set-current-version"           // for Worker Deployment wfs
 	SetRampingVersion                 = "set-ramping-version"           // for Worker Deployment wfs
 	DeleteVersion                     = "delete-version"                // for WorkerDeployment wfs
@@ -77,14 +79,19 @@ const (
 	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
 	errVersionNotFound            = "Version not found in deployment"
-	errDeploymentDeleted          = "worker deployment deleted"         // returned in the race condition that the deployment is deleted but the workflow is not yet closed.
-	errDeploymentAlreadyExists    = "worker deployment already exists"  // returned in the race condition that the deployment exists with a different request ID.
+	errDeploymentDeleted          = "worker deployment deleted"        // returned in the race condition that the deployment is deleted but the workflow is not yet closed.
+	errDeploymentAlreadyExists    = "worker deployment already exists" // returned in the race condition that the deployment exists with a different request ID.
+	errVersionAlreadyExists       = "worker deployment version already exists"
 	errVersionDeleted             = "worker deployment version deleted" // returned in the race condition that the deployment version is deleted but the workflow is not yet closed.
 	errLongHistory                = "errLongHistory"                    // update is not accepted until CaN happens. client should retry
 	errVersionIsDraining          = "errVersionIsDraining"
 	errVersionHasPollers          = "errVersionHasPollersSuffix"
 
-	errFailedPrecondition = "FailedPrecondition"
+	errFailedPrecondition   = "FailedPrecondition"
+	errInvalidComputeConfig = "errInvalidComputeConfig"
+
+	ErrMultipleCatchAllScalingGroups = "scaling groups %q and %q both cover all task queue types; at most one scaling group can have an empty task queue types list"
+	ErrOverlappingTaskQueueType      = "task queue type %v is covered by both scaling group %q and %q"
 
 	ErrVersionIsDraining         = "version '%s' cannot be deleted since it is draining"
 	ErrVersionHasPollers         = "version '%s' cannot be deleted since it has active pollers"
@@ -97,6 +104,7 @@ const (
 	ErrWorkerDeploymentVersionNotFound        = "build ID '%s' not found in Worker Deployment '%s'"
 	ErrTooManyRequests                        = "too many requests issued to Worker Deployment '%s'. Please try again later"
 	ErrWorkerDeploymentAlreadyExists          = "Worker Deployment with name %q already exists"
+	ErrWorkerDeploymentVersionAlreadyExists   = "Worker Deployment Version %q already exists"
 
 	AutoCreateRequestIDPrefix = "_auto_create_"
 )
@@ -134,6 +142,43 @@ var (
 // Worker Deployment Version related workflowID's are valid
 func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit int) error {
 	return worker_versioning.ValidateDeploymentVersionFields(fieldName, field, maxIDLengthLimit)
+}
+
+// ValidateWorkerDeploymentVersionComputeConfig checks that the scaling groups in a ComputeConfig
+// do not have overlapping task queue types. An empty TaskQueueTypes list means the
+// scaling group covers all task queue types. At most one scaling group may have an
+// empty list, and no task queue type may appear in more than one group.
+func ValidateWorkerDeploymentVersionComputeConfig(config *computepb.ComputeConfig) error {
+	groups := config.GetScalingGroups()
+	if len(groups) == 0 {
+		return nil
+	}
+
+	catchAllGroup := ""
+	seen := make(map[enumspb.TaskQueueType]string) // task queue type -> scaling group name
+
+	names := workflow.DeterministicKeys(groups)
+
+	for _, name := range names {
+		group := groups[name]
+		types := group.GetTaskQueueTypes()
+		if len(types) == 0 {
+			// Empty list means all types — only one such group is allowed.
+			if catchAllGroup != "" {
+				return fmt.Errorf(ErrMultipleCatchAllScalingGroups, catchAllGroup, name)
+			}
+			catchAllGroup = name
+			continue
+		}
+		for _, tqType := range types {
+			if other, ok := seen[tqType]; ok {
+				return fmt.Errorf(ErrOverlappingTaskQueueType, tqType, other, name)
+			}
+			seen[tqType] = name
+		}
+	}
+
+	return nil
 }
 
 func GetDeploymentNameFromWorkflowID(workflowID string) string {
