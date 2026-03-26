@@ -155,8 +155,9 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 
 	workflowId := uuid.New()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-		ID:        workflowId,
-		TaskQueue: s.TaskQueue(),
+		ID:                  workflowId,
+		TaskQueue:           s.TaskQueue(),
+		WorkflowTaskTimeout: time.Second, // Use shorter timeout so test completes faster.
 	}, myWorkflow)
 	s.NoError(err)
 
@@ -187,9 +188,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 
 	// mark one of the pending activities as complete and verify that the workflow can now complete
 	s.NoError(s.SdkClient().CompleteActivity(ctx, activityInfo.TaskToken, nil, nil))
-	s.Eventually(func() bool {
-		return workflowRun.Get(ctx, nil) == nil
-	}, 30*time.Second, 500*time.Millisecond)
+	s.NoError(workflowRun.Get(ctx, nil))
 }
 
 func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
