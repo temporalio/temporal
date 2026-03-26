@@ -52,7 +52,7 @@ type (
 		// Track if async propagations are in progress (prevents CaN)
 		asyncPropagationsInProgress int
 		// When true, all the ongoing propagations should cancel themselves
-		// Used when delete happens while there are ungoing propagations.
+		// Used when delete happens while there are ongoing propagations.
 		cancelPropagations bool
 		// workflowVersion is set at workflow start based on the dynamic config of the worker
 		// that completes the first task. It remains constant for the lifetime of the run and

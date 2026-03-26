@@ -990,9 +990,9 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation_BlocksWorkerR
 	s.True(workerRegistrationCompleted, "worker registration should have completed")
 }
 
-// Test_RegisterWorker_IncrementsRevisionNumber_WhenRevivingDeletedVersion tests that the revision number
-// is incremented when a worker registers on a version that was previously deleted
-func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_WhenRevivingDeletedVersion() {
+// Test_RegisterWorker_ResetRevisionNumber_WhenRevivingDeletedVersion tests that the revision number
+// is reset to 0 when a worker registers on a version that was previously deleted
+func (s *VersionWorkflowSuite) Test_RegisterWorker_ResetRevisionNumber_WhenRevivingDeletedVersion() {
 	s.skipBeforeVersion(VersionDataRevisionNumber)
 
 	tv := testvars.New(s.T())
@@ -1010,7 +1010,7 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_When
 	// Mock delete and register propagation
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
-			if req.UpsertVersionData != nil && req.UpsertVersionData.Deleted {
+			if req.GetForgetVersion() {
 				// This is the delete call
 				s.Equal(int64(6), req.UpsertVersionData.RevisionNumber, "Revision number should be incremented from 5 to 6 on delete")
 				return &deploymentspb.SyncDeploymentVersionUserDataResponse{
@@ -1020,7 +1020,7 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_When
 			// This is a register worker propagation call
 			s.NotNil(req.UpsertVersionData, "UpsertVersionData should be present for registration")
 			s.False(req.UpsertVersionData.Deleted, "Deleted should be false after revival")
-			s.Equal(int64(7), req.UpsertVersionData.RevisionNumber, "Revision number should be incremented from 6 to 7 on revival")
+			s.Equal(int64(0), req.UpsertVersionData.RevisionNumber, "Revision number should be reset to 0 on revival")
 			return &deploymentspb.SyncDeploymentVersionUserDataResponse{
 				TaskQueueMaxVersions: map[string]int64{newTaskQueueName: 1},
 			}, nil
