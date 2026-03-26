@@ -18,8 +18,8 @@ import (
 // an MVCC snapshot. On retry, the FS state is intact — no intermediate state is lost.
 type Activities struct {
 	baseStore store.Store
-	stats     *RunStats               // shared stats for real-time dashboard updates
-	eventCh   chan<- WorkflowEvent     // per-activity events for the dashboard
+	stats     *RunStats            // shared stats for real-time dashboard updates
+	eventCh   chan<- WorkflowEvent // per-activity events for the dashboard
 }
 
 // emitEvent sends a dashboard event for the current activity step.

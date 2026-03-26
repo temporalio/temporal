@@ -53,10 +53,14 @@ func ResearchWorkflow(ctx workflow.Context, params WorkflowParams) (WorkflowResu
 		fn   func(ctx workflow.Context) workflow.Future
 		name string
 	}{
-		{func(ctx workflow.Context) workflow.Future { return workflow.ExecuteActivity(ctx, a.WebResearch, params) }, "WebResearch"},
+		{func(ctx workflow.Context) workflow.Future {
+			return workflow.ExecuteActivity(ctx, a.WebResearch, params)
+		}, "WebResearch"},
 		{func(ctx workflow.Context) workflow.Future { return workflow.ExecuteActivity(ctx, a.Summarize, params) }, "Summarize"},
 		{func(ctx workflow.Context) workflow.Future { return workflow.ExecuteActivity(ctx, a.FactCheck, params) }, "FactCheck"},
-		{func(ctx workflow.Context) workflow.Future { return workflow.ExecuteActivity(ctx, a.FinalReport, params) }, "FinalReport"},
+		{func(ctx workflow.Context) workflow.Future {
+			return workflow.ExecuteActivity(ctx, a.FinalReport, params)
+		}, "FinalReport"},
 		{func(ctx workflow.Context) workflow.Future { return workflow.ExecuteActivity(ctx, a.PeerReview, params) }, "PeerReview"},
 	}
 

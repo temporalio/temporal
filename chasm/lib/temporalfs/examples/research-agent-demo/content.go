@@ -53,10 +53,10 @@ var (
 		"Practical applications of %s are increasingly driven by",
 	}
 
-	verdicts       = []string{"Confirmed", "Partially Confirmed", "Needs Context", "Unverified", "Confirmed"}
-	strengthAdjs   = []string{"comprehensive", "rigorous", "innovative", "well-structured", "thorough"}
-	weaknessAdjs   = []string{"limited", "narrow", "incomplete", "surface-level", "brief"}
-	reviewScores   = []string{"7.0", "7.5", "8.0", "8.5", "9.0"}
+	verdicts     = []string{"Confirmed", "Partially Confirmed", "Needs Context", "Unverified", "Confirmed"}
+	strengthAdjs = []string{"comprehensive", "rigorous", "innovative", "well-structured", "thorough"}
+	weaknessAdjs = []string{"limited", "narrow", "incomplete", "surface-level", "brief"}
+	reviewScores = []string{"7.0", "7.5", "8.0", "8.5", "9.0"}
 )
 
 func generateSources(topic string, seed int64) []Source {
