@@ -102,6 +102,63 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestLimitMemoSpecSize", func(t *testing.T) { testLimitMemoSpecSize(t, newContext) })
 	t.Run("TestCountSchedules", func(t *testing.T) { testCountSchedules(t, newContext) })
 	t.Run("TestSchedule_InternalTaskQueue", func(t *testing.T) { testScheduleInternalTaskQueue(t, newContext) })
+	t.Run("TestDeletedScheduleOperations", func(t *testing.T) { testDeletedScheduleOperations(t, newContext) })
+}
+
+func testDeletedScheduleOperations(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+
+	sid := "sched-test-deleted-ops"
+	wid := "sched-test-deleted-ops-wf"
+	wt := "sched-test-deleted-ops-wt"
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	// Create a schedule.
+	_, err := s.FrontendClient().CreateSchedule(newContext(s.Context()), &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Delete the schedule.
+	_, err = s.FrontendClient().DeleteSchedule(newContext(s.Context()), &workflowservice.DeleteScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Identity:   "test",
+	})
+	s.NoError(err)
+
+	// Describe should return NotFound.
+	var notFoundErr *serviceerror.NotFound
+	s.Eventually(func() bool {
+		_, descErr := s.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		return errors.As(descErr, &notFoundErr)
+	}, 10*time.Second, 200*time.Millisecond)
+
+	// Update, Patch, and Delete behave differently across CHASM and V1,
+	// so they are not tested here. See TestScheduleUpdateAfterDelete.
 }
 
 func testBasics(t *testing.T, newContext contextFactory) {
@@ -520,7 +577,8 @@ func testBasics(t *testing.T, newContext contextFactory) {
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 	})
-	s.Error(err)
+	var notFoundErr *serviceerror.NotFound
+	s.ErrorAs(err, &notFoundErr)
 
 	s.Eventually(func() bool { // wait for visibility
 		listResp, err := s.FrontendClient().ListSchedules(newContext(s.Context()), &workflowservice.ListSchedulesRequest{
