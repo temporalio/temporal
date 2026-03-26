@@ -190,7 +190,6 @@ func (t *transferQueueActiveTaskExecutor) executeChasmSideEffectTransferTask(
 	return executeChasmSideEffectTask(
 		ctx,
 		t.chasmEngine,
-		t.shardContext.ChasmRegistry(),
 		tree,
 		task,
 	)
@@ -1739,7 +1738,6 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		baseRebuildLastEventVersion,
 		baseNextEventID,
 		resetRunID,
-		uuid.NewString(),
 		baseWorkflow,
 		ndc.NewWorkflow(
 			t.shardContext.GetClusterMetadata(),

@@ -681,6 +681,15 @@ instances in the cluster, for a given namespace, per-API method. If this is set 
 ignored. The name 'frontend.globalNamespaceCount' is kept for consistency with the per-instance limit name,
 'frontend.namespaceCount'.`,
 	)
+	FrontendPollWaitForNamespaceRateLimitToken = NewNamespaceBoolSetting(
+		"frontend.pollWaitForNamespaceRateLimitToken",
+		false,
+		`FrontendPollWaitForNamespaceRateLimitToken controls whether poll requests wait for
+a namespace RPS rate limit token to become available instead of immediately rejecting
+with ResourceExhausted. When enabled, poll requests block until a token is available
+or the request context deadline is reached. The concurrent request rate limiter fires
+before this limiter and will still reject requests that exceed the concurrent limit.`,
+	)
 	FrontendMaxNamespaceVisibilityRPSPerInstance = NewNamespaceIntSetting(
 		"frontend.namespaceRPS.visibility",
 		10,
@@ -898,7 +907,7 @@ and deployment interaction in matching and history.`,
 	)
 	UseRevisionNumberForWorkerVersioning = NewNamespaceBoolSetting(
 		"system.useRevisionNumberForWorkerVersioning",
-		false,
+		true,
 		`UseRevisionNumberForWorkerVersioning enables the use of revision number to resolve consistency problems that may arise during task dispatch time.`,
 	)
 	EnableSuggestCaNOnNewTargetVersion = NewNamespaceBoolSetting(
@@ -911,13 +920,6 @@ and deployment interaction in matching and history.`,
 		true,
 		`EnableSendTargetVersionChanged lets Pinned workflows receive TargetWorkerDeploymentVersionChanged=true when a new target version is available for that workflow.`,
 	)
-	EnableNexus = NewGlobalBoolSetting(
-		"system.enableNexus",
-		true,
-		`Toggles all Nexus functionality on the server. Note that toggling this requires restarting server hosts for it
-		to take effect.`,
-	)
-
 	AllowDeleteNamespaceIfNexusEndpointTarget = NewGlobalBoolSetting(
 		"frontend.allowDeleteNamespaceIfNexusEndpointTarget",
 		false,
@@ -1307,6 +1309,12 @@ duration since last poll exceeds this threshold.`,
 		20*time.Second,
 		`QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window`,
 	)
+	MatchingEmitTaskDispatchLatencyAtPoll = NewTaskQueueBoolSetting(
+		"matching.emitTaskDispatchLatencyAtPoll",
+		true,
+		`When enabled, TaskDispatchLatencyPerTaskQueue is emitted when responding to poll requests (with extra tags
+like partition and worker-version) instead of being emitted at the matcher level.`,
+	)
 	MatchingListNexusEndpointsLongPollTimeout = NewGlobalDurationSetting(
 		"matching.listNexusEndpointsLongPollTimeout",
 		5*time.Minute-10*time.Second,
@@ -1336,7 +1344,7 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 	)
 	MatchingDeploymentWorkflowVersion = NewNamespaceIntSetting(
 		"matching.deploymentWorkflowVersion",
-		0,
+		2,
 		`MatchingDeploymentWorkflowVersion controls what version of the logic should the manager workflows use.`,
 	)
 	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
@@ -1385,8 +1393,8 @@ second per poller by one physical queue manager`,
 	)
 	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",
-		ConvertGradualChange(false),
-		StaticGradualChange(false),
+		ConvertGradualChange(true),
+		StaticGradualChange(true),
 		`Use priority-enabled TaskMatcher`,
 	)
 	MatchingEnableFairness = NewTaskQueueTypedSettingWithConverter(
@@ -1397,7 +1405,7 @@ second per poller by one physical queue manager`,
 	)
 	MatchingEnableMigration = NewTaskQueueBoolSetting(
 		"matching.enableMigration",
-		false,
+		true,
 		`Allows migration between v1 and v2 (fairness) task backlogs.`,
 	)
 	MatchingPriorityLevels = NewTaskQueueIntSetting(
@@ -1431,6 +1439,13 @@ second per poller by one physical queue manager`,
 		`MatchingEnableWorkerPluginMetrics controls whether to export worker plugin metrics.
 The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is
 an optional feature and also requires a metrics collection system that can handle higher cardinalities.`,
+	)
+	MatchingEnablePollerAutoscalingMetrics = NewGlobalBoolSetting(
+		"matching.enablePollerAutoscalingMetrics",
+		false,
+		`MatchingEnablePollerAutoscalingMetrics controls whether to export poller autoscaling metrics.
+The metric has dimensions: namespace, taskqueue, and task_type (Workflow, Activity, Nexus). Disabled by
+default as namespace cardinality can be high and this requires a metrics collection system that can handle it.`,
 	)
 	MatchingAutoEnableV2 = NewTaskQueueBoolSetting(
 		"matching.autoEnableV2",
@@ -1713,6 +1728,15 @@ before calling remote for missing events`,
 		15*time.Minute,
 		`StandbyTaskMissingEventsDiscardDelay is the amount of time standby cluster's will wait (if events are missing)
 before discarding the task`,
+	)
+	ChasmStandbyTaskDiscardDelay = NewChasmTaskTypeDurationSetting(
+		"history.ChasmStandbyTaskDiscardDelay",
+		24*time.Hour,
+		`ChasmStandbyTaskDiscardDelay is the amount of time standby cluster will wait
+before discarding a CHASM task. Configurable per RegistrableTask type (e.g. "activity.dispatch").
+The default is intentionally much higher than the non CHASM standby discard delay because
+discarding a CHASM task can leave the execution in a stuck state after failover. Task types
+that can be safely offloaded should be configured with a shorter delay.`,
 	)
 	QueuePendingTaskCriticalCount = NewGlobalIntSetting(
 		"history.queuePendingTaskCriticalCount",
@@ -2403,6 +2427,11 @@ the number of children greater than or equal to this threshold`,
 		false,
 		`EnableDropRepeatedWorkflowTaskFailures whether to silently drop repeated workflow task failures`,
 	)
+	SendTransientOrSpeculativeWorkflowTaskEvents = NewNamespaceBoolSetting(
+		"history.sendTransientOrSpeculativeWorkflowTaskEvents",
+		true,
+		`SendTransientOrSpeculativeWorkflowTaskEvents controls whether GetWorkflowExecutionHistory returns non-durable transient or speculative workflow task events. Enabled by default but can be disabled per namespace if it causes compatibility problems.`,
+	)
 	DefaultWorkflowTaskTimeout = NewNamespaceDurationSetting(
 		"history.defaultWorkflowTaskTimeout",
 		primitives.DefaultWorkflowTaskTimeout,
@@ -2791,6 +2820,13 @@ that task will be sent to DLQ.`,
 instead of the existing (V1) implementation.`,
 	)
 
+	EnableCHASMSchedulerRouting = NewNamespaceBoolSetting(
+		"history.enableCHASMSchedulerRouting",
+		false,
+		`EnableCHASMSchedulerRouting controls whether schedule RPCs are routed to the CHASM (V2) implementation
+first (with fallback to V1), excluding CreateSchedule.`,
+	)
+
 	EnableCHASMSchedulerMigration = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerMigration",
 		false,
@@ -3143,10 +3179,12 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		preventing task orphaning that can occur if tasks are dispatched to a shutting-down worker.`,
 	)
 
+	// Deprecated: ListWorkersEnabled is no longer honored. ListWorkers and DescribeWorker APIs are
+	// always enabled. The write path is gated by WorkerHeartbeatsEnabled.
 	ListWorkersEnabled = NewNamespaceBoolSetting(
 		"frontend.ListWorkersEnabled",
 		true,
-		`ListWorkersEnabled is a "feature enable" flag. It allows clients to get workers heartbeat information.`,
+		`Deprecated: no longer honored. ListWorkers and DescribeWorker are always enabled.`,
 	)
 
 	WorkerCommandsEnabled = NewNamespaceBoolSetting(

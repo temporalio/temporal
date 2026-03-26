@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -79,7 +80,7 @@ type (
 
 		// Fields used by SDK based tests.
 		sdkClient sdkclient.Client
-		worker    sdkworker.Worker
+		sdkWorker sdkworker.Worker
 		taskQueue string
 
 		// TODO (alex): replace with v2
@@ -92,13 +93,15 @@ type (
 	}
 	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
-		ServiceOptions         map[primitives.ServiceName][]fx.Option
-		DynamicConfigOverrides map[dynamicconfig.Key]any
-		ArchivalEnabled        bool
-		EnableMTLS             bool
-		FaultInjectionConfig   *config.FaultInjection
-		NumHistoryShards       int32
-		SharedCluster          bool
+		ServiceOptions                  map[primitives.ServiceName][]fx.Option
+		DynamicConfigOverrides          map[dynamicconfig.Key]any
+		ArchivalEnabled                 bool
+		EnableMTLS                      bool
+		FaultInjectionConfig            *config.FaultInjection
+		NumHistoryShards                int32
+		SharedCluster                   bool
+		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
+		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 	}
 	TestClusterOption func(params *TestClusterParams)
 )
@@ -167,6 +170,18 @@ func WithSharedCluster() TestClusterOption {
 	}
 }
 
+func WithCustomHistoryArchiverFactory(factory provider.CustomHistoryArchiverFactory) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.CustomHistoryArchiverFactory = factory
+	}
+}
+
+func WithCustomVisibilityArchiverFactory(factory provider.CustomVisibilityArchiverFactory) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.CustomVisibilityArchiverFactory = factory
+	}
+}
+
 func (s *FunctionalTestBase) GetTestCluster() *TestCluster {
 	return s.testCluster
 }
@@ -211,8 +226,8 @@ func (s *FunctionalTestBase) WorkerGRPCAddress() string {
 	return s.GetTestCluster().WorkerGRPCAddress()
 }
 
-func (s *FunctionalTestBase) Worker() sdkworker.Worker {
-	return s.worker
+func (s *FunctionalTestBase) SdkWorker() sdkworker.Worker {
+	return s.sdkWorker
 }
 
 func (s *FunctionalTestBase) SdkClient() sdkclient.Client {
@@ -268,11 +283,13 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		HistoryConfig: HistoryConfig{
 			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
 		},
-		DynamicConfigOverrides: params.DynamicConfigOverrides,
-		ServiceFxOptions:       params.ServiceOptions,
-		EnableMetricsCapture:   true,
-		EnableArchival:         params.ArchivalEnabled,
-		EnableMTLS:             params.EnableMTLS,
+		DynamicConfigOverrides:          params.DynamicConfigOverrides,
+		ServiceFxOptions:                params.ServiceOptions,
+		EnableMetricsCapture:            true,
+		EnableArchival:                  params.ArchivalEnabled,
+		EnableMTLS:                      params.EnableMTLS,
+		CustomHistoryArchiverFactory:    params.CustomHistoryArchiverFactory,
+		CustomVisibilityArchiverFactory: params.CustomVisibilityArchiverFactory,
 	}
 
 	// Apply configuration for shared clusters.
@@ -387,8 +404,8 @@ func (s *FunctionalTestBase) setupSdk() {
 	s.taskQueue = RandomizeStr("tq")
 
 	workerOptions := sdkworker.Options{}
-	s.worker = sdkworker.New(s.sdkClient, s.taskQueue, workerOptions)
-	err = s.worker.Start()
+	s.sdkWorker = sdkworker.New(s.sdkClient, s.taskQueue, workerOptions)
+	err = s.sdkWorker.Start()
 	s.NoError(err)
 }
 
@@ -432,8 +449,8 @@ func (s *FunctionalTestBase) TearDownSubTest() {
 }
 
 func (s *FunctionalTestBase) tearDownSdk() {
-	if s.worker != nil {
-		s.worker.Stop()
+	if s.sdkWorker != nil {
+		s.sdkWorker.Stop()
 	}
 	if s.sdkClient != nil {
 		s.sdkClient.Close()
@@ -523,7 +540,7 @@ func (s *FunctionalTestBase) GetHistoryFunc(namespace string, execution *commonp
 			Execution:       execution,
 			MaximumPageSize: 5, // Use small page size to force pagination code path
 		})
-		require.NoError(s.T(), err)
+		s.Require().NoError(err)
 
 		events := historyResponse.History.Events
 		for historyResponse.NextPageToken != nil {
@@ -532,7 +549,7 @@ func (s *FunctionalTestBase) GetHistoryFunc(namespace string, execution *commonp
 				Execution:     execution,
 				NextPageToken: historyResponse.NextPageToken,
 			})
-			require.NoError(s.T(), err)
+			s.Require().NoError(err)
 			events = append(events, historyResponse.History.Events...)
 		}
 
@@ -590,6 +607,11 @@ func (s *FunctionalTestBase) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	return s.testCluster.host.injectHook(s.T(), hook, scope)
 }
 
+// Context returns a context with RPC headers for use in this test.
+func (s *FunctionalTestBase) Context() context.Context {
+	return NewContext()
+}
+
 // CloseShard closes the shard that contains the given workflow.
 // This is a cluster-global operation and cannot be called on shared clusters.
 func (s *FunctionalTestBase) CloseShard(namespaceID string, workflowID string) {
@@ -612,55 +634,18 @@ func (s *FunctionalTestBase) GetNamespaceID(namespace string) string {
 }
 
 func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
-	for _, forcePollForward := range []bool{false, true} {
-		for _, forceTaskForward := range []bool{false, true} {
-			for _, forceAsync := range []bool{false, true} {
-				name := "NoTaskForward"
-				if forceTaskForward {
-					// force two levels of forwarding
-					name = "ForceTaskForward"
-				}
-				if forcePollForward {
-					name += "ForcePollForward"
-				} else {
-					name += "NoPollForward"
-				}
-				if forceAsync {
-					name += "ForceAsync"
-				} else {
-					name += "AllowSync"
-				}
-
-				s.Run(
-					name, func() {
-						if forceTaskForward || forcePollForward {
-							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
-							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
-						} else {
-							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-						}
-						if forceTaskForward {
-							s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 11))
-						} else {
-							s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 0))
-						}
-						if forcePollForward {
-							s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 5))
-						} else {
-							s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 0))
-						}
-						if forceAsync {
-							s.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, true))
-						} else {
-							s.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, false))
-						}
-
-						subtest()
-					},
-				)
+	for _, behavior := range AllMatchingBehaviors() {
+		s.Run(behavior.Name(), func() {
+			if behavior.ForceTaskForward || behavior.ForcePollForward {
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
+			} else {
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 			}
-		}
+			behavior.InjectHooks(s)
+			subtest()
+		})
 	}
 }
 

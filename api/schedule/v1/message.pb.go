@@ -65,7 +65,11 @@ type BufferedStart struct {
 	StartTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
 	// Populated when the workflow execution completes. Presence indicates the
 	// action is complete and retained for history. Only used by the CHASM scheduler.
-	Completed     *CompletedResult `protobuf:"bytes,12,opt,name=completed,proto3" json:"completed,omitempty"`
+	Completed *CompletedResult `protobuf:"bytes,12,opt,name=completed,proto3" json:"completed,omitempty"`
+	// True when a running BufferedStart is known to have a Nexus callback
+	// attached. False when a BufferedStart originated from a migrated V1
+	// workflow. Only used by CHASM scheduler, for migration from V1.
+	HasCallback   bool `protobuf:"varint,13,opt,name=has_callback,json=hasCallback,proto3" json:"has_callback,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -184,6 +188,13 @@ func (x *BufferedStart) GetCompleted() *CompletedResult {
 	return nil
 }
 
+func (x *BufferedStart) GetHasCallback() bool {
+	if x != nil {
+		return x.HasCallback
+	}
+	return false
+}
+
 // Result when a workflow execution has completed.
 // Only used by the CHASM scheduler.
 type CompletedResult struct {
@@ -252,10 +263,11 @@ type InternalState struct {
 	LastCompletionResult *v12.Payloads `protobuf:"bytes,5,opt,name=last_completion_result,json=lastCompletionResult,proto3" json:"last_completion_result,omitempty"`
 	ContinuedFailure     *v13.Failure  `protobuf:"bytes,6,opt,name=continued_failure,json=continuedFailure,proto3" json:"continued_failure,omitempty"`
 	// conflict token is implemented as simple sequence number
-	ConflictToken int64 `protobuf:"varint,7,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
-	NeedRefresh   bool  `protobuf:"varint,9,opt,name=need_refresh,json=needRefresh,proto3" json:"need_refresh,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ConflictToken    int64 `protobuf:"varint,7,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
+	NeedRefresh      bool  `protobuf:"varint,9,opt,name=need_refresh,json=needRefresh,proto3" json:"need_refresh,omitempty"`
+	PendingMigration bool  `protobuf:"varint,11,opt,name=pending_migration,json=pendingMigration,proto3" json:"pending_migration,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *InternalState) Reset() {
@@ -354,6 +366,13 @@ func (x *InternalState) GetConflictToken() int64 {
 func (x *InternalState) GetNeedRefresh() bool {
 	if x != nil {
 		return x.NeedRefresh
+	}
+	return false
+}
+
+func (x *InternalState) GetPendingMigration() bool {
+	if x != nil {
+		return x.PendingMigration
 	}
 	return false
 }
@@ -1035,7 +1054,7 @@ var File_temporal_server_api_schedule_v1_message_proto protoreflect.FileDescript
 
 const file_temporal_server_api_schedule_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"-temporal/server/api/schedule/v1/message.proto\x12\x1ftemporal.server.api.schedule.v1\x1a$temporal/api/common/v1/message.proto\x1a$temporal/api/enums/v1/schedule.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/failure/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf2\x04\n" +
+	"-temporal/server/api/schedule/v1/message.proto\x12\x1ftemporal.server.api.schedule.v1\x1a$temporal/api/common/v1/message.proto\x1a$temporal/api/enums/v1/schedule.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/failure/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x95\x05\n" +
 	"\rBufferedStart\x12=\n" +
 	"\fnominal_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vnominalTime\x12;\n" +
 	"\vactual_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -1053,11 +1072,12 @@ const file_temporal_server_api_schedule_v1_message_proto_rawDesc = "" +
 	" \x01(\tR\x05runId\x129\n" +
 	"\n" +
 	"start_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12N\n" +
-	"\tcompleted\x18\f \x01(\v20.temporal.server.api.schedule.v1.CompletedResultR\tcompleted\"\x94\x01\n" +
+	"\tcompleted\x18\f \x01(\v20.temporal.server.api.schedule.v1.CompletedResultR\tcompleted\x12!\n" +
+	"\fhas_callback\x18\r \x01(\bR\vhasCallback\"\x94\x01\n" +
 	"\x0fCompletedResult\x12F\n" +
 	"\x06status\x18\x01 \x01(\x0e2..temporal.api.enums.v1.WorkflowExecutionStatusR\x06status\x129\n" +
 	"\n" +
-	"close_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\"\xdf\x04\n" +
+	"close_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\"\x8c\x05\n" +
 	"\rInternalState\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12!\n" +
 	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12\x1f\n" +
@@ -1070,7 +1090,8 @@ const file_temporal_server_api_schedule_v1_message_proto_rawDesc = "" +
 	"\x16last_completion_result\x18\x05 \x01(\v2 .temporal.api.common.v1.PayloadsR\x14lastCompletionResult\x12M\n" +
 	"\x11continued_failure\x18\x06 \x01(\v2 .temporal.api.failure.v1.FailureR\x10continuedFailure\x12%\n" +
 	"\x0econflict_token\x18\a \x01(\x03R\rconflictToken\x12!\n" +
-	"\fneed_refresh\x18\t \x01(\bR\vneedRefresh\"\xa3\x02\n" +
+	"\fneed_refresh\x18\t \x01(\bR\vneedRefresh\x12+\n" +
+	"\x11pending_migration\x18\v \x01(\bR\x10pendingMigration\"\xa3\x02\n" +
 	"\x11StartScheduleArgs\x12>\n" +
 	"\bschedule\x18\x01 \x01(\v2\".temporal.api.schedule.v1.ScheduleR\bschedule\x12:\n" +
 	"\x04info\x18\x02 \x01(\v2&.temporal.api.schedule.v1.ScheduleInfoR\x04info\x12L\n" +

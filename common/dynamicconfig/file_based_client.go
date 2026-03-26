@@ -10,10 +10,11 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 )
 
-var _ Client = (*fileBasedClient)(nil)
-var _ NotifyingClient = (*fileBasedClient)(nil)
+var _ Client = (*FileBasedClient)(nil)
+var _ NotifyingClient = (*FileBasedClient)(nil)
 
 const (
 	minPollInterval = time.Second * 5
@@ -33,13 +34,14 @@ type (
 		PollInterval time.Duration `yaml:"pollInterval"`
 	}
 
-	fileBasedClient struct {
+	FileBasedClient struct {
 		values          atomic.Value // ConfigValueMap
 		logger          log.Logger
 		reader          FileReader
-		lastUpdatedTime time.Time
+		lastCheckedTime time.Time
 		config          *FileBasedClientConfig
 		doneCh          <-chan any
+		metricsHandler  atomic.Pointer[metrics.Handler]
 
 		NotifyingClientImpl
 	}
@@ -50,37 +52,76 @@ type (
 )
 
 // NewFileBasedClient creates a file based client.
-func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any) (*fileBasedClient, error) {
+// use the NewFileBasedClientWithMetrics instead if you want to collect metrics.
+// This method is retained mainly for backward compatibility.
+func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any) (*FileBasedClient, error) {
+	return NewFileBasedClientWithMetrics(config, logger, doneCh, metrics.NoopMetricsHandler)
+}
+
+func NewFileBasedClientWithMetrics(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any, metricsHandler metrics.Handler) (*FileBasedClient, error) {
 	if config == nil {
 		return nil, errors.New("configuration for dynamic config client is nil")
 	}
 	reader := &osReader{path: config.Filepath}
-	return NewFileBasedClientWithReader(reader, config, logger, doneCh)
+	return NewFileBasedClientWithReader(reader, config, logger, doneCh, metricsHandler)
 }
 
-func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any) (*fileBasedClient, error) {
-	client := &fileBasedClient{
+func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any, metricsHandler metrics.Handler) (*FileBasedClient, error) {
+	if config == nil {
+		return nil, errors.New("configuration for dynamic config client is nil")
+	}
+	if reader == nil {
+		return nil, errors.New("file reader for dynamic config client is nil")
+	}
+	if logger == nil {
+		return nil, errors.New("logger for dynamic config client is nil")
+	}
+	if metricsHandler == nil {
+		metricsHandler = metrics.NoopMetricsHandler
+		logger.Warn("metrics handler is nil, using noop metrics handler")
+	}
+
+	client := &FileBasedClient{
 		logger:              logger,
 		reader:              reader,
 		config:              config,
 		doneCh:              doneCh,
 		NotifyingClientImpl: NewNotifyingClientImpl(),
 	}
-
+	client.metricsHandler.Store(&metricsHandler)
 	err := client.init()
 	if err != nil {
 		return nil, err
 	}
-
 	return client, nil
 }
 
-func (fc *fileBasedClient) GetValue(key Key) []ConstrainedValue {
+// SetMetricsHandler sets the metrics handler for the client. This is useful when the
+// metricsHandler is not available at the time of initialization due to circular dependencies.
+func (fc *FileBasedClient) SetMetricsHandler(metricsHandler metrics.Handler) {
+	if metricsHandler == nil {
+		fc.logger.Warn("metrics handler is nil, using noop metrics handler")
+		metricsHandler = metrics.NoopMetricsHandler
+	}
+	fc.metricsHandler.Store(&metricsHandler)
+}
+
+func (fc *FileBasedClient) getMetricsHandler() metrics.Handler {
+	h := fc.metricsHandler.Load() // nolint:revive // unchecked-type-assertion
+	if h == nil {
+		// this should never happen, but we'll log a warning if it does
+		fc.logger.Warn("dynamic config is missing correct metrics handler, using noop metrics handler")
+		return metrics.NoopMetricsHandler
+	}
+	return *h
+}
+
+func (fc *FileBasedClient) GetValue(key Key) []ConstrainedValue {
 	values := fc.values.Load().(ConfigValueMap) // nolint:revive // unchecked-type-assertion
 	return values[key]
 }
 
-func (fc *fileBasedClient) init() error {
+func (fc *FileBasedClient) init() error {
 	if err := fc.validateStaticConfig(fc.config); err != nil {
 		return fmt.Errorf("unable to validate dynamic config: %w", err)
 	}
@@ -110,15 +151,27 @@ func (fc *fileBasedClient) init() error {
 
 // This is public mainly for testing. The update loop will call this periodically, you don't
 // have to call it explicitly.
-func (fc *fileBasedClient) Update() error {
-	modtime, err := fc.reader.GetModTime()
-	if err != nil {
-		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
+func (fc *FileBasedClient) Update() (updateErr error) {
+	modtime, updateErr := fc.reader.GetModTime()
+	retryOnErr := true
+	defer func() {
+		h := fc.getMetricsHandler()
+		// gauge value 1 refers to a failed update state, and should trigger alerts
+		if updateErr != nil {
+			metrics.DynamicConfigUpdateFailure.With(h).Record(1)
+		} else {
+			metrics.DynamicConfigUpdateFailure.With(h).Record(0)
+		}
+		if updateErr == nil || !retryOnErr {
+			fc.lastCheckedTime = modtime
+		}
+	}()
+	if updateErr != nil {
+		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, updateErr)
 	}
-	if !modtime.After(fc.lastUpdatedTime) {
+	if !modtime.After(fc.lastCheckedTime) {
 		return nil
 	}
-	fc.lastUpdatedTime = modtime
 
 	contents, err := fc.reader.ReadFile()
 	if err != nil {
@@ -127,12 +180,14 @@ func (fc *fileBasedClient) Update() error {
 
 	lr := LoadYamlFile(contents)
 	for _, e := range lr.Errors {
-		fc.logger.Warn("dynamic config error", tag.Error(e))
+		fc.logger.Error("dynamic config error", tag.Error(e))
 	}
 	for _, w := range lr.Warnings {
 		fc.logger.Warn("dynamic config warning", tag.Error(w))
 	}
 	if len(lr.Errors) > 0 {
+		// we don't retry on parsing errors which will fail deterministically until the file is fixed
+		retryOnErr = false
 		return fmt.Errorf("loading dynamic config failed: %d errors, %d warnings",
 			len(lr.Errors), len(lr.Warnings))
 	}
@@ -146,7 +201,7 @@ func (fc *fileBasedClient) Update() error {
 	return nil
 }
 
-func (fc *fileBasedClient) validateStaticConfig(config *FileBasedClientConfig) error {
+func (fc *FileBasedClient) validateStaticConfig(config *FileBasedClientConfig) error {
 	if config == nil {
 		return errors.New("configuration for dynamic config client is nil")
 	}

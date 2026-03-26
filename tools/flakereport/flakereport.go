@@ -259,8 +259,9 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	// Count test runs by name for failure rate calculation
 	testRunCounts := countTestRuns(allTestRuns)
 
-	// Group failures by test name
+	// Group failures by test name, then remove parent entries whose subtests were observed.
 	grouped := groupFailuresByTest(allFailures)
+	filterParentTests(grouped, testRunCounts)
 	fmt.Printf("Unique tests with failures: %d\n", len(grouped))
 
 	// Classify failures
@@ -271,13 +272,14 @@ func runGenerateCommand(c *cli.Context) (err error) {
 
 	// Identify CI breakers (tests that failed all retries in a single job)
 	ciBreakerMap, ciBreakCounts := identifyCIBreakers(allFailures)
+	filterParentTests(ciBreakerMap, testRunCounts)
 	fmt.Printf("CI breaker tests (failed all retries): %d\n", len(ciBreakerMap))
 
 	// Convert to reports with failure rates and sort
 	flakyReports := convertToReports(flakyMap, testRunCounts, repo, maxLinks)
 	timeoutReports := convertToReports(timeoutMap, testRunCounts, repo, maxLinks)
-	crashReports := convertToReports(crashMap, testRunCounts, repo, maxLinks)
-	ciBreakerReports := convertCIBreakersToReports(ciBreakerMap, ciBreakCounts, repo, maxLinks)
+	crashReports := convertCrashesToReports(crashMap, jobs, repo, maxLinks)
+	ciBreakerReports := convertCIBreakersToReports(ciBreakerMap, ciBreakCounts, len(runs), repo, maxLinks)
 
 	// Compute suite-level breakdown
 	suiteReports := generateSuiteReports(allFailures, allTestRuns)

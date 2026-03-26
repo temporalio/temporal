@@ -65,6 +65,12 @@ func getCommands(
 			},
 		},
 		{
+			Name:        "schedule",
+			Aliases:     []string{"sch"},
+			Usage:       "Run admin operation on a schedule",
+			Subcommands: newAdminScheduleCommands(clientFactory),
+		},
+		{
 			Name:        "decode",
 			Usage:       "Decode payload",
 			Subcommands: newDecodeCommands(taskBlobEncoder),
@@ -160,6 +166,10 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
 				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDescribeExecution(c, clientFactory)
@@ -184,6 +194,10 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Name:        FlagArchetype,
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
+				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
 				},
 				&cli.StringFlag{
 					Name:  FlagVisibilityQuery,
@@ -242,6 +256,10 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
 				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				return AdminReplicateWorkflow(c, clientFactory)
@@ -267,9 +285,38 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
 				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDeleteWorkflow(c, clientFactory, prompterFactory(c))
+			},
+		},
+	}
+}
+
+func newAdminScheduleCommands(clientFactory ClientFactory) []*cli.Command {
+	return []*cli.Command{
+		{
+			Name:  "migrate",
+			Usage: "Migrate a schedule between V1 (workflow-backed) and V2 (CHASM)",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagScheduleID,
+					Aliases:  FlagScheduleIDAlias,
+					Usage:    "Schedule ID",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagTarget,
+					Usage:    "Target scheduler implementation: chasm, workflow",
+					Required: true,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminMigrateSchedule(c, clientFactory)
 			},
 		},
 	}

@@ -84,7 +84,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,

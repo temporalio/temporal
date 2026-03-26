@@ -374,7 +374,7 @@ func (s *TestBase) GetAckLevels(
 func (s *TestBase) PublishToNamespaceDLQ(ctx context.Context, task *replicationspb.ReplicationTask) error {
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond).
 		WithBackoffCoefficient(1.5).
-		WithMaximumAttempts(5)
+		WithMaximumAttempts(20)
 
 	return backoff.ThrottleRetryContext(
 		ctx,

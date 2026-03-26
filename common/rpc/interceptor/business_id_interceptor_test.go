@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
@@ -214,6 +216,96 @@ func TestBusinessIDInterceptor_AllMethods(t *testing.T) {
 				},
 			},
 			expectedBusinessID: "wf-id",
+		},
+
+		// task queue name
+		{
+			methodName:         "UpdateTaskQueueConfig",
+			request:            &workflowservice.UpdateTaskQueueConfigRequest{TaskQueue: "test-task-queue"},
+			expectedBusinessID: "test-task-queue",
+		},
+
+		// task queue name (from TaskQueue message)
+		{
+			methodName:         "ListTaskQueuePartitions",
+			request:            &workflowservice.ListTaskQueuePartitionsRequest{TaskQueue: &taskqueuepb.TaskQueue{Name: "test-task-queue"}},
+			expectedBusinessID: "test-task-queue",
+		},
+
+		// deployment name
+		{
+			methodName:         "DescribeWorkerDeployment",
+			request:            &workflowservice.DescribeWorkerDeploymentRequest{DeploymentName: "test-deployment"},
+			expectedBusinessID: "test-deployment",
+		},
+		{
+			methodName:         "DeleteWorkerDeployment",
+			request:            &workflowservice.DeleteWorkerDeploymentRequest{DeploymentName: "test-deployment"},
+			expectedBusinessID: "test-deployment",
+		},
+		{
+			methodName:         "SetWorkerDeploymentCurrentVersion",
+			request:            &workflowservice.SetWorkerDeploymentCurrentVersionRequest{DeploymentName: "test-deployment"},
+			expectedBusinessID: "test-deployment",
+		},
+		{
+			methodName:         "SetWorkerDeploymentManager",
+			request:            &workflowservice.SetWorkerDeploymentManagerRequest{DeploymentName: "test-deployment"},
+			expectedBusinessID: "test-deployment",
+		},
+		{
+			methodName:         "SetWorkerDeploymentRampingVersion",
+			request:            &workflowservice.SetWorkerDeploymentRampingVersionRequest{DeploymentName: "test-deployment"},
+			expectedBusinessID: "test-deployment",
+		},
+
+		// deployment name (from WorkerDeploymentVersion message)
+		{
+			methodName:         "DescribeWorkerDeploymentVersion",
+			request:            &workflowservice.DescribeWorkerDeploymentVersionRequest{DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{DeploymentName: "test-deployment"}},
+			expectedBusinessID: "test-deployment",
+		},
+		{
+			methodName:         "DeleteWorkerDeploymentVersion",
+			request:            &workflowservice.DeleteWorkerDeploymentVersionRequest{DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{DeploymentName: "test-deployment"}},
+			expectedBusinessID: "test-deployment",
+		},
+		{
+			methodName:         "UpdateWorkerDeploymentVersionMetadata",
+			request:            &workflowservice.UpdateWorkerDeploymentVersionMetadataRequest{DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{DeploymentName: "test-deployment"}},
+			expectedBusinessID: "test-deployment",
+		},
+
+		// namespace
+		{
+			methodName:         "FetchWorkerConfig",
+			request:            &workflowservice.FetchWorkerConfigRequest{Namespace: "test-namespace"},
+			expectedBusinessID: "test-namespace",
+		},
+		{
+			methodName:         "UpdateWorkerConfig",
+			request:            &workflowservice.UpdateWorkerConfigRequest{Namespace: "test-namespace"},
+			expectedBusinessID: "test-namespace",
+		},
+		{
+			methodName:         "DescribeWorker",
+			request:            &workflowservice.DescribeWorkerRequest{Namespace: "test-namespace"},
+			expectedBusinessID: "test-namespace",
+		},
+		{
+			methodName:         "RecordWorkerHeartbeat",
+			request:            &workflowservice.RecordWorkerHeartbeatRequest{Namespace: "test-namespace"},
+			expectedBusinessID: "test-namespace",
+		},
+		// workflow ID (from UpdateRef)
+		{
+			methodName: "PollWorkflowExecutionUpdate",
+			request: &workflowservice.PollWorkflowExecutionUpdateRequest{
+				UpdateRef: &updatepb.UpdateRef{
+					WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "test-workflow-id"},
+				},
+			},
+			expectedBusinessID: "test-workflow-id",
 		},
 	}
 
@@ -567,6 +659,32 @@ func TestMethodToPatternMapping(t *testing.T) {
 
 		// PatternMultiOperation
 		"ExecuteMultiOperation": PatternMultiOperation,
+
+		// PatternTaskQueueName
+		"UpdateTaskQueueConfig": PatternTaskQueueName,
+
+		// PatternTaskQueueNameFromMessage
+		"ListTaskQueuePartitions": PatternTaskQueueNameFromMessage,
+
+		// PatternDeploymentName
+		"DescribeWorkerDeployment":          PatternDeploymentName,
+		"DeleteWorkerDeployment":            PatternDeploymentName,
+		"SetWorkerDeploymentCurrentVersion": PatternDeploymentName,
+		"SetWorkerDeploymentManager":        PatternDeploymentName,
+		"SetWorkerDeploymentRampingVersion": PatternDeploymentName,
+
+		// PatternDeploymentVersion
+		"DescribeWorkerDeploymentVersion":       PatternDeploymentVersion,
+		"DeleteWorkerDeploymentVersion":         PatternDeploymentVersion,
+		"UpdateWorkerDeploymentVersionMetadata": PatternDeploymentVersion,
+
+		// PatternNamespace
+		"FetchWorkerConfig":     PatternNamespace,
+		"UpdateWorkerConfig":    PatternNamespace,
+		"DescribeWorker":        PatternNamespace,
+		"RecordWorkerHeartbeat": PatternNamespace,
+
+		"PollWorkflowExecutionUpdate": PatternUpdateRef,
 	}
 
 	require.Equal(t, expectedMappings, methodToPattern)
