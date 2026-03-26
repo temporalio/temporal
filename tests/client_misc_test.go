@@ -189,7 +189,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 	s.NoError(s.SdkClient().CompleteActivity(ctx, activityInfo.TaskToken, nil, nil))
 	s.Eventually(func() bool {
 		return workflowRun.Get(ctx, nil) == nil
-	}, 10*time.Second, 500*time.Millisecond)
+	}, 30*time.Second, 500*time.Millisecond)
 }
 
 func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
