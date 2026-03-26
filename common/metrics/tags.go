@@ -36,7 +36,9 @@ const (
 	commandType    = "commandType"
 	serviceName    = "service_name"
 	actionType     = "action_type"
-	workerVersion  = "worker_version"
+	workerVersion           = "worker_version"
+	workerDeploymentName    = "temporal_worker_deployment_name"
+	workerDeploymentBuildID = "temporal_worker_deployment_build_id"
 	destination    = "destination"
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
@@ -188,6 +190,24 @@ func WorkerVersionTag(version string, versionBreakdown bool) Tag {
 		version = "__versioned__"
 	}
 	return Tag{Key: workerVersion, Value: version}
+}
+
+func WorkerDeploymentNameTag(deploymentName string, versionBreakdown bool) Tag {
+	if deploymentName == "" {
+		deploymentName = "__unversioned__"
+	} else if !versionBreakdown {
+		deploymentName = "__versioned__"
+	}
+	return Tag{Key: workerDeploymentName, Value: deploymentName}
+}
+
+func WorkerDeploymentBuildIDTag(buildID string, versionBreakdown bool) Tag {
+	if buildID == "" {
+		buildID = "__unversioned__"
+	} else if !versionBreakdown {
+		buildID = "__versioned__"
+	}
+	return Tag{Key: workerDeploymentBuildID, Value: buildID}
 }
 
 // WorkflowTypeTag returns a new workflow type tag.

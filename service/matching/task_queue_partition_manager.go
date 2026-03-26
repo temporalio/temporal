@@ -7,6 +7,7 @@ import (
 	"maps"
 	"math"
 	"math/bits"
+	"strings"
 	"sync"
 	"time"
 
@@ -1241,8 +1242,11 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 
 		pqInfo := vInfo.GetPhysicalTaskQueueInfo()
 
+		deploymentName, buildID := parseDeploymentFromVersionKey(versionKey)
 		versionHandler := pm.metricsHandler.WithTags(
 			metrics.WorkerVersionTag(versionKey, pm.config.BreakdownMetricsByBuildID()),
+			metrics.WorkerDeploymentNameTag(deploymentName, pm.config.BreakdownMetricsByBuildID()),
+			metrics.WorkerDeploymentBuildIDTag(buildID, pm.config.BreakdownMetricsByBuildID()),
 		)
 
 		// Per-priority backlog count
@@ -1280,11 +1284,25 @@ func (pm *taskQueuePartitionManagerImpl) emitZeroLogicalBacklogForQueue(version 
 	}
 	handler := pm.metricsHandler.WithTags(
 		metrics.WorkerVersionTag(version.MetricsTagValue(), pm.config.BreakdownMetricsByBuildID()),
+		metrics.WorkerDeploymentNameTag(version.Deployment().GetSeriesName(), pm.config.BreakdownMetricsByBuildID()),
+		metrics.WorkerDeploymentBuildIDTag(version.Deployment().GetBuildId(), pm.config.BreakdownMetricsByBuildID()),
 	)
 	for pri := range pq.GetStatsByPriority(false) {
 		metrics.ApproximateBacklogCount.With(handler).Record(0, metrics.MatchingTaskPriorityTag(pri))
 	}
 	metrics.ApproximateBacklogAgeSeconds.With(handler).Record(0)
+}
+
+// parseDeploymentFromVersionKey extracts the deployment name and build ID from a version key
+// string used as the map key in DescribeTaskQueuePartitionResponse.VersionsInfoInternal.
+// The key format is "deploymentName:buildId" for V3 deployment-based versions, or empty for
+// unversioned queues. Returns empty strings when the delimiter is not found (unversioned or
+// V2 version-set keys), which the tag functions map to "__unversioned__".
+func parseDeploymentFromVersionKey(versionKey string) (deploymentName, buildID string) {
+	if name, id, found := strings.Cut(versionKey, worker_versioning.WorkerDeploymentVersionDelimiter); found {
+		return name, id
+	}
+	return "", ""
 }
 
 func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb.EphemeralData) {
