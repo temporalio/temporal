@@ -544,7 +544,7 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_FallsBackToFieldNamesWh
 		ctx,
 		&operatorservice.ListSearchAttributesRequest{Namespace: testNamespace},
 	)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.NotNil(resp)
 	s.Equal(searchattribute.TestNameTypeMap().Custom(), resp.CustomAttributes)
 }
