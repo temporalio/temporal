@@ -7077,3 +7077,31 @@ func (wh *WorkflowHandler) UnpauseWorkflowExecution(ctx context.Context, request
 
 	return &workflowservice.UnpauseWorkflowExecutionResponse{}, nil
 }
+
+func (wh *WorkflowHandler) PauseActivityExecution(
+	_ context.Context,
+	_ *workflowservice.PauseActivityExecutionRequest,
+) (_ *workflowservice.PauseActivityExecutionResponse, retError error) {
+	return nil, status.Errorf(codes.Unimplemented, "PauseActivityExecution is not yet implemented")
+}
+
+func (wh *WorkflowHandler) UnpauseActivityExecution(
+	_ context.Context,
+	_ *workflowservice.UnpauseActivityExecutionRequest,
+) (_ *workflowservice.UnpauseActivityExecutionResponse, retError error) {
+	return nil, status.Errorf(codes.Unimplemented, "UnpauseActivityExecution is not yet implemented")
+}
+
+func (wh *WorkflowHandler) ResetActivityExecution(
+	_ context.Context,
+	_ *workflowservice.ResetActivityExecutionRequest,
+) (_ *workflowservice.ResetActivityExecutionResponse, retError error) {
+	return nil, status.Errorf(codes.Unimplemented, "ResetActivityExecution is not yet implemented")
+}
+
+func (wh *WorkflowHandler) UpdateActivityExecutionOptions(
+	_ context.Context,
+	_ *workflowservice.UpdateActivityExecutionOptionsRequest,
+) (_ *workflowservice.UpdateActivityExecutionOptionsResponse, retError error) {
+	return nil, status.Errorf(codes.Unimplemented, "UpdateActivityExecutionOptions is not yet implemented")
+}
