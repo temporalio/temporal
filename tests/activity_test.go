@@ -1050,7 +1050,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	select {
 	case <-cancelCh:
 	case <-ctx.Done():
-		s.Fail("Test timed out after 90s waiting for activity cancellation", ctx.Err())
+		s.Fail("Test timed out for activity cancellation", ctx.Err())
 		return
 	}
 	s.True(activityCanceled, "Activity was not cancelled.")
