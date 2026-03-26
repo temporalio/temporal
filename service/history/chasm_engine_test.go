@@ -726,6 +726,182 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 	s.NoError(err)
 }
 
+func (s *chasmEngineSuite) TestUpdateComponent_RelaxToComponentLevel() {
+	// This test validates the caller-level failover tolerance pattern:
+	// a ref with executionLastUpdateVT on a different failover branch would
+	// normally be rejected as stale. After RelaxToComponentLevel() clears
+	// executionLastUpdateVT, the staleness check passes (nil VT is accepted)
+	// and the component is found via componentInitialVT.
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		RunID:       tv.RunID(),
+	}
+	newActivityID := tv.ActivityID()
+
+	testComponentTypeID, ok := s.mockShard.ChasmRegistry().ComponentIDFor(&testComponent{})
+	s.True(ok)
+
+	// Build a ref with executionLastUpdateVT on a different failover branch
+	// (higher failover version than what's in persistence).
+	pRef := &persistencespb.ChasmComponentRef{
+		NamespaceId: executionKey.NamespaceID,
+		BusinessId:  executionKey.BusinessID,
+		RunId:       executionKey.RunID,
+		ArchetypeId: uint32(testComponentTypeID),
+		ExecutionVersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(executionKey.BusinessID) + 1,
+			TransitionCount:          testTransitionCount,
+		},
+	}
+	staleToken, err := pRef.Marshal()
+	s.NoError(err)
+	staleRef, err := chasm.DeserializeComponentRef(staleToken)
+	s.NoError(err)
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(executionKey, &persistencespb.ActivityInfo{
+				ActivityId: "",
+			}, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
+		}, nil).AnyTimes()
+
+	// Tier 1: UpdateComponent with stale ref should fail.
+	_, err = s.engine.UpdateComponent(
+		context.Background(),
+		staleRef,
+		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
+			s.Fail("update fn should not be called for stale ref")
+			return nil
+		},
+	)
+	s.Error(err)
+
+	// Tier 2: After RelaxToComponentLevel, the staleness check passes because
+	// executionLastUpdateVT is nil.
+	staleRef.RelaxToComponentLevel()
+
+	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *persistence.UpdateWorkflowExecutionRequest,
+		) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			s.Len(request.UpdateWorkflowMutation.UpsertChasmNodes, 1)
+			updatedNode, ok := request.UpdateWorkflowMutation.UpsertChasmNodes[""]
+			s.True(ok)
+
+			activityInfo := &persistencespb.ActivityInfo{}
+			err := serialization.Decode(updatedNode.Data, activityInfo)
+			s.NoError(err)
+			s.Equal(newActivityID, activityInfo.ActivityId)
+			return tests.UpdateWorkflowExecutionResponse, nil
+		},
+	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(executionKey, gomock.Any()).Return().Times(1)
+
+	_, err = s.engine.UpdateComponent(
+		context.Background(),
+		staleRef,
+		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
+			tc, ok := component.(*testComponent)
+			s.True(ok)
+			tc.ActivityInfo.ActivityId = newActivityID
+			return nil
+		},
+	)
+	s.NoError(err)
+}
+
+func (s *chasmEngineSuite) TestUpdateComponent_CrossRunRetryPattern() {
+	// This test validates the caller-level cross-run retry pattern used by
+	// completeNexusOperationChasm: when UpdateComponent returns NotFound for a
+	// stale run ID, the caller resets the ref via ResetToBusinessID and retries
+	// with an empty run ID, which resolves to the current run.
+	tv := testvars.New(s.T())
+	oldRunID := tv.Any().RunID()
+	newRunID := tv.WithRunID(tv.Any().RunID()).RunID()
+
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		RunID:       oldRunID,
+	}
+	newActivityID := tv.ActivityID()
+
+	// First UpdateComponent call uses oldRunID, which is no longer found.
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewNotFound("execution not found")).Times(1)
+
+	ref := chasm.NewComponentRef[*testComponent](executionKey)
+
+	_, err := s.engine.UpdateComponent(
+		context.Background(),
+		ref,
+		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
+			s.Fail("update fn should not be called for not found execution")
+			return nil
+		},
+	)
+	s.Error(err)
+	var notFoundErr *serviceerror.NotFound
+	s.ErrorAs(err, &notFoundErr)
+
+	// Now simulate the retry: reset ref to business ID level, resolve to new run.
+	ref.ResetToBusinessID()
+	s.Empty(ref.RunID)
+
+	newKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		RunID:       newRunID,
+	}
+
+	// GetCurrentExecution resolves the current run for this business ID.
+	s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetCurrentExecutionResponse{
+			RunID: newRunID,
+		}, nil).Times(1)
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(newKey, &persistencespb.ActivityInfo{
+				ActivityId: "",
+			}, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
+		}, nil).Times(1)
+	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *persistence.UpdateWorkflowExecutionRequest,
+		) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			s.Len(request.UpdateWorkflowMutation.UpsertChasmNodes, 1)
+			updatedNode, ok := request.UpdateWorkflowMutation.UpsertChasmNodes[""]
+			s.True(ok)
+
+			activityInfo := &persistencespb.ActivityInfo{}
+			err := serialization.Decode(updatedNode.Data, activityInfo)
+			s.NoError(err)
+			s.Equal(newActivityID, activityInfo.ActivityId)
+			return tests.UpdateWorkflowExecutionResponse, nil
+		},
+	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(newKey, gomock.Any()).Return().Times(1)
+
+	_, err = s.engine.UpdateComponent(
+		context.Background(),
+		ref,
+		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
+			tc, ok := component.(*testComponent)
+			s.True(ok)
+			tc.ActivityInfo.ActivityId = newActivityID
+			return nil
+		},
+	)
+	s.NoError(err)
+}
+
 func (s *chasmEngineSuite) TestReadComponent_Success() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())

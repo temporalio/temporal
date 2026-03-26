@@ -54,6 +54,24 @@ type ComponentRef struct {
 	validationFn func(NodeBackend, Context, Component, *Registry) error
 }
 
+// RelaxToComponentLevel clears the execution-level versioned transition from the
+// ref, keeping only the component's initial VT for validation. This allows the
+// ref to pass the staleness check after failover divergence, as long as the
+// component itself was created on the current branch.
+func (r *ComponentRef) RelaxToComponentLevel() {
+	r.executionLastUpdateVT = nil
+}
+
+// ResetToBusinessID prepares a ComponentRef for cross-run resolution by clearing all
+// versioned transition fields and the run ID. After this call, the ref identifies a
+// component solely by its path within the execution tree, and the framework will
+// resolve it against the latest open execution for the business ID.
+func (r *ComponentRef) ResetToBusinessID() {
+	r.RunID = ""
+	r.executionLastUpdateVT = nil
+	r.componentInitialVT = nil
+}
+
 // NewComponentRef creates a new ComponentRef with a registered root component go type.
 //
 // In V1, if you don't have a ref,

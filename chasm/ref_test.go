@@ -98,3 +98,74 @@ func (s *componentRefSuite) TestSerializeDeserialize() {
 	s.Equal(ref.ExecutionKey, deserializedRef.ExecutionKey)
 	s.Equal(ref.componentPath, deserializedRef.componentPath)
 }
+
+func (s *componentRefSuite) TestRelaxToComponentLevel() {
+	ref := ComponentRef{
+		ExecutionKey: ExecutionKey{
+			NamespaceID: primitives.NewUUID().String(),
+			BusinessID:  primitives.NewUUID().String(),
+			RunID:       primitives.NewUUID().String(),
+		},
+		archetypeID: 42,
+		executionLastUpdateVT: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: rand.Int63(),
+			TransitionCount:          rand.Int63(),
+		},
+		componentPath: []string{"root", "child"},
+		componentInitialVT: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: rand.Int63(),
+			TransitionCount:          rand.Int63(),
+		},
+	}
+
+	originalRunID := ref.RunID
+	originalComponentInitialVT := ref.componentInitialVT
+
+	ref.RelaxToComponentLevel()
+
+	// Only executionLastUpdateVT should be cleared.
+	s.Nil(ref.executionLastUpdateVT)
+
+	// Everything else should be preserved, including RunID and componentInitialVT.
+	s.Equal(originalRunID, ref.RunID)
+	s.ProtoEqual(originalComponentInitialVT, ref.componentInitialVT)
+	s.Equal([]string{"root", "child"}, ref.componentPath)
+}
+
+func (s *componentRefSuite) TestResetToBusinessID() {
+	ref := ComponentRef{
+		ExecutionKey: ExecutionKey{
+			NamespaceID: primitives.NewUUID().String(),
+			BusinessID:  primitives.NewUUID().String(),
+			RunID:       primitives.NewUUID().String(),
+		},
+		archetypeID: 42,
+		executionLastUpdateVT: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: rand.Int63(),
+			TransitionCount:          rand.Int63(),
+		},
+		componentPath: []string{"root", "child"},
+		componentInitialVT: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: rand.Int63(),
+			TransitionCount:          rand.Int63(),
+		},
+	}
+
+	originalNamespaceID := ref.NamespaceID
+	originalBusinessID := ref.BusinessID
+	originalArchetypeID := ref.archetypeID
+	originalComponentPath := ref.componentPath
+
+	ref.ResetToBusinessID()
+
+	// RunID and VTs should be cleared.
+	s.Empty(ref.RunID)
+	s.Nil(ref.executionLastUpdateVT)
+	s.Nil(ref.componentInitialVT)
+
+	// Other fields should be preserved.
+	s.Equal(originalNamespaceID, ref.NamespaceID)
+	s.Equal(originalBusinessID, ref.BusinessID)
+	s.Equal(originalArchetypeID, ref.archetypeID)
+	s.Equal(originalComponentPath, ref.componentPath)
+}

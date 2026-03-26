@@ -2270,22 +2270,80 @@ func (h *Handler) CompleteNexusOperationChasm(
 		return nil, serviceerror.NewUnimplemented("unhandled Nexus operation outcome")
 	}
 
-	// Attempt to access the component and call its invocation method. We execute
-	// this similarly as we would a pure task (holding an exclusive lock), as the
-	// assumption is that the accessed component will be recording (or generating a
-	// task) based on this result.
-	_, _, err := chasm.UpdateComponent(
-		ctx,
-		request.GetCompletion().GetComponentRef(),
-		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
-			return nil, c.HandleNexusCompletion(ctx, completion)
-		},
-		completion)
+	ref, err := chasm.DeserializeComponentRef(request.GetCompletion().GetComponentRef())
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	err = h.completeNexusOperationChasm(ctx, ref, completion)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
 
 	return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+}
+
+func (h *Handler) completeNexusOperationChasm(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	completion *persistencespb.ChasmNexusCompletion,
+) error {
+	// Attempt to access the component and call its invocation method. We execute
+	// this similarly as we would a pure task (holding an exclusive lock), as the
+	// assumption is that the accessed component will be recording (or generating a
+	// task) based on this result.
+	//
+	// Three-tier fallback for consistency:
+	//
+	// Tier 1 (default): Use the full ref. Works in the normal case.
+	//
+	// Tier 2 (failover tolerance): If tier 1 returns Unavailable (stale state after
+	// failover divergence), clear executionLastUpdateVT via RelaxToComponentLevel and
+	// retry. The staleness check passes (nil VT is always accepted) while
+	// componentInitialVT still validates the component identity.
+	//
+	// Tier 3 (cross-run tolerance): If tier 1 or 2 returns NotFound (component doesn't
+	// exist in this run, e.g. after reset), clear RunID and all VTs via
+	// ResetToBusinessID and retry. The framework resolves to the latest open run.
+	// Only attempted when the ref has a request ID (for dedup) and a run ID.
+	err := h.updateNexusCompletionComponent(ctx, ref, completion)
+	if err == nil {
+		return nil
+	}
+
+	// Tier 2: tolerate failover by relaxing to component-level consistency.
+	var unavailableErr *serviceerror.Unavailable
+	if errors.As(err, &unavailableErr) {
+		ref.RelaxToComponentLevel()
+		err = h.updateNexusCompletionComponent(ctx, ref, completion)
+		if err == nil {
+			return nil
+		}
+	}
+
+	// Tier 3: tolerate reset by falling back to the current run for this business ID.
+	var notFoundErr *serviceerror.NotFound
+	if errors.As(err, &notFoundErr) && completion.RequestId != "" && ref.RunID != "" {
+		ref.ResetToBusinessID()
+		return h.updateNexusCompletionComponent(ctx, ref, completion)
+	}
+
+	return err
+}
+
+func (h *Handler) updateNexusCompletionComponent(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	completion *persistencespb.ChasmNexusCompletion,
+) error {
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		ref,
+		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
+			return nil, c.HandleNexusCompletion(ctx, completion)
+		},
+		completion)
+	return err
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
