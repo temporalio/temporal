@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -17,16 +16,15 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-type WorkflowTimerTestSuite struct {
-	testcore.FunctionalTestBase
-}
-
 func TestWorkflowTimerTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(WorkflowTimerTestSuite))
+	t.Run("TestCancelTimer", timerTestCancelTimer)
+	t.Run("TestCancelTimer_CancelFiredAndBuffered", timerTestCancelTimerCancelFiredAndBuffered)
 }
 
-func (s *WorkflowTimerTestSuite) TestCancelTimer() {
+func timerTestCancelTimer(t *testing.T) {
+	s := testcore.NewEnv(t)
+
 	id := "functional-cancel-timer-test"
 	wt := "functional-cancel-timer-test-type"
 	tl := "functional-cancel-timer-test-taskqueue"
@@ -148,7 +146,9 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer() {
 `, historyEvents)
 }
 
-func (s *WorkflowTimerTestSuite) TestCancelTimer_CancelFiredAndBuffered() {
+func timerTestCancelTimerCancelFiredAndBuffered(t *testing.T) {
+	s := testcore.NewEnv(t)
+
 	id := "functional-cancel-timer-fired-and-buffered-test"
 	wt := "functional-cancel-timer-fired-and-buffered-test-type"
 	tl := "functional-cancel-timer-fired-and-buffered-test-taskqueue"
