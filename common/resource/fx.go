@@ -121,6 +121,7 @@ var DefaultOptions = fx.Options(
 	fx.Provide(ThrottledLoggerProvider),
 	fx.Provide(SdkClientFactoryProvider),
 	fx.Provide(DCRedirectionPolicyProvider),
+	fx.Provide(ListenerProviderProvider),
 )
 
 func DefaultSnTaggedLoggerProvider(logger log.Logger, sn primitives.ServiceName) log.SnTaggedLogger {
@@ -401,6 +402,7 @@ func RPCFactoryProvider(
 	perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption,
 	monitor membership.Monitor,
 	dc *dynamicconfig.Collection,
+	listenerProvider common.ListenerProvider,
 ) (common.RPCFactory, error) {
 	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
@@ -426,11 +428,20 @@ func RPCFactoryProvider(
 		options,
 		perServiceDialOptions,
 		monitor,
+		listenerProvider,
 	)
 	factory.EnableInternodeServerKeepalive = enableServerKeepalive
 	factory.EnableInternodeClientKeepalive = enableClientKeepalive
 	logger.Debug(fmt.Sprintf("RPC factory created. enableServerKeepalive: %v, enableClientKeepalive: %v", enableServerKeepalive, enableClientKeepalive))
 	return factory, nil
+}
+
+func ListenerProviderProvider(
+	cfg *config.Config,
+	svcName primitives.ServiceName,
+	logger log.Logger,
+) common.ListenerProvider {
+	return rpc.NewConfigListenerProvider(cfg, svcName, logger)
 }
 
 func FrontendHTTPClientCacheProvider(
