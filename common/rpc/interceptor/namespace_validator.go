@@ -216,11 +216,11 @@ func (ni *NamespaceValidatorInterceptor) StateValidationIntercept(
 // 3. Namespace exists.
 // 4. Namespace from request match namespace from task token, if check is enabled with dynamic config.
 // 5. Namespace is in correct state.
-func (ni *NamespaceValidatorInterceptor) ValidateState(namespaceEntry *namespace.Namespace, fullMethod string, workflowID string) error {
+func (ni *NamespaceValidatorInterceptor) ValidateState(namespaceEntry *namespace.Namespace, fullMethod string, businessID string) error {
 	if err := ni.checkNamespaceState(namespaceEntry, fullMethod); err != nil {
 		return err
 	}
-	return ni.checkReplicationState(namespaceEntry, fullMethod, workflowID)
+	return ni.checkReplicationState(namespaceEntry, fullMethod, businessID)
 }
 
 func (ni *NamespaceValidatorInterceptor) extractNamespace(req any) (*namespace.Namespace, error) {
@@ -378,11 +378,11 @@ func (ni *NamespaceValidatorInterceptor) checkNamespaceState(namespaceEntry *nam
 	return serviceerror.NewNamespaceInvalidState(namespaceEntry.Name().String(), namespaceEntry.State(), allowedStates)
 }
 
-func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *namespace.Namespace, fullMethod string, workflowID string) error {
+func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *namespace.Namespace, fullMethod string, businessID string) error {
 	if namespaceEntry == nil {
 		return nil
 	}
-	if namespaceEntry.ReplicationState(workflowID) != enumspb.REPLICATION_STATE_HANDOVER {
+	if namespaceEntry.ReplicationState(businessID) != enumspb.REPLICATION_STATE_HANDOVER {
 		return nil
 	}
 
