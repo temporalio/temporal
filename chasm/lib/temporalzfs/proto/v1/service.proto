@@ -1,0 +1,134 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.temporalzfs.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/temporalzfs/gen/temporalzfspb;temporalzfspb";
+
+import "chasm/lib/temporalzfs/proto/v1/request_response.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+import "temporal/server/api/common/v1/api_category.proto";
+
+service TemporalFSService {
+    // Lifecycle
+    rpc CreateFilesystem(CreateFilesystemRequest) returns (CreateFilesystemResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc GetFilesystemInfo(GetFilesystemInfoRequest) returns (GetFilesystemInfoResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc ArchiveFilesystem(ArchiveFilesystemRequest) returns (ArchiveFilesystemResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    // Inode operations
+    rpc Lookup(LookupRequest) returns (LookupResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc Getattr(GetattrRequest) returns (GetattrResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc Setattr(SetattrRequest) returns (SetattrResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    // File I/O
+    rpc ReadChunks(ReadChunksRequest) returns (ReadChunksResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc WriteChunks(WriteChunksRequest) returns (WriteChunksResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc Truncate(TruncateRequest) returns (TruncateResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    // Directory operations
+    rpc Mkdir(MkdirRequest) returns (MkdirResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc Unlink(UnlinkRequest) returns (UnlinkResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc Rmdir(RmdirRequest) returns (RmdirResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc Rename(RenameRequest) returns (RenameResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc ReadDir(ReadDirRequest) returns (ReadDirResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    // Links
+    rpc Link(LinkRequest) returns (LinkResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc Symlink(SymlinkRequest) returns (SymlinkResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc Readlink(ReadlinkRequest) returns (ReadlinkResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    // Special
+    rpc CreateFile(CreateFileRequest) returns (CreateFileResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc Mknod(MknodRequest) returns (MknodResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc Statfs(StatfsRequest) returns (StatfsResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    // Snapshots
+    rpc CreateSnapshot(CreateSnapshotRequest) returns (CreateSnapshotResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    // Owner management
+    rpc AttachWorkflow(AttachWorkflowRequest) returns (AttachWorkflowResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc DetachWorkflow(DetachWorkflowRequest) returns (DetachWorkflowResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+}

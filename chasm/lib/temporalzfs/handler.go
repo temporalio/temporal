@@ -1,0 +1,697 @@
+package temporalzfs
+
+import (
+	"context"
+	"errors"
+	"math"
+	"time"
+
+	tzfs "github.com/temporalio/temporal-zfs/pkg/fs"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
+	temporalzfspb "go.temporal.io/server/chasm/lib/temporalzfs/gen/temporalzfspb/v1"
+	"go.temporal.io/server/common/log"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+// Setattr valid bitmask values (matching FUSE FATTR_* constants).
+const (
+	setattrMode  = 1 << 0
+	setattrUID   = 1 << 1
+	setattrGID   = 1 << 2
+	setattrSize  = 1 << 3 // truncate
+	setattrAtime = 1 << 4
+	setattrMtime = 1 << 5
+)
+
+// Statfs virtual capacity defaults when no quota is configured.
+const (
+	statfsVirtualBytes  = 1 << 40 // 1 TiB
+	statfsVirtualInodes = 1 << 20 // ~1M inodes
+)
+
+type handler struct {
+	temporalzfspb.UnimplementedTemporalFSServiceServer
+
+	config        *Config
+	logger        log.Logger
+	storeProvider FSStoreProvider
+}
+
+func newHandler(config *Config, logger log.Logger, storeProvider FSStoreProvider) *handler {
+	return &handler{
+		config:        config,
+		logger:        logger,
+		storeProvider: storeProvider,
+	}
+}
+
+// openFS obtains a store for the given filesystem and opens an fs.FS on it.
+// The caller owns the returned *tzfs.FS and must call f.Close() which also
+// closes the underlying store. On error, all resources are cleaned up internally.
+func (h *handler) openFS(shardID int32, namespaceID, filesystemID string) (*tzfs.FS, error) {
+	s, err := h.storeProvider.GetStore(shardID, namespaceID, filesystemID)
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+	f, err := tzfs.Open(s)
+	if err != nil {
+		_ = s.Close()
+		return nil, mapFSError(err)
+	}
+	return f, nil
+}
+
+// createFS initializes a new filesystem in the store.
+// The caller owns the returned *tzfs.FS and must call f.Close() which also
+// closes the underlying store. On error, all resources are cleaned up internally.
+func (h *handler) createFS(shardID int32, namespaceID, filesystemID string, config *temporalzfspb.FilesystemConfig) (*tzfs.FS, error) {
+	s, err := h.storeProvider.GetStore(shardID, namespaceID, filesystemID)
+	if err != nil {
+		return nil, err
+	}
+
+	chunkSize := uint32(defaultChunkSize)
+	if config.GetChunkSize() > 0 {
+		chunkSize = config.GetChunkSize()
+	}
+
+	f, err := tzfs.Create(s, tzfs.Options{ChunkSize: chunkSize})
+	if err != nil {
+		_ = s.Close()
+		return nil, err
+	}
+	return f, nil
+}
+
+func (h *handler) CreateFilesystem(
+	ctx context.Context,
+	req *temporalzfspb.CreateFilesystemRequest,
+) (*temporalzfspb.CreateFilesystemResponse, error) {
+	result, err := chasm.StartExecution(
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: req.GetNamespaceId(),
+			BusinessID:  req.GetFilesystemId(),
+		},
+		func(mCtx chasm.MutableContext, req *temporalzfspb.CreateFilesystemRequest) (*Filesystem, error) {
+			fs := &Filesystem{
+				FilesystemState: &temporalzfspb.FilesystemState{},
+				Visibility:      chasm.NewComponentField(mCtx, chasm.NewVisibilityWithData(mCtx, nil, nil)),
+			}
+
+			err := TransitionCreate.Apply(fs, mCtx, CreateEvent{
+				Config:           req.GetConfig(),
+				OwnerWorkflowIDs: req.GetOwnerWorkflowIds(),
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			// Initialize the underlying FS store.
+			f, createErr := h.createFS(0, req.GetNamespaceId(), req.GetFilesystemId(), fs.Config)
+			if createErr != nil {
+				return nil, createErr
+			}
+			_ = f.Close()
+
+			return fs, nil
+		},
+		req,
+		chasm.WithRequestID(req.GetRequestId()),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &temporalzfspb.CreateFilesystemResponse{
+		RunId: result.ExecutionKey.RunID,
+	}, nil
+}
+
+func (h *handler) GetFilesystemInfo(
+	ctx context.Context,
+	req *temporalzfspb.GetFilesystemInfoRequest,
+) (*temporalzfspb.GetFilesystemInfoResponse, error) {
+	ref := chasm.NewComponentRef[*Filesystem](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  req.GetFilesystemId(),
+	})
+
+	return chasm.ReadComponent(
+		ctx,
+		ref,
+		func(fs *Filesystem, ctx chasm.Context, _ *temporalzfspb.GetFilesystemInfoRequest) (*temporalzfspb.GetFilesystemInfoResponse, error) {
+			return &temporalzfspb.GetFilesystemInfoResponse{
+				State: fs.FilesystemState,
+				RunId: ctx.ExecutionKey().RunID,
+			}, nil
+		},
+		req,
+		nil,
+	)
+}
+
+func (h *handler) ArchiveFilesystem(
+	ctx context.Context,
+	req *temporalzfspb.ArchiveFilesystemRequest,
+) (*temporalzfspb.ArchiveFilesystemResponse, error) {
+	ref := chasm.NewComponentRef[*Filesystem](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  req.GetFilesystemId(),
+	})
+
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		ref,
+		func(fs *Filesystem, ctx chasm.MutableContext, _ any) (*temporalzfspb.ArchiveFilesystemResponse, error) {
+			if err := TransitionArchive.Apply(fs, ctx, nil); err != nil {
+				return nil, err
+			}
+			return &temporalzfspb.ArchiveFilesystemResponse{}, nil
+		},
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &temporalzfspb.ArchiveFilesystemResponse{}, nil
+}
+
+func (h *handler) AttachWorkflow(
+	ctx context.Context,
+	req *temporalzfspb.AttachWorkflowRequest,
+) (*temporalzfspb.AttachWorkflowResponse, error) {
+	ref := chasm.NewComponentRef[*Filesystem](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  req.GetFilesystemId(),
+	})
+
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		ref,
+		func(fs *Filesystem, _ chasm.MutableContext, _ any) (*temporalzfspb.AttachWorkflowResponse, error) {
+			wfID := req.GetWorkflowId()
+			for _, id := range fs.OwnerWorkflowIds {
+				if id == wfID {
+					return &temporalzfspb.AttachWorkflowResponse{}, nil
+				}
+			}
+			fs.OwnerWorkflowIds = append(fs.OwnerWorkflowIds, wfID)
+			return &temporalzfspb.AttachWorkflowResponse{}, nil
+		},
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &temporalzfspb.AttachWorkflowResponse{}, nil
+}
+
+func (h *handler) DetachWorkflow(
+	ctx context.Context,
+	req *temporalzfspb.DetachWorkflowRequest,
+) (*temporalzfspb.DetachWorkflowResponse, error) {
+	ref := chasm.NewComponentRef[*Filesystem](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  req.GetFilesystemId(),
+	})
+
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		ref,
+		func(fs *Filesystem, mCtx chasm.MutableContext, _ any) (*temporalzfspb.DetachWorkflowResponse, error) {
+			wfID := req.GetWorkflowId()
+			filtered := fs.OwnerWorkflowIds[:0]
+			for _, id := range fs.OwnerWorkflowIds {
+				if id != wfID {
+					filtered = append(filtered, id)
+				}
+			}
+			fs.OwnerWorkflowIds = filtered
+
+			// If all owners are gone, transition to DELETED.
+			if len(fs.OwnerWorkflowIds) == 0 {
+				if err := TransitionDelete.Apply(fs, mCtx, nil); err != nil {
+					return nil, err
+				}
+			}
+			return &temporalzfspb.DetachWorkflowResponse{}, nil
+		},
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &temporalzfspb.DetachWorkflowResponse{}, nil
+}
+
+// FS operations — these use temporal-zfs inode-based APIs.
+
+func (h *handler) Lookup(_ context.Context, req *temporalzfspb.LookupRequest) (*temporalzfspb.LookupResponse, error) {
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	inode, err := f.LookupByID(req.GetParentInodeId(), req.GetName())
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalzfspb.LookupResponse{
+		InodeId: inode.ID,
+		Attr:    inodeToAttr(inode),
+	}, nil
+}
+
+func (h *handler) Getattr(_ context.Context, req *temporalzfspb.GetattrRequest) (*temporalzfspb.GetattrResponse, error) {
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	inode, err := f.StatByID(req.GetInodeId())
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalzfspb.GetattrResponse{
+		Attr: inodeToAttr(inode),
+	}, nil
+}
+
+func (h *handler) Setattr(_ context.Context, req *temporalzfspb.SetattrRequest) (*temporalzfspb.SetattrResponse, error) {
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	inodeID := req.GetInodeId()
+	valid := req.GetValid()
+	attr := req.GetAttr()
+
+	if valid&setattrMode != 0 {
+		if err := f.ChmodByID(inodeID, uint16(attr.GetMode())); err != nil {
+			return nil, mapFSError(err)
+		}
+	}
+	if valid&setattrUID != 0 || valid&setattrGID != 0 {
+		uid := uint32(math.MaxUint32) // unchanged
+		gid := uint32(math.MaxUint32)
+		if valid&setattrUID != 0 {
+			uid = attr.GetUid()
+		}
+		if valid&setattrGID != 0 {
+			gid = attr.GetGid()
+		}
+		if err := f.ChownByID(inodeID, uid, gid); err != nil {
+			return nil, mapFSError(err)
+		}
+	}
+	if valid&setattrSize != 0 {
+		if err := f.TruncateByID(inodeID, int64(attr.GetFileSize())); err != nil {
+			return nil, mapFSError(err)
+		}
+	}
+	if err := h.applyUtimens(f, inodeID, valid, attr); err != nil {
+		return nil, err
+	}
+
+	// Re-read the inode to return updated attributes.
+	inode, err := f.StatByID(inodeID)
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalzfspb.SetattrResponse{
+		Attr: inodeToAttr(inode),
+	}, nil
+}
+
+func (h *handler) applyUtimens(f *tzfs.FS, inodeID uint64, valid uint32, attr *temporalzfspb.InodeAttr) error {
+	if valid&setattrAtime == 0 && valid&setattrMtime == 0 {
+		return nil
+	}
+	var atime, mtime time.Time
+	if valid&setattrAtime != 0 && attr.GetAtime() != nil {
+		atime = attr.GetAtime().AsTime()
+	}
+	if valid&setattrMtime != 0 && attr.GetMtime() != nil {
+		mtime = attr.GetMtime().AsTime()
+	}
+	return mapFSError(f.UtimensByID(inodeID, atime, mtime))
+}
+
+func (h *handler) ReadChunks(_ context.Context, req *temporalzfspb.ReadChunksRequest) (*temporalzfspb.ReadChunksResponse, error) {
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	data, err := f.ReadAtByID(req.GetInodeId(), req.GetOffset(), int(req.GetReadSize()))
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalzfspb.ReadChunksResponse{
+		Data: data,
+	}, nil
+}
+
+func (h *handler) WriteChunks(_ context.Context, req *temporalzfspb.WriteChunksRequest) (*temporalzfspb.WriteChunksResponse, error) {
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	err = f.WriteAtByID(req.GetInodeId(), req.GetOffset(), req.GetData())
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalzfspb.WriteChunksResponse{
+		BytesWritten: int64(len(req.GetData())),
+	}, nil
+}
+
+func (h *handler) Truncate(_ context.Context, req *temporalzfspb.TruncateRequest) (*temporalzfspb.TruncateResponse, error) {
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	if err := f.TruncateByID(req.GetInodeId(), req.GetNewSize()); err != nil {
+		return nil, mapFSError(err)
+	}
+	return &temporalzfspb.TruncateResponse{}, nil
+}
+
+func (h *handler) Mkdir(_ context.Context, req *temporalzfspb.MkdirRequest) (*temporalzfspb.MkdirResponse, error) {
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	inode, err := f.MkdirByID(req.GetParentInodeId(), req.GetName(), uint16(req.GetMode()))
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalzfspb.MkdirResponse{
+		InodeId: inode.ID,
+		Attr:    inodeToAttr(inode),
+	}, nil
+}
+
+func (h *handler) Unlink(_ context.Context, req *temporalzfspb.UnlinkRequest) (*temporalzfspb.UnlinkResponse, error) {
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	if err := f.UnlinkByID(req.GetParentInodeId(), req.GetName()); err != nil {
+		return nil, mapFSError(err)
+	}
+	return &temporalzfspb.UnlinkResponse{}, nil
+}
+
+func (h *handler) Rmdir(_ context.Context, req *temporalzfspb.RmdirRequest) (*temporalzfspb.RmdirResponse, error) {
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	if err := f.RmdirByID(req.GetParentInodeId(), req.GetName()); err != nil {
+		return nil, mapFSError(err)
+	}
+	return &temporalzfspb.RmdirResponse{}, nil
+}
+
+func (h *handler) Rename(_ context.Context, req *temporalzfspb.RenameRequest) (*temporalzfspb.RenameResponse, error) {
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	if err := f.RenameByID(
+		req.GetOldParentInodeId(), req.GetOldName(),
+		req.GetNewParentInodeId(), req.GetNewName(),
+	); err != nil {
+		return nil, mapFSError(err)
+	}
+	return &temporalzfspb.RenameResponse{}, nil
+}
+
+func (h *handler) ReadDir(_ context.Context, req *temporalzfspb.ReadDirRequest) (*temporalzfspb.ReadDirResponse, error) {
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	entries, err := f.ReadDirPlusByID(req.GetInodeId())
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	protoEntries := make([]*temporalzfspb.DirEntry, len(entries))
+	for i, e := range entries {
+		inode := e.Inode
+		if inode == nil {
+			// Embedded inode unavailable (e.g., hardlinked file) — fetch it.
+			inode, err = f.StatByID(e.InodeID)
+			if err != nil {
+				return nil, mapFSError(err)
+			}
+		}
+		protoEntries[i] = &temporalzfspb.DirEntry{
+			Name:    e.Name,
+			InodeId: e.InodeID,
+			Mode:    uint32(inode.Mode),
+		}
+	}
+
+	return &temporalzfspb.ReadDirResponse{
+		Entries: protoEntries,
+	}, nil
+}
+
+func (h *handler) Link(_ context.Context, req *temporalzfspb.LinkRequest) (*temporalzfspb.LinkResponse, error) {
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	inode, err := f.LinkByID(req.GetInodeId(), req.GetNewParentInodeId(), req.GetNewName())
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalzfspb.LinkResponse{
+		Attr: inodeToAttr(inode),
+	}, nil
+}
+
+func (h *handler) Symlink(_ context.Context, req *temporalzfspb.SymlinkRequest) (*temporalzfspb.SymlinkResponse, error) {
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	inode, err := f.SymlinkByID(req.GetParentInodeId(), req.GetName(), req.GetTarget())
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalzfspb.SymlinkResponse{
+		InodeId: inode.ID,
+		Attr:    inodeToAttr(inode),
+	}, nil
+}
+
+func (h *handler) Readlink(_ context.Context, req *temporalzfspb.ReadlinkRequest) (*temporalzfspb.ReadlinkResponse, error) {
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	target, err := f.ReadlinkByID(req.GetInodeId())
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalzfspb.ReadlinkResponse{
+		Target: target,
+	}, nil
+}
+
+func (h *handler) CreateFile(_ context.Context, req *temporalzfspb.CreateFileRequest) (*temporalzfspb.CreateFileResponse, error) {
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	inode, err := f.CreateFileByID(req.GetParentInodeId(), req.GetName(), uint16(req.GetMode()))
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalzfspb.CreateFileResponse{
+		InodeId: inode.ID,
+		Attr:    inodeToAttr(inode),
+	}, nil
+}
+
+func (h *handler) Mknod(_ context.Context, req *temporalzfspb.MknodRequest) (*temporalzfspb.MknodResponse, error) {
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	typ := modeToInodeType(req.GetMode())
+	inode, err := f.MknodByID(req.GetParentInodeId(), req.GetName(), uint16(req.GetMode()&0xFFF), typ, uint64(req.GetDev()))
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalzfspb.MknodResponse{
+		InodeId: inode.ID,
+		Attr:    inodeToAttr(inode),
+	}, nil
+}
+
+func (h *handler) Statfs(_ context.Context, req *temporalzfspb.StatfsRequest) (*temporalzfspb.StatfsResponse, error) {
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	quota := f.GetQuota()
+
+	bsize := uint32(f.ChunkSize())
+	if bsize == 0 {
+		bsize = 4096
+	}
+
+	var blocks, bfree, files, ffree uint64
+	if quota.MaxBytes > 0 {
+		blocks = uint64(quota.MaxBytes) / uint64(bsize)
+		used := min(uint64(quota.UsedBytes)/uint64(bsize), blocks)
+		bfree = blocks - used
+	} else {
+		blocks = statfsVirtualBytes / uint64(bsize)
+		bfree = blocks
+	}
+	if quota.MaxInodes > 0 {
+		files = uint64(quota.MaxInodes)
+		used := min(uint64(quota.UsedInodes), files)
+		ffree = files - used
+	} else {
+		files = statfsVirtualInodes
+		ffree = files
+	}
+
+	return &temporalzfspb.StatfsResponse{
+		Blocks:  blocks,
+		Bfree:   bfree,
+		Bavail:  bfree,
+		Files:   files,
+		Ffree:   ffree,
+		Bsize:   bsize,
+		Namelen: 255,
+		Frsize:  bsize,
+	}, nil
+}
+
+func (h *handler) CreateSnapshot(_ context.Context, req *temporalzfspb.CreateSnapshotRequest) (*temporalzfspb.CreateSnapshotResponse, error) {
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	snap, err := f.CreateSnapshot(req.GetSnapshotName())
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalzfspb.CreateSnapshotResponse{
+		SnapshotTxnId: snap.TxnID,
+	}, nil
+}
+
+// modeToInodeType extracts the inode type from POSIX mode bits.
+func modeToInodeType(mode uint32) tzfs.InodeType {
+	switch mode & 0xF000 {
+	case 0x1000:
+		return tzfs.InodeTypeFIFO
+	case 0x2000:
+		return tzfs.InodeTypeCharDev
+	case 0x6000:
+		return tzfs.InodeTypeBlockDev
+	case 0xC000:
+		return tzfs.InodeTypeSocket
+	default:
+		return tzfs.InodeTypeFile
+	}
+}
+
+// inodeToAttr converts a temporal-zfs Inode to the proto InodeAttr.
+func inodeToAttr(inode *tzfs.Inode) *temporalzfspb.InodeAttr {
+	return &temporalzfspb.InodeAttr{
+		InodeId:  inode.ID,
+		FileSize: inode.Size,
+		Mode:     uint32(inode.Mode),
+		Nlink:    inode.LinkCount,
+		Uid:      inode.UID,
+		Gid:      inode.GID,
+		Atime:    timestamppb.New(inode.Atime),
+		Mtime:    timestamppb.New(inode.Mtime),
+		Ctime:    timestamppb.New(inode.Ctime),
+	}
+}
+
+// mapFSError converts temporal-zfs errors to appropriate gRPC service errors.
+func mapFSError(err error) error {
+	if err == nil {
+		return nil
+	}
+	switch {
+	case errors.Is(err, tzfs.ErrNotFound), errors.Is(err, tzfs.ErrSnapshotNotFound):
+		return serviceerror.NewNotFound(err.Error())
+	case errors.Is(err, tzfs.ErrExist):
+		return serviceerror.NewAlreadyExists(err.Error())
+	case errors.Is(err, tzfs.ErrPermission), errors.Is(err, tzfs.ErrNotPermitted):
+		return serviceerror.NewPermissionDenied(err.Error(), "")
+	case errors.Is(err, tzfs.ErrInvalidPath), errors.Is(err, tzfs.ErrInvalidRename), errors.Is(err, tzfs.ErrNameTooLong):
+		return serviceerror.NewInvalidArgument(err.Error())
+	case errors.Is(err, tzfs.ErrNoSpace), errors.Is(err, tzfs.ErrTooManyLinks):
+		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT, err.Error())
+	case errors.Is(err, tzfs.ErrNotDir), errors.Is(err, tzfs.ErrIsDir),
+		errors.Is(err, tzfs.ErrNotEmpty), errors.Is(err, tzfs.ErrNotSymlink),
+		errors.Is(err, tzfs.ErrReadOnly), errors.Is(err, tzfs.ErrLockConflict):
+		return serviceerror.NewFailedPrecondition(err.Error())
+	case errors.Is(err, tzfs.ErrClosed), errors.Is(err, tzfs.ErrVersionMismatch):
+		return serviceerror.NewUnavailable(err.Error())
+	default:
+		return err
+	}
+}
