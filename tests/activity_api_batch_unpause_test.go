@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"github.com/temporalio/sqlparser"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -25,13 +24,14 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-type ActivityApiBatchUnpauseClientTestSuite struct {
-	testcore.FunctionalTestBase
-}
-
 func TestActivityApiBatchUnpauseClientTestSuite(t *testing.T) {
-	s := new(ActivityApiBatchUnpauseClientTestSuite)
-	suite.Run(t, s)
+	t.Parallel()
+	t.Run("TestActivityBatchUnpause_Success", func(t *testing.T) {
+		testActivityBatchUnpauseSuccess(testcore.NewEnv(t, testcore.WithSdkWorker()))
+	})
+	t.Run("TestActivityBatchUnpause_Failed", func(t *testing.T) {
+		testActivityBatchUnpauseFailed(testcore.NewEnv(t, testcore.WithSdkWorker()))
+	})
 }
 
 type internalTestWorkflow struct {
@@ -79,10 +79,10 @@ func (w *internalTestWorkflow) ActivityFunc() (string, error) {
 	return "done!", nil
 }
 
-func (s *ActivityApiBatchUnpauseClientTestSuite) createWorkflow(ctx context.Context, workflowFn WorkflowFunction) sdkclient.WorkflowRun {
+func createBatchUnpauseWorkflow(ctx context.Context, s *testcore.TestEnv, workflowFn WorkflowFunction) sdkclient.WorkflowRun {
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
-		TaskQueue: s.TaskQueue(),
+		TaskQueue: s.WorkerTaskQueue(),
 	}
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
@@ -91,7 +91,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) createWorkflow(ctx context.Cont
 	return workflowRun
 }
 
-func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Success() {
+func testActivityBatchUnpauseSuccess(s *testcore.TestEnv) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -100,8 +100,8 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 	s.SdkWorker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
 	s.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
 
-	workflowRun1 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
-	workflowRun2 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
+	workflowRun1 := createBatchUnpauseWorkflow(ctx, s, internalWorkflow.WorkflowFunc)
+	workflowRun2 := createBatchUnpauseWorkflow(ctx, s, internalWorkflow.WorkflowFunc)
 
 	// wait for activity to start in both workflows
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -197,7 +197,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 	s.NoError(err)
 }
 
-func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Failed() {
+func testActivityBatchUnpauseFailed(s *testcore.TestEnv) {
 	// neither activity type not "match all" is provided
 	_, err := s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace: s.Namespace().String(),
