@@ -903,7 +903,7 @@ var File_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto pro
 
 const file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"Ctemporal/server/chasm/lib/scheduler/proto/v1/request_response.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a:temporal/server/chasm/lib/scheduler/proto/v1/message.proto\"\x9d\x01\n" +
+	"Ctemporal/server/chasm/lib/scheduler/proto/v1/request_response.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1a:temporal/server/chasm/lib/scheduler/proto/v1/message.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\"\x9d\x01\n" +
 	"\x15CreateScheduleRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12a\n" +
 	"\x10frontend_request\x18\x02 \x01(\v26.temporal.api.workflowservice.v1.CreateScheduleRequestR\x0ffrontendRequest\"~\n" +

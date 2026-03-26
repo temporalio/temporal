@@ -931,7 +931,7 @@ var File_temporal_server_api_taskqueue_v1_message_proto protoreflect.FileDescrip
 
 const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"\n" +
-	".temporal/server/api/taskqueue/v1/message.proto\x12 temporal.server.api.taskqueue.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a(temporal/api/deployment/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a'temporal/server/api/enums/v1/task.proto\x1a/temporal/server/api/deployment/v1/message.proto\"\xbf\x03\n" +
+	".temporal/server/api/taskqueue/v1/message.proto\x12 temporal.server.api.taskqueue.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a(temporal/api/deployment/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a/temporal/server/api/deployment/v1/message.proto\x1a'temporal/server/api/enums/v1/task.proto\"\xbf\x03\n" +
 	"\x14TaskVersionDirective\x12J\n" +
 	"\x14use_assignment_rules\x18\x01 \x01(\v2\x16.google.protobuf.EmptyH\x00R\x12useAssignmentRules\x12,\n" +
 	"\x11assigned_build_id\x18\x02 \x01(\tH\x00R\x0fassignedBuildId\x12E\n" +
