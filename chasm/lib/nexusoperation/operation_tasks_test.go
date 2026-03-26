@@ -54,7 +54,7 @@ func TestBackoffTaskHandler_Validate(t *testing.T) {
 		},
 	}
 
-	executor := &OperationBackoffTaskHandler{}
+	handler := &OperationBackoffTaskHandler{}
 	ctx := &chasm.MockContext{}
 
 	for _, tc := range testCases {
@@ -63,7 +63,7 @@ func TestBackoffTaskHandler_Validate(t *testing.T) {
 			op.Status = tc.status
 			op.Attempt = tc.attempt
 
-			valid, err := executor.Validate(ctx, op, chasm.TaskAttributes{}, tc.task)
+			valid, err := handler.Validate(ctx, op, chasm.TaskAttributes{}, tc.task)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, valid)
 		})
@@ -81,8 +81,8 @@ func TestBackoffTaskHandler_Execute(t *testing.T) {
 	op.Status = nexusoperationpb.OPERATION_STATUS_BACKING_OFF
 	op.Attempt = 2
 
-	executor := &OperationBackoffTaskHandler{}
-	err := executor.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.InvocationBackoffTask{Attempt: 2})
+	handler := &OperationBackoffTaskHandler{}
+	err := handler.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.InvocationBackoffTask{Attempt: 2})
 	require.NoError(t, err)
 
 	require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, op.Status)
@@ -125,7 +125,7 @@ func TestScheduleToStartTimeoutTaskHandler_Validate(t *testing.T) {
 		},
 	}
 
-	executor := &OperationScheduleToStartTimeoutTaskHandler{}
+	handler := &OperationScheduleToStartTimeoutTaskHandler{}
 	ctx := &chasm.MockContext{}
 
 	for _, tc := range testCases {
@@ -133,7 +133,7 @@ func TestScheduleToStartTimeoutTaskHandler_Validate(t *testing.T) {
 			op := newTestOperation()
 			op.Status = tc.status
 
-			valid, err := executor.Validate(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.ScheduleToStartTimeoutTask{})
+			valid, err := handler.Validate(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.ScheduleToStartTimeoutTask{})
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, valid)
 		})
@@ -150,8 +150,8 @@ func TestScheduleToStartTimeoutTaskHandler_Execute(t *testing.T) {
 	op := newTestOperation()
 	op.Status = nexusoperationpb.OPERATION_STATUS_SCHEDULED
 
-	executor := &OperationScheduleToStartTimeoutTaskHandler{}
-	err := executor.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.ScheduleToStartTimeoutTask{})
+	handler := &OperationScheduleToStartTimeoutTaskHandler{}
+	err := handler.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.ScheduleToStartTimeoutTask{})
 	require.NoError(t, err)
 
 	require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, op.Status)
@@ -191,7 +191,7 @@ func TestStartToCloseTimeoutTaskHandler_Validate(t *testing.T) {
 		},
 	}
 
-	executor := &OperationStartToCloseTimeoutTaskHandler{}
+	handler := &OperationStartToCloseTimeoutTaskHandler{}
 	ctx := &chasm.MockContext{}
 
 	for _, tc := range testCases {
@@ -199,7 +199,7 @@ func TestStartToCloseTimeoutTaskHandler_Validate(t *testing.T) {
 			op := newTestOperation()
 			op.Status = tc.status
 
-			valid, err := executor.Validate(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.StartToCloseTimeoutTask{})
+			valid, err := handler.Validate(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.StartToCloseTimeoutTask{})
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, valid)
 		})
@@ -216,8 +216,8 @@ func TestStartToCloseTimeoutTaskHandler_Execute(t *testing.T) {
 	op := newTestOperation()
 	op.Status = nexusoperationpb.OPERATION_STATUS_STARTED
 
-	executor := &OperationStartToCloseTimeoutTaskHandler{}
-	err := executor.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.StartToCloseTimeoutTask{})
+	handler := &OperationStartToCloseTimeoutTaskHandler{}
+	err := handler.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.StartToCloseTimeoutTask{})
 	require.NoError(t, err)
 
 	require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, op.Status)
@@ -267,7 +267,7 @@ func TestScheduleToCloseTimeoutTaskHandler_Validate(t *testing.T) {
 		},
 	}
 
-	executor := &OperationScheduleToCloseTimeoutTaskHandler{}
+	handler := &OperationScheduleToCloseTimeoutTaskHandler{}
 	ctx := &chasm.MockContext{}
 
 	for _, tc := range testCases {
@@ -275,7 +275,7 @@ func TestScheduleToCloseTimeoutTaskHandler_Validate(t *testing.T) {
 			op := newTestOperation()
 			op.Status = tc.status
 
-			valid, err := executor.Validate(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.ScheduleToCloseTimeoutTask{})
+			valid, err := handler.Validate(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.ScheduleToCloseTimeoutTask{})
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, valid)
 		})
@@ -292,8 +292,8 @@ func TestScheduleToCloseTimeoutTaskHandler_Execute(t *testing.T) {
 	op := newTestOperation()
 	op.Status = nexusoperationpb.OPERATION_STATUS_SCHEDULED
 
-	executor := &OperationScheduleToCloseTimeoutTaskHandler{}
-	err := executor.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.ScheduleToCloseTimeoutTask{})
+	handler := &OperationScheduleToCloseTimeoutTaskHandler{}
+	err := handler.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.ScheduleToCloseTimeoutTask{})
 	require.NoError(t, err)
 
 	require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, op.Status)
