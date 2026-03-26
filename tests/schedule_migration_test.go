@@ -894,9 +894,7 @@ func TestScheduleMigrationV2ToV1RoutingFallback(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestScheduleDeleteThenDescribeViaSchedulerClient verifies that after deleting
-// a CHASM schedule, describing it via the scheduler client returns NotFound.
-func TestScheduleDeleteThenDescribeViaSchedulerClient(t *testing.T) {
+func TestScheduleUpdateAfterDelete(t *testing.T) {
 	env := testcore.NewEnv(
 		t,
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
@@ -905,15 +903,32 @@ func TestScheduleDeleteThenDescribeViaSchedulerClient(t *testing.T) {
 	)
 
 	ctx := testcore.NewContext()
-	sid := testcore.RandomizeStr("sched-delete-then-describe")
-	wid := testcore.RandomizeStr("sched-delete-describe-wf")
-	wt := testcore.RandomizeStr("sched-delete-describe-wt")
+	sid := testcore.RandomizeStr("sched-update-after-delete")
+	wid := testcore.RandomizeStr("sched-update-after-delete-wf")
+	wt := testcore.RandomizeStr("sched-update-after-delete-wt")
 	tq := testcore.RandomizeStr("tq")
 
 	nsName := env.Namespace().String()
 	nsID := env.NamespaceID().String()
 
-	// Create CHASM schedule directly via scheduler client.
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	// Create CHASM schedule.
 	_, err := env.GetTestCluster().SchedulerClient().CreateSchedule(
 		ctx,
 		&schedulerpb.CreateScheduleRequest{
@@ -921,35 +936,10 @@ func TestScheduleDeleteThenDescribeViaSchedulerClient(t *testing.T) {
 			FrontendRequest: &workflowservice.CreateScheduleRequest{
 				Namespace:  nsName,
 				ScheduleId: sid,
-				Schedule: &schedulepb.Schedule{
-					Spec: &schedulepb.ScheduleSpec{
-						Interval: []*schedulepb.IntervalSpec{
-							{Interval: durationpb.New(1 * time.Hour)},
-						},
-					},
-					Action: &schedulepb.ScheduleAction{
-						Action: &schedulepb.ScheduleAction_StartWorkflow{
-							StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
-								WorkflowId:   wid,
-								WorkflowType: &commonpb.WorkflowType{Name: wt},
-								TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-							},
-						},
-					},
-				},
-				Identity:  "test",
-				RequestId: testcore.RandomizeStr("request-id"),
+				Schedule:   schedule,
+				Identity:   "test",
+				RequestId:  testcore.RandomizeStr("request-id"),
 			},
-		},
-	)
-	require.NoError(t, err)
-
-	// Verify it exists.
-	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(
-		ctx,
-		&schedulerpb.DescribeScheduleRequest{
-			NamespaceId:     nsID,
-			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
 		},
 	)
 	require.NoError(t, err)
@@ -968,16 +958,48 @@ func TestScheduleDeleteThenDescribeViaSchedulerClient(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// Describe via scheduler client should return NotFound.
-	var notFoundErr *serviceerror.NotFound
-	require.Eventually(t, func() bool {
-		_, descErr := env.GetTestCluster().SchedulerClient().DescribeSchedule(
-			ctx,
-			&schedulerpb.DescribeScheduleRequest{
-				NamespaceId:     nsID,
-				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+	// Update via scheduler client should fail on the closed schedule.
+	_, err = env.GetTestCluster().SchedulerClient().UpdateSchedule(
+		ctx,
+		&schedulerpb.UpdateScheduleRequest{
+			NamespaceId: nsID,
+			FrontendRequest: &workflowservice.UpdateScheduleRequest{
+				Namespace:  nsName,
+				ScheduleId: sid,
+				Schedule:   schedule,
+				Identity:   "test",
 			},
-		)
-		return errors.As(descErr, &notFoundErr)
-	}, 5*time.Second, 5*time.Millisecond)
+		},
+	)
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPreconditionErr)
+
+	// Patch via scheduler client should also fail on the closed schedule.
+	_, err = env.GetTestCluster().SchedulerClient().PatchSchedule(
+		ctx,
+		&schedulerpb.PatchScheduleRequest{
+			NamespaceId: nsID,
+			FrontendRequest: &workflowservice.PatchScheduleRequest{
+				Namespace:  nsName,
+				ScheduleId: sid,
+				Patch:      &schedulepb.SchedulePatch{Pause: "test"},
+				Identity:   "test",
+			},
+		},
+	)
+	require.ErrorAs(t, err, &failedPreconditionErr)
+
+	// Delete again is idempotent in CHASM — sets Closed=true again.
+	_, err = env.GetTestCluster().SchedulerClient().DeleteSchedule(
+		ctx,
+		&schedulerpb.DeleteScheduleRequest{
+			NamespaceId: nsID,
+			FrontendRequest: &workflowservice.DeleteScheduleRequest{
+				Namespace:  nsName,
+				ScheduleId: sid,
+				Identity:   "test",
+			},
+		},
+	)
+	require.NoError(t, err)
 }

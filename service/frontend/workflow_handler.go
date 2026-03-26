@@ -4137,6 +4137,10 @@ func (wh *WorkflowHandler) describeScheduleWorkflow(ctx context.Context, request
 		// only treat running schedules as existing
 		return nil, serviceerror.NewNotFound("schedule not found")
 	}
+	if executionInfo.GetType().GetName() == dummy.DummyWFTypeName {
+		// This is a sentinel workflow, not a real scheduler.
+		return nil, serviceerror.NewNotFound("schedule not found")
+	}
 
 	// map search attributes
 	if sas := executionInfo.GetSearchAttributes(); sas != nil {
