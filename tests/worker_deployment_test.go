@@ -38,7 +38,7 @@ type (
 	}
 )
 
-func TestWorkerDeploymentSuiteV2(t *testing.T) {
+func TestWorkerDeploymentSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber})
 }

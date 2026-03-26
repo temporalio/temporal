@@ -87,6 +87,7 @@ ifeq ($(OTEL),true)
 	export OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
 	export OTEL_TRACES_EXPORTER=otlp
 	export TEMPORAL_OTEL_DEBUG=true
+	export TEMPORAL_TEST_DATA_ENCODING=json
 endif
 
 MODULE_ROOT := $(lastword $(shell grep -e "^module " go.mod))

@@ -29,7 +29,7 @@ type VersionWorkflowSuite struct {
 	workflowVersion        DeploymentWorkflowVersion
 }
 
-func TestVersionWorkflowSuiteV2(t *testing.T) {
+func TestVersionWorkflowSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &VersionWorkflowSuite{workflowVersion: VersionDataRevisionNumber})
 }
