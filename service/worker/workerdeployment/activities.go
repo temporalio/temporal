@@ -8,6 +8,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/namespace"
@@ -273,4 +274,13 @@ func (a *Activities) StartWorkerDeploymentVersionWorkflow(
 	logger.Info("starting worker deployment version workflow", "deploymentName", input.DeploymentName, "buildID", input.BuildId)
 	identity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
 	return a.WorkerDeploymentClient.StartWorkerDeploymentVersion(ctx, a.namespace, input.DeploymentName, input.BuildId, identity, input.RequestId, input.ComputeConfig)
+}
+
+func (a *Activities) ValidateWorkerControllerInstanceSpec(ctx context.Context, input *deploymentspb.ValidateWorkerControllerInstanceSpecInput) error {
+	identity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+	spec := computeConfigScalingGroupsToWCISpec(input.GetScalingGroups())
+	if err := a.WorkerControllerInstanceClient.ValidateWorkerControllerInstanceSpec(ctx, a.namespace, spec, identity); err != nil {
+		return temporal.NewApplicationError(err.Error(), errInvalidComputeConfig)
+	}
+	return nil
 }

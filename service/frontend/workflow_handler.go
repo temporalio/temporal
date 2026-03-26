@@ -206,9 +206,62 @@ func (wh *WorkflowHandler) CreateWorkerDeploymentVersion(
 func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionComputeConfig(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest,
-) (*workflowservice.UpdateWorkerDeploymentVersionComputeConfigResponse, error) {
-	// TODO implement me
-	return nil, serviceerror.NewUnimplemented("UpdateWorkerDeploymentVersionComputeConfig not implemented")
+) (_ *workflowservice.UpdateWorkerDeploymentVersionComputeConfigResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if request.GetDeploymentVersion().GetDeploymentName() == "" {
+		return nil, serviceerror.NewInvalidArgument("deployment name cannot be empty")
+	}
+
+	if request.GetDeploymentVersion().GetBuildId() == "" {
+		return nil, serviceerror.NewInvalidArgument("build ID cannot be empty")
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentVersionsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	requestID := request.RequestId
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
+
+	// Convert API scaling group updates to internal proto type.
+	upsertScalingGroups := make(map[string]*deploymentspb.ScalingGroupUpdate, len(request.GetComputeConfigScalingGroups()))
+	for name, apiUpdate := range request.GetComputeConfigScalingGroups() {
+		upsertScalingGroups[name] = &deploymentspb.ScalingGroupUpdate{
+			ScalingGroup: apiUpdate.GetScalingGroup(),
+			UpdateMask:   apiUpdate.GetUpdateMask(),
+		}
+	}
+
+	err = wh.workerDeploymentClient.UpdateVersionComputeConfig(
+		ctx,
+		namespaceEntry,
+		request.GetDeploymentVersion(),
+		upsertScalingGroups,
+		request.GetRemoveComputeConfigScalingGroups(),
+		request.Identity,
+		requestID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateWorkerDeploymentVersionComputeConfigResponse{}, nil
 }
 
 func (wh *WorkflowHandler) ValidateWorkerDeploymentVersionComputeConfig(

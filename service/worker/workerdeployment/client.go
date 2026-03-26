@@ -134,6 +134,16 @@ type Client interface {
 		identity string,
 	) (*deploymentpb.VersionMetadata, error)
 
+	UpdateVersionComputeConfig(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		version *deploymentpb.WorkerDeploymentVersion,
+		upsertScalingGroups map[string]*deploymentspb.ScalingGroupUpdate,
+		removeScalingGroups []string,
+		identity string,
+		requestID string,
+	) error
+
 	SetManager(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
@@ -505,6 +515,51 @@ func (d *ClientImpl) UpdateVersionMetadata(
 	}
 
 	return res.Metadata, nil
+}
+
+func (d *ClientImpl) UpdateVersionComputeConfig(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	version *deploymentpb.WorkerDeploymentVersion,
+	upsertScalingGroups map[string]*deploymentspb.ScalingGroupUpdate,
+	removeScalingGroups []string,
+	identity string,
+	requestID string,
+) (retErr error) {
+	//revive:disable-next-line:defer
+	defer d.convertAndRecordError("UpdateVersionComputeConfig", version.GetDeploymentName(), &retErr, namespaceEntry.Name(), version.GetBuildId(), identity)()
+
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.UpdateVersionComputeConfigArgs{
+		Identity:            identity,
+		RequestId:           requestID,
+		UpsertScalingGroups: upsertScalingGroups,
+		RemoveScalingGroups: removeScalingGroups,
+	})
+	if err != nil {
+		return err
+	}
+
+	workflowID := GenerateVersionWorkflowID(version.GetDeploymentName(), version.GetBuildId())
+	outcome, err := updateWorkflow(ctx, d.historyClient, namespaceEntry, workflowID, &updatepb.Request{
+		Input: &updatepb.Input{Name: UpdateVersionComputeConfig, Args: updatePayload},
+		Meta:  &updatepb.Meta{UpdateId: "_update_compute_config_" + requestID, Identity: identity},
+	})
+	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return serviceerror.NewNotFound(fmt.Sprintf(ErrWorkerDeploymentVersionNotFound, version.GetBuildId(), version.GetDeploymentName()))
+		}
+		return err
+	}
+
+	if failure := outcome.GetFailure(); failure != nil {
+		if failure.GetApplicationFailureInfo().GetType() == errInvalidComputeConfig {
+			return serviceerror.NewInvalidArgument(failure.GetMessage())
+		}
+		return serviceerror.NewInternalf("update version compute config failed: %s", failure.Message)
+	}
+
+	return nil
 }
 
 func (d *ClientImpl) DescribeWorkerDeployment(

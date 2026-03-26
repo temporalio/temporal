@@ -8,12 +8,14 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
@@ -23,6 +25,7 @@ import (
 type VersionWorkflowSuite struct {
 	suite.Suite
 	testsuite.WorkflowTestSuite
+	protorequire.ProtoAssertions
 	controller             *gomock.Controller
 	env                    *testsuite.TestWorkflowEnvironment
 	workerDeploymentClient *ClientImpl
@@ -35,6 +38,7 @@ func TestVersionWorkflowSuiteV2(t *testing.T) {
 }
 
 func (s *VersionWorkflowSuite) SetupTest() {
+	s.ProtoAssertions = protorequire.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
 
@@ -2224,6 +2228,191 @@ func (s *VersionWorkflowSuite) Test_DrainageStatusChange_TriggersAsyncPropagatio
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(asyncPropagationTriggered, "Async propagation should be triggered for drainage status change")
+}
+
+func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_Success() {
+	tv := testvars.New(s.T())
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	s.env.RegisterActivity(a.ValidateWorkerControllerInstanceSpec)
+	s.env.OnActivity(a.ValidateWorkerControllerInstanceSpec, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	s.env.RegisterDelayedCallback(func() {
+		args := &deploymentspb.UpdateVersionComputeConfigArgs{
+			Identity:  tv.ClientIdentity(),
+			RequestId: "req-1",
+			UpsertScalingGroups: map[string]*deploymentspb.ScalingGroupUpdate{
+				"group1": {ScalingGroup: &computepb.ComputeConfigScalingGroup{
+					Provider: &computepb.ComputeProvider{Type: "aws-lambda"},
+				}},
+			},
+		}
+		s.env.UpdateWorkflow(UpdateVersionComputeConfig, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("update should not be rejected", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(result any, err error) {
+				s.Require().NoError(err)
+
+				// Verify compute config was applied by querying workflow state.
+				val, err := s.env.QueryWorkflow(QueryDescribeVersion)
+				s.Require().NoError(err)
+				var resp deploymentspb.QueryDescribeVersionResponse
+				s.Require().NoError(val.Get(&resp))
+				s.ProtoEqual(&computepb.ComputeConfig{
+					ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+						"group1": {Provider: &computepb.ComputeProvider{Type: "aws-lambda"}},
+					},
+				}, resp.VersionState.GetComputeConfig())
+			},
+		}, args)
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			TaskQueueFamilies:         map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{},
+			StartedDeploymentWorkflow: true,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_RejectedWhenDeleted() {
+	tv := testvars.New(s.T())
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.RegisterActivity(a.ValidateWorkerControllerInstanceSpec)
+	s.env.OnActivity(a.ValidateWorkerControllerInstanceSpec, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
+		&deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil,
+	).Maybe()
+	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.OnActivity(a.CheckIfTaskQueuesHavePollers, mock.Anything, mock.Anything).Return(false, nil).Maybe()
+
+	// First delete the version.
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) { s.Fail("delete should not be rejected", err) },
+			OnAccept: func() {},
+			OnComplete: func(result any, err error) {
+				s.Require().NoError(err)
+			},
+		}, &deploymentspb.DeleteVersionArgs{
+			SkipDrainage: true,
+		})
+		args := &deploymentspb.UpdateVersionComputeConfigArgs{
+			Identity:  tv.ClientIdentity(),
+			RequestId: "req-1",
+			UpsertScalingGroups: map[string]*deploymentspb.ScalingGroupUpdate{
+				"group1": {ScalingGroup: &computepb.ComputeConfigScalingGroup{
+					Provider: &computepb.ComputeProvider{Type: "aws-lambda"},
+				}},
+			},
+		}
+		// Send update at the same time as delete so both operations arrive before workflow completes.
+		s.env.UpdateWorkflow(UpdateVersionComputeConfig, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Require().ErrorContains(err, errVersionDeleted)
+			},
+			OnComplete: func(result any, err error) {
+				s.Fail("update should not complete on deleted version")
+			},
+		}, args)
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_ValidationFailure_DoesNotModifyState() {
+	tv := testvars.New(s.T())
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	s.env.RegisterActivity(a.ValidateWorkerControllerInstanceSpec)
+	s.env.OnActivity(a.ValidateWorkerControllerInstanceSpec, mock.Anything, mock.Anything).Return(
+		temporal.NewNonRetryableApplicationError("invalid config", errInvalidComputeConfig, nil),
+	).Once()
+
+	s.env.RegisterDelayedCallback(func() {
+		args := &deploymentspb.UpdateVersionComputeConfigArgs{
+			Identity:  tv.ClientIdentity(),
+			RequestId: "req-1",
+			UpsertScalingGroups: map[string]*deploymentspb.ScalingGroupUpdate{
+				"group1": {ScalingGroup: &computepb.ComputeConfigScalingGroup{
+					Provider: &computepb.ComputeProvider{Type: "bad-provider"},
+				}},
+			},
+		}
+		s.env.UpdateWorkflow(UpdateVersionComputeConfig, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("update should not be rejected at validation stage", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(result any, err error) {
+				s.Require().Error(err)
+				s.Require().ErrorContains(err, errInvalidComputeConfig)
+
+				// Verify compute config was NOT modified by querying workflow state.
+				val, qErr := s.env.QueryWorkflow(QueryDescribeVersion)
+				s.Require().NoError(qErr)
+				var resp deploymentspb.QueryDescribeVersionResponse
+				s.Require().NoError(val.Get(&resp))
+				s.ProtoEqual(&computepb.ComputeConfig{
+					ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+						"original": {Provider: &computepb.ComputeProvider{Type: "original-provider"}},
+					},
+				}, resp.VersionState.GetComputeConfig())
+			},
+		}, args)
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			TaskQueueFamilies:         map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{},
+			StartedDeploymentWorkflow: true,
+			ComputeConfig: &computepb.ComputeConfig{
+				ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+					"original": {Provider: &computepb.ComputeProvider{Type: "original-provider"}},
+				},
+			},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
 }
 
 func (s *VersionWorkflowSuite) skipBeforeVersion(version DeploymentWorkflowVersion) {

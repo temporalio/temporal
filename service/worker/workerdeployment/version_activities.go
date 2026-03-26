@@ -197,3 +197,12 @@ func (a *VersionActivities) GetVersionDrainageStatus(ctx context.Context, versio
 		LastCheckedTime: timestamppb.Now(),
 	}, nil
 }
+
+func (a *VersionActivities) ValidateWorkerControllerInstanceSpec(ctx context.Context, input *deploymentspb.ValidateWorkerControllerInstanceSpecInput) error {
+	identity := "version workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+	spec := computeConfigScalingGroupsToWCISpec(input.GetScalingGroups())
+	if err := a.WorkerControllerInstanceClient.ValidateWorkerControllerInstanceSpec(ctx, a.namespace, spec, identity); err != nil {
+		return temporal.NewApplicationError(err.Error(), errInvalidComputeConfig)
+	}
+	return nil
+}
