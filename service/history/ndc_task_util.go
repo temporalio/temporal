@@ -314,11 +314,12 @@ func getNamespaceTagByID(
 func getNamespaceTagAndReplicationStateByID(
 	registry namespace.Registry,
 	namespaceID string,
+	workflowID string,
 ) (metrics.Tag, enumspb.ReplicationState) {
 	namespaceName, err := registry.GetNamespaceByID(namespace.ID(namespaceID))
 	if err != nil {
 		return metrics.NamespaceUnknownTag(), enumspb.REPLICATION_STATE_UNSPECIFIED
 	}
 
-	return metrics.NamespaceTag(namespaceName.Name().String()), namespaceName.ReplicationState()
+	return metrics.NamespaceTag(namespaceName.Name().String()), namespaceName.ReplicationState(workflowID)
 }

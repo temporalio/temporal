@@ -78,6 +78,7 @@ func (t *visibilityQueueTaskExecutor) Execute(
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
+		executable.GetWorkflowID(),
 	)
 	metricsTags := []metrics.Tag{
 		namespaceTag,
