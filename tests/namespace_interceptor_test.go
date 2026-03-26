@@ -85,13 +85,13 @@ func (b *sutConnector) respondWorkflowTaskCompleted(token []byte, ns namespace.N
 	return err
 }
 
-func nsInterceptorStartWorkflowRequest(ns namespace.Name, workflowId string, identity string, queue *taskqueuepb.TaskQueue) *workflowservice.StartWorkflowExecutionRequest {
+func nsInterceptorStartWorkflowRequest(ns namespace.Name, workflowID string, identity string, queue *taskqueuepb.TaskQueue) *workflowservice.StartWorkflowExecutionRequest {
 	wt := "functional-workflow-namespace-validator-interceptor"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           ns.String(),
-		WorkflowId:          workflowId,
+		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
 		TaskQueue:           queue,
 		Input:               nil,
