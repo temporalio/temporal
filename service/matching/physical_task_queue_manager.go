@@ -712,6 +712,19 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		return errMissingDeploymentVersion
 	}
 
+	userData, _, err := c.partitionMgr.getPerTypeUserData()
+	if err != nil {
+		return err
+	}
+
+	deploymentData := userData.GetDeploymentData()
+	if worker_versioning.HasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
+		// already registered in user data, we can assume the workflow is running.
+		// TODO: consider replication scenarios where user data is replicated before
+		// the deployment workflow.
+		return nil
+	}
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -729,12 +742,13 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		}
 	}()
 
-	userData, _, err := c.partitionMgr.getPerTypeUserData()
+	// Recheck user data in case it was updated in the meantime while we were waiting for the lock.
+	userData, _, err = c.partitionMgr.getPerTypeUserData()
 	if err != nil {
 		return err
 	}
 
-	deploymentData := userData.GetDeploymentData()
+	deploymentData = userData.GetDeploymentData()
 	if worker_versioning.HasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
 		// already registered in user data, we can assume the workflow is running.
 		// TODO: consider replication scenarios where user data is replicated before
