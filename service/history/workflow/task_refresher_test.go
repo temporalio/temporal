@@ -14,7 +14,6 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -1445,7 +1444,7 @@ func (s *taskRefresherSuite) buildMutableStateWithTimeSkipping(totalSkip time.Du
 			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
 				Enabled: enabled,
 				TimeSkippedDetails: []*persistencespb.TimeSkippedDetails{
-					{DurationToSkip: clock.TimeSkippedDurationToTimestamp(totalSkip)},
+					{Duration: durationpb.New(totalSkip)},
 				},
 			},
 		},
@@ -1521,8 +1520,8 @@ func (s *taskRefresherSuite) TestApplyTimeSkippingOffset_MultipleSkipEntries_Use
 			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
 				Enabled: true,
 				TimeSkippedDetails: []*persistencespb.TimeSkippedDetails{
-					{DurationToSkip: clock.TimeSkippedDurationToTimestamp(time.Hour)},
-					{DurationToSkip: clock.TimeSkippedDurationToTimestamp(time.Hour)},
+					{Duration: durationpb.New(time.Hour)},
+					{Duration: durationpb.New(time.Hour)},
 				},
 			},
 		},

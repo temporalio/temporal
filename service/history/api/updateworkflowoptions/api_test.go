@@ -3,6 +3,7 @@ package updateworkflowoptions
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,6 +30,7 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
@@ -188,6 +190,22 @@ func TestMergeOptions_TimeSkippingConfigMask(t *testing.T) {
 		require.NoError(t, err)
 		assert.Nil(t, merged.GetTimeSkippingConfig())
 	})
+
+	t.Run("MaxAutoSkipDuration is preserved in merged config", func(t *testing.T) {
+		maxSkip := durationpb.New(30 * time.Minute)
+		current := &workflowpb.WorkflowExecutionOptions{}
+		update := &workflowpb.WorkflowExecutionOptions{
+			TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+				Enabled:             true,
+				MaxAutoSkipDuration: maxSkip,
+			},
+		}
+		merged, err := mergeWorkflowExecutionOptions(current, update, mask)
+		require.NoError(t, err)
+		assert.True(t, merged.GetTimeSkippingConfig().GetEnabled())
+		assert.NotNil(t, merged.GetTimeSkippingConfig().GetMaxAutoSkipDuration())
+		assert.Equal(t, maxSkip.AsDuration(), merged.GetTimeSkippingConfig().GetMaxAutoSkipDuration().AsDuration())
+	})
 }
 
 type (
@@ -261,8 +279,12 @@ func (s *updateWorkflowOptionsSuite) TearDownTest() {
 }
 
 func (s *updateWorkflowOptionsSuite) TestInvoke_TimeSkipping() {
+	maxSkip := durationpb.New(45 * time.Minute)
 	expectedOptions := &workflowpb.WorkflowExecutionOptions{
-		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+			Enabled:             true,
+			MaxAutoSkipDuration: maxSkip,
+		},
 	}
 	s.currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.shardContext.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
@@ -276,7 +298,7 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_TimeSkipping() {
 		gomock.Any(), // deployment series
 		"test-identity",
 		gomock.Any(), // priority — not in mask
-		&workflowpb.TimeSkippingConfig{Enabled: true},
+		&workflowpb.TimeSkippingConfig{Enabled: true, MaxAutoSkipDuration: maxSkip},
 	).Return(&historypb.HistoryEvent{}, nil)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), s.shardContext).Return(nil)
 
@@ -307,6 +329,8 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_TimeSkipping() {
 	s.NoError(err)
 	s.NotNil(resp)
 	s.True(resp.GetWorkflowExecutionOptions().GetTimeSkippingConfig().GetEnabled())
+	s.NotNil(resp.GetWorkflowExecutionOptions().GetTimeSkippingConfig().GetMaxAutoSkipDuration())
+	s.Equal(maxSkip.AsDuration(), resp.GetWorkflowExecutionOptions().GetTimeSkippingConfig().GetMaxAutoSkipDuration().AsDuration())
 }
 
 func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {

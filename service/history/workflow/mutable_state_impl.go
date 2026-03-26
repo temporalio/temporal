@@ -2761,7 +2761,8 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 
 	if tsc := startRequest.GetStartRequest().GetTimeSkippingConfig(); tsc.GetEnabled() {
 		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Enabled: true,
+			Enabled:             true,
+			MaxAutoSkipDuration: tsc.GetMaxAutoSkipDuration(),
 		}
 		ms.timeSource = clock.NewTimeSkippingTimeSource(ms.timeSource, nil)
 	}
@@ -3936,6 +3937,11 @@ func (ms *MutableStateImpl) ApplyWorkflowTaskFailedEvent() error {
 
 // AddWorkflowExecutionTimeSkippedEvent adds a WorkflowExecutionTimeSkippedEvent to the history
 // and refreshes tasks to reflect the advanced time point.
+//
+// If MaxAutoSkipDuration is set, the total accumulated skip duration (existing + proposed) is
+// clamped to that bound: advanceToTimePoint is adjusted so the total does not exceed the limit,
+// and boundReachedAndTimeSkippingDisabled is set to true in the event so that time skipping is
+// automatically disabled when the event is applied.
 func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippedEvent(
 	ctx context.Context,
 	advanceToTimePoint time.Time,
@@ -3945,7 +3951,24 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippedEvent(
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddWorkflowExecutionTimeSkippedEvent(advanceToTimePoint)
+	boundReached := false
+	if maxDur := ms.executionInfo.GetTimeSkippingInfo().GetMaxAutoSkipDuration(); maxDur != nil {
+		existingTotal := clock.ComputeTotalSkippedOffset(ms.executionInfo.GetTimeSkippingInfo().GetTimeSkippedDetails())
+		proposedSkip := advanceToTimePoint.Sub(ms.timeSource.Now())
+		if proposedSkip < 0 {
+			proposedSkip = 0
+		}
+		if existingTotal+proposedSkip > maxDur.AsDuration() {
+			allowedAdditional := maxDur.AsDuration() - existingTotal
+			if allowedAdditional < 0 {
+				allowedAdditional = 0
+			}
+			advanceToTimePoint = ms.timeSource.Now().Add(allowedAdditional)
+			boundReached = true
+		}
+	}
+
+	event := ms.hBuilder.AddWorkflowExecutionTimeSkippedEvent(advanceToTimePoint, boundReached)
 	if err := ms.ApplyWorkflowExecutionTimeSkippedEvent(ctx, event); err != nil {
 		return nil, err
 	}
@@ -3960,7 +3983,10 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippedEvent(ctx context.C
 		newDetails,
 	)
 	if ts, ok := ms.timeSource.(*clock.TimeSkippingTimeSource); ok {
-		ts.Advance(clock.TimeSkippedDurationFromTimestamp(newDetails.GetDurationToSkip()))
+		ts.Advance(newDetails.GetDuration().AsDuration())
+	}
+	if event.GetWorkflowExecutionTimeSkippedEventAttributes().GetBoundReachedAndTimeSkippingDisabled() {
+		executionInfo.TimeSkippingInfo.Enabled = false
 	}
 	return NewTaskRefresher(ms.shard).Refresh(ctx, ms, false)
 }
@@ -3971,9 +3997,8 @@ func buildTimeSkippedDetails(
 	attrs := event.GetWorkflowExecutionTimeSkippedEventAttributes()
 	skipDuration := attrs.GetToTime().AsTime().Sub(event.GetEventTime().AsTime())
 	return &persistencespb.TimeSkippedDetails{
-		SkippingTime:   event.GetEventTime(),
-		DurationToSkip: clock.TimeSkippedDurationToTimestamp(skipDuration),
-		ToTime:         attrs.GetToTime(),
+		Duration:      durationpb.New(skipDuration),
+		VirtualToTime: attrs.GetToTime(),
 	}
 }
 
@@ -5566,6 +5591,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 			ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{}
 		}
 		ms.executionInfo.TimeSkippingInfo.Enabled = tsc.GetEnabled()
+		ms.executionInfo.TimeSkippingInfo.MaxAutoSkipDuration = tsc.GetMaxAutoSkipDuration()
 
 		if tsc.GetEnabled() {
 			if _, alreadySkipping := ms.timeSource.(*clock.TimeSkippingTimeSource); !alreadySkipping {

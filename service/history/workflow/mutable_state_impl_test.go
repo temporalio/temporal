@@ -6171,12 +6171,10 @@ func (s *mutableStateSuite) TestBuildTimeSkippedDetails_FirstSkip() {
 
 	details := buildTimeSkippedDetails(event)
 
-	// Skipping time is the event time.
-	s.Equal(realTime, details.GetSkippingTime().AsTime())
 	// Duration encodes correctly.
-	s.Equal(skipDuration, clock.TimeSkippedDurationFromTimestamp(details.GetDurationToSkip()))
+	s.Equal(skipDuration, details.GetDuration().AsDuration())
 	// Target = realTime + 2h.
-	s.Equal(targetVirtualTime, details.GetToTime().AsTime())
+	s.Equal(targetVirtualTime, details.GetVirtualToTime().AsTime())
 }
 
 func (s *mutableStateSuite) TestBuildTimeSkippedDetails_SecondSkip() {
@@ -6195,9 +6193,8 @@ func (s *mutableStateSuite) TestBuildTimeSkippedDetails_SecondSkip() {
 	}
 	details := buildTimeSkippedDetails(event)
 
-	s.Equal(eventTime, details.GetSkippingTime().AsTime())
-	s.Equal(skipDuration, clock.TimeSkippedDurationFromTimestamp(details.GetDurationToSkip()))
-	s.Equal(targetTime, details.GetToTime().AsTime())
+	s.Equal(skipDuration, details.GetDuration().AsDuration())
+	s.Equal(targetTime, details.GetVirtualToTime().AsTime())
 }
 
 func (s *mutableStateSuite) TestBuildTimeSkippedDetails_ThreeSkips_VirtualTimeAccumulates() {
@@ -6221,25 +6218,10 @@ func (s *mutableStateSuite) TestBuildTimeSkippedDetails_ThreeSkips_VirtualTimeAc
 		}
 		d := buildTimeSkippedDetails(event)
 
-		s.Equal(eventTime, d.GetSkippingTime().AsTime(), "skip %d: skipping time", i)
-		s.Equal(dur, clock.TimeSkippedDurationFromTimestamp(d.GetDurationToSkip()), "skip %d: duration", i)
-		s.Equal(target, d.GetToTime().AsTime(), "skip %d: target time", i)
+		s.Equal(dur, d.GetDuration().AsDuration(), "skip %d: duration", i)
+		s.Equal(target, d.GetVirtualToTime().AsTime(), "skip %d: target time", i)
 
 		prevTarget = target
-	}
-}
-
-func (s *mutableStateSuite) TestTimeSkippedDurationRoundtrip() {
-	durations := []time.Duration{
-		0,
-		time.Second,
-		time.Minute,
-		time.Hour,
-		2*time.Hour + 30*time.Minute + 15*time.Second,
-		24 * time.Hour,
-	}
-	for _, d := range durations {
-		s.Equal(d, clock.TimeSkippedDurationFromTimestamp(clock.TimeSkippedDurationToTimestamp(d)), "duration: %v", d)
 	}
 }
 
@@ -6252,7 +6234,7 @@ func (s *mutableStateSuite) TestNewMutableStateFromDB_TimeSkippingDisabled_Virtu
 		Enabled: false,
 		TimeSkippedDetails: []*persistencespb.TimeSkippedDetails{
 			{
-				DurationToSkip: clock.TimeSkippedDurationToTimestamp(skipDuration),
+				Duration: durationpb.New(skipDuration),
 			},
 		},
 	}
@@ -6264,4 +6246,96 @@ func (s *mutableStateSuite) TestNewMutableStateFromDB_TimeSkippingDisabled_Virtu
 	realNow := s.mockShard.GetTimeSource().Now()
 	virtualNow := ms.VirtualTimeNow()
 	s.WithinDuration(realNow.Add(skipDuration), virtualNow, time.Second)
+}
+
+func (s *mutableStateSuite) TestAddWorkflowExecutionTimeSkippedEvent_NoMaxDuration_NoClamping() {
+	// When MaxAutoSkipDuration is nil, the skip proceeds at full requested duration.
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Enabled: true}
+	s.mutableState.timeSource = clock.NewTimeSkippingTimeSource(s.mockShard.GetTimeSource(), nil)
+	s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&historypb.HistoryEvent{}, nil).AnyTimes()
+
+	virtualNow := s.mutableState.timeSource.Now()
+	advanceBy := 5 * time.Hour
+
+	event, err := s.mutableState.AddWorkflowExecutionTimeSkippedEvent(context.Background(), virtualNow.Add(advanceBy))
+	s.NoError(err)
+
+	attrs := event.GetWorkflowExecutionTimeSkippedEventAttributes()
+	s.False(attrs.GetBoundReachedAndTimeSkippingDisabled())
+	s.WithinDuration(virtualNow.Add(advanceBy), attrs.GetToTime().AsTime(), time.Second)
+	s.True(s.mutableState.executionInfo.TimeSkippingInfo.Enabled)
+}
+
+func (s *mutableStateSuite) TestAddWorkflowExecutionTimeSkippedEvent_WithinLimit_NoClamping() {
+	// When existing + proposed is still under MaxAutoSkipDuration, no clamping occurs.
+	existingDetails := []*persistencespb.TimeSkippedDetails{
+		{Duration: durationpb.New(1 * time.Hour)},
+	}
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		Enabled:             true,
+		MaxAutoSkipDuration: durationpb.New(3 * time.Hour),
+		TimeSkippedDetails:  existingDetails,
+	}
+	s.mutableState.timeSource = clock.NewTimeSkippingTimeSource(s.mockShard.GetTimeSource(), existingDetails)
+	s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&historypb.HistoryEvent{}, nil).AnyTimes()
+
+	virtualNow := s.mutableState.timeSource.Now()
+	advanceBy := 1 * time.Hour // 1h existing + 1h proposed = 2h, under 3h limit
+
+	event, err := s.mutableState.AddWorkflowExecutionTimeSkippedEvent(context.Background(), virtualNow.Add(advanceBy))
+	s.NoError(err)
+
+	attrs := event.GetWorkflowExecutionTimeSkippedEventAttributes()
+	s.False(attrs.GetBoundReachedAndTimeSkippingDisabled())
+	s.WithinDuration(virtualNow.Add(advanceBy), attrs.GetToTime().AsTime(), time.Second)
+	s.True(s.mutableState.executionInfo.TimeSkippingInfo.Enabled)
+}
+
+func (s *mutableStateSuite) TestAddWorkflowExecutionTimeSkippedEvent_ExceedsLimit_ClampsAndDisables() {
+	// When existing + proposed would exceed MaxAutoSkipDuration, clamp the advance
+	// and set BoundReachedAndTimeSkippingDisabled=true, disabling time skipping.
+	existingDetails := []*persistencespb.TimeSkippedDetails{
+		{Duration: durationpb.New(90 * time.Minute)},
+	}
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		Enabled:             true,
+		MaxAutoSkipDuration: durationpb.New(2 * time.Hour),
+		TimeSkippedDetails:  existingDetails,
+	}
+	s.mutableState.timeSource = clock.NewTimeSkippingTimeSource(s.mockShard.GetTimeSource(), existingDetails)
+	s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&historypb.HistoryEvent{}, nil).AnyTimes()
+
+	virtualNow := s.mutableState.timeSource.Now()
+	// Requesting 90min more: 90min existing + 90min proposed = 3h > 2h limit.
+	// Only 30min more should be allowed.
+	event, err := s.mutableState.AddWorkflowExecutionTimeSkippedEvent(context.Background(), virtualNow.Add(90*time.Minute))
+	s.NoError(err)
+
+	attrs := event.GetWorkflowExecutionTimeSkippedEventAttributes()
+	s.True(attrs.GetBoundReachedAndTimeSkippingDisabled())
+	s.WithinDuration(virtualNow.Add(30*time.Minute), attrs.GetToTime().AsTime(), time.Second)
+	s.False(s.mutableState.executionInfo.TimeSkippingInfo.Enabled)
+}
+
+func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippedEvent_BoundReached_DisablesTimeSkipping() {
+	// On history replay: BoundReachedAndTimeSkippingDisabled=true must set Enabled=false.
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Enabled: true}
+	s.mutableState.timeSource = clock.NewTimeSkippingTimeSource(s.mockShard.GetTimeSource(), nil)
+	s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&historypb.HistoryEvent{}, nil).AnyTimes()
+
+	now := s.mockShard.GetTimeSource().Now()
+	event := &historypb.HistoryEvent{
+		EventTime: timestamppb.New(now),
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionTimeSkippedEventAttributes{
+			WorkflowExecutionTimeSkippedEventAttributes: &historypb.WorkflowExecutionTimeSkippedEventAttributes{
+				ToTime:                              timestamppb.New(now.Add(30 * time.Minute)),
+				BoundReachedAndTimeSkippingDisabled: true,
+			},
+		},
+	}
+
+	err := s.mutableState.ApplyWorkflowExecutionTimeSkippedEvent(context.Background(), event)
+	s.NoError(err)
+
+	s.False(s.mutableState.executionInfo.TimeSkippingInfo.Enabled)
 }

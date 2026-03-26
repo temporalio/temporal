@@ -184,7 +184,8 @@ func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowEx
 	}
 	if timeSkippingInfo := ms.GetExecutionInfo().GetTimeSkippingInfo(); timeSkippingInfo != nil {
 		opts.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{
-			Enabled: timeSkippingInfo.GetEnabled(),
+			Enabled:             timeSkippingInfo.GetEnabled(),
+			MaxAutoSkipDuration: timeSkippingInfo.GetMaxAutoSkipDuration(),
 		}
 	}
 	return opts

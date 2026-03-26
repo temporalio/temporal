@@ -559,6 +559,14 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 			namespaceName,
 		)
 	}
+	if timeSkippingConfig.GetMaxAutoSkipDuration() != nil {
+		if timeSkippingConfig.GetMaxAutoSkipDuration().GetSeconds() < 0 {
+			return serviceerror.NewInvalidArgumentf(
+				"Max auto skip duration is negative: %v",
+				timeSkippingConfig.GetMaxAutoSkipDuration(),
+			)
+		}
+	}
 	return nil
 }
 

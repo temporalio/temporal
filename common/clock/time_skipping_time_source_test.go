@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func TestTimeSkippingTimeSource_NowWithNoSkip(t *testing.T) {
@@ -50,8 +50,8 @@ func TestTimeSkippingTimeSource_ReconstructedFromPersistedDetails(t *testing.T) 
 
 	// Simulate two previously persisted skip events: 10h + 5h = 15h total offset
 	details := []*persistencespb.TimeSkippedDetails{
-		{DurationToSkip: TimeSkippedDurationToTimestamp(10 * time.Hour)},
-		{DurationToSkip: TimeSkippedDurationToTimestamp(5 * time.Hour)},
+		{Duration: durationpb.New(10 * time.Hour)},
+		{Duration: durationpb.New(5 * time.Hour)},
 	}
 
 	ts := NewTimeSkippingTimeSource(base, details)
@@ -87,9 +87,9 @@ func TestTimeSkippingTimeSource_DelegatesTimersToBase(t *testing.T) {
 
 func TestComputeTotalSkippedOffset(t *testing.T) {
 	details := []*persistencespb.TimeSkippedDetails{
-		{DurationToSkip: TimeSkippedDurationToTimestamp(3 * time.Hour)},
-		{DurationToSkip: TimeSkippedDurationToTimestamp(7 * time.Hour)},
-		{DurationToSkip: TimeSkippedDurationToTimestamp(2 * time.Hour)},
+		{Duration: durationpb.New(3 * time.Hour)},
+		{Duration: durationpb.New(7 * time.Hour)},
+		{Duration: durationpb.New(2 * time.Hour)},
 	}
 	assert.Equal(t, 12*time.Hour, ComputeTotalSkippedOffset(details))
 }
@@ -97,24 +97,4 @@ func TestComputeTotalSkippedOffset(t *testing.T) {
 func TestComputeTotalSkippedOffset_Empty(t *testing.T) {
 	assert.Equal(t, time.Duration(0), ComputeTotalSkippedOffset(nil))
 	assert.Equal(t, time.Duration(0), ComputeTotalSkippedOffset([]*persistencespb.TimeSkippedDetails{}))
-}
-
-// roundtrip helper — verifies encoding/decoding is consistent
-func TestTimeSkippedDurationRoundtrip(t *testing.T) {
-	durations := []time.Duration{
-		0,
-		time.Second,
-		time.Hour,
-		24 * time.Hour,
-		365 * 24 * time.Hour,
-		time.Hour + 30*time.Minute + 15*time.Second,
-	}
-	for _, d := range durations {
-		ts := TimeSkippedDurationToTimestamp(d)
-		assert.Equal(t, d, TimeSkippedDurationFromTimestamp(ts))
-	}
-}
-
-func TestTimeSkippedDurationFromTimestamp_Nil(t *testing.T) {
-	assert.Equal(t, time.Duration(0), TimeSkippedDurationFromTimestamp((*timestamppb.Timestamp)(nil)))
 }

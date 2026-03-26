@@ -328,23 +328,21 @@ message LastNotifiedTargetVersion {
 }
 
 message TimeSkippingInfo {
-    // metadata
+    // current configuration
     bool enabled = 1;
+    google.protobuf.Duration max_auto_skip_duration = 2;
     // runtime history
-    repeated TimeSkippedDetails time_skipped_details = 2;
+    repeated TimeSkippedDetails time_skipped_details = 3;
 } 
 
 message TimeSkippedDetails {
     // (-- api-linter: core::0142::time-field-names=disabled
-    //     aip.dev/not-precedent: Ignoring lint rules. --)
-    google.protobuf.Timestamp skipping_time = 2;
-    // (-- api-linter: core::0142::time-field-names=disabled
     //     api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: Ignoring lint rules. --)
-    google.protobuf.Timestamp duration_to_skip = 3;
+    google.protobuf.Duration duration = 3;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: Ignoring lint rules. --)
-    google.protobuf.Timestamp to_time = 4;
+    google.protobuf.Timestamp virtual_to_time = 4;
 }
 
 message ExecutionStats {

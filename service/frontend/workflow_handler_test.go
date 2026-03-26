@@ -3237,6 +3237,18 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	// config with enabled=true and dynamic config enabled is valid
 	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+
+	// GetMaxAutoSkipDuration is not nil with a valid (non-negative) duration is valid
+	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+		Enabled:             true,
+		MaxAutoSkipDuration: durationpb.New(30 * time.Minute),
+	}, s.testNamespace))
+
+	// GetMaxAutoSkipDuration with a negative duration returns an error
+	s.Error(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+		Enabled:             true,
+		MaxAutoSkipDuration: durationpb.New(-1 * time.Second),
+	}, s.testNamespace))
 }
 
 // TestStartWorkflowExecution_TimeSkipping_DCDisabled verifies that requesting time skipping when the

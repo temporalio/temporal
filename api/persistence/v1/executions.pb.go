@@ -1221,10 +1221,11 @@ func (x *LastNotifiedTargetVersion) GetDeploymentVersion() *v18.WorkerDeployment
 
 type TimeSkippingInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// metadata
-	Enabled bool `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	// current configuration
+	Enabled             bool                 `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	MaxAutoSkipDuration *durationpb.Duration `protobuf:"bytes,2,opt,name=max_auto_skip_duration,json=maxAutoSkipDuration,proto3" json:"max_auto_skip_duration,omitempty"`
 	// runtime history
-	TimeSkippedDetails []*TimeSkippedDetails `protobuf:"bytes,2,rep,name=time_skipped_details,json=timeSkippedDetails,proto3" json:"time_skipped_details,omitempty"`
+	TimeSkippedDetails []*TimeSkippedDetails `protobuf:"bytes,3,rep,name=time_skipped_details,json=timeSkippedDetails,proto3" json:"time_skipped_details,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -1266,6 +1267,13 @@ func (x *TimeSkippingInfo) GetEnabled() bool {
 	return false
 }
 
+func (x *TimeSkippingInfo) GetMaxAutoSkipDuration() *durationpb.Duration {
+	if x != nil {
+		return x.MaxAutoSkipDuration
+	}
+	return nil
+}
+
 func (x *TimeSkippingInfo) GetTimeSkippedDetails() []*TimeSkippedDetails {
 	if x != nil {
 		return x.TimeSkippedDetails
@@ -1277,17 +1285,13 @@ type TimeSkippedDetails struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// (-- api-linter: core::0142::time-field-names=disabled
 	//
-	//	aip.dev/not-precedent: Ignoring lint rules. --)
-	SkippingTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=skipping_time,json=skippingTime,proto3" json:"skipping_time,omitempty"`
-	// (-- api-linter: core::0142::time-field-names=disabled
-	//
 	//	api-linter: core::0140::prepositions=disabled
 	//	aip.dev/not-precedent: Ignoring lint rules. --)
-	DurationToSkip *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=duration_to_skip,json=durationToSkip,proto3" json:"duration_to_skip,omitempty"`
+	Duration *durationpb.Duration `protobuf:"bytes,3,opt,name=duration,proto3" json:"duration,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
 	//
 	//	aip.dev/not-precedent: Ignoring lint rules. --)
-	ToTime        *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to_time,json=toTime,proto3" json:"to_time,omitempty"`
+	VirtualToTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=virtual_to_time,json=virtualToTime,proto3" json:"virtual_to_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1322,23 +1326,16 @@ func (*TimeSkippedDetails) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *TimeSkippedDetails) GetSkippingTime() *timestamppb.Timestamp {
+func (x *TimeSkippedDetails) GetDuration() *durationpb.Duration {
 	if x != nil {
-		return x.SkippingTime
+		return x.Duration
 	}
 	return nil
 }
 
-func (x *TimeSkippedDetails) GetDurationToSkip() *timestamppb.Timestamp {
+func (x *TimeSkippedDetails) GetVirtualToTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.DurationToSkip
-	}
-	return nil
-}
-
-func (x *TimeSkippedDetails) GetToTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ToTime
+		return x.VirtualToTime
 	}
 	return nil
 }
@@ -4924,14 +4921,14 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v22.temporal.server.api.persistence.v1.ResetChildInfoR\x05value:\x028\x01B\x1c\n" +
 	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\x7f\n" +
 	"\x19LastNotifiedTargetVersion\x12b\n" +
-	"\x12deployment_version\x18\x01 \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x11deploymentVersion\"\x96\x01\n" +
+	"\x12deployment_version\x18\x01 \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x11deploymentVersion\"\xe6\x01\n" +
 	"\x10TimeSkippingInfo\x12\x18\n" +
-	"\aenabled\x18\x01 \x01(\bR\aenabled\x12h\n" +
-	"\x14time_skipped_details\x18\x02 \x03(\v26.temporal.server.api.persistence.v1.TimeSkippedDetailsR\x12timeSkippedDetails\"\xd0\x01\n" +
-	"\x12TimeSkippedDetails\x12?\n" +
-	"\rskipping_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fskippingTime\x12D\n" +
-	"\x10duration_to_skip\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x0edurationToSkip\x123\n" +
-	"\ato_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x06toTime\"\x9d\x01\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\x12N\n" +
+	"\x16max_auto_skip_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x13maxAutoSkipDuration\x12h\n" +
+	"\x14time_skipped_details\x18\x03 \x03(\v26.temporal.server.api.persistence.v1.TimeSkippedDetailsR\x12timeSkippedDetails\"\x8f\x01\n" +
+	"\x12TimeSkippedDetails\x125\n" +
+	"\bduration\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\bduration\x12B\n" +
+	"\x0fvirtual_to_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\rvirtualToTime\"\x9d\x01\n" +
 	"\x0eExecutionStats\x12!\n" +
 	"\fhistory_size\x18\x01 \x01(\x03R\vhistorySize\x122\n" +
 	"\x15external_payload_size\x18\x02 \x01(\x03R\x13externalPayloadSize\x124\n" +
@@ -5408,10 +5405,10 @@ var file_temporal_server_api_persistence_v1_executions_proto_depIdxs = []int32{
 	62,  // 46: temporal.server.api.persistence.v1.WorkflowExecutionInfo.declined_target_version_upgrade:type_name -> temporal.api.history.v1.DeclinedTargetVersionUpgrade
 	3,   // 47: temporal.server.api.persistence.v1.WorkflowExecutionInfo.time_skipping_info:type_name -> temporal.server.api.persistence.v1.TimeSkippingInfo
 	63,  // 48: temporal.server.api.persistence.v1.LastNotifiedTargetVersion.deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
-	4,   // 49: temporal.server.api.persistence.v1.TimeSkippingInfo.time_skipped_details:type_name -> temporal.server.api.persistence.v1.TimeSkippedDetails
-	46,  // 50: temporal.server.api.persistence.v1.TimeSkippedDetails.skipping_time:type_name -> google.protobuf.Timestamp
-	46,  // 51: temporal.server.api.persistence.v1.TimeSkippedDetails.duration_to_skip:type_name -> google.protobuf.Timestamp
-	46,  // 52: temporal.server.api.persistence.v1.TimeSkippedDetails.to_time:type_name -> google.protobuf.Timestamp
+	47,  // 49: temporal.server.api.persistence.v1.TimeSkippingInfo.max_auto_skip_duration:type_name -> google.protobuf.Duration
+	4,   // 50: temporal.server.api.persistence.v1.TimeSkippingInfo.time_skipped_details:type_name -> temporal.server.api.persistence.v1.TimeSkippedDetails
+	47,  // 51: temporal.server.api.persistence.v1.TimeSkippedDetails.duration:type_name -> google.protobuf.Duration
+	46,  // 52: temporal.server.api.persistence.v1.TimeSkippedDetails.virtual_to_time:type_name -> google.protobuf.Timestamp
 	64,  // 53: temporal.server.api.persistence.v1.WorkflowExecutionState.state:type_name -> temporal.server.api.enums.v1.WorkflowExecutionState
 	65,  // 54: temporal.server.api.persistence.v1.WorkflowExecutionState.status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus
 	55,  // 55: temporal.server.api.persistence.v1.WorkflowExecutionState.last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition

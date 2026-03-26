@@ -306,8 +306,9 @@ func (b *HistoryBuilder) AddWorkflowExecutionUnpausedEvent(
 
 func (b *HistoryBuilder) AddWorkflowExecutionTimeSkippedEvent(
 	advanceToTimePoint time.Time,
+	boundReachedAndTimeSkippingDisabled bool,
 ) *historypb.HistoryEvent {
-	event := b.CreateWorkflowExecutionTimePointAdvancedEvent(advanceToTimePoint)
+	event := b.CreateWorkflowExecutionTimePointAdvancedEvent(advanceToTimePoint, boundReachedAndTimeSkippingDisabled)
 	// Mark the event as 'worker may ignore' so that older SDKs can safely ignore it.
 	event.WorkerMayIgnore = true
 	event, _ = b.add(event)

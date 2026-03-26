@@ -4,7 +4,6 @@ import (
 	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // TimeSkippingTimeSource is a TimeSource decorator for workflows with time skipping enabled.
@@ -68,26 +67,7 @@ func (ts *TimeSkippingTimeSource) Advance(d time.Duration) {
 func ComputeTotalSkippedOffset(details []*persistencespb.TimeSkippedDetails) time.Duration {
 	var total time.Duration
 	for _, d := range details {
-		total += TimeSkippedDurationFromTimestamp(d.GetDurationToSkip())
+		total += d.GetDuration().AsDuration()
 	}
 	return total
-}
-
-// TimeSkippedDurationToTimestamp encodes a time.Duration into a *timestamppb.Timestamp by storing
-// seconds and nanoseconds in the timestamp's integer fields. This is not a real point in time —
-// it is a convention for the DurationToSkip field in TimeSkippedDetails that lets a duration be
-// stored in a proto message that has no native duration type.
-func TimeSkippedDurationToTimestamp(d time.Duration) *timestamppb.Timestamp {
-	return &timestamppb.Timestamp{
-		Seconds: int64(d / time.Second),
-		Nanos:   int32(d % time.Second),
-	}
-}
-
-// TimeSkippedDurationFromTimestamp reverses TimeSkippedDurationToTimestamp.
-func TimeSkippedDurationFromTimestamp(ts *timestamppb.Timestamp) time.Duration {
-	if ts == nil {
-		return 0
-	}
-	return time.Duration(ts.GetSeconds())*time.Second + time.Duration(ts.GetNanos())
 }
