@@ -32,8 +32,8 @@ type Workflow struct {
 	// Callbacks map is used to store the callbacks for the workflow.
 	Callbacks chasm.Map[string, *callback.Callback]
 
-	// Operations map is used to store the Nexus operations for the workflow.
-	Operations chasm.Map[string, *nexusoperation.Operation]
+	// Operations map is used to store the Nexus operations for the workflow, keyed by scheduled event ID.
+	Operations chasm.Map[int64, *nexusoperation.Operation]
 }
 
 func NewWorkflow(
@@ -138,11 +138,11 @@ func (w *Workflow) AddCompletionCallbacks(
 // AddNexusOperation adds a Nexus operation component to the workflow.
 func (w *Workflow) AddNexusOperation(
 	ctx chasm.MutableContext,
-	key string,
+	key int64,
 	op *nexusoperation.Operation,
 ) {
 	if w.Operations == nil {
-		w.Operations = make(chasm.Map[string, *nexusoperation.Operation])
+		w.Operations = make(chasm.Map[int64, *nexusoperation.Operation])
 	}
 	w.Operations[key] = chasm.NewComponentField(ctx, op)
 }
@@ -311,7 +311,7 @@ func createNexusOperationFailure(op *nexusoperation.Operation, scheduledEventID 
 }
 
 // RemoveNexusOperation removes a Nexus operation from the workflow.
-func (w *Workflow) RemoveNexusOperation(key string) {
+func (w *Workflow) RemoveNexusOperation(key int64) {
 	delete(w.Operations, key)
 }
 
