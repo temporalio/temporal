@@ -18,7 +18,6 @@ message BuildId {
     STATE_DELETED = 2;
   }
 
-
   string id = 1;
   State state = 2;
   // HLC timestamp representing when the state was updated or the when build ID was originally inserted.
