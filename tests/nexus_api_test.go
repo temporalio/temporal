@@ -131,6 +131,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 				s.Equal("http://localhost/callback", start.Callback)
 				s.Equal("request-id", start.RequestId)
 				s.Equal("value", res.Request.Header["key"])
+				s.NotContains(res.Request.Header, "temporal-nexus-failure-support")
 				s.Len(start.GetLinks(), 1)
 				s.Equal(callerNexusLink.URL.String(), start.Links[0].GetUrl())
 				s.Equal(callerNexusLink.Type, start.Links[0].Type)
@@ -286,7 +287,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 		pollerErrCh := s.nexusTaskPoller(ctx, tc.endpoint.Spec.Target.GetWorker().TaskQueue, tc.handler)
 
 		eventuallyTick := 500 * time.Millisecond
-		header := nexus.Header{"key": "value"}
+		header := nexus.Header{"key": "value", "temporal-nexus-failure-support": "true"}
 		if tc.timeout > 0 {
 			eventuallyTick = tc.timeout + (100 * time.Millisecond)
 			header[nexus.HeaderRequestTimeout] = tc.timeout.String()
