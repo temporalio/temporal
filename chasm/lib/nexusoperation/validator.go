@@ -132,7 +132,8 @@ func validateAndNormalizeStartRequest(
 		req.GetInput().Size(),
 		logger,
 		ns); err != nil {
-		return serviceerror.NewInvalidArgument("input exceeds size limit")
+		return serviceerror.NewInvalidArgumentf("input exceeds size limit. Length=%d Limit=%d",
+			req.GetInput().Size(), config.PayloadSizeLimit(ns))
 	}
 
 	loweredHeaders, err := ValidateAndLowercaseNexusHeaders(req.GetNexusHeader(), config.DisallowedOperationHeaders(), config.MaxOperationHeaderSize(ns))
