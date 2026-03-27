@@ -1,0 +1,436 @@
+# Fix Flaky Test
+#
+# Fires when CI completes (success or failure) on the main branch.
+# On failure: collects failing-job logs to find outright failures.
+# On success or failure: downloads JUnit artifacts to find tests that failed
+# on first attempt but passed on retry (flaky tests hidden by the retry mechanism).
+# Identifies each failing/flaky test, then runs one Claude job per test in
+# parallel. Each test that Claude can fix gets its own PR.
+#
+# Concurrency: workflow runs are serialized (cancel-in-progress: false) to
+# avoid overlapping invocations from back-to-back failures.
+#
+# Deduplication: before invoking Claude for a test, the workflow checks for an
+# open "bot:flaky-fix" PR whose title contains the test name. If one exists,
+# that test is skipped. Tests Claude cannot confidently fix produce no PR.
+#
+# Can also be triggered manually via workflow_dispatch with a run ID.
+
+name: Fix Flaky Test
+
+on:
+  workflow_run:
+    workflows: ["All Tests"]
+    types: [completed]
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "CI workflow run ID to analyze"
+        required: false
+        type: string
+      commit_sha:
+        description: "Commit SHA on main to find the CI run for"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+  id-token: write
+
+concurrency:
+  group: fix-flaky-test
+  cancel-in-progress: false
+
+jobs:
+  extract:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'failure' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    outputs:
+      has_failures: ${{ steps.extract.outputs.has_failures }}
+      tests: ${{ steps.extract.outputs.tests }}
+      run_id: ${{ steps.run-info.outputs.run_id }}
+    steps:
+      - name: Generate GitHub token
+        id: generate-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+          owner: temporalio
+          permission-contents: write
+          permission-pull-requests: write
+          permission-actions: read
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: Set run ID
+        id: run-info
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_RUN_ID: ${{ inputs.run_id }}
+          INPUT_COMMIT_SHA: ${{ inputs.commit_sha }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          if [[ "$EVENT_NAME" != "workflow_dispatch" ]]; then
+            echo "run_id=$WORKFLOW_RUN_ID" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ -n "$INPUT_RUN_ID" ]]; then
+            echo "run_id=$INPUT_RUN_ID" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ -n "$INPUT_COMMIT_SHA" ]]; then
+            # Find the most recent "All Tests" workflow run for this commit
+            RUN_ID=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/run-tests.yml/runs?head_sha=${INPUT_COMMIT_SHA}&per_page=1" \
+              --jq '.workflow_runs[0].id // empty')
+            if [[ -z "$RUN_ID" ]]; then
+              echo "::error::No CI run found for commit ${INPUT_COMMIT_SHA}"
+              exit 1
+            fi
+            echo "Found CI run $RUN_ID for commit ${INPUT_COMMIT_SHA}"
+            echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "::error::Either run_id or commit_sha must be provided"
+          exit 1
+
+      - name: Extract failing tests from JUnit artifacts
+        id: extract
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          RUN_ID: ${{ steps.run-info.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ci-context/logs
+
+          # Build a short summary for Claude's orientation
+          {
+            echo "=== FLAKY TEST CONTEXT ==="
+            echo "Failed CI run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}"
+            echo ""
+          } > /tmp/ci-context/summary.txt
+
+          # Download the full log for each failing job (used by Claude for diagnosis, not test extraction).
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs" \
+            --jq '.jobs[] | select(.conclusion == "failure") | "\(.id)\t\(.name)"' \
+            > /tmp/failed-jobs.tsv || true
+
+          if [[ -s /tmp/failed-jobs.tsv ]]; then
+            while IFS=$'\t' read -r job_id job_name; do
+              safe_name="${job_name//[^A-Za-z0-9_-]/-}"
+              gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$job_id/logs" 2>/dev/null \
+                > "/tmp/ci-context/logs/${safe_name}.txt" || true
+            done < /tmp/failed-jobs.tsv
+          fi
+
+          # Download JUnit XML artifacts and extract flaky/failing test names.
+          # The script detects both:
+          #   1. Flaky tests: failed first attempt but passed on retry
+          #   2. CI breakers: failed all retries including the (final) attempt
+          mkdir -p /tmp/junit
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
+            --jq '.artifacts[] | select(.name | test("junit-xml")) | .id' \
+            > /tmp/junit-artifact-ids.txt 2>/dev/null || true
+          if [[ -s /tmp/junit-artifact-ids.txt ]]; then
+            while IFS= read -r artifact_id; do
+              gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" \
+                > "/tmp/junit/artifact-${artifact_id}.zip" 2>/dev/null || true
+              unzip -q -o "/tmp/junit/artifact-${artifact_id}.zip" \
+                -d "/tmp/junit/${artifact_id}" 2>/dev/null || true
+            done < /tmp/junit-artifact-ids.txt
+          fi
+
+          tests=$(python3 .github/scripts/find-flaky-tests /tmp/junit \
+            | jq -R . | jq -sc .) || tests="[]"
+
+          if [[ "$tests" != "[]" ]]; then
+            echo "has_failures=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_failures=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tests=$tests" >> "$GITHUB_OUTPUT"
+
+          echo "Tests found: $tests"
+          echo "Log files downloaded: $(find /tmp/ci-context/logs/ -maxdepth 1 -type f 2>/dev/null | wc -l)"
+
+      - name: Upload CI context
+        if: steps.extract.outputs.has_failures == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: ci-context
+          path: /tmp/ci-context/
+          retention-days: 1
+
+  fix:
+    needs: extract
+    if: needs.extract.outputs.has_failures == 'true'
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        test: ${{ fromJSON(needs.extract.outputs.tests) }}
+      fail-fast: false
+    steps:
+      - name: Generate GitHub token
+        id: generate-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+          owner: temporalio
+          permission-contents: write
+          permission-pull-requests: write
+          permission-actions: read
+
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          token: ${{ steps.generate-token.outputs.token }}
+          fetch-depth: 0
+
+      - name: Configure git
+        env:
+          APP_SLUG: ${{ steps.generate-token.outputs.app-slug }}
+        run: |
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"
+
+      - name: Download CI context
+        uses: actions/download-artifact@v7
+        with:
+          name: ci-context
+          path: /tmp/ci-context
+
+      - name: Check for existing fix PR
+        id: check_pr
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          TEST_NAME: ${{ matrix.test }}
+        run: |
+          existing=$(gh pr list --label "bot:flaky-fix" --state open --json title 2>/dev/null \
+            | grep -c "${TEST_NAME}" 2>/dev/null || echo "0")
+          if [[ "$existing" -gt 0 ]]; then
+            echo "Open fix PR for ${TEST_NAME} already exists; skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Skip if a fix PR was closed without merging in the past week —
+          # this indicates the last attempt was rejected and should not be retried.
+          week_ago=$(date -d '7 days ago' --iso-8601=seconds)
+          closed_rejected=$(gh pr list --label "bot:flaky-fix" --state closed --limit 50 \
+            --json title,closedAt,mergedAt 2>/dev/null \
+            | jq --arg test "$TEST_NAME" --arg cutoff "$week_ago" \
+            '[.[] | select(.title | contains($test))
+                  | select(.mergedAt == null)
+                  | select(.closedAt != null)
+                  | select(.closedAt >= $cutoff)] | length')
+          if [[ "$closed_rejected" -gt 0 ]]; then
+            echo "A fix PR for ${TEST_NAME} was closed without merging recently; skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Run Claude to diagnose and fix
+        if: steps.check_pr.outputs.skip != 'true'
+        id: claude
+        timeout-minutes: 20
+        uses: anthropics/claude-code-action@v1
+        with:
+          github_token: ${{ steps.generate-token.outputs.token }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: --allowedTools "Read,Write,Glob,Grep,Bash,Edit" --max-turns 50
+          prompt: |
+            The CI pipeline failed on the main branch.
+
+            Your task is to diagnose and fix this specific flaky test: **${{ matrix.test }}**
+
+            ## Step 1: Orient yourself
+
+            Read `/tmp/ci-context/summary.txt` for a brief overview (run URL, JUnit failures).
+
+            The full logs for each failing CI job are in `/tmp/ci-context/logs/`. Start by
+            grepping those files for the test name and common error patterns to locate the
+            relevant failure output before reading large sections:
+
+            ```
+            grep -r '${{ matrix.test }}' /tmp/ci-context/logs/
+            grep -rE 'Error:|panic:|\bFAIL\b' /tmp/ci-context/logs/
+            ```
+
+            ## Step 2: Locate the test in the codebase
+
+            Search the codebase for the test function `${{ matrix.test }}`. Read the full
+            test and any relevant helpers, fixtures, or setup/teardown. Also read the code
+            under test if it is not too large.
+
+            ## Step 3: Diagnose the root cause
+
+            Think carefully about why this test might fail non-deterministically. Common causes:
+
+            - **Timing/concurrency:** goroutine races, missing synchronization, `time.Sleep`
+              instead of proper waiting/polling, assumptions about goroutine scheduling
+            - **Shared state:** global variables, package-level state, test pollution from
+              parallel tests
+            - **External dependencies:** non-deterministic values, current time, random numbers
+            - **Ordering assumptions:** map iteration order, channel receive order, undefined
+              sort order
+            - **Resource contention:** port conflicts, file locks, database connections
+
+            Examine the error message closely — it often points directly at the cause.
+
+            ## Step 4: Apply the fix
+
+            Apply a concrete, minimal fix directly to the code. Do not ask for confirmation.
+
+            Constraints:
+            - Fix only `${{ matrix.test }}` — do not touch other tests or refactor unrelated code
+            - Never delete a test; fix it
+            - Follow the Go conventions used in the surrounding code
+            - Do not create git commits, push branches, or open PRs
+
+            If after thorough investigation you cannot determine a safe, confident fix, make
+            no file changes and skip Step 5.
+
+            ## Step 5: Write a PR description
+
+            Write a PR body to `/tmp/pr-body-claude.txt` that explains the fix. Follow the
+            structure in `.github/pull_request_template.md`. The description should cover:
+            - What the test does and why it was flaky (the root cause)
+            - What the fix does and why it addresses the root cause
+
+      - name: Check for changes
+        id: changes
+        env:
+          TEST_NAME: ${{ matrix.test }}
+        run: |
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No file changes — Claude was unable to determine a fix for ${TEST_NAME}."
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            git diff --stat
+          fi
+
+      - name: Check for duplicate diff
+        id: check_duplicate
+        if: steps.changes.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          TEST_NAME: ${{ matrix.test }}
+        run: |
+          git diff HEAD > /tmp/current.diff
+          mkdir -p /tmp/pr-diffs
+
+          # Collect PR numbers from open and recently-merged bot:flaky-fix PRs
+          {
+            gh pr list --label "bot:flaky-fix" --state open   --limit 30 --json number --jq '.[].number'
+            gh pr list --label "bot:flaky-fix" --state merged --limit 10 --json number --jq '.[].number'
+          } 2>/dev/null | sort -u > /tmp/flaky-pr-numbers.txt || true
+
+          if [[ -s /tmp/flaky-pr-numbers.txt ]]; then
+            while IFS= read -r pr_num; do
+              gh pr diff "$pr_num" > "/tmp/pr-diffs/${pr_num}.diff" 2>/dev/null || true
+            done < /tmp/flaky-pr-numbers.txt
+          fi
+
+          is_dup=$(python3 .github/scripts/check-diff-similarity /tmp/current.diff /tmp/pr-diffs)
+          if [[ "$is_dup" == "true" ]]; then
+            echo "Diff is similar to an existing bot:flaky-fix PR; skipping PR for ${TEST_NAME}."
+            echo "is_duplicate=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_duplicate=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Find top blame author
+        id: blame_author
+        if: steps.changes.outputs.has_changes == 'true' && steps.check_duplicate.outputs.is_duplicate != 'true'
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          TOP_EMAIL=$(python3 .github/scripts/find-blame-author) || TOP_EMAIL=""
+
+          ASSIGNEE=""
+          if [[ -n "${TOP_EMAIL}" ]]; then
+            SHA=$(git log --all --format='%H %ae' \
+              | awk -v email="${TOP_EMAIL}" '$2==email{print $1; exit}' || true)
+            if [[ -n "${SHA}" ]]; then
+              ASSIGNEE=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}" \
+                --jq '.author.login // empty' 2>/dev/null || true)
+            fi
+          fi
+
+          echo "assignee=${ASSIGNEE}" >> "$GITHUB_OUTPUT"
+          echo "Top blame email: ${TOP_EMAIL}, GitHub login: ${ASSIGNEE}"
+
+      - name: Create PR with fix
+        if: steps.changes.outputs.has_changes == 'true' && steps.check_duplicate.outputs.is_duplicate != 'true'
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          RUN_ID: ${{ needs.extract.outputs.run_id }}
+          TEST_NAME: ${{ matrix.test }}
+          ASSIGNEE: ${{ steps.blame_author.outputs.assignee }}
+        run: |
+          set -euo pipefail
+
+          timestamp=$(date +%Y%m%d-%H%M%S)
+          branch_name="bot-fix-flaky-${TEST_NAME,,//\//-}-${timestamp}"
+
+          git checkout -b "${branch_name}"
+          git add -A
+          git commit -m "test: fix flaky test ${TEST_NAME}
+
+          Automated fix for ${TEST_NAME} which was flaky on main.
+          CI run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}"
+
+          git push origin "${branch_name}"
+
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}"
+
+          # Use Claude's PR description as the body, then append metadata
+          {
+            if [[ -f /tmp/pr-body-claude.txt ]]; then
+              cat /tmp/pr-body-claude.txt
+              echo ""
+              echo "---"
+              echo ""
+            fi
+            echo "**Failed CI run:** ${run_url}"
+            echo ""
+            echo "### Changed files"
+            echo ""
+            echo '```'
+            git show --stat HEAD
+            echo '```'
+            echo ""
+            echo "---"
+            echo "*Generated by the [fix-flaky-test](https://github.com/${GITHUB_REPOSITORY}/actions/workflows/fix-flaky-test.yml) workflow. Please review carefully before merging.*"
+          } > /tmp/pr-body.txt
+
+          gh label create "bot:flaky-fix" --color "0075ca" --description "Automated flaky test fix" 2>/dev/null || true
+
+          pr_args=(
+            --title "test: fix flaky test ${TEST_NAME}"
+            --body-file /tmp/pr-body.txt
+            --base main
+            --head "${branch_name}"
+            --label "bot:flaky-fix"
+          )
+          [[ -n "${ASSIGNEE}" ]] && pr_args+=(--assignee "${ASSIGNEE}")
+          gh pr create "${pr_args[@]}"

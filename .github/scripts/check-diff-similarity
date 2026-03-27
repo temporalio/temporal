@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+# Usage: check-diff-similarity <current.diff> <pr-diffs-dir>
+# Prints "true" to stdout if any diff in pr-diffs-dir has Jaccard similarity >= THRESHOLD
+# against current.diff. Prints "false" otherwise. Logs scores to stderr.
+
+import os
+import sys
+
+THRESHOLD = 0.7
+
+
+def normalize_diff(text):
+    """Return the set of (filepath, changed_line) pairs, tracking current file context.
+
+    Including the file path prevents false positives when the same line content
+    appears in completely different files across two unrelated fixes.
+    Single-line Go comments (//) are excluded from the comparison.
+    """
+    lines = set()
+    current_file = ''
+    for line in text.splitlines():
+        if line.startswith('diff --git '):
+            parts = line.split(' b/', 1)
+            if len(parts) == 2:
+                current_file = parts[1]
+        elif line.startswith('+') and not line.startswith('+++'):
+            content = line[1:].strip()
+            if content and not content.startswith('//'):
+                lines.add(f'{current_file}:{content}')
+        elif line.startswith('-') and not line.startswith('---'):
+            content = line[1:].strip()
+            if content and not content.startswith('//'):
+                lines.add(f'{current_file}:{content}')
+    return lines
+
+
+def jaccard(a, b):
+    union = a | b
+    if not union:
+        return 0.0
+    return len(a & b) / len(union)
+
+
+if len(sys.argv) != 3:
+    print(f"Usage: {sys.argv[0]} <current.diff> <pr-diffs-dir>", file=sys.stderr)
+    sys.exit(2)
+
+current_path = sys.argv[1]
+pr_diffs_dir = sys.argv[2]
+
+if not os.path.exists(current_path):
+    print("false")
+    sys.exit(0)
+
+with open(current_path, encoding='utf-8', errors='replace') as f:
+    current = normalize_diff(f.read())
+
+if not current:
+    print("false")
+    sys.exit(0)
+
+if not os.path.isdir(pr_diffs_dir):
+    print("false")
+    sys.exit(0)
+
+for fname in sorted(os.listdir(pr_diffs_dir)):
+    if not fname.endswith('.diff'):
+        continue
+    with open(os.path.join(pr_diffs_dir, fname), encoding='utf-8', errors='replace') as f:
+        other = normalize_diff(f.read())
+    if not other:
+        continue
+    sim = jaccard(current, other)
+    print(f"  {fname}: similarity={sim:.2f}", file=sys.stderr)
+    if sim >= THRESHOLD:
+        print(f"Duplicate detected: {fname} similarity={sim:.2f}", file=sys.stderr)
+        print("true")
+        sys.exit(0)
+
+print("false")

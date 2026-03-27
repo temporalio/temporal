@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+# Usage: find-flaky-tests <junit-dir>
+# Parse JUnit XML files under <junit-dir> and print the base name of any test
+# that either:
+#   1. Failed on its first attempt but passed on a retry (flaky), or
+#   2. Failed all retries including the (final) attempt (CI breaker).
+# Output: one test name per line, sorted, starting with "Test".
+
+import glob
+import os
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+if len(sys.argv) != 2:
+    print(f"Usage: {sys.argv[0]} <junit-dir>", file=sys.stderr)
+    sys.exit(2)
+
+junit_dir = sys.argv[1]
+
+retry_re = re.compile(r'\s*\(retry \d+\)$')
+final_re = re.compile(r'\s*\(final\)$')
+suffix_re = re.compile(r'\s*\([^)]+\)$')
+
+def strip_suffixes(name):
+    """Strip all trailing parenthesized suffixes: (retry 1), (final), etc."""
+    while True:
+        stripped = suffix_re.sub('', name)
+        if stripped == name:
+            return name.strip()
+        name = stripped
+
+failed = set()
+passed_retry = set()
+final_failed = set()
+
+for path in glob.glob(os.path.join(junit_dir, '**', '*.xml'), recursive=True):
+    try:
+        tree = ET.parse(path)
+    except ET.ParseError:
+        continue
+    for tc in tree.iter('testcase'):
+        name = tc.get('name', '')
+        base = strip_suffixes(name)
+        has_failure = (
+            tc.find('failure') is not None or tc.find('error') is not None
+        )
+        if final_re.search(name):
+            if has_failure:
+                final_failed.add(base)
+        elif retry_re.search(name):
+            if not has_failure:
+                passed_retry.add(base)
+        else:
+            if has_failure:
+                failed.add(base)
+
+# Flaky: failed first attempt but passed on retry
+# CI breaker: failed all retries including (final)
+results = (passed_retry & failed) | final_failed
+
+for t in sorted(results):
+    if t.startswith('Test'):
+        print(t)
