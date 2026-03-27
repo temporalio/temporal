@@ -1522,6 +1522,13 @@ Don't change this on a live cluster without using the gradual change mechanism.
 [go.temporal.io/server/common/persistence.QueueV2]`,
 	)
 
+	EnableDeleteWorkflowExecutionReplication = NewGlobalBoolSetting(
+		"history.enableDeleteWorkflowExecutionReplication",
+		false,
+		`EnableDeleteWorkflowExecutionReplication controls whether a replication task is generated when a workflow
+execution is deleted. When enabled, workflow deletions on the active cluster will be replicated to passive clusters.`,
+	)
+
 	HistoryRPS = NewGlobalIntSetting(
 		"history.rps",
 		3000,

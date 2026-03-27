@@ -8,6 +8,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -153,6 +154,20 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		return err
 	}
 
+	// Generate replication task to replicate the deletion to passive cluster(s).
+	// Best-effort: log failure but don't block the deletion.
+	if m.config.EnableDeleteWorkflowExecutionReplication() {
+		if err := m.addDeleteExecutionReplicationTask(ctx, namespaceID, we, ms); err != nil {
+			m.shardContext.GetLogger().Warn("Failed to add delete execution replication task",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(we.GetWorkflowId()),
+				tag.WorkflowRunID(we.GetRunId()),
+				tag.Error(err),
+			)
+			metrics.ReplicationDeleteExecutionTaskGenerationFailure.With(m.metricsHandler).Record(1)
+		}
+	}
+
 	executionInfo := ms.GetExecutionInfo()
 	if err := m.shardContext.DeleteWorkflowExecution(
 		ctx,
@@ -175,4 +190,32 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 
 	metrics.WorkflowCleanupDeleteCount.With(metricsHandler).Record(1)
 	return nil
+}
+
+func (m *DeleteManagerImpl) addDeleteExecutionReplicationTask(
+	ctx context.Context,
+	nsID namespace.ID,
+	we *commonpb.WorkflowExecution,
+	ms historyi.MutableState,
+) error {
+	ns := ms.GetNamespaceEntry()
+	if !ns.ActiveInCluster(m.shardContext.GetClusterMetadata().GetCurrentClusterName()) {
+		return nil
+	}
+
+	taskGenerator := workflow.GetTaskGeneratorProvider().NewTaskGenerator(m.shardContext, ms)
+	replicationTask, err := taskGenerator.GenerateDeleteExecutionReplicationTask()
+	if err != nil {
+		return err
+	}
+
+	return m.shardContext.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
+		ShardID:     m.shardContext.GetShardID(),
+		NamespaceID: nsID.String(),
+		WorkflowID:  we.GetWorkflowId(),
+		ArchetypeID: ms.ChasmTree().ArchetypeID(),
+		Tasks: map[tasks.Category][]tasks.Task{
+			tasks.CategoryReplication: {replicationTask},
+		},
+	})
 }
