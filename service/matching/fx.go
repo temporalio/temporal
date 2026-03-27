@@ -1,6 +1,7 @@
 package matching
 
 import (
+	autoscaledworkers "go.temporal.io/auto-scaled-workers/wci/client"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -31,6 +32,7 @@ import (
 var Module = fx.Options(
 	resource.Module,
 	workerdeployment.Module,
+	autoscaledworkers.Module,
 	fx.Provide(ConfigProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
