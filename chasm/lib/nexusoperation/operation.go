@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/pkg/errors"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -146,24 +145,18 @@ func (o *Operation) RequestCancel(
 		newReqID := req.GetRequestId()
 
 		if existingReqID != newReqID {
-			return errors.Wrap(ErrCancellationAlreadyRequested, fmt.Sprintf("already requested with request ID %s", existingReqID))
+			return fmt.Errorf("already requested with request ID %s: %w", existingReqID, ErrCancellationAlreadyRequested)
 		}
 		return nil
 	}
 
-	return o.handleCancellation(ctx, newCancellation(req))
-}
-
-func (o *Operation) handleCancellation(
-	ctx chasm.MutableContext,
-	cancellation *Cancellation,
-) error {
-	o.Cancellation = chasm.NewComponentField(ctx, cancellation)
+	cancel := newCancellation(req)
+	o.Cancellation = chasm.NewComponentField(ctx, cancel)
 
 	// Once started, the handler returns a token that can be used in the cancelation request.
 	// Until then, no need to schedule the cancelation.
 	if o.Status == nexusoperationpb.OPERATION_STATUS_STARTED {
-		return transitionCancellationScheduled.Apply(cancellation, ctx, EventCancellationScheduled{})
+		return transitionCancellationScheduled.Apply(cancel, ctx, EventCancellationScheduled{})
 	}
 
 	return nil
