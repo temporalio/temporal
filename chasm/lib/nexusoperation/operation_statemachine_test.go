@@ -486,7 +486,7 @@ func TestTransitionTerminated(t *testing.T) {
 			operation.Status = tc.startStatus
 
 			event := EventTerminated{
-				Request: chasm.TerminateComponentRequest{
+				chasm.TerminateComponentRequest{
 					RequestID: "terminate-request-id",
 					Reason:    "test reason",
 					Identity:  "test-identity",

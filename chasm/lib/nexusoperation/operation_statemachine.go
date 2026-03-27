@@ -205,7 +205,7 @@ var TransitionCanceled = chasm.NewTransition(
 
 // EventTerminated is triggered when the operation is terminated by user request.
 type EventTerminated struct {
-	Request chasm.TerminateComponentRequest
+	chasm.TerminateComponentRequest
 }
 
 var TransitionTerminated = chasm.NewTransition(
@@ -218,14 +218,14 @@ var TransitionTerminated = chasm.NewTransition(
 	nexusoperationpb.OPERATION_STATUS_TERMINATED,
 	func(o *Operation, ctx chasm.MutableContext, event EventTerminated) error {
 		o.TerminateState = &nexusoperationpb.NexusOperationTerminateState{
-			RequestId: event.Request.RequestID,
-			Identity:  event.Request.Identity,
+			RequestId: event.RequestID,
+			Identity:  event.Identity,
 		}
 		outcome := o.Outcome.Get(ctx)
 		outcome.Variant = &nexusoperationpb.OperationOutcome_Failed_{
 			Failed: &nexusoperationpb.OperationOutcome_Failed{
 				Failure: &failurepb.Failure{
-					Message: event.Request.Reason,
+					Message: event.Reason,
 					FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
 						TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
 					},

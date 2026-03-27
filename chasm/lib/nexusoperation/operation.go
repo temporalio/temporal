@@ -196,7 +196,7 @@ func (o *Operation) Terminate(
 		return chasm.TerminateComponentResponse{}, nil
 	}
 
-	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(o, ctx, EventTerminated{Request: req})
+	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(o, ctx, EventTerminated{req})
 }
 
 // SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface.
