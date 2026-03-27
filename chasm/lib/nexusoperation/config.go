@@ -174,7 +174,7 @@ type Config struct {
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
 	VisibilityMaxPageSize               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit                    dynamicconfig.IntPropertyFn
-	MaxUserNoteLength                 dynamicconfig.IntPropertyFn
+	MaxUserNoteLength                   dynamicconfig.IntPropertyFn
 	RetryPolicy                         func() backoff.RetryPolicy
 }
 
@@ -198,7 +198,7 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
 		VisibilityMaxPageSize:              dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 		MaxIDLengthLimit:                   dynamicconfig.MaxIDLengthLimit.Get(dc),
-		MaxUserNoteLength:                dynamicconfig.MaxUserNoteLength.Get(dc),
+		MaxUserNoteLength:                  dynamicconfig.MaxUserNoteLength.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),
