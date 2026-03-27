@@ -1,7 +1,10 @@
 package nexusoperation
 
 import (
+	"fmt"
+
 	"github.com/google/uuid"
+	"github.com/pkg/errors"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -10,7 +13,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
-	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -132,23 +134,9 @@ func (o *Operation) SetStateMachineState(status nexusoperationpb.OperationStatus
 	o.Status = status
 }
 
-// Cancel requests cancellation of the operation. It creates a Cancellation child component and, if the
+// RequestCancel requests cancellation of the operation. It creates a Cancellation child component and, if the
 // operation has already started, schedules the cancellation request to be sent to the Nexus endpoint.
-// parentData is opaque data injected by the parent (e.g. workflow) for its own bookkeeping.
-func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) error {
-	if !TransitionCanceled.Possible(o) {
-		return ErrOperationAlreadyCompleted
-	}
-	if _, ok := o.Cancellation.TryGet(ctx); ok {
-		return ErrCancellationAlreadyRequested
-	}
-
-	return o.handleCancellation(ctx, newCancellation(&nexusoperationpb.CancellationState{
-		ParentData: parentData,
-	}))
-}
-
-func (o *Operation) requestCancel(
+func (o *Operation) RequestCancel(
 	ctx chasm.MutableContext,
 	req *nexusoperationpb.CancellationState,
 ) error {
@@ -157,7 +145,7 @@ func (o *Operation) requestCancel(
 		newReqID := req.GetRequestId()
 
 		if existingReqID != newReqID {
-			return serviceerror.NewFailedPreconditionf("cancellation already requested with request ID %s", existingReqID)
+			return errors.Wrap(ErrCancellationAlreadyRequested, fmt.Sprintf("already requested with request ID %s", existingReqID))
 		}
 		return nil
 	}

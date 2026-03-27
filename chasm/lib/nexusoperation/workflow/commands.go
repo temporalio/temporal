@@ -326,7 +326,11 @@ func (ch *commandHandler) handleCancelCommand(
 	if err != nil {
 		return fmt.Errorf("failed to marshal cancellation parent data: %w", err)
 	}
-	err = op.Cancel(chasmCtx, cancelParentData)
+
+	err = op.RequestCancel(chasmCtx, &nexusoperationpb.CancellationState{
+		ParentData: cancelParentData,
+		RequestId:  uuid.NewString(),
+	})
 	if errors.Is(err, nexusoperation.ErrCancellationAlreadyRequested) {
 		return chasmworkflow.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
