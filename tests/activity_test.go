@@ -982,9 +982,11 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	}
 
 	activityCanceled := false
+	activityStarted := make(chan struct{})
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
 		s.Equal(activityName, task.ActivityType.GetName())
+		close(activityStarted)
 		for i := range 10 {
 			s.Logger.Info("Heartbeating for activity", tag.ActivityID(task.ActivityId), tag.Counter(i))
 			response, err := s.FrontendClient().RecordActivityTaskHeartbeat(testcore.NewContext(),
@@ -1020,6 +1022,14 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	cancelCh := make(chan struct{})
 	go func() {
 		s.Logger.Info("Trying to cancel the task in a different thread")
+		// Wait for the activity to be started before sending the cancel signal.
+		// Otherwise the cancel can race ahead and cancel the activity before a
+		// worker picks it up, causing PollAndProcessActivityTask to block forever.
+		select {
+		case <-activityStarted:
+		case <-s.T().Context().Done():
+			return
+		}
 		// Send signal so that worker can send an activity cancel
 		_, err1 := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace: s.Namespace().String(),
@@ -1045,7 +1055,11 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
 	s.Logger.Info("Waiting for cancel to complete.", tag.WorkflowRunID(we.RunId))
-	<-cancelCh
+	select {
+	case <-cancelCh:
+	case <-s.T().Context().Done():
+		s.Fail("timed out waiting for activity cancellation")
+	}
 	s.True(activityCanceled, "Activity was not cancelled.")
 	s.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.RunId))
 }
