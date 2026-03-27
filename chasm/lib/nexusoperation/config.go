@@ -147,13 +147,6 @@ Adding high-cardinality tags (like unique operation names) can significantly inc
 query complexity. Consider the cardinality impact when enabling these tags.`,
 )
 
-var MaxReasonLength = dynamicconfig.NewNamespaceIntSetting(
-	"nexusoperation.limit.reason.length",
-	1000,
-	`Limits the maximum allowed length for a reason string in Nexus operation cancel and terminate requests.
-Uses Go's len() function to determine the length.`,
-)
-
 var UseNewFailureWireFormat = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.useNewFailureWireFormat",
 	true,
@@ -181,7 +174,7 @@ type Config struct {
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
 	VisibilityMaxPageSize               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit                    dynamicconfig.IntPropertyFn
-	MaxReasonLength                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxUserNoteLength                 dynamicconfig.IntPropertyFn
 	RetryPolicy                         func() backoff.RetryPolicy
 }
 
@@ -205,7 +198,7 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
 		VisibilityMaxPageSize:              dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 		MaxIDLengthLimit:                   dynamicconfig.MaxIDLengthLimit.Get(dc),
-		MaxReasonLength:                    MaxReasonLength.Get(dc),
+		MaxUserNoteLength:                dynamicconfig.MaxUserNoteLength.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),

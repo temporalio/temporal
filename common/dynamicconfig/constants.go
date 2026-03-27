@@ -419,6 +419,12 @@ suggest continue-as-new (in workflow task started event)`,
 		`MaxIDLengthLimit is the length limit for various IDs, including: Namespace, TaskQueue, WorkflowID, ActivityID, TimerID,
 WorkflowType, ActivityType, SignalName, MarkerName, ErrorReason/FailureReason/CancelCause, Identity, RequestID`,
 	)
+	MaxUserNoteLength = NewGlobalIntSetting(
+		"limit.maxUserNoteLength",
+		1000,
+		`MaxUserNoteLength is the length limit for user-provided note fields such as reason.
+Uses Go's len() function to determine the length.`,
+	)
 	WorkerBuildIdSizeLimit = NewGlobalIntSetting(
 		"limit.workerBuildIdSize",
 		255,

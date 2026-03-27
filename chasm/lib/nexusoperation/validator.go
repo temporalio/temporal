@@ -194,9 +194,9 @@ func validateAndNormalizeCancelRequest(req *workflowservice.RequestCancelNexusOp
 		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
 			len(req.GetIdentity()), config.MaxIDLengthLimit())
 	}
-	if len(req.GetReason()) > config.MaxReasonLength(req.GetNamespace()) {
+	if len(req.GetReason()) > config.MaxUserNoteLength() {
 		return serviceerror.NewInvalidArgumentf("reason exceeds length limit. Length=%d Limit=%d",
-			len(req.GetReason()), config.MaxReasonLength(req.GetNamespace()))
+			len(req.GetReason()), config.MaxUserNoteLength())
 	}
 
 	return nil
@@ -225,9 +225,9 @@ func validateAndNormalizeTerminateRequest(req *workflowservice.TerminateNexusOpe
 		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
 			len(req.GetIdentity()), config.MaxIDLengthLimit())
 	}
-	if len(req.GetReason()) > config.MaxReasonLength(req.GetNamespace()) {
+	if len(req.GetReason()) > config.MaxUserNoteLength() {
 		return serviceerror.NewInvalidArgumentf("reason exceeds length limit. Length=%d Limit=%d",
-			len(req.GetReason()), config.MaxReasonLength(req.GetNamespace()))
+			len(req.GetReason()), config.MaxUserNoteLength())
 	}
 
 	return nil
