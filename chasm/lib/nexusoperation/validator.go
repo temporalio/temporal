@@ -161,9 +161,10 @@ func validateAndNormalizeDescribeRequest(req *workflowservice.DescribeNexusOpera
 		return serviceerror.NewInvalidArgumentf("operation_id exceeds length limit. Length=%d Limit=%d",
 			len(req.GetOperationId()), config.MaxIDLengthLimit())
 	}
-	if len(req.GetRunId()) > config.MaxIDLengthLimit() {
-		return serviceerror.NewInvalidArgumentf("run_id exceeds length limit. Length=%d Limit=%d",
-			len(req.GetRunId()), config.MaxIDLengthLimit())
+	if runID := req.GetRunId(); runID != "" {
+		if err := uuid.Validate(runID); err != nil {
+			return serviceerror.NewInvalidArgument("run_id is not a valid UUID")
+		}
 	}
 	// TODO: Add long-poll validation (run_id required when long_poll_token is set).
 	return nil
@@ -183,9 +184,10 @@ func validateAndNormalizeCancelRequest(req *workflowservice.RequestCancelNexusOp
 		return serviceerror.NewInvalidArgumentf("operation_id exceeds length limit. Length=%d Limit=%d",
 			len(req.GetOperationId()), config.MaxIDLengthLimit())
 	}
-	if len(req.GetRunId()) > config.MaxIDLengthLimit() {
-		return serviceerror.NewInvalidArgumentf("run_id exceeds length limit. Length=%d Limit=%d",
-			len(req.GetRunId()), config.MaxIDLengthLimit())
+	if runID := req.GetRunId(); runID != "" {
+		if err := uuid.Validate(runID); err != nil {
+			return serviceerror.NewInvalidArgument("run_id is not a valid UUID")
+		}
 	}
 	if len(req.GetIdentity()) > config.MaxIDLengthLimit() {
 		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
@@ -213,9 +215,10 @@ func validateAndNormalizeTerminateRequest(req *workflowservice.TerminateNexusOpe
 		return serviceerror.NewInvalidArgumentf("operation_id exceeds length limit. Length=%d Limit=%d",
 			len(req.GetOperationId()), config.MaxIDLengthLimit())
 	}
-	if len(req.GetRunId()) > config.MaxIDLengthLimit() {
-		return serviceerror.NewInvalidArgumentf("run_id exceeds length limit. Length=%d Limit=%d",
-			len(req.GetRunId()), config.MaxIDLengthLimit())
+	if runID := req.GetRunId(); runID != "" {
+		if err := uuid.Validate(runID); err != nil {
+			return serviceerror.NewInvalidArgument("run_id is not a valid UUID")
+		}
 	}
 	if len(req.GetIdentity()) > config.MaxIDLengthLimit() {
 		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
