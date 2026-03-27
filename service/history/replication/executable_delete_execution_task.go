@@ -78,7 +78,7 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.TaskID(e.TaskID()),
 		)
 		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
 			1,
@@ -131,7 +131,7 @@ func (e *ExecutableDeleteExecutionTask) HandleErr(err error) error {
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.TaskID(e.TaskID()),
 			tag.Error(err),
 		)
 		return fmt.Errorf("delete execution replication task error: %w", err)
@@ -144,7 +144,7 @@ func (e *ExecutableDeleteExecutionTask) MarkPoisonPill() error {
 			NamespaceId: e.NamespaceID,
 			WorkflowId:  e.WorkflowID,
 			RunId:       e.RunID,
-			TaskId:      e.ExecutableTask.TaskID(),
+			TaskId:      e.TaskID(),
 			TaskType:    enumsspb.TASK_TYPE_REPLICATION_DELETE_EXECUTION,
 		}
 	}

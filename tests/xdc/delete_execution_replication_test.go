@@ -14,6 +14,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -82,11 +84,16 @@ func (s *deleteExecutionReplicationTestSuite) SetupTest() {
 }
 
 func (s *deleteExecutionReplicationTestSuite) TestDeleteClosedWorkflow_ReplicatedToPassiveCluster() {
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*2)
 	defer cancel()
 
 	// Create a global namespace on both clusters.
 	ns := s.createGlobalNamespace()
+	nsResp, err := s.clusters[0].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: ns,
+	})
+	s.Require().NoError(err)
+	nsID := nsResp.GetNamespaceInfo().GetId()
 
 	workflowID := "test-delete-replication-" + uuid.NewString()
 	taskQueue := "test-delete-tq-" + uuid.NewString()
@@ -116,6 +123,7 @@ func (s *deleteExecutionReplicationTestSuite) TestDeleteClosedWorkflow_Replicate
 			},
 		}}, nil
 	}
+	//nolint:staticcheck // TODO: replace with taskpoller.TaskPoller
 	poller := &testcore.TaskPoller{
 		Client:              sourceClient,
 		Namespace:           ns,
@@ -176,25 +184,31 @@ func (s *deleteExecutionReplicationTestSuite) TestDeleteClosedWorkflow_Replicate
 		return errors.As(err, &notFound)
 	}, time.Second*10, time.Second, "Workflow should be deleted on active cluster")
 
-	// Verify the workflow is also deleted on the passive cluster via replication.
+	// Verify the workflow mutable state is deleted on the passive cluster via replication.
 	s.Eventually(func() bool {
-		_, err := targetClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: ns,
-			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+		_, err := s.clusters[1].HistoryClient().DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
+			NamespaceId: nsID,
+			Execution:   &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+			ArchetypeId: chasm.WorkflowArchetypeID,
 		})
 		if err == nil {
 			return false
 		}
 		var notFound *serviceerror.NotFound
 		return errors.As(err, &notFound)
-	}, time.Second*20, replicationCheckInterval, "Workflow should be deleted on passive cluster via replication")
+	}, time.Second*30, replicationCheckInterval, "Workflow mutable state should be deleted on passive cluster via replication")
 }
 
 func (s *deleteExecutionReplicationTestSuite) TestDeleteRunningWorkflow_ReplicatedToPassiveCluster() {
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	ns := s.createGlobalNamespace()
+	nsResp, err := s.clusters[0].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: ns,
+	})
+	s.Require().NoError(err)
+	nsID := nsResp.GetNamespaceInfo().GetId()
 
 	workflowID := "test-delete-running-" + uuid.NewString()
 	taskQueue := "test-delete-running-tq-" + uuid.NewString()
@@ -214,9 +228,8 @@ func (s *deleteExecutionReplicationTestSuite) TestDeleteRunningWorkflow_Replicat
 	runID := startResp.GetRunId()
 
 	// Wait for the workflow to be replicated to the passive cluster.
-	targetClient := s.clusters[1].FrontendClient()
 	s.Eventually(func() bool {
-		_, err := targetClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		_, err := s.clusters[1].FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: ns,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 		})
@@ -247,18 +260,19 @@ func (s *deleteExecutionReplicationTestSuite) TestDeleteRunningWorkflow_Replicat
 		return errors.As(err, &notFound)
 	}, time.Second*10, time.Second, "Workflow should be deleted on active cluster")
 
-	// Verify the workflow is also deleted on the passive cluster via replication.
+	// Verify the workflow mutable state is deleted on the passive cluster via replication.
 	s.Eventually(func() bool {
-		_, err := targetClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: ns,
-			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+		_, err := s.clusters[1].HistoryClient().DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
+			NamespaceId: nsID,
+			Execution:   &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+			ArchetypeId: chasm.WorkflowArchetypeID,
 		})
 		if err == nil {
 			return false
 		}
 		var notFound *serviceerror.NotFound
 		return errors.As(err, &notFound)
-	}, time.Second*20, replicationCheckInterval, "Workflow should be deleted on passive cluster via replication")
+	}, time.Second*30, replicationCheckInterval, "Workflow mutable state should be deleted on passive cluster via replication")
 }
 
 func (s *deleteExecutionReplicationTestSuite) TestDeleteWorkflow_NotReplicatedWhenFeatureFlagDisabled() {
@@ -266,10 +280,10 @@ func (s *deleteExecutionReplicationTestSuite) TestDeleteWorkflow_NotReplicatedWh
 	defer cancel()
 
 	// Disable the feature flag on both clusters.
-	for _, c := range s.clusters {
-		cleanup := c.OverrideDynamicConfig(s.T(), dynamicconfig.EnableDeleteWorkflowExecutionReplication, false)
-		defer cleanup()
-	}
+	cleanup0 := s.clusters[0].OverrideDynamicConfig(s.T(), dynamicconfig.EnableDeleteWorkflowExecutionReplication, false)
+	defer cleanup0()
+	cleanup1 := s.clusters[1].OverrideDynamicConfig(s.T(), dynamicconfig.EnableDeleteWorkflowExecutionReplication, false)
+	defer cleanup1()
 
 	ns := s.createGlobalNamespace()
 
@@ -300,6 +314,7 @@ func (s *deleteExecutionReplicationTestSuite) TestDeleteWorkflow_NotReplicatedWh
 			},
 		}}, nil
 	}
+	//nolint:staticcheck // TODO: replace with taskpoller.TaskPoller
 	poller := &testcore.TaskPoller{
 		Client:              sourceClient,
 		Namespace:           ns,

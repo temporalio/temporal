@@ -949,6 +949,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 ) (retErr error) {
 	// DeleteWorkflowExecution is a 4 stages process (order is very important and should not be changed):
 	// 1. Add visibility delete task, i.e. schedule visibility record delete,
+	// 1.5. Add delete execution replication task (if enabled, active cluster only),
 	// 2. Delete current workflow execution pointer,
 	// 3. Delete workflow mutable state,
 	// 4. Delete history branch.
@@ -1000,6 +1001,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	// Don't acquire shard lock or io semaphore if all stages that require lock are already processed.
 	if !stage.IsProcessed(
 		tasks.DeleteWorkflowExecutionStageVisibility |
+			tasks.DeleteWorkflowExecutionStageReplication |
 			tasks.DeleteWorkflowExecutionStageCurrent |
 			tasks.DeleteWorkflowExecutionStageMutableState) {
 
@@ -1042,6 +1044,36 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 				}
 			}
 			stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageVisibility)
+
+			// Stage 1.5. Replicate deletion to passive clusters before mutable state is deleted.
+			if s.config.EnableDeleteWorkflowExecutionReplication() && !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageReplication) {
+				if nsEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(
+					namespace.ID(key.NamespaceID),
+				); err == nil && nsEntry.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) {
+					newTasks := map[tasks.Category][]tasks.Task{
+						tasks.CategoryReplication: {
+							&tasks.DeleteExecutionReplicationTask{
+								WorkflowKey: key,
+							},
+						},
+					}
+					addTasksRequest := &persistence.AddHistoryTasksRequest{
+						ShardID:     s.shardID,
+						NamespaceID: key.NamespaceID,
+						WorkflowID:  key.WorkflowID,
+						ArchetypeID: archetypeID,
+						Tasks:       newTasks,
+					}
+					err := s.addTasksSemaphoreAcquired(ctx, addTasksRequest)
+					if persistence.OperationPossiblySucceeded(err) {
+						engine.NotifyNewTasks(newTasks)
+					}
+					if err != nil {
+						return err
+					}
+				}
+			}
+			stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageReplication)
 
 			// Stage 2. Delete current workflow execution pointer.
 			if !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageCurrent) {

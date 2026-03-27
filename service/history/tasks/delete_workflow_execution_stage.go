@@ -12,6 +12,7 @@ const (
 	DeleteWorkflowExecutionStageCurrent
 	DeleteWorkflowExecutionStageMutableState
 	DeleteWorkflowExecutionStageHistory
+	DeleteWorkflowExecutionStageReplication // Replicate deletion to passive clusters.
 )
 
 func (s *DeleteWorkflowExecutionStage) MarkProcessed(stage DeleteWorkflowExecutionStage) {
