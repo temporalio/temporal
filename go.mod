@@ -36,6 +36,7 @@ require (
 	github.com/nexus-rpc/sdk-go v0.5.2-0.20260211051645-26b0b4c584e5
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
+	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.21.0
 	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.62.0
@@ -78,10 +79,7 @@ require (
 	modernc.org/sqlite v1.44.3
 )
 
-require (
-	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
-)
+require github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2 // indirect
 
 require (
 	cel.dev/expr v0.25.1 // indirect
