@@ -63,6 +63,8 @@ type Operation struct {
 	Cancellation chasm.Field[*Cancellation]
 
 	// Outcome stores the terminal outcome of the operation.
+	// Only used for standalone Nexus operations; for workflow-embedded operations,
+	// outcome is stored in the workflow's history events.
 	Outcome chasm.Field[*nexusoperationpb.OperationOutcome]
 
 	// Visibility holds custom search attributes for this operation.
