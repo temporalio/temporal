@@ -194,7 +194,7 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	s.EqualError(err, "IndexedFields is not set on UpsertWorkflowSearchAttributesCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
-	saPayload, err := searchattribute.EncodeValue("bytes", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	saPayload, err := sadefs.EncodeValue("bytes", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	s.NoError(err)
 	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
 		"Keyword01": saPayload,
@@ -238,7 +238,7 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 		executionInfo,
 	)
 	s.Error(err)
-	s.Contains(err.Error(), "cannot use internal per namespace task queue")
+	s.Contains(err.Error(), "cannot use internal per-namespace task queue")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, fc)
 
 	executionInfo.TaskQueue = primitives.PerNSWorkerTaskQueue
@@ -286,7 +286,7 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 	s.Equal(maxWorkflowTaskStartToCloseTimeout, attributes.GetWorkflowTaskTimeout().AsDuration())
 
 	// Predefined Worker-Deployment related SA's should be rejected when they are attempted to be set during CAN
-	saPayload, _ := searchattribute.EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	saPayload, _ := sadefs.EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	attributes.SearchAttributes = &commonpb.SearchAttributes{}
 
 	deploymentRestrictedAttributes := []string{

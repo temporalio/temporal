@@ -87,6 +87,7 @@ ifeq ($(OTEL),true)
 	export OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
 	export OTEL_TRACES_EXPORTER=otlp
 	export TEMPORAL_OTEL_DEBUG=true
+	export TEMPORAL_TEST_DATA_ENCODING=json
 endif
 
 MODULE_ROOT := $(lastword $(shell grep -e "^module " go.mod))
@@ -722,4 +723,4 @@ ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."
 	@printf $(COLOR) "========================================================================"
 	@git status --porcelain
-	@test -z "`git status --porcelain`" || (printf $(COLOR) "========================================================================"; printf $(RED) "Above files are not regenerated properly. Regenerate them and try again."; exit 1)
+	@test -z "`git status --porcelain`" || (printf $(COLOR) "========================================================================"; printf $(RED) "Above files are not regenerated properly. Regenerate them and try again."; git diff HEAD ; exit 1)

@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"github.com/temporalio/sqlparser"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -21,19 +20,18 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-type ActivityApiBatchResetClientTestSuite struct {
-	testcore.FunctionalTestBase
-}
-
 func TestActivityApiBatchResetClientTestSuite(t *testing.T) {
-	s := new(ActivityApiBatchResetClientTestSuite)
-	suite.Run(t, s)
+	t.Parallel()
+	t.Run("TestActivityBatchReset_Success", testActivityBatchResetSuccess)
+	t.Run("TestActivityBatchReset_Success_Protobuf", testActivityBatchResetSuccessProtobuf)
+	t.Run("TestActivityBatchReset_DontResetAttempts", testActivityBatchResetDontResetAttempts)
+	t.Run("TestActivityBatchReset_Failed", testActivityBatchResetFailed)
 }
 
-func (s *ActivityApiBatchResetClientTestSuite) createWorkflow(ctx context.Context, workflowFn WorkflowFunction) sdkclient.WorkflowRun {
+func createBatchResetWorkflow(ctx context.Context, s *testcore.TestEnv, workflowFn WorkflowFunction) sdkclient.WorkflowRun {
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
-		TaskQueue: s.TaskQueue(),
+		TaskQueue: s.WorkerTaskQueue(),
 	}
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
@@ -42,29 +40,31 @@ func (s *ActivityApiBatchResetClientTestSuite) createWorkflow(ctx context.Contex
 	return workflowRun
 }
 
-func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success() {
+func testActivityBatchResetSuccess(t *testing.T) {
+	s := testcore.NewEnv(t, testcore.WithSdkWorker())
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	internalWorkflow := newInternalWorkflow()
 
-	s.Worker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
-	s.Worker().RegisterActivity(internalWorkflow.ActivityFunc)
+	s.SdkWorker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
+	s.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
 
-	workflowRun1 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
-	workflowRun2 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
+	workflowRun1 := createBatchResetWorkflow(ctx, s, internalWorkflow.WorkflowFunc)
+	workflowRun2 := createBatchResetWorkflow(ctx, s, internalWorkflow.WorkflowFunc)
 
 	// wait for activity to start in both workflows
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activities in both workflows
@@ -111,7 +111,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success() 
 		require.NoError(t, err)
 		require.NotNil(t, listResp)
 		require.Len(t, listResp.GetExecutions(), 2)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// reset the activities in both workflows with batch reset
@@ -135,13 +135,13 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success() 
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
 		require.True(t, description.PendingActivities[0].Paused)
-		require.Equal(t, description.PendingActivities[0].Attempt, int32(1))
+		require.Equal(t, int32(1), description.PendingActivities[0].Attempt)
 
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
 		require.True(t, description.PendingActivities[0].Paused)
-		require.Equal(t, description.PendingActivities[0].Attempt, int32(1))
+		require.Equal(t, int32(1), description.PendingActivities[0].Attempt)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let activities succeed
@@ -170,29 +170,31 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success() 
 	s.NoError(err)
 }
 
-func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success_Protobuf() {
+func testActivityBatchResetSuccessProtobuf(t *testing.T) {
+	s := testcore.NewEnv(t, testcore.WithSdkWorker())
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	internalWorkflow := newInternalWorkflow()
 
-	s.Worker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
-	s.Worker().RegisterActivity(internalWorkflow.ActivityFunc)
+	s.SdkWorker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
+	s.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
 
-	workflowRun1 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
-	workflowRun2 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
+	workflowRun1 := createBatchResetWorkflow(ctx, s, internalWorkflow.WorkflowFunc)
+	workflowRun2 := createBatchResetWorkflow(ctx, s, internalWorkflow.WorkflowFunc)
 
 	// wait for activity to start in both workflows
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activities in both workflows
@@ -239,7 +241,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success_Pr
 		require.NoError(t, err)
 		require.NotNil(t, listResp)
 		require.Len(t, listResp.GetExecutions(), 2)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// reset the activities in both workflows with batch reset
@@ -263,13 +265,13 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success_Pr
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
 		require.True(t, description.PendingActivities[0].Paused)
-		require.Equal(t, description.PendingActivities[0].Attempt, int32(1))
+		require.Equal(t, int32(1), description.PendingActivities[0].Attempt)
 
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
 		require.True(t, description.PendingActivities[0].Paused)
-		require.Equal(t, description.PendingActivities[0].Attempt, int32(1))
+		require.Equal(t, int32(1), description.PendingActivities[0].Attempt)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let activities succeed
@@ -298,29 +300,31 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success_Pr
 	s.NoError(err)
 }
 
-func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_DontResetAttempts() {
+func testActivityBatchResetDontResetAttempts(t *testing.T) {
+	s := testcore.NewEnv(t, testcore.WithSdkWorker())
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	internalWorkflow := newInternalWorkflow()
 
-	s.Worker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
-	s.Worker().RegisterActivity(internalWorkflow.ActivityFunc)
+	s.SdkWorker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
+	s.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
 
-	workflowRun1 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
-	workflowRun2 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
+	workflowRun1 := createBatchResetWorkflow(ctx, s, internalWorkflow.WorkflowFunc)
+	workflowRun2 := createBatchResetWorkflow(ctx, s, internalWorkflow.WorkflowFunc)
 
 	// wait for activity to start in both workflows
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activities in both workflows
@@ -367,7 +371,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_DontResetA
 		require.NoError(t, err)
 		require.NotNil(t, listResp)
 		require.Len(t, listResp.GetExecutions(), 2)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// reset the activities in both workflows with batch reset
@@ -391,12 +395,12 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_DontResetA
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
-		require.NotEqual(t, description.PendingActivities[0].Attempt, int32(1))
+		require.NotEqual(t, int32(1), description.PendingActivities[0].Attempt)
 
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
-		require.NotEqual(t, description.PendingActivities[0].Attempt, int32(1))
+		require.NotEqual(t, int32(1), description.PendingActivities[0].Attempt)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let activities succeed
@@ -425,7 +429,9 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_DontResetA
 	s.NoError(err)
 }
 
-func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Failed() {
+func testActivityBatchResetFailed(t *testing.T) {
+	s := testcore.NewEnv(t, testcore.WithSdkWorker())
+
 	// neither activity type not "match all" is provided
 	_, err := s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace: s.Namespace().String(),

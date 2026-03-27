@@ -30,7 +30,6 @@ type TestReport struct {
 	TestName     string    // Normalized test name (retry suffix stripped)
 	FailureCount int       // Total number of failures
 	TotalRuns    int       // Total number of times this test ran (including successes)
-	CIRunsBroken int       // Number of CI runs this test broke (for CI breakers only)
 	GitHubURLs   []string  // Up to max_links failure URLs
 	LastFailure  time.Time // Timestamp of the most recent failure
 }

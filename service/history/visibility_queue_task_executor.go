@@ -367,7 +367,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	}
 
 	valid, err := validateChasmSideEffectTask(ctx, mutableState, task)
-	if err != nil || valid == nil {
+	if err != nil || !valid {
 		return err
 	}
 
@@ -424,12 +424,6 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	if err != nil {
 		return err
 	}
-
-	visTaskContext = chasm.AugmentContextForComponent(
-		visTaskContext,
-		rootComponent,
-		t.shardContext.ChasmRegistry(),
-	)
 
 	var chasmTaskQueue string
 	if chasmSAProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {

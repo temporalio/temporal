@@ -29,7 +29,6 @@ type (
 	// taskQueueStatsSuite encapsulates the test environment and parameters for task queue stats tests.
 	taskQueueStatsSuite struct {
 		testcore.Env
-		t               *testing.T
 		usePriMatcher   bool
 		minPriority     int
 		maxPriority     int
@@ -47,10 +46,9 @@ type (
 	TaskQueueExpectationsByType map[enumspb.TaskQueueType]TaskQueueExpectations
 )
 
-func newTaskQueueStatsSuite(t *testing.T, env testcore.Env, usePriMatcher bool) *taskQueueStatsSuite {
+func newTaskQueueStatsSuite(env testcore.Env, usePriMatcher bool) *taskQueueStatsSuite {
 	return &taskQueueStatsSuite{
 		Env:             env,
-		t:               t,
 		usePriMatcher:   usePriMatcher,
 		minPriority:     1,
 		maxPriority:     5,
@@ -61,13 +59,11 @@ func newTaskQueueStatsSuite(t *testing.T, env testcore.Env, usePriMatcher bool) 
 
 // TODO(pri): remove once the classic matcher is removed
 func TestTaskQueueStats_Classic_Suite(t *testing.T) {
-	testcore.MustRunSequential(t, "tests flake when run in parallel")
 	t.Parallel()
 	runTaskQueueStatsTests(t, false) // usePriMatcher = false
 }
 
 func TestTaskQueueStats_Pri_Suite(t *testing.T) {
-	testcore.MustRunSequential(t, "tests flake when run in parallel")
 	t.Parallel()
 	runTaskQueueStatsTests(t, true) // usePriMatcher = true
 }
@@ -83,7 +79,7 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 	// Tests WITHOUT RunTestWithMatchingBehavior
 	t.Run("TestDescribeTaskQueue_NonRoot", func(t *testing.T) {
 		env := testcore.NewEnv(t, baseOpts...)
-		s := newTaskQueueStatsSuite(t, env, usePriMatcher)
+		s := newTaskQueueStatsSuite(env, usePriMatcher)
 		s.testDescribeTaskQueueNonRoot()
 	})
 
@@ -95,7 +91,7 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 			testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond),
 		)
 		env := testcore.NewEnv(t, opts...)
-		s := newTaskQueueStatsSuite(t, env, usePriMatcher)
+		s := newTaskQueueStatsSuite(env, usePriMatcher)
 		s.publishConsumeWorkflowTasksValidateStats(0, false)
 	})
 
@@ -105,7 +101,7 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 			testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Hour),
 		)
 		env := testcore.NewEnv(t, opts...)
-		s := newTaskQueueStatsSuite(t, env, usePriMatcher)
+		s := newTaskQueueStatsSuite(env, usePriMatcher)
 		s.testAddMultipleTasksValidateStatsCached()
 	})
 
@@ -113,7 +109,7 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 	// Note: runWithMatchingBehavior already configures partition count based on forwarding behavior.
 	// Do NOT override MatchingNumTaskqueueReadPartitions/WritePartitions inside the subtest.
 	t.Run("TestMultipleTasks_WithMatchingBehavior_ValidateStats", func(t *testing.T) {
-		runWithMatchingBehavior(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
+		runSuiteWithMatchingBehaviors(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
 			s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
 			s.publishConsumeWorkflowTasksValidateStats(4, false)
@@ -121,55 +117,47 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 	})
 
 	t.Run("TestCurrentVersionAbsorbsUnversionedBacklog_NoRamping", func(t *testing.T) {
-		runWithMatchingBehavior(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
+		runSuiteWithMatchingBehaviors(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
 			s.currentVersionAbsorbsUnversionedBacklogNoRamping()
 		})
 	})
 
 	t.Run("TestRampingAndCurrentAbsorbUnversionedBacklog", func(t *testing.T) {
-		runWithMatchingBehavior(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
+		runSuiteWithMatchingBehaviors(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
 			s.rampingAndCurrentAbsorbsUnversionedBacklog()
 		})
 	})
 
 	t.Run("TestCurrentAbsorbsUnversionedBacklog_WhenRampingToUnversioned", func(t *testing.T) {
-		runWithMatchingBehavior(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
+		runSuiteWithMatchingBehaviors(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
 			s.currentAbsorbsUnversionedBacklogWhenRampingToUnversioned()
 		})
 	})
 
 	t.Run("TestRampingAbsorbsUnversionedBacklog_WhenCurrentIsUnversioned", func(t *testing.T) {
-		runWithMatchingBehavior(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
+		runSuiteWithMatchingBehaviors(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
 			s.rampingAbsorbsUnversionedBacklogWhenCurrentIsUnversioned()
 		})
 	})
 
 	t.Run("TestInactiveVersionDoesNotAbsorbUnversionedBacklog", func(t *testing.T) {
-		runWithMatchingBehavior(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
+		runSuiteWithMatchingBehaviors(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
 			s.inactiveVersionDoesNotAbsorbUnversionedBacklog()
 		})
 	})
 }
 
-// runWithMatchingBehavior runs a test with all combinations of matching behaviors.
-func runWithMatchingBehavior(
+// runSuiteWithMatchingBehaviors runs a test with all combinations of matching behaviors.
+func runSuiteWithMatchingBehaviors(
 	t *testing.T,
 	baseOpts []testcore.TestOption,
 	usePriMatcher bool,
 	subtest func(s *taskQueueStatsSuite),
 ) {
-	for _, behavior := range testcore.AllMatchingBehaviors() {
-		t.Run(behavior.Name(), func(t *testing.T) {
-			opts := append([]testcore.TestOption{}, baseOpts...)
-			opts = append(opts, behavior.Options()...)
-
-			env := testcore.NewEnv(t, opts...)
-			behavior.InjectHooks(env)
-
-			s := newTaskQueueStatsSuite(t, env, usePriMatcher)
-			subtest(s)
-		})
-	}
+	runWithMatchingBehaviors(t, baseOpts, func(env *testcore.TestEnv, behavior testcore.MatchingBehavior) {
+		s := newTaskQueueStatsSuite(env, usePriMatcher)
+		subtest(s)
+	})
 }
 
 func (s *taskQueueStatsSuite) testDescribeTaskQueueNonRoot() {
@@ -177,8 +165,8 @@ func (s *taskQueueStatsSuite) testDescribeTaskQueueNonRoot() {
 		Namespace: s.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: "/_sys/foo/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
-	require.NoError(s.t, err)
-	require.NotNil(s.t, resp)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), resp)
 
 	_, err = s.FrontendClient().DescribeTaskQueue(context.Background(),
 		&workflowservice.DescribeTaskQueueRequest{
@@ -186,7 +174,7 @@ func (s *taskQueueStatsSuite) testDescribeTaskQueueNonRoot() {
 			TaskQueue:   &taskqueuepb.TaskQueue{Name: "/_sys/foo/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			ReportStats: true,
 		})
-	require.ErrorContains(s.t, err, "DescribeTaskQueue stats are only supported for the root partition")
+	require.ErrorContains(s.T(), err, "DescribeTaskQueue stats are only supported for the root partition")
 }
 
 func (s *taskQueueStatsSuite) testAddMultipleTasksValidateStatsCached() {
@@ -266,7 +254,7 @@ func (s *taskQueueStatsSuite) currentVersionAbsorbsUnversionedBacklogNoRamping()
 		MaxExtraTasks: 0,
 	}
 
-	require.EventuallyWithT(s.t, func(c *assert.CollectT) {
+	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
 		a := require.New(c)
 
 		// DescribeWorkerDeploymentVersion: current version should also show the full backlog for this task queue.
@@ -304,7 +292,7 @@ func (s *taskQueueStatsSuite) currentVersionAbsorbsUnversionedBacklogNoRamping()
 		MaxExtraTasks: 0,
 	}
 
-	require.EventuallyWithT(s.t, func(c *assert.CollectT) {
+	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
 		a := require.New(c)
 
 		// Since the activity task queue is part of the current version,
@@ -379,7 +367,7 @@ func (s *taskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog() {
 	// Currently only testing the following API's:
 	// - DescribeWorkerDeploymentVersion for the current and ramping versions.
 	// - DescribeTaskQueue Legacy Mode for the current and ramping versions.
-	require.EventuallyWithT(s.t, func(c *assert.CollectT) {
+	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
 		a := require.New(c)
 
 		// DescribeWorkerDeploymentVersion: current version should also show only 70% of the unversioned backlog for this task queue
@@ -461,7 +449,7 @@ func (s *taskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog() {
 		MaxExtraTasks: 0,
 	}
 
-	require.EventuallyWithT(s.t, func(c *assert.CollectT) {
+	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
 		a := require.New(c)
 
 		// Validate current version activity stats
@@ -528,7 +516,7 @@ func (s *taskQueueStatsSuite) currentAbsorbsUnversionedBacklogWhenRampingToUnver
 		MaxExtraTasks: 0,
 	}
 
-	require.EventuallyWithT(s.t, func(c *assert.CollectT) {
+	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
 		a := require.New(c)
 
 		// There is no way right now for a user to query stats of the "unversioned" version. All we can do in this case
@@ -594,7 +582,7 @@ func (s *taskQueueStatsSuite) rampingAbsorbsUnversionedBacklogWhenCurrentIsUnver
 		MaxExtraTasks: 0,
 	}
 
-	require.EventuallyWithT(s.t, func(c *assert.CollectT) {
+	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
 		a := require.New(c)
 
 		// We can't query "unversioned" as a WorkerDeploymentVersion, but we can validate that the ramping version
@@ -668,7 +656,7 @@ func (s *taskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog() {
 	// Currently only testing the following API's:
 	// - DescribeWorkerDeploymentVersion
 	// - DescribeTaskQueue Legacy Mode
-	require.EventuallyWithT(s.t, func(c *assert.CollectT) {
+	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
 		a := require.New(c)
 
 		// DescribeWorkerDeploymentVersion: current version should should show 100% of the unversioned backlog for this task queue
@@ -740,7 +728,7 @@ func (s *taskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog() {
 		MaxExtraTasks: 0,
 	}
 
-	require.EventuallyWithT(s.t, func(c *assert.CollectT) {
+	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
 		a := require.New(c)
 
 		// The activity task queue of the current version should have the backlog count for the activities that were scheduled
@@ -883,7 +871,7 @@ func (s *taskQueueStatsSuite) publishConsumeWorkflowTasksValidateStats(sets int,
 
 	// poll all workflow tasks and enqueue one activity task for each workflow
 	totalAct := s.enqueueActivitiesForEachWorkflow(sets, tqName)
-	require.Equal(s.t, total, totalAct, "should have enqueued the same number of activities as workflows")
+	require.Equal(s.T(), total, totalAct, "should have enqueued the same number of activities as workflows")
 
 	// verify workflow dispatch rate and activity add rate
 	if sets > 0 {
@@ -940,7 +928,7 @@ func (s *taskQueueStatsSuite) startUnversionedWorkflows(count int, tqName string
 	for range count {
 		request.WorkflowId = uuid.NewString() // starting "count" different Unversioned workflows.
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-		require.NoError(s.t, err)
+		require.NoError(s.T(), err)
 	}
 }
 
@@ -971,7 +959,7 @@ func (s *taskQueueStatsSuite) startPinnedWorkflows(count int, tqName string, dep
 	for range count {
 		request.WorkflowId = uuid.NewString() // starting "n" different Pinned workflows.
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-		require.NoError(s.t, err)
+		require.NoError(s.T(), err)
 	}
 }
 
@@ -1002,7 +990,7 @@ func (s *taskQueueStatsSuite) pollWorkflowTasksAndScheduleActivitiesParallel(par
 	wg.Wait()
 	close(errCh)
 	for err := range errCh {
-		require.NoError(s.t, err)
+		require.NoError(s.T(), err)
 	}
 }
 
@@ -1080,7 +1068,7 @@ func (s *taskQueueStatsSuite) completeWorkflowTasksAndScheduleActivities(
 			Identity:          "current-version-worker",
 			DeploymentOptions: deploymentOpts,
 		})
-		require.NoError(s.t, err)
+		require.NoError(s.T(), err)
 		if resp == nil || resp.GetAttempt() < 1 {
 			fmt.Println("Empty poll! Continuing...")
 			continue
@@ -1110,7 +1098,7 @@ func (s *taskQueueStatsSuite) completeWorkflowTasksAndScheduleActivities(
 		}
 
 		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), respondReq)
-		require.NoError(s.t, err)
+		require.NoError(s.T(), err)
 		i++
 	}
 }
@@ -1125,7 +1113,7 @@ func (s *taskQueueStatsSuite) setCurrentVersion(deploymentName, buildID string) 
 		DeploymentName: deploymentName,
 		BuildId:        buildID,
 	})
-	require.NoError(s.t, err)
+	require.NoError(s.T(), err)
 }
 
 // TODO (Shivam): We may have to wait for the propagation status to show completed if we are using async workflows here.
@@ -1139,7 +1127,7 @@ func (s *taskQueueStatsSuite) setRampingVersion(deploymentName, buildID string, 
 		BuildId:        buildID,
 		Percentage:     float32(rampPercentage),
 	})
-	require.NoError(s.t, err)
+	require.NoError(s.T(), err)
 }
 
 func (s *taskQueueStatsSuite) describeWDVTaskQueueStats(
@@ -1225,14 +1213,14 @@ func (s *taskQueueStatsSuite) enqueueWorkflows(sets int, tqName string) int {
 				}
 
 				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-				require.NoError(s.t, err)
+				require.NoError(s.T(), err)
 
 				total++
 			}
 		}
 	}
 
-	s.t.Logf("Enqueued %d workflows", total)
+	s.T().Logf("Enqueued %d workflows", total)
 	return total
 }
 
@@ -1256,7 +1244,7 @@ func (s *taskQueueStatsSuite) createVersionsInTaskQueue(ctx context.Context, tqN
 	}()
 
 	// Wait for the version to be created.
-	require.EventuallyWithT(s.t, func(c *assert.CollectT) {
+	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
 		a := require.New(c)
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: s.Namespace().String(),
@@ -1312,7 +1300,7 @@ func (s *taskQueueStatsSuite) enqueueActivitiesForEachWorkflow(sets int, tqName 
 				}
 
 				resp, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), pollReq)
-				require.NoError(s.t, err)
+				require.NoError(s.T(), err)
 				if resp == nil || resp.GetAttempt() < 1 {
 					continue
 				}
@@ -1343,14 +1331,14 @@ func (s *taskQueueStatsSuite) enqueueActivitiesForEachWorkflow(sets int, tqName 
 				}
 
 				_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), respondReq)
-				require.NoError(s.t, err)
+				require.NoError(s.T(), err)
 
 				i++
 				total++
 			}
 		}
 	}
-	s.t.Logf("Enqueued %d activities", total)
+	s.T().Logf("Enqueued %d activities", total)
 	return total
 }
 
@@ -1370,13 +1358,13 @@ func (s *taskQueueStatsSuite) pollActivities(count int, tqName string) {
 		resp, err := s.FrontendClient().PollActivityTaskQueue(
 			testcore.NewContext(), pollReq,
 		)
-		require.NoError(s.t, err)
+		require.NoError(s.T(), err)
 		if resp == nil || resp.GetAttempt() < 1 {
 			continue // poll again on empty responses
 		}
 		i++
 	}
-	s.t.Logf("Polled %d activities", count)
+	s.T().Logf("Polled %d activities", count)
 }
 
 func (s *taskQueueStatsSuite) validateAllTaskQueueStats(
@@ -1408,7 +1396,7 @@ func (s *taskQueueStatsSuite) validateRates(
 		ReportStats:   true,
 	}
 
-	require.EventuallyWithT(s.t, func(c *assert.CollectT) {
+	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
 		a := require.New(c)
 		label := "validateRates[" + tqType.String() + "]"
 
@@ -1464,13 +1452,13 @@ func (s *taskQueueStatsSuite) validateDescribeTaskQueueWithDefaultMode(
 
 	// test stats are not reported by default (and therefore also not cached)
 	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
-	require.NoError(s.t, err)
-	require.NotNil(s.t, resp)
-	require.Nil(s.t, resp.Stats, "stats should not be reported by default")
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), resp)
+	require.Nil(s.T(), resp.Stats, "stats should not be reported by default")
 	//nolint:staticcheck // SA1019 deprecated
-	require.Nil(s.t, resp.TaskQueueStatus, "status should not be reported by default")
+	require.Nil(s.T(), resp.TaskQueueStatus, "status should not be reported by default")
 
-	require.EventuallyWithT(s.t, func(c *assert.CollectT) {
+	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
 		a := require.New(c)
 		label := "DescribeTaskQueue_DefaultMode[" + tqType.String() + "]"
 
@@ -1521,14 +1509,14 @@ func (s *taskQueueStatsSuite) validateDescribeTaskQueueWithEnhancedMode(
 
 	if !expectation.CachedEnabled { // skip if testing caching; as this would pin the result to the cache
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
-		require.NoError(s.t, err)
-		require.NotNil(s.t, resp)
-		require.Nil(s.t, resp.Stats, "stats should not be reported by default")
+		require.NoError(s.T(), err)
+		require.NotNil(s.T(), resp)
+		require.Nil(s.T(), resp.Stats, "stats should not be reported by default")
 		//nolint:staticcheck // SA1019 deprecated
-		require.Nil(s.t, resp.TaskQueueStatus, "status should not be reported")
+		require.Nil(s.T(), resp.TaskQueueStatus, "status should not be reported")
 	}
 
-	require.EventuallyWithT(s.t, func(c *assert.CollectT) {
+	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
 		a := require.New(c)
 
 		req.ReportStats = true
@@ -1537,7 +1525,7 @@ func (s *taskQueueStatsSuite) validateDescribeTaskQueueWithEnhancedMode(
 		a.NotNil(resp)
 
 		//nolint:staticcheck // SA1019 deprecated
-		a.Equal(2, len(resp.GetVersionsInfo()), "should be 2: 1 default/unversioned + 1 versioned")
+		a.Len(resp.GetVersionsInfo(), 2, "should be 2: 1 default/unversioned + 1 versioned")
 		//nolint:staticcheck // SA1019 deprecated
 		for _, v := range resp.GetVersionsInfo() {
 			a.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, v.GetTaskReachability())
@@ -1574,18 +1562,18 @@ func (s *taskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
 
 	// test stats are not reported by default (and therefore also not cached)
 	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, req)
-	require.NoError(s.t, err)
-	require.NotNil(s.t, resp)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), resp)
 	for _, info := range resp.VersionTaskQueues {
-		require.Nil(s.t, info.Stats, "stats should not be reported by default")
+		require.Nil(s.T(), info.Stats, "stats should not be reported by default")
 	}
 
-	require.EventuallyWithT(s.t, func(c *assert.CollectT) {
+	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
 		a := require.New(c)
 
 		req.ReportTaskQueueStats = true
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, req)
-		require.NoError(s.t, err)
+		a.NoError(err)
 		a.Len(resp.VersionTaskQueues, 2, "should be 1 task queue for Workflows and 1 for Activities")
 
 		for _, info := range resp.VersionTaskQueues {

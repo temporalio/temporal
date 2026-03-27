@@ -44,6 +44,9 @@ outputs:
   sha-tag:
     description: "Docker SHA tag (e.g., sha-abc1234)"
     value: ${{ steps.image-tags.outputs.sha }}
+  sha-full-tag:
+    description: "Docker full SHA tag (e.g., sha-abcdef123456...)"
+    value: ${{ steps.image-tags.outputs.sha-full }}
 
 runs:
   using: composite
@@ -111,7 +114,8 @@ runs:
       working-directory: ${{ github.workspace }}
       env:
         IMAGE_REPO: temporaliotest
-        IMAGE_SHA_TAG: ${{ steps.image-tags.outputs.sha }}
+        IMAGE_SHA_SHORT_TAG: ${{ steps.image-tags.outputs.sha }}
+        IMAGE_SHA_FULL_TAG: ${{ steps.image-tags.outputs.sha-full }}
         IMAGE_BRANCH_TAG: ${{ steps.image-tags.outputs.tag }}
         TEMPORAL_SHA: ${{ steps.image-tags.outputs.git-sha }}
         TAG_LATEST: ${{ inputs.tag-latest }}
@@ -138,7 +142,8 @@ runs:
       working-directory: ${{ github.workspace }}
       env:
         IMAGE_REPO: temporaliotest
-        IMAGE_SHA_TAG: ${{ steps.image-tags.outputs.sha }}
+        IMAGE_SHA_SHORT_TAG: ${{ steps.image-tags.outputs.sha }}
+        IMAGE_SHA_FULL_TAG: ${{ steps.image-tags.outputs.sha-full }}
         IMAGE_BRANCH_TAG: ${{ steps.image-tags.outputs.tag }}
         TEMPORAL_SHA: ${{ steps.image-tags.outputs.git-sha }}
         TAG_LATEST: ${{ inputs.tag-latest }}

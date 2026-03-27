@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
@@ -19,39 +18,25 @@ import (
 	"go.temporal.io/server/tests/testcore"
 )
 
-type AdminTestSuite struct {
-	testcore.FunctionalTestBase
-	testContext context.Context
-}
-
 func TestAdminTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(AdminTestSuite))
-}
+	t.Run("TestAdminRebuildMutableState_ChasmDisabled", func(t *testing.T) {
+		s := testcore.NewEnv(t, testcore.WithSdkWorker())
+		rebuildMutableStateWorkflowHelper(s, false)
+	})
+	t.Run("TestAdminRebuildMutableState_ChasmEnabled", func(t *testing.T) {
+		s := testcore.NewEnv(t, testcore.WithSdkWorker(), testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true))
 
-func (s *AdminTestSuite) SetupSuite() {
-	// Call parent setup to initialize the test cluster
-	s.FunctionalTestBase.SetupSuite()
-	s.testContext = context.Background()
-}
-
-func (s *AdminTestSuite) TestAdminRebuildMutableState_ChasmDisabled() {
-	rebuildMutableStateWorkflowHelper(s, false)
-}
-
-func (s *AdminTestSuite) TestAdminRebuildMutableState_ChasmEnabled() {
-	cleanup := s.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
-	defer cleanup()
-
-	configValues := s.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.EnableChasm.Key())
-	s.NotEmpty(configValues, "EnableChasm config should be set")
-	configValue, _ := configValues[0].Value.(bool)
-	s.True(configValue, "EnableChasm config should be true")
-	rebuildMutableStateWorkflowHelper(s, true)
+		configValues := s.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.EnableChasm.Key())
+		s.NotEmpty(configValues, "EnableChasm config should be set")
+		configValue, _ := configValues[0].Value.(bool)
+		s.True(configValue, "EnableChasm config should be true")
+		rebuildMutableStateWorkflowHelper(s, true)
+	})
 }
 
 // common test helper
-func rebuildMutableStateWorkflowHelper(s *AdminTestSuite, testWithChasm bool) {
+func rebuildMutableStateWorkflowHelper(s *testcore.TestEnv, testWithChasm bool) {
 	tv := testvars.New(s.T())
 	workflowFn := func(ctx workflow.Context) error {
 		var randomUUID string
@@ -65,18 +50,18 @@ func rebuildMutableStateWorkflowHelper(s *AdminTestSuite, testWithChasm bool) {
 		return nil
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowID := tv.Any().String()
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 workflowID,
-		TaskQueue:          s.TaskQueue(),
+		TaskQueue:          s.WorkerTaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
-	ctx, cancel := context.WithTimeout(s.testContext, 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 	defer cancel()
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(s.testContext, workflowOptions, workflowFn)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, workflowFn)
 	s.NoError(err)
 	runID := workflowRun.GetRunID()
 

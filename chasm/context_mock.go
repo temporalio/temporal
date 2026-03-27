@@ -2,6 +2,7 @@ package chasm
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -23,14 +24,35 @@ type MockContext struct {
 	HandleStateTransitionCount func() int64
 	HandleMetricsHandler       func() metrics.Handler
 
-	ctx context.Context
+	// GoCtx is the underlying context.Context used for context value lookups.
+	// Any values set on it will be available via the CHASM mock context's Value method,
+	// and take precedence over any registered context values.
+	// Defaults to context.Background() if nil.
+	GoCtx context.Context
+
+	registeredContextValues map[any]any
+}
+
+func (c *MockContext) RegisterComponentContextValues(
+	keyValues map[any]any,
+) {
+	if c.registeredContextValues == nil {
+		c.registeredContextValues = make(map[any]any)
+	}
+	for k, v := range keyValues {
+		if _, exists := c.registeredContextValues[k]; exists {
+			// nolint:forbidigo
+			panic(fmt.Sprintf("context value key already registered: %v", k))
+		}
+		c.registeredContextValues[k] = v
+	}
 }
 
 func (c *MockContext) goContext() context.Context {
-	if c.ctx == nil {
-		c.ctx = context.Background()
+	if c.GoCtx == nil {
+		c.GoCtx = context.Background()
 	}
-	return c.ctx
+	return c.GoCtx
 }
 
 func (c *MockContext) Now(cmp Component) time.Time {
@@ -100,7 +122,7 @@ func (c *MockContext) withValue(key any, value any) Context {
 		HandleExecutionCloseTime:   c.HandleExecutionCloseTime,
 		HandleStateTransitionCount: c.HandleStateTransitionCount,
 		HandleMetricsHandler:       c.HandleMetricsHandler,
-		ctx:                        context.WithValue(c.goContext(), key, value),
+		GoCtx:                      context.WithValue(c.goContext(), key, value),
 	}
 }
 

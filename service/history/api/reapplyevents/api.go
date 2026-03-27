@@ -131,7 +131,6 @@ func Invoke(
 					baseRebuildLastEventVersion,
 					baseNextEventID,
 					resetRunID.String(),
-					uuid.New().String(),
 					baseWorkflow,
 					baseWorkflow,
 					ndc.EventsReapplicationResetWorkflowReason,

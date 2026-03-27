@@ -366,10 +366,12 @@ func VisibilityManagerProvider(
 
 func ChasmVisibilityManagerProvider(
 	chasmRegistry *chasm.Registry,
+	nsRegistry namespace.Registry,
 	visibilityManager manager.VisibilityManager,
 ) chasm.VisibilityManager {
 	return visibility.NewChasmVisibilityManager(
 		chasmRegistry,
+		nsRegistry,
 		visibilityManager,
 	)
 }
