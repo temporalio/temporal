@@ -37,8 +37,8 @@ const (
 	serviceName    = "service_name"
 	actionType     = "action_type"
 	workerVersion           = "worker_version"
-	workerDeploymentName    = "temporal_worker_deployment_name"
-	workerDeploymentBuildID = "temporal_worker_deployment_build_id"
+	workerDeploymentName    = "deployment_name"
+	workerDeploymentBuildID = "build_id"
 	destination    = "destination"
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
