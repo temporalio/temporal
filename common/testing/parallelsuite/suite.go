@@ -64,6 +64,7 @@ func (s *Suite[T]) Run(name string, fn func(T)) bool {
 	pt := s.guardT.T // grab T before sealing
 	s.guardT.markHasSubtests()
 	return pt.Run(name, func(t *testing.T) {
+		t.Parallel()
 		fn(s.copySuite(t).(T))
 	})
 }
