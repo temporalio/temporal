@@ -7,7 +7,7 @@ import (
 
 // MergeStats merges from into into. Mutates into.
 func MergeStats(into, from *taskqueuepb.TaskQueueStats) {
-	if from == nil {
+	if into == nil || from == nil {
 		return
 	}
 	into.ApproximateBacklogCount += from.ApproximateBacklogCount

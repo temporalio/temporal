@@ -31,6 +31,17 @@ func TestMergeStats(t *testing.T) {
 	require.InDelta(t, 4, into.TasksDispatchRate, 1e-9)
 }
 
+func TestMergeStats_NilInto(t *testing.T) {
+	from := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 10,
+	}
+	require.NotPanics(t, func() { MergeStats(nil, from) })
+}
+
+func TestMergeStats_BothNil(t *testing.T) {
+	require.NotPanics(t, func() { MergeStats(nil, nil) })
+}
+
 func TestMergeStats_NilFrom(t *testing.T) {
 	into := &taskqueuepb.TaskQueueStats{
 		ApproximateBacklogCount: 10,
