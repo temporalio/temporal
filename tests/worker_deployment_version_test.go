@@ -26,6 +26,8 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
@@ -145,7 +147,9 @@ func (s *DeploymentVersionSuite) startVersionWorkflow(ctx context.Context, tv *t
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 		resp, err := s.describeVersion(tv)
-		a.NoError(err)
+		if !a.NoError(err) {
+			return
+		}
 		// regardless of s.useV32, we want to read both version formats
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
 		a.Equal(tv.ExternalDeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
@@ -156,7 +160,9 @@ func (s *DeploymentVersionSuite) startVersionWorkflow(ctx context.Context, tv *t
 			Namespace:      s.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 		})
-		a.NoError(err)
+		if !a.NoError(err) {
+			return
+		}
 		var versionSummaryNames []string
 		var versionSummaryVersions []*deploymentpb.WorkerDeploymentVersion
 		for _, versionSummary := range newResp.GetWorkerDeploymentInfo().GetVersionSummaries() {
@@ -943,6 +949,12 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 
 	// idempotency check: deleting the same version again should succeed
 	s.tryDeleteVersion(ctx, tv1, "", false)
+}
+
+func (s *DeploymentVersionSuite) skipBeforeVersion(version workerdeployment.DeploymentWorkflowVersion) {
+	if s.workflowVersion < version {
+		s.T().Skipf("test supports version %v and newer", version)
+	}
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
@@ -3328,4 +3340,108 @@ func (s *DeploymentVersionSuite) TestReactivationSignalCache_Deduplication_Reset
 	resetRun2 := s.SdkClient().GetWorkflow(ctx, wfTV2.WorkflowID(), resetResp2.RunId)
 	var result2 string
 	s.NoError(resetRun2.Get(ctx, &result2))
+}
+
+func (s *DeploymentVersionSuite) TestDeleteVersion_ThenRecreateByPolling() {
+	s.skipBeforeVersion(workerdeployment.VersionDataRevisionNumber)
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	tv := testvars.New(s).WithBuildIDNumber(1)
+
+	s.startVersionWorkflow(ctx, tv)
+
+	vd := s.getTaskQueueVersionData(tv, enumspb.TASK_QUEUE_TYPE_WORKFLOW, tv.ExternalDeploymentVersion())
+	s.Equal(int64(0), vd.GetRevisionNumber())
+	s.False(vd.GetDeleted())
+
+	// Wait for pollers to go away
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     tv.TaskQueue(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		require.NoError(t, err)
+		require.Empty(t, resp.Pollers)
+	}, 5*time.Second, time.Second)
+
+	// Delete the version
+	s.tryDeleteVersion(ctx, tv, "", false)
+	// Verify the version is gone from the task queue
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		vd = s.getTaskQueueVersionData(tv, enumspb.TASK_QUEUE_TYPE_WORKFLOW, tv.ExternalDeploymentVersion())
+		require.New(t).Nil(vd)
+	}, time.Second*5, time.Millisecond*200)
+
+	// Verify the version is gone from the deployment
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+			//nolint:staticcheck // SA1019 deprecated Version will clean up later
+			a.NotEqual(tv.DeploymentVersionString(), vs.Version)
+		}
+	}, time.Second*5, time.Millisecond*200)
+
+	// Poll again to recreate the version
+
+	s.startVersionWorkflow(ctx, tv)
+
+	// Verify the version is back (undeleted) in the deployment
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		found := false
+		for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+			//nolint:staticcheck // SA1019 deprecated Version will clean up later
+			if vs.Version == tv.DeploymentVersionString() {
+				found = true
+			}
+		}
+		a.True(found, "version should be recreated after polling")
+	}, time.Second*5, time.Millisecond*200)
+
+	// Ensure the version data revived properly in the task queue
+	vd = s.getTaskQueueVersionData(tv, enumspb.TASK_QUEUE_TYPE_WORKFLOW, tv.ExternalDeploymentVersion())
+	s.Equal(int64(0), vd.GetRevisionNumber())
+	s.False(vd.GetDeleted())
+}
+
+// getTaskQueueDeploymentData gets the deployment data for a given TQ type. The data is always
+// returned from the WF type root partition, so no need to wait for propagation before calling this
+// function.
+func (s *DeploymentVersionSuite) getTaskQueueDeploymentData(
+	tv *testvars.TestVars,
+	tqType enumspb.TaskQueueType,
+) *persistencespb.DeploymentData {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	resp, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(
+		ctx,
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueue:     tv.TaskQueue().GetName(),
+			TaskQueueType: tqTypeWf,
+		})
+	s.NoError(err)
+	return resp.GetUserData().GetData().GetPerType()[int32(tqType)].GetDeploymentData()
+}
+
+func (s *DeploymentVersionSuite) getTaskQueueVersionData(
+	tv *testvars.TestVars,
+	tqType enumspb.TaskQueueType,
+	version *deploymentpb.WorkerDeploymentVersion,
+) *deploymentspb.WorkerDeploymentVersionData {
+	data := s.getTaskQueueDeploymentData(tv, tqType)
+	return data.GetDeploymentsData()[version.GetDeploymentName()].GetVersions()[version.GetBuildId()]
 }
