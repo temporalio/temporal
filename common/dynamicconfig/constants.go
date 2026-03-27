@@ -3150,10 +3150,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 
 	EnableMatchingFanOutForPollCancellation = NewNamespaceBoolSetting(
 		"frontend.enableMatchingFanOutForPollCancellation",
-		true,
+		false,
 		`EnableMatchingFanOutForPollCancellation controls where poll cancellation fan-out happens.
 		When enabled, frontend sends root partition only; matching fans out to all partitions.
-		When disabled, frontend iterates partitions; matching handles each partition locally.`,
+		When disabled, frontend iterates partitions; matching handles each partition locally.
+		Default is false for safe rollout: flip to true after both frontend and matching are deployed.`,
 	)
 
 	ListWorkersEnabled = NewNamespaceBoolSetting(

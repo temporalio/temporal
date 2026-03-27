@@ -3834,6 +3834,7 @@ func (s *WorkflowHandlerSuite) TestShutdownWorker() {
 func (s *WorkflowHandlerSuite) TestShutdownWorkerWithEagerPollCancellation() {
 	config := s.newConfig()
 	config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.EnableMatchingFanOutForPollCancellation = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(2) // 2 partitions
 	wh := s.getWorkflowHandler(config)
 	ctx := context.Background()
@@ -3877,6 +3878,7 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithCancellationError() {
 	// This ensures backward compatibility during rolling upgrades.
 	config := s.newConfig()
 	config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.EnableMatchingFanOutForPollCancellation = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(1)
 	wh := s.getWorkflowHandler(config)
 	ctx := context.Background()
@@ -3918,6 +3920,7 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithPartialCancellationFailure(
 	// Verifies ShutdownWorker succeeds when some cancellation calls succeed and others fail.
 	config := s.newConfig()
 	config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.EnableMatchingFanOutForPollCancellation = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(2) // 2 partitions
 	wh := s.getWorkflowHandler(config)
 	ctx := context.Background()

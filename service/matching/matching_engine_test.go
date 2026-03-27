@@ -5836,6 +5836,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Eq(namespace.ID(namespaceID))).Return(nsName, nil)
 
 		config := defaultTestConfig()
+		config.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 		config.NumTaskqueueReadPartitions = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(numPartitions)
 
 		// Partition 0 handled locally; RPC only for partitions 1+
@@ -5886,6 +5887,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Eq(namespace.ID(namespaceID))).Return(nsName, nil)
 
 		config := defaultTestConfig()
+		config.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 		config.NumTaskqueueReadPartitions = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(numPartitions)
 
 		// Partition 0 handled locally; partition 1 fails (best-effort: log and continue)
