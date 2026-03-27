@@ -12,7 +12,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -124,16 +123,17 @@ func validateAndNormalizeStartRequest(
 		return serviceerror.NewInvalidArgument(err.Error())
 	}
 
-	if err := validateBlobSize(
-		req.GetOperationId(),
-		"StartNexusOperationExecution",
-		config.PayloadSizeLimit(ns),
-		config.PayloadSizeLimitWarn(ns),
-		req.GetInput().Size(),
-		logger,
-		ns); err != nil {
+	inputSize := req.GetInput().Size()
+	if inputSize > config.PayloadSizeLimitWarn(ns) {
+		logger.Warn("Nexus Start Operation input size exceeds the warning limit.",
+			tag.WorkflowNamespace(ns),
+			tag.OperationID(req.GetOperationId()),
+			tag.BlobSize(int64(inputSize)),
+			tag.BlobSizeViolationOperation("StartNexusOperationExecution"))
+	}
+	if inputSize > config.PayloadSizeLimit(ns) {
 		return serviceerror.NewInvalidArgumentf("input exceeds size limit. Length=%d Limit=%d",
-			req.GetInput().Size(), config.PayloadSizeLimit(ns))
+			inputSize, config.PayloadSizeLimit(ns))
 	}
 
 	loweredHeaders, err := ValidateAndLowercaseNexusHeaders(req.GetNexusHeader(), config.DisallowedOperationHeaders(), config.MaxOperationHeaderSize(ns))
@@ -255,28 +255,4 @@ func validateAndNormalizeSearchAttributes(
 	}
 
 	return saValidator.ValidateSize(saToValidate, namespaceName)
-}
-
-func validateBlobSize(
-	operationID string,
-	blobSizeViolationTagValue string,
-	blobSizeLimitError int,
-	blobSizeLimitWarn int,
-	blobSize int,
-	logger log.Logger,
-	namespaceName string,
-) error {
-	if blobSize > blobSizeLimitWarn {
-		logger.Warn("Nexus Operation blob size exceeds the warning limit.",
-			tag.WorkflowNamespace(namespaceName),
-			tag.OperationID(operationID),
-			tag.BlobSize(int64(blobSize)),
-			tag.BlobSizeViolationOperation(blobSizeViolationTagValue))
-	}
-
-	if blobSize > blobSizeLimitError {
-		return common.ErrBlobSizeExceedsLimit
-	}
-
-	return nil
 }
