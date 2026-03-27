@@ -73,6 +73,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	configVersion := int64(0)
 	failoverVersion := int64(59)
 	clusters := []string{clusterActive, clusterStandby}
+	replicationState := enumspb.REPLICATION_STATE_NORMAL
 
 	namespaceOperation := enumsspb.NAMESPACE_OPERATION_CREATE
 	info := &persistencespb.NamespaceInfo{
@@ -94,6 +95,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	replicationConfig := &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
+		State:             replicationState,
 	}
 	isGlobalNamespace := true
 
@@ -121,6 +123,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 					ActiveClusterName: clusterActive,
 					Clusters:          convertClusterReplicationConfigToProto(clusters),
+					State:             replicationState,
 				},
 				ConfigVersion:   configVersion,
 				FailoverVersion: failoverVersion,
@@ -218,6 +221,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 	configVersion := int64(0)
 	failoverVersion := int64(59)
 	clusters := []string{clusterActive, clusterStandby}
+	replicationState := enumspb.REPLICATION_STATE_NORMAL
 
 	namespaceOperation := enumsspb.NAMESPACE_OPERATION_UPDATE
 	info := &persistencespb.NamespaceInfo{
@@ -239,6 +243,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 	replicationConfig := &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
+		State:             replicationState,
 	}
 	isGlobalNamespace := true
 
@@ -266,6 +271,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 					ActiveClusterName: clusterActive,
 					Clusters:          convertClusterReplicationConfigToProto(clusters),
+					State:             replicationState,
 				},
 				ConfigVersion:   configVersion,
 				FailoverVersion: failoverVersion,
@@ -361,6 +367,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 	configVersion := int64(0)
 	failoverVersion := int64(59)
 	singleClusterList := []string{clusterActive}
+	replicationState := enumspb.REPLICATION_STATE_NORMAL
 
 	namespaceOperation := enumsspb.NAMESPACE_OPERATION_UPDATE
 	info := &persistencespb.NamespaceInfo{
@@ -382,6 +389,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 	replicationConfig := &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: clusterActive,
 		Clusters:          singleClusterList,
+		State:             replicationState,
 	}
 
 	isGlobalNamespace := true
@@ -410,6 +418,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 					ActiveClusterName: clusterActive,
 					Clusters:          convertClusterReplicationConfigToProto(singleClusterList),
+					State:             replicationState,
 				},
 				ConfigVersion:   configVersion,
 				FailoverVersion: failoverVersion,

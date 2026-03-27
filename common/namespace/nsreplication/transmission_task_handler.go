@@ -101,6 +101,7 @@ func (r *replicator) HandleTransmissionTask(
 			},
 			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 				ActiveClusterName: replicationConfig.ActiveClusterName,
+				State:             replicationConfig.State,
 				Clusters:          convertClusterReplicationConfigToProto(replicationConfig.Clusters),
 			},
 			ConfigVersion:   configVersion,
