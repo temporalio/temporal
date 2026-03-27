@@ -306,8 +306,6 @@ func (h *frontendHandler) TerminateActivityExecution(
 	}
 
 	if req.GetRequestId() == "" {
-		// Since this mutates the request, we clone it first so that any retries use the original request.
-		req = common.CloneProto(req)
 		req.RequestId = uuid.NewString()
 	}
 
@@ -345,8 +343,6 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 	}
 
 	if req.GetRequestId() == "" {
-		// Since this mutates the request, we clone it first so that any retries use the original request.
-		req = common.CloneProto(req)
 		req.RequestId = uuid.NewString()
 	}
 
@@ -374,6 +370,9 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	req *workflowservice.StartActivityExecutionRequest,
 	namespaceID namespace.ID,
 ) (*workflowservice.StartActivityExecutionRequest, error) {
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	}
 	// Since validation includes mutation of the request, we clone it first so that any retries use the original request.
 	req = common.CloneProto(req)
 	activityType := req.ActivityType.GetName()
@@ -412,10 +411,6 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 func (h *frontendHandler) validateAndNormalizeStartActivityExecutionRequest(
 	req *workflowservice.StartActivityExecutionRequest,
 ) error {
-	if req.GetRequestId() == "" {
-		req.RequestId = uuid.NewString()
-	}
-
 	maxIDLengthLimit := h.config.MaxIDLengthLimit()
 
 	if len(req.GetRequestId()) > maxIDLengthLimit {
