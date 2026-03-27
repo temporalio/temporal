@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -26,27 +25,31 @@ const (
 	// With few executions closed and deleted in parallel, it is hard to predict time needed for every DeleteExecutionTask
 	// to process. Set it to 20s here, as a minimum sufficient interval. Increase it, if tests in this file are failing with
 	// "Condition never satisfied" error.
+	// TODO(workflow-delete-execution-test): Revisit and reduce this timeout after queue-processing timing is stabilized.
 	waitForTaskProcessing = 20 * time.Second
 )
 
-type WorkflowDeleteExecutionSuite struct {
-	testcore.FunctionalTestBase
-}
-
 func TestWorkflowDeleteExecutionSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(WorkflowDeleteExecutionSuite))
+	t.Run("TestDeleteWorkflowExecution_CompetedWorkflow", func(t *testing.T) {
+		workflowDeleteExecutionTestDeleteWorkflowExecutionCompetedWorkflow(workflowDeleteExecutionEnv(t))
+	})
+	t.Run("TestDeleteWorkflowExecution_RunningWorkflow", func(t *testing.T) {
+		workflowDeleteExecutionTestDeleteWorkflowExecutionRunningWorkflow(workflowDeleteExecutionEnv(t))
+	})
+	t.Run("TestDeleteWorkflowExecution_JustTerminatedWorkflow", func(t *testing.T) {
+		workflowDeleteExecutionTestDeleteWorkflowExecutionJustTerminatedWorkflow(workflowDeleteExecutionEnv(t))
+	})
 }
 
-func (s *WorkflowDeleteExecutionSuite) SetupSuite() {
-	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.TransferProcessorUpdateAckInterval.Key():   1 * time.Second,
-		dynamicconfig.VisibilityProcessorUpdateAckInterval.Key(): 1 * time.Second,
-	}
-	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+func workflowDeleteExecutionEnv(t *testing.T) *testcore.TestEnv {
+	return testcore.NewEnv(t,
+		testcore.WithDynamicConfig(dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second),
+		testcore.WithDynamicConfig(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second),
+	)
 }
 
-func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkflow() {
+func workflowDeleteExecutionTestDeleteWorkflowExecutionCompetedWorkflow(s *testcore.TestEnv) {
 	tv := testvars.New(s.T())
 
 	const numExecutions = 5
@@ -190,7 +193,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkf
 	}
 }
 
-func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_RunningWorkflow() {
+func workflowDeleteExecutionTestDeleteWorkflowExecutionRunningWorkflow(s *testcore.TestEnv) {
 	tv := testvars.New(s.T())
 
 	const numExecutions = 5
@@ -305,7 +308,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_RunningWorkfl
 	}
 }
 
-func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_JustTerminatedWorkflow() {
+func workflowDeleteExecutionTestDeleteWorkflowExecutionJustTerminatedWorkflow(s *testcore.TestEnv) {
 	tv := testvars.New(s.T())
 
 	const numExecutions = 3
