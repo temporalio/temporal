@@ -145,7 +145,7 @@ func (o *Operation) RequestCancel(
 		newReqID := req.GetRequestId()
 
 		if existingReqID != newReqID {
-			return fmt.Errorf("already requested with request ID %s: %w", existingReqID, ErrCancellationAlreadyRequested)
+			return fmt.Errorf("%w with request ID %s", ErrCancellationAlreadyRequested, existingReqID)
 		}
 		return nil
 	}
@@ -209,6 +209,7 @@ func (o *Operation) buildDescribeResponse(
 	}
 
 	// Include output, if available and requested
+	// TODO: get failure from last attempt for running operation, if available
 	if req.GetFrontendRequest().GetIncludeOutcome() && o.LifecycleState(ctx).IsClosed() {
 		outcome := o.Outcome.Get(ctx)
 		if successful := outcome.GetSuccessful(); successful != nil {
