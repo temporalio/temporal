@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -26,16 +25,15 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type WorkflowFailuresTestSuite struct {
-	testcore.FunctionalTestBase
-}
-
 func TestWorkflowFailuresTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(WorkflowFailuresTestSuite))
+	t.Run("TestWorkflowTimeout", workflowFailuresTestWorkflowTimeout)
+	t.Run("TestWorkflowTaskFailed", workflowFailuresTestWorkflowTaskFailed)
+	t.Run("TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalidArgument", workflowFailuresTestRespondWorkflowTaskCompletedReturnsErrorIfInvalidArgument)
 }
 
-func (s *WorkflowFailuresTestSuite) TestWorkflowTimeout() {
+func workflowFailuresTestWorkflowTimeout(t *testing.T) {
+	s := testcore.NewEnv(t)
 	startTime := time.Now().UTC()
 
 	id := "functional-workflow-timeout"
@@ -112,7 +110,8 @@ ListClosedLoop:
 	s.Equal(1, closedCount)
 }
 
-func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
+func workflowFailuresTestWorkflowTaskFailed(t *testing.T) {
+	s := testcore.NewEnv(t)
 	id := "functional-workflowtask-failed-test"
 	wt := "functional-workflowtask-failed-test-type"
 	tl := "functional-workflowtask-failed-test-taskqueue"
@@ -319,7 +318,8 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 	s.GreaterOrEqual(wfCompletedEvent.GetEventTime().AsTime().Sub(lastWorkflowTaskTime), time.Second)
 }
 
-func (s *WorkflowFailuresTestSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalidArgument() {
+func workflowFailuresTestRespondWorkflowTaskCompletedReturnsErrorIfInvalidArgument(t *testing.T) {
+	s := testcore.NewEnv(t)
 	id := "functional-respond-workflow-task-completed-test"
 	wt := "functional-respond-workflow-task-completed-test-type"
 	tq := "functional-respond-workflow-task-completed-test-taskqueue"
