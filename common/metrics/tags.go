@@ -20,24 +20,26 @@ const (
 	buildPlatformTag = "build_platform"
 	goVersionTag     = "go_version"
 
-	instance       = "instance"
-	namespace      = "namespace"
-	namespaceID    = "namespace_id"
-	namespaceState = "namespace_state"
-	sourceCluster  = "source_cluster"
-	targetCluster  = "target_cluster"
-	taskSourceTag  = "source"
-	forwardedTag   = "forwarded"
-	fromCluster    = "from_cluster"
-	toCluster      = "to_cluster"
-	taskQueue      = "taskqueue"
-	workflowType   = "workflowType"
-	activityType   = "activityType"
-	commandType    = "commandType"
-	serviceName    = "service_name"
-	actionType     = "action_type"
-	workerVersion  = "worker_version"
-	destination    = "destination"
+	instance                = "instance"
+	namespace               = "namespace"
+	namespaceID             = "namespace_id"
+	namespaceState          = "namespace_state"
+	sourceCluster           = "source_cluster"
+	targetCluster           = "target_cluster"
+	taskSourceTag           = "source"
+	forwardedTag            = "forwarded"
+	fromCluster             = "from_cluster"
+	toCluster               = "to_cluster"
+	taskQueue               = "taskqueue"
+	workflowType            = "workflowType"
+	activityType            = "activityType"
+	commandType             = "commandType"
+	serviceName             = "service_name"
+	actionType              = "action_type"
+	workerVersion           = "worker_version"
+	workerDeploymentName    = "temporal_worker_deployment_name"
+	workerDeploymentBuildID = "temporal_worker_deployment_build_id"
+	destination             = "destination"
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
 	// See server.api.enums.v1.ReplicationTaskType
@@ -188,6 +190,20 @@ func WorkerVersionTag(version string, versionBreakdown bool) Tag {
 		version = "__versioned__"
 	}
 	return Tag{Key: workerVersion, Value: version}
+}
+
+func WorkerDeploymentNameTag(deploymentName string, versionBreakdown bool) Tag {
+	if !versionBreakdown {
+		deploymentName = ""
+	}
+	return Tag{Key: workerDeploymentName, Value: deploymentName}
+}
+
+func WorkerDeploymentBuildIDTag(buildID string, versionBreakdown bool) Tag {
+	if !versionBreakdown {
+		buildID = ""
+	}
+	return Tag{Key: workerDeploymentBuildID, Value: buildID}
 }
 
 // WorkflowTypeTag returns a new workflow type tag.

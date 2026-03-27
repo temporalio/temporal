@@ -133,7 +133,10 @@ func newPhysicalTaskQueueManager(
 	buildIDTag := tag.WorkerVersion(versionTagValue)
 	taggedMetricsHandler := partitionMgr.metricsHandler.WithTags(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
-		metrics.WorkerVersionTag(versionTagValue, config.BreakdownMetricsByBuildID()))
+		metrics.WorkerVersionTag(versionTagValue, config.BreakdownMetricsByBuildID()),
+		metrics.WorkerDeploymentNameTag(queue.Version().Deployment().GetSeriesName(), config.BreakdownMetricsByBuildID()),
+		metrics.WorkerDeploymentBuildIDTag(queue.Version().Deployment().GetBuildId(), config.BreakdownMetricsByBuildID()),
+	)
 
 	tqCtx, tqCancel := context.WithCancel(partitionMgr.callerInfoContext(context.Background()))
 
