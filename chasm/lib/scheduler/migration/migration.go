@@ -249,11 +249,14 @@ func convertRunningWorkflowsToBufferedStarts(
 			RunId:       wf.RunId,
 			// RequestId will be used with AttachRequestID to register Nexus
 			// callbacks for tracking workflow completion after migration.
+			// Include the RunId in the tag to ensure each running workflow
+			// gets a unique RequestId (important for ALLOW_ALL overlap
+			// policy where multiple workflows may be running concurrently).
 			RequestId: schedulescommon.GenerateRequestID(
 				namespaceID,
 				scheduleID,
 				conflictToken,
-				"migrated-running",
+				"migrated-running-"+wf.RunId,
 				migrationTime,
 				migrationTime,
 			),

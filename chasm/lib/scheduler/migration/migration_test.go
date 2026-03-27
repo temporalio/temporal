@@ -306,3 +306,29 @@ func TestLegacyToCreateFromMigrationStateRequest_DeduplicatesRunningWorkflows(t 
 		seen[runID] = true
 	}
 }
+
+func TestConvertRunningWorkflowsToBufferedStarts_UniqueRequestIDs(t *testing.T) {
+	// With ALLOW_ALL overlap policy, multiple workflows can be running
+	// concurrently. Each must get a unique RequestId so that
+	// recordCompletedAction matches the correct BufferedStart.
+	now := time.Now().UTC()
+	running := []*commonpb.WorkflowExecution{
+		{WorkflowId: "wf-1", RunId: "run-aaa"},
+		{WorkflowId: "wf-2", RunId: "run-bbb"},
+		{WorkflowId: "wf-3", RunId: "run-ccc"},
+	}
+
+	starts := convertRunningWorkflowsToBufferedStarts(
+		running, "ns-id", "sched-id", 1, now,
+	)
+	require.Len(t, starts, 3)
+
+	requestIDs := make(map[string]string) // requestId -> runId
+	for _, start := range starts {
+		if prev, ok := requestIDs[start.RequestId]; ok {
+			t.Fatalf("duplicate RequestId %q: used by both RunId %q and %q",
+				start.RequestId, prev, start.RunId)
+		}
+		requestIDs[start.RequestId] = start.RunId
+	}
+}
