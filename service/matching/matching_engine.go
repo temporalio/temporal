@@ -1254,7 +1254,7 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 
 	var totalCancelled atomic.Int32
 	var wg sync.WaitGroup
-	for partitionID := 0; partitionID < numPartitions; partitionID++ {
+	for partitionID := range numPartitions {
 		wg.Go(func() {
 			partitionReq := &matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
 				NamespaceId: request.GetNamespaceId(),
