@@ -660,16 +660,24 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 	waitForTasks := func(tp enumspb.TaskQueueType, onDraining, onActive int64) {
 		s.T().Helper()
 		s.EventuallyWithT(func(c *assert.CollectT) {
-			tasksOnDraining, tasksOnActive, _, err := s.countTasksByDrainingActive(ctx, tv, tp)
+			tasksOnDraining, tasksOnActive, loadedOnDraining, loadedOnActive, _, err := s.countTasksByDrainingActive(ctx, tv, tp)
 			require.NoError(c, err)
 			require.Equal(c, onDraining, tasksOnDraining)
 			require.Equal(c, onActive, tasksOnActive)
+			// ensure that expected tasks are actually loaded to avoid poller getting regular
+			// task before draining loads
+			if tasksOnDraining > 0 {
+				require.NotZero(c, loadedOnDraining)
+			}
+			if tasksOnActive > 0 {
+				require.NotZero(c, loadedOnActive)
+			}
 		}, 15*time.Second, 250*time.Millisecond)
 	}
 	waitForNoDraining := func(tp enumspb.TaskQueueType) {
 		s.T().Helper()
 		s.EventuallyWithT(func(c *assert.CollectT) {
-			_, _, hasDraining, err := s.countTasksByDrainingActive(ctx, tv, tp)
+			_, _, _, _, hasDraining, err := s.countTasksByDrainingActive(ctx, tv, tp)
 			require.NoError(c, err)
 			require.False(c, hasDraining, "draining queue should be unloaded after drain completes")
 		}, 15*time.Second, 250*time.Millisecond)
@@ -800,7 +808,7 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 }
 
 func (s *FairnessSuite) countTasksByDrainingActive(ctx context.Context, tv *testvars.TestVars, tp enumspb.TaskQueueType) (
-	tasksOnDraining, tasksOnActive int64, hasDraining bool, retErr error,
+	tasksOnDraining, tasksOnActive, loadedOnDraining, loadedOnActive int64, hasDraining bool, retErr error,
 ) {
 	for i := range s.partitions {
 		res, err := s.AdminClient().DescribeTaskQueuePartition(ctx, &adminservice.DescribeTaskQueuePartitionRequest{
@@ -813,15 +821,17 @@ func (s *FairnessSuite) countTasksByDrainingActive(ctx context.Context, tv *test
 			BuildIds: &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
 		})
 		if err != nil {
-			return 0, 0, false, err
+			return 0, 0, 0, 0, false, err
 		}
 		for _, versionInfoInternal := range res.VersionsInfoInternal {
 			for _, st := range versionInfoInternal.PhysicalTaskQueueInfo.InternalTaskQueueStatus {
 				if st.Draining {
 					hasDraining = true
 					tasksOnDraining += st.ApproximateBacklogCount
+					loadedOnDraining += st.LoadedTasks
 				} else {
 					tasksOnActive += st.ApproximateBacklogCount
+					loadedOnActive += st.LoadedTasks
 				}
 			}
 		}
