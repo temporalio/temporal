@@ -882,11 +882,11 @@ func (r *registry) getNamespacePersistence(request *persistence.GetNamespaceRequ
 // this test should include anything that might affect whether a namespace is active on
 // this cluster.
 // returns true if the state was changed or false if not
-func (r *registry) namespaceStateChanged(old *namespace.Namespace, new *namespace.Namespace) bool {
-	return old == nil ||
-		old.State() != new.State() ||
-		old.Name() != new.Name() ||
-		old.IsGlobalNamespace() != new.IsGlobalNamespace() ||
-		old.ActiveInCluster(r.currentClusterName) != new.ActiveInCluster(r.currentClusterName) ||
-		old.ReplicationState("") != new.ReplicationState("")
+func (r *registry) namespaceStateChanged(oldNS *namespace.Namespace, newNS *namespace.Namespace) bool {
+	return oldNS == nil ||
+		oldNS.State() != newNS.State() ||
+		oldNS.Name() != newNS.Name() ||
+		oldNS.IsGlobalNamespace() != newNS.IsGlobalNamespace() ||
+		oldNS.ActiveInCluster(r.currentClusterName) != newNS.ActiveInCluster(r.currentClusterName) ||
+		oldNS.ReplicationState("") != newNS.ReplicationState("")
 }
