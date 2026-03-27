@@ -2925,7 +2925,6 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPollsMatchingFanOut(
 	var totalCancelled atomic.Int32
 	var wg sync.WaitGroup
 	for _, taskType := range taskTypes {
-		taskType := taskType
 		wg.Go(func() {
 			rootPartition := tqFamily.TaskQueue(taskType).RootPartition()
 			resp, err := wh.matchingClient.CancelOutstandingWorkerPolls(ctx, &matchingservice.CancelOutstandingWorkerPollsRequest{

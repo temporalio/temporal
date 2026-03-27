@@ -3873,6 +3873,48 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithEagerPollCancellation() {
 	}
 }
 
+func (s *WorkflowHandlerSuite) TestShutdownWorkerWithEagerPollCancellationFrontendFanOut() {
+	config := s.newConfig()
+	config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.EnableMatchingFanOutForPollCancellation = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(2) // 2 partitions
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	stickyTaskQueue := "sticky-task-queue"
+	taskQueue := "my-task-queue"
+	workerInstanceKey := "worker-instance-123"
+
+	// Frontend fans out: 2 partitions x 2 task types = 4 calls
+	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
+		Return(&matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil).
+		Times(4)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
+
+	expectedForceUnloadRequest := &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: s.testNamespaceID.String(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     stickyTaskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		},
+	}
+
+	s.mockMatchingClient.EXPECT().ForceUnloadTaskQueuePartition(gomock.Any(), gomock.Eq(expectedForceUnloadRequest)).Return(&matchingservice.ForceUnloadTaskQueuePartitionResponse{}, nil)
+
+	_, err := wh.ShutdownWorker(ctx, &workflowservice.ShutdownWorkerRequest{
+		Namespace:         s.testNamespace.String(),
+		StickyTaskQueue:   stickyTaskQueue,
+		Identity:          "worker",
+		Reason:            "graceful shutdown",
+		WorkerInstanceKey: workerInstanceKey,
+		TaskQueue:         taskQueue,
+	})
+	if err != nil {
+		s.Fail("ShutdownWorker with frontend fan-out failed:", err)
+	}
+}
+
 func (s *WorkflowHandlerSuite) TestShutdownWorkerWithCancellationError() {
 	// Verifies graceful degradation: ShutdownWorker succeeds even when poll cancellation fails.
 	// This ensures backward compatibility during rolling upgrades.

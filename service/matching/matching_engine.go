@@ -61,7 +61,6 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/workerdeployment"
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1243,10 +1242,9 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 	numPartitions := max(1, tqConfig.NumReadPartitions())
 
 	var totalCancelled atomic.Int32
-	waitGroup, gctx := errgroup.WithContext(ctx)
+	var wg sync.WaitGroup
 	for partitionID := 0; partitionID < numPartitions; partitionID++ {
-		partitionID := partitionID
-		waitGroup.Go(func() error {
+		wg.Go(func() {
 			partitionReq := &matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
 				NamespaceId: request.GetNamespaceId(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
@@ -1263,7 +1261,7 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 			if partitionID == 0 {
 				resp, err = e.CancelOutstandingWorkerPollsPartition(ctx, partitionReq)
 			} else {
-				resp, err = e.matchingRawClient.CancelOutstandingWorkerPollsPartition(gctx, partitionReq)
+				resp, err = e.matchingRawClient.CancelOutstandingWorkerPollsPartition(ctx, partitionReq)
 			}
 			if err != nil {
 				partition := rootPartition.TaskQueue().NormalPartition(partitionID)
@@ -1271,15 +1269,12 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 					tag.WorkflowTaskQueueName(partition.RpcName()),
 					tag.String("worker-instance-key", request.GetWorkerInstanceKey()),
 					tag.Error(err))
-				return nil
+				return
 			}
 			totalCancelled.Add(resp.CancelledCount)
-			return nil
 		})
 	}
-	if err := waitGroup.Wait(); err != nil {
-		return nil, err
-	}
+	wg.Wait()
 	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: totalCancelled.Load()}, nil
 }
 
