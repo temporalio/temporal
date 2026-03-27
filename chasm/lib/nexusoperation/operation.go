@@ -112,7 +112,6 @@ func (o *Operation) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	case nexusoperationpb.OPERATION_STATUS_SUCCEEDED:
 		return chasm.LifecycleStateCompleted
 	case nexusoperationpb.OPERATION_STATUS_FAILED,
-		nexusoperationpb.OPERATION_STATUS_CANCELED,
 		nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
 		nexusoperationpb.OPERATION_STATUS_TERMINATED:
 		return chasm.LifecycleStateFailed
