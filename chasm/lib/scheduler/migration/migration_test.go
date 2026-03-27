@@ -247,9 +247,9 @@ func TestLegacyToCreateFromMigrationStateRequest_DeduplicatesRunningWorkflows(t 
 	// duplicate BufferedStarts for the same execution.
 	now := time.Now().UTC()
 	state := &schedulespb.InternalState{
-		Namespace:   "test-ns",
-		NamespaceId: "test-ns-id",
-		ScheduleId:  "test-sched-id",
+		Namespace:     "test-ns",
+		NamespaceId:   "test-ns-id",
+		ScheduleId:    "test-sched-id",
 		ConflictToken: 1,
 	}
 	info := &schedulepb.ScheduleInfo{
@@ -291,6 +291,8 @@ func TestLegacyToCreateFromMigrationStateRequest_DeduplicatesRunningWorkflows(t 
 			completed++
 			require.Equal(t, "wf-old", start.WorkflowId)
 			require.Equal(t, "run-old", start.RunId)
+		default:
+			t.Fatalf("unexpected buffered start state: RunId=%q, Completed=%v", start.RunId, start.Completed)
 		}
 	}
 	require.Equal(t, 1, running, "expected exactly 1 running workflow (not duplicated)")
