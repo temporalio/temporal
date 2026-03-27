@@ -240,7 +240,7 @@ func newMatchingEngine(
 	mockVisibilityManager manager.VisibilityManager, mockHostInfoProvider membership.HostInfoProvider,
 	mockServiceResolver membership.ServiceResolver, nexusEndpointManager persistence.NexusEndpointManager,
 ) *matchingEngineImpl {
-	return &matchingEngineImpl{
+	e := &matchingEngineImpl{
 		taskManager:     taskMgr,
 		fairTaskManager: fairTaskMgr,
 		historyClient:   mockHistoryClient,
@@ -251,23 +251,24 @@ func newMatchingEngine(
 			loadedTaskQueuePartitionCount: make(map[taskQueueCounterKey]int),
 			loadedPhysicalTaskQueueCount:  make(map[taskQueueCounterKey]int),
 		},
-		queryResults:                  collection.NewSyncMap[string, chan *queryResult](),
-		logger:                        logger,
-		throttledLogger:               log.ThrottledLogger(logger),
-		metricsHandler:                metrics.NoopMetricsHandler,
-		matchingRawClient:             mockMatchingClient,
-		tokenSerializer:               tasktoken.NewSerializer(),
-		config:                        config,
-		namespaceRegistry:             mockNamespaceCache,
-		hostInfoProvider:              mockHostInfoProvider,
-		serviceResolver:               mockServiceResolver,
-		membershipChangedCh:           make(chan *membership.ChangedEvent, 1),
-		clusterMeta:                   clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
-		timeSource:                    clock.NewRealTimeSource(),
-		visibilityManager:             mockVisibilityManager,
-		nexusEndpointClient:           newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
-		nexusEndpointsOwnershipLostCh: make(chan struct{}),
+		queryResults:        collection.NewSyncMap[string, chan *queryResult](),
+		logger:              logger,
+		throttledLogger:     log.ThrottledLogger(logger),
+		metricsHandler:      metrics.NoopMetricsHandler,
+		matchingRawClient:   mockMatchingClient,
+		tokenSerializer:     tasktoken.NewSerializer(),
+		config:              config,
+		namespaceRegistry:   mockNamespaceCache,
+		hostInfoProvider:    mockHostInfoProvider,
+		serviceResolver:     mockServiceResolver,
+		membershipChangedCh: make(chan *membership.ChangedEvent, 1),
+		clusterMeta:         clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
+		timeSource:          clock.NewRealTimeSource(),
+		visibilityManager:   mockVisibilityManager,
+		nexusEndpointClient: newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
 	}
+	e.nexusEndpointsOwnershipLostCh.Store(make(chan struct{}))
+	return e
 }
 
 func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *Config) taskQueuePartitionManager {
@@ -3579,7 +3580,7 @@ func (s *matchingEngineSuite) TestCheckNexusEndpointsOwnership() {
 }
 
 func (s *matchingEngineSuite) TestNotifyNexusEndpointsOwnershipLost() {
-	ch := s.matchingEngine.nexusEndpointsOwnershipLostCh
+	ch := s.matchingEngine.nexusEndpointsOwnershipLostCh.Load().(chan struct{}) //nolint:revive // type is always chan struct{}
 	s.matchingEngine.notifyNexusEndpointsOwnershipChange()
 	select {
 	case <-ch:
