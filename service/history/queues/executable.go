@@ -112,21 +112,21 @@ type (
 		sync.Mutex
 		state ctasks.State
 
-		executor                   Executor
-		scheduler                  Scheduler
-		rescheduler                Rescheduler
-		priorityAssigner           PriorityAssigner
-		timeSource                 clock.TimeSource
-		namespaceRegistry          namespace.Registry
-		clusterMetadata            cluster.Metadata
-		chasmRegistry              *chasm.Registry
-		taskTypeTagProvider        TaskTypeTagProvider
-		logger                     log.Logger
+		executor              Executor
+		scheduler             Scheduler
+		rescheduler           Rescheduler
+		priorityAssigner      PriorityAssigner
+		timeSource            clock.TimeSource
+		namespaceRegistry     namespace.Registry
+		clusterMetadata       cluster.Metadata
+		chasmRegistry         *chasm.Registry
+		taskTypeTagProvider   TaskTypeTagProvider
+		logger                log.Logger
 		baseMetricsHandler    metrics.Handler
 		defaultMetricsHandler metrics.Handler
-		chasmMetricsHandler   metrics.Handler
-		tracer                     trace.Tracer
-		dlqWriter                  *DLQWriter
+		chasmMetricsHandler   metrics.Handler // contains archetype tag
+		tracer                trace.Tracer
+		dlqWriter             *DLQWriter
 
 		readerID                   int64
 		attempt                    int
