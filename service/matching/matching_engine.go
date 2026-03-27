@@ -271,29 +271,29 @@ func NewEngine(
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
-		status:                        common.DaemonStatusInitialized,
-		taskManager:                   taskManager,
-		fairTaskManager:               fairTaskManager,
-		historyClient:                 historyClient,
-		matchingRawClient:             matchingRawClient,
-		tokenSerializer:               tasktoken.NewSerializer(),
-		workerDeploymentClient:        workerDeploymentClient,
-		historySerializer:             historySerializer,
-		logger:                        log.With(logger, tag.ComponentMatchingEngine),
-		throttledLogger:               log.With(throttledLogger, tag.ComponentMatchingEngine),
-		namespaceRegistry:             namespaceRegistry,
-		hostInfoProvider:              hostInfoProvider,
-		serviceResolver:               resolver,
-		membershipChangedCh:           make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
-		clusterMeta:                   clusterMeta,
-		timeSource:                    clock.NewRealTimeSource(), // No need to mock this at the moment
-		visibilityManager:             visibilityManager,
-		nexusEndpointClient:           newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
+		status:                 common.DaemonStatusInitialized,
+		taskManager:            taskManager,
+		fairTaskManager:        fairTaskManager,
+		historyClient:          historyClient,
+		matchingRawClient:      matchingRawClient,
+		tokenSerializer:        tasktoken.NewSerializer(),
+		workerDeploymentClient: workerDeploymentClient,
+		historySerializer:      historySerializer,
+		logger:                 log.With(logger, tag.ComponentMatchingEngine),
+		throttledLogger:        log.With(throttledLogger, tag.ComponentMatchingEngine),
+		namespaceRegistry:      namespaceRegistry,
+		hostInfoProvider:       hostInfoProvider,
+		serviceResolver:        resolver,
+		membershipChangedCh:    make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
+		clusterMeta:            clusterMeta,
+		timeSource:             clock.NewRealTimeSource(), // No need to mock this at the moment
+		visibilityManager:      visibilityManager,
+		nexusEndpointClient:    newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
 		// nexusEndpointsOwnershipLostCh initialized below
-		saProvider:                    saProvider,
-		saMapperProvider:              saMapperProvider,
-		metricsHandler:                scopedMetricsHandler,
-		partitions:                    make(map[tqid.PartitionKey]taskQueuePartitionManager),
+		saProvider:       saProvider,
+		saMapperProvider: saMapperProvider,
+		metricsHandler:   scopedMetricsHandler,
+		partitions:       make(map[tqid.PartitionKey]taskQueuePartitionManager),
 		gaugeMetrics: gaugeMetrics{
 			loadedTaskQueueFamilyCount:    make(map[taskQueueCounterKey]int),
 			loadedTaskQueueCount:          make(map[taskQueueCounterKey]int),
