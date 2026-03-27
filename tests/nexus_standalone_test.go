@@ -268,9 +268,9 @@ func TestRequestCancelNexusOperationExecution(t *testing.T) {
 		s.Contains(err.Error(), "cancellation already requested")
 	})
 
-	// TODO: Enable once terminate is fully implemented.
+	// TODO: Enable once cancel is fully implemented for standalone Nexus operations.
 	t.Run("AlreadyTerminated", func(t *testing.T) {
-		t.Skip("Terminate not yet fully implemented for standalone Nexus operations")
+		t.Skip("Cancel not yet fully implemented for standalone Nexus operations")
 
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		endpointName := createNexusEndpoint(s)
