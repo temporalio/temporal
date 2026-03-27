@@ -329,7 +329,6 @@ func (ch *commandHandler) handleCancelCommand(
 
 	err = op.RequestCancel(chasmCtx, &nexusoperationpb.CancellationState{
 		ParentData: cancelParentData,
-		RequestId:  uuid.NewString(),
 	})
 	if errors.Is(err, nexusoperation.ErrCancellationAlreadyRequested) {
 		return chasmworkflow.FailWorkflowTaskError{
