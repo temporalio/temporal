@@ -180,6 +180,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetMatchingClient(),
 		nil,
 		nil, // Not initializing the scheduler client here.
+		nil, // Not initializing the callback execution client here.
 		s.mockResource.GetArchiverProvider(),
 		s.mockResource.GetPayloadSerializer(),
 		s.mockResource.GetNamespaceRegistry(),

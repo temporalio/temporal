@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	callback "go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -116,6 +117,7 @@ var Module = fx.Options(
 	fx.Invoke(ServiceLifetimeHooks),
 	fx.Invoke(EndpointRegistryLifetimeHooks),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
+	callback.FrontendModule,
 	nexusfrontend.Module,
 	activity.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
@@ -804,6 +806,7 @@ func HandlerProvider(
 	matchingClient resource.MatchingClient,
 	workerDeploymentStoreClient workerdeployment.Client,
 	schedulerClient schedulerpb.SchedulerServiceClient,
+	callbackExecutionFrontendHandler callback.CallbackExecutionFrontendHandler,
 	archiverProvider provider.ArchiverProvider,
 	metricsHandler metrics.Handler,
 	payloadSerializer serialization.Serializer,
@@ -840,6 +843,7 @@ func HandlerProvider(
 		matchingClient,
 		workerDeploymentStoreClient,
 		schedulerClient,
+		callbackExecutionFrontendHandler,
 		archiverProvider,
 		payloadSerializer,
 		namespaceRegistry,

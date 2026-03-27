@@ -1,10 +1,12 @@
 package chasm
 
 const (
-	CallbackLibraryName   = "callback"
-	CallbackComponentName = "callback"
+	CallbackLibraryName            = "callback"
+	CallbackComponentName          = "callback"
+	CallbackExecutionComponentName = "callback_execution"
 )
 
 var (
-	CallbackComponentID = GenerateTypeID(FullyQualifiedName(CallbackLibraryName, CallbackComponentName))
+	CallbackComponentID          = GenerateTypeID(FullyQualifiedName(CallbackLibraryName, CallbackComponentName))
+	CallbackExecutionComponentID = GenerateTypeID(FullyQualifiedName(CallbackLibraryName, CallbackExecutionComponentName))
 )

@@ -52,7 +52,11 @@ func (c *Callback) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	switch c.Status {
 	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
 		return chasm.LifecycleStateCompleted
-	case callbackspb.CALLBACK_STATUS_FAILED:
+	case callbackspb.CALLBACK_STATUS_FAILED,
+		callbackspb.CALLBACK_STATUS_TERMINATED:
+		// TODO: Use chasm.LifecycleStateTerminated when it's available (currently commented out
+		// in chasm/component.go:70). For now, LifecycleStateFailed is functionally correct
+		// as IsClosed() returns true for all states >= LifecycleStateCompleted.
 		return chasm.LifecycleStateFailed
 	default:
 		return chasm.LifecycleStateRunning
@@ -117,6 +121,11 @@ func (c *Callback) saveResult(
 	ctx chasm.MutableContext,
 	input saveResultInput,
 ) (chasm.NoValue, error) {
+	// If the callback was terminated while the invocation was in-flight,
+	// the result is no longer relevant — drop it silently.
+	if c.LifecycleState(ctx).IsClosed() {
+		return nil, nil
+	}
 	switch r := input.result.(type) {
 	case invocationResultOK:
 		err := TransitionSucceeded.Apply(c, ctx, EventSucceeded{Time: ctx.Now(c)})

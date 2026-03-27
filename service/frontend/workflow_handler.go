@@ -36,6 +36,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	callback "go.temporal.io/server/chasm/lib/callback"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client/frontend"
@@ -132,6 +133,7 @@ type (
 		matchingClient                  matchingservice.MatchingServiceClient
 		workerDeploymentClient          workerdeployment.Client
 		schedulerClient                 schedulerpb.SchedulerServiceClient
+		callback.CallbackExecutionFrontendHandler
 		archiverProvider                provider.ArchiverProvider
 		payloadSerializer               serialization.Serializer
 		namespaceRegistry               namespace.Registry
@@ -165,6 +167,7 @@ func NewWorkflowHandler(
 	matchingClient matchingservice.MatchingServiceClient,
 	workerDeploymentClient workerdeployment.Client,
 	schedulerClient schedulerpb.SchedulerServiceClient,
+	callbackExecutionFrontendHandler callback.CallbackExecutionFrontendHandler,
 	archiverProvider provider.ArchiverProvider,
 	payloadSerializer serialization.Serializer,
 	namespaceRegistry namespace.Registry,
@@ -198,22 +201,23 @@ func NewWorkflowHandler(
 			timeSource,
 			config,
 		),
-		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
-		visibilityMgr:                   visibilityMgr,
-		logger:                          logger,
-		throttledLogger:                 throttledLogger,
-		persistenceExecutionName:        persistenceExecutionName,
-		clusterMetadataManager:          clusterMetadataManager,
-		clusterMetadata:                 clusterMetadata,
-		historyClient:                   historyClient,
-		matchingClient:                  matchingClient,
-		workerDeploymentClient:          workerDeploymentClient,
-		schedulerClient:                 schedulerClient,
-		archiverProvider:                archiverProvider,
-		payloadSerializer:               payloadSerializer,
-		namespaceRegistry:               namespaceRegistry,
-		saProvider:                      saProvider,
-		saMapperProvider:                saMapperProvider,
+		getDefaultWorkflowRetrySettings:  config.DefaultWorkflowRetryPolicy,
+		visibilityMgr:                    visibilityMgr,
+		logger:                           logger,
+		throttledLogger:                  throttledLogger,
+		persistenceExecutionName:         persistenceExecutionName,
+		clusterMetadataManager:           clusterMetadataManager,
+		clusterMetadata:                  clusterMetadata,
+		historyClient:                    historyClient,
+		matchingClient:                   matchingClient,
+		workerDeploymentClient:           workerDeploymentClient,
+		schedulerClient:                  schedulerClient,
+		CallbackExecutionFrontendHandler: callbackExecutionFrontendHandler,
+		archiverProvider:                 archiverProvider,
+		payloadSerializer:                payloadSerializer,
+		namespaceRegistry:                namespaceRegistry,
+		saProvider:                       saProvider,
+		saMapperProvider:                 saMapperProvider,
 		saValidator: searchattribute.NewValidator(
 			saProvider,
 			saMapperProvider,

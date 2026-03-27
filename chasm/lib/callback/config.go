@@ -14,31 +14,58 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
-	"callback.request.timeout",
-	time.Second*10,
-	`RequestTimeout is the timeout for executing a single callback request.`,
-)
+var (
+	Enabled = dynamicconfig.NewNamespaceBoolSetting(
+		"callback.enableStandaloneExecutions",
+		true,
+		`Toggles standalone callback execution functionality on the server.`,
+	)
 
-var RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
-	"callback.retryPolicy.initialInterval",
-	time.Second,
-	`The initial backoff interval between every callback request attempt for a given callback.`,
-)
+	RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
+		"callback.request.timeout",
+		time.Second*10,
+		`RequestTimeout is the timeout for executing a single callback request.`,
+	)
 
-var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
-	"callback.retryPolicy.maxInterval",
-	time.Hour,
-	`The maximum backoff interval between every callback request attempt for a given callback.`,
+	RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
+		"callback.retryPolicy.initialInterval",
+		time.Second,
+		`The initial backoff interval between every callback request attempt for a given callback.`,
+	)
+
+	RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
+		"callback.retryPolicy.maxInterval",
+		time.Hour,
+		`The maximum backoff interval between every callback request attempt for a given callback.`,
+	)
+
+	LongPollTimeout = dynamicconfig.NewNamespaceDurationSetting(
+		"callback.longPollTimeout",
+		20*time.Second,
+		`Timeout for callback execution long-poll requests.`,
+	)
+
+	LongPollBuffer = dynamicconfig.NewNamespaceDurationSetting(
+		"callback.longPollBuffer",
+		time.Second,
+		`A buffer used to adjust the callback execution long-poll timeouts.
+The long-poll response is sent before the caller's deadline by this amount of time.`,
+	)
 )
 
 type Config struct {
-	RequestTimeout dynamicconfig.DurationPropertyFnWithDestinationFilter
-	RetryPolicy    func() backoff.RetryPolicy
+	Enabled              dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	RequestTimeout       dynamicconfig.DurationPropertyFnWithDestinationFilter
+	RetryPolicy          func() backoff.RetryPolicy
+	LongPollTimeout      dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	LongPollBuffer       dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	CallbackURLMaxLength dynamicconfig.IntPropertyFnWithNamespaceFilter
+	AllowedAddresses     dynamicconfig.TypedPropertyFnWithNamespaceFilter[AddressMatchRules]
 }
 
 func configProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
+		Enabled:        Enabled.Get(dc),
 		RequestTimeout: RequestTimeout.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
@@ -49,6 +76,10 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 				backoff.NoInterval,
 			)
 		},
+		LongPollTimeout:      LongPollTimeout.Get(dc),
+		LongPollBuffer:       LongPollBuffer.Get(dc),
+		CallbackURLMaxLength: dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		AllowedAddresses:     AllowedAddresses.Get(dc),
 	}
 }
 

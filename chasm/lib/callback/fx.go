@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"go.temporal.io/server/chasm"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -53,12 +54,20 @@ func httpCallerProviderProvider(
 	return m.Get, nil
 }
 
+var FrontendModule = fx.Module(
+	"callback-execution-frontend",
+	fx.Provide(callbackspb.NewCallbackExecutionServiceLayeredClient),
+	fx.Provide(NewCallbackExecutionFrontendHandler),
+)
+
 var Module = fx.Module(
 	"chasm.lib.callback",
 	fx.Provide(configProvider),
 	fx.Provide(httpCallerProviderProvider),
 	fx.Provide(NewInvocationTaskHandler),
 	fx.Provide(NewBackoffTaskHandler),
+	fx.Provide(NewScheduleToCloseTimeoutTaskHandler),
+	fx.Provide(newCallbackExecutionHandler),
 	fx.Provide(newLibrary),
 	fx.Invoke(register),
 )

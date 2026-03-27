@@ -2824,7 +2824,7 @@ that task will be sent to DLQ.`,
 
 	EnableChasm = NewNamespaceBoolSetting(
 		"history.enableChasm",
-		false,
+		true,
 		"Use real chasm tree implementation instead of the noop one",
 	)
 
@@ -2857,7 +2857,7 @@ to the CHASM (V2) implementation on active scheduler workflows.`,
 
 	EnableCHASMCallbacks = NewNamespaceBoolSetting(
 		"history.enableCHASMCallbacks",
-		false,
+		true,
 		`Controls whether new callbacks are created using the CHASM implementation
 instead of the previous HSM backed implementation.`,
 	)

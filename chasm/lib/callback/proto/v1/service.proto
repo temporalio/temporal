@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.callbacks.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspb";
+
+import "chasm/lib/callback/proto/v1/request_response.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+import "temporal/server/api/common/v1/api_category.proto";
+
+service CallbackExecutionService {
+    rpc StartCallbackExecution(StartCallbackExecutionRequest) returns (StartCallbackExecutionResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.callback_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc DescribeCallbackExecution(DescribeCallbackExecutionRequest) returns (DescribeCallbackExecutionResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.callback_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc PollCallbackExecution(PollCallbackExecutionRequest) returns (PollCallbackExecutionResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.callback_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc TerminateCallbackExecution(TerminateCallbackExecutionRequest) returns (TerminateCallbackExecutionResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.callback_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc DeleteCallbackExecution(DeleteCallbackExecutionRequest) returns (DeleteCallbackExecutionResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.callback_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+}

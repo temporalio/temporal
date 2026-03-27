@@ -13,6 +13,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.CountActivityExecutionsResponse:
 		return nil
+	case *workflowservice.CountCallbackExecutionsRequest:
+		return nil
+	case *workflowservice.CountCallbackExecutionsResponse:
+		return nil
 	case *workflowservice.CountSchedulesRequest:
 		return nil
 	case *workflowservice.CountSchedulesResponse:
@@ -35,6 +39,12 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 			tag.ChasmRunID(r.GetRunId()),
 		}
 	case *workflowservice.DeleteActivityExecutionResponse:
+		return nil
+	case *workflowservice.DeleteCallbackExecutionRequest:
+		return []tag.Tag{
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.DeleteCallbackExecutionResponse:
 		return nil
 	case *workflowservice.DeleteScheduleRequest:
 		return nil
@@ -75,6 +85,12 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.DescribeBatchOperationRequest:
 		return nil
 	case *workflowservice.DescribeBatchOperationResponse:
+		return nil
+	case *workflowservice.DescribeCallbackExecutionRequest:
+		return []tag.Tag{
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.DescribeCallbackExecutionResponse:
 		return nil
 	case *workflowservice.DescribeDeploymentRequest:
 		return nil
@@ -181,6 +197,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.ListBatchOperationsResponse:
 		return nil
+	case *workflowservice.ListCallbackExecutionsRequest:
+		return nil
+	case *workflowservice.ListCallbackExecutionsResponse:
+		return nil
 	case *workflowservice.ListClosedWorkflowExecutionsRequest:
 		return nil
 	case *workflowservice.ListClosedWorkflowExecutionsResponse:
@@ -259,6 +279,12 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
 		}
+	case *workflowservice.PollCallbackExecutionRequest:
+		return []tag.Tag{
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.PollCallbackExecutionResponse:
+		return nil
 	case *workflowservice.PollNexusTaskQueueRequest:
 		return nil
 	case *workflowservice.PollNexusTaskQueueResponse:
@@ -451,6 +477,12 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.StartBatchOperationResponse:
 		return nil
+	case *workflowservice.StartCallbackExecutionRequest:
+		return nil
+	case *workflowservice.StartCallbackExecutionResponse:
+		return []tag.Tag{
+			tag.WorkflowRunID(r.GetRunId()),
+		}
 	case *workflowservice.StartWorkflowExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowId()),
@@ -469,6 +501,12 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 			tag.ChasmRunID(r.GetRunId()),
 		}
 	case *workflowservice.TerminateActivityExecutionResponse:
+		return nil
+	case *workflowservice.TerminateCallbackExecutionRequest:
+		return []tag.Tag{
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.TerminateCallbackExecutionResponse:
 		return nil
 	case *workflowservice.TerminateWorkflowExecutionRequest:
 		return []tag.Tag{

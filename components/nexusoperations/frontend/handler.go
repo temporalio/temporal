@@ -224,6 +224,12 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 		if errors.As(err, &notFoundErr) {
 			return commonnexus.ConvertGRPCError(err, true)
 		}
+		var unavailableErr *serviceerror.Unavailable
+		if errors.As(err, &unavailableErr) {
+			// Expose the message so callers can detect specific conditions
+			// like "operation not started yet" and avoid circuit breaking.
+			return commonnexus.ConvertGRPCError(err, true)
+		}
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 	return nil
