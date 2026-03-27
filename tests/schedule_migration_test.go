@@ -1160,11 +1160,11 @@ func TestScheduleMigrationV1ToV2WithClosedV2(t *testing.T) {
 // in RecentActions. In V1, recordAction puts the same workflow in both
 // RunningWorkflows and RecentActions. The migration must deduplicate these.
 func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
+	// Create the env without EnableChasm so that CreateSchedule does not write
+	// a CHASM sentinel (which would block the migration activity).
 	env := testcore.NewEnv(
 		t,
 		testcore.WithSdkWorker(),
-		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
-		testcore.WithDynamicConfig(dynamicconfig.FrontendAllowedExperiments, []string{"*"}),
 	)
 
 	ctx := testcore.NewContext()
@@ -1231,6 +1231,9 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 		runningWfID = a.GetStartWorkflowResult().GetWorkflowId()
 		return true
 	}, 15*time.Second, 500*time.Millisecond)
+
+	// Enable CHASM now so the migration activity can create the V2 schedule.
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
 
 	// Migrate from V1 to V2 while the workflow is still running.
 	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
