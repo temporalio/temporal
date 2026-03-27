@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -27,30 +26,36 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type SizeLimitFunctionalSuite struct {
-	testcore.FunctionalTestBase
+func sizeLimitTestOpts() []testcore.TestOption {
+	return []testcore.TestOption{
+		testcore.WithDynamicConfig(dynamicconfig.HistoryCountLimitWarn, 10),
+		testcore.WithDynamicConfig(dynamicconfig.HistoryCountLimitError, 20),
+		testcore.WithDynamicConfig(dynamicconfig.HistorySizeLimitWarn, 5000),
+		testcore.WithDynamicConfig(dynamicconfig.HistorySizeLimitError, 9000),
+		testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitWarn, 1),
+		testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitError, 1000),
+		testcore.WithDynamicConfig(dynamicconfig.MutableStateSizeLimitWarn, 200),
+		testcore.WithDynamicConfig(dynamicconfig.MutableStateSizeLimitError, 1100),
+	}
 }
 
 func TestSizeLimitFunctionalSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(SizeLimitFunctionalSuite))
+	t.Run("TerminateWorkflowCausedByHistoryCountLimit", func(t *testing.T) {
+		sizeLimitTestTerminateWorkflowCausedByHistoryCountLimit(testcore.NewEnv(t, sizeLimitTestOpts()...))
+	})
+	t.Run("WorkflowFailed_PayloadSizeTooLarge", func(t *testing.T) {
+		sizeLimitTestWorkflowFailedPayloadSizeTooLarge(testcore.NewEnv(t, sizeLimitTestOpts()...))
+	})
+	t.Run("TerminateWorkflowCausedByMsSizeLimit", func(t *testing.T) {
+		sizeLimitTestTerminateWorkflowCausedByMsSizeLimit(testcore.NewEnv(t, sizeLimitTestOpts()...))
+	})
+	t.Run("TerminateWorkflowCausedByHistorySizeLimit", func(t *testing.T) {
+		sizeLimitTestTerminateWorkflowCausedByHistorySizeLimit(testcore.NewEnv(t, sizeLimitTestOpts()...))
+	})
 }
 
-func (s *SizeLimitFunctionalSuite) SetupSuite() {
-	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.HistoryCountLimitWarn.Key():      10,
-		dynamicconfig.HistoryCountLimitError.Key():     20,
-		dynamicconfig.HistorySizeLimitWarn.Key():       5000,
-		dynamicconfig.HistorySizeLimitError.Key():      9000,
-		dynamicconfig.BlobSizeLimitWarn.Key():          1,
-		dynamicconfig.BlobSizeLimitError.Key():         1000,
-		dynamicconfig.MutableStateSizeLimitWarn.Key():  200,
-		dynamicconfig.MutableStateSizeLimitError.Key(): 1100,
-	}
-	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
-}
-
-func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {
+func sizeLimitTestTerminateWorkflowCausedByHistoryCountLimit(s *testcore.TestEnv) {
 	id := "functional-terminate-workflow-by-history-count-limit-test"
 	wt := "functional-terminate-workflow-by-history-count-limit-test-type"
 	tq := "functional-terminate-workflow-by-history-count-limit-test-taskqueue"
@@ -232,7 +237,7 @@ SignalLoop:
 	)
 }
 
-func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
+func sizeLimitTestWorkflowFailedPayloadSizeTooLarge(s *testcore.TestEnv) {
 
 	id := "functional-workflow-failed-large-payload"
 	wt := "functional-workflow-failed-large-payload-type"
@@ -328,7 +333,7 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
   6 WorkflowExecutionTerminated`, historyEvents)
 }
 
-func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
+func sizeLimitTestTerminateWorkflowCausedByMsSizeLimit(s *testcore.TestEnv) {
 	id := "functional-terminate-workflow-by-ms-size-limit-test"
 	wt := "functional-terminate-workflow-by-ms-size-limit-test-type"
 	tq := "functional-terminate-workflow-by-ms-size-limit-test-taskqueue"
@@ -478,7 +483,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	)
 }
 
-func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistorySizeLimit() {
+func sizeLimitTestTerminateWorkflowCausedByHistorySizeLimit(s *testcore.TestEnv) {
 	id := "functional-terminate-workflow-by-history-size-limit-test"
 	wt := "functional-terminate-workflow-by-history-size-limit-test-type"
 	tq := "functional-terminate-workflow-by-history-size-limit-test-taskqueue"
