@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -22,16 +21,20 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-type TransientTaskSuite struct {
-	testcore.FunctionalTestBase
-}
-
 func TestTransientTaskSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(TransientTaskSuite))
+	t.Run("TestTransientWorkflowTaskTimeout", func(t *testing.T) {
+		transientTaskTestWorkflowTaskTimeout(testcore.NewEnv(t))
+	})
+	t.Run("TestTransientWorkflowTaskHistorySize", func(t *testing.T) {
+		transientTaskTestWorkflowTaskHistorySize(testcore.NewEnv(t))
+	})
+	t.Run("TestNoTransientWorkflowTaskAfterFlushBufferedEvents", func(t *testing.T) {
+		transientTaskTestNoTransientWorkflowTaskAfterFlushBufferedEvents(testcore.NewEnv(t))
+	})
 }
 
-func (s *TransientTaskSuite) TestTransientWorkflowTaskTimeout() {
+func transientTaskTestWorkflowTaskTimeout(s *testcore.TestEnv) {
 	id := "functional-transient-workflow-task-timeout-test"
 	wt := "functional-transient-workflow-task-timeout-test-type"
 	tl := "functional-transient-workflow-task-timeout-test-taskqueue"
@@ -120,7 +123,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskTimeout() {
 	s.True(workflowComplete)
 }
 
-func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
+func transientTaskTestWorkflowTaskHistorySize(s *testcore.TestEnv) {
 	id := "functional-transient-workflow-task-history-size-test"
 	wt := "functional-transient-workflow-task-history-size-test-type"
 	tl := "functional-transient-workflow-task-history-size-test-taskqueue"
@@ -340,7 +343,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
  25 WorkflowExecutionCompleted`, sawFieldsFlat...), allEvents)
 }
 
-func (s *TransientTaskSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() {
+func transientTaskTestNoTransientWorkflowTaskAfterFlushBufferedEvents(s *testcore.TestEnv) {
 	id := "functional-no-transient-workflow-task-after-flush-buffered-events-test"
 	wt := "functional-no-transient-workflow-task-after-flush-buffered-events-test-type"
 	tl := "functional-no-transient-workflow-task-after-flush-buffered-events-test-taskqueue"
