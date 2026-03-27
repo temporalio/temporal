@@ -169,7 +169,7 @@ func validateAndNormalizeDescribeRequest(req *workflowservice.DescribeNexusOpera
 	return nil
 }
 
-func validateAndNormalizeCancelRequest(req *workflowservice.RequestCancelNexusOperationExecutionRequest, config *Config, logger log.Logger) error {
+func validateAndNormalizeCancelRequest(req *workflowservice.RequestCancelNexusOperationExecutionRequest, config *Config) error {
 	if req.GetRequestId() == "" {
 		req.RequestId = uuid.NewString()
 	} else if len(req.GetRequestId()) > config.MaxIDLengthLimit() {
@@ -191,24 +191,15 @@ func validateAndNormalizeCancelRequest(req *workflowservice.RequestCancelNexusOp
 		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
 			len(req.GetIdentity()), config.MaxIDLengthLimit())
 	}
-
-	// TODO: use different config for limit
-	err := validateBlobSize(
-		req.GetOperationId(),
-		"RequestCancelNexusOperationExecution",
-		config.PayloadSizeLimit(req.GetNamespace()),
-		config.PayloadSizeLimitWarn(req.GetNamespace()),
-		len(req.GetReason()),
-		logger,
-		req.GetNamespace())
-	if err != nil {
-		return serviceerror.NewInvalidArgument("reason exceeds length limit")
+	if len(req.GetReason()) > config.MaxReasonLength(req.GetNamespace()) {
+		return serviceerror.NewInvalidArgumentf("reason exceeds length limit. Length=%d Limit=%d",
+			len(req.GetReason()), config.MaxReasonLength(req.GetNamespace()))
 	}
 
 	return nil
 }
 
-func validateAndNormalizeTerminateRequest(req *workflowservice.TerminateNexusOperationExecutionRequest, config *Config, logger log.Logger) error {
+func validateAndNormalizeTerminateRequest(req *workflowservice.TerminateNexusOperationExecutionRequest, config *Config) error {
 	if req.GetRequestId() == "" {
 		req.RequestId = uuid.NewString()
 	} else if len(req.GetRequestId()) > config.MaxIDLengthLimit() {
@@ -230,18 +221,9 @@ func validateAndNormalizeTerminateRequest(req *workflowservice.TerminateNexusOpe
 		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
 			len(req.GetIdentity()), config.MaxIDLengthLimit())
 	}
-
-	// TODO: use different config for limit
-	err := validateBlobSize(
-		req.GetOperationId(),
-		"TerminateNexusOperationExecution",
-		config.PayloadSizeLimit(req.GetNamespace()),
-		config.PayloadSizeLimitWarn(req.GetNamespace()),
-		len(req.GetReason()),
-		logger,
-		req.GetNamespace())
-	if err != nil {
-		return serviceerror.NewInvalidArgument("reason exceeds length limit")
+	if len(req.GetReason()) > config.MaxReasonLength(req.GetNamespace()) {
+		return serviceerror.NewInvalidArgumentf("reason exceeds length limit. Length=%d Limit=%d",
+			len(req.GetReason()), config.MaxReasonLength(req.GetNamespace()))
 	}
 
 	return nil

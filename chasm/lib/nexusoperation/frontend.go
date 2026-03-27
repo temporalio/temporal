@@ -233,7 +233,7 @@ func (h *frontendHandler) RequestCancelNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := validateAndNormalizeCancelRequest(req, h.config, h.logger); err != nil {
+	if err := validateAndNormalizeCancelRequest(req, h.config); err != nil {
 		return nil, err
 	}
 
@@ -261,7 +261,7 @@ func (h *frontendHandler) TerminateNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := validateAndNormalizeTerminateRequest(req, h.config, h.logger); err != nil {
+	if err := validateAndNormalizeTerminateRequest(req, h.config); err != nil {
 		return nil, err
 	}
 
