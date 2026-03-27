@@ -3623,19 +3623,22 @@ func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceN
 
 // isSchedulerErrorLegacyRoutable returns true if the error from the CHASM scheduler
 // indicates that the request should be routed to the legacy (V1) scheduler stack.
-// This accounts for two situations:
+// This accounts for three situations:
 //   - NotFound: the CHASM stack doesn't have a schedule for that ID
 //   - NotFound (sentinel): the key at that ID is a sentinel value (reserving the ID
 //     for the V1 stack)
-//
-// TODO: should ErrClosed (FailedPrecondition) from a CHASM schedule that was
-// migrated to V1 also be routable? Currently closed schedules return
-// FailedPrecondition which does not fall back to V1. This means callers with
-// routing enabled must handle the closed schedule case themselves or wait for
-// the CHASM entity to be cleaned up.
+//   - ErrClosed: the CHASM schedule was migrated to V1 and marked closed; the
+//     request should be retried against the workflow-backed stack.
 func isSchedulerErrorLegacyRoutable(err error) bool {
 	var notFoundErr *serviceerror.NotFound
-	return errors.As(err, &notFoundErr)
+	if errors.As(err, &notFoundErr) {
+		return true
+	}
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	if errors.As(err, &failedPreconditionErr) {
+		return failedPreconditionErr.Message == chasmscheduler.ErrClosed.(*serviceerror.FailedPrecondition).Message
+	}
+	return false
 }
 
 // Validates inner start workflow request. Note that this can mutate search attributes if present.
@@ -4132,6 +4135,10 @@ func (wh *WorkflowHandler) describeScheduleWorkflow(ctx context.Context, request
 	executionInfo := describeResponse.GetWorkflowExecutionInfo()
 	if executionInfo.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		// only treat running schedules as existing
+		return nil, serviceerror.NewNotFound("schedule not found")
+	}
+	if executionInfo.GetType().GetName() == dummy.DummyWFTypeName {
+		// This is a sentinel workflow, not a real scheduler.
 		return nil, serviceerror.NewNotFound("schedule not found")
 	}
 
