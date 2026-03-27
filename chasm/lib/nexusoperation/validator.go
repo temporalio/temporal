@@ -284,7 +284,7 @@ func validateBlobSize(
 		logger.Warn("Nexus Operation blob size exceeds the warning limit.",
 			tag.WorkflowNamespace(namespaceName),
 			tag.OperationID(operationID),
-			tag.OperationSize(int64(blobSize)),
+			tag.BlobSize(int64(blobSize)),
 			tag.BlobSizeViolationOperation(blobSizeViolationTagValue))
 	}
 
