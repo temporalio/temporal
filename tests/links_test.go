@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -16,12 +15,24 @@ import (
 	"go.temporal.io/server/tests/testcore"
 )
 
-type LinksSuite struct {
-	testcore.FunctionalTestBase
-}
-
 func TestLinksTestSuite(t *testing.T) {
-	suite.Run(t, new(LinksSuite))
+	t.Parallel()
+	t.Run(
+		"TestTerminateWorkflow_LinksAttachedToEvent",
+		TestTerminateWorkflow_LinksAttachedToEvent,
+	)
+	t.Run(
+		"TestRequestCancelWorkflow_LinksAttachedToEvent",
+		TestRequestCancelWorkflow_LinksAttachedToEvent,
+	)
+	t.Run(
+		"TestSignalWorkflowExecution_LinksAttachedToEvent",
+		TestSignalWorkflowExecution_LinksAttachedToEvent,
+	)
+	t.Run(
+		"TestSignalWithStartWorkflowExecution_LinksAttachedToRelevantEvents",
+		TestSignalWithStartWorkflowExecution_LinksAttachedToRelevantEvents,
+	)
 }
 
 var links = []*commonpb.Link{
@@ -36,7 +47,9 @@ var links = []*commonpb.Link{
 	},
 }
 
-func (s *LinksSuite) TestTerminateWorkflow_LinksAttachedToEvent() {
+func TestTerminateWorkflow_LinksAttachedToEvent(t *testing.T) {
+	s := testcore.NewEnv(t, testcore.WithSdkWorker())
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	run, err := s.SdkClient().ExecuteWorkflow(
@@ -65,7 +78,9 @@ func (s *LinksSuite) TestTerminateWorkflow_LinksAttachedToEvent() {
 	protorequire.ProtoSliceEqual(s.T(), links, event.Links)
 }
 
-func (s *LinksSuite) TestRequestCancelWorkflow_LinksAttachedToEvent() {
+func TestRequestCancelWorkflow_LinksAttachedToEvent(t *testing.T) {
+	s := testcore.NewEnv(t, testcore.WithSdkWorker())
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	run, err := s.SdkClient().ExecuteWorkflow(
@@ -102,7 +117,9 @@ func (s *LinksSuite) TestRequestCancelWorkflow_LinksAttachedToEvent() {
 	s.True(foundEvent)
 }
 
-func (s *LinksSuite) TestSignalWorkflowExecution_LinksAttachedToEvent() {
+func TestSignalWorkflowExecution_LinksAttachedToEvent(t *testing.T) {
+	s := testcore.NewEnv(t, testcore.WithSdkWorker())
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	run, err := s.SdkClient().ExecuteWorkflow(
@@ -141,7 +158,9 @@ func (s *LinksSuite) TestSignalWorkflowExecution_LinksAttachedToEvent() {
 	s.True(foundEvent)
 }
 
-func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToRelevantEvents() {
+func TestSignalWithStartWorkflowExecution_LinksAttachedToRelevantEvents(t *testing.T) {
+	s := testcore.NewEnv(t, testcore.WithSdkWorker())
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
