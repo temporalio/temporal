@@ -53,14 +53,11 @@ func Invoke(
 		return nil, err
 	}
 
-	// TODO: remove this call in 1.25
-	enums.SetDefaultWorkflowIdConflictPolicy(
-		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdConflictPolicy,
-		enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)
-
-	api.MigrateWorkflowIdReusePolicyForRunningWorkflow(
+	enums.SetDefaultWorkflowIdPolicies(
 		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdReusePolicy,
-		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdConflictPolicy)
+		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdConflictPolicy,
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+	)
 
 	startRequest := ConvertToStartRequest(
 		namespaceID,

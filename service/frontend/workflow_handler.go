@@ -456,6 +456,13 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, errRequestNotSet
 	}
 
+	// Apply defaults before validation; must be first for idempotency on internal retries.
+	enums.SetDefaultWorkflowIdPolicies(
+		&request.WorkflowIdReusePolicy,
+		&request.WorkflowIdConflictPolicy,
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+	)
+
 	if err := wh.validateWorkflowID(request.GetWorkflowId()); err != nil {
 		return nil, err
 	}
@@ -499,9 +506,6 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		request.WorkflowIdConflictPolicy); err != nil {
 		return nil, err
 	}
-
-	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
-	enums.SetDefaultWorkflowIdConflictPolicy(&request.WorkflowIdConflictPolicy, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
 
 	if err := wh.validateOnConflictOptions(request.OnConflictOptions); err != nil {
 		return nil, err
@@ -2127,6 +2131,13 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, errRequestNotSet
 	}
 
+	// Apply defaults before validation; must be first for idempotency on internal retries.
+	enums.SetDefaultWorkflowIdPolicies(
+		&request.WorkflowIdReusePolicy,
+		&request.WorkflowIdConflictPolicy,
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+	)
+
 	if err := wh.validateWorkflowID(request.GetWorkflowId()); err != nil {
 		return nil, err
 	}
@@ -2181,9 +2192,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		name := enumspb.WorkflowIdConflictPolicy_name[int32(request.WorkflowIdConflictPolicy.Number())]
 		return nil, serviceerror.NewInvalidArgumentf(errUnsupportedIDConflictPolicy, name)
 	}
-
-	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
-	enums.SetDefaultWorkflowIdConflictPolicy(&request.WorkflowIdConflictPolicy, enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)
 
 	if err := backoff.ValidateSchedule(request.GetCronSchedule()); err != nil {
 		return nil, err

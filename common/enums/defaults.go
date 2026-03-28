@@ -10,13 +10,26 @@ func SetDefaultWorkflowIdReusePolicy(f *enumspb.WorkflowIdReusePolicy) {
 	}
 }
 
-func SetDefaultWorkflowIdConflictPolicy(
+// SetDefaultWorkflowIdPolicies migrates and applies defaults to both WorkflowId policies.
+func SetDefaultWorkflowIdPolicies(
+	reusePolicy *enumspb.WorkflowIdReusePolicy,
 	conflictPolicy *enumspb.WorkflowIdConflictPolicy,
-	defaultPolicy enumspb.WorkflowIdConflictPolicy,
+	defaultConflictPolicy enumspb.WorkflowIdConflictPolicy,
 ) {
+	// Set default conflict policy, if unset
 	if *conflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED {
-		*conflictPolicy = defaultPolicy
+		//nolint:staticcheck // SA1019: intentional migration of deprecated policy
+		if *reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
+			// Migrate the deprecated TERMINATE_IF_RUNNING.
+			*conflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+			*reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+		} else {
+			*conflictPolicy = defaultConflictPolicy
+		}
 	}
+
+	// Set default reuse policy, if unset
+	SetDefaultWorkflowIdReusePolicy(reusePolicy)
 }
 
 func SetDefaultHistoryEventFilterType(f *enumspb.HistoryEventFilterType) {

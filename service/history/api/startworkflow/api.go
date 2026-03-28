@@ -120,14 +120,11 @@ func NewStarter(
 func (s *Starter) prepare(ctx context.Context) error {
 	request := s.request.StartRequest
 
-	// TODO: remove this call in 1.25
-	enums.SetDefaultWorkflowIdConflictPolicy(
-		&request.WorkflowIdConflictPolicy,
-		enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
-
-	api.MigrateWorkflowIdReusePolicyForRunningWorkflow(
+	enums.SetDefaultWorkflowIdPolicies(
 		&request.WorkflowIdReusePolicy,
-		&request.WorkflowIdConflictPolicy)
+		&request.WorkflowIdConflictPolicy,
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+	)
 
 	api.OverrideStartWorkflowExecutionRequest(
 		request,
