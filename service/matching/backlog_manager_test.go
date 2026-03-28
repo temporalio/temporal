@@ -355,6 +355,83 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_NotIncrementedBySp
 		"backlog count should not be incremented")
 }
 
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
+	if !s.newMatcher || s.fairness {
+		s.T().Skip("only for priority backlog manager")
+	}
+
+	blm := s.blm.(*priBacklogManagerImpl)
+	db := blm.db
+
+	// Capture tasks as they're dispatched to the matcher.
+	var tasks []*internalTask
+	var lock sync.Mutex
+	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).DoAndReturn(func(t *internalTask) error {
+		lock.Lock()
+		defer lock.Unlock()
+		tasks = append(tasks, t)
+		return nil
+	}).AnyTimes()
+
+	s.blm.Start()
+	defer s.blm.Stop()
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
+
+	// Spool 3 tasks through the real writer path.
+	for range 3 {
+		s.Require().NoError(s.blm.SpoolTask(&persistencespb.TaskInfo{
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			CreateTime: timestamp.TimeNowPtrUtc(),
+		}))
+	}
+
+	// Wait for all tasks to reach the matcher via signalNewTasks/direct-add.
+	s.Eventually(func() bool {
+		lock.Lock()
+		defer lock.Unlock()
+		return len(tasks) == 3
+	}, 5*time.Second, 10*time.Millisecond)
+
+	s.EqualValues(3, totalApproximateBacklogCount(s.blm))
+
+	// Inject backlog count divergence (simulating accumulated drift).
+	db.updateBacklogStats(2, time.Time{})
+	s.EqualValues(5, totalApproximateBacklogCount(s.blm))
+
+	// Advance maxReadLevel past all task IDs to simulate a range renewal.
+	// After direct-add, readLevel == old maxReadLevel == last task ID.
+	maxRL := db.GetMaxReadLevel(subqueueZero) + 100
+	db.setMaxReadLevelForTesting(subqueueZero, maxRL)
+
+	// Signal the reader pump to scan through the empty range up to the
+	// new maxReadLevel, advancing readLevel.
+	blm.subqueues[subqueueZero].SignalTaskLoading()
+
+	// Wait for the reader pump to scan through the gap.
+	s.Eventually(func() bool {
+		rl, _ := blm.subqueues[subqueueZero].getLevels()
+		return rl >= maxRL
+	}, 5*time.Second, 10*time.Millisecond)
+
+	// Complete all tasks. On the last completion:
+	// - outstandingTasks is empty
+	// - readLevel >= maxReadLevel (pump already scanned)
+	// - isDrainedLocked() returns true
+	// - ackLevel < maxReadLevel (gap between last task ID and maxReadLevel)
+	// Without the isDrained fix, count would be 5 - 3 = 2. With the fix,
+	// it resets to 0.
+	lock.Lock()
+	for _, t := range tasks {
+		t.finish(nil, true)
+	}
+	lock.Unlock()
+
+	_, ackLevel := blm.subqueues[subqueueZero].getLevels()
+	s.Less(ackLevel, maxRL)
+
+	s.Zero(totalApproximateBacklogCount(s.blm))
+}
+
 func totalApproximateBacklogCount(c backlogManager) (total int64) {
 	for _, stats := range c.BacklogStatsByPriority() {
 		total += stats.ApproximateBacklogCount
