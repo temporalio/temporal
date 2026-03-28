@@ -59,3 +59,9 @@ message ObsoleteMatchingTaskFailure {
 // between worker deployments.
 message ActivityStartDuringTransitionFailure {
 }
+
+// StalePartitionCountsFailure is returned when the clients view of valid partition counts is
+// too far from the current value and the server rejects the call. It is an "Aborted" error.
+// The current values will be returned in a grpc trailer.
+message StalePartitionCountsFailure {
+}
