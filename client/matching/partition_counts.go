@@ -48,12 +48,12 @@ func (pc PartitionCounts) appendToOutgoingContext(ctx context.Context) context.C
 	return metadata.AppendToOutgoingContext(ctx, partitionCountsHeaderName, v)
 }
 
-func (pc PartitionCounts) SetTrailer(ctx context.Context) {
+func (pc PartitionCounts) SetTrailer(ctx context.Context) error {
 	v, err := pc.encode()
 	if err != nil {
-		return
+		return err
 	}
-	grpc.SetTrailer(ctx, metadata.Pairs(partitionCountsTrailerName, v))
+	return grpc.SetTrailer(ctx, metadata.Pairs(partitionCountsTrailerName, v))
 }
 
 func parsePartitionCounts(hdr string) (PartitionCounts, error) {

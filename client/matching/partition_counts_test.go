@@ -164,7 +164,7 @@ func TestHandlePartitionCounts_StaleRetry_Fails(t *testing.T) {
 	}
 
 	_, err := handlePartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Equal(t, 2, calls)
 }
 
@@ -184,7 +184,7 @@ func TestHandlePartitionCounts_OtherErrorNoRetry(t *testing.T) {
 	}
 
 	_, err := handlePartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Equal(t, 1, calls) // no retry
 
 	// cache should still be updated from trailer
