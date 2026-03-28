@@ -54,6 +54,20 @@ func (mr *MockSenderFlowControllerMockRecorder) RefreshReceiverFlowControlInfo(s
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshReceiverFlowControlInfo", reflect.TypeOf((*MockSenderFlowController)(nil).RefreshReceiverFlowControlInfo), syncState)
 }
 
+// IsPaused mocks base method.
+func (m *MockSenderFlowController) IsPaused(priority enums.TaskPriority) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsPaused", priority)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsPaused indicates an expected call of IsPaused.
+func (mr *MockSenderFlowControllerMockRecorder) IsPaused(priority any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsPaused", reflect.TypeOf((*MockSenderFlowController)(nil).IsPaused), priority)
+}
+
 // Wait mocks base method.
 func (m *MockSenderFlowController) Wait(ctx context.Context, priority enums.TaskPriority) error {
 	m.ctrl.T.Helper()

@@ -2,6 +2,7 @@ package replication
 
 import (
 	"math/rand"
+	"sort"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -26,12 +28,13 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller              *gomock.Controller
-		clusterMetadata         *cluster.MockMetadata
-		highPriorityTaskTracker *MockExecutableTaskTracker
-		lowPriorityTaskTracker  *MockExecutableTaskTracker
-		stream                  *mockStream
-		taskScheduler           *mockScheduler
+		controller                   *gomock.Controller
+		clusterMetadata              *cluster.MockMetadata
+		highPriorityTaskTracker      *MockExecutableTaskTracker
+		throttledPriorityTaskTracker *MockExecutableTaskTracker
+		lowPriorityTaskTracker       *MockExecutableTaskTracker
+		stream                       *mockStream
+		taskScheduler                *mockScheduler
 
 		streamReceiver         *StreamReceiverImpl
 		receiverFlowController *MockReceiverFlowController
@@ -66,6 +69,7 @@ func (s *streamReceiverSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.clusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.highPriorityTaskTracker = NewMockExecutableTaskTracker(s.controller)
+	s.throttledPriorityTaskTracker = NewMockExecutableTaskTracker(s.controller)
 	s.lowPriorityTaskTracker = NewMockExecutableTaskTracker(s.controller)
 	s.stream = &mockStream{
 		requests: nil,
@@ -75,13 +79,16 @@ func (s *streamReceiverSuite) SetupTest() {
 		tasks: nil,
 	}
 
+	testLogger := log.NewTestLogger()
 	processToolBox := ProcessToolBox{
 		ClusterMetadata:           s.clusterMetadata,
 		Config:                    tests.NewDynamicConfig(),
 		HighPriorityTaskScheduler: s.taskScheduler,
 		LowPriorityTaskScheduler:  s.taskScheduler,
 		MetricsHandler:            metrics.NoopMetricsHandler,
-		Logger:                    log.NewTestLogger(),
+		Logger:                    testLogger,
+		ThrottledLogger:           testLogger,
+		NamespaceThrottler:        NoopNamespaceReplicationThrottler{},
 		DLQWriter:                 NoopDLQWriter{},
 	}
 	processToolBox.Config.ReplicationStreamSyncStatusDuration = dynamicconfig.GetDurationPropertyFn(5 * time.Millisecond)
@@ -105,6 +112,7 @@ func (s *streamReceiverSuite) SetupTest() {
 		},
 	).AnyTimes()
 	s.streamReceiver.highPriorityTaskTracker = s.highPriorityTaskTracker
+	s.streamReceiver.throttledPriorityTaskTracker = s.throttledPriorityTaskTracker
 	s.streamReceiver.lowPriorityTaskTracker = s.lowPriorityTaskTracker
 	s.stream.requests = []*adminservice.StreamWorkflowReplicationMessagesRequest{}
 	s.receiverFlowController = NewMockReceiverFlowController(s.controller)
@@ -117,8 +125,10 @@ func (s *streamReceiverSuite) TearDownTest() {
 
 func (s *streamReceiverSuite) TestAckMessage_Noop() {
 	s.highPriorityTaskTracker.EXPECT().LowWatermark().Return(nil)
+	s.throttledPriorityTaskTracker.EXPECT().LowWatermark().Return(nil)
 	s.lowPriorityTaskTracker.EXPECT().LowWatermark().Return(nil)
 	s.highPriorityTaskTracker.EXPECT().Size().Return(0)
+	s.throttledPriorityTaskTracker.EXPECT().Size().Return(0)
 	s.lowPriorityTaskTracker.EXPECT().Size().Return(0)
 
 	s.streamReceiver.ackMessage(s.stream)
@@ -129,8 +139,10 @@ func (s *streamReceiverSuite) TestAckMessage_Noop() {
 func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeUnset() {
 	s.streamReceiver.receiverMode = ReceiverModeUnset // when stream receiver is in unset mode, means no task received yet, so no ACK should be sent
 	s.highPriorityTaskTracker.EXPECT().LowWatermark().Return(nil)
+	s.throttledPriorityTaskTracker.EXPECT().LowWatermark().Return(nil)
 	s.lowPriorityTaskTracker.EXPECT().LowWatermark().Return(nil)
 	s.highPriorityTaskTracker.EXPECT().Size().Return(0)
+	s.throttledPriorityTaskTracker.EXPECT().Size().Return(0)
 	s.lowPriorityTaskTracker.EXPECT().Size().Return(0)
 	_, err := s.streamReceiver.ackMessage(s.stream)
 	s.Equal(0, len(s.stream.requests))
@@ -145,8 +157,10 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeSingleStack(
 
 	s.streamReceiver.receiverMode = ReceiverModeSingleStack
 	s.highPriorityTaskTracker.EXPECT().LowWatermark().Return(watermarkInfo)
+	s.throttledPriorityTaskTracker.EXPECT().LowWatermark().Return(nil)
 	s.lowPriorityTaskTracker.EXPECT().LowWatermark().Return(nil)
 	s.highPriorityTaskTracker.EXPECT().Size().Return(0)
+	s.throttledPriorityTaskTracker.EXPECT().Size().Return(0)
 	s.lowPriorityTaskTracker.EXPECT().Size().Return(0)
 
 	_, err := s.streamReceiver.ackMessage(s.stream)
@@ -170,8 +184,10 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeSingleStack_
 
 	s.streamReceiver.receiverMode = ReceiverModeSingleStack
 	s.highPriorityTaskTracker.EXPECT().LowWatermark().Return(nil)
+	s.throttledPriorityTaskTracker.EXPECT().LowWatermark().Return(nil)
 	s.lowPriorityTaskTracker.EXPECT().LowWatermark().Return(watermarkInfo)
 	s.highPriorityTaskTracker.EXPECT().Size().Return(0)
+	s.throttledPriorityTaskTracker.EXPECT().Size().Return(0)
 	s.lowPriorityTaskTracker.EXPECT().Size().Return(0)
 
 	_, err := s.streamReceiver.ackMessage(s.stream)
@@ -187,8 +203,10 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeSingleStack_
 
 	s.streamReceiver.receiverMode = ReceiverModeSingleStack
 	s.highPriorityTaskTracker.EXPECT().LowWatermark().Return(watermarkInfo)
+	s.throttledPriorityTaskTracker.EXPECT().LowWatermark().Return(nil)
 	s.lowPriorityTaskTracker.EXPECT().LowWatermark().Return(watermarkInfo)
 	s.highPriorityTaskTracker.EXPECT().Size().Return(0)
+	s.throttledPriorityTaskTracker.EXPECT().Size().Return(0)
 	s.lowPriorityTaskTracker.EXPECT().Size().Return(0)
 
 	_, err := s.streamReceiver.ackMessage(s.stream)
@@ -203,8 +221,10 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredStack_
 		Timestamp: time.Unix(0, rand.Int63()),
 	}
 	s.highPriorityTaskTracker.EXPECT().LowWatermark().Return(nil)
+	s.throttledPriorityTaskTracker.EXPECT().LowWatermark().Return(nil)
 	s.lowPriorityTaskTracker.EXPECT().LowWatermark().Return(watermarkInfo)
 	s.highPriorityTaskTracker.EXPECT().Size().Return(0)
+	s.throttledPriorityTaskTracker.EXPECT().Size().Return(0)
 	s.lowPriorityTaskTracker.EXPECT().Size().Return(0)
 	_, err := s.streamReceiver.ackMessage(s.stream)
 	s.Equal(0, len(s.stream.requests))
@@ -218,8 +238,10 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredStack_
 		Timestamp: time.Unix(0, rand.Int63()),
 	}
 	s.highPriorityTaskTracker.EXPECT().LowWatermark().Return(watermarkInfo)
+	s.throttledPriorityTaskTracker.EXPECT().LowWatermark().Return(nil)
 	s.lowPriorityTaskTracker.EXPECT().LowWatermark().Return(nil)
 	s.highPriorityTaskTracker.EXPECT().Size().Return(0)
+	s.throttledPriorityTaskTracker.EXPECT().Size().Return(0)
 	s.lowPriorityTaskTracker.EXPECT().Size().Return(0)
 	_, err := s.streamReceiver.ackMessage(s.stream)
 	s.Equal(0, len(s.stream.requests))
@@ -237,10 +259,13 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredStack(
 		Timestamp: time.Unix(0, rand.Int63()),
 	}
 	s.highPriorityTaskTracker.EXPECT().LowWatermark().Return(highWatermarkInfo)
+	s.throttledPriorityTaskTracker.EXPECT().LowWatermark().Return(nil)
 	s.lowPriorityTaskTracker.EXPECT().LowWatermark().Return(lowWatermarkInfo)
 	s.receiverFlowController.EXPECT().GetFlowControlInfo(enumsspb.TASK_PRIORITY_HIGH).Return(FlowControlInfo{Command: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME})
+	s.receiverFlowController.EXPECT().GetFlowControlInfo(enumsspb.TASK_PRIORITY_THROTTLED).Return(FlowControlInfo{Command: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME})
 	s.receiverFlowController.EXPECT().GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW).Return(FlowControlInfo{Command: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE, Cause: "test cause"})
 	s.highPriorityTaskTracker.EXPECT().Size().Return(0).AnyTimes()
+	s.throttledPriorityTaskTracker.EXPECT().Size().Return(0).AnyTimes()
 	s.lowPriorityTaskTracker.EXPECT().Size().Return(0).AnyTimes()
 	_, err := s.streamReceiver.ackMessage(s.stream)
 	s.NoError(err)
@@ -253,6 +278,9 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredStack(
 					InclusiveLowWatermark:     highWatermarkInfo.Watermark,
 					InclusiveLowWatermarkTime: timestamppb.New(highWatermarkInfo.Timestamp),
 					FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
+				},
+				ThrottledPriorityState: &replicationspb.ReplicationState{
+					FlowControlCommand: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
 				},
 				LowPriorityState: &replicationspb.ReplicationState{
 					InclusiveLowWatermark:     lowWatermarkInfo.Watermark,
@@ -509,6 +537,87 @@ func (s *streamReceiverSuite) TestRecvEventLoop_Panic_Captured() {
 	s.streamReceiver.recvEventLoop() // should not cause panic
 }
 
+func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack_ThrottledNamespace() {
+	// A HIGH-priority task whose namespace is throttled must be demoted to THROTTLED priority
+	// and routed to the low-priority scheduler.
+	const throttledNS = "throttled-ns-id"
+	throttler := &mockNamespaceReplicationThrottler{
+		throttledIDs: map[string]struct{}{throttledNS: {}},
+	}
+	s.streamReceiver.NamespaceThrottler = throttler
+	s.streamReceiver.receiverMode = ReceiverModeTieredStack
+
+	rawTaskInfo := &persistencespb.ReplicationTaskInfo{NamespaceId: throttledNS}
+	replicationTask := &replicationspb.ReplicationTask{
+		TaskType:       enumsspb.ReplicationTaskType(-1),
+		SourceTaskId:   rand.Int63(),
+		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
+		Priority:       enumsspb.TASK_PRIORITY_HIGH,
+		RawTaskInfo:    rawTaskInfo,
+	}
+	streamResp := StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]{
+		Resp: &adminservice.StreamWorkflowReplicationMessagesResponse{
+			Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
+				Messages: &replicationspb.WorkflowReplicationMessages{
+					ReplicationTasks:           []*replicationspb.ReplicationTask{replicationTask},
+					ExclusiveHighWatermark:     rand.Int63(),
+					ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
+					Priority:                   enumsspb.TASK_PRIORITY_HIGH,
+				},
+			},
+		},
+	}
+	s.stream.respChan <- streamResp
+	close(s.stream.respChan)
+
+	highScheduler := &mockScheduler{}
+	lowScheduler := &mockScheduler{}
+	s.streamReceiver.HighPriorityTaskScheduler = highScheduler
+	s.streamReceiver.LowPriorityTaskScheduler = lowScheduler
+
+	trackedTask := NewMockTrackableExecutableTask(s.controller)
+	trackedTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
+	s.highPriorityTaskTracker.EXPECT().TrackTasks(gomock.Any(), gomock.Any()).Return([]TrackableExecutableTask{trackedTask})
+
+	err := s.streamReceiver.processMessages(s.stream)
+	s.NoError(err)
+	s.Empty(highScheduler.tasks, "throttled namespace task must NOT go to high priority scheduler")
+	s.Len(lowScheduler.tasks, 1, "throttled namespace task must go to low priority scheduler")
+}
+
+func (s *streamReceiverSuite) TestAckMessage_TieredStack_IncludesThrottledNamespaceIDs() {
+	const throttledNS = "throttled-ns-id"
+	s.streamReceiver.NamespaceThrottler = &mockNamespaceReplicationThrottler{
+		throttledIDs: map[string]struct{}{throttledNS: {}},
+	}
+	s.streamReceiver.receiverMode = ReceiverModeTieredStack
+
+	highWatermarkInfo := &WatermarkInfo{
+		Watermark: rand.Int63(),
+		Timestamp: time.Unix(0, rand.Int63()),
+	}
+	lowWatermarkInfo := &WatermarkInfo{
+		Watermark: highWatermarkInfo.Watermark - 10,
+		Timestamp: time.Unix(0, rand.Int63()),
+	}
+	s.highPriorityTaskTracker.EXPECT().LowWatermark().Return(highWatermarkInfo)
+	s.throttledPriorityTaskTracker.EXPECT().LowWatermark().Return(nil)
+	s.lowPriorityTaskTracker.EXPECT().LowWatermark().Return(lowWatermarkInfo)
+	s.highPriorityTaskTracker.EXPECT().Size().Return(0)
+	s.throttledPriorityTaskTracker.EXPECT().Size().Return(0)
+	s.lowPriorityTaskTracker.EXPECT().Size().Return(0)
+	s.receiverFlowController.EXPECT().GetFlowControlInfo(enumsspb.TASK_PRIORITY_HIGH).Return(FlowControlInfo{Command: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME})
+	s.receiverFlowController.EXPECT().GetFlowControlInfo(enumsspb.TASK_PRIORITY_THROTTLED).Return(FlowControlInfo{Command: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME})
+	s.receiverFlowController.EXPECT().GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW).Return(FlowControlInfo{Command: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME})
+
+	_, err := s.streamReceiver.ackMessage(s.stream)
+	s.NoError(err)
+	s.Require().Len(s.stream.requests, 1)
+	syncState := s.stream.requests[0].GetSyncReplicationState()
+	s.NotNil(syncState)
+	s.Equal([]string{throttledNS}, syncState.ThrottledNamespaceIds)
+}
+
 func (s *streamReceiverSuite) TestLivenessMonitor() {
 	s.streamReceiver.recvSignalChan <- struct{}{}
 	livenessMonitor(
@@ -552,3 +661,21 @@ func (s *mockScheduler) TrySubmit(task TrackableExecutableTask) bool {
 
 func (s *mockScheduler) Start() {}
 func (s *mockScheduler) Stop()  {}
+
+type mockNamespaceReplicationThrottler struct {
+	throttledIDs map[string]struct{}
+}
+
+func (m *mockNamespaceReplicationThrottler) Allow(namespaceID string) bool {
+	_, throttled := m.throttledIDs[namespaceID]
+	return !throttled
+}
+
+func (m *mockNamespaceReplicationThrottler) ThrottledNamespaceIDs() []string {
+	ids := make([]string, 0, len(m.throttledIDs))
+	for id := range m.throttledIDs {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}

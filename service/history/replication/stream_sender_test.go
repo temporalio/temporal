@@ -207,52 +207,15 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_TieredStack_Success() {
 	}
 	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(replicationState).Return().Times(1)
 
+	// ThrottledPriorityState is nil so throttled watermark falls back to high watermark.
 	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(
 		readerID,
 		&persistencespb.QueueReaderState{
 			Scopes: []*persistencespb.QueueSliceScope{
-				{
-					Range: &persistencespb.QueueSliceRange{
-						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(replicationState.InclusiveLowWatermark),
-						),
-						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(math.MaxInt64),
-						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
-				{
-					Range: &persistencespb.QueueSliceRange{
-						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(replicationState.HighPriorityState.InclusiveLowWatermark),
-						),
-						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(math.MaxInt64),
-						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
-				{
-					Range: &persistencespb.QueueSliceRange{
-						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(replicationState.LowPriorityState.InclusiveLowWatermark),
-						),
-						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(math.MaxInt64),
-						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
+				makeUniversalQueueSliceScope(replicationState.InclusiveLowWatermark),
+				makeUniversalQueueSliceScope(replicationState.HighPriorityState.InclusiveLowWatermark),
+				makeUniversalQueueSliceScope(replicationState.LowPriorityState.InclusiveLowWatermark),
+				makeUniversalQueueSliceScope(replicationState.HighPriorityState.InclusiveLowWatermark), // throttled fallback
 			},
 		},
 	).Return(nil)
@@ -295,52 +258,15 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_TieredStack_Error() {
 	}
 	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(replicationState).Return().Times(1)
 
+	// ThrottledPriorityState is nil so throttled watermark falls back to high watermark.
 	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(
 		readerID,
 		&persistencespb.QueueReaderState{
 			Scopes: []*persistencespb.QueueSliceScope{
-				{
-					Range: &persistencespb.QueueSliceRange{
-						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(replicationState.InclusiveLowWatermark),
-						),
-						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(math.MaxInt64),
-						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
-				{
-					Range: &persistencespb.QueueSliceRange{
-						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(replicationState.HighPriorityState.InclusiveLowWatermark),
-						),
-						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(math.MaxInt64),
-						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
-				{
-					Range: &persistencespb.QueueSliceRange{
-						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(replicationState.LowPriorityState.InclusiveLowWatermark),
-						),
-						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(math.MaxInt64),
-						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
+				makeUniversalQueueSliceScope(replicationState.InclusiveLowWatermark),
+				makeUniversalQueueSliceScope(replicationState.HighPriorityState.InclusiveLowWatermark),
+				makeUniversalQueueSliceScope(replicationState.LowPriorityState.InclusiveLowWatermark),
+				makeUniversalQueueSliceScope(replicationState.HighPriorityState.InclusiveLowWatermark), // throttled fallback
 			},
 		},
 	).Return(ownershipLost)
@@ -1046,6 +972,227 @@ func (s *streamSenderSuite) TestRecvEventLoop_RpcError_ShouldReturnStreamError()
 	s.Error(err)
 	s.Error(err, "rpc error")
 	s.IsType(&StreamError{}, err)
+}
+
+func (s *streamSenderSuite) TestGetEffectiveTaskPriority_NotTieredStack_ReturnsBase() {
+	s.streamSender.isTieredStackEnabled = false
+	task := tasks.NewMockTask(s.controller)
+	// GetNamespaceID must not be called; the throttle check is gated on isTieredStackEnabled.
+	s.Equal(enumsspb.TASK_PRIORITY_HIGH, s.streamSender.getEffectiveTaskPriority(task))
+}
+
+func (s *streamSenderSuite) TestGetEffectiveTaskPriority_TieredStack_NotThrottled_ReturnsHigh() {
+	s.streamSender.isTieredStackEnabled = true
+	task := tasks.NewMockTask(s.controller)
+	task.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
+	s.streamSender.throttledNamespaceIDs.Store(map[string]struct{}{})
+	s.Equal(enumsspb.TASK_PRIORITY_HIGH, s.streamSender.getEffectiveTaskPriority(task))
+}
+
+func (s *streamSenderSuite) TestGetEffectiveTaskPriority_TieredStack_Throttled_DemotesToThrottled() {
+	s.streamSender.isTieredStackEnabled = true
+	task := tasks.NewMockTask(s.controller)
+	task.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
+	s.streamSender.throttledNamespaceIDs.Store(map[string]struct{}{"ns-1": {}})
+	s.Equal(enumsspb.TASK_PRIORITY_THROTTLED, s.streamSender.getEffectiveTaskPriority(task))
+}
+
+func (s *streamSenderSuite) TestGetEffectiveTaskPriority_TieredStack_LowTaskNotAffected() {
+	s.streamSender.isTieredStackEnabled = true
+	// SyncWorkflowStateTask is inherently LOW priority; throttle map must not flip it further.
+	task := &tasks.SyncWorkflowStateTask{}
+	s.Equal(enumsspb.TASK_PRIORITY_LOW, s.streamSender.getEffectiveTaskPriority(task))
+}
+
+func (s *streamSenderSuite) TestRecvSyncReplicationState_TieredStack_StoresThrottledNamespaceIDs() {
+	s.streamSender.isTieredStackEnabled = true
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	ts := timestamppb.New(time.Now())
+	replicationState := &replicationspb.SyncReplicationState{
+		InclusiveLowWatermark:     100,
+		InclusiveLowWatermarkTime: ts,
+		HighPriorityState: &replicationspb.ReplicationState{
+			InclusiveLowWatermark:     110,
+			InclusiveLowWatermarkTime: ts,
+		},
+		LowPriorityState: &replicationspb.ReplicationState{
+			InclusiveLowWatermark:     100,
+			InclusiveLowWatermarkTime: ts,
+		},
+		ThrottledNamespaceIds: []string{"ns-a", "ns-b"},
+	}
+	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(replicationState).Times(1)
+	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(readerID, gomock.Any()).Return(nil)
+	s.shardContext.EXPECT().UpdateRemoteReaderInfo(readerID, gomock.Any(), gomock.Any()).Return(nil)
+
+	err := s.streamSender.recvSyncReplicationState(replicationState)
+	s.NoError(err)
+
+	m, ok := s.streamSender.throttledNamespaceIDs.Load().(map[string]struct{})
+	s.True(ok)
+	s.Contains(m, "ns-a")
+	s.Contains(m, "ns-b")
+	s.Len(m, 2)
+}
+
+func (s *streamSenderSuite) TestRecvSyncReplicationState_TieredStack_ClearsThrottledNamespaceIDs() {
+	s.streamSender.isTieredStackEnabled = true
+	// Pre-populate with some throttled namespaces.
+	s.streamSender.throttledNamespaceIDs.Store(map[string]struct{}{"old-ns": {}})
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	ts := timestamppb.New(time.Now())
+	replicationState := &replicationspb.SyncReplicationState{
+		InclusiveLowWatermark:     100,
+		InclusiveLowWatermarkTime: ts,
+		HighPriorityState: &replicationspb.ReplicationState{
+			InclusiveLowWatermark:     110,
+			InclusiveLowWatermarkTime: ts,
+		},
+		LowPriorityState: &replicationspb.ReplicationState{
+			InclusiveLowWatermark:     100,
+			InclusiveLowWatermarkTime: ts,
+		},
+		// No throttled namespace IDs — receiver cleared them.
+	}
+	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(replicationState).Times(1)
+	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(readerID, gomock.Any()).Return(nil)
+	s.shardContext.EXPECT().UpdateRemoteReaderInfo(readerID, gomock.Any(), gomock.Any()).Return(nil)
+
+	err := s.streamSender.recvSyncReplicationState(replicationState)
+	s.NoError(err)
+
+	m, ok := s.streamSender.throttledNamespaceIDs.Load().(map[string]struct{})
+	s.True(ok)
+	s.Empty(m)
+}
+
+// TestSendTasks_TieredStack_HighLoopSkipsThrottledTasks verifies that the HIGH loop skips
+// tasks whose effective priority is THROTTLED (namespace is back-pressured by receiver).
+// Those tasks are handled by the dedicated THROTTLED goroutine; the HIGH loop never sees them.
+func (s *streamSenderSuite) TestSendTasks_TieredStack_HighLoopSkipsThrottledTasks() {
+	s.streamSender.isTieredStackEnabled = true
+	s.streamSender.clientClusterShardCount = 1
+	s.streamSender.throttledNamespaceIDs.Store(map[string]struct{}{"throttled-ns": {}})
+
+	beginInclusiveWatermark := int64(100)
+	endExclusiveWatermark := int64(200)
+
+	throttledTask := &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.WorkflowKey{NamespaceID: "throttled-ns", WorkflowID: "w1"},
+		TaskID:      110,
+		Priority:    enumsspb.TASK_PRIORITY_HIGH, // effective priority → THROTTLED
+	}
+	highTask := &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.WorkflowKey{NamespaceID: "normal-ns", WorkflowID: "w2"},
+		TaskID:      120,
+		Priority:    enumsspb.TASK_PRIORITY_HIGH,
+	}
+	convertedHighTask := &replicationspb.ReplicationTask{
+		SourceTaskId:   120,
+		VisibilityTime: timestamppb.New(time.Unix(0, 1)),
+		Priority:       enumsspb.TASK_PRIORITY_HIGH,
+	}
+
+	mockRegistry := namespace.NewMockRegistry(s.controller)
+	mockRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespace.NewGlobalNamespaceForTest(
+		nil, nil, &persistencespb.NamespaceReplicationConfig{
+			Clusters: []string{"source_cluster", "target_cluster"},
+		}, 100), nil).AnyTimes()
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
+
+	iter := collection.NewPagingIterator[tasks.Task](
+		func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+			return []tasks.Task{throttledTask, highTask}, nil, nil
+		},
+	)
+	s.historyEngine.EXPECT().GetReplicationTasksIter(gomock.Any(), string(s.clientShardKey.ClusterID), beginInclusiveWatermark, endExclusiveWatermark).Return(iter, nil)
+
+	// No IsPaused calls: the HIGH loop skips THROTTLED tasks purely via resolveTaskPriorityForLoop.
+	s.senderFlowController.EXPECT().Wait(gomock.Any(), enumsspb.TASK_PRIORITY_HIGH).Return(nil).Times(1)
+	s.taskConverter.EXPECT().Convert(highTask, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_HIGH).Return(convertedHighTask, nil)
+
+	gomock.InOrder(
+		// throttledTask is silently skipped; highTask is sent.
+		s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			msgs := resp.GetMessages()
+			s.Equal(enumsspb.TASK_PRIORITY_HIGH, msgs.Priority)
+			s.Len(msgs.ReplicationTasks, 1)
+			return nil
+		}),
+		// End-of-batch watermark beacon.
+		s.server.EXPECT().Send(gomock.Any()).Return(nil),
+	)
+
+	err := s.streamSender.sendTasks(enumsspb.TASK_PRIORITY_HIGH, beginInclusiveWatermark, endExclusiveWatermark)
+	s.NoError(err)
+}
+
+// TestSendTasks_TieredStack_ThrottledLoopSendsThrottledTasks verifies that the THROTTLED loop
+// sends tasks whose effective priority is THROTTLED and skips tasks for non-throttled namespaces.
+func (s *streamSenderSuite) TestSendTasks_TieredStack_ThrottledLoopSendsThrottledTasks() {
+	s.streamSender.isTieredStackEnabled = true
+	s.streamSender.clientClusterShardCount = 1
+	s.streamSender.throttledNamespaceIDs.Store(map[string]struct{}{"throttled-ns": {}})
+
+	beginInclusiveWatermark := int64(100)
+	endExclusiveWatermark := int64(200)
+
+	throttledTask := &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.WorkflowKey{NamespaceID: "throttled-ns", WorkflowID: "w1"},
+		TaskID:      110,
+		Priority:    enumsspb.TASK_PRIORITY_HIGH, // effective priority → THROTTLED
+	}
+	// This task has a non-throttled namespace; its effective priority is HIGH, so the
+	// THROTTLED loop skips it (it is handled by the HIGH goroutine).
+	highTask := &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.WorkflowKey{NamespaceID: "normal-ns", WorkflowID: "w2"},
+		TaskID:      120,
+		Priority:    enumsspb.TASK_PRIORITY_HIGH,
+	}
+	convertedThrottledTask := &replicationspb.ReplicationTask{
+		SourceTaskId:   110,
+		VisibilityTime: timestamppb.New(time.Unix(0, 1)),
+		Priority:       enumsspb.TASK_PRIORITY_THROTTLED,
+	}
+
+	mockRegistry := namespace.NewMockRegistry(s.controller)
+	mockRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespace.NewGlobalNamespaceForTest(
+		nil, nil, &persistencespb.NamespaceReplicationConfig{
+			Clusters: []string{"source_cluster", "target_cluster"},
+		}, 100), nil).AnyTimes()
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
+
+	iter := collection.NewPagingIterator[tasks.Task](
+		func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+			return []tasks.Task{throttledTask, highTask}, nil, nil
+		},
+	)
+	s.historyEngine.EXPECT().GetReplicationTasksIter(gomock.Any(), string(s.clientShardKey.ClusterID), beginInclusiveWatermark, endExclusiveWatermark).Return(iter, nil)
+
+	// THROTTLED goroutine blocks freely on Wait — no IsPaused needed.
+	s.senderFlowController.EXPECT().Wait(gomock.Any(), enumsspb.TASK_PRIORITY_THROTTLED).Return(nil).Times(1)
+	s.taskConverter.EXPECT().Convert(throttledTask, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_THROTTLED).Return(convertedThrottledTask, nil)
+
+	gomock.InOrder(
+		// highTask is silently skipped; throttledTask is sent as THROTTLED priority.
+		s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			msgs := resp.GetMessages()
+			s.Equal(enumsspb.TASK_PRIORITY_THROTTLED, msgs.Priority)
+			s.Len(msgs.ReplicationTasks, 1)
+			return nil
+		}),
+		// End-of-batch watermark beacon.
+		s.server.EXPECT().Send(gomock.Any()).Return(nil),
+	)
+
+	err := s.streamSender.sendTasks(enumsspb.TASK_PRIORITY_THROTTLED, beginInclusiveWatermark, endExclusiveWatermark)
+	s.NoError(err)
 }
 
 func (s *streamSenderSuite) TestLivenessMonitor() {

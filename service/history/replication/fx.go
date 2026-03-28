@@ -41,6 +41,9 @@ type (
 
 var Module = fx.Provide(
 	NewTaskFetcherFactory,
+	func() NamespaceThrottler {
+		return NoopNamespaceReplicationThrottler{}
+	},
 	func(m persistence.ExecutionManager) ExecutionManager {
 		return m
 	},

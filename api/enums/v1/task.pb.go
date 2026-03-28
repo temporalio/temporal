@@ -237,13 +237,14 @@ func (x TaskType) String() string {
 	case TASK_TYPE_USER_TIMER:
 		return "UserTimer"
 
-		// gap between index can be used for future priority levels if needed
+		// TASK_PRIORITY_THROTTLED is assigned by the sender to tasks that would normally be HIGH
+		// priority but whose namespace is currently reported as throttled by the receiver.
+		// The receiver continues to run these tasks through the namespace throttler so the
+		// namespace can recover and be promoted back to HIGH priority.
 	case TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		return "WorkflowRunTimeout"
 	case TASK_TYPE_DELETE_HISTORY_EVENT:
 		return "DeleteHistoryEvent"
-
-		// Enum value maps for TaskPriority.
 	case TASK_TYPE_ACTIVITY_RETRY_TIMER:
 		return "ActivityRetryTimer"
 	case TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
@@ -252,9 +253,13 @@ func (x TaskType) String() string {
 		return "VisibilityStartExecution"
 	case TASK_TYPE_VISIBILITY_UPSERT_EXECUTION:
 		return "VisibilityUpsertExecution"
+
+		// gap between index can be used for future priority levels if needed
 	case TASK_TYPE_VISIBILITY_CLOSE_EXECUTION:
 		return "VisibilityCloseExecution"
 	case TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
+
+		// Enum value maps for TaskPriority.
 		return "VisibilityDeleteExecution"
 	case TASK_TYPE_TRANSFER_DELETE_EXECUTION:
 		return "TransferDeleteExecution"
@@ -270,8 +275,6 @@ func (x TaskType) String() string {
 		return "WorkflowExecutionTimeout"
 	case TASK_TYPE_REPLICATION_SYNC_HSM:
 		return "ReplicationSyncHsm"
-
-		// Deprecated: Use TaskPriority.Descriptor instead.
 	case TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION:
 		return "ReplicationSyncVersionedTransition"
 	case TASK_TYPE_CHASM_PURE:
@@ -306,6 +309,8 @@ const (
 	TASK_PRIORITY_UNSPECIFIED TaskPriority = 0
 	TASK_PRIORITY_HIGH        TaskPriority = 1
 
+	TASK_PRIORITY_THROTTLED TaskPriority = 2
+
 	TASK_PRIORITY_LOW TaskPriority = 10
 )
 
@@ -313,11 +318,13 @@ var (
 	TaskPriority_name = map[int32]string{
 		0:  "TASK_PRIORITY_UNSPECIFIED",
 		1:  "TASK_PRIORITY_HIGH",
+		2:  "TASK_PRIORITY_THROTTLED",
 		10: "TASK_PRIORITY_LOW",
 	}
 	TaskPriority_value = map[string]int32{
 		"TASK_PRIORITY_UNSPECIFIED": 0,
 		"TASK_PRIORITY_HIGH":        1,
+		"TASK_PRIORITY_THROTTLED":   2,
 		"TASK_PRIORITY_LOW":         10,
 	}
 )
@@ -334,6 +341,8 @@ func (x TaskPriority) String() string {
 		return "Unspecified"
 	case TASK_PRIORITY_HIGH:
 		return "High"
+	case TASK_PRIORITY_THROTTLED:
+		return "Throttled"
 	case TASK_PRIORITY_LOW:
 		return "Low"
 	default:
@@ -354,6 +363,7 @@ func (x TaskPriority) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
+// Deprecated: Use TaskPriority.Descriptor instead.
 func (TaskPriority) EnumDescriptor() ([]byte, []int) {
 	return file_temporal_server_api_enums_v1_task_proto_rawDescGZIP(), []int{2}
 }
@@ -400,10 +410,11 @@ const file_temporal_server_api_enums_v1_task_proto_rawDesc = "" +
 	"\x1eTASK_TYPE_REPLICATION_SYNC_HSM\x10\x1e\x123\n" +
 	"/TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION\x10\x1f\x12\x18\n" +
 	"\x14TASK_TYPE_CHASM_PURE\x10 \x12\x13\n" +
-	"\x0fTASK_TYPE_CHASM\x10!\"\x04\b\t\x10\t\"\x04\b\v\x10\v\"\x04\b\x17\x10\x17*\\\n" +
+	"\x0fTASK_TYPE_CHASM\x10!\"\x04\b\t\x10\t\"\x04\b\v\x10\v\"\x04\b\x17\x10\x17*y\n" +
 	"\fTaskPriority\x12\x1d\n" +
 	"\x19TASK_PRIORITY_UNSPECIFIED\x10\x00\x12\x16\n" +
-	"\x12TASK_PRIORITY_HIGH\x10\x01\x12\x15\n" +
+	"\x12TASK_PRIORITY_HIGH\x10\x01\x12\x1b\n" +
+	"\x17TASK_PRIORITY_THROTTLED\x10\x02\x12\x15\n" +
 	"\x11TASK_PRIORITY_LOW\x10\n" +
 	"B*Z(go.temporal.io/server/api/enums/v1;enumsb\x06proto3"
 

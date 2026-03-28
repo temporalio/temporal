@@ -63,6 +63,9 @@ type (
 		flowController          SenderFlowController
 		sendLock                sync.Mutex
 		ssRateLimiter           ServerSchedulerRateLimiter
+		// throttledNamespaceIDs stores a map[string]struct{} of namespace IDs that the
+		// receiver has reported as throttled; updated on each SyncReplicationState ACK.
+		throttledNamespaceIDs atomic.Value
 	}
 )
 
@@ -121,10 +124,12 @@ func (s *StreamSenderImpl) Start() {
 	}
 
 	if s.isTieredStackEnabled {
-		// High Priority sender is used for live traffic
-		// Low Priority sender is used for force replication closed workflow
+		// High Priority sender is used for live traffic.
+		// Low Priority sender is used for force replication of closed workflows.
+		// Throttled Priority sender handles tasks for namespaces the receiver has back-pressured.
 		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_HIGH), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
 		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_LOW), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
+		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_THROTTLED), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
 	} else {
 		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_UNSPECIFIED), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
 	}
@@ -250,53 +255,22 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		if attr.HighPriorityState == nil || attr.LowPriorityState == nil {
 			return NewStreamError("streamSender encountered unsupported SyncReplicationState", nil)
 		}
+		// Throttled watermark falls back to the high watermark when the receiver has not
+		// yet sent a ThrottledPriorityState (e.g. older receiver versions or first connect).
+		throttledWatermark := attr.GetHighPriorityState().GetInclusiveLowWatermark()
+		if tp := attr.GetThrottledPriorityState(); tp != nil {
+			throttledWatermark = tp.GetInclusiveLowWatermark()
+		}
 		readerState = &persistencespb.QueueReaderState{
 			Scopes: []*persistencespb.QueueSliceScope{
-				// index 0 is for overall low watermark. In tiered stack it is Min(LowWatermark-high priority, LowWatermark-low priority)
-				{
-					Range: &persistencespb.QueueSliceRange{
-						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(attr.GetInclusiveLowWatermark()),
-						),
-						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(math.MaxInt64),
-						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
-				// index 1 is for high priority
-				{
-					Range: &persistencespb.QueueSliceRange{
-						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(attr.GetHighPriorityState().GetInclusiveLowWatermark()),
-						),
-						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(math.MaxInt64),
-						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
-				// index 2 is for low priority
-				{
-					Range: &persistencespb.QueueSliceRange{
-						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(attr.GetLowPriorityState().GetInclusiveLowWatermark()),
-						),
-						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(math.MaxInt64),
-						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
+				// index 0: overall low watermark — Min(high, low, throttled) in tiered stack
+				makeUniversalQueueSliceScope(attr.GetInclusiveLowWatermark()),
+				// index 1: high priority
+				makeUniversalQueueSliceScope(attr.GetHighPriorityState().GetInclusiveLowWatermark()),
+				// index 2: low priority
+				makeUniversalQueueSliceScope(attr.GetLowPriorityState().GetInclusiveLowWatermark()),
+				// index 3: throttled priority
+				makeUniversalQueueSliceScope(throttledWatermark),
 			},
 		}
 	case false:
@@ -305,21 +279,8 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		}
 		readerState = &persistencespb.QueueReaderState{
 			Scopes: []*persistencespb.QueueSliceScope{
-				// in single stack, index 0 is for overall low watermark
-				{
-					Range: &persistencespb.QueueSliceRange{
-						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(attr.GetInclusiveLowWatermark()),
-						),
-						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(math.MaxInt64),
-						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
+				// index 0: overall low watermark (single stack)
+				makeUniversalQueueSliceScope(attr.GetInclusiveLowWatermark()),
 			},
 		}
 	}
@@ -333,6 +294,11 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 	)
 	if s.isTieredStackEnabled {
 		s.flowController.RefreshReceiverFlowControlInfo(attr)
+		throttled := make(map[string]struct{}, len(attr.GetThrottledNamespaceIds()))
+		for _, id := range attr.GetThrottledNamespaceIds() {
+			throttled[id] = struct{}{}
+		}
+		s.throttledNamespaceIDs.Store(throttled)
 	}
 
 	if err := s.shardContext.UpdateReplicationQueueReaderState(
@@ -394,26 +360,29 @@ func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, e
 }
 
 func (s *StreamSenderImpl) getSendCatchupBeginInclusiveWatermark(readerState *persistencespb.QueueReaderState, priority enumsspb.TaskPriority) int64 {
+	// Scope layout: [0]=overall, [1]=high, [2]=low, [3]=throttled.
+	// Older reader states may have fewer scopes (e.g. single-stack has only [0], the
+	// previous tiered format had [0,1,2]). Fall back to index 0 (overall watermark)
+	// when the expected scope does not exist — it is always Min of all per-lane watermarks
+	// so it is a safe, conservative starting point.
 	getReaderScopesIndex := func(priority enumsspb.TaskPriority) int {
 		switch priority {
 		case enumsspb.TASK_PRIORITY_HIGH:
-			/*
-				this is to handle the case when switch from single stack to tiered stack, the reader state is still in old format.
-				In this case, it is safe to use the overall low watermark as the beginInclusiveWatermark, as long as we always guarantee
-				the overall low watermark is Min(lowPriorityLowWatermark, highPriorityLowWatermark)
-			*/
-			if len(readerState.Scopes) != 3 {
+			if len(readerState.Scopes) < 2 {
 				return 0
 			}
 			return 1
 		case enumsspb.TASK_PRIORITY_LOW:
-			if len(readerState.Scopes) != 3 {
+			if len(readerState.Scopes) < 3 {
 				return 0
 			}
 			return 2
-		case enumsspb.TASK_PRIORITY_UNSPECIFIED:
-			return 0
-		default:
+		case enumsspb.TASK_PRIORITY_THROTTLED:
+			if len(readerState.Scopes) < 4 {
+				return 0
+			}
+			return 3
+		default: // UNSPECIFIED and anything else
 			return 0
 		}
 	}
@@ -488,7 +457,7 @@ func (s *StreamSenderImpl) sendTasks(
 		})
 	}
 
-	callerInfo := getReplicaitonCallerInfo(priority)
+	callerInfo := getReplicationCallerInfo(priority)
 	ctx := headers.SetCallerInfo(s.server.Context(), callerInfo)
 	iter, err := s.historyEngine.GetReplicationTasksIter(
 		ctx,
@@ -529,8 +498,8 @@ Loop:
 			}
 			skipCount = 0
 		}
-		if priority != enumsspb.TASK_PRIORITY_UNSPECIFIED && // case: skip priority check. When priority is unspecified, send all tasks
-			priority != s.getTaskPriority(item) { // case: skip task with different priority than this loop
+		taskPriority, skip := s.resolveTaskPriorityForLoop(priority, item)
+		if skip {
 			continue Loop
 		}
 		if !s.shouldProcessTask(item) {
@@ -541,7 +510,7 @@ Loop:
 			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
 			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
 			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
-			metrics.ReplicationTaskPriorityTag(priority),
+			metrics.ReplicationTaskPriorityTag(taskPriority),
 		)
 
 		var attempt int64
@@ -554,19 +523,21 @@ Loop:
 					metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
 					metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
 					metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
-					metrics.ReplicationTaskPriorityTag(priority),
+					metrics.ReplicationTaskPriorityTag(taskPriority),
 				)
 			}()
-			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, priority)
+			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, taskPriority)
 			if err != nil {
 				return err
 			}
 			if task == nil {
 				return nil
 			}
-			task.Priority = priority
+			task.Priority = taskPriority
 			if s.isTieredStackEnabled {
-				if err := s.flowController.Wait(s.server.Context(), priority); err != nil {
+				// THROTTLED tasks use the THROTTLED flow control lane so backpressure
+				// from throttled-namespace backlogs does not affect the HIGH lane.
+				if err := s.flowController.Wait(s.server.Context(), taskPriority); err != nil {
 					if errors.Is(err, context.Canceled) {
 						return err
 					}
@@ -600,7 +571,7 @@ Loop:
 						ReplicationTasks:           []*replicationspb.ReplicationTask{task},
 						ExclusiveHighWatermark:     task.SourceTaskId + 1,
 						ExclusiveHighWatermarkTime: task.VisibilityTime,
-						Priority:                   priority,
+						Priority:                   taskPriority,
 					},
 				},
 			}); err != nil {
@@ -616,13 +587,7 @@ Loop:
 			return nil
 		}
 
-		retryPolicy := backoff.NewExponentialRetryPolicy(s.config.ReplicationStreamSenderErrorRetryWait()).
-			WithBackoffCoefficient(s.config.ReplicationStreamSenderErrorRetryBackoffCoefficient()).
-			WithMaximumInterval(s.config.ReplicationStreamSenderErrorRetryMaxInterval()).
-			WithMaximumAttempts(s.config.ReplicationStreamSenderErrorRetryMaxAttempts()).
-			WithExpirationInterval(s.config.ReplicationStreamSenderErrorRetryExpiration())
-
-		err = backoff.ThrottleRetry(operation, retryPolicy, isRetryableError)
+		err = backoff.ThrottleRetry(operation, s.newSendRetryPolicy(), isRetryableError)
 		metrics.ReplicationTaskSendAttempt.With(s.metrics).Record(
 			attempt,
 			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
@@ -712,6 +677,70 @@ func (s *StreamSenderImpl) getTaskPriority(task tasks.Task) enumsspb.TaskPriorit
 		return t.Priority
 	default:
 		return enumsspb.TASK_PRIORITY_HIGH
+	}
+}
+
+// getEffectiveTaskPriority returns the task priority to use for routing decisions.
+// In tiered-stack mode, HIGH-priority tasks whose namespace is currently reported as
+// throttled by the receiver are sent with THROTTLED priority. The receiver continues
+// to run THROTTLED tasks through the namespace rate limiter so the namespace can
+// recover and be promoted back to HIGH priority.
+func (s *StreamSenderImpl) getEffectiveTaskPriority(task tasks.Task) enumsspb.TaskPriority {
+	p := s.getTaskPriority(task)
+	if p == enumsspb.TASK_PRIORITY_HIGH && s.isTieredStackEnabled {
+		if m, ok := s.throttledNamespaceIDs.Load().(map[string]struct{}); ok {
+			if _, throttled := m[task.GetNamespaceID()]; throttled {
+				return enumsspb.TASK_PRIORITY_THROTTLED
+			}
+		}
+	}
+	return p
+}
+
+// resolveTaskPriorityForLoop returns the effective priority for item and whether
+// the task should be skipped in a loop running at loopPriority.
+//   - HIGH loop:      sends only HIGH tasks; skips LOW and THROTTLED (each has its own goroutine).
+//   - LOW loop:       sends only always-LOW tasks (e.g. SyncWorkflowStateTask); skips everything else.
+//   - THROTTLED loop: sends tasks whose effective priority is THROTTLED (HIGH-base tasks for
+//     namespaces the receiver has back-pressured); idles when no namespaces are throttled.
+//   - UNSPECIFIED loop (single-stack): sends all tasks unchanged.
+func (s *StreamSenderImpl) resolveTaskPriorityForLoop(loopPriority enumsspb.TaskPriority, item tasks.Task) (enumsspb.TaskPriority, bool) {
+	if loopPriority == enumsspb.TASK_PRIORITY_UNSPECIFIED {
+		return loopPriority, false
+	}
+	effective := s.getEffectiveTaskPriority(item)
+	switch loopPriority {
+	case enumsspb.TASK_PRIORITY_HIGH:
+		return effective, effective != enumsspb.TASK_PRIORITY_HIGH
+	case enumsspb.TASK_PRIORITY_LOW:
+		return effective, effective != enumsspb.TASK_PRIORITY_LOW
+	case enumsspb.TASK_PRIORITY_THROTTLED:
+		return effective, effective != enumsspb.TASK_PRIORITY_THROTTLED
+	default:
+		return effective, false
+	}
+}
+
+func (s *StreamSenderImpl) newSendRetryPolicy() backoff.RetryPolicy {
+	return backoff.NewExponentialRetryPolicy(s.config.ReplicationStreamSenderErrorRetryWait()).
+		WithBackoffCoefficient(s.config.ReplicationStreamSenderErrorRetryBackoffCoefficient()).
+		WithMaximumInterval(s.config.ReplicationStreamSenderErrorRetryMaxInterval()).
+		WithMaximumAttempts(s.config.ReplicationStreamSenderErrorRetryMaxAttempts()).
+		WithExpirationInterval(s.config.ReplicationStreamSenderErrorRetryExpiration())
+}
+
+// makeUniversalQueueSliceScope returns a QueueSliceScope that covers [watermark, MaxInt64)
+// with a universal predicate (matches all task types).
+func makeUniversalQueueSliceScope(watermark int64) *persistencespb.QueueSliceScope {
+	return &persistencespb.QueueSliceScope{
+		Range: &persistencespb.QueueSliceRange{
+			InclusiveMin: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(watermark)),
+			ExclusiveMax: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(math.MaxInt64)),
+		},
+		Predicate: &persistencespb.Predicate{
+			PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+			Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+		},
 	}
 }
 

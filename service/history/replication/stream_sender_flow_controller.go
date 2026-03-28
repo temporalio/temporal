@@ -26,6 +26,8 @@ type (
 	SenderFlowController interface {
 		// Wait will block go routine until the sender is allowed to send a task
 		Wait(ctx context.Context, priority enumsspb.TaskPriority) error
+		// IsPaused returns true if the given priority lane is currently paused, without blocking.
+		IsPaused(priority enumsspb.TaskPriority) bool
 		RefreshReceiverFlowControlInfo(syncState *replicationspb.SyncReplicationState)
 	}
 	SenderFlowControllerImpl struct {
@@ -52,7 +54,16 @@ func NewSenderFlowController(config *configs.Config, logger log.Logger) *SenderF
 	lowPriorityState.rateLimiter = quotas.NewDefaultOutgoingRateLimiter(func() float64 {
 		return float64(config.ReplicationStreamSenderLowPriorityQPS())
 	})
+	throttledPriorityState := &flowControlState{
+		resume: true,
+	}
+	throttledPriorityState.cond = sync.NewCond(&throttledPriorityState.mu)
+	throttledPriorityState.rateLimiter = quotas.NewDefaultOutgoingRateLimiter(func() float64 {
+		return float64(config.ReplicationStreamSenderLowPriorityQPS())
+	})
+
 	flowControlStates[enumsspb.TASK_PRIORITY_HIGH] = highPriorityState
+	flowControlStates[enumsspb.TASK_PRIORITY_THROTTLED] = throttledPriorityState
 	flowControlStates[enumsspb.TASK_PRIORITY_LOW] = lowPriorityState
 	return &SenderFlowControllerImpl{
 		flowControlStates:  flowControlStates,
@@ -64,6 +75,9 @@ func NewSenderFlowController(config *configs.Config, logger log.Logger) *SenderF
 func (s *SenderFlowControllerImpl) RefreshReceiverFlowControlInfo(syncState *replicationspb.SyncReplicationState) {
 	if syncState.GetHighPriorityState() != nil {
 		s.setState(s.flowControlStates[enumsspb.TASK_PRIORITY_HIGH], syncState.GetHighPriorityState().GetFlowControlCommand())
+	}
+	if syncState.GetThrottledPriorityState() != nil {
+		s.setState(s.flowControlStates[enumsspb.TASK_PRIORITY_THROTTLED], syncState.GetThrottledPriorityState().GetFlowControlCommand())
 	}
 	if syncState.GetLowPriorityState() != nil {
 		s.setState(s.flowControlStates[enumsspb.TASK_PRIORITY_LOW], syncState.GetLowPriorityState().GetFlowControlCommand())
@@ -84,6 +98,16 @@ func (s *SenderFlowControllerImpl) setState(state *flowControlState, flowControl
 		defer state.mu.Unlock()
 		state.resume = false
 	}
+}
+
+func (s *SenderFlowControllerImpl) IsPaused(priority enumsspb.TaskPriority) bool {
+	state, ok := s.flowControlStates[priority]
+	if !ok {
+		return false
+	}
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	return !state.resume
 }
 
 func (s *SenderFlowControllerImpl) Wait(ctx context.Context, priority enumsspb.TaskPriority) error {
