@@ -48,6 +48,7 @@ const (
 	VersionReactivationSignalCacheTypeTagValue        = "version_reactivation_signal"
 	RoutingInfoCacheTypeTagValue                      = "routing_info"
 	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
+	ReplicationProgressCacheTypeTagValue              = "replication_progress"
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
 	InvalidVisibilityURITagValue = "invalid_visibility_uri"
