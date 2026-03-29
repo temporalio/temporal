@@ -580,6 +580,17 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	var notFoundErr *serviceerror.NotFound
 	s.ErrorAs(err, &notFoundErr)
 
+	// patch (trigger) on a deleted schedule should also error
+	_, err = s.FrontendClient().PatchSchedule(newContext(s.Context()), &workflowservice.PatchScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Patch: &schedulepb.SchedulePatch{
+			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+		},
+		Identity: "test",
+	})
+	s.Error(err)
+
 	s.Eventually(func() bool { // wait for visibility
 		listResp, err := s.FrontendClient().ListSchedules(newContext(s.Context()), &workflowservice.ListSchedulesRequest{
 			Namespace:       s.Namespace().String(),

@@ -99,6 +99,8 @@ jobs:
           - value: true
         history.enableCHASMSchedulerCreation:
           - value: true
+        history.enableCHASMSchedulerRouting:
+          - value: true
 
   feature-tests-python:
     needs: build-docker-image
