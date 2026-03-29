@@ -12,17 +12,17 @@ type (
 
 		handler *handler
 
-		SchedulerIdleTaskExecutor        *SchedulerIdleTaskExecutor
-		SchedulerCallbacksTaskExecutor   *SchedulerCallbacksTaskExecutor
-		GeneratorTaskExecutor            *GeneratorTaskExecutor
-		InvokerExecuteTaskExecutor       *InvokerExecuteTaskExecutor
-		InvokerProcessBufferTaskExecutor *InvokerProcessBufferTaskExecutor
-		BackfillerTaskExecutor           *BackfillerTaskExecutor
-		MigrateToWorkflowTaskExecutor    *SchedulerMigrateToWorkflowTaskExecutor
+		SchedulerIdleTaskHandler        *SchedulerIdleTaskHandler
+		SchedulerCallbacksTaskHandler   *SchedulerCallbacksTaskHandler
+		GeneratorTaskHandler            *GeneratorTaskHandler
+		InvokerExecuteTaskHandler       *InvokerExecuteTaskHandler
+		InvokerProcessBufferTaskHandler *InvokerProcessBufferTaskHandler
+		BackfillerTaskHandler           *BackfillerTaskHandler
+		MigrateToWorkflowTaskHandler    *SchedulerMigrateToWorkflowTaskHandler
 	}
 )
 
-// NewNilLibrary creates a Library with all nil executors. Useful for
+// NewNilLibrary creates a Library with all nil handlers. Useful for
 // registration-only contexts like tdbg where no task execution is needed.
 func NewNilLibrary() *Library {
 	return &Library{}
@@ -30,23 +30,23 @@ func NewNilLibrary() *Library {
 
 func NewLibrary(
 	handler *handler,
-	SchedulerIdleTaskExecutor *SchedulerIdleTaskExecutor,
-	SchedulerCallbacksTaskExecutor *SchedulerCallbacksTaskExecutor,
-	GeneratorTaskExecutor *GeneratorTaskExecutor,
-	InvokerExecuteTaskExecutor *InvokerExecuteTaskExecutor,
-	InvokerProcessBufferTaskExecutor *InvokerProcessBufferTaskExecutor,
-	BackfillerTaskExecutor *BackfillerTaskExecutor,
-	MigrateToWorkflowTaskExecutor *SchedulerMigrateToWorkflowTaskExecutor,
+	SchedulerIdleTaskHandler *SchedulerIdleTaskHandler,
+	SchedulerCallbacksTaskHandler *SchedulerCallbacksTaskHandler,
+	GeneratorTaskHandler *GeneratorTaskHandler,
+	InvokerExecuteTaskHandler *InvokerExecuteTaskHandler,
+	InvokerProcessBufferTaskHandler *InvokerProcessBufferTaskHandler,
+	BackfillerTaskHandler *BackfillerTaskHandler,
+	MigrateToWorkflowTaskHandler *SchedulerMigrateToWorkflowTaskHandler,
 ) *Library {
 	return &Library{
-		handler:                          handler,
-		SchedulerIdleTaskExecutor:        SchedulerIdleTaskExecutor,
-		SchedulerCallbacksTaskExecutor:   SchedulerCallbacksTaskExecutor,
-		GeneratorTaskExecutor:            GeneratorTaskExecutor,
-		InvokerExecuteTaskExecutor:       InvokerExecuteTaskExecutor,
-		InvokerProcessBufferTaskExecutor: InvokerProcessBufferTaskExecutor,
-		BackfillerTaskExecutor:           BackfillerTaskExecutor,
-		MigrateToWorkflowTaskExecutor:    MigrateToWorkflowTaskExecutor,
+		handler:                         handler,
+		SchedulerIdleTaskHandler:        SchedulerIdleTaskHandler,
+		SchedulerCallbacksTaskHandler:   SchedulerCallbacksTaskHandler,
+		GeneratorTaskHandler:            GeneratorTaskHandler,
+		InvokerExecuteTaskHandler:       InvokerExecuteTaskHandler,
+		InvokerProcessBufferTaskHandler: InvokerProcessBufferTaskHandler,
+		BackfillerTaskHandler:           BackfillerTaskHandler,
+		MigrateToWorkflowTaskHandler:    MigrateToWorkflowTaskHandler,
 	}
 }
 
@@ -71,38 +71,31 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
 		chasm.NewRegistrablePureTask(
 			"idle",
-			l.SchedulerIdleTaskExecutor,
-			l.SchedulerIdleTaskExecutor,
+			l.SchedulerIdleTaskHandler,
 		),
 		chasm.NewRegistrableSideEffectTask(
 			"callbacks",
-			l.SchedulerCallbacksTaskExecutor,
-			l.SchedulerCallbacksTaskExecutor,
+			l.SchedulerCallbacksTaskHandler,
 		),
 		chasm.NewRegistrablePureTask(
 			"generate",
-			l.GeneratorTaskExecutor,
-			l.GeneratorTaskExecutor,
+			l.GeneratorTaskHandler,
 		),
 		chasm.NewRegistrableSideEffectTask(
 			"execute",
-			l.InvokerExecuteTaskExecutor,
-			l.InvokerExecuteTaskExecutor,
+			l.InvokerExecuteTaskHandler,
 		),
 		chasm.NewRegistrablePureTask(
 			"processBuffer",
-			l.InvokerProcessBufferTaskExecutor,
-			l.InvokerProcessBufferTaskExecutor,
+			l.InvokerProcessBufferTaskHandler,
 		),
 		chasm.NewRegistrablePureTask(
 			"backfill",
-			l.BackfillerTaskExecutor,
-			l.BackfillerTaskExecutor,
+			l.BackfillerTaskHandler,
 		),
 		chasm.NewRegistrableSideEffectTask(
 			"migrateToWorkflow",
-			l.MigrateToWorkflowTaskExecutor,
-			l.MigrateToWorkflowTaskExecutor,
+			l.MigrateToWorkflowTaskHandler,
 		),
 	}
 }

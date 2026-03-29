@@ -62,6 +62,15 @@ var (
 		DispatchNexusTaskByEndpointAPIName:              1,
 	}
 
+	// PollTaskAPISet is the set of API methods for which NamespaceRateLimitInterceptor will
+	// block waiting for a token (rather than rejecting immediately) when
+	// FrontendPollWaitForNamespaceRateLimitToken is enabled.
+	PollTaskAPISet = map[string]struct{}{
+		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":    {},
+	}
+
 	// APIToPriority determines common API priorities.
 	// If APIs rely on visibility, they should be added to VisibilityAPIToPriority.
 	// If APIs result in replication in namespace replication queue, they belong to NamespaceReplicationInducingAPIToPriority

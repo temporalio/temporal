@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/matching/counter"
 )
 
@@ -681,6 +682,15 @@ instances in the cluster, for a given namespace, per-API method. If this is set 
 ignored. The name 'frontend.globalNamespaceCount' is kept for consistency with the per-instance limit name,
 'frontend.namespaceCount'.`,
 	)
+	FrontendPollWaitForNamespaceRateLimitToken = NewNamespaceBoolSetting(
+		"frontend.pollWaitForNamespaceRateLimitToken",
+		false,
+		`FrontendPollWaitForNamespaceRateLimitToken controls whether poll requests wait for
+a namespace RPS rate limit token to become available instead of immediately rejecting
+with ResourceExhausted. When enabled, poll requests block until a token is available
+or the request context deadline is reached. The concurrent request rate limiter fires
+before this limiter and will still reject requests that exceed the concurrent limit.`,
+	)
 	FrontendMaxNamespaceVisibilityRPSPerInstance = NewNamespaceIntSetting(
 		"frontend.namespaceRPS.visibility",
 		10,
@@ -898,7 +908,7 @@ and deployment interaction in matching and history.`,
 	)
 	UseRevisionNumberForWorkerVersioning = NewNamespaceBoolSetting(
 		"system.useRevisionNumberForWorkerVersioning",
-		false,
+		true,
 		`UseRevisionNumberForWorkerVersioning enables the use of revision number to resolve consistency problems that may arise during task dispatch time.`,
 	)
 	EnableSuggestCaNOnNewTargetVersion = NewNamespaceBoolSetting(
@@ -942,10 +952,17 @@ used when the first cache layer has a miss. Requires server restart for change t
 	FrontendNexusRequestHeadersBlacklist = NewGlobalTypedSettingWithConverter(
 		"frontend.nexusRequestHeadersBlacklist",
 		ConvertWildcardStringListToRegexp,
-		MatchNothingRE,
-		`Nexus request headers to be removed before being sent to a user handler.
-Wildcards (*) are expanded to allow any substring. By default blacklist is empty.
-Concrete type should be list of strings.`,
+		// Failure support is an internal implementation detail that shouldn't propagate to the user.
+		util.MustWildCardStringsToRegexp([]string{
+			"accept-encoding",
+			"x-forwarded-for",
+			"xdc-redirection",
+			"xdc-redirection-api",
+			"temporal-nexus-failure-support",
+		}),
+		`Nexus request headers to be removed before being sent to a user handler. Wildcards (*) are expanded to
+allow any substring. By default headers that are meant for internal use are disallowed. Concrete type should be list of
+strings.`,
 	)
 	FrontendNexusForwardRequestUseEndpointDispatch = NewGlobalBoolSetting(
 		"frontend.nexusForwardRequestUseEndpointDispatch",
@@ -1335,7 +1352,7 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 	)
 	MatchingDeploymentWorkflowVersion = NewNamespaceIntSetting(
 		"matching.deploymentWorkflowVersion",
-		0,
+		2,
 		`MatchingDeploymentWorkflowVersion controls what version of the logic should the manager workflows use.`,
 	)
 	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(

@@ -425,18 +425,24 @@ func NewSearchAttributesMap(values map[string]VisibilityValue) SearchAttributesM
 	return SearchAttributesMap{values: values}
 }
 
-// ToProto encodes the search attributes as proto object.
-func (m *SearchAttributesMap) ToProto() *commonpb.SearchAttributes {
-	if m == nil || m.values == nil {
-		return nil
+// newSearchAttributesMapFromProto creates a new SearchAttributesMap from commonpb.SearchAttributes.
+func newSearchAttributesMapFromProto(
+	searchAttributes *commonpb.SearchAttributes,
+) (SearchAttributesMap, error) {
+	if len(searchAttributes.GetIndexedFields()) == 0 {
+		return SearchAttributesMap{}, nil
 	}
-	res := &commonpb.SearchAttributes{
-		IndexedFields: make(map[string]*commonpb.Payload, len(m.values)),
+	result := SearchAttributesMap{
+		values: make(map[string]VisibilityValue),
 	}
-	for k, v := range m.values {
-		res.IndexedFields[k] = v.MustEncode()
+	for saName, saPayload := range searchAttributes.IndexedFields {
+		value, err := visibilityValueFromPayload(saPayload)
+		if err != nil {
+			return SearchAttributesMap{}, nil
+		}
+		result.values[saName] = value
 	}
-	return res
+	return result, nil
 }
 
 // SearchAttributeValue returns the value for a given SearchAttribute with compile-time type safety.

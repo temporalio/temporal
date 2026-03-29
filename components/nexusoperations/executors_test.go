@@ -239,6 +239,7 @@ func TestProcessInvocationTask(t *testing.T) {
 								Message: "cause",
 								FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
 									ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+										Type: "NexusFailure",
 										Details: &commonpb.Payloads{
 											Payloads: []*commonpb.Payload{
 												mustToPayload(t, nexus.Failure{
@@ -296,6 +297,7 @@ func TestProcessInvocationTask(t *testing.T) {
 								Message: "cause",
 								FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
 									ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+										Type: "NexusFailure",
 										Details: &commonpb.Payloads{
 											Payloads: []*commonpb.Payload{
 												mustToPayload(t, nexus.Failure{
