@@ -280,6 +280,16 @@ func (db *taskQueueDB) OldUpdateState(
 	return err
 }
 
+// shouldUpdateMetadataOnAppendLocked returns whether a task append should also write the
+// metadata blob. This is always true when enough time has passed since the last metadata
+// write (controlled by MetadataUpdateOnAppendInterval), so that backlog counts stay
+// reasonably fresh. When the interval is zero, metadata is updated on every append
+// (previous behavior). Caller must hold db.Mutex.
+func (db *taskQueueDB) shouldUpdateMetadataOnAppendLocked() bool {
+	interval := db.config.MetadataUpdateOnAppendInterval()
+	return interval <= 0 || time.Since(db.lastWrite) >= interval
+}
+
 func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	db.Lock()
 	defer db.Unlock()
@@ -500,6 +510,11 @@ func (db *taskQueueDB) CreateTasks(
 		db.subqueues[sq].ApproximateBacklogCount += int64(len(update.tasks))
 	}
 
+	// Decide whether to include metadata in the write. We always need the LWT for the
+	// range ID check, but updating the full metadata blob on every append has extra cost.
+	// We piggyback the metadata update if enough time has passed since the last write.
+	updateMetadata := db.shouldUpdateMetadataOnAppendLocked()
+
 	resp, err := db.store.CreateTasks(
 		ctx,
 		&persistence.CreateTasksRequest{
@@ -507,8 +522,9 @@ func (db *taskQueueDB) CreateTasks(
 				Data:    db.cachedQueueInfo(),
 				RangeID: db.rangeID,
 			},
-			Tasks:     allTasks,
-			Subqueues: allSubqueues,
+			Tasks:          allTasks,
+			Subqueues:      allSubqueues,
+			UpdateMetadata: updateMetadata,
 		})
 
 	// Update the maxReadLevel after the writes are completed, but before we send the response,
@@ -580,6 +596,8 @@ func (db *taskQueueDB) CreateFairTasks(
 		db.subqueues[sq].FairMaxReadLevel = fairLevelFromProto(db.subqueues[sq].FairMaxReadLevel).max(level).toProto()
 	}
 
+	updateMetadata := db.shouldUpdateMetadataOnAppendLocked()
+
 	resp, err := db.store.CreateTasks(
 		ctx,
 		&persistence.CreateTasksRequest{
@@ -587,8 +605,9 @@ func (db *taskQueueDB) CreateFairTasks(
 				Data:    db.cachedQueueInfo(),
 				RangeID: db.rangeID,
 			},
-			Tasks:     allTasks,
-			Subqueues: allSubqueues,
+			Tasks:          allTasks,
+			Subqueues:      allSubqueues,
+			UpdateMetadata: updateMetadata,
 		})
 
 	if err == nil {

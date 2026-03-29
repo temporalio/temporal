@@ -48,6 +48,7 @@ type (
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		MetadataUpdateOnAppendInterval           dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MaxTaskQueueIdleTime                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		NumTaskqueueWritePartitions              dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		NumTaskqueueReadPartitions               dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -165,8 +166,9 @@ type (
 		AutoEnableV2               func() bool
 		GetTasksBatchSize          func() int
 		GetTasksReloadAt           func() int
-		UpdateAckInterval          func() time.Duration
-		MaxTaskQueueIdleTime       func() time.Duration
+		UpdateAckInterval                func() time.Duration
+		MetadataUpdateOnAppendInterval   func() time.Duration
+		MaxTaskQueueIdleTime             func() time.Duration
 		MinTaskThrottlingBurstSize func() int
 		MaxTaskDeleteBatchSize     func() int
 		TaskDeleteInterval         func() time.Duration
@@ -280,6 +282,7 @@ func NewConfig(
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
 		GetTasksReloadAt:                         dynamicconfig.MatchingGetTasksReloadAt.Get(dc),
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
+		MetadataUpdateOnAppendInterval:           dynamicconfig.MatchingMetadataUpdateOnAppendInterval.Get(dc),
 		MaxTaskQueueIdleTime:                     dynamicconfig.MatchingMaxTaskQueueIdleTime.Get(dc),
 		LongPollExpirationInterval:               dynamicconfig.MatchingLongPollExpirationInterval.Get(dc),
 		BacklogTaskForwardTimeout:                dynamicconfig.MatchingBacklogTaskForwardTimeout.Get(dc),
@@ -395,6 +398,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		UpdateAckInterval: func() time.Duration {
 			return config.UpdateAckInterval(ns.String(), taskQueueName, taskType)
+		},
+		MetadataUpdateOnAppendInterval: func() time.Duration {
+			return config.MetadataUpdateOnAppendInterval(ns.String(), taskQueueName, taskType)
 		},
 		MaxTaskQueueIdleTime: func() time.Duration {
 			return config.MaxTaskQueueIdleTime(ns.String(), taskQueueName, taskType)

@@ -5072,7 +5072,7 @@ func (m *testTaskManager) CreateTasks(
 	}
 
 	resp := &persistence.CreateTasksResponse{}
-	if m.updateMetadataOnCreateTasks {
+	if request.UpdateMetadata {
 		tlm.info = common.CloneProto(request.TaskQueueInfo.Data)
 		resp.UpdatedMetadata = true
 	}
