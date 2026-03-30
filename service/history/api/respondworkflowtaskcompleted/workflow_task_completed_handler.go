@@ -58,15 +58,15 @@ type (
 		workflowTaskCompletedID int64
 
 		// internal state
-		hasBufferedEventsOrMessages          bool
-		workflowTaskFailedCause              *workflowTaskFailedCause
-		activityNotStartedCancelled          bool
-		newMutableState                      historyi.MutableState
-		stopProcessing                       bool // should stop processing any more commands
-		mutableState                         historyi.MutableState
-		effects                              effect.Controller
-		initiatedChildExecutionsInBatch      map[string]struct{} // Set of initiated child executions in the workflow task
-		updateRegistry                       update.Registry
+		hasBufferedEventsOrMessages         bool
+		workflowTaskFailedCause             *workflowTaskFailedCause
+		activityNotStartedCancelled         bool
+		newMutableState                     historyi.MutableState
+		stopProcessing                      bool // should stop processing any more commands
+		mutableState                        historyi.MutableState
+		effects                             effect.Controller
+		initiatedChildExecutionsInBatch     map[string]struct{} // Set of initiated child executions in the workflow task
+		updateRegistry                      update.Registry
 		pendingWorkerCommandsByControlQueue map[string][]*workerpb.WorkerCommand // Batched worker commands by control queue
 
 		// validation
