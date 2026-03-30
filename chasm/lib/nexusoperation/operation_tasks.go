@@ -113,14 +113,7 @@ func (h *OperationScheduleToStartTimeoutTaskHandler) Validate(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.ScheduleToStartTimeoutTask,
 ) (bool, error) {
-	// Only timeout if we haven't started yet.
-	switch op.Status {
-	case nexusoperationpb.OPERATION_STATUS_SCHEDULED,
-		nexusoperationpb.OPERATION_STATUS_BACKING_OFF:
-		return true, nil
-	default:
-		return false, nil
-	}
+	return TransitionStarted.Possible(op), nil
 }
 
 func (h *OperationScheduleToStartTimeoutTaskHandler) Execute(
