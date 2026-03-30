@@ -1594,6 +1594,9 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 	if err != nil {
 		return nil, err
 	}
+	if !pm.Partition().IsRoot() {
+		return nil, serviceerror.NewInvalidArgument("DescribeVersionedTaskQueues must be called on the root task queue partition")
+	}
 
 	cacheKey := describeVersionedTaskQueuesCacheKey(
 		worker_versioning.WorkerDeploymentVersionToStringV31(request.Version),
