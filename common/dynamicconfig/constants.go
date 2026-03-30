@@ -2804,6 +2804,18 @@ that task will be sent to DLQ.`,
 		`WorkflowIDReuseBurstRatio is the burst-to-rate ratio for the per-(namespace, workflowID)
 start rate limiter. Burst = max(1, int(rps * ratio)). Default 1.0 (no burst above rate).`,
 	)
+	WorkflowIDReuseLimiterCacheSize = NewGlobalIntSetting(
+		"history.workflowIDReuseLimiterCacheSize",
+		10000,
+		`WorkflowIDReuseLimiterCacheSize is the max number of per-(namespace, workflowID) rate limiters
+cached on a single history shard. Requires service restart to take effect.`,
+	)
+	WorkflowIDReuseLimiterCacheTTL = NewGlobalDurationSetting(
+		"history.workflowIDReuseLimiterCacheTTL",
+		60*time.Second,
+		`WorkflowIDReuseLimiterCacheTTL is the TTL for per-(namespace, workflowID) rate limiter cache entries.
+Requires service restart to take effect.`,
+	)
 	HealthPersistenceLatencyFailure = NewGlobalFloatSetting(
 		"history.healthPersistenceLatencyFailure",
 		500,

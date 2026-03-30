@@ -42,7 +42,12 @@ func Invoke(
 	request := resetRequest.ResetRequest
 	workflowID := request.WorkflowExecution.GetWorkflowId()
 
-	if rl := shardContext.WorkflowIDReuseRL(namespaceID, workflowID); rl != nil && !rl.Allow() {
+	if rl := shardContext.WorkflowIDReuseRateLimiter(namespaceID, workflowID); rl != nil && !rl.Allow() {
+		metrics.WorkflowIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
+			1,
+			metrics.ResourceExhaustedCauseTag(consts.ErrWorkflowIDRateLimitExceeded.Cause),
+			metrics.ResourceExhaustedScopeTag(consts.ErrWorkflowIDRateLimitExceeded.Scope),
+		)
 		return nil, consts.ErrWorkflowIDRateLimitExceeded
 	}
 	baseRunID := request.WorkflowExecution.GetRunId()

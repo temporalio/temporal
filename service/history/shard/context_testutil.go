@@ -151,7 +151,10 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		namespaceRegistry:       registry,
 		stateMachineRegistry:    hsm.NewRegistry(),
 		chasmRegistry:           chasm.NewRegistry(t.GetLogger()),
-		workflowIDRateLimiters:  cache.New(workflowIDRateLimiterCacheSize, &cache.Options{TTL: workflowIDRateLimiterCacheTTL}),
+		workflowIDRateLimiters: cache.New(
+			config.Config.WorkflowIDReuseLimiterCacheSize(),
+			&cache.Options{TTL: config.Config.WorkflowIDReuseLimiterCacheTTL()},
+		),
 		persistenceShardManager: t.GetShardManager(),
 		clientBean:              t.GetClientBean(),
 		saProvider:              t.GetSearchAttributesProvider(),

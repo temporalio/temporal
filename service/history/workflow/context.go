@@ -247,10 +247,15 @@ func (c *ContextImpl) CreateWorkflowExecution(
 ) (retError error) {
 
 	if transactionPolicy == historyi.TransactionPolicyActive {
-		if rl := shardContext.WorkflowIDReuseRL(
+		if rl := shardContext.WorkflowIDReuseRateLimiter(
 			namespace.ID(c.workflowKey.NamespaceID),
 			c.workflowKey.WorkflowID,
 		); rl != nil && !rl.Allow() {
+			metrics.WorkflowIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
+				1,
+				metrics.ResourceExhaustedCauseTag(consts.ErrWorkflowIDRateLimitExceeded.Cause),
+				metrics.ResourceExhaustedScopeTag(consts.ErrWorkflowIDRateLimitExceeded.Scope),
+			)
 			return consts.ErrWorkflowIDRateLimitExceeded
 		}
 	}
@@ -548,10 +553,15 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
 		if *newWorkflowTransactionPolicy == historyi.TransactionPolicyActive {
 			execInfo := newMutableState.GetExecutionInfo()
-			if rl := shardContext.WorkflowIDReuseRL(
+			if rl := shardContext.WorkflowIDReuseRateLimiter(
 				namespace.ID(execInfo.NamespaceId),
 				execInfo.WorkflowId,
 			); rl != nil && !rl.Allow() {
+				metrics.WorkflowIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
+					1,
+					metrics.ResourceExhaustedCauseTag(consts.ErrWorkflowIDRateLimitExceeded.Cause),
+					metrics.ResourceExhaustedScopeTag(consts.ErrWorkflowIDRateLimitExceeded.Scope),
+				)
 				return consts.ErrWorkflowIDRateLimitExceeded
 			}
 		}
