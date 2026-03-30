@@ -68,7 +68,7 @@ jobs:
             --sha "$SHA"
 
       - name: Upload generated reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: steps.process-flaky-tests.outcome == 'success'
         with:
           name: flaky-tests-reports-${{ github.run_number }}
