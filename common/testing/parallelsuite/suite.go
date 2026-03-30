@@ -79,9 +79,7 @@ func (s *Suite[T]) Run(name string, fn func(T)) bool {
 func Run[T testingSuite](t *testing.T, s T, args ...any) {
 	t.Helper()
 
-	v := reflect.ValueOf(s)
-	typ := v.Type()
-
+	typ := reflect.TypeOf(s)
 	if typ.Kind() != reflect.Ptr || typ.Elem().Kind() != reflect.Struct {
 		panic(fmt.Sprintf("parallelsuite.Run: suite must be a pointer to a struct, got %v", typ))
 	}
