@@ -329,6 +329,8 @@ func (ch *commandHandler) handleCancelCommand(
 
 	err = op.RequestCancel(chasmCtx, &nexusoperationpb.CancellationState{
 		ParentData: cancelParentData,
+		// Used by the cancel executor for idempotency; safe to generate fresh since this path runs at most once per operation.
+		RequestId: uuid.NewString(),
 	})
 	if errors.Is(err, nexusoperation.ErrCancellationAlreadyRequested) {
 		return chasmworkflow.FailWorkflowTaskError{

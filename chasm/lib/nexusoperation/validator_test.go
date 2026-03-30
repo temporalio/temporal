@@ -312,8 +312,8 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 
 func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 	config := &Config{
-		MaxIDLengthLimit:  func() int { return 20 },
-		MaxReasonLength: func(string) int { return 20 },
+		MaxIDLengthLimit: func() int { return 20 },
+		MaxReasonLength:  func(string) int { return 20 },
 	}
 
 	for _, tc := range []struct {
@@ -402,8 +402,8 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 
 func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 	config := &Config{
-		MaxIDLengthLimit:  func() int { return 20 },
-		MaxReasonLength: func(string) int { return 20 },
+		MaxIDLengthLimit: func() int { return 20 },
+		MaxReasonLength:  func(string) int { return 20 },
 	}
 
 	for _, tc := range []struct {
