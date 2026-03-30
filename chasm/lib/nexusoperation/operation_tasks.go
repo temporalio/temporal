@@ -3,9 +3,11 @@ package nexusoperation
 import (
 	"context"
 
+	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.uber.org/fx"
@@ -77,7 +79,7 @@ func (h *OperationBackoffTaskHandler) Validate(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.InvocationBackoffTask,
 ) (bool, error) {
-	return false, serviceerror.NewUnimplemented("unimplemented")
+	return op.Status == nexusoperationpb.OPERATION_STATUS_BACKING_OFF && op.GetAttempt() == task.GetAttempt(), nil
 }
 
 func (h *OperationBackoffTaskHandler) Execute(
@@ -86,7 +88,7 @@ func (h *OperationBackoffTaskHandler) Execute(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.InvocationBackoffTask,
 ) error {
-	return serviceerror.NewUnimplemented("unimplemented")
+	return transitionRescheduled.Apply(op, ctx, EventRescheduled{})
 }
 
 type OperationScheduleToStartTimeoutTaskHandler struct {
@@ -111,7 +113,7 @@ func (h *OperationScheduleToStartTimeoutTaskHandler) Validate(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.ScheduleToStartTimeoutTask,
 ) (bool, error) {
-	return false, serviceerror.NewUnimplemented("unimplemented")
+	return TransitionStarted.Possible(op), nil
 }
 
 func (h *OperationScheduleToStartTimeoutTaskHandler) Execute(
@@ -120,7 +122,14 @@ func (h *OperationScheduleToStartTimeoutTaskHandler) Execute(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.ScheduleToStartTimeoutTask,
 ) error {
-	return serviceerror.NewUnimplemented("unimplemented")
+	return op.OnTimedOut(ctx, op, &failurepb.Failure{
+		Message: "operation timed out",
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+				TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+			},
+		},
+	})
 }
 
 type OperationStartToCloseTimeoutTaskHandler struct {
@@ -145,7 +154,7 @@ func (h *OperationStartToCloseTimeoutTaskHandler) Validate(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.StartToCloseTimeoutTask,
 ) (bool, error) {
-	return false, serviceerror.NewUnimplemented("unimplemented")
+	return op.Status == nexusoperationpb.OPERATION_STATUS_STARTED, nil
 }
 
 func (h *OperationStartToCloseTimeoutTaskHandler) Execute(
@@ -154,7 +163,14 @@ func (h *OperationStartToCloseTimeoutTaskHandler) Execute(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.StartToCloseTimeoutTask,
 ) error {
-	return serviceerror.NewUnimplemented("unimplemented")
+	return op.OnTimedOut(ctx, op, &failurepb.Failure{
+		Message: "operation timed out",
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+				TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			},
+		},
+	})
 }
 
 type OperationScheduleToCloseTimeoutTaskHandler struct {
@@ -179,7 +195,7 @@ func (h *OperationScheduleToCloseTimeoutTaskHandler) Validate(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.ScheduleToCloseTimeoutTask,
 ) (bool, error) {
-	return false, serviceerror.NewUnimplemented("unimplemented")
+	return TransitionTimedOut.Possible(op), nil
 }
 
 func (h *OperationScheduleToCloseTimeoutTaskHandler) Execute(
@@ -188,5 +204,12 @@ func (h *OperationScheduleToCloseTimeoutTaskHandler) Execute(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.ScheduleToCloseTimeoutTask,
 ) error {
-	return serviceerror.NewUnimplemented("unimplemented")
+	return op.OnTimedOut(ctx, op, &failurepb.Failure{
+		Message: "operation timed out",
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+				TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			},
+		},
+	})
 }
