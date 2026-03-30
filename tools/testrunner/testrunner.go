@@ -29,7 +29,6 @@ const (
 	// goTestTimeoutFlag is the go test flag whose value is also used as the
 	// testrunner's total-run deadline (so results are flushed before an external
 	// kill such as a GitHub Actions timeout).
-	goTestTimeoutFlag   = "-timeout"
 	goTestTimeoutFlagEq = "-timeout="
 
 	// fullRerunThreshold is the number of test failures above which we do a full
@@ -92,13 +91,9 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 	// Pre-pass: read the go test -timeout value and use it as the testrunner's
 	// total deadline so results are flushed before an external kill (e.g. GitHub
 	// Actions timeout). The flag is NOT consumed — it still passes through to gotestsum.
-	for i, arg := range args {
+	for _, arg := range args {
 		if strings.HasPrefix(arg, goTestTimeoutFlagEq) {
 			if d, err := time.ParseDuration(strings.TrimPrefix(arg, goTestTimeoutFlagEq)); err == nil {
-				r.totalTimeout = d
-			}
-		} else if arg == goTestTimeoutFlag && i+1 < len(args) {
-			if d, err := time.ParseDuration(args[i+1]); err == nil {
 				r.totalTimeout = d
 			}
 		}
