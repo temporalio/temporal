@@ -146,11 +146,11 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		remoteClusterInfos: make(map[string]*remoteClusterInfo),
 		handoverNamespaces: make(map[namespace.Name]*namespaceHandOverInfo),
 
-		clusterMetadata:         clusterMetadata,
-		timeSource:              t.TimeSource,
-		namespaceRegistry:       registry,
-		stateMachineRegistry:    hsm.NewRegistry(),
-		chasmRegistry:           chasm.NewRegistry(t.GetLogger()),
+		clusterMetadata:      clusterMetadata,
+		timeSource:           t.TimeSource,
+		namespaceRegistry:    registry,
+		stateMachineRegistry: hsm.NewRegistry(),
+		chasmRegistry:        chasm.NewRegistry(t.GetLogger()),
 		workflowIDRateLimiters: cache.New(
 			config.Config.WorkflowIDReuseLimiterCacheSize(),
 			&cache.Options{TTL: config.Config.WorkflowIDReuseLimiterCacheTTL()},
