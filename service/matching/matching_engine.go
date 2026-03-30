@@ -1269,14 +1269,14 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueueRequest,
 ) (*matchingservice.DescribeTaskQueueResponse, error) {
-	req := request.GetDescRequest()
+	req := request.DescRequest
 	if req == nil {
 		return nil, serviceerror.NewInvalidArgument("DescribeTaskQueueRequest.desc_request must be set")
 	}
 
 	// This has been deprecated.
 	if req.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
-		rootPartition, err := tqid.PartitionFromProto(req.GetTaskQueue(), request.GetNamespaceId(), req.GetTaskQueueType())
+		rootPartition, err := tqid.PartitionFromProto(req.TaskQueue, request.NamespaceId, req.TaskQueueType)
 		if err != nil {
 			return nil, err
 		}
@@ -1288,7 +1288,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		if err != nil {
 			return nil, err
 		}
-		if req.GetVersions() == nil {
+		if req.Versions == nil {
 			defaultBuildId := getDefaultBuildId(userData.GetVersioningData().GetAssignmentRules())
 			req.Versions = &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{defaultBuildId}}
 		}
@@ -1338,15 +1338,15 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			for _, taskQueueType := range req.TaskQueueTypes {
 				for i := range numPartitions {
 					partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
-						NamespaceId: request.GetNamespaceId(),
+						NamespaceId: request.NamespaceId,
 						TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 							TaskQueue:     req.TaskQueue.Name,
 							TaskQueueType: taskQueueType,
 							PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
 						},
-						Versions:      req.GetVersions(),
-						ReportStats:   req.GetReportStats(),
-						ReportPollers: req.GetReportPollers(),
+						Versions:      req.Versions,
+						ReportStats:   req.ReportStats,
+						ReportPollers: req.ReportPollers,
 					})
 					if err != nil {
 						return nil, err
@@ -1365,7 +1365,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						} else {
 							var mergedStats *taskqueuepb.TaskQueueStats
 
-							if req.GetReportStats() {
+							if req.ReportStats {
 								totalStats := physicalTqInfos[buildId][taskQueueType].TaskQueueStats
 								partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
 								mergedStats = cloneTaskQueueStats(totalStats)
@@ -1399,15 +1399,15 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				}
 			}
 			var reachability enumspb.BuildIdTaskReachability
-			if req.GetReportTaskReachability() {
+			if req.ReportTaskReachability {
 				reachability, err = getBuildIdTaskReachability(ctx,
 					newReachabilityCalculator(
 						userData.GetVersioningData(),
 						e.reachabilityCache,
-						request.GetNamespaceId(),
-						req.GetNamespace(),
+						request.NamespaceId,
+						req.Namespace,
 						rootPartition.TaskQueue().Family(),
-						e.config.ReachabilityBuildIdVisibilityGracePeriod(req.GetNamespace()),
+						e.config.ReachabilityBuildIdVisibilityGracePeriod(req.Namespace),
 						tqConfig,
 					),
 					e.metricsHandler,
@@ -1430,7 +1430,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		}, nil
 	}
 
-	partition, err := tqid.PartitionFromProto(req.TaskQueue, request.GetNamespaceId(), req.TaskQueueType)
+	partition, err := tqid.PartitionFromProto(req.TaskQueue, request.NamespaceId, req.TaskQueueType)
 	if err != nil {
 		return nil, err
 	}
@@ -1439,12 +1439,12 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		return nil, err
 	}
 	//nolint:staticcheck // SA1019 deprecated
-	descrResp, err := pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus())
+	descrResp, err := pm.LegacyDescribeTaskQueue(req.IncludeTaskQueueStatus)
 	if err != nil {
 		return nil, err
 	}
 
-	if req.GetReportStats() {
+	if req.ReportStats {
 		if !pm.Partition().IsRoot() {
 			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue stats are only supported for the root partition")
 		}
@@ -1510,7 +1510,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			for i := 0; i < pm.PartitionCount(); i++ {
 				partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx,
 					&matchingservice.DescribeTaskQueuePartitionRequest{
-						NamespaceId: request.GetNamespaceId(),
+						NamespaceId: request.NamespaceId,
 						TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 							TaskQueue:     req.TaskQueue.Name,
 							TaskQueueType: req.TaskQueueType,
@@ -1545,12 +1545,12 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		}
 	}
 
-	if req.GetReportConfig() {
+	if req.ReportConfig {
 		userData, _, err := pm.GetUserDataManager().GetUserData()
 		if err != nil {
 			return nil, err
 		}
-		descrResp.DescResponse.Config = userData.GetData().GetPerType()[int32(req.GetTaskQueueType())].GetConfig()
+		descrResp.DescResponse.Config = userData.GetData().GetPerType()[int32(req.TaskQueueType)].GetConfig()
 	}
 
 	effectiveRPS, sourceForEffectiveRPS := pm.GetRateLimitManager().GetEffectiveRPSAndSource()
@@ -1585,7 +1585,7 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 	ctx context.Context,
 	request *matchingservice.DescribeVersionedTaskQueuesRequest,
 ) (*matchingservice.DescribeVersionedTaskQueuesResponse, error) {
-	partition, err := tqid.PartitionFromProto(request.TaskQueue, request.GetNamespaceId(), request.TaskQueueType)
+	partition, err := tqid.PartitionFromProto(request.TaskQueue, request.NamespaceId, request.TaskQueueType)
 	if err != nil {
 		return nil, err
 	}
@@ -1611,7 +1611,7 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 	for _, tq := range request.VersionTaskQueues {
 		tqResp, err := e.matchingRawClient.DescribeTaskQueue(ctx,
 			&matchingservice.DescribeTaskQueueRequest{
-				NamespaceId: request.GetNamespaceId(),
+				NamespaceId: request.NamespaceId,
 				DescRequest: &workflowservice.DescribeTaskQueueRequest{
 					TaskQueue: &taskqueuepb.TaskQueue{
 						Name: tq.Name,
@@ -1642,18 +1642,18 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueuePartitionRequest,
 ) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
-	if request.GetVersions() == nil {
+	if request.Versions == nil {
 		return nil, serviceerror.NewInvalidArgument("versions must not be nil, to describe the default queue, pass the default build ID as a member of the BuildIds list")
 	}
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId()), true, loadCauseDescribe)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, tqid.PartitionFromPartitionProto(request.TaskQueuePartition, request.NamespaceId), true, loadCauseDescribe)
 	if err != nil {
 		return nil, err
 	}
-	buildIds, err := e.getBuildIds(request.GetVersions())
+	buildIds, err := e.getBuildIds(request.Versions)
 	if err != nil {
 		return nil, err
 	}
-	return pm.Describe(ctx, buildIds, request.GetVersions().GetAllActive(), request.GetReportStats(), request.GetReportPollers(), request.GetReportInternalTaskQueueStatus())
+	return pm.Describe(ctx, buildIds, request.Versions.GetAllActive(), request.ReportStats, request.ReportPollers, request.ReportInternalTaskQueueStatus)
 }
 
 func (e *matchingEngineImpl) getBuildIds(versions *taskqueuepb.TaskQueueVersionSelection) (map[string]bool, error) {
