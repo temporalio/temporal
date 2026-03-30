@@ -330,7 +330,7 @@ jobs:
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
-        if: failure()
+        if: ${{ !cancelled() }}
         with:
           report_paths: ./.testoutput/junit.*.xml
           detailed_summary: true
@@ -430,7 +430,7 @@ jobs:
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
-        if: failure()
+        if: ${{ !cancelled() }}
         with:
           report_paths: ./.testoutput/junit.*.xml
           detailed_summary: true
@@ -569,7 +569,7 @@ jobs:
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
-        if: failure()
+        if: ${{ !cancelled() }}
         with:
           report_paths: ./.testoutput/junit.*.xml
           detailed_summary: true
@@ -705,10 +705,10 @@ jobs:
       actions: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
           cache: true
