@@ -1451,15 +1451,21 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 
 		var buildIds []string
 		var reportUnversioned bool
-		if request.GetVersion() != nil {
-			buildIds = []string{worker_versioning.WorkerDeploymentVersionToStringV32(request.GetVersion())}
+
+		if request.Version != nil {
+			// A particular version was requested. This is only available internally; not user-facing.
+			buildIds = []string{worker_versioning.WorkerDeploymentVersionToStringV32(request.Version)}
 			sort.Strings(buildIds)
-		} else {
+		}
+
+		if len(buildIds) == 0 {
 			userData, _, err := pm.GetUserDataManager().GetUserData()
 			if err != nil {
 				return nil, err
 			}
 			typedUserData := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
+
+			// Fetch buildIDs from old deploymentData format
 			for _, v := range typedUserData.GetDeploymentData().GetVersions() {
 				if v.GetVersion() == nil || v.GetVersion().GetDeploymentName() == "" || v.GetVersion().GetBuildId() == "" {
 					continue
@@ -1467,6 +1473,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				deploymentVersion := worker_versioning.WorkerDeploymentVersionToStringV32(v.GetVersion())
 				buildIds = append(buildIds, deploymentVersion)
 			}
+
+			// Fetch buildIDs from new deploymentData format
 			for deploymentName, v := range typedUserData.GetDeploymentData().GetDeploymentsData() {
 				if v.GetVersions() == nil {
 					continue
@@ -1476,10 +1484,15 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					buildIds = append(buildIds, deploymentVersion)
 				}
 			}
+
+			// Report stats from the unversioned queue here
 			reportUnversioned = true
-			buildIds = append(buildIds, "")
-			sort.Strings(buildIds)
 		}
+
+		if reportUnversioned {
+			buildIds = append(buildIds, "")
+		}
+		sort.Strings(buildIds)
 
 		// TODO(stephan): cache each version separately to allow re-use of cached stats
 		cacheKey := "dtq_default:" + strings.Join(buildIds, ",")
