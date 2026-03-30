@@ -51,7 +51,7 @@ func (s *workflowIDRateLimiterSuite) TestWorkflowIDReuseRateLimiter_AllowsUnderL
 	nsID := namespace.ID("test-ns-id")
 	rl := s.shard.WorkflowIDReuseRateLimiter(nsID, "wf-id", chasm.WorkflowArchetypeID)
 	s.NotNil(rl)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		s.True(rl.Allow())
 	}
 }
@@ -107,7 +107,7 @@ func (s *workflowIDRateLimiterSuite) TestWorkflowIDReuseRateLimiter_BurstRatio()
 	nsID := namespace.ID("test-ns-id")
 	rl := s.shard.WorkflowIDReuseRateLimiter(nsID, "wf-id", chasm.WorkflowArchetypeID)
 	s.NotNil(rl)
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		s.True(rl.Allow(), "expected Allow() on call %d", i+1)
 	}
 	s.False(rl.Allow(), "expected Allow() to be false after burst exhausted")
