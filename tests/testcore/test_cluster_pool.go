@@ -117,18 +117,7 @@ func (p *pool) get(t *testing.T, createCluster func() *FunctionalTestBase) *Func
 	})
 
 	cluster := p.clusters[idx]
-	if p.slots != nil {
-		// Exclusive pool: only one test uses this slot at a time — no lock needed.
-		cluster.SetT(t)
-		cluster.initAssertions()
-	} else {
-		// Shared pool: multiple tests may use the same cluster concurrently.
-		// Protect SetT + initAssertions to avoid data races on the shared base.
-		p.clusterMu[idx].Lock()
-		cluster.SetT(t)
-		cluster.initAssertions()
-		p.clusterMu[idx].Unlock()
-	}
+	cluster.SetT(t)
 	return cluster
 }
 

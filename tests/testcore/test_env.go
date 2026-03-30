@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -52,6 +53,12 @@ type Env interface {
 
 type TestEnv struct {
 	*FunctionalTestBase
+
+	// Shadows FunctionalTestBase.Assertions with a per-test instance bound to
+	// this TestEnv's own *testing.T, avoiding data races when parallel tests
+	// share the same *FunctionalTestBase cluster.
+	// TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
+	*require.Assertions
 
 	Logger log.Logger
 
@@ -162,6 +169,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 
 	env := &TestEnv{
 		FunctionalTestBase: base,
+		Assertions:         require.New(t),
 		cluster:            cluster,
 		nsName:             ns,
 		nsID:               nsID,
