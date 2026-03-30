@@ -131,6 +131,14 @@ func (h *HealthCheckInterceptor) UnaryIntercept(
 		return resp, err
 	}
 
+	if IsLongPollGetWorkflowExecutionHistoryRequest(req) {
+		return resp, err
+	}
+
+	if IsLongPollDescribeActivityExecutionRequest(req) {
+		return resp, err
+	}
+
 	// Record health signal for standard APIs
 	h.healthSignalAggregator.Record(elapsed, err)
 	return resp, err
