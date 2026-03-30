@@ -550,6 +550,8 @@ jobs:
           TEST_TOTAL_SHARDS: ${{ matrix.total_shards }}
           TEST_SHARD_INDEX: ${{ matrix.total_shards && matrix.shard_index }} # guard with total_shards to avoid falsy eval of shard_index=0
           TEST_ARGS: "${{ matrix.test_args }}"
+          TEMPORAL_TEST_LOG_FILE: ${{ github.workspace }}/.testoutput/debug.log
+          TEMPORAL_TEST_LOG_LEVEL: info
 
       - name: Dump container logs
         if: ${{ failure() && toJson(matrix.containers) != '[]' }}
@@ -600,6 +602,15 @@ jobs:
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
+
+      - name: Upload debug logs
+        uses: actions/upload-artifact@v4.4.3
+        if: ${{ !cancelled() }}
+        with:
+          name: debug-logs--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ matrix.name }}--${{ matrix.display_name }}--functional-test
+          path: ${{ github.workspace }}/.testoutput/debug.log
+          if-no-files-found: ignore
+          retention-days: 14
 
   mixed-brain-test:
     name: Mixed brain test

@@ -75,7 +75,7 @@ func NewExecutableFactory(
 		chasmRegistry:              chasmRegistry,
 		taskTypeTagProvider:        taskTypeTagProvider,
 		logger:                     logger,
-		metricsHandler:             metricsHandler.WithTags(defaultExecutableMetricsTags...),
+		metricsHandler:             metricsHandler,
 		tracer:                     tracer,
 		dlqWriter:                  dlqWriter,
 		dlqEnabled:                 dlqEnabled,

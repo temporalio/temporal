@@ -38,12 +38,7 @@ type (
 	}
 )
 
-func TestWorkerDeploymentSuiteV0(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.InitialVersion})
-}
-
-func TestWorkerDeploymentSuiteV2(t *testing.T) {
+func TestWorkerDeploymentSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber})
 }
@@ -340,13 +335,12 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions_Sorted(
 
 	go s.pollFromDeployment(ctx, firstVersion)
 
-	// waiting for 1ms to start the second version later.
-	startTime := time.Now()
-	waitTime := 1 * time.Millisecond
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
-		a.Greater(time.Since(startTime), waitTime)
-	}, 10*time.Second, 1000*time.Millisecond)
+	// Wait until the first version is registered in the deployment before starting the second.
+	// This ensures that both versions get distinct CreateTime values in the deployment workflow
+	// (each processed in a separate workflow task), so that the descending-by-CreateTime sort
+	// produces a deterministic order. A wall-clock wait is not sufficient because in V2 mode
+	// both registrations can queue up and be processed within the same workflow task millisecond.
+	s.ensureCreateVersionInDeployment(firstVersion)
 
 	go s.pollFromDeployment(ctx, secondVersion)
 

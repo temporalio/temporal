@@ -607,13 +607,14 @@ func (r *registry) refreshNamespaces(ctx context.Context) (err error) {
 	}
 
 	r.nsMapsLock.Lock()
+	totalNamespaceCount := len(newIDToNamespace) // record metric value within lock boundary
 	r.idToNamespace = newIDToNamespace
 	r.nameToID = newNameToID
 	stateChanged = append(stateChanged, r.stateChangedDuringReadthrough...)
 	r.stateChangedDuringReadthrough = nil
 	r.nsMapsLock.Unlock()
 
-	metrics.TotalNamespaces.With(r.metricsHandler).Record(float64(len(newIDToNamespace)))
+	metrics.TotalNamespaces.With(r.metricsHandler).Record(float64(totalNamespaceCount))
 
 	r.stateChangeCallbacks.Range(
 		func(_, value any) bool {

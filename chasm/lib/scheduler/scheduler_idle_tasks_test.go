@@ -40,7 +40,7 @@ func runIdleValidateTestCase(t *testing.T, env *testEnv, c *idleValidateTestCase
 		},
 	}
 
-	executor := scheduler.NewSchedulerIdleTaskExecutor(scheduler.SchedulerIdleTaskExecutorOptions{
+	handler := scheduler.NewSchedulerIdleTaskHandler(scheduler.SchedulerIdleTaskHandlerOptions{
 		Config: config,
 	})
 
@@ -59,7 +59,7 @@ func runIdleValidateTestCase(t *testing.T, env *testEnv, c *idleValidateTestCase
 		ScheduledTime: scheduledTime,
 	}
 
-	isValid, err := executor.Validate(ctx, sched, taskAttrs, task)
+	isValid, err := handler.Validate(ctx, sched, taskAttrs, task)
 	require.NoError(t, err)
 	require.Equal(t, c.expectedValid, isValid)
 }
@@ -69,7 +69,7 @@ func TestIdleTask_Execute(t *testing.T) {
 	ctx := env.MutableContext()
 	sched := env.Scheduler
 
-	executor := scheduler.NewSchedulerIdleTaskExecutor(scheduler.SchedulerIdleTaskExecutorOptions{
+	handler := scheduler.NewSchedulerIdleTaskHandler(scheduler.SchedulerIdleTaskHandlerOptions{
 		Config: defaultConfig(),
 	})
 
@@ -77,7 +77,7 @@ func TestIdleTask_Execute(t *testing.T) {
 	require.False(t, sched.Closed)
 
 	// Execute the idle task.
-	err := executor.Execute(ctx, sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerIdleTask{})
+	err := handler.Execute(ctx, sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerIdleTask{})
 	require.NoError(t, err)
 
 	// Verify scheduler is now closed.
