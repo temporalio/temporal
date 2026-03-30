@@ -377,6 +377,24 @@ func (s *matchingEngineSuite) TestDescribeTaskQueueNilDescRequest() {
 	s.ErrorAs(err, &invalidArgument)
 }
 
+func TestDescribeVersionedTaskQueuesCacheKey(t *testing.T) {
+	t.Parallel()
+	v := "deployment-version-1"
+	kOne := describeVersionedTaskQueuesCacheKey(v, []*matchingservice.DescribeVersionedTaskQueuesRequest_VersionTaskQueue{
+		{Name: "q-a", Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+	})
+	kTwo := describeVersionedTaskQueuesCacheKey(v, []*matchingservice.DescribeVersionedTaskQueuesRequest_VersionTaskQueue{
+		{Name: "q-a", Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		{Name: "q-b", Type: enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+	})
+	require.NotEqual(t, kOne, kTwo, "different task-queue sets must not share a cache key")
+	kTwoPermuted := describeVersionedTaskQueuesCacheKey(v, []*matchingservice.DescribeVersionedTaskQueuesRequest_VersionTaskQueue{
+		{Name: "q-b", Type: enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+		{Name: "q-a", Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+	})
+	require.Equal(t, kTwo, kTwoPermuted, "order of VersionTaskQueues must not affect the key")
+}
+
 func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 	prtn := newRootPartition(
 		uuid.NewString(),

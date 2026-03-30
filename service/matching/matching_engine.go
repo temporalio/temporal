@@ -1562,6 +1562,25 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	return descrResp, nil
 }
 
+// describeVersionedTaskQueuesCacheKey builds a stable cache key for DescribeVersionedTaskQueues.
+// The key must incorporate the requested task-queue set; the version string alone was insufficient
+// and could return a stale response when the same deployment version was queried with different
+// VersionTaskQueues lists (same root partition, same TTL window).
+func describeVersionedTaskQueuesCacheKey(
+	version string,
+	tqs []*matchingservice.DescribeVersionedTaskQueuesRequest_VersionTaskQueue,
+) string {
+	parts := make([]string, 0, len(tqs))
+	for _, tq := range tqs {
+		if tq == nil {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s:%d", tq.Name, tq.Type))
+	}
+	sort.Strings(parts)
+	return fmt.Sprintf("dvtq:%s:%s", version, strings.Join(parts, ","))
+}
+
 func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 	ctx context.Context,
 	request *matchingservice.DescribeVersionedTaskQueuesRequest,
@@ -1576,7 +1595,10 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 		return nil, err
 	}
 
-	cacheKey := fmt.Sprintf("dvtq:%s", worker_versioning.WorkerDeploymentVersionToStringV31(request.Version))
+	cacheKey := describeVersionedTaskQueuesCacheKey(
+		worker_versioning.WorkerDeploymentVersionToStringV31(request.Version),
+		request.VersionTaskQueues,
+	)
 	if cached := pm.GetCache(cacheKey); cached != nil {
 		//revive:disable-next-line:unchecked-type-assertion
 		return cached.(*matchingservice.DescribeVersionedTaskQueuesResponse), nil
