@@ -143,8 +143,8 @@ func (s *TaskQueueStatsSuite) TestAddMultipleTasks_ValidateStats_Cached(usePriMa
 // Do NOT override MatchingNumTaskqueueReadPartitions/WritePartitions inside the subtest.
 func (s *TaskQueueStatsSuite) TestVersioningSuite(usePriMatcher bool) {
 	for _, behavior := range testcore.AllMatchingBehaviors() {
-		s.Run(behavior.Name()+"Suite", func(s *TaskQueueStatsSuite) {
-			parallelsuite.Run(s.T(), &TaskQueueStatsVersionSuite{}, usePriMatcher, behavior)
+		s.T().Run(behavior.Name()+"Suite", func(t *testing.T) { //nolint:testifylint // nested parallelsuite.Run needs raw *testing.T
+			parallelsuite.Run(t, &TaskQueueStatsVersionSuite{}, usePriMatcher, behavior)
 		})
 	}
 }
