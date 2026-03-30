@@ -1316,7 +1316,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 
 	// This has been deprecated.
 	if req.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
-		rootPartition, err := tqid.PartitionFromProto(req.GetTaskQueue(), request.GetNamespaceId(), req.GetTaskQueueType())
+		rootPartition, err := tqid.PartitionFromProto(req.TaskQueue, request.GetNamespaceId(), req.TaskQueueType)
 		if err != nil {
 			return nil, err
 		}
@@ -1380,12 +1380,12 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
 						NamespaceId: request.GetNamespaceId(),
 						TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-							TaskQueue:     req.GetTaskQueue().GetName(),
+							TaskQueue:     req.TaskQueue.Name,
 							TaskQueueType: taskQueueType,
 							PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
 						},
 						Versions:      req.GetVersions(),
-						ReportStats:   req.GetReportStats(),
+						ReportStats:   req.ReportStats,
 						ReportPollers: req.GetReportPollers(),
 					})
 					if err != nil {
@@ -1405,7 +1405,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						} else {
 							var mergedStats *taskqueuepb.TaskQueueStats
 
-							if req.GetReportStats() {
+							if req.ReportStats {
 								totalStats := physicalTqInfos[buildId][taskQueueType].TaskQueueStats
 								partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
 								mergedStats = cloneTaskQueueStats(totalStats)
@@ -1470,7 +1470,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		}, nil
 	}
 
-	partition, err := tqid.PartitionFromProto(req.GetTaskQueue(), request.GetNamespaceId(), req.GetTaskQueueType())
+	partition, err := tqid.PartitionFromProto(req.TaskQueue, request.GetNamespaceId(), req.TaskQueueType)
 	if err != nil {
 		return nil, err
 	}
@@ -1484,7 +1484,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		return nil, err
 	}
 
-	if req.GetReportStats() {
+	if req.ReportStats {
 		if !pm.Partition().IsRoot() {
 			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue stats are only supported for the root partition")
 		}
@@ -1512,8 +1512,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					&matchingservice.DescribeTaskQueuePartitionRequest{
 						NamespaceId: request.GetNamespaceId(),
 						TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-							TaskQueue:     req.GetTaskQueue().GetName(),
-							TaskQueueType: req.GetTaskQueueType(),
+							TaskQueue:     req.TaskQueue.Name,
+							TaskQueueType: req.TaskQueueType,
 							PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
 						},
 						Versions: &taskqueuepb.TaskQueueVersionSelection{
@@ -1550,7 +1550,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		if err != nil {
 			return nil, err
 		}
-		descrResp.DescResponse.Config = userData.GetData().GetPerType()[int32(req.GetTaskQueueType())].GetConfig()
+		descrResp.DescResponse.Config = userData.GetData().GetPerType()[int32(req.TaskQueueType)].GetConfig()
 	}
 
 	effectiveRPS, sourceForEffectiveRPS := pm.GetRateLimitManager().GetEffectiveRPSAndSource()
