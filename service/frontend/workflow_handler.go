@@ -2848,7 +2848,11 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 	// Cancel outstanding polls (best-effort)
 	if wh.config.EnableCancelWorkerPollsOnShutdown(request.GetNamespace()) {
 		waitGroup.Go(func() {
-			wh.cancelOutstandingWorkerPolls(ctx, namespaceID.String(), request)
+			if wh.config.EnableMatchingFanOutForPollCancellation(request.GetNamespace()) {
+				wh.cancelOutstandingWorkerPollsMatchingFanOut(ctx, namespaceID.String(), request)
+			} else {
+				wh.cancelOutstandingWorkerPolls(ctx, namespaceID.String(), request)
+			}
 		})
 	}
 
@@ -2890,6 +2894,69 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 	return &workflowservice.ShutdownWorkerResponse{}, nil
 }
 
+// cancelOutstandingWorkerPollsMatchingFanOut sends root partition only; matching fans out to all partitions.
+// Best-effort: errors are logged but don't fail shutdown.
+func (wh *WorkflowHandler) cancelOutstandingWorkerPollsMatchingFanOut(
+	ctx context.Context,
+	namespaceID string,
+	request *workflowservice.ShutdownWorkerRequest,
+) {
+	workerInstanceKey := request.GetWorkerInstanceKey()
+	taskQueueName := request.GetTaskQueue()
+	if workerInstanceKey == "" || taskQueueName == "" {
+		return
+	}
+
+	taskTypes := request.GetTaskQueueTypes()
+	if len(taskTypes) == 0 {
+		taskTypes = []enumspb.TaskQueueType{
+			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		}
+	}
+
+	tqFamily, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	if err != nil {
+		wh.logger.Warn("Invalid task queue name for poll cancellation.",
+			tag.WorkflowTaskQueueName(taskQueueName),
+			tag.Error(err))
+		return
+	}
+
+	var totalCancelled atomic.Int32
+	var wg sync.WaitGroup
+	for _, taskType := range taskTypes {
+		wg.Go(func() {
+			rootPartition := tqFamily.TaskQueue(taskType).RootPartition()
+			resp, err := wh.matchingClient.CancelOutstandingWorkerPolls(ctx, &matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId: namespaceID,
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: rootPartition.RpcName(),
+					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+				},
+				TaskQueueType:     taskType,
+				WorkerInstanceKey: workerInstanceKey,
+				WorkerIdentity:    request.GetIdentity(),
+			})
+			if err != nil {
+				wh.logger.Warn("Failed to cancel outstanding polls for worker.",
+					tag.WorkflowTaskQueueName(rootPartition.RpcName()),
+					tag.String("worker-instance-key", workerInstanceKey),
+					tag.Error(err))
+			} else {
+				totalCancelled.Add(resp.CancelledCount)
+			}
+		})
+	}
+	wg.Wait()
+
+	if totalCancelled.Load() > 0 {
+		wh.logger.Info("Cancelled outstanding polls for worker shutdown.",
+			tag.String("worker-instance-key", workerInstanceKey),
+			tag.NewInt32("cancelled-count", totalCancelled.Load()))
+	}
+}
+
 // cancelOutstandingWorkerPolls fans out poll cancellation to all partitions of the task queue.
 // This is a best-effort operation - errors are logged but don't fail the shutdown.
 func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
@@ -2905,7 +2972,6 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 
 	namespaceName := request.GetNamespace()
 
-	// Use task queue types from request, or default to both workflow and activity
 	taskTypes := request.GetTaskQueueTypes()
 	if len(taskTypes) == 0 {
 		taskTypes = []enumspb.TaskQueueType{
@@ -2914,7 +2980,6 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 		}
 	}
 
-	// The partition is only used for routing; the matching engine cancels all pollers for the workerInstanceKey.
 	tqFamily, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	if err != nil {
 		wh.logger.Warn("Invalid task queue name for poll cancellation.",
@@ -2964,8 +3029,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 	if totalCancelled.Load() > 0 || failedPartitions.Load() > 0 {
 		wh.logger.Info("Cancelled outstanding polls for worker shutdown.",
 			tag.String("worker-instance-key", workerInstanceKey),
-			tag.NewInt32("cancelled-count", totalCancelled.Load()),
-			tag.NewInt32("failed-partitions", failedPartitions.Load()))
+			tag.NewInt32("cancelled-count", totalCancelled.Load()))
 	}
 }
 
