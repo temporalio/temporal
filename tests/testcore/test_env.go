@@ -145,7 +145,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 
 	// Obtain the test cluster from the pool.
 	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig)
-	base.initAssertions() // TODO: remove once all tests use parallelsuites
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
