@@ -101,13 +101,18 @@ func (r *replicator) HandleTransmissionTask(
 			},
 			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 				ActiveClusterName: replicationConfig.ActiveClusterName,
-				State:             replicationConfig.State,
 				Clusters:          convertClusterReplicationConfigToProto(replicationConfig.Clusters),
 			},
 			ConfigVersion:   configVersion,
 			FailoverVersion: failoverVersion,
 			FailoverHistory: convertFailoverHistoryToReplicationProto(failoverHistoy),
 		},
+	}
+
+	// Only replicate on Create operation, and only if state is Normal
+	if namespaceOperation == enumsspb.NAMESPACE_OPERATION_CREATE &&
+		replicationConfig.State == enumspb.REPLICATION_STATE_NORMAL {
+		task.NamespaceTaskAttributes.ReplicationConfig.State = replicationConfig.State
 	}
 
 	return r.namespaceReplicationQueue.Publish(
