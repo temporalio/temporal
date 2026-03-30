@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -7091,6 +7092,27 @@ func (ms *MutableStateImpl) closeTransaction(
 	workflowEventsSeq, eventBatches, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
 	if err != nil {
 		return closeTransactionResult{}, err
+	}
+
+	// Stamp events with the caller's principal. Only do this on the active
+	// cluster — standby (passive) replays events that were already stamped by
+	// the active side, and we must not overwrite those principals.
+	if transactionPolicy == historyi.TransactionPolicyActive {
+		principal := headers.GetPrincipal(ctx)
+		for _, we := range workflowEventsSeq {
+			for _, event := range we.Events {
+				// Skip events that already have a principal. Those are previously
+				// buffered events (e.g., signals) that were stamped when originally
+				// created and are now being flushed into history by a different caller
+				// (e.g., the worker completing a workflow task).
+				if event.Principal == nil {
+					event.Principal = principal
+				}
+			}
+		}
+		for _, event := range bufferEvents {
+			event.Principal = principal
+		}
 	}
 
 	// CloseTransaction() on chasmTree may update execution state & status,

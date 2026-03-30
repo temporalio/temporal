@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
@@ -6148,4 +6149,143 @@ func (s *mutableStateSuite) TestSetContextMetadata() {
 	tq, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
 	s.True(ok)
 	s.Equal(taskQueue, tq)
+}
+
+func (s *mutableStateSuite) TestCloseTransaction_PrincipalStamped() {
+	for _, tc := range []struct {
+		name   string
+		policy historyi.TransactionPolicy
+	}{
+		{"Active", historyi.TransactionPolicyActive},
+		{"Passive", historyi.TransactionPolicyPassive},
+	} {
+		s.Run(tc.name, func() {
+			namespaceEntry := tests.GlobalNamespaceEntry
+			s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+			dbState := s.buildWorkflowMutableState()
+			dbState.BufferedEvents = nil
+
+			var err error
+			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
+			s.NoError(err)
+			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
+			s.NoError(err)
+
+			// Complete the workflow task to generate events in workflowEventsSeq.
+			workflowTaskInfo := s.mutableState.GetStartedWorkflowTask()
+			_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+				workflowTaskInfo,
+				&workflowservice.RespondWorkflowTaskCompletedRequest{},
+				workflowTaskCompletionLimits,
+			)
+			s.NoError(err)
+
+			// Close the transaction with a principal in context.
+			principal := &commonpb.Principal{Type: "user", Name: "alice"}
+			ctx := headers.SetPrincipal(context.Background(), principal)
+			_, eventsSeq, err := s.mutableState.CloseTransactionAsMutation(ctx, tc.policy)
+			s.NoError(err)
+
+			s.NotEmpty(eventsSeq)
+			for _, we := range eventsSeq {
+				for _, event := range we.Events {
+					if tc.policy == historyi.TransactionPolicyActive {
+						// Active: all events should be stamped with the caller's principal.
+						s.Equal("user", event.Principal.GetType(), "event %s should have principal type 'user'", event.EventType)
+						s.Equal("alice", event.Principal.GetName(), "event %s should have principal name 'alice'", event.EventType)
+					} else {
+						// Passive: events must not be stamped
+						s.Nil(event.Principal, "event %s should not have principal stamped in passive mode", event.EventType)
+					}
+				}
+			}
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestCloseTransaction_PrincipalPreserved() {
+	namespaceEntry := tests.GlobalNamespaceEntry
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	dbState := s.buildWorkflowMutableState()
+
+	var err error
+	s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
+	s.NoError(err)
+	err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
+	s.NoError(err)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	// Transaction 1: First signal arrives while a workflow task is started.
+	// The signal gets buffered and stamped with alice's principal.
+	_, err = s.mutableState.AddWorkflowExecutionSignaledEvent(
+		"signal-from-alice",
+		&commonpb.Payloads{},
+		"alice-identity",
+		&commonpb.Header{},
+		nil,
+		nil,
+	)
+	s.NoError(err)
+
+	aliceCtx := headers.SetPrincipal(context.Background(), &commonpb.Principal{Type: "user", Name: "alice"})
+	mutation, _, err := s.mutableState.CloseTransactionAsMutation(aliceCtx, historyi.TransactionPolicyActive)
+	s.NoError(err)
+	s.Len(mutation.NewBufferedEvents, 1)
+	s.Equal("alice", mutation.NewBufferedEvents[0].Principal.GetName())
+
+	// Transaction 2: Second signal arrives from a different caller.
+	// It gets buffered and stamped with bob's principal. Alice's buffered
+	// signal must not be overwritten.
+	_, err = s.mutableState.AddWorkflowExecutionSignaledEvent(
+		"signal-from-bob",
+		&commonpb.Payloads{},
+		"bob-identity",
+		&commonpb.Header{},
+		nil,
+		nil,
+	)
+	s.NoError(err)
+
+	bobCtx := headers.SetPrincipal(context.Background(), &commonpb.Principal{Type: "user", Name: "bob"})
+	mutation, _, err = s.mutableState.CloseTransactionAsMutation(bobCtx, historyi.TransactionPolicyActive)
+	s.NoError(err)
+	s.Len(mutation.NewBufferedEvents, 1)
+	s.Equal("bob", mutation.NewBufferedEvents[0].Principal.GetName())
+
+	// Transaction 3: A worker completes the workflow task. Both buffered
+	// signals are flushed into history. Each should retain its original
+	// principal.
+	workflowTaskInfo := s.mutableState.GetStartedWorkflowTask()
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		workflowTaskInfo,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+
+	workerCtx := headers.SetPrincipal(context.Background(), &commonpb.Principal{Type: "worker", Name: "worker-1"})
+	_, eventsSeq, err := s.mutableState.CloseTransactionAsMutation(workerCtx, historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	s.NotEmpty(eventsSeq)
+	principalBySignalName := map[string]string{}
+	foundWorkerEvent := false
+	for _, we := range eventsSeq {
+		for _, event := range we.Events {
+			if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+				signalName := event.GetWorkflowExecutionSignaledEventAttributes().GetSignalName()
+				principalBySignalName[signalName] = event.Principal.GetName()
+			} else {
+				foundWorkerEvent = true
+				s.Equal("worker", event.Principal.GetType(), "event %s should have worker's principal type", event.EventType)
+				s.Equal("worker-1", event.Principal.GetName(), "event %s should have worker's principal name", event.EventType)
+			}
+		}
+	}
+	s.True(foundWorkerEvent, "expected to find non-signal events in workflowEventsSeq")
+	s.Equal("alice", principalBySignalName["signal-from-alice"], "alice's signal should retain her principal")
+	s.Equal("bob", principalBySignalName["signal-from-bob"], "bob's signal should retain his principal")
 }
