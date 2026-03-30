@@ -1585,7 +1585,7 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 	ctx context.Context,
 	request *matchingservice.DescribeVersionedTaskQueuesRequest,
 ) (*matchingservice.DescribeVersionedTaskQueuesResponse, error) {
-	partition, err := tqid.PartitionFromProto(request.TaskQueue, request.NamespaceId, request.TaskQueueType)
+	partition, err := tqid.PartitionFromProto(request.TaskQueue, request.GetNamespaceId(), request.TaskQueueType)
 	if err != nil {
 		return nil, err
 	}
@@ -1611,7 +1611,7 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 	for _, tq := range request.VersionTaskQueues {
 		tqResp, err := e.matchingRawClient.DescribeTaskQueue(ctx,
 			&matchingservice.DescribeTaskQueueRequest{
-				NamespaceId: request.NamespaceId,
+				NamespaceId: request.GetNamespaceId(),
 				DescRequest: &workflowservice.DescribeTaskQueueRequest{
 					TaskQueue: &taskqueuepb.TaskQueue{
 						Name: tq.Name,
@@ -1642,18 +1642,18 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueuePartitionRequest,
 ) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
-	if request.Versions == nil {
+	if request.GetVersions() == nil {
 		return nil, serviceerror.NewInvalidArgument("versions must not be nil, to describe the default queue, pass the default build ID as a member of the BuildIds list")
 	}
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, tqid.PartitionFromPartitionProto(request.TaskQueuePartition, request.NamespaceId), true, loadCauseDescribe)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId()), true, loadCauseDescribe)
 	if err != nil {
 		return nil, err
 	}
-	buildIds, err := e.getBuildIds(request.Versions)
+	buildIds, err := e.getBuildIds(request.GetVersions())
 	if err != nil {
 		return nil, err
 	}
-	return pm.Describe(ctx, buildIds, request.Versions.GetAllActive(), request.ReportStats, request.ReportPollers, request.ReportInternalTaskQueueStatus)
+	return pm.Describe(ctx, buildIds, request.GetVersions().GetAllActive(), request.GetReportStats(), request.GetReportPollers(), request.GetReportInternalTaskQueueStatus())
 }
 
 func (e *matchingEngineImpl) getBuildIds(versions *taskqueuepb.TaskQueueVersionSelection) (map[string]bool, error) {
