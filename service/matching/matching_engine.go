@@ -1470,7 +1470,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		}, nil
 	}
 
-	partition, err := tqid.PartitionFromProto(req.GetTaskQueue(), request.GetNamespaceId(), req.GetTaskQueueType())
+	partition, err := tqid.PartitionFromProto(req.TaskQueue, request.GetNamespaceId(), req.TaskQueueType)
 	if err != nil {
 		return nil, err
 	}
