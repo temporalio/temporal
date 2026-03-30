@@ -19,7 +19,7 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Avoid stuttering: don't use `ActivityStatus` in package `activity`, just `Status`
 - Use `ok` boolean pattern instead of nil checks where idiomatic
 
-## 3. Testify Suite Correctness
+## 3. Testify Suite Correctness and Reliability
 
 - Never use `s.T()` in subtests - use the subtest's `t` parameter
 - Never use suite assertion methods (`s.NoError`, `s.Equal`) from goroutines - causes panics
@@ -27,6 +27,15 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Use `require.ErrorAs(t, err, &specificErr)` for specific error type checks
 - Prefer `require` over `assert` - it's rarely useful to continue a test after a failed assertion
 - Add comments explaining why `Eventually` is needed (e.g., eventual consistency)
+- Do not use single-value type assertions on errors (`err.(*T)`); this panics instead of failing the test when the type doesn't match. Use `errors.As` with a guarded return.
+- When launching a goroutine to maintain a precondition for later assertions (e.g., keeping pollers active so a deployment version gets registered), loop until context cancellation rather than running once. A single attempt that times out exits silently, leaving downstream Eventually/propagation waits to hang until their own deadline.
+- Never call testify assertions (`s.NoError`, `s.Equal`, `require.NoError`, even `assert.NoError`) inside a `go func()` — if the goroutine outlives the test, the assertion panics the binary with `panic: Fail in goroutine after TestXxx has completed`. Move assertions to the test goroutine or use a buffered error channel.
+- Any `<-ch` that isn't inside a `select` with `ctx.Done()` will hang indefinitely if the sender never sends. Always provide a context cancellation fallback.
+- Never write to package-level or global variables in tests — parallel tests share the same process; thread values through function parameters instead.
+- Never use `time.Sleep` or `time.Since(start) > threshold` to enforce ordering — use channels, `sync.WaitGroup`, or `EventuallyWithT` instead.
+- When using `EventuallyWithT` (or similar) to wait for a condition driven by a background goroutine, ensure the goroutine's timeout is longer than the `EventuallyWithT` deadline — if the background op times out first, the condition will never be satisfied and the wait will hang until its own deadline.
+- Do not silently discard errors from precondition operations with `_, _ = f()` — if `f()` failing invalidates the rest of the test, surface the error or loop until it succeeds.
+- Be suspicious of `go s.someHelper(ctx, ...)` calls where the goroutine runs exactly once and the test then immediately waits for something that helper was supposed to cause. If the operation can fail transiently (network, tight deadline, busy CI), the single attempt may fail silently and the wait will never succeed. Either loop the goroutine until `ctx.Done()`, or check that the operation succeeded before proceeding.
 
 ## 4. Inline Code / Avoid Abstractions
 
@@ -70,3 +79,4 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Prefer `sync.Mutex` over `sync.RWMutex` almost always, except when reads are much more common than writes (>1000×) or readers hold the lock for significant time
 - Don't do IO while holding locks - use side effect tasks
 - Clone data before releasing locks if it might be modified
+- Proto message fields accessed outside the workflow lock must be cloned, not aliased: use `common.CloneProto(...)` rather than returning the pointer directly.
