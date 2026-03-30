@@ -969,7 +969,7 @@ func (s *OperatorSuite) TestList() {
 func (s *OperatorSuite) TestGet() {
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 	ctx := testcore.NewContext()
-	endpoint := s.createNexusEndpoint(ctx,endpointName)
+	endpoint := s.createNexusEndpoint(ctx, endpointName)
 
 	type testcase struct {
 		name      string
