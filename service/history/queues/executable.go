@@ -85,12 +85,6 @@ var (
 	dependencyTaskNotCompletedReschedulePolicy = common.CreateDependencyTaskNotCompletedReschedulePolicy()
 )
 
-var defaultSharedExecutableMetricsTags = []metrics.Tag{
-	metrics.NamespaceUnknownTag(),
-	metrics.TaskTypeTag("__unknown__"),
-	metrics.OperationTag("__unknown__"),
-}
-
 const (
 	// resubmitMaxAttempts is the max number of attempts we may skip rescheduler when a task is Nacked.
 	// check the comment in shouldResubmitOnNack() for more details
@@ -819,14 +813,13 @@ func (e *executableImpl) incAttempt() {
 }
 
 func (e *executableImpl) refreshMetricsHandlers(executionMetricTags []metrics.Tag) {
-	sharedTags := append([]metrics.Tag{}, defaultSharedExecutableMetricsTags...)
-	sharedTags = append(sharedTags, taskBaseMetricTagsWithoutArchetype(
+	sharedTags := taskBaseMetricTagsWithoutArchetype(
 		e.GetTask(),
 		e.namespaceRegistry,
 		e.clusterMetadata.GetCurrentClusterName(),
 		e.chasmRegistry,
 		e.taskTypeTagProvider,
-	)...)
+	)
 	if len(executionMetricTags) > 0 {
 		sharedTags = append(sharedTags, executionMetricTags...)
 	}
