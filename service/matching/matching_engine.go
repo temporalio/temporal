@@ -1380,7 +1380,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
 						NamespaceId: request.GetNamespaceId(),
 						TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-							TaskQueue:     req.GetTaskQueue().GetName(),
+							TaskQueue:     req.TaskQueue.Name,
 							TaskQueueType: taskQueueType,
 							PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
 						},
@@ -1484,7 +1484,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		return nil, err
 	}
 
-	if req.GetReportStats() {
+	if req.ReportStats {
 		if !pm.Partition().IsRoot() {
 			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue stats are only supported for the root partition")
 		}
@@ -1512,8 +1512,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					&matchingservice.DescribeTaskQueuePartitionRequest{
 						NamespaceId: request.GetNamespaceId(),
 						TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-							TaskQueue:     req.GetTaskQueue().GetName(),
-							TaskQueueType: req.GetTaskQueueType(),
+							TaskQueue:     req.TaskQueue.Name,
+							TaskQueueType: req.TaskQueueType,
 							PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
 						},
 						Versions: &taskqueuepb.TaskQueueVersionSelection{
