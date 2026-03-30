@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -40,9 +41,10 @@ func sizeLimitTestOpts() []testcore.TestOption {
 }
 
 func TestSizeLimitFunctionalSuite(t *testing.T) {
-	t.Parallel()
+	// TODO use parallel suite
 	t.Run("TerminateWorkflowCausedByHistoryCountLimit", func(t *testing.T) {
 		s := testcore.NewEnv(t, sizeLimitTestOpts()...)
+		tv := testvars.New(t)
 
 		id := "functional-terminate-workflow-by-history-count-limit-test"
 		wt := "functional-terminate-workflow-by-history-count-limit-test-type"
@@ -102,21 +104,7 @@ func TestSizeLimitFunctionalSuite(t *testing.T) {
 			}}, nil
 		}
 
-		atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-
-			return payloads.EncodeString("Activity Result"), false, nil
-		}
-
-		poller := &testcore.TaskPoller{
-			Client:              s.FrontendClient(),
-			Namespace:           s.Namespace().String(),
-			TaskQueue:           taskQueue,
-			Identity:            identity,
-			WorkflowTaskHandler: wtHandler,
-			ActivityTaskHandler: atHandler,
-			Logger:              s.Logger,
-			T:                   s.T(),
-		}
+		poller := s.TaskPoller()
 
 		for i := int32(0); i < activityCount-1; i++ {
 			dwResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
@@ -130,12 +118,19 @@ func TestSizeLimitFunctionalSuite(t *testing.T) {
 
 			// Poll workflow task only if it is running
 			if dwResp.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				_, err := poller.PollAndProcessWorkflowTask()
-				s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+				_, err := poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					cmds, err := wtHandler(task)
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: cmds}, err
+				})
+				s.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 				s.NoError(err)
 
-				err = poller.PollAndProcessActivityTask(false)
-				s.Logger.Info("PollAndProcessActivityTask", tag.Error(err))
+				_, err = poller.PollAndHandleActivityTask(tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+					return &workflowservice.RespondActivityTaskCompletedRequest{
+						Result: payloads.EncodeString("Activity Result"),
+					}, nil
+				})
+				s.Logger.Info("PollAndHandleActivityTask", tag.Error(err))
 				s.NoError(err)
 			}
 		}
@@ -164,7 +159,7 @@ func TestSizeLimitFunctionalSuite(t *testing.T) {
 		// Signalling workflow should result in force terminating the workflow execution and returns with ResourceExhausted
 		// error. InvalidArgument is returned by the client.
 		s.EqualError(signalErr, common.FailureReasonHistoryCountExceedsLimit)
-		s.IsType(&serviceerror.InvalidArgument{}, signalErr)
+		s.ErrorAs(signalErr, new(*serviceerror.InvalidArgument))
 
 		historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -226,6 +221,7 @@ func TestSizeLimitFunctionalSuite(t *testing.T) {
 	})
 	t.Run("WorkflowFailed_PayloadSizeTooLarge", func(t *testing.T) {
 		s := testcore.NewEnv(t, sizeLimitTestOpts()...)
+		tv := testvars.New(t)
 		id := "functional-workflow-failed-large-payload"
 		wt := "functional-workflow-failed-large-payload-type"
 		tl := "functional-workflow-failed-large-payload-taskqueue"
@@ -236,37 +232,8 @@ func TestSizeLimitFunctionalSuite(t *testing.T) {
 		s.NoError(err)
 		sigReadyToSendChan := make(chan struct{}, 1)
 		sigSendDoneChan := make(chan struct{})
-		wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-			select {
-			case sigReadyToSendChan <- struct{}{}:
-			default:
-			}
 
-			select {
-			case <-sigSendDoneChan:
-			}
-			return []*commandpb.Command{
-				{
-					CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
-					Attributes: &commandpb.Command_RecordMarkerCommandAttributes{
-						RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
-							MarkerName: "large-payload",
-							Details:    map[string]*commonpb.Payloads{"test": pl},
-						},
-					},
-				},
-			}, nil
-		}
-		poller := &testcore.TaskPoller{
-			Client:              s.FrontendClient(),
-			Namespace:           s.Namespace().String(),
-			TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			Identity:            identity,
-			WorkflowTaskHandler: wtHandler,
-			ActivityTaskHandler: nil,
-			Logger:              s.Logger,
-			T:                   s.T(),
-		}
+		poller := s.TaskPoller()
 
 		request := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:           uuid.NewString(),
@@ -283,12 +250,38 @@ func TestSizeLimitFunctionalSuite(t *testing.T) {
 		s.NoError(err)
 
 		go func() {
-			_, err = poller.PollAndProcessWorkflowTask()
-			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+			_, err = poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				select {
+				case sigReadyToSendChan <- struct{}{}:
+				default:
+				}
+
+				select {
+				case <-sigSendDoneChan:
+				case <-s.Context().Done():
+					return nil, s.Context().Err()
+				}
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Commands: []*commandpb.Command{
+						{
+							CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
+							Attributes: &commandpb.Command_RecordMarkerCommandAttributes{
+								RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
+									MarkerName: "large-payload",
+									Details:    map[string]*commonpb.Payloads{"test": pl},
+								},
+							},
+						},
+					},
+				}, nil
+			})
+			s.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 		}()
 
 		select {
 		case <-sigReadyToSendChan:
+		case <-s.Context().Done():
+			s.FailNow("timed out waiting for workflow task handler to be ready")
 		}
 
 		_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
@@ -321,6 +314,7 @@ func TestSizeLimitFunctionalSuite(t *testing.T) {
 	})
 	t.Run("TerminateWorkflowCausedByMsSizeLimit", func(t *testing.T) {
 		s := testcore.NewEnv(t, sizeLimitTestOpts()...)
+		tv := testvars.New(t)
 		id := "functional-terminate-workflow-by-ms-size-limit-test"
 		wt := "functional-terminate-workflow-by-ms-size-limit-test-type"
 		tq := "functional-terminate-workflow-by-ms-size-limit-test-taskqueue"
@@ -349,52 +343,28 @@ func TestSizeLimitFunctionalSuite(t *testing.T) {
 		s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 		activityCount := int32(4)
-		activitiesScheduled := false
 		activityLargePayload := payloads.EncodeBytes(make([]byte, 900))
 		wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-			if !activitiesScheduled {
-				cmds := make([]*commandpb.Command, activityCount)
-				for i := range cmds {
-					cmds[i] = &commandpb.Command{
-						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-							ActivityId:             convert.Int32ToString(int32(i)),
-							ActivityType:           &commonpb.ActivityType{Name: activityName},
-							TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-							Input:                  activityLargePayload,
-							ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
-							ScheduleToStartTimeout: durationpb.New(10 * time.Second),
-							StartToCloseTimeout:    durationpb.New(50 * time.Second),
-							HeartbeatTimeout:       durationpb.New(5 * time.Second),
-						}},
-					}
+			cmds := make([]*commandpb.Command, activityCount)
+			for i := range cmds {
+				cmds[i] = &commandpb.Command{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+						ActivityId:             convert.Int32ToString(int32(i)),
+						ActivityType:           &commonpb.ActivityType{Name: activityName},
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+						Input:                  activityLargePayload,
+						ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+						ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+						StartToCloseTimeout:    durationpb.New(50 * time.Second),
+						HeartbeatTimeout:       durationpb.New(5 * time.Second),
+					}},
 				}
-				return cmds, nil
 			}
-
-			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-					Result: payloads.EncodeString("Done"),
-				}},
-			}}, nil
+			return cmds, nil
 		}
 
-		atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-
-			return payloads.EncodeString("Activity Result"), false, nil
-		}
-
-		poller := &testcore.TaskPoller{
-			Client:              s.FrontendClient(),
-			Namespace:           s.Namespace().String(),
-			TaskQueue:           taskQueue,
-			Identity:            identity,
-			WorkflowTaskHandler: wtHandler,
-			ActivityTaskHandler: atHandler,
-			Logger:              s.Logger,
-			T:                   s.T(),
-		}
+		poller := s.TaskPoller()
 
 		dwResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace().String(),
@@ -407,8 +377,11 @@ func TestSizeLimitFunctionalSuite(t *testing.T) {
 
 		// Poll workflow task only if it is running
 		if dwResp.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-			_, err := poller.PollAndProcessWorkflowTask()
-			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+			_, err := poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				cmds, err := wtHandler(task)
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: cmds}, err
+			})
+			s.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 
 			// Workflow should be force terminated at this point
 			s.EqualError(err, common.FailureReasonMutableStateSizeExceedsLimit)
@@ -426,7 +399,7 @@ func TestSizeLimitFunctionalSuite(t *testing.T) {
 		})
 
 		s.EqualError(signalErr, consts.ErrWorkflowCompleted.Error())
-		s.IsType(&serviceerror.NotFound{}, signalErr)
+		s.ErrorAs(signalErr, new(*serviceerror.NotFound))
 
 		historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -520,7 +493,7 @@ func TestSizeLimitFunctionalSuite(t *testing.T) {
 		// Signalling workflow should result in force terminating the workflow execution and returns with ResourceExhausted
 		// error. InvalidArgument is returned by the client.
 		s.EqualError(signalErr, common.FailureReasonHistorySizeExceedsLimit)
-		s.IsType(&serviceerror.InvalidArgument{}, signalErr)
+		s.ErrorAs(signalErr, new(*serviceerror.InvalidArgument))
 
 		historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: id,
