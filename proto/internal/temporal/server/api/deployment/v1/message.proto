@@ -62,6 +62,8 @@ message WorkerDeploymentVersionData {
   // immediately delete the version data from task queues. instead, we mark them as deleted while
   // keeping the revision number.
   // Old enough deleted versions are GCed based on update_time.
+  // Deprecated. This mechanism is not safe against reactivation of versions after delete.
+  // Use forget_version flag for synchronous deletion of the version data from TQ.
   bool deleted = 3;
 
   temporal.api.enums.v1.WorkerDeploymentVersionStatus status = 6;

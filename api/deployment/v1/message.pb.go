@@ -200,6 +200,8 @@ type WorkerDeploymentVersionData struct {
 	// immediately delete the version data from task queues. instead, we mark them as deleted while
 	// keeping the revision number.
 	// Old enough deleted versions are GCed based on update_time.
+	// Deprecated. This mechanism is not safe against reactivation of versions after delete.
+	// Use forget_version flag for synchronous deletion of the version data from TQ.
 	Deleted       bool                             `protobuf:"varint,3,opt,name=deleted,proto3" json:"deleted,omitempty"`
 	Status        v1.WorkerDeploymentVersionStatus `protobuf:"varint,6,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkerDeploymentVersionStatus" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields

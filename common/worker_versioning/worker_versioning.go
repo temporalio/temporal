@@ -370,7 +370,7 @@ func checkVersionMembershipViaUserData(
 	return HasDeploymentVersion(tqData.GetDeploymentData(), DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version))), nil
 }
 
-func FindDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) int {
+func FindOldDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) int {
 	for i, vd := range deployments.GetVersions() {
 		if proto.Equal(v, vd.GetVersion()) {
 			return i
@@ -1139,6 +1139,8 @@ func WorkerDeploymentVersionFromStringV32(s string) (*deploymentspb.WorkerDeploy
 
 // CleanupOldDeletedVersions removes versions deleted more than 7 days ago. Also removes more deleted versions if
 // the limit is being exceeded. Never removes undeleted versions.
+// Deprecated. Versions now are deleted serially without using the deleted flag in versionData.
+// TODO: remove this cleanup logic after next major release.
 func CleanupOldDeletedVersions(deploymentData *persistencespb.WorkerDeploymentData, maxVersions int) bool {
 	now := time.Now()
 	aWeekAgo := now.Add(-time.Hour * 24 * 7)

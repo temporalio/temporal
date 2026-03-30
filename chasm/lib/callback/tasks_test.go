@@ -143,6 +143,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 
 			// Setup metrics expectations
 			metricsHandler := metrics.NewMockHandler(ctrl)
+			metricsHandler.EXPECT().WithTags(gomock.Any()).Return(metricsHandler).AnyTimes()
 			counter := metrics.NewMockCounterIface(ctrl)
 			timer := metrics.NewMockTimerIface(ctrl)
 			metricsHandler.EXPECT().Counter(RequestCounter.Name()).Return(counter)
