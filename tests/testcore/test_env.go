@@ -7,7 +7,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -22,7 +21,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
@@ -37,8 +35,7 @@ var shardSalt string
 
 var (
 	_                  Env = (*TestEnv)(nil)
-	sequentialSuites   sync.Map
-	defaultTestTimeout = 90 * time.Second * debug.TimeoutMultiplier
+	defaultTestTimeout     = 90 * time.Second * debug.TimeoutMultiplier
 )
 
 type Env interface {
@@ -56,8 +53,12 @@ type Env interface {
 
 type TestEnv struct {
 	*FunctionalTestBase
+
+	// Shadows FunctionalTestBase.Assertions with a per-test instance bound to
+	// this TestEnv's own *testing.T, avoiding data races when parallel tests
+	// share the same *FunctionalTestBase cluster.
+	// TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
 	*require.Assertions
-	historyrequire.HistoryRequire
 
 	Logger log.Logger
 
@@ -128,81 +129,29 @@ func WithTimeout(duration time.Duration) TestOption {
 	}
 }
 
-// sequentialSuite holds state for a suite marked with MustRunSequential.
-// It manages a single dedicated cluster shared by all tests in the suite.
-type sequentialSuite struct {
-	cluster *FunctionalTestBase
-}
-
-// MustRunSequential marks a test suite to run its tests sequentially instead
-// of in parallel. Call this at the start of your test suite before any
-// subtests are created. A single dedicated cluster will be created for this
-// suite and torn down when the suite completes.
-func MustRunSequential(t *testing.T, reason string) {
-	if strings.Contains(t.Name(), "/") {
-		panic("MustRunSequential must be called from a top-level test, not a subtest")
-	}
-	if reason == "" {
-		panic("MustRunSequential requires a reason")
-	}
-
-	// Create a dedicated cluster for this suite.
-	suite := &sequentialSuite{
-		cluster: testClusterPool.createCluster(t, nil, false),
-	}
-	sequentialSuites.Store(t.Name(), suite)
-
-	// Register cleanup to tear down the suite's cluster when the parent test completes.
-	t.Cleanup(func() {
-		sequentialSuites.Delete(t.Name())
-		if err := suite.cluster.testCluster.TearDownCluster(); err != nil {
-			t.Logf("Failed to tear down sequential suite cluster: %v", err)
-		}
-	})
-}
-
 // NewEnv creates a new test environment with access to a Temporal cluster.
-//
-// By default, tests are marked as parallel. Use MustRunSequential on the
-// test's parent `testing.T` to run them sequentially instead.
 func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
+	t.Helper()
+
 	// Check test sharding early, before any expensive operations.
 	checkTestShard(t)
-
-	// Check if this is a sequential suite by looking up the parent test name.
-	suiteName := t.Name()
-	if idx := strings.Index(suiteName, "/"); idx != -1 {
-		suiteName = suiteName[:idx]
-	}
-	suiteVal, sequential := sequentialSuites.Load(suiteName)
-	if !sequential {
-		t.Parallel()
-	}
 
 	var options testOptions
 	for _, opt := range opts {
 		opt(&options)
 	}
 
-	var base *FunctionalTestBase
-	if sequential {
-		// Sequential suites use a single dedicated cluster for all tests.
-		suite := suiteVal.(*sequentialSuite)
-		base = suite.cluster
-		base.SetT(t)
-	} else {
-		// For dedicated clusters, pass all dynamic config settings at cluster creation.
-		var startupConfig map[dynamicconfig.Key]any
-		if options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
-			startupConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
-			for _, override := range options.dynamicConfigSettings {
-				startupConfig[override.setting.Key()] = override.value
-			}
+	// For dedicated clusters, pass all dynamic config settings at cluster creation.
+	var startupConfig map[dynamicconfig.Key]any
+	if options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
+		startupConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
+		for _, override := range options.dynamicConfigSettings {
+			startupConfig[override.setting.Key()] = override.value
 		}
-
-		// Obtain the test cluster from the pool.
-		base = testClusterPool.get(t, options.dedicatedCluster, startupConfig)
 	}
+
+	// Obtain the test cluster from the pool.
+	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig)
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
@@ -221,7 +170,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	env := &TestEnv{
 		FunctionalTestBase: base,
 		Assertions:         require.New(t),
-		HistoryRequire:     historyrequire.New(t),
 		cluster:            cluster,
 		nsName:             ns,
 		nsID:               nsID,
