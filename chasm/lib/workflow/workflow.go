@@ -333,7 +333,7 @@ func (w *Workflow) GetNexusOperationInvocationData(
 		)
 	}
 
-	event, err := w.MSPointer.LoadHistoryEvent(ctx, token)
+	event, err := w.LoadHistoryEvent(ctx, token)
 	if err != nil {
 		return nexusoperation.InvocationData{}, err
 	}

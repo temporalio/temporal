@@ -167,10 +167,10 @@ func (h *OperationInvocationTaskHandler) Execute(
 	var callErr error
 	var startTime time.Time
 	if callTimeout < h.config.MinRequestTimeout(ns.Name().String()) {
-		startTime = time.Now()
+		startTime = time.Now() //nolint:forbidigo // Measuring wall-clock latency of external calls, not state machine time.
 		callErr = &operationTimeoutBelowMinError{timeoutType: timeoutType}
 	} else if args.endpointName == commonnexus.SystemEndpoint {
-		startTime = time.Now()
+		startTime = time.Now() //nolint:forbidigo // Measuring wall-clock latency of external calls, not state machine time.
 		result, callErr = h.startOnHistoryService(callCtx, ns, args, options)
 	} else {
 		client, clientErr := h.clientProvider(
@@ -192,14 +192,14 @@ func (h *OperationInvocationTaskHandler) Execute(
 				tag.Endpoint(args.endpointName),
 				tag.WorkflowID(opRef.BusinessID),
 				tag.WorkflowRunID(opRef.RunID),
-				tag.AttemptStart(time.Now().UTC()),
+				tag.AttemptStart(time.Now().UTC()), //nolint:forbidigo // Wall-clock time for tracing.
 				tag.Attempt(task.GetAttempt()),
 			)
 			if trace := h.httpTraceProvider.NewTrace(task.GetAttempt(), traceLogger); trace != nil {
 				callCtx = httptrace.WithClientTrace(callCtx, trace)
 			}
 		}
-		startTime = time.Now()
+		startTime = time.Now() //nolint:forbidigo // Measuring wall-clock latency of external calls, not state machine time.
 		result, callErr = h.startViaHTTP(callCtx, client, args, options)
 	}
 

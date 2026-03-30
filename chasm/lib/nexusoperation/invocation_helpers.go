@@ -335,6 +335,7 @@ func classifyStartOperationError(callErr error) invocationResult {
 		return invocationResultTimeout{timeoutType: opTimeoutBelowMinErr.timeoutType}
 	case errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled):
 		callErr = errRequestTimedOut
+	default:
 	}
 
 	// Retryable error
