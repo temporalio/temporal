@@ -9,6 +9,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -42,7 +43,7 @@ func Invoke(
 	request := resetRequest.ResetRequest
 	workflowID := request.WorkflowExecution.GetWorkflowId()
 
-	if rl := shardContext.WorkflowIDReuseRateLimiter(namespaceID, workflowID); rl != nil && !rl.Allow() {
+	if rl := shardContext.WorkflowIDReuseRateLimiter(namespaceID, workflowID, chasm.WorkflowArchetypeID); rl != nil && !rl.Allow() {
 		metrics.WorkflowIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
 			1,
 			metrics.ResourceExhaustedCauseTag(consts.ErrWorkflowIDRateLimitExceeded.Cause),

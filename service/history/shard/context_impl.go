@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -156,7 +157,7 @@ type (
 		chasmRegistry    *chasm.Registry
 		endpointRegistry chasm.EndpointRegistry
 
-		workflowIDRateLimiters cache.StoppableCache
+		workflowIDRateLimiters cache.Cache
 	}
 
 	remoteClusterInfo struct {
@@ -2269,13 +2270,13 @@ func (s *ContextImpl) EndpointRegistry() chasm.EndpointRegistry {
 	return s.endpointRegistry
 }
 
-func (s *ContextImpl) WorkflowIDReuseRateLimiter(namespaceID namespace.ID, workflowID string) quotas.RateLimiter {
+func (s *ContextImpl) WorkflowIDReuseRateLimiter(namespaceID namespace.ID, businessID string, archetypeID chasm.ArchetypeID) quotas.RateLimiter {
 	rps := s.config.WorkflowIDReuseRate(namespaceID.String())
 	if rps <= 0 {
 		return nil
 	}
 	burst := max(1, int(float64(rps)*s.config.WorkflowIDReuseBurstRatio(namespaceID.String())))
-	key := namespaceID.String() + "/" + workflowID
+	key := namespaceID.String() + "/" + businessID + "/" + strconv.Itoa(int(archetypeID))
 	existing := s.workflowIDRateLimiters.Get(key)
 	if existing == nil {
 		rl := quotas.NewRateLimiter(float64(rps), burst)

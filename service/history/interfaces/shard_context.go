@@ -109,7 +109,7 @@ type (
 		ChasmRegistry() *chasm.Registry
 		EndpointRegistry() chasm.EndpointRegistry
 
-		WorkflowIDReuseRateLimiter(namespaceID namespace.ID, workflowID string) quotas.RateLimiter
+		WorkflowIDReuseRateLimiter(namespaceID namespace.ID, businessID string, archetypeID chasm.ArchetypeID) quotas.RateLimiter
 	}
 
 	// A ControllableContext is a Context plus other methods needed by

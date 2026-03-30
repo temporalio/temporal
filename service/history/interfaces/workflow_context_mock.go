@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	persistence "go.temporal.io/server/api/persistence/v1"
+	chasm "go.temporal.io/server/chasm"
 	definition "go.temporal.io/server/common/definition"
 	locks "go.temporal.io/server/common/locks"
 	persistence0 "go.temporal.io/server/common/persistence"
@@ -55,6 +56,20 @@ func (m *MockWorkflowContext) Clear() {
 func (mr *MockWorkflowContextMockRecorder) Clear() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Clear", reflect.TypeOf((*MockWorkflowContext)(nil).Clear))
+}
+
+// GetArchetypeID mocks base method.
+func (m *MockWorkflowContext) GetArchetypeID() chasm.ArchetypeID {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetArchetypeID")
+	ret0, _ := ret[0].(chasm.ArchetypeID)
+	return ret0
+}
+
+// GetArchetypeID indicates an expected call of GetArchetypeID.
+func (mr *MockWorkflowContextMockRecorder) GetArchetypeID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetArchetypeID", reflect.TypeOf((*MockWorkflowContext)(nil).GetArchetypeID))
 }
 
 // ConflictResolveWorkflowExecution mocks base method.

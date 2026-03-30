@@ -740,17 +740,17 @@ func (mr *MockShardContextMockRecorder) StateMachineRegistry() *gomock.Call {
 }
 
 // WorkflowIDReuseRateLimiter mocks base method.
-func (m *MockShardContext) WorkflowIDReuseRateLimiter(namespaceID namespace.ID, workflowID string) quotas.RateLimiter {
+func (m *MockShardContext) WorkflowIDReuseRateLimiter(namespaceID namespace.ID, businessID string, archetypeID chasm.ArchetypeID) quotas.RateLimiter {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WorkflowIDReuseRateLimiter", namespaceID, workflowID)
+	ret := m.ctrl.Call(m, "WorkflowIDReuseRateLimiter", namespaceID, businessID, archetypeID)
 	ret0, _ := ret[0].(quotas.RateLimiter)
 	return ret0
 }
 
 // WorkflowIDReuseRateLimiter indicates an expected call of WorkflowIDReuseRateLimiter.
-func (mr *MockShardContextMockRecorder) WorkflowIDReuseRateLimiter(namespaceID, workflowID any) *gomock.Call {
+func (mr *MockShardContextMockRecorder) WorkflowIDReuseRateLimiter(namespaceID, businessID, archetypeID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WorkflowIDReuseRateLimiter", reflect.TypeOf((*MockShardContext)(nil).WorkflowIDReuseRateLimiter), namespaceID, workflowID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WorkflowIDReuseRateLimiter", reflect.TypeOf((*MockShardContext)(nil).WorkflowIDReuseRateLimiter), namespaceID, businessID, archetypeID)
 }
 
 // UnloadForOwnershipLost mocks base method.
@@ -1597,17 +1597,17 @@ func (mr *MockControllableContextMockRecorder) UnloadForOwnershipLost() *gomock.
 }
 
 // WorkflowIDReuseRateLimiter mocks base method.
-func (m *MockControllableContext) WorkflowIDReuseRateLimiter(namespaceID namespace.ID, workflowID string) quotas.RateLimiter {
+func (m *MockControllableContext) WorkflowIDReuseRateLimiter(namespaceID namespace.ID, businessID string, archetypeID chasm.ArchetypeID) quotas.RateLimiter {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WorkflowIDReuseRateLimiter", namespaceID, workflowID)
+	ret := m.ctrl.Call(m, "WorkflowIDReuseRateLimiter", namespaceID, businessID, archetypeID)
 	ret0, _ := ret[0].(quotas.RateLimiter)
 	return ret0
 }
 
 // WorkflowIDReuseRateLimiter indicates an expected call of WorkflowIDReuseRateLimiter.
-func (mr *MockControllableContextMockRecorder) WorkflowIDReuseRateLimiter(namespaceID, workflowID any) *gomock.Call {
+func (mr *MockControllableContextMockRecorder) WorkflowIDReuseRateLimiter(namespaceID, businessID, archetypeID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WorkflowIDReuseRateLimiter", reflect.TypeOf((*MockControllableContext)(nil).WorkflowIDReuseRateLimiter), namespaceID, workflowID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WorkflowIDReuseRateLimiter", reflect.TypeOf((*MockControllableContext)(nil).WorkflowIDReuseRateLimiter), namespaceID, businessID, archetypeID)
 }
 
 // UpdateHandoverNamespace mocks base method.

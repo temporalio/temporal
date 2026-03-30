@@ -112,6 +112,10 @@ func (c *ContextImpl) Clear() {
 	}
 }
 
+func (c *ContextImpl) GetArchetypeID() chasm.ArchetypeID {
+	return c.archetypeID
+}
+
 func (c *ContextImpl) GetWorkflowKey() definition.WorkflowKey {
 	return c.workflowKey
 }
@@ -250,6 +254,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		if rl := shardContext.WorkflowIDReuseRateLimiter(
 			namespace.ID(c.workflowKey.NamespaceID),
 			c.workflowKey.WorkflowID,
+			c.archetypeID,
 		); rl != nil && !rl.Allow() {
 			metrics.WorkflowIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
 				1,
@@ -556,6 +561,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 			if rl := shardContext.WorkflowIDReuseRateLimiter(
 				namespace.ID(execInfo.NamespaceId),
 				execInfo.WorkflowId,
+				newContext.GetArchetypeID(),
 			); rl != nil && !rl.Allow() {
 				metrics.WorkflowIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
 					1,
