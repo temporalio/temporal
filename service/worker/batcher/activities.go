@@ -261,11 +261,25 @@ func (a *activities) checkNamespace(namespace string) error {
 	if namespace != a.namespace.String() && a.namespace.String() != primitives.SystemLocalNamespace {
 		return errNamespaceMismatch
 	}
+	// Validate that batchParams targets the worker's own namespace.
+	// The Namespace must agree with the worker's bound namespace. This prevents cross-namespace
+	// escalation via the privileged internal-frontend connection (NoopClaimMapper → RoleAdmin).
+	if namespace != a.namespace.String() {
+		return errNamespaceMismatch
+	}
 	return nil
 }
 
-func (a *activities) checkNamespaceID(namespaceID string) error {
-	if namespaceID != a.namespaceID.String() {
+// checkNamespaceProtobuf validates that batchParams targets the worker's own namespace.
+// The NamespaceId and Request.Namespace (if set)
+// must all agree with the worker's bound namespace. This prevents cross-namespace
+// escalation via the privileged internal-frontend connection (NoopClaimMapper → RoleAdmin).
+func (a *activities) checkNamespaceProtobuf(batchParams *batchspb.BatchOperationInput) error {
+	if batchParams.NamespaceId != a.namespaceID.String() {
+		return errNamespaceMismatch
+	}
+	ns := a.namespace.String()
+	if req := batchParams.GetRequest(); req != nil && req.GetNamespace() != ns {
 		return errNamespaceMismatch
 	}
 	return nil
@@ -370,14 +384,15 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	hbd := HeartBeatDetails{}
 	metricsHandler := a.MetricsHandler.WithTags(metrics.OperationTag(metrics.BatcherScope), metrics.NamespaceIDTag(batchParams.NamespaceId))
 
-	if err := a.checkNamespaceID(batchParams.NamespaceId); err != nil {
+	if err := a.checkNamespaceProtobuf(batchParams); err != nil {
 		metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 		logger.Error("Failed to run batch operation due to namespace mismatch", tag.Error(err))
 		return hbd, err
 	}
+	ns := a.namespace.String()
 
 	sdkClient := a.ClientFactory.NewClient(sdkclient.Options{
-		Namespace:     a.namespace.String(),
+		Namespace:     ns,
 		DataConverter: sdk.PreferProtoDataConverter,
 	})
 	startOver := true
@@ -776,7 +791,7 @@ func startTaskProcessorProtobuf(
 						} else {
 							// Old fields
 							//nolint:staticcheck // SA1019: worker versioning v0.31
-							eventId, err = getResetEventIDByType(ctx, operation.ResetOperation.ResetType, batchOperation.Request.Namespace, execution, frontendClient, logger)
+							eventId, err = getResetEventIDByType(ctx, operation.ResetOperation.ResetType, namespace, execution, frontendClient, logger)
 							//nolint:staticcheck // SA1019: worker versioning v0.31
 							resetReapplyType = operation.ResetOperation.ResetReapplyType
 						}

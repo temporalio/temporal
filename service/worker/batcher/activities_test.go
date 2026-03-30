@@ -9,16 +9,20 @@ import (
 	"unicode"
 
 	"github.com/stretchr/testify/suite"
+	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/testsuite"
+	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.uber.org/mock/gomock"
+	"golang.org/x/time/rate"
 )
 
 type activitiesSuite struct {
@@ -406,4 +410,62 @@ func (s *activitiesSuite) TestAdjustQueryBatchTypeEnum() {
 			s.Equal(testRun.expectedResult, adjustedQuery)
 		})
 	}
+}
+
+// TestStartTaskProcessor_SignalUsesWorkerNamespace verifies that startTaskProcessor uses
+// the worker's authoritative namespace (passed as the namespace argument) for operations,
+// not the user-controlled namespace from batchOperation.Request.Namespace.
+// This guards against a regression introduced in PR #8144 where batchParams.Request.Namespace
+// (user-controlled) was used instead of a.namespace.String() (server-trusted).
+func (s *activitiesSuite) TestStartTaskProcessor_SignalUsesWorkerNamespace() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	workerNamespace := "trusted-namespace"
+	requestNamespace := "untrusted-namespace" // intentionally different
+
+	batchOperation := &batchspb.BatchOperationInput{
+		NamespaceId: "some-namespace-id",
+		Request: &workflowservice.StartBatchOperationRequest{
+			Namespace: requestNamespace,
+			Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
+				SignalOperation: &batchpb.BatchOperationSignal{
+					Signal: "test-signal",
+				},
+			},
+		},
+	}
+
+	testPage := &page{
+		executions: []*commonpb.WorkflowExecution{
+			{
+				WorkflowId: "test-workflow-id",
+				RunId:      "test-run-id",
+			},
+		},
+	}
+	testTask := task{
+		execution: testPage.executions[0],
+		attempts:  1,
+		page:      testPage,
+	}
+
+	taskCh := make(chan task, 1)
+	respCh := make(chan taskResponse, 1)
+	limiter := rate.NewLimiter(rate.Limit(100), 1)
+
+	// The signal must be executed with the worker's trusted namespace, not the user-supplied one.
+	s.mockFrontendClient.EXPECT().
+		SignalWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *workflowservice.SignalWorkflowExecutionRequest, _ ...any) (*workflowservice.SignalWorkflowExecutionResponse, error) {
+			s.Equal(workerNamespace, req.Namespace, "must use worker namespace, not request namespace")
+			return &workflowservice.SignalWorkflowExecutionResponse{}, nil
+		})
+
+	taskCh <- testTask
+
+	go startTaskProcessorProtobuf(ctx, batchOperation, workerNamespace, taskCh, respCh, limiter, nil, s.mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
+
+	resp := <-respCh
+	s.NoError(resp.err)
 }
