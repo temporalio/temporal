@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -375,6 +376,24 @@ func (s *matchingEngineSuite) TestDescribeTaskQueueNilDescRequest() {
 	s.Error(err)
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)
+}
+
+// TestDescribeTaskQueueDtqDefaultCacheKeyPre9436Collision documents the cache bug fixed for
+// https://github.com/temporalio/temporal/issues/9436 : when dtq_default cache keys were built
+// from buildIds before user-data resolution (no explicit Version), buildIds was still empty, so
+// the key was always "dtq_default:". Different resolved deployment sets then collided on that key.
+// The fix resolves and sorts build IDs first, then builds the key: "dtq_default:" + strings.Join(...).
+func TestDescribeTaskQueueDtqDefaultCacheKeyPre9436Collision(t *testing.T) {
+	t.Parallel()
+	keyIfComputedBeforeResolution := "dtq_default:" + strings.Join(nil, ",")
+	require.Equal(t, "dtq_default:", keyIfComputedBeforeResolution)
+
+	resolvedBuildIds := []string{"deployment:ns__build-b", "deployment:ns__build-a", ""}
+	sort.Strings(resolvedBuildIds)
+	keyAfterResolution := "dtq_default:" + strings.Join(resolvedBuildIds, ",")
+	require.NotEqual(t, keyIfComputedBeforeResolution, keyAfterResolution,
+		"empty-join key must not equal key after resolving deployment versions + unversioned sentinel")
+	require.Equal(t, "dtq_default:,deployment:ns__build-a,deployment:ns__build-b", keyAfterResolution)
 }
 
 func TestDescribeVersionedTaskQueuesCacheKey(t *testing.T) {
