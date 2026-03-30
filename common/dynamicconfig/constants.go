@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/matching/counter"
 )
 
@@ -951,10 +952,17 @@ used when the first cache layer has a miss. Requires server restart for change t
 	FrontendNexusRequestHeadersBlacklist = NewGlobalTypedSettingWithConverter(
 		"frontend.nexusRequestHeadersBlacklist",
 		ConvertWildcardStringListToRegexp,
-		MatchNothingRE,
-		`Nexus request headers to be removed before being sent to a user handler.
-Wildcards (*) are expanded to allow any substring. By default blacklist is empty.
-Concrete type should be list of strings.`,
+		// Failure support is an internal implementation detail that shouldn't propagate to the user.
+		util.MustWildCardStringsToRegexp([]string{
+			"accept-encoding",
+			"x-forwarded-for",
+			"xdc-redirection",
+			"xdc-redirection-api",
+			"temporal-nexus-failure-support",
+		}),
+		`Nexus request headers to be removed before being sent to a user handler. Wildcards (*) are expanded to
+allow any substring. By default headers that are meant for internal use are disallowed. Concrete type should be list of
+strings.`,
 	)
 	FrontendNexusForwardRequestUseEndpointDispatch = NewGlobalBoolSetting(
 		"frontend.nexusForwardRequestUseEndpointDispatch",
