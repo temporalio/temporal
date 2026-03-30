@@ -338,10 +338,7 @@ func (c *ActivityServiceLayeredClient) callPauseActivityExecutionNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	var businessID string
-	if businessID == "" {
-		businessID = request.GetFrontendRequest().GetWorkflowId()
-	}
+	businessID := request.GetFrontendRequest().GetWorkflowId()
 	if businessID == "" {
 		businessID = request.GetFrontendRequest().GetActivityId()
 	}
@@ -388,10 +385,7 @@ func (c *ActivityServiceLayeredClient) callUnpauseActivityExecutionNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	var businessID string
-	if businessID == "" {
-		businessID = request.GetFrontendRequest().GetWorkflowId()
-	}
+	businessID := request.GetFrontendRequest().GetWorkflowId()
 	if businessID == "" {
 		businessID = request.GetFrontendRequest().GetActivityId()
 	}
@@ -438,10 +432,7 @@ func (c *ActivityServiceLayeredClient) callResetActivityExecutionNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	var businessID string
-	if businessID == "" {
-		businessID = request.GetFrontendRequest().GetWorkflowId()
-	}
+	businessID := request.GetFrontendRequest().GetWorkflowId()
 	if businessID == "" {
 		businessID = request.GetFrontendRequest().GetActivityId()
 	}
@@ -488,10 +479,7 @@ func (c *ActivityServiceLayeredClient) callUpdateActivityExecutionOptionsNoRetry
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	var businessID string
-	if businessID == "" {
-		businessID = request.GetFrontendRequest().GetWorkflowId()
-	}
+	businessID := request.GetFrontendRequest().GetWorkflowId()
 	if businessID == "" {
 		businessID = request.GetFrontendRequest().GetActivityId()
 	}
