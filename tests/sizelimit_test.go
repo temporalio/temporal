@@ -26,6 +26,19 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+func sizeLimitTestOpts() []testcore.TestOption {
+	return []testcore.TestOption{
+		testcore.WithDynamicConfig(dynamicconfig.HistoryCountLimitWarn, 10),
+		testcore.WithDynamicConfig(dynamicconfig.HistoryCountLimitError, 20),
+		testcore.WithDynamicConfig(dynamicconfig.HistorySizeLimitWarn, 5000),
+		testcore.WithDynamicConfig(dynamicconfig.HistorySizeLimitError, 9000),
+		testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitWarn, 1),
+		testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitError, 1000),
+		testcore.WithDynamicConfig(dynamicconfig.MutableStateSizeLimitWarn, 200),
+		testcore.WithDynamicConfig(dynamicconfig.MutableStateSizeLimitError, 1100),
+	}
+}
+
 func TestSizeLimitFunctionalSuite(t *testing.T) {
 	t.Parallel()
 	t.Run("TerminateWorkflowCausedByHistoryCountLimit", func(t *testing.T) {
@@ -557,17 +570,4 @@ func TestSizeLimitFunctionalSuite(t *testing.T) {
 			100*time.Millisecond,
 		)
 	})
-}
-
-func sizeLimitTestOpts() []testcore.TestOption {
-	return []testcore.TestOption{
-		testcore.WithDynamicConfig(dynamicconfig.HistoryCountLimitWarn, 10),
-		testcore.WithDynamicConfig(dynamicconfig.HistoryCountLimitError, 20),
-		testcore.WithDynamicConfig(dynamicconfig.HistorySizeLimitWarn, 5000),
-		testcore.WithDynamicConfig(dynamicconfig.HistorySizeLimitError, 9000),
-		testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitWarn, 1),
-		testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitError, 1000),
-		testcore.WithDynamicConfig(dynamicconfig.MutableStateSizeLimitWarn, 200),
-		testcore.WithDynamicConfig(dynamicconfig.MutableStateSizeLimitError, 1100),
-	}
 }
