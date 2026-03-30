@@ -412,7 +412,7 @@ func NewMutableState(
 			s,
 			chasm.DefaultPathEncoder,
 			logger,
-			shard.GetMetricsHandler(),
+			shard.GetMetricsHandler().WithTags(metrics.NamespaceTag(namespaceName)),
 		)
 	}
 
@@ -560,7 +560,7 @@ func NewMutableStateFromDB(
 			mutableState,
 			chasm.DefaultPathEncoder,
 			mutableState.logger, // this logger is tagged with execution key.
-			shard.GetMetricsHandler(),
+			shard.GetMetricsHandler().WithTags(metrics.NamespaceTag(namespaceEntry.Name().String())),
 		)
 		if err != nil {
 			return nil, err
