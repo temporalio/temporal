@@ -27,7 +27,7 @@ jobs:
     steps:
       - name: Generate token
         id: generate_token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
           private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
@@ -41,7 +41,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
 
@@ -68,7 +68,7 @@ jobs:
             --sha "$SHA"
 
       - name: Upload generated reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: steps.process-flaky-tests.outcome == 'success'
         with:
           name: flaky-tests-reports-${{ github.run_number }}

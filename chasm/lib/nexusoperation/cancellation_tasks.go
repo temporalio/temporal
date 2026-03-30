@@ -11,7 +11,7 @@ import (
 	"go.uber.org/fx"
 )
 
-type CancellationTaskExecutorOptions struct {
+type CancellationTaskHandlerOptions struct {
 	fx.In
 
 	Config *Config
@@ -20,22 +20,23 @@ type CancellationTaskExecutorOptions struct {
 	Logger         log.Logger
 }
 
-type CancellationTaskExecutor struct {
+type CancellationTaskHandler struct {
+	chasm.SideEffectTaskHandlerBase[*nexusoperationpb.CancellationTask]
 	config *Config
 
 	metricsHandler metrics.Handler
 	logger         log.Logger
 }
 
-func NewCancellationTaskExecutor(opts CancellationTaskExecutorOptions) *CancellationTaskExecutor {
-	return &CancellationTaskExecutor{
+func NewCancellationTaskHandler(opts CancellationTaskHandlerOptions) *CancellationTaskHandler {
+	return &CancellationTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
 		logger:         opts.Logger,
 	}
 }
 
-func (e *CancellationTaskExecutor) Validate(
+func (h *CancellationTaskHandler) Validate(
 	ctx chasm.Context,
 	cancellation *Cancellation,
 	attrs chasm.TaskAttributes,
@@ -44,7 +45,7 @@ func (e *CancellationTaskExecutor) Validate(
 	return false, serviceerror.NewUnimplemented("unimplemented")
 }
 
-func (e *CancellationTaskExecutor) Execute(
+func (h *CancellationTaskHandler) Execute(
 	ctx context.Context,
 	cancelRef chasm.ComponentRef,
 	attrs chasm.TaskAttributes,
@@ -53,22 +54,23 @@ func (e *CancellationTaskExecutor) Execute(
 	return serviceerror.NewUnimplemented("unimplemented")
 }
 
-type CancellationBackoffTaskExecutor struct {
+type CancellationBackoffTaskHandler struct {
+	chasm.PureTaskHandlerBase
 	config *Config
 
 	metricsHandler metrics.Handler
 	logger         log.Logger
 }
 
-func NewCancellationBackoffTaskExecutor(opts CancellationTaskExecutorOptions) *CancellationBackoffTaskExecutor {
-	return &CancellationBackoffTaskExecutor{
+func NewCancellationBackoffTaskHandler(opts CancellationTaskHandlerOptions) *CancellationBackoffTaskHandler {
+	return &CancellationBackoffTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
 		logger:         opts.Logger,
 	}
 }
 
-func (e *CancellationBackoffTaskExecutor) Validate(
+func (h *CancellationBackoffTaskHandler) Validate(
 	ctx chasm.Context,
 	cancellation *Cancellation,
 	attrs chasm.TaskAttributes,
@@ -77,7 +79,7 @@ func (e *CancellationBackoffTaskExecutor) Validate(
 	return false, serviceerror.NewUnimplemented("unimplemented")
 }
 
-func (e *CancellationBackoffTaskExecutor) Execute(
+func (h *CancellationBackoffTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	cancellation *Cancellation,
 	attrs chasm.TaskAttributes,

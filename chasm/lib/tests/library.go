@@ -47,13 +47,11 @@ func (l *library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
 		chasm.NewRegistrablePureTask(
 			"payloadTTLPureTask",
-			&PayloadTTLPureTaskValidator{},
-			&PayloadTTLPureTaskExecutor{},
+			&PayloadTTLPureTaskHandler{},
 		),
 		chasm.NewRegistrableSideEffectTask(
 			"payloadTTLSideEffectTask",
-			&PayloadTTLSideEffectTaskValidator{},
-			&PayloadTTLSideEffectTaskExecutor{},
+			&PayloadTTLSideEffectTaskHandler{},
 		),
 	}
 }

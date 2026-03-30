@@ -27,7 +27,7 @@ func TestNewSentinel(t *testing.T) {
 func TestSentinelIdleTask_Validate_Valid(t *testing.T) {
 	sentinel, ctx, _ := setupSentinelForTest(t)
 
-	executor := scheduler.NewSchedulerIdleTaskExecutor(scheduler.SchedulerIdleTaskExecutorOptions{
+	executor := scheduler.NewSchedulerIdleTaskHandler(scheduler.SchedulerIdleTaskHandlerOptions{
 		Config: defaultConfig(),
 	})
 
@@ -47,7 +47,7 @@ func TestSentinelIdleTask_Validate_InvalidAfterClosed(t *testing.T) {
 	sentinel, ctx, _ := setupSentinelForTest(t)
 	sentinel.Closed = true
 
-	executor := scheduler.NewSchedulerIdleTaskExecutor(scheduler.SchedulerIdleTaskExecutorOptions{
+	executor := scheduler.NewSchedulerIdleTaskHandler(scheduler.SchedulerIdleTaskHandlerOptions{
 		Config: defaultConfig(),
 	})
 
@@ -66,7 +66,7 @@ func TestSentinelIdleTask_Validate_InvalidAfterClosed(t *testing.T) {
 func TestSentinelIdleTask_Validate_MismatchedScheduledTime(t *testing.T) {
 	sentinel, ctx, _ := setupSentinelForTest(t)
 
-	executor := scheduler.NewSchedulerIdleTaskExecutor(scheduler.SchedulerIdleTaskExecutorOptions{
+	executor := scheduler.NewSchedulerIdleTaskHandler(scheduler.SchedulerIdleTaskHandlerOptions{
 		Config: defaultConfig(),
 	})
 
@@ -85,7 +85,7 @@ func TestSentinelIdleTask_Validate_MismatchedScheduledTime(t *testing.T) {
 func TestSentinelIdleTask_Execute(t *testing.T) {
 	sentinel, ctx, _ := setupSentinelForTest(t)
 
-	executor := scheduler.NewSchedulerIdleTaskExecutor(scheduler.SchedulerIdleTaskExecutorOptions{
+	executor := scheduler.NewSchedulerIdleTaskHandler(scheduler.SchedulerIdleTaskHandlerOptions{
 		Config: defaultConfig(),
 	})
 

@@ -251,13 +251,13 @@ func TestBackfillTask_PartialFill(t *testing.T) {
 	// task is in the future (after backoff delay).
 	invoker := sched.Invoker.Get(ctx)
 	invoker.BufferedStarts = nil // Clear to make room for next batch
-	executor := scheduler.NewBackfillerTaskExecutor(scheduler.BackfillerTaskExecutorOptions{
+	handler := scheduler.NewBackfillerTaskHandler(scheduler.BackfillerTaskHandlerOptions{
 		Config:         defaultConfig(),
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     env.Logger,
 		SpecProcessor:  env.SpecProcessor,
 	})
-	err = executor.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
+	err = handler.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
 	require.NoError(t, err)
 	require.NoError(t, env.CloseTransaction())
 

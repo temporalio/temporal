@@ -52,7 +52,7 @@ func logInternalError(logger log.Logger, internalMsg string, internalErr error) 
 func (c chasmInvocation) Invoke(
 	ctx context.Context,
 	ns *namespace.Namespace,
-	e InvocationTaskExecutor,
+	h InvocationTaskHandler,
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
@@ -64,30 +64,30 @@ func (c chasmInvocation) Invoke(
 	// Get back the base64-encoded ComponentRef from the header.
 	encodedRef := header.Get(commonnexus.CallbackTokenHeader)
 	if encodedRef == "" {
-		return invocationResultFail{logInternalError(e.logger, "callback missing token", nil)}
+		return invocationResultFail{logInternalError(h.logger, "callback missing token", nil)}
 	}
 
 	decodedRef, err := base64.RawURLEncoding.DecodeString(encodedRef)
 	if err != nil {
-		return invocationResultFail{logInternalError(e.logger, "failed to decode CHASM ComponentRef", err)}
+		return invocationResultFail{logInternalError(h.logger, "failed to decode CHASM ComponentRef", err)}
 	}
 
 	// Validate that the bytes are a valid ChasmComponentRef
 	ref := &persistencespb.ChasmComponentRef{}
 	err = proto.Unmarshal(decodedRef, ref)
 	if err != nil {
-		return invocationResultFail{logInternalError(e.logger, "failed to unmarshal CHASM ComponentRef", err)}
+		return invocationResultFail{logInternalError(h.logger, "failed to unmarshal CHASM ComponentRef", err)}
 	}
 
 	request, err := c.getHistoryRequest(decodedRef)
 	if err != nil {
-		return invocationResultFail{logInternalError(e.logger, "failed to build history request", err)}
+		return invocationResultFail{logInternalError(h.logger, "failed to build history request", err)}
 	}
 
 	// RPC to History for cross-shard completion delivery.
-	_, err = e.historyClient.CompleteNexusOperationChasm(ctx, request)
+	_, err = h.historyClient.CompleteNexusOperationChasm(ctx, request)
 	if err != nil {
-		msg := logInternalError(e.logger, "failed to complete Nexus operation", err)
+		msg := logInternalError(h.logger, "failed to complete Nexus operation", err)
 		if isRetryableRPCResponse(err) {
 			return invocationResultRetry{err: msg}
 		}

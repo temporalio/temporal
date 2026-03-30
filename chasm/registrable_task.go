@@ -31,21 +31,12 @@ type (
 )
 
 // NewRegistrableSideEffectTask creates a new registrable side-effect task. NOTE: C is not Component but any.
-// If the executor also implements SideEffectTaskDiscarder, the framework will call Discard instead of silently
-// discarding the task on standby clusters after the discard delay.
+// The handler's Discard method is called on standby clusters when a task has been pending past the discard delay.
 func NewRegistrableSideEffectTask[C any, T any](
 	taskType string,
-	validator TaskValidator[C, T],
-	executor SideEffectTaskExecutor[C, T],
+	handler SideEffectTaskHandler[C, T],
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
-	var discardFn sideEffectTaskDiscardFn
-	if discarder, ok := any(executor).(SideEffectTaskDiscarder[T]); ok {
-		discardFn = func(ctx context.Context, ref ComponentRef, attrs TaskAttributes, task any) error {
-			return discarder.Discard(ctx, ref, attrs, task.(T))
-		}
-	}
-
 	return newRegistrableTask(
 		taskType,
 		reflect.TypeFor[T](),
@@ -57,7 +48,7 @@ func NewRegistrableSideEffectTask[C any, T any](
 			taskData any,
 			registry *Registry,
 		) (bool, error) {
-			return validator.Validate(
+			return handler.Validate(
 				ctx,
 				component.(C),
 				taskAttrs,
@@ -71,18 +62,19 @@ func NewRegistrableSideEffectTask[C any, T any](
 			taskAttrs TaskAttributes,
 			taskData any,
 		) error {
-			return executor.Execute(ctx, componentRef, taskAttrs, taskData.(T))
+			return handler.Execute(ctx, componentRef, taskAttrs, taskData.(T))
 		},
 		false,
-		discardFn,
+		func(ctx context.Context, ref ComponentRef, attrs TaskAttributes, task any) error {
+			return handler.Discard(ctx, ref, attrs, task.(T))
+		},
 		opts...,
 	)
 }
 
 func NewRegistrablePureTask[C any, T any](
 	taskType string,
-	validator TaskValidator[C, T],
-	executor PureTaskExecutor[C, T],
+	handler PureTaskHandler[C, T],
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
 	return newRegistrableTask(
@@ -96,7 +88,7 @@ func NewRegistrablePureTask[C any, T any](
 			taskData any,
 			registry *Registry,
 		) (bool, error) {
-			return validator.Validate(
+			return handler.Validate(
 				ctx,
 				component.(C),
 				taskAttrs,
@@ -110,7 +102,7 @@ func NewRegistrablePureTask[C any, T any](
 			taskData any,
 			registry *Registry,
 		) error {
-			return executor.Execute(
+			return handler.Execute(
 				ctx,
 				component.(C),
 				taskAttrs,
@@ -169,12 +161,6 @@ func (rt *RegistrableTask) registerToLibrary(
 // GoType returns the reflect.Type of the task's Go struct.
 func (rt *RegistrableTask) GoType() reflect.Type {
 	return rt.goType
-}
-
-// HasDiscardHandler returns true if the task's executor implements SideEffectTaskDiscarder, meaning it has custom
-// discard behavior for standby clusters.
-func (rt *RegistrableTask) HasDiscardHandler() bool {
-	return rt.sideEffectTaskDiscardFn != nil
 }
 
 // fqType returns the fully qualified name of the task, which is a combination of
