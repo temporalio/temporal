@@ -76,6 +76,7 @@ type startArgs struct {
 	requestID              string
 	endpointName           string
 	endpointID             string
+	currentTime            time.Time
 	scheduledTime          time.Time
 	scheduleToStartTimeout time.Duration
 	scheduleToCloseTimeout time.Duration
@@ -132,8 +133,8 @@ type saveResultInput struct {
 	retryPolicy func() backoff.RetryPolicy
 }
 
-// loadInvocationArgs is a ReadComponent callback that loads the start arguments from the operation.
-func (o *Operation) loadInvocationArgs(
+// loadStartArgs is a ReadComponent callback that loads the start arguments from the operation.
+func (o *Operation) loadStartArgs(
 	ctx chasm.Context,
 	_ chasm.NoValue,
 ) (startArgs, error) {
@@ -148,6 +149,7 @@ func (o *Operation) loadInvocationArgs(
 		service:                o.GetService(),
 		operation:              o.GetOperation(),
 		requestID:              o.GetRequestId(),
+		currentTime:            ctx.Now(o),
 		scheduledTime:          o.GetScheduledTime().AsTime(),
 		scheduleToCloseTimeout: o.GetScheduleToCloseTimeout().AsDuration(),
 		scheduleToStartTimeout: o.GetScheduleToStartTimeout().AsDuration(),

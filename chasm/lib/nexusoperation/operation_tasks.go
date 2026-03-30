@@ -87,7 +87,7 @@ func (h *OperationInvocationTaskHandler) Execute(
 		return serviceerror.NewNotFoundf("failed to get namespace by ID: %v", err)
 	}
 
-	args, err := chasm.ReadComponent(ctx, opRef, (*Operation).loadInvocationArgs, nil)
+	args, err := chasm.ReadComponent(ctx, opRef, (*Operation).loadStartArgs, nil)
 	if err != nil {
 		return err
 	}
@@ -121,13 +121,14 @@ func (h *OperationInvocationTaskHandler) Execute(
 		return err
 	}
 
+	elapsed := args.currentTime.Sub(args.scheduledTime)
 	callTimeout := h.config.RequestTimeout(ns.Name().String(), attrs.Destination)
 	var timeoutType enumspb.TimeoutType
 	if args.scheduleToStartTimeout > 0 {
-		callTimeout = min(callTimeout, args.scheduleToStartTimeout-time.Since(args.scheduledTime))
+		callTimeout = min(callTimeout, args.scheduleToStartTimeout-elapsed)
 		timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START
 	} else if args.scheduleToCloseTimeout > 0 {
-		callTimeout = min(callTimeout, args.scheduleToCloseTimeout-time.Since(args.scheduledTime))
+		callTimeout = min(callTimeout, args.scheduleToCloseTimeout-elapsed)
 		timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
 	}
 
@@ -136,7 +137,7 @@ func (h *OperationInvocationTaskHandler) Execute(
 		opTimeout = args.startToCloseTimeout
 	}
 	if args.scheduleToCloseTimeout > 0 {
-		opTimeout = min(args.scheduleToCloseTimeout-time.Since(args.scheduledTime), opTimeout)
+		opTimeout = min(args.scheduleToCloseTimeout-elapsed, opTimeout)
 	}
 	header := nexus.Header(args.header)
 	if header == nil {
@@ -165,12 +166,10 @@ func (h *OperationInvocationTaskHandler) Execute(
 
 	var result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload]
 	var callErr error
-	var startTime time.Time
+	startTime := args.currentTime
 	if callTimeout < h.config.MinRequestTimeout(ns.Name().String()) {
-		startTime = time.Now() //nolint:forbidigo // Measuring wall-clock latency of external calls, not state machine time.
 		callErr = &operationTimeoutBelowMinError{timeoutType: timeoutType}
 	} else if args.endpointName == commonnexus.SystemEndpoint {
-		startTime = time.Now() //nolint:forbidigo // Measuring wall-clock latency of external calls, not state machine time.
 		result, callErr = h.startOnHistoryService(callCtx, ns, args, options)
 	} else {
 		client, clientErr := h.clientProvider(
@@ -192,14 +191,13 @@ func (h *OperationInvocationTaskHandler) Execute(
 				tag.Endpoint(args.endpointName),
 				tag.WorkflowID(opRef.BusinessID),
 				tag.WorkflowRunID(opRef.RunID),
-				tag.AttemptStart(time.Now().UTC()), //nolint:forbidigo // Wall-clock time for tracing.
+				tag.AttemptStart(args.currentTime.UTC()),
 				tag.Attempt(task.GetAttempt()),
 			)
 			if trace := h.httpTraceProvider.NewTrace(task.GetAttempt(), traceLogger); trace != nil {
 				callCtx = httptrace.WithClientTrace(callCtx, trace)
 			}
 		}
-		startTime = time.Now() //nolint:forbidigo // Measuring wall-clock latency of external calls, not state machine time.
 		result, callErr = h.startViaHTTP(callCtx, client, args, options)
 	}
 
