@@ -4,15 +4,18 @@ import (
 	"context"
 	"errors"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/resource"
 )
 
 var (
@@ -31,14 +34,16 @@ var (
 type handler struct {
 	activitypb.UnimplementedActivityServiceServer
 	config            *Config
+	historyClient     resource.HistoryClient
 	logger            log.Logger
 	metricsHandler    metrics.Handler
 	namespaceRegistry namespace.Registry
 }
 
-func newHandler(config *Config, metricsHandler metrics.Handler, logger log.Logger, namespaceRegistry namespace.Registry) *handler {
+func newHandler(config *Config, historyClient resource.HistoryClient, metricsHandler metrics.Handler, logger log.Logger, namespaceRegistry namespace.Registry) *handler {
 	return &handler{
 		config:            config,
+		historyClient:     historyClient,
 		logger:            logger,
 		metricsHandler:    metricsHandler,
 		namespaceRegistry: namespaceRegistry,
@@ -293,4 +298,110 @@ func (h *handler) RequestCancelActivityExecution(
 	}
 
 	return response, nil
+}
+
+func (h *handler) PauseActivityExecution(ctx context.Context, req *activitypb.PauseActivityExecutionRequest) (*activitypb.PauseActivityExecutionResponse, error) {
+	frontendReq := req.GetFrontendRequest()
+	if frontendReq.GetWorkflowId() != "" {
+		_, err := h.historyClient.PauseActivity(ctx, &historyservice.PauseActivityRequest{
+			NamespaceId: req.GetNamespaceId(),
+			FrontendRequest: &workflowservice.PauseActivityRequest{
+				Namespace: frontendReq.GetNamespace(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: frontendReq.GetWorkflowId(),
+					RunId:      frontendReq.GetRunId(),
+				},
+				Activity: &workflowservice.PauseActivityRequest_Id{Id: frontendReq.GetActivityId()},
+				Reason:   frontendReq.GetReason(),
+				Identity: frontendReq.GetIdentity(),
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &activitypb.PauseActivityExecutionResponse{}, nil
+	}
+	return nil, serviceerror.NewUnimplemented("PauseActivityExecution for standalone activities is not yet implemented")
+}
+
+func (h *handler) UnpauseActivityExecution(ctx context.Context, req *activitypb.UnpauseActivityExecutionRequest) (*activitypb.UnpauseActivityExecutionResponse, error) {
+	frontendReq := req.GetFrontendRequest()
+	if frontendReq.GetWorkflowId() != "" {
+		_, err := h.historyClient.UnpauseActivity(ctx, &historyservice.UnpauseActivityRequest{
+			NamespaceId: req.GetNamespaceId(),
+			FrontendRequest: &workflowservice.UnpauseActivityRequest{
+				Namespace: frontendReq.GetNamespace(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: frontendReq.GetWorkflowId(),
+					RunId:      frontendReq.GetRunId(),
+				},
+				Activity:       &workflowservice.UnpauseActivityRequest_Id{Id: frontendReq.GetActivityId()},
+				Jitter:         frontendReq.GetJitter(),
+				ResetAttempts:  frontendReq.GetResetAttempts(),
+				ResetHeartbeat: frontendReq.GetResetHeartbeat(),
+				Identity:       frontendReq.GetIdentity(),
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &activitypb.UnpauseActivityExecutionResponse{}, nil
+	}
+	return nil, serviceerror.NewUnimplemented("UnpauseActivityExecution for standalone activities is not yet implemented")
+}
+
+func (h *handler) ResetActivityExecution(ctx context.Context, req *activitypb.ResetActivityExecutionRequest) (*activitypb.ResetActivityExecutionResponse, error) {
+	frontendReq := req.GetFrontendRequest()
+	if frontendReq.GetWorkflowId() != "" {
+		_, err := h.historyClient.ResetActivity(ctx, &historyservice.ResetActivityRequest{
+			NamespaceId: req.GetNamespaceId(),
+			FrontendRequest: &workflowservice.ResetActivityRequest{
+				Namespace: frontendReq.GetNamespace(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: frontendReq.GetWorkflowId(),
+					RunId:      frontendReq.GetRunId(),
+				},
+				Activity:       &workflowservice.ResetActivityRequest_Id{Id: frontendReq.GetActivityId()},
+				ResetHeartbeat: frontendReq.GetResetHeartbeat(),
+				KeepPaused:     frontendReq.GetKeepPaused(),
+				Jitter:         frontendReq.GetJitter(),
+				Identity:       frontendReq.GetIdentity(),
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &activitypb.ResetActivityExecutionResponse{}, nil
+	}
+	return nil, serviceerror.NewUnimplemented("ResetActivityExecution for standalone activities is not yet implemented")
+}
+
+func (h *handler) UpdateActivityExecutionOptions(ctx context.Context, req *activitypb.UpdateActivityExecutionOptionsRequest) (*activitypb.UpdateActivityExecutionOptionsResponse, error) {
+	frontendReq := req.GetFrontendRequest()
+	if frontendReq.GetWorkflowId() != "" {
+		resp, err := h.historyClient.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
+			NamespaceId: req.GetNamespaceId(),
+			UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
+				Namespace: frontendReq.GetNamespace(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: frontendReq.GetWorkflowId(),
+					RunId:      frontendReq.GetRunId(),
+				},
+				Activity:        &workflowservice.UpdateActivityOptionsRequest_Id{Id: frontendReq.GetActivityId()},
+				ActivityOptions: frontendReq.GetActivityOptions(),
+				UpdateMask:      frontendReq.GetUpdateMask(),
+				RestoreOriginal: frontendReq.GetRestoreOriginal(),
+				Identity:        frontendReq.GetIdentity(),
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &activitypb.UpdateActivityExecutionOptionsResponse{
+			FrontendResponse: &workflowservice.UpdateActivityExecutionOptionsResponse{
+				ActivityOptions: resp.GetActivityOptions(),
+			},
+		}, nil
+	}
+	return nil, serviceerror.NewUnimplemented("UpdateActivityExecutionOptions for standalone activities is not yet implemented")
 }

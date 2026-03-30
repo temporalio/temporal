@@ -1345,7 +1345,7 @@ message UpdateActivityOptionsResponse {
 // (-- api-linter: core::0134::request-mask-required=disabled
 // (-- api-linter: core::0134::request-resource-required=disabled
 message UpdateActivityExecutionOptionsRequest {
-    option (routing).workflow_id = "frontend_request.resource_id";
+    option (routing).workflow_id = "frontend_request.workflow_id";
 
     // Namespace ID of the workflow which scheduled this activity
     string namespace_id = 1;
@@ -1371,7 +1371,7 @@ message PauseActivityResponse {
 }
 
 message PauseActivityExecutionRequest {
-    option (routing).workflow_id = "frontend_request.resource_id";
+    option (routing).workflow_id = "frontend_request.workflow_id";
 
     // Namespace ID of the workflow which scheduled this activity
     string namespace_id = 1;
@@ -1395,7 +1395,7 @@ message UnpauseActivityResponse {
 }
 
 message UnpauseActivityExecutionRequest {
-    option (routing).workflow_id = "frontend_request.resource_id";
+    option (routing).workflow_id = "frontend_request.workflow_id";
 
     // Namespace ID of the workflow which scheduled this activity
     string namespace_id = 1;
@@ -1419,7 +1419,7 @@ message ResetActivityResponse {
 }
 
 message ResetActivityExecutionRequest {
-    option (routing).workflow_id = "frontend_request.resource_id";
+    option (routing).workflow_id = "frontend_request.workflow_id";
 
     // Namespace ID of the workflow which scheduled this activity
     string namespace_id = 1;

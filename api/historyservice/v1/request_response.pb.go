@@ -11490,7 +11490,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x10activity_options\x18\x01 \x01(\v2).temporal.api.activity.v1.ActivityOptionsR\x0factivityOptions\"\xe1\x01\n" +
 	"%UpdateActivityExecutionOptionsRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12q\n" +
-	"\x10frontend_request\x18\x02 \x01(\v2F.temporal.api.workflowservice.v1.UpdateActivityExecutionOptionsRequestR\x0ffrontendRequest:\"\x92\xc4\x03\x1e*\x1cfrontend_request.resource_id\"~\n" +
+	"\x10frontend_request\x18\x02 \x01(\v2F.temporal.api.workflowservice.v1.UpdateActivityExecutionOptionsRequestR\x0ffrontendRequest:\"\x92\xc4\x03\x1e*\x1cfrontend_request.workflow_id\"~\n" +
 	"&UpdateActivityExecutionOptionsResponse\x12T\n" +
 	"\x10activity_options\x18\x01 \x01(\v2).temporal.api.activity.v1.ActivityOptionsR\x0factivityOptions\"\xc9\x01\n" +
 	"\x14PauseActivityRequest\x12!\n" +
@@ -11499,7 +11499,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x15PauseActivityResponse\"\xd1\x01\n" +
 	"\x1dPauseActivityExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12i\n" +
-	"\x10frontend_request\x18\x02 \x01(\v2>.temporal.api.workflowservice.v1.PauseActivityExecutionRequestR\x0ffrontendRequest:\"\x92\xc4\x03\x1e*\x1cfrontend_request.resource_id\" \n" +
+	"\x10frontend_request\x18\x02 \x01(\v2>.temporal.api.workflowservice.v1.PauseActivityExecutionRequestR\x0ffrontendRequest:\"\x92\xc4\x03\x1e*\x1cfrontend_request.workflow_id\" \n" +
 	"\x1ePauseActivityExecutionResponse\"\xcd\x01\n" +
 	"\x16UnpauseActivityRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12b\n" +
@@ -11507,7 +11507,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x17UnpauseActivityResponse\"\xd5\x01\n" +
 	"\x1fUnpauseActivityExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12k\n" +
-	"\x10frontend_request\x18\x02 \x01(\v2@.temporal.api.workflowservice.v1.UnpauseActivityExecutionRequestR\x0ffrontendRequest:\"\x92\xc4\x03\x1e*\x1cfrontend_request.resource_id\"\"\n" +
+	"\x10frontend_request\x18\x02 \x01(\v2@.temporal.api.workflowservice.v1.UnpauseActivityExecutionRequestR\x0ffrontendRequest:\"\x92\xc4\x03\x1e*\x1cfrontend_request.workflow_id\"\"\n" +
 	" UnpauseActivityExecutionResponse\"\xc9\x01\n" +
 	"\x14ResetActivityRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12`\n" +
@@ -11515,7 +11515,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x15ResetActivityResponse\"\xd1\x01\n" +
 	"\x1dResetActivityExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12i\n" +
-	"\x10frontend_request\x18\x02 \x01(\v2>.temporal.api.workflowservice.v1.ResetActivityExecutionRequestR\x0ffrontendRequest:\"\x92\xc4\x03\x1e*\x1cfrontend_request.resource_id\" \n" +
+	"\x10frontend_request\x18\x02 \x01(\v2>.temporal.api.workflowservice.v1.ResetActivityExecutionRequestR\x0ffrontendRequest:\"\x92\xc4\x03\x1e*\x1cfrontend_request.workflow_id\" \n" +
 	"\x1eResetActivityExecutionResponse\"\xee\x01\n" +
 	"%UpdateWorkflowExecutionOptionsRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12m\n" +

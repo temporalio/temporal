@@ -14,5 +14,6 @@ message RoutingOptions {
     // Requests may specify how to obtain the namespace ID. Defaults to the "namespace_id" field.
     string namespace_id = 2;
     // Request will be routed by resolving the namespace ID and business ID to a given shard.
-    string business_id = 3;
+    // When multiple values are specified, the first non-empty value is used.
+    repeated string business_id = 3;
 }

@@ -624,7 +624,7 @@ func (c *clientImpl) PauseActivityExecution(
 	request *historyservice.PauseActivityExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.PauseActivityExecutionResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetFrontendRequest().GetResourceId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowId())
 	var response *historyservice.PauseActivityExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1002,7 +1002,7 @@ func (c *clientImpl) ResetActivityExecution(
 	request *historyservice.ResetActivityExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.ResetActivityExecutionResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetFrontendRequest().GetResourceId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowId())
 	var response *historyservice.ResetActivityExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1452,7 +1452,7 @@ func (c *clientImpl) UnpauseActivityExecution(
 	request *historyservice.UnpauseActivityExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.UnpauseActivityExecutionResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetFrontendRequest().GetResourceId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowId())
 	var response *historyservice.UnpauseActivityExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1492,7 +1492,7 @@ func (c *clientImpl) UpdateActivityExecutionOptions(
 	request *historyservice.UpdateActivityExecutionOptionsRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.UpdateActivityExecutionOptionsResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetFrontendRequest().GetResourceId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowId())
 	var response *historyservice.UpdateActivityExecutionOptionsResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
