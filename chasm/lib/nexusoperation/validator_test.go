@@ -408,6 +408,67 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 	}
 }
 
+func TestValidateDeleteNexusOperationExecutionRequest(t *testing.T) {
+	config := &Config{
+		MaxIDLengthLimit: func() int { return 20 },
+	}
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(*workflowservice.DeleteNexusOperationExecutionRequest)
+		errMsg string
+	}{
+		{
+			name: "valid request",
+		},
+		{
+			name: "valid request - with run_id",
+			mutate: func(r *workflowservice.DeleteNexusOperationExecutionRequest) {
+				r.RunId = "550e8400-e29b-41d4-a716-446655440000"
+			},
+		},
+		{
+			name: "operation_id - required",
+			mutate: func(r *workflowservice.DeleteNexusOperationExecutionRequest) {
+				r.OperationId = ""
+			},
+			errMsg: "operation_id is required",
+		},
+		{
+			name: "operation_id - exceeds length limit",
+			mutate: func(r *workflowservice.DeleteNexusOperationExecutionRequest) {
+				r.OperationId = "this-operation-id-is-too-long"
+			},
+			errMsg: "operation_id exceeds length limit",
+		},
+		{
+			name: "run_id - invalid UUID",
+			mutate: func(r *workflowservice.DeleteNexusOperationExecutionRequest) {
+				r.RunId = "not-a-valid-uuid"
+			},
+			errMsg: "invalid run id: must be a valid UUID",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			validReq := &workflowservice.DeleteNexusOperationExecutionRequest{
+				Namespace:   "default",
+				OperationId: "operation-id",
+			}
+			if tc.mutate != nil {
+				tc.mutate(validReq)
+			}
+			err := validateAndNormalizeDeleteRequest(validReq, config)
+			if tc.errMsg != "" {
+				var invalidArgErr *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgErr)
+				require.Contains(t, err.Error(), tc.errMsg)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 	config := &Config{
 		MaxIDLengthLimit:     func() int { return 20 },

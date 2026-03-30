@@ -161,9 +161,11 @@ func validateAndNormalizeDeleteRequest(req *workflowservice.DeleteNexusOperation
 		return serviceerror.NewInvalidArgumentf("operation_id exceeds length limit. Length=%d Limit=%d",
 			len(req.GetOperationId()), config.MaxIDLengthLimit())
 	}
-	if len(req.GetRunId()) > config.MaxIDLengthLimit() {
-		return serviceerror.NewInvalidArgumentf("run_id exceeds length limit. Length=%d Limit=%d",
-			len(req.GetRunId()), config.MaxIDLengthLimit())
+	if req.GetRunId() != "" {
+		_, err := uuid.Parse(req.GetRunId())
+		if err != nil {
+			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
+		}
 	}
 	return nil
 }
