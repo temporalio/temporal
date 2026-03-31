@@ -115,7 +115,7 @@ type saveResultInput struct {
 
 func buildCallbackURL(
 	useSystemCallback bool,
-	callbackTemplate string,
+	callbackTemplate *template.Template,
 	ns *namespace.Namespace,
 	endpoint *persistencespb.NexusEndpointEntry,
 ) (string, error) {
@@ -138,16 +138,12 @@ func buildCallbackURL(
 	}
 }
 
-func buildCallbackFromTemplate(callbackTemplate string, ns *namespace.Namespace) (string, error) {
-	if callbackTemplate == "unset" {
+func buildCallbackFromTemplate(callbackTemplate *template.Template, ns *namespace.Namespace) (string, error) {
+	if callbackTemplate == nil {
 		return "", serviceerror.NewInternalf("dynamic config %q is unset", CallbackURLTemplate.Key().String())
 	}
-	callbackURLTemplate, err := template.New("NexusCallbackURL").Parse(callbackTemplate)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse callback URL template: %w", err)
-	}
 	builder := &strings.Builder{}
-	err = callbackURLTemplate.Execute(builder, struct{ NamespaceName, NamespaceID string }{
+	err := callbackTemplate.Execute(builder, struct{ NamespaceName, NamespaceID string }{
 		NamespaceName: ns.Name().String(),
 		NamespaceID:   ns.ID().String(),
 	})

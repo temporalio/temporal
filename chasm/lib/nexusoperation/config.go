@@ -2,6 +2,7 @@ package nexusoperation
 
 import (
 	"strings"
+	"text/template"
 	"time"
 
 	"go.temporal.io/server/common/backoff"
@@ -108,9 +109,19 @@ var MaxOperationScheduleToCloseTimeout = dynamicconfig.NewNamespaceDurationSetti
 or a longer timeout than permitted will have their schedule-to-close timeout capped to this value. 0 implies no limit.`,
 )
 
-var CallbackURLTemplate = dynamicconfig.NewGlobalStringSetting(
+var CallbackURLTemplate = dynamicconfig.NewGlobalTypedSettingWithConverter(
 	"nexusoperation.callback.endpoint.template",
-	"unset",
+	func(in any) (*template.Template, error) {
+		s, err := dynamicconfig.ConvertStructure[string]("")(in)
+		if err != nil {
+			return nil, err
+		}
+		if s == "unset" {
+			return nil, nil
+		}
+		return template.New("NexusCallbackURL").Parse(s)
+	},
+	nil,
 	`Controls the template for generating callback URLs included in Nexus operation requests, which are used to deliver
 asynchronous completion for external endpoint targets. The template can be used to interpolate the {{.NamepaceName}}
 and {{.NamespaceID}} parameters to construct a publicly accessible URL.
@@ -170,7 +181,7 @@ type Config struct {
 	DisallowedOperationHeaders          dynamicconfig.TypedPropertyFn[[]string]
 	MaxOperationScheduleToCloseTimeout  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	CallbackURLTemplate                 dynamicconfig.StringPropertyFn
+	CallbackURLTemplate                 dynamicconfig.TypedPropertyFn[*template.Template]
 	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
 	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
