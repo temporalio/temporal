@@ -6,22 +6,22 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
 )
 
 type LinksSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*LinksSuite]
 }
 
 func TestLinksTestSuite(t *testing.T) {
-	suite.Run(t, new(LinksSuite))
+	parallelsuite.Run(t, &LinksSuite{})
 }
 
 var links = []*commonpb.Link{
@@ -37,9 +37,10 @@ var links = []*commonpb.Link{
 }
 
 func (s *LinksSuite) TestTerminateWorkflow_LinksAttachedToEvent() {
+	env := testcore.NewEnv(s.T())
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	run, err := s.SdkClient().ExecuteWorkflow(
+	run, err := env.SdkClient().ExecuteWorkflow(
 		ctx,
 		client.StartWorkflowOptions{
 			TaskQueue: "dont-care",
@@ -49,8 +50,8 @@ func (s *LinksSuite) TestTerminateWorkflow_LinksAttachedToEvent() {
 	s.NoError(err)
 
 	// TODO(bergundy): Use SdkClient if and when it exposes links on TerminateWorkflow.
-	_, err = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: run.GetID(),
 		},
@@ -59,16 +60,17 @@ func (s *LinksSuite) TestTerminateWorkflow_LinksAttachedToEvent() {
 	})
 	s.NoError(err)
 
-	history := s.SdkClient().GetWorkflowHistory(ctx, run.GetID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT)
+	history := env.SdkClient().GetWorkflowHistory(ctx, run.GetID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT)
 	event, err := history.Next()
 	s.NoError(err)
 	protorequire.ProtoSliceEqual(s.T(), links, event.Links)
 }
 
 func (s *LinksSuite) TestRequestCancelWorkflow_LinksAttachedToEvent() {
+	env := testcore.NewEnv(s.T())
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	run, err := s.SdkClient().ExecuteWorkflow(
+	run, err := env.SdkClient().ExecuteWorkflow(
 		ctx,
 		client.StartWorkflowOptions{
 			TaskQueue: "dont-care",
@@ -78,8 +80,8 @@ func (s *LinksSuite) TestRequestCancelWorkflow_LinksAttachedToEvent() {
 	s.NoError(err)
 
 	// TODO(bergundy): Use SdkClient if and when it exposes links on CancelWorkflow.
-	_, err = s.FrontendClient().RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.FrontendClient().RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: run.GetID(),
 		},
@@ -88,7 +90,7 @@ func (s *LinksSuite) TestRequestCancelWorkflow_LinksAttachedToEvent() {
 	})
 	s.NoError(err)
 
-	history := s.SdkClient().GetWorkflowHistory(ctx, run.GetID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	history := env.SdkClient().GetWorkflowHistory(ctx, run.GetID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	foundEvent := false
 	for history.HasNext() {
 		event, err := history.Next()
@@ -103,9 +105,10 @@ func (s *LinksSuite) TestRequestCancelWorkflow_LinksAttachedToEvent() {
 }
 
 func (s *LinksSuite) TestSignalWorkflowExecution_LinksAttachedToEvent() {
+	env := testcore.NewEnv(s.T())
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	run, err := s.SdkClient().ExecuteWorkflow(
+	run, err := env.SdkClient().ExecuteWorkflow(
 		ctx,
 		client.StartWorkflowOptions{
 			TaskQueue: "dont-care",
@@ -115,8 +118,8 @@ func (s *LinksSuite) TestSignalWorkflowExecution_LinksAttachedToEvent() {
 	s.NoError(err)
 
 	// TODO(bergundy): Use SdkClient if and when it exposes links on SignalWorkflow.
-	_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: run.GetID(),
 		},
@@ -127,7 +130,7 @@ func (s *LinksSuite) TestSignalWorkflowExecution_LinksAttachedToEvent() {
 	})
 	s.NoError(err)
 
-	history := s.SdkClient().GetWorkflowHistory(ctx, run.GetID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	history := env.SdkClient().GetWorkflowHistory(ctx, run.GetID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	foundEvent := false
 	for history.HasNext() {
 		event, err := history.Next()
@@ -142,6 +145,7 @@ func (s *LinksSuite) TestSignalWorkflowExecution_LinksAttachedToEvent() {
 }
 
 func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToRelevantEvents() {
+	env := testcore.NewEnv(s.T())
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -149,7 +153,7 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToRelevan
 
 	// TODO(bergundy): Use SdkClient if and when it exposes links on SignalWithStartWorkflow.
 	request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
-		Namespace:  s.Namespace().String(),
+		Namespace:  env.Namespace().String(),
 		WorkflowId: workflowID,
 		WorkflowType: &commonpb.WorkflowType{
 			Name: "dont-care",
@@ -162,15 +166,15 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToRelevan
 		RequestId: uuid.NewString(),
 		Links:     links,
 	}
-	_, err := s.FrontendClient().SignalWithStartWorkflowExecution(ctx, request)
+	_, err := env.FrontendClient().SignalWithStartWorkflowExecution(ctx, request)
 	s.NoError(err)
 
 	// Send a second request and verify that the new signal has links attached to it too.
 	request.RequestId = uuid.NewString()
-	_, err = s.FrontendClient().SignalWithStartWorkflowExecution(ctx, request)
+	_, err = env.FrontendClient().SignalWithStartWorkflowExecution(ctx, request)
 	s.NoError(err)
 
-	history := s.SdkClient().GetWorkflowHistory(ctx, workflowID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	history := env.SdkClient().GetWorkflowHistory(ctx, workflowID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	foundStartEvent := false
 	foundFirstSignal := false
 	foundSecondSignal := false
