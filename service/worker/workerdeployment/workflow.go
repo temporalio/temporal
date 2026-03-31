@@ -510,9 +510,6 @@ func (d *WorkflowRunner) validateCreateWorkerDeploymentVersion(args *deployments
 		}
 		return temporal.NewNonRetryableApplicationError(errVersionAlreadyExists, errVersionAlreadyExists, nil)
 	}
-	if err := ValidateWorkerDeploymentVersionComputeConfig(args.GetComputeConfig()); err != nil {
-		return temporal.NewNonRetryableApplicationError(err.Error(), errInvalidComputeConfig, nil)
-	}
 	return nil
 }
 
@@ -554,6 +551,21 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(args.GetVersion())
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
+	}
+
+	// Validate the compute config via the Worker Controller Instance client.
+	if computeConfig := args.GetComputeConfig(); computeConfig != nil {
+		validateCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+		err = workflow.ExecuteActivity(validateCtx, d.a.ValidateWorkerControllerInstanceSpec, &deploymentspb.ValidateWorkerControllerInstanceSpecInput{
+			ScalingGroups: computeConfig.GetScalingGroups(),
+		}).Get(ctx, nil)
+		if err != nil {
+			var appErr *temporal.ApplicationError
+			if errors.As(err, &appErr) && appErr.Type() == errInvalidComputeConfig {
+				return nil, appErr
+			}
+			return nil, serviceerror.NewInternalf("validate compute config: %v", err)
+		}
 	}
 
 	// Start the version workflow via activity.
