@@ -843,10 +843,7 @@ var (
 	)
 	TaskDiscarded = NewCounterDef("task_errors_discarded")
 
-	WorkerCommandsDispatchSuccess   = NewCounterDef("worker_commands_dispatch_success")
-	WorkerCommandsDispatchFailure   = NewCounterDef("worker_commands_dispatch_failure")
-	WorkerCommandsDispatchNoPoller  = NewCounterDef("worker_commands_dispatch_no_poller")
-	WorkerCommandsOperationFailure  = NewCounterDef("worker_commands_operation_failure")
+	WorkerCommandsSent              = NewCounterDef("worker_commands_sent")
 	TaskSkipped                     = NewCounterDef("task_skipped")
 	TaskVersionMisMatch             = NewCounterDef("task_errors_version_mismatch")
 	TasksDependencyTaskNotCompleted = NewCounterDef("task_dependency_task_not_completed")

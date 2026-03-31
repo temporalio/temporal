@@ -12,6 +12,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -145,5 +146,15 @@ func TestDispatchCancelToWorker(t *testing.T) {
 	env.NotNil(startOp, "Expected StartOperation in Nexus request")
 	env.Equal(workerservicepb.WorkerService.ServiceName, startOp.Service, "Expected WorkerService")
 	env.Equal(workerservicepb.WorkerService.ExecuteCommands.Name(), startOp.Operation, "Expected ExecuteCommands operation")
-	t.Log("SUCCESS: Received ExecuteCommands Nexus request on control queue")
+
+	// Verify the payload contains the expected CancelActivity command with a valid task token.
+	env.NotNil(startOp.Payload, "Expected payload in StartOperation request")
+	var executeReq workerservicepb.ExecuteCommandsRequest
+	err = payload.Decode(startOp.Payload, &executeReq)
+	env.NoError(err, "Failed to decode ExecuteCommandsRequest from payload")
+	env.Len(executeReq.Commands, 1, "Expected exactly 1 command")
+	cancelCmd := executeReq.Commands[0].GetCancelActivity()
+	env.NotNil(cancelCmd, "Expected CancelActivity command")
+	env.NotEmpty(cancelCmd.TaskToken, "Expected non-empty task token in CancelActivity command")
+	t.Log("SUCCESS: Received ExecuteCommands Nexus request on control queue with valid CancelActivity payload")
 }
