@@ -128,7 +128,7 @@ func (h *OperationInvocationTaskHandler) Execute(
 
 		endpoint, err = lookupEndpoint(ctx, h.endpointRegistry, ns.ID(), args.endpointID, args.endpointName)
 		if err != nil {
-			if errors.As(err, new(*serviceerror.NotFound)) {
+			if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 				// The endpoint is not registered, immediately fail the invocation.
 				handlerError := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
 				return h.completeInvocation(ctx, opRef, ns, classifyStartOperationError(handlerError))
@@ -142,7 +142,7 @@ func (h *OperationInvocationTaskHandler) Execute(
 		return fmt.Errorf("failed to build callback URL: %w", err)
 	}
 
-	token, err := h.generateCallbackToken(opRef, args.requestID)
+	token, err := h.generateCallbackToken(args.serializedRef, args.requestID)
 	if err != nil {
 		return err
 	}
@@ -259,7 +259,8 @@ func (h *OperationInvocationTaskHandler) Execute(
 	OutboundRequestLatency.With(h.metricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
 
 	if callErr != nil {
-		if failureSource == commonnexus.FailureSourceWorker || errors.As(callErr, new(*operationTimeoutBelowMinError)) {
+		_, isTimeoutBelowMin := errors.AsType[*operationTimeoutBelowMinError](callErr)
+		if failureSource == commonnexus.FailureSourceWorker || isTimeoutBelowMin {
 			h.logger.Debug("Nexus StartOperation request failed", tag.Error(callErr))
 		} else {
 			h.logger.Error("Nexus StartOperation request failed", tag.Error(callErr))

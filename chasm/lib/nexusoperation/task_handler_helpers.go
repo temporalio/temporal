@@ -64,6 +64,7 @@ type startArgs struct {
 	header                 map[string]string
 	payload                *commonpb.Payload
 	nexusLink              nexus.Link
+	serializedRef          []byte
 }
 
 // invocationResult is a marker interface for the outcome of a Nexus start operation call.
@@ -154,10 +155,13 @@ func buildCallbackFromTemplate(callbackTemplate *template.Template, ns *namespac
 }
 
 // lookupEndpoint gets an endpoint from the registry, preferring to look up by ID and falling back to name lookup.
+// The fallback is needed because endpoints may be deleted and recreated with the same name but a different ID.
+// In that case, the ID stored in the operation state becomes stale, but the name-based lookup still resolves correctly.
 func lookupEndpoint(ctx context.Context, registry commonnexus.EndpointRegistry, namespaceID namespace.ID, endpointID, endpointName string) (*persistencespb.NexusEndpointEntry, error) {
 	entry, err := registry.GetByID(ctx, endpointID)
 	if err != nil {
-		if errors.As(err, new(*serviceerror.NotFound)) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+			// Endpoint was not found by ID, fall back to name lookup.
 			return registry.GetByName(ctx, namespaceID, endpointName)
 		}
 		return nil, err
@@ -166,8 +170,7 @@ func lookupEndpoint(ctx context.Context, registry commonnexus.EndpointRegistry, 
 }
 
 func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error) {
-	var serviceErr serviceerror.ServiceError
-	if errors.As(callErr, &serviceErr) {
+	if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
 		return &failurepb.Failure{
 			Message: fmt.Sprintf("%s: %s", strings.Replace(fmt.Sprintf("%T", serviceErr), "*serviceerror.", "", 1), serviceErr.Error()),
 			FailureInfo: &failurepb.Failure_ServerFailureInfo{
@@ -177,8 +180,7 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 			},
 		}, nil
 	}
-	var handlerErr *nexus.HandlerError
-	if errors.As(callErr, &handlerErr) {
+	if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok {
 		var nf nexus.Failure
 		if handlerErr.OriginalFailure != nil {
 			nf = *handlerErr.OriginalFailure
@@ -209,13 +211,7 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 
 // classifyStartOperationError classifies the call error and returns an invocation result.
 func classifyStartOperationError(callErr error) invocationResult {
-	var handlerErr *nexus.HandlerError
-	var opErr *nexus.OperationError
-	var opTimeoutBelowMinErr *operationTimeoutBelowMinError
-	var serviceErr serviceerror.ServiceError
-
-	switch {
-	case errors.As(callErr, &serviceErr):
+	if _, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
 		if !common.IsRetryableRPCError(callErr) {
 			failure, err := callErrToFailure(callErr, false)
 			if err != nil {
@@ -223,31 +219,30 @@ func classifyStartOperationError(callErr error) invocationResult {
 			}
 			return invocationResultFail{failure: failure}
 		}
-	case errors.As(callErr, &opErr):
+	} else if opErr, ok := errors.AsType[*nexus.OperationError](callErr); ok {
 		return classifyOperationError(opErr)
-	case errors.As(callErr, &handlerErr) && !handlerErr.Retryable():
+	} else if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok && !handlerErr.Retryable() {
 		failure, err := callErrToFailure(callErr, false)
 		if err != nil {
 			failure = &failurepb.Failure{Message: callErr.Error()}
 		}
 		return invocationResultFail{failure: failure}
-	case errors.Is(callErr, ErrResponseBodyTooLarge):
+	} else if errors.Is(callErr, ErrResponseBodyTooLarge) {
 		failure, err := callErrToFailure(callErr, false)
 		if err != nil {
 			failure = &failurepb.Failure{Message: callErr.Error()}
 		}
 		return invocationResultFail{failure: failure}
-	case errors.Is(callErr, ErrInvalidOperationToken):
+	} else if errors.Is(callErr, ErrInvalidOperationToken) {
 		failure, err := callErrToFailure(callErr, false)
 		if err != nil {
 			failure = &failurepb.Failure{Message: callErr.Error()}
 		}
 		return invocationResultFail{failure: failure}
-	case errors.As(callErr, &opTimeoutBelowMinErr):
+	} else if opTimeoutBelowMinErr, ok := errors.AsType[*operationTimeoutBelowMinError](callErr); ok {
 		return invocationResultTimeout{timeoutType: opTimeoutBelowMinErr.timeoutType}
-	case errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled):
+	} else if errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled) {
 		callErr = errRequestTimedOut
-	default:
 	}
 
 	// Retryable error
@@ -260,6 +255,9 @@ func classifyStartOperationError(callErr error) invocationResult {
 
 // classifyOperationError converts a Nexus OperationError to the appropriate invocation result.
 func classifyOperationError(opErr *nexus.OperationError) invocationResult {
+	// Special marker for Temporal->Temporal calls to indicate that the original failure should be unwrapped.
+	// Temporal uses a wrapper operation error with no additional information to transmit the OperationError over the network.
+	// The meaningful information is in the operation error's cause.
 	unwrapError := opErr.OriginalFailure.Metadata["unwrap-error"] == "true"
 
 	var originalCause *failurepb.Failure
@@ -267,6 +265,7 @@ func classifyOperationError(opErr *nexus.OperationError) invocationResult {
 	if unwrapError && opErr.OriginalFailure.Cause != nil {
 		originalCause, err = commonnexus.NexusFailureToTemporalFailure(*opErr.OriginalFailure.Cause)
 	} else {
+		// Transform the OperationError to either ApplicationFailure or CanceledFailure based on the operation error state.
 		originalCause, err = commonnexus.NexusFailureToTemporalFailure(*opErr.OriginalFailure)
 	}
 	if err != nil {
@@ -313,16 +312,13 @@ func convertResponseLinks(links []nexus.Link, logger log.Logger) []*commonpb.Lin
 }
 
 func isDestinationDown(err error) bool {
-	var serviceErr serviceerror.ServiceError
-	if errors.As(err, &serviceErr) {
+	if _, ok := errors.AsType[serviceerror.ServiceError](err); ok {
 		return false
 	}
-	var opFailedErr *nexus.OperationError
-	if errors.As(err, &opFailedErr) {
+	if _, ok := errors.AsType[*nexus.OperationError](err); ok {
 		return false
 	}
-	var handlerError *nexus.HandlerError
-	if errors.As(err, &handlerError) {
+	if handlerError, ok := errors.AsType[*nexus.HandlerError](err); ok {
 		return handlerError.Retryable()
 	}
 	if errors.Is(err, errOpProcessorFailed) {
@@ -334,8 +330,8 @@ func isDestinationDown(err error) bool {
 	if errors.Is(err, ErrInvalidOperationToken) {
 		return false
 	}
-	var opTimeoutBelowMinErr *operationTimeoutBelowMinError
-	return !errors.As(err, &opTimeoutBelowMinErr)
+	_, ok := errors.AsType[*operationTimeoutBelowMinError](err)
+	return !ok
 }
 
 func failureSourceFromContext(ctx context.Context) string {
@@ -360,8 +356,7 @@ func failureSourceFromContext(ctx context.Context) string {
 
 func startCallOutcomeTag(callCtx context.Context, result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload], callErr error) string {
 	if callErr != nil {
-		var opTimeoutBelowMinErr *operationTimeoutBelowMinError
-		if errors.As(callErr, &opTimeoutBelowMinErr) {
+		if _, ok := errors.AsType[*operationTimeoutBelowMinError](callErr); ok {
 			return "operation-timeout"
 		}
 		if errors.Is(callErr, ErrInvalidOperationToken) {
@@ -373,16 +368,13 @@ func startCallOutcomeTag(callCtx context.Context, result *nexusrpc.ClientStartOp
 		if callCtx.Err() != nil {
 			return "request-timeout"
 		}
-		var serviceErr serviceerror.ServiceError
-		if errors.As(callErr, &serviceErr) {
+		if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
 			return "service-error:" + strings.Replace(fmt.Sprintf("%T", serviceErr), "*serviceerror.", "", 1)
 		}
-		var opFailedError *nexus.OperationError
-		if errors.As(callErr, &opFailedError) {
+		if opFailedError, ok := errors.AsType[*nexus.OperationError](callErr); ok {
 			return "operation-unsuccessful:" + string(opFailedError.State)
 		}
-		var handlerError *nexus.HandlerError
-		if errors.As(callErr, &handlerError) {
+		if handlerError, ok := errors.AsType[*nexus.HandlerError](callErr); ok {
 			return "handler-error:" + string(handlerError.Type)
 		}
 		return "unknown-error"
@@ -500,19 +492,11 @@ func (h *OperationInvocationTaskHandler) startOnHistoryService(
 
 // generateCallbackToken creates a callback token for the given operation reference.
 func (h *OperationInvocationTaskHandler) generateCallbackToken(
-	ref chasm.ComponentRef,
+	serializedRef []byte,
 	requestID string,
 ) (string, error) {
-	componentRef, err := ref.Serialize(h.chasmRegistry)
-	if err != nil {
-		return "", fmt.Errorf("%w: %w", queueserrors.NewUnprocessableTaskError("failed to serialize component ref"), err)
-	}
-
 	token, err := h.callbackTokenGenerator.Tokenize(&tokenspb.NexusOperationCompletion{
-		NamespaceId:  ref.NamespaceID,
-		WorkflowId:   ref.BusinessID,
-		RunId:        ref.RunID,
-		ComponentRef: componentRef,
+		ComponentRef: serializedRef,
 		RequestId:    requestID,
 	})
 	if err != nil {

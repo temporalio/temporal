@@ -178,6 +178,11 @@ func (o *Operation) loadStartArgs(
 		return startArgs{}, serviceerror.NewInternal("no store available to load invocation data")
 	}
 
+	serializedRef, err := ctx.Ref(o)
+	if err != nil {
+		return startArgs{}, err
+	}
+
 	return startArgs{
 		endpointName:           o.GetEndpoint(),
 		endpointID:             o.GetEndpointId(),
@@ -192,6 +197,7 @@ func (o *Operation) loadStartArgs(
 		payload:                invocationData.Input,
 		header:                 invocationData.Header,
 		nexusLink:              invocationData.NexusLink,
+		serializedRef:          serializedRef,
 	}, nil
 }
 
