@@ -2,15 +2,15 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.tests.proto.v1;
 
+import "chasm/lib/tests/proto/v1/request_response.proto";
+import "temporal/server/api/common/v1/api_category.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+
 option go_package = "go.temporal.io/server/chasm/lib/tests/gen/testspb;testspb";
 
-import "chasm/lib/tests/proto/v1/request_response.proto";
-import "temporal/server/api/routing/v1/extension.proto";
-import "temporal/server/api/common/v1/api_category.proto";
-
 service TestService {
-    rpc Test(TestRequest) returns (TestResponse) {
-        option (temporal.server.api.routing.v1.routing).random = true;
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  rpc Test(TestRequest) returns (TestResponse) {
+    option (temporal.server.api.routing.v1.routing).random = true;
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 }
