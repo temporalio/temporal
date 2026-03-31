@@ -425,54 +425,21 @@ func (d *ClientImpl) DescribeVersion(
 		return nil, nil, err
 	}
 
-	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
-
-	req := &historyservice.QueryWorkflowRequest{
-		NamespaceId: namespaceEntry.ID().String(),
-		Request: &workflowservice.QueryWorkflowRequest{
-			Namespace: namespaceEntry.Name().String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-			},
-			Query: &querypb.WorkflowQuery{QueryType: QueryDescribeVersion},
-		},
-	}
-
-	res, err := d.queryWorkflowWithRetry(ctx, req)
-
+	versionState, err := d.queryVersionState(ctx, namespaceEntry, deploymentName, buildID)
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
 			return nil, nil, serviceerror.NewNotFound("Worker Deployment Version not found")
 		}
-		var queryFailed *serviceerror.QueryFailed
-		if errors.As(err, &queryFailed) && queryFailed.Error() == errVersionDeleted {
-			return nil, nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentVersionNotFound, buildID, deploymentName)
-		}
 		return nil, nil, err
 	}
 
-	if rej := res.GetResponse().GetQueryRejected(); rej != nil {
-		// This should not happen
-		return nil, nil, serviceerror.NewInternalf("describe deployment query rejected with status %s", rej.GetStatus())
-	}
-
-	if res.GetResponse().GetQueryResult() == nil {
-		return nil, nil, serviceerror.NewInternal("Did not receive deployment info")
-	}
-
-	var queryResponse deploymentspb.QueryDescribeVersionResponse
-	err = sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse)
+	tqInfos, err := d.getTaskQueueDetails(ctx, namespaceEntry.ID(), versionState, reportTaskQueueStats)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	tqInfos, err := d.getTaskQueueDetails(ctx, namespaceEntry.ID(), queryResponse.VersionState, reportTaskQueueStats)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	versionInfo := versionStateToVersionInfo(queryResponse.VersionState, tqInfos)
+	versionInfo := versionStateToVersionInfo(versionState, tqInfos)
 	return versionInfo, tqInfos, nil
 }
 
@@ -2118,8 +2085,21 @@ func (d *ClientImpl) queryVersionState(
 	}
 	res, err := d.queryWorkflowWithRetry(ctx, req)
 	if err != nil {
+		var queryFailed *serviceerror.QueryFailed
+		if errors.As(err, &queryFailed) && queryFailed.Error() == errVersionDeleted {
+			return nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentVersionNotFound, buildID, deploymentName)
+		}
 		return nil, err
 	}
+
+	if rej := res.GetResponse().GetQueryRejected(); rej != nil {
+		return nil, serviceerror.NewInternalf("describe deployment query rejected with status %s", rej.GetStatus())
+	}
+
+	if res.GetResponse().GetQueryResult() == nil {
+		return nil, serviceerror.NewInternal("Did not receive deployment info")
+	}
+
 	var queryResponse deploymentspb.QueryDescribeVersionResponse
 	if err := sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse); err != nil {
 		return nil, err
