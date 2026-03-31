@@ -98,18 +98,18 @@ func newTestHandler(t *testing.T, captureHandler *metricstest.CaptureHandler) (*
 	return h, stubEngine
 }
 
-// hasTag checks whether any recording for the given metric name contains the
-// specified tag key/value pair.
-func hasTag(snap metricstest.CaptureSnapshot, tagKey, tagValue string) bool {
-	for _, recordings := range snap {
-		for _, rec := range recordings {
-			if v, ok := rec.Tags[tagKey]; ok && v == tagValue {
-				return true
-			}
+// findMetricWithTag searches captured metrics for a recording of the named metric
+// that contains the specified tag key/value pair.
+func findMetricWithTag(snap metricstest.CaptureSnapshot, metricName, tagKey, tagValue string) bool {
+	for _, rec := range snap[metricName] {
+		if v, ok := rec.Tags[tagKey]; ok && v == tagValue {
+			return true
 		}
 	}
 	return false
 }
+
+const nexusTaskRequestsMetric = "nexus_task_requests"
 
 func TestWithClientNameTag(t *testing.T) {
 	t.Run("adds tag when client name is present", func(t *testing.T) {
@@ -124,7 +124,7 @@ func TestWithClientNameTag(t *testing.T) {
 		// Emit a counter on the tagged handler and verify the tag is present.
 		tagged.Counter("test_counter").Record(1)
 		snap := capture.Snapshot()
-		require.True(t, hasTag(snap, "client_name", "temporal-go"),
+		require.True(t, findMetricWithTag(snap, "test_counter", "client_name", "temporal-go"),
 			"expected client_name=temporal-go tag, got snapshot: %v", snap)
 	})
 
@@ -139,11 +139,9 @@ func TestWithClientNameTag(t *testing.T) {
 
 		tagged.Counter("test_counter").Record(1)
 		snap := capture.Snapshot()
-		for _, recordings := range snap {
-			for _, rec := range recordings {
-				_, exists := rec.Tags["client_name"]
-				assert.False(t, exists, "expected no client_name tag when header is absent")
-			}
+		for _, recordings := range snap["test_counter"] {
+			_, exists := recordings.Tags["client_name"]
+			assert.False(t, exists, "expected no client_name tag when header is absent")
 		}
 	})
 }
@@ -157,7 +155,7 @@ func TestNexusHandlersIncludeClientNameTag(t *testing.T) {
 		capture := captureHandler.StartCapture()
 		defer captureHandler.StopCapture(capture)
 
-		h, engine := newTestHandler(t, captureHandler)
+		h, _ := newTestHandler(t, captureHandler)
 		ctx := ctxWithClientName(expectedClientName)
 
 		_, err := h.PollNexusTaskQueue(ctx, &matchingservice.PollNexusTaskQueueRequest{
@@ -167,13 +165,12 @@ func TestNexusHandlersIncludeClientNameTag(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		require.NotNil(t, engine.capturedMetrics)
 
-		// Emit a metric through the captured handler to verify tags.
-		engine.capturedMetrics.Counter("poll_test").Record(1)
 		snap := capture.Snapshot()
-		require.True(t, hasTag(snap, "client_name", expectedClientName),
-			"PollNexusTaskQueue should propagate client_name tag, got: %v", snap)
+		require.NotEmpty(t, snap[nexusTaskRequestsMetric],
+			"expected nexus_task_requests metric to be recorded")
+		require.True(t, findMetricWithTag(snap, nexusTaskRequestsMetric, "client_name", expectedClientName),
+			"PollNexusTaskQueue should emit nexus_task_requests with client_name tag, got: %v", snap)
 	})
 
 	t.Run("RespondNexusTaskCompleted", func(t *testing.T) {
@@ -181,7 +178,7 @@ func TestNexusHandlersIncludeClientNameTag(t *testing.T) {
 		capture := captureHandler.StartCapture()
 		defer captureHandler.StopCapture(capture)
 
-		h, engine := newTestHandler(t, captureHandler)
+		h, _ := newTestHandler(t, captureHandler)
 		ctx := ctxWithClientName(expectedClientName)
 
 		_, err := h.RespondNexusTaskCompleted(ctx, &matchingservice.RespondNexusTaskCompletedRequest{
@@ -189,12 +186,11 @@ func TestNexusHandlersIncludeClientNameTag(t *testing.T) {
 			TaskQueue:   taskQueue,
 		})
 		require.NoError(t, err)
-		require.NotNil(t, engine.capturedMetrics)
 
-		engine.capturedMetrics.Counter("respond_completed_test").Record(1)
 		snap := capture.Snapshot()
-		require.True(t, hasTag(snap, "client_name", expectedClientName),
-			"RespondNexusTaskCompleted should propagate client_name tag, got: %v", snap)
+		require.NotEmpty(t, snap[nexusTaskRequestsMetric])
+		require.True(t, findMetricWithTag(snap, nexusTaskRequestsMetric, "client_name", expectedClientName),
+			"RespondNexusTaskCompleted should emit nexus_task_requests with client_name tag, got: %v", snap)
 	})
 
 	t.Run("RespondNexusTaskFailed", func(t *testing.T) {
@@ -202,7 +198,7 @@ func TestNexusHandlersIncludeClientNameTag(t *testing.T) {
 		capture := captureHandler.StartCapture()
 		defer captureHandler.StopCapture(capture)
 
-		h, engine := newTestHandler(t, captureHandler)
+		h, _ := newTestHandler(t, captureHandler)
 		ctx := ctxWithClientName(expectedClientName)
 
 		_, err := h.RespondNexusTaskFailed(ctx, &matchingservice.RespondNexusTaskFailedRequest{
@@ -210,12 +206,11 @@ func TestNexusHandlersIncludeClientNameTag(t *testing.T) {
 			TaskQueue:   taskQueue,
 		})
 		require.NoError(t, err)
-		require.NotNil(t, engine.capturedMetrics)
 
-		engine.capturedMetrics.Counter("respond_failed_test").Record(1)
 		snap := capture.Snapshot()
-		require.True(t, hasTag(snap, "client_name", expectedClientName),
-			"RespondNexusTaskFailed should propagate client_name tag, got: %v", snap)
+		require.NotEmpty(t, snap[nexusTaskRequestsMetric])
+		require.True(t, findMetricWithTag(snap, nexusTaskRequestsMetric, "client_name", expectedClientName),
+			"RespondNexusTaskFailed should emit nexus_task_requests with client_name tag, got: %v", snap)
 	})
 
 	t.Run("no client_name tag when header is absent", func(t *testing.T) {
@@ -223,7 +218,7 @@ func TestNexusHandlersIncludeClientNameTag(t *testing.T) {
 		capture := captureHandler.StartCapture()
 		defer captureHandler.StopCapture(capture)
 
-		h, engine := newTestHandler(t, captureHandler)
+		h, _ := newTestHandler(t, captureHandler)
 		ctx := context.Background()
 		ctx, _ = context.WithTimeout(ctx, 10*time.Second)
 
@@ -234,12 +229,12 @@ func TestNexusHandlersIncludeClientNameTag(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		require.NotNil(t, engine.capturedMetrics)
 
-		engine.capturedMetrics.Counter("poll_no_client_test").Record(1)
 		snap := capture.Snapshot()
-		assert.False(t, hasTag(snap, "client_name", expectedClientName),
-			"PollNexusTaskQueue should not have client_name tag when header is absent, got: %v", snap)
+		require.NotEmpty(t, snap[nexusTaskRequestsMetric],
+			"nexus_task_requests should still be emitted without client_name header")
+		assert.False(t, findMetricWithTag(snap, nexusTaskRequestsMetric, "client_name", expectedClientName),
+			"nexus_task_requests should not have client_name tag when header is absent, got: %v", snap)
 	})
 }
 

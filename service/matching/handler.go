@@ -513,6 +513,7 @@ func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservi
 		metrics.MatchingPollWorkflowTaskQueueScope,
 	)
 	opMetrics = h.withClientNameTag(ctx, opMetrics)
+	metrics.NexusTaskRequestsPerTaskQueue.With(opMetrics).Record(1)
 
 	if request.GetForwardedSource() != "" {
 		h.reportForwardedPerTaskQueueCounter(opMetrics, namespace.ID(request.GetNamespaceId()))
@@ -537,6 +538,7 @@ func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchi
 		metrics.MatchingRespondNexusTaskCompletedScope,
 	)
 	opMetrics = h.withClientNameTag(ctx, opMetrics)
+	metrics.NexusTaskRequestsPerTaskQueue.With(opMetrics).Record(1)
 
 	return h.engine.RespondNexusTaskCompleted(ctx, request, opMetrics)
 }
@@ -550,6 +552,7 @@ func (h *Handler) RespondNexusTaskFailed(ctx context.Context, request *matchings
 		metrics.MatchingRespondNexusTaskFailedScope,
 	)
 	opMetrics = h.withClientNameTag(ctx, opMetrics)
+	metrics.NexusTaskRequestsPerTaskQueue.With(opMetrics).Record(1)
 
 	return h.engine.RespondNexusTaskFailed(ctx, request, opMetrics)
 }

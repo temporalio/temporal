@@ -19,6 +19,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -27,6 +28,7 @@ import (
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/grpc/metadata"
 )
 
 type headerCapture struct {
@@ -644,6 +646,65 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Su
 	cancel()
 	s.NoError(<-pollerErrCh2)
 	s.NoError(<-pollerErrCh3)
+}
+
+// TestNexusClientNameMetricPropagation verifies that when an SDK worker polls for Nexus tasks
+// with client-name in gRPC metadata, the matching service emits nexus_task_requests with a
+// client_name tag. This proves the header propagates e2e: SDK → frontend → matching.
+func (s *NexusApiTestSuite) TestNexusClientNameMetricPropagation() {
+	const expectedClientName = "temporal-go"
+	taskQueue := testcore.RandomizeStr("tq")
+	endpoint := s.createNexusEndpoint(testcore.RandomizeStr("endpoint"), taskQueue)
+
+	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
+	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+
+	ctx, cancel := context.WithCancel(testcore.NewContext())
+	defer cancel()
+
+	// Start a poller that simulates an SDK worker with a specific client-name.
+	// We build the outgoing metadata from scratch (instead of using NewContext which
+	// sets client-name=temporal-server) so the SDK name is the only value.
+	pollerCtx := metadata.NewOutgoingContext(ctx, metadata.Pairs(
+		"client-name", expectedClientName,
+		"client-version", "1.0.0",
+		"supported-server-versions", headers.SupportedServerVersions,
+		"supported-features", headers.AllFeatures,
+	))
+	pollerErrCh := s.nexusTaskPoller(pollerCtx, taskQueue, nexusEchoHandler)
+
+	// Trigger a Nexus start operation via HTTP to unblock the poller.
+	client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
+		BaseURL: getDispatchByEndpointURL(s.HttpAPIAddress(), endpoint.Id),
+		Service: "test-service",
+	})
+	s.NoError(err)
+
+	s.Eventually(func() bool {
+		_, err = nexusrpc.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
+		var handlerErr *nexus.HandlerError
+		return err == nil || !(errors.As(err, &handlerErr) && handlerErr.Type == nexus.HandlerErrorTypeNotFound)
+	}, 10*time.Second, 500*time.Millisecond)
+	s.NoError(err)
+	s.NoError(<-pollerErrCh)
+
+	// Verify that the matching service emitted nexus_task_requests with client_name tag.
+	snap := capture.Snapshot()
+	var found bool
+	for _, rec := range snap["nexus_task_requests"] {
+		if rec.Tags["client_name"] == expectedClientName {
+			found = true
+			break
+		}
+	}
+	s.True(found, "expected nexus_task_requests metric with client_name=%s, got snapshot keys: %v, nexus_task_requests entries: %v",
+		expectedClientName, func() []string {
+			keys := make([]string, 0, len(snap))
+			for k := range snap {
+				keys = append(keys, k)
+			}
+			return keys
+		}(), snap["nexus_task_requests"])
 }
 
 func nexusEchoHandler(res *workflowservice.PollNexusTaskQueueResponse) (*nexusTaskResponse, error) {
