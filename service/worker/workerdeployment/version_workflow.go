@@ -376,18 +376,32 @@ func (d *VersionWorkflowRunner) handleUpdateVersionComputeConfig(ctx workflow.Co
 	// Build the new compute config by applying changes to a copy of the current one.
 	newConfig := buildUpdatedComputeConfig(d.VersionState.GetComputeConfig(), args)
 
-	// Validate the new config via the Worker Controller Instance client.
+	// Update or delete the Worker Controller Instance based on the new config.
+	apiVersion := &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: d.VersionState.Version.DeploymentName,
+		BuildId:        d.VersionState.Version.BuildId,
+	}
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	if len(newConfig.GetScalingGroups()) > 0 {
-		validateCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-		err := workflow.ExecuteActivity(validateCtx, d.a.ValidateWorkerControllerInstanceSpec, &deploymentspb.ValidateWorkerControllerInstanceSpecInput{
+		err := workflow.ExecuteActivity(activityCtx, d.a.UpdateWorkerControllerInstance, &deploymentspb.UpdateWorkerControllerInstanceInput{
+			Version:       apiVersion,
 			ScalingGroups: newConfig.GetScalingGroups(),
+			Identity:      args.GetIdentity(),
 		}).Get(ctx, nil)
 		if err != nil {
 			var appErr *temporal.ApplicationError
 			if errors.As(err, &appErr) && appErr.Type() == errInvalidComputeConfig {
 				return nil, appErr
 			}
-			return nil, serviceerror.NewInternalf("validate compute config: %v", err)
+			return nil, serviceerror.NewInternalf("update worker controller instance: %v", err)
+		}
+	} else {
+		err := workflow.ExecuteActivity(activityCtx, d.a.DeleteWorkerControllerInstance, &deploymentspb.DeleteWorkerControllerInstanceInput{
+			Version:  apiVersion,
+			Identity: args.GetIdentity(),
+		}).Get(ctx, nil)
+		if err != nil {
+			return nil, serviceerror.NewInternalf("delete worker controller instance: %v", err)
 		}
 	}
 

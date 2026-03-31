@@ -1966,6 +1966,80 @@ func (this *ValidateWorkerControllerInstanceSpecInput) Equal(that interface{}) b
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type UpdateWorkerControllerInstanceInput to the protobuf v3 wire format
+func (val *UpdateWorkerControllerInstanceInput) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type UpdateWorkerControllerInstanceInput from the protobuf v3 wire format
+func (val *UpdateWorkerControllerInstanceInput) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *UpdateWorkerControllerInstanceInput) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two UpdateWorkerControllerInstanceInput values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *UpdateWorkerControllerInstanceInput) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *UpdateWorkerControllerInstanceInput
+	switch t := that.(type) {
+	case *UpdateWorkerControllerInstanceInput:
+		that1 = t
+	case UpdateWorkerControllerInstanceInput:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type DeleteWorkerControllerInstanceInput to the protobuf v3 wire format
+func (val *DeleteWorkerControllerInstanceInput) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DeleteWorkerControllerInstanceInput from the protobuf v3 wire format
+func (val *DeleteWorkerControllerInstanceInput) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DeleteWorkerControllerInstanceInput) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DeleteWorkerControllerInstanceInput values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DeleteWorkerControllerInstanceInput) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DeleteWorkerControllerInstanceInput
+	switch t := that.(type) {
+	case *DeleteWorkerControllerInstanceInput:
+		that1 = t
+	case DeleteWorkerControllerInstanceInput:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type UpdateVersionComputeConfigArgs to the protobuf v3 wire format
 func (val *UpdateVersionComputeConfigArgs) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

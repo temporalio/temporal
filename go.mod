@@ -59,7 +59,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.40.0
 	go.opentelemetry.io/otel/sdk/metric v1.40.0
 	go.opentelemetry.io/otel/trace v1.40.0
-	go.temporal.io/api v1.62.3-0.20260325221344-112518d1ad10
+	go.temporal.io/api v1.62.3-0.20260327234204-dbc016f3811d
 	go.temporal.io/auto-scaled-workers v0.0.0-20260326224417-91f89c53fd14
 	go.temporal.io/sdk v1.38.0
 	go.uber.org/fx v1.24.0
@@ -80,6 +80,7 @@ require (
 )
 
 require (
+	github.com/google/pprof v0.0.0-20250403155104-27863c87afa6 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 )

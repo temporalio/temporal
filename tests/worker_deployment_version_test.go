@@ -3332,7 +3332,7 @@ func (s *DeploymentVersionSuite) TestReactivationSignalCache_Deduplication_Reset
 }
 
 func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	tv := testvars.New(s)
@@ -3354,7 +3354,8 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
 			"sg1": {
 				Provider: &computepb.ComputeProvider{
-					Details: &commonpb.Payload{Data: []byte("sg1 details")},
+					Type:    "subprocess",
+					Details: &commonpb.Payload{Data: []byte("{\"command\": \"echo hello\"}")},
 				},
 			},
 		},
@@ -3769,7 +3770,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_InvalidScalin
 			name: "two catch-all scaling groups",
 			computeConfig: &computepb.ComputeConfig{
 				ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
-					"sg1": {TaskQueueTypes: nil},
+					"sg1": {TaskQueueTypes: nil, Provider: &computepb.ComputeProvider{Type: "subprocess"}},
 					"sg2": {TaskQueueTypes: nil},
 				},
 			},

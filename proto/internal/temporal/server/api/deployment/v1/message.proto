@@ -183,8 +183,6 @@ message WorkerDeploymentLocalState {
     map<string, PropagatingRevisions> propagating_revisions = 8;
     // Request ID used to create this worker deployment.
     string create_request_id = 9;
-    // Compute config provided during deployment creation.
-    temporal.api.compute.v1.ComputeConfig compute_config = 10;
 }
 
 // Tracks revision numbers that are currently propagating for a specific build ID
@@ -564,6 +562,21 @@ message WorkerDeploymentSummary {
 // the Worker Controller Instance client.
 message ValidateWorkerControllerInstanceSpecInput {
     map<string, temporal.api.compute.v1.ComputeConfigScalingGroup> scaling_groups = 1;
+}
+
+// used as activity input for creating or updating a Worker Controller Instance
+// via the WCI client.
+message UpdateWorkerControllerInstanceInput {
+    temporal.api.deployment.v1.WorkerDeploymentVersion version = 1;
+    map<string, temporal.api.compute.v1.ComputeConfigScalingGroup> scaling_groups = 2;
+    string identity = 3;
+}
+
+// used as activity input for deleting a Worker Controller Instance
+// via the WCI client.
+message DeleteWorkerControllerInstanceInput {
+    temporal.api.deployment.v1.WorkerDeploymentVersion version = 1;
+    string identity = 2;
 }
 
 // used as Worker Deployment Version workflow update input:

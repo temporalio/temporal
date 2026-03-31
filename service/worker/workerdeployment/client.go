@@ -19,6 +19,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	wciclient "go.temporal.io/auto-scaled-workers/wci/client"
 	"go.temporal.io/sdk/temporal"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -212,6 +213,15 @@ type Client interface {
 		namespaceEntry *namespace.Namespace,
 		deploymentName, buildID string,
 	) error
+
+	ValidateComputeConfig(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		version *deploymentpb.WorkerDeploymentVersion,
+		upsertScalingGroups map[string]*deploymentspb.ScalingGroupUpdate,
+		removeScalingGroups []string,
+		identity string,
+	) error
 }
 
 type ErrRegister struct{ error }
@@ -224,6 +234,7 @@ type ClientImpl struct {
 	historyClient                    historyservice.HistoryServiceClient
 	visibilityManager                manager.VisibilityManager
 	matchingClient                   resource.MatchingClient
+	workerControllerInstanceClient   wciclient.Client
 	maxIDLengthLimit                 dynamicconfig.IntPropertyFn
 	visibilityMaxPageSize            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	maxTaskQueuesInDeploymentVersion dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -2053,4 +2064,65 @@ func (d *ClientImpl) makeVersionWorkflowArgs(
 			Status:            initialStatus,
 		},
 	}
+}
+
+func (d *ClientImpl) ValidateComputeConfig(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	version *deploymentpb.WorkerDeploymentVersion,
+	upsertScalingGroups map[string]*deploymentspb.ScalingGroupUpdate,
+	removeScalingGroups []string,
+	identity string,
+) error {
+	// If the version exists, merge changes with the existing config.
+	var existingConfig *computepb.ComputeConfig
+	existingState, err := d.queryVersionState(ctx, namespaceEntry, version.GetDeploymentName(), version.GetBuildId())
+	if err != nil {
+		var notFound *serviceerror.NotFound
+		if !errors.As(err, &notFound) {
+			return err
+		}
+		// Version doesn't exist yet — apply changes to empty config.
+	} else {
+		existingConfig = existingState.GetComputeConfig()
+	}
+
+	mergedConfig := buildUpdatedComputeConfig(existingConfig, &deploymentspb.UpdateVersionComputeConfigArgs{
+		UpsertScalingGroups: upsertScalingGroups,
+		RemoveScalingGroups: removeScalingGroups,
+	})
+
+	spec := computeConfigScalingGroupsToWCISpec(mergedConfig.GetScalingGroups())
+	if err := d.workerControllerInstanceClient.ValidateWorkerControllerInstanceSpec(ctx, namespaceEntry, spec, identity); err != nil {
+		return serviceerror.NewInvalidArgument(err.Error())
+	}
+	return nil
+}
+
+// queryVersionState queries the version workflow for its current state.
+func (d *ClientImpl) queryVersionState(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName, buildID string,
+) (*deploymentspb.VersionLocalState, error) {
+	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
+	req := &historyservice.QueryWorkflowRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		Request: &workflowservice.QueryWorkflowRequest{
+			Namespace: namespaceEntry.Name().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+			},
+			Query: &querypb.WorkflowQuery{QueryType: QueryDescribeVersion},
+		},
+	}
+	res, err := d.queryWorkflowWithRetry(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	var queryResponse deploymentspb.QueryDescribeVersionResponse
+	if err := sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse); err != nil {
+		return nil, err
+	}
+	return queryResponse.VersionState, nil
 }

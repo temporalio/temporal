@@ -41,12 +41,12 @@ type (
 
 	activityDeps struct {
 		fx.In
-		MetricsHandler              metrics.Handler
-		Logger                      log.Logger
-		ClientFactory               sdk.ClientFactory
-		MatchingClient              resource.MatchingClient
-		HistoryClient               resource.HistoryClient
-		WorkerDeploymentClient      Client
+		MetricsHandler                 metrics.Handler
+		Logger                         log.Logger
+		ClientFactory                  sdk.ClientFactory
+		MatchingClient                 resource.MatchingClient
+		HistoryClient                  resource.HistoryClient
+		WorkerDeploymentClient         Client
 		WorkerControllerInstanceClient wciclient.Client
 	}
 
@@ -66,6 +66,7 @@ func ClientProvider(
 	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
 	visibilityManager manager.VisibilityManager,
+	workerControllerInstanceClient wciclient.Client,
 	dc *dynamicconfig.Collection,
 	testHooks testhooks.TestHooks,
 	metricsHandler metrics.Handler,
@@ -75,6 +76,7 @@ func ClientProvider(
 		historyClient:                    historyClient,
 		visibilityManager:                visibilityManager,
 		matchingClient:                   matchingClient,
+		workerControllerInstanceClient:   workerControllerInstanceClient,
 		maxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),
 		visibilityMaxPageSize:            dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 		maxTaskQueuesInDeploymentVersion: dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Get(dc),
