@@ -483,6 +483,32 @@ func (h *OperationInvocationTaskHandler) startOnHistoryService(
 	return result, nil
 }
 
+// cancelCallOutcomeTag returns a metric tag for the outcome of a cancel call.
+func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
+	if callErr != nil {
+		if errors.Is(callErr, errOpProcessorFailed) {
+			return "operation-processor-failed"
+		}
+		var opTimeoutBelowMinErr *operationTimeoutBelowMinError
+		if errors.As(callErr, &opTimeoutBelowMinErr) {
+			return "operation-timeout"
+		}
+		if callCtx.Err() != nil {
+			return "request-timeout"
+		}
+		var handlerErr *nexus.HandlerError
+		if errors.As(callErr, &handlerErr) {
+			return "handler-error:" + string(handlerErr.Type)
+		}
+		var serviceErr serviceerror.ServiceError
+		if errors.As(callErr, &serviceErr) {
+			return "service-error:" + strings.Replace(fmt.Sprintf("%T", serviceErr), "*serviceerror.", "", 1)
+		}
+		return "unknown-error"
+	}
+	return "successful"
+}
+
 // generateCallbackToken creates a callback token for the given operation reference.
 func (h *OperationInvocationTaskHandler) generateCallbackToken(
 	serializedRef []byte,

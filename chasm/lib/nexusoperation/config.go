@@ -160,6 +160,13 @@ var UseSystemCallbackURL = dynamicconfig.NewGlobalBoolSetting(
 When true, uses the fixed system callback URL for all worker targets.`,
 )
 
+var RecordCancelRequestCompletionEvents = dynamicconfig.NewGlobalBoolSetting(
+	"nexusoperation.recordCancelRequestCompletionEvents",
+	true,
+	`Boolean flag to control whether to record NexusOperationCancelRequestCompleted and
+NexusOperationCancelRequestFailed events. Default true.`,
+)
+
 var UseNewFailureWireFormat = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.useNewFailureWireFormat",
 	true,
@@ -190,22 +197,23 @@ type Config struct {
 
 func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Config {
 	return &Config{
-		ChasmEnabled:                       dynamicconfig.EnableChasm.Get(dc),
-		ChasmNexusEnabled:                  ChasmNexusEnabled.Get(dc),
-		NumHistoryShards:                   cfg.NumHistoryShards,
-		RequestTimeout:                     RequestTimeout.Get(dc),
-		MinRequestTimeout:                  MinRequestTimeout.Get(dc),
-		MaxConcurrentOperations:            MaxConcurrentOperations.Get(dc),
-		MaxServiceNameLength:               MaxServiceNameLength.Get(dc),
-		MaxOperationNameLength:             MaxOperationNameLength.Get(dc),
-		MaxOperationTokenLength:            MaxOperationTokenLength.Get(dc),
-		MaxOperationHeaderSize:             MaxOperationHeaderSize.Get(dc),
-		DisallowedOperationHeaders:         DisallowedOperationHeaders.Get(dc),
-		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
-		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
-		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
-		UseSystemCallbackURL:               UseSystemCallbackURL.Get(dc),
-		UseNewFailureWireFormat:            UseNewFailureWireFormat.Get(dc),
+		ChasmEnabled:                        dynamicconfig.EnableChasm.Get(dc),
+		ChasmNexusEnabled:                   ChasmNexusEnabled.Get(dc),
+		NumHistoryShards:                    cfg.NumHistoryShards,
+		RequestTimeout:                      RequestTimeout.Get(dc),
+		MinRequestTimeout:                   MinRequestTimeout.Get(dc),
+		MaxConcurrentOperations:             MaxConcurrentOperations.Get(dc),
+		MaxServiceNameLength:                MaxServiceNameLength.Get(dc),
+		MaxOperationNameLength:              MaxOperationNameLength.Get(dc),
+		MaxOperationTokenLength:             MaxOperationTokenLength.Get(dc),
+		MaxOperationHeaderSize:              MaxOperationHeaderSize.Get(dc),
+		DisallowedOperationHeaders:          DisallowedOperationHeaders.Get(dc),
+		MaxOperationScheduleToCloseTimeout:  MaxOperationScheduleToCloseTimeout.Get(dc),
+		PayloadSizeLimit:                    dynamicconfig.BlobSizeLimitError.Get(dc),
+		CallbackURLTemplate:                 CallbackURLTemplate.Get(dc),
+		UseSystemCallbackURL:                UseSystemCallbackURL.Get(dc),
+		UseNewFailureWireFormat:             UseNewFailureWireFormat.Get(dc),
+		RecordCancelRequestCompletionEvents: RecordCancelRequestCompletionEvents.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),
