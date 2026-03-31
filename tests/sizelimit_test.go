@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
@@ -36,27 +37,24 @@ func TestSizeLimitFunctionalSuite(t *testing.T) {
 	parallelsuite.Run(t, &SizeLimitSuite{})
 }
 
-func sizeLimitTestOpts() []testcore.TestOption {
-	return []testcore.TestOption{
+func (s *SizeLimitSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {
+	env := testcore.NewEnv(
+		s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.HistoryCountLimitWarn, 10),
 		testcore.WithDynamicConfig(dynamicconfig.HistoryCountLimitError, 20),
-		testcore.WithDynamicConfig(dynamicconfig.HistorySizeLimitWarn, 5000),
-		testcore.WithDynamicConfig(dynamicconfig.HistorySizeLimitError, 9000),
-		testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitWarn, 1),
-		testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitError, 1000),
-		testcore.WithDynamicConfig(dynamicconfig.MutableStateSizeLimitWarn, 200),
-		testcore.WithDynamicConfig(dynamicconfig.MutableStateSizeLimitError, 1100),
-	}
-}
-
-func (s *SizeLimitSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {
-	env := testcore.NewEnv(s.T(), sizeLimitTestOpts()...)
+		// Poller identity is persisted in mutable state when an activity starts.
+		// If identity changes to a longer value (for example tv.WorkerIdentity()),
+		// low mutable-state/history-size limits can be hit before history-count limits.
+		testcore.WithDynamicConfig(dynamicconfig.HistorySizeLimitWarn, 10*1024*1024),
+		testcore.WithDynamicConfig(dynamicconfig.HistorySizeLimitError, 50*1024*1024),
+		testcore.WithDynamicConfig(dynamicconfig.MutableStateSizeLimitWarn, 1*1024*1024),
+		testcore.WithDynamicConfig(dynamicconfig.MutableStateSizeLimitError, 8*1024*1024),
+	)
 
 	id := "functional-terminate-workflow-by-history-count-limit-test"
 	wt := "functional-terminate-workflow-by-history-count-limit-test-type"
 	tq := "functional-terminate-workflow-by-history-count-limit-test-taskqueue"
 	tv := testvars.New(s.T()).WithTaskQueue(tq)
-	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
@@ -72,7 +70,6 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            identity,
 	}
 
 	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
@@ -132,22 +129,13 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {
 			env.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 			s.NoError(err)
 
-			// NOTE: Using direct gRPC calls for activity polling because taskpoller.PollAndHandleActivityTask
-			// has a bug where it doesn't find activity tasks that are immediately available after workflow task completion.
-			actResp, actErr := env.FrontendClient().PollActivityTaskQueue(testcore.NewContext(), &workflowservice.PollActivityTaskQueueRequest{
-				Namespace: env.Namespace().String(),
-				TaskQueue: taskQueue,
-				Identity:  identity,
-			})
-			s.NoError(actErr)
-			s.NotEmpty(actResp.GetTaskToken())
-			_, actErr = env.FrontendClient().RespondActivityTaskCompleted(testcore.NewContext(), &workflowservice.RespondActivityTaskCompletedRequest{
-				Namespace: env.Namespace().String(),
-				TaskToken: actResp.TaskToken,
-				Identity:  identity,
-				Result:    payloads.EncodeString("Activity Result"),
-			})
-			s.NoError(actErr)
+			_, err = poller.PollAndHandleActivityTask(tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+				return &workflowservice.RespondActivityTaskCompletedRequest{
+					Result: payloads.EncodeString("Activity Result"),
+				}, nil
+			}, taskpoller.WithTimeout(90*time.Second))
+			env.Logger.Info("PollAndHandleActivityTask", tag.Error(err))
+			s.NoError(err)
 		}
 	}
 
@@ -165,7 +153,6 @@ SignalLoop:
 			},
 			SignalName: signalName,
 			Input:      signalInput,
-			Identity:   identity,
 		})
 
 		if signalErr != nil {
@@ -237,12 +224,15 @@ SignalLoop:
 }
 
 func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
-	env := testcore.NewEnv(s.T(), sizeLimitTestOpts()...)
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitWarn, 1),
+		testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitError, 1000),
+	)
 	id := "functional-workflow-failed-large-payload"
 	wt := "functional-workflow-failed-large-payload-type"
 	tl := "functional-workflow-failed-large-payload-taskqueue"
 	tv := testvars.New(s.T()).WithTaskQueue(tl)
-	identity := "worker1"
 
 	largePayload := make([]byte, 1001)
 	pl, err := payloads.Encode(largePayload)
@@ -260,7 +250,7 @@ func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowTaskTimeout: durationpb.New(60 * time.Second),
-		Identity:            identity,
+		Identity:            testcore.RandomizeStr("worker"),
 	}
 
 	we, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
@@ -305,7 +295,7 @@ func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 		Namespace:         env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()},
 		SignalName:        "signal-name",
-		Identity:          identity,
+		Identity:          testcore.RandomizeStr("worker"),
 		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err)
@@ -331,12 +321,15 @@ func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 }
 
 func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
-	env := testcore.NewEnv(s.T(), sizeLimitTestOpts()...)
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.MutableStateSizeLimitWarn, 200),
+		testcore.WithDynamicConfig(dynamicconfig.MutableStateSizeLimitError, 1100),
+	)
 	id := "functional-terminate-workflow-by-ms-size-limit-test"
 	wt := "functional-terminate-workflow-by-ms-size-limit-test-type"
 	tq := "functional-terminate-workflow-by-ms-size-limit-test-taskqueue"
 	tv := testvars.New(s.T()).WithTaskQueue(tq)
-	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
@@ -352,7 +345,7 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-		Identity:            identity,
+		Identity:            testcore.RandomizeStr("worker"),
 	}
 
 	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
@@ -413,7 +406,7 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 		},
 		SignalName: "another signal",
 		Input:      payloads.EncodeString("another signal input"),
-		Identity:   identity,
+		Identity:   testcore.RandomizeStr("worker"),
 	})
 
 	s.EqualError(signalErr, consts.ErrWorkflowCompleted.Error())
@@ -462,11 +455,14 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 }
 
 func (s *SizeLimitSuite) TestTerminateWorkflowCausedByHistorySizeLimit() {
-	env := testcore.NewEnv(s.T(), sizeLimitTestOpts()...)
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.HistorySizeLimitWarn, 5000),
+		testcore.WithDynamicConfig(dynamicconfig.HistorySizeLimitError, 9000),
+	)
 	id := "functional-terminate-workflow-by-history-size-limit-test"
 	wt := "functional-terminate-workflow-by-history-size-limit-test-type"
 	tq := "functional-terminate-workflow-by-history-size-limit-test-taskqueue"
-	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -478,7 +474,7 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByHistorySizeLimit() {
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            identity,
+		Identity:            testcore.RandomizeStr("worker"),
 	}
 
 	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
@@ -502,7 +498,7 @@ SignalLoop:
 			},
 			SignalName: signalName,
 			Input:      signalInput,
-			Identity:   identity,
+			Identity:   testcore.RandomizeStr("worker"),
 		})
 
 		if signalErr != nil {
