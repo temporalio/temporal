@@ -1,9 +1,12 @@
 package parallelsuite
 
 import (
+	"context"
 	"flag"
 	"reflect"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -48,6 +51,31 @@ type setupTestSuite struct{ Suite[*setupTestSuite] }
 func (s *setupTestSuite) TestA()     {}
 func (s *setupTestSuite) SetupTest() {} //nolint:unused
 
+type awaitTrueSuite struct{ Suite[*awaitTrueSuite] }
+
+func (s *awaitTrueSuite) TestAwaitTrue() {
+	var attempts atomic.Int32
+	s.AwaitTrue(func(_ context.Context, s *awaitTrueSuite) bool {
+		return attempts.Add(1) == 2
+	}, time.Second, time.Millisecond)
+	s.Equal(int32(2), attempts.Load())
+}
+
+func (s *awaitTrueSuite) TestAwaitTrueAssertionRetry() {
+	var attempts atomic.Int32
+	s.AwaitTrue(func(_ context.Context, s *awaitTrueSuite) bool {
+		s.Equal(int32(2), attempts.Add(1))
+		return true
+	}, time.Second, time.Millisecond)
+	s.Equal(int32(2), attempts.Load())
+}
+
+func (s *awaitTrueSuite) TestAwaitTruef() {
+	s.AwaitTruef(func(_ context.Context, s *awaitTrueSuite) bool {
+		return true
+	}, time.Second, time.Millisecond, "condition should pass")
+}
+
 type sealAfterRunSuite struct{ Suite[*sealAfterRunSuite] }
 
 func (s *sealAfterRunSuite) TestAssertionAfterRun() {
@@ -71,6 +99,9 @@ func TestRun_AcceptsSuite(t *testing.T) {
 	})
 	t.Run("with args", func(t *testing.T) {
 		require.NotPanics(t, func() { Run(t, &validWithArgsSuite{}, "hello", 42) })
+	})
+	t.Run("await true", func(t *testing.T) {
+		require.NotPanics(t, func() { Run(t, &awaitTrueSuite{}) })
 	})
 }
 

@@ -46,6 +46,7 @@ env:
   COMMIT: ${{ inputs.commit }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
+  TEMPORAL_TEST_AWAIT_SCALE: 2
 
 jobs:
   unit-test:
