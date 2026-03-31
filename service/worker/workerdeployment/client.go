@@ -529,7 +529,7 @@ func (d *ClientImpl) UpdateVersionComputeConfig(
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("UpdateVersionComputeConfig", version.GetDeploymentName(), &retErr, namespaceEntry.Name(), version.GetBuildId(), identity)()
 
-	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.UpdateVersionComputeConfigArgs{
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.UpdateComputeConfigArgs{
 		Identity:            identity,
 		RequestId:           requestID,
 		UpsertScalingGroups: upsertScalingGroups,

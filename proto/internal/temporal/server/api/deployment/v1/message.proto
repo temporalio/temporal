@@ -560,19 +560,19 @@ message WorkerDeploymentSummary {
     temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary ramping_version_summary = 6;
 }
 
-// used as activity input for validating compute config scaling groups via
+// Input for the activity that validates compute config scaling groups via
 // the Worker Controller Instance client.
 message ValidateWorkerControllerInstanceSpecInput {
     map<string, temporal.api.compute.v1.ComputeConfigScalingGroup> scaling_groups = 1;
 }
 
-// used as Worker Deployment Version workflow update input:
-message UpdateVersionComputeConfigArgs {
+// Input for the UpdateComputeConfig workflow update on a version workflow.
+message UpdateComputeConfigArgs {
     string identity = 1;
     string request_id = 2;
     // Scaling groups to add or update.
     map<string, ScalingGroupUpdate> upsert_scaling_groups = 3;
-    // Names of scaling groups to remove.
+    // Names of scaling groups to remove. Names that don't match an existing group are ignored.
     repeated string remove_scaling_groups = 4;
 }
 
@@ -581,8 +581,8 @@ message ScalingGroupUpdate {
     google.protobuf.FieldMask update_mask = 2;
 }
 
-// used as Worker Deployment Version workflow update response:
-message UpdateVersionComputeConfigResponse {
+// Response for the UpdateComputeConfig workflow update on a version workflow.
+message UpdateComputeConfigResponse {
 }
 
 // Signal input for force-continue-as-new on Deployment workflow

@@ -82,8 +82,9 @@ func VersionWorkflow(
 		a:       nil,
 		logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", versionWorkflowArgs.NamespaceName),
 		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": versionWorkflowArgs.NamespaceName}),
-		lock:    workflow.NewMutex(ctx),
+		lock: workflow.NewMutex(ctx),
 		// Compute config is independent from version status and routing info so it has its own lock.
+		// Lock ordering: always acquire `lock` before `computeConfigLock`.
 		computeConfigLock:                 workflow.NewMutex(ctx),
 		unsafeWorkflowVersionGetter:       unsafeWorkflowVersionGetter,
 		unsafeRefreshIntervalGetter:       unsafeRefreshIntervalGetter,
@@ -358,23 +359,26 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 	}, nil
 }
 
-func (d *VersionWorkflowRunner) validateUpdateVersionComputeConfig(args *deploymentspb.UpdateVersionComputeConfigArgs) error {
+func (d *VersionWorkflowRunner) validateUpdateVersionComputeConfig(args *deploymentspb.UpdateComputeConfigArgs) error {
 	return d.ensureNotDeleted()
 }
 
-func (d *VersionWorkflowRunner) handleUpdateVersionComputeConfig(ctx workflow.Context, args *deploymentspb.UpdateVersionComputeConfigArgs) (*deploymentspb.UpdateVersionComputeConfigResponse, error) {
+func (d *VersionWorkflowRunner) handleUpdateVersionComputeConfig(ctx workflow.Context, args *deploymentspb.UpdateComputeConfigArgs) (*deploymentspb.UpdateComputeConfigResponse, error) {
 	if err := d.preUpdateChecks(ctx); err != nil {
 		return nil, err
 	}
 
 	if err := d.computeConfigLock.Lock(ctx); err != nil {
-		d.logger.Error("Could not acquire compute config lock")
-		return nil, serviceerror.NewDeadlineExceeded("Could not acquire compute config lock")
+		d.logger.Error("Could not acquire compute config lock in version workflow", "error", err)
+		return nil, err
 	}
 	defer d.computeConfigLock.Unlock()
 
 	// Build the new compute config by applying changes to a copy of the current one.
-	newConfig := buildUpdatedComputeConfig(d.VersionState.GetComputeConfig(), args)
+	newConfig, err := buildUpdatedComputeConfig(d.VersionState.GetComputeConfig(), args)
+	if err != nil {
+		return nil, err
+	}
 
 	// Validate the new config via the Worker Controller Instance client.
 	if len(newConfig.GetScalingGroups()) > 0 {
@@ -395,7 +399,7 @@ func (d *VersionWorkflowRunner) handleUpdateVersionComputeConfig(ctx workflow.Co
 	d.VersionState.ComputeConfig = newConfig
 	d.setStateChanged()
 
-	return &deploymentspb.UpdateVersionComputeConfigResponse{}, nil
+	return &deploymentspb.UpdateComputeConfigResponse{}, nil
 }
 
 func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context) {
@@ -435,21 +439,21 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
-		d.logger.Error("Could not acquire workflow lock")
-		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+		d.logger.Error("Could not acquire workflow lock in version workflow", "error", err)
+		return err
 	}
 	// also lock compute config lock to ensure that the compute config is not updated while the version is being deleted.
 	err = d.computeConfigLock.Lock(ctx)
 	if err != nil {
-		d.logger.Error("Could not acquire compute config lock")
-		return serviceerror.NewDeadlineExceeded("Could not acquire compute config lock")
+		d.logger.Error("Could not acquire compute config lock in version workflow", "error", err)
+		return err
 	}
 	defer func() {
 		// although the handler might have not changed the state and had returned an error, still
 		// it's better to CaN because some history events are built now.
 		d.setStateChanged()
-		d.lock.Unlock()
 		d.computeConfigLock.Unlock()
+		d.lock.Unlock()
 	}()
 
 	if d.deleteVersion {

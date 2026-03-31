@@ -1,6 +1,8 @@
 package workerdeployment
 
 import (
+	"go.temporal.io/api/serviceerror"
+
 	computepb "go.temporal.io/api/compute/v1"
 	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	"go.temporal.io/sdk/workflow"
@@ -10,11 +12,15 @@ import (
 
 // buildUpdatedComputeConfig creates a new ComputeConfig by applying the upsert and
 // remove operations from the update args to a copy of the current config.
-func buildUpdatedComputeConfig(current *computepb.ComputeConfig, args *deploymentspb.UpdateVersionComputeConfigArgs) *computepb.ComputeConfig {
+func buildUpdatedComputeConfig(current *computepb.ComputeConfig, args *deploymentspb.UpdateComputeConfigArgs) (*computepb.ComputeConfig, error) {
 	// Start with a copy of existing scaling groups.
 	newGroups := make(map[string]*computepb.ComputeConfigScalingGroup)
 	for name, sg := range current.GetScalingGroups() {
-		newGroups[name] = proto.Clone(sg).(*computepb.ComputeConfigScalingGroup)
+		cloned, ok := proto.Clone(sg).(*computepb.ComputeConfigScalingGroup)
+		if !ok {
+			continue
+		}
+		newGroups[name] = cloned
 	}
 
 	// Apply upserts.
@@ -29,7 +35,9 @@ func buildUpdatedComputeConfig(current *computepb.ComputeConfig, args *deploymen
 			// Empty mask on existing group: no-op, keep existing unchanged.
 		} else {
 			// Apply only the fields specified in the mask to the cloned existing group.
-			applyFieldMask(existing, update.GetScalingGroup(), paths)
+			if err := applyFieldMask(existing, update.GetScalingGroup(), paths); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -38,12 +46,13 @@ func buildUpdatedComputeConfig(current *computepb.ComputeConfig, args *deploymen
 		delete(newGroups, name)
 	}
 
-	return &computepb.ComputeConfig{ScalingGroups: newGroups}
+	return &computepb.ComputeConfig{ScalingGroups: newGroups}, nil
 }
 
 // applyFieldMask copies only the specified field paths from src to dst.
 // Supports top-level fields and one level of nesting (e.g. "provider.type").
-func applyFieldMask(dst, src *computepb.ComputeConfigScalingGroup, paths []string) {
+// Returns an error for unsupported field paths.
+func applyFieldMask(dst, src *computepb.ComputeConfigScalingGroup, paths []string) error {
 	for _, path := range paths {
 		switch path {
 		case "task_queue_types":
@@ -77,22 +86,28 @@ func applyFieldMask(dst, src *computepb.ComputeConfigScalingGroup, paths []strin
 				dst.Scaler = &computepb.ComputeScaler{}
 			}
 			dst.Scaler.Details = src.GetScaler().GetDetails()
+		default:
+			return serviceerror.NewInvalidArgumentf("unsupported field mask path: %q", path)
 		}
 	}
+	return nil
 }
 
 func computeConfigScalingGroupsToWCISpec(scalingGroups map[string]*computepb.ComputeConfigScalingGroup) *wciiface.WorkerControllerInstanceSpec {
-	if len(scalingGroups) == 0 {
-		return nil
-	}
 	specs := make(map[string]wciiface.ScalingGroupSpec, len(scalingGroups))
 	for name, sg := range scalingGroups {
-		specs[name] = wciiface.ScalingGroupSpec{
+		groupSpec := wciiface.ScalingGroupSpec{
 			TaskTypes: sg.GetTaskQueueTypes(),
 			Compute: wciiface.ComputeProviderSpec{
 				ProviderType: wciiface.ComputeProviderType(sg.GetProvider().GetType()),
 			},
 		}
+		if scaler := sg.GetScaler(); scaler != nil {
+			groupSpec.Scaling = &wciiface.ScalingAlgorithmSpec{
+				ScalingAlgorithm: wciiface.ScalingAlgorithmType(scaler.GetType()),
+			}
+		}
+		specs[name] = groupSpec
 	}
 	return &wciiface.WorkerControllerInstanceSpec{
 		ScalingGroupSpecs: specs,

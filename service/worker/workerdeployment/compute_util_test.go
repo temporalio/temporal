@@ -4,9 +4,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	computepb "go.temporal.io/api/compute/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
@@ -17,13 +19,14 @@ func TestBuildUpdatedComputeConfig_UpsertNewGroupToEmptyConfig(t *testing.T) {
 		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 		Provider:       &computepb.ComputeProvider{Type: "aws-lambda"},
 	}
-	args := &deploymentspb.UpdateVersionComputeConfigArgs{
+	args := &deploymentspb.UpdateComputeConfigArgs{
 		UpsertScalingGroups: map[string]*deploymentspb.ScalingGroupUpdate{
 			"group1": {ScalingGroup: sg},
 		},
 	}
 
-	result := buildUpdatedComputeConfig(nil, args)
+	result, err := buildUpdatedComputeConfig(nil, args)
+	require.NoError(t, err)
 
 	assert.Len(t, result.GetScalingGroups(), 1)
 	assert.True(t, result.GetScalingGroups()["group1"].Equal(sg))
@@ -36,7 +39,7 @@ func TestBuildUpdatedComputeConfig_UpsertNewGroupToExistingConfig(t *testing.T) 
 			"existing": {Provider: &computepb.ComputeProvider{Type: "existing-type"}},
 		},
 	}
-	args := &deploymentspb.UpdateVersionComputeConfigArgs{
+	args := &deploymentspb.UpdateComputeConfigArgs{
 		UpsertScalingGroups: map[string]*deploymentspb.ScalingGroupUpdate{
 			"new": {ScalingGroup: &computepb.ComputeConfigScalingGroup{
 				Provider: &computepb.ComputeProvider{Type: "new-type"},
@@ -44,7 +47,8 @@ func TestBuildUpdatedComputeConfig_UpsertNewGroupToExistingConfig(t *testing.T) 
 		},
 	}
 
-	result := buildUpdatedComputeConfig(existing, args)
+	result, err := buildUpdatedComputeConfig(existing, args)
+	require.NoError(t, err)
 
 	assert.Len(t, result.GetScalingGroups(), 2)
 	assert.Equal(t, "existing-type", result.GetScalingGroups()["existing"].GetProvider().GetType())
@@ -60,7 +64,7 @@ func TestBuildUpdatedComputeConfig_UpsertExistingGroupEmptyMask_NoOp(t *testing.
 			},
 		},
 	}
-	args := &deploymentspb.UpdateVersionComputeConfigArgs{
+	args := &deploymentspb.UpdateComputeConfigArgs{
 		UpsertScalingGroups: map[string]*deploymentspb.ScalingGroupUpdate{
 			"group1": {
 				ScalingGroup: &computepb.ComputeConfigScalingGroup{
@@ -71,7 +75,8 @@ func TestBuildUpdatedComputeConfig_UpsertExistingGroupEmptyMask_NoOp(t *testing.
 		},
 	}
 
-	result := buildUpdatedComputeConfig(existing, args)
+	result, err := buildUpdatedComputeConfig(existing, args)
+	require.NoError(t, err)
 
 	assert.Equal(t, "original", result.GetScalingGroups()["group1"].GetProvider().GetType())
 }
@@ -87,7 +92,7 @@ func TestBuildUpdatedComputeConfig_UpsertExistingGroupWithFieldMask(t *testing.T
 			},
 		},
 	}
-	args := &deploymentspb.UpdateVersionComputeConfigArgs{
+	args := &deploymentspb.UpdateComputeConfigArgs{
 		UpsertScalingGroups: map[string]*deploymentspb.ScalingGroupUpdate{
 			"group1": {
 				ScalingGroup: &computepb.ComputeConfigScalingGroup{
@@ -99,7 +104,8 @@ func TestBuildUpdatedComputeConfig_UpsertExistingGroupWithFieldMask(t *testing.T
 		},
 	}
 
-	result := buildUpdatedComputeConfig(existing, args)
+	result, err := buildUpdatedComputeConfig(existing, args)
+	require.NoError(t, err)
 
 	g := result.GetScalingGroups()["group1"]
 	assert.Equal(t, "new-provider", g.GetProvider().GetType())
@@ -115,11 +121,12 @@ func TestBuildUpdatedComputeConfig_RemoveExistingGroup(t *testing.T) {
 			"group2": {Provider: &computepb.ComputeProvider{Type: "type2"}},
 		},
 	}
-	args := &deploymentspb.UpdateVersionComputeConfigArgs{
+	args := &deploymentspb.UpdateComputeConfigArgs{
 		RemoveScalingGroups: []string{"group1"},
 	}
 
-	result := buildUpdatedComputeConfig(existing, args)
+	result, err := buildUpdatedComputeConfig(existing, args)
+	require.NoError(t, err)
 
 	assert.Len(t, result.GetScalingGroups(), 1)
 	assert.Nil(t, result.GetScalingGroups()["group1"])
@@ -133,11 +140,12 @@ func TestBuildUpdatedComputeConfig_RemoveNonExistentGroup_NoOp(t *testing.T) {
 			"group1": {Provider: &computepb.ComputeProvider{Type: "type1"}},
 		},
 	}
-	args := &deploymentspb.UpdateVersionComputeConfigArgs{
+	args := &deploymentspb.UpdateComputeConfigArgs{
 		RemoveScalingGroups: []string{"nonexistent"},
 	}
 
-	result := buildUpdatedComputeConfig(existing, args)
+	result, err := buildUpdatedComputeConfig(existing, args)
+	require.NoError(t, err)
 
 	assert.Len(t, result.GetScalingGroups(), 1)
 	assert.Equal(t, "type1", result.GetScalingGroups()["group1"].GetProvider().GetType())
@@ -151,7 +159,7 @@ func TestBuildUpdatedComputeConfig_CombinedUpsertAndRemove(t *testing.T) {
 			"remove": {Provider: &computepb.ComputeProvider{Type: "remove-type"}},
 		},
 	}
-	args := &deploymentspb.UpdateVersionComputeConfigArgs{
+	args := &deploymentspb.UpdateComputeConfigArgs{
 		UpsertScalingGroups: map[string]*deploymentspb.ScalingGroupUpdate{
 			"new": {ScalingGroup: &computepb.ComputeConfigScalingGroup{
 				Provider: &computepb.ComputeProvider{Type: "new-type"},
@@ -160,12 +168,53 @@ func TestBuildUpdatedComputeConfig_CombinedUpsertAndRemove(t *testing.T) {
 		RemoveScalingGroups: []string{"remove"},
 	}
 
-	result := buildUpdatedComputeConfig(existing, args)
+	result, err := buildUpdatedComputeConfig(existing, args)
+	require.NoError(t, err)
 
 	assert.Len(t, result.GetScalingGroups(), 2)
 	assert.Equal(t, "keep-type", result.GetScalingGroups()["keep"].GetProvider().GetType())
 	assert.Equal(t, "new-type", result.GetScalingGroups()["new"].GetProvider().GetType())
 	assert.Nil(t, result.GetScalingGroups()["remove"])
+}
+
+func TestBuildUpdatedComputeConfig_UpsertAndRemoveSameGroup(t *testing.T) {
+	t.Parallel()
+	existing := &computepb.ComputeConfig{
+		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+			"group1": {Provider: &computepb.ComputeProvider{Type: "original"}},
+		},
+	}
+	args := &deploymentspb.UpdateComputeConfigArgs{
+		UpsertScalingGroups: map[string]*deploymentspb.ScalingGroupUpdate{
+			"group1": {ScalingGroup: &computepb.ComputeConfigScalingGroup{
+				Provider: &computepb.ComputeProvider{Type: "upserted"},
+			}},
+		},
+		RemoveScalingGroups: []string{"group1"},
+	}
+
+	result, err := buildUpdatedComputeConfig(existing, args)
+	require.NoError(t, err)
+
+	assert.Empty(t, result.GetScalingGroups(), "remove should win over upsert")
+}
+
+func TestBuildUpdatedComputeConfig_RemoveAllGroups(t *testing.T) {
+	t.Parallel()
+	existing := &computepb.ComputeConfig{
+		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+			"group1": {Provider: &computepb.ComputeProvider{Type: "type1"}},
+			"group2": {Provider: &computepb.ComputeProvider{Type: "type2"}},
+		},
+	}
+	args := &deploymentspb.UpdateComputeConfigArgs{
+		RemoveScalingGroups: []string{"group1", "group2"},
+	}
+
+	result, err := buildUpdatedComputeConfig(existing, args)
+	require.NoError(t, err)
+
+	assert.Empty(t, result.GetScalingGroups())
 }
 
 func TestBuildUpdatedComputeConfig_DoesNotMutateOriginal(t *testing.T) {
@@ -175,7 +224,7 @@ func TestBuildUpdatedComputeConfig_DoesNotMutateOriginal(t *testing.T) {
 			"group1": {Provider: &computepb.ComputeProvider{Type: "original"}},
 		},
 	}
-	args := &deploymentspb.UpdateVersionComputeConfigArgs{
+	args := &deploymentspb.UpdateComputeConfigArgs{
 		UpsertScalingGroups: map[string]*deploymentspb.ScalingGroupUpdate{
 			"group1": {
 				ScalingGroup: &computepb.ComputeConfigScalingGroup{
@@ -186,14 +235,15 @@ func TestBuildUpdatedComputeConfig_DoesNotMutateOriginal(t *testing.T) {
 		},
 	}
 
-	buildUpdatedComputeConfig(existing, args)
+	_, err := buildUpdatedComputeConfig(existing, args)
+	require.NoError(t, err)
 
 	assert.Equal(t, "original", existing.GetScalingGroups()["group1"].GetProvider().GetType(), "original config should not be mutated")
 }
 
 func TestBuildUpdatedComputeConfig_NilCurrentConfig(t *testing.T) {
 	t.Parallel()
-	args := &deploymentspb.UpdateVersionComputeConfigArgs{
+	args := &deploymentspb.UpdateComputeConfigArgs{
 		UpsertScalingGroups: map[string]*deploymentspb.ScalingGroupUpdate{
 			"group1": {ScalingGroup: &computepb.ComputeConfigScalingGroup{
 				Provider: &computepb.ComputeProvider{Type: "new"},
@@ -201,7 +251,8 @@ func TestBuildUpdatedComputeConfig_NilCurrentConfig(t *testing.T) {
 		},
 	}
 
-	result := buildUpdatedComputeConfig(nil, args)
+	result, err := buildUpdatedComputeConfig(nil, args)
+	require.NoError(t, err)
 
 	assert.Len(t, result.GetScalingGroups(), 1)
 	assert.Equal(t, "new", result.GetScalingGroups()["group1"].GetProvider().GetType())
@@ -218,7 +269,8 @@ func TestApplyFieldMask_TaskQueueTypes(t *testing.T) {
 		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY},
 	}
 
-	applyFieldMask(dst, src, []string{"task_queue_types"})
+	err := applyFieldMask(dst, src, []string{"task_queue_types"})
+	require.NoError(t, err)
 
 	assert.Equal(t, []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY}, dst.TaskQueueTypes)
 }
@@ -233,7 +285,8 @@ func TestApplyFieldMask_TopLevelProvider(t *testing.T) {
 		Provider: &computepb.ComputeProvider{Type: "new", Details: &commonpb.Payload{Data: []byte("new-details")}},
 	}
 
-	applyFieldMask(dst, src, []string{"provider"})
+	err := applyFieldMask(dst, src, []string{"provider"})
+	require.NoError(t, err)
 
 	assert.Equal(t, "new", dst.Provider.Type)
 	assert.Equal(t, []byte("new-details"), dst.Provider.Details.Data)
@@ -250,7 +303,8 @@ func TestApplyFieldMask_TopLevelScaler(t *testing.T) {
 		Scaler: &computepb.ComputeScaler{Type: "new"},
 	}
 
-	applyFieldMask(dst, src, []string{"scaler"})
+	err := applyFieldMask(dst, src, []string{"scaler"})
+	require.NoError(t, err)
 
 	assert.Equal(t, "new", dst.Scaler.Type)
 	assert.Equal(t, "keep-me", dst.Provider.Type, "provider should be untouched")
@@ -268,7 +322,8 @@ func TestApplyFieldMask_NestedProviderType(t *testing.T) {
 		Provider: &computepb.ComputeProvider{Type: "new-type"},
 	}
 
-	applyFieldMask(dst, src, []string{"provider.type"})
+	err := applyFieldMask(dst, src, []string{"provider.type"})
+	require.NoError(t, err)
 
 	assert.Equal(t, "new-type", dst.Provider.Type)
 	assert.Equal(t, []byte("keep-details"), dst.Provider.Details.Data, "details should be preserved")
@@ -288,7 +343,8 @@ func TestApplyFieldMask_NestedProviderDetails(t *testing.T) {
 		},
 	}
 
-	applyFieldMask(dst, src, []string{"provider.details"})
+	err := applyFieldMask(dst, src, []string{"provider.details"})
+	require.NoError(t, err)
 
 	assert.Equal(t, "keep-type", dst.Provider.Type, "type should be preserved")
 	assert.Equal(t, []byte("new"), dst.Provider.Details.Data)
@@ -298,15 +354,16 @@ func TestApplyFieldMask_NestedProviderNexusEndpoint(t *testing.T) {
 	t.Parallel()
 	dst := &computepb.ComputeConfigScalingGroup{
 		Provider: &computepb.ComputeProvider{
-			Type:           "keep-type",
-			NexusEndpoint:  "old-endpoint",
+			Type:          "keep-type",
+			NexusEndpoint: "old-endpoint",
 		},
 	}
 	src := &computepb.ComputeConfigScalingGroup{
 		Provider: &computepb.ComputeProvider{NexusEndpoint: "new-endpoint"},
 	}
 
-	applyFieldMask(dst, src, []string{"provider.nexus_endpoint"})
+	err := applyFieldMask(dst, src, []string{"provider.nexus_endpoint"})
+	require.NoError(t, err)
 
 	assert.Equal(t, "keep-type", dst.Provider.Type, "type should be preserved")
 	assert.Equal(t, "new-endpoint", dst.Provider.NexusEndpoint)
@@ -324,7 +381,8 @@ func TestApplyFieldMask_NestedScalerType(t *testing.T) {
 		Scaler: &computepb.ComputeScaler{Type: "new-type"},
 	}
 
-	applyFieldMask(dst, src, []string{"scaler.type"})
+	err := applyFieldMask(dst, src, []string{"scaler.type"})
+	require.NoError(t, err)
 
 	assert.Equal(t, "new-type", dst.Scaler.Type)
 	assert.Equal(t, []byte("keep-details"), dst.Scaler.Details.Data, "details should be preserved")
@@ -344,7 +402,8 @@ func TestApplyFieldMask_NestedScalerDetails(t *testing.T) {
 		},
 	}
 
-	applyFieldMask(dst, src, []string{"scaler.details"})
+	err := applyFieldMask(dst, src, []string{"scaler.details"})
+	require.NoError(t, err)
 
 	assert.Equal(t, "keep-type", dst.Scaler.Type, "type should be preserved")
 	assert.Equal(t, []byte("new"), dst.Scaler.Details.Data)
@@ -357,13 +416,14 @@ func TestApplyFieldMask_NestedFieldOnNilParent(t *testing.T) {
 		Provider: &computepb.ComputeProvider{Type: "new-type"},
 	}
 
-	applyFieldMask(dst, src, []string{"provider.type"})
+	err := applyFieldMask(dst, src, []string{"provider.type"})
+	require.NoError(t, err)
 
 	assert.NotNil(t, dst.Provider, "provider should be initialized")
 	assert.Equal(t, "new-type", dst.Provider.Type)
 }
 
-func TestApplyFieldMask_UnknownPathIgnored(t *testing.T) {
+func TestApplyFieldMask_UnknownPathReturnsError(t *testing.T) {
 	t.Parallel()
 	dst := &computepb.ComputeConfigScalingGroup{
 		Provider: &computepb.ComputeProvider{Type: "original"},
@@ -372,8 +432,10 @@ func TestApplyFieldMask_UnknownPathIgnored(t *testing.T) {
 		Provider: &computepb.ComputeProvider{Type: "new"},
 	}
 
-	applyFieldMask(dst, src, []string{"unknown_field"})
+	err := applyFieldMask(dst, src, []string{"unknown_field"})
 
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported field mask path")
 	assert.Equal(t, "original", dst.Provider.Type, "nothing should change")
 }
 
@@ -390,9 +452,53 @@ func TestApplyFieldMask_MultiplePaths(t *testing.T) {
 		Scaler:         &computepb.ComputeScaler{Type: "new-scaler"},
 	}
 
-	applyFieldMask(dst, src, []string{"task_queue_types", "scaler"})
+	err := applyFieldMask(dst, src, []string{"task_queue_types", "scaler"})
+	require.NoError(t, err)
 
 	assert.Equal(t, []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY}, dst.TaskQueueTypes)
 	assert.Equal(t, "old-provider", dst.Provider.Type, "provider should be untouched")
 	assert.Equal(t, "new-scaler", dst.Scaler.Type)
+}
+
+// computeConfigScalingGroupsToWCISpec tests
+
+func TestComputeConfigScalingGroupsToWCISpec_EmptyGroups(t *testing.T) {
+	t.Parallel()
+	result := computeConfigScalingGroupsToWCISpec(nil)
+	assert.NotNil(t, result)
+	assert.Empty(t, result.ScalingGroupSpecs)
+
+	result = computeConfigScalingGroupsToWCISpec(map[string]*computepb.ComputeConfigScalingGroup{})
+	assert.NotNil(t, result)
+	assert.Empty(t, result.ScalingGroupSpecs)
+}
+
+func TestComputeConfigScalingGroupsToWCISpec_WithComputeAndScaling(t *testing.T) {
+	t.Parallel()
+	groups := map[string]*computepb.ComputeConfigScalingGroup{
+		"group1": {
+			TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+			Provider:       &computepb.ComputeProvider{Type: "aws-lambda"},
+			Scaler:         &computepb.ComputeScaler{Type: "rate-based"},
+		},
+		"group2": {
+			TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+			Provider:       &computepb.ComputeProvider{Type: "aws-ecs"},
+		},
+	}
+
+	result := computeConfigScalingGroupsToWCISpec(groups)
+
+	assert.Len(t, result.ScalingGroupSpecs, 2)
+
+	g1 := result.ScalingGroupSpecs["group1"]
+	assert.Equal(t, []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW}, g1.TaskTypes)
+	assert.Equal(t, wciiface.ComputeProviderType("aws-lambda"), g1.Compute.ProviderType)
+	assert.NotNil(t, g1.Scaling)
+	assert.Equal(t, wciiface.ScalingAlgorithmType("rate-based"), g1.Scaling.ScalingAlgorithm)
+
+	g2 := result.ScalingGroupSpecs["group2"]
+	assert.Equal(t, []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY}, g2.TaskTypes)
+	assert.Equal(t, wciiface.ComputeProviderType("aws-ecs"), g2.Compute.ProviderType)
+	assert.Nil(t, g2.Scaling, "no scaler means nil scaling spec")
 }

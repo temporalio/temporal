@@ -3483,7 +3483,7 @@ func (x *WorkerDeploymentSummary) GetRampingVersionSummary() *v11.WorkerDeployme
 	return nil
 }
 
-// used as activity input for validating compute config scaling groups via
+// Input for the activity that validates compute config scaling groups via
 // the Worker Controller Instance client.
 type ValidateWorkerControllerInstanceSpecInput struct {
 	state         protoimpl.MessageState                    `protogen:"open.v1"`
@@ -3529,33 +3529,33 @@ func (x *ValidateWorkerControllerInstanceSpecInput) GetScalingGroups() map[strin
 	return nil
 }
 
-// used as Worker Deployment Version workflow update input:
-type UpdateVersionComputeConfigArgs struct {
+// Input for the UpdateComputeConfig workflow update on a version workflow.
+type UpdateComputeConfigArgs struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Identity  string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
 	RequestId string                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	// Scaling groups to add or update.
 	UpsertScalingGroups map[string]*ScalingGroupUpdate `protobuf:"bytes,3,rep,name=upsert_scaling_groups,json=upsertScalingGroups,proto3" json:"upsert_scaling_groups,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Names of scaling groups to remove.
+	// Names of scaling groups to remove. Names that don't match an existing group are ignored.
 	RemoveScalingGroups []string `protobuf:"bytes,4,rep,name=remove_scaling_groups,json=removeScalingGroups,proto3" json:"remove_scaling_groups,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
 
-func (x *UpdateVersionComputeConfigArgs) Reset() {
-	*x = UpdateVersionComputeConfigArgs{}
+func (x *UpdateComputeConfigArgs) Reset() {
+	*x = UpdateComputeConfigArgs{}
 	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *UpdateVersionComputeConfigArgs) String() string {
+func (x *UpdateComputeConfigArgs) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*UpdateVersionComputeConfigArgs) ProtoMessage() {}
+func (*UpdateComputeConfigArgs) ProtoMessage() {}
 
-func (x *UpdateVersionComputeConfigArgs) ProtoReflect() protoreflect.Message {
+func (x *UpdateComputeConfigArgs) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3567,33 +3567,33 @@ func (x *UpdateVersionComputeConfigArgs) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateVersionComputeConfigArgs.ProtoReflect.Descriptor instead.
-func (*UpdateVersionComputeConfigArgs) Descriptor() ([]byte, []int) {
+// Deprecated: Use UpdateComputeConfigArgs.ProtoReflect.Descriptor instead.
+func (*UpdateComputeConfigArgs) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{53}
 }
 
-func (x *UpdateVersionComputeConfigArgs) GetIdentity() string {
+func (x *UpdateComputeConfigArgs) GetIdentity() string {
 	if x != nil {
 		return x.Identity
 	}
 	return ""
 }
 
-func (x *UpdateVersionComputeConfigArgs) GetRequestId() string {
+func (x *UpdateComputeConfigArgs) GetRequestId() string {
 	if x != nil {
 		return x.RequestId
 	}
 	return ""
 }
 
-func (x *UpdateVersionComputeConfigArgs) GetUpsertScalingGroups() map[string]*ScalingGroupUpdate {
+func (x *UpdateComputeConfigArgs) GetUpsertScalingGroups() map[string]*ScalingGroupUpdate {
 	if x != nil {
 		return x.UpsertScalingGroups
 	}
 	return nil
 }
 
-func (x *UpdateVersionComputeConfigArgs) GetRemoveScalingGroups() []string {
+func (x *UpdateComputeConfigArgs) GetRemoveScalingGroups() []string {
 	if x != nil {
 		return x.RemoveScalingGroups
 	}
@@ -3652,27 +3652,27 @@ func (x *ScalingGroupUpdate) GetUpdateMask() *fieldmaskpb.FieldMask {
 	return nil
 }
 
-// used as Worker Deployment Version workflow update response:
-type UpdateVersionComputeConfigResponse struct {
+// Response for the UpdateComputeConfig workflow update on a version workflow.
+type UpdateComputeConfigResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *UpdateVersionComputeConfigResponse) Reset() {
-	*x = UpdateVersionComputeConfigResponse{}
+func (x *UpdateComputeConfigResponse) Reset() {
+	*x = UpdateComputeConfigResponse{}
 	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *UpdateVersionComputeConfigResponse) String() string {
+func (x *UpdateComputeConfigResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*UpdateVersionComputeConfigResponse) ProtoMessage() {}
+func (*UpdateComputeConfigResponse) ProtoMessage() {}
 
-func (x *UpdateVersionComputeConfigResponse) ProtoReflect() protoreflect.Message {
+func (x *UpdateComputeConfigResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3684,8 +3684,8 @@ func (x *UpdateVersionComputeConfigResponse) ProtoReflect() protoreflect.Message
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateVersionComputeConfigResponse.ProtoReflect.Descriptor instead.
-func (*UpdateVersionComputeConfigResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use UpdateComputeConfigResponse.ProtoReflect.Descriptor instead.
+func (*UpdateComputeConfigResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{55}
 }
 
@@ -4222,12 +4222,12 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x0escaling_groups\x18\x01 \x03(\v2_.temporal.server.api.deployment.v1.ValidateWorkerControllerInstanceSpecInput.ScalingGroupsEntryR\rscalingGroups\x1at\n" +
 	"\x12ScalingGroupsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12H\n" +
-	"\x05value\x18\x02 \x01(\v22.temporal.api.compute.v1.ComputeConfigScalingGroupR\x05value:\x028\x01\"\x9f\x03\n" +
-	"\x1eUpdateVersionComputeConfigArgs\x12\x1a\n" +
+	"\x05value\x18\x02 \x01(\v22.temporal.api.compute.v1.ComputeConfigScalingGroupR\x05value:\x028\x01\"\x91\x03\n" +
+	"\x17UpdateComputeConfigArgs\x12\x1a\n" +
 	"\bidentity\x18\x01 \x01(\tR\bidentity\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x02 \x01(\tR\trequestId\x12\x8e\x01\n" +
-	"\x15upsert_scaling_groups\x18\x03 \x03(\v2Z.temporal.server.api.deployment.v1.UpdateVersionComputeConfigArgs.UpsertScalingGroupsEntryR\x13upsertScalingGroups\x122\n" +
+	"request_id\x18\x02 \x01(\tR\trequestId\x12\x87\x01\n" +
+	"\x15upsert_scaling_groups\x18\x03 \x03(\v2S.temporal.server.api.deployment.v1.UpdateComputeConfigArgs.UpsertScalingGroupsEntryR\x13upsertScalingGroups\x122\n" +
 	"\x15remove_scaling_groups\x18\x04 \x03(\tR\x13removeScalingGroups\x1a}\n" +
 	"\x18UpsertScalingGroupsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12K\n" +
@@ -4235,8 +4235,8 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x12ScalingGroupUpdate\x12W\n" +
 	"\rscaling_group\x18\x01 \x01(\v22.temporal.api.compute.v1.ComputeConfigScalingGroupR\fscalingGroup\x12;\n" +
 	"\vupdate_mask\x18\x02 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
-	"updateMask\"$\n" +
-	"\"UpdateVersionComputeConfigResponse\"\x84\x01\n" +
+	"updateMask\"\x1d\n" +
+	"\x1bUpdateComputeConfigResponse\"\x84\x01\n" +
 	"\x1cForceCANDeploymentSignalArgs\x12d\n" +
 	"\x0eoverride_state\x18\x01 \x01(\v2=.temporal.server.api.deployment.v1.WorkerDeploymentLocalStateR\roverrideState\"x\n" +
 	"\x19ForceCANVersionSignalArgs\x12[\n" +
@@ -4309,9 +4309,9 @@ var file_temporal_server_api_deployment_v1_message_proto_goTypes = []any{
 	(*WorkerDeploymentWorkflowMemo)(nil),                      // 50: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo
 	(*WorkerDeploymentSummary)(nil),                           // 51: temporal.server.api.deployment.v1.WorkerDeploymentSummary
 	(*ValidateWorkerControllerInstanceSpecInput)(nil),         // 52: temporal.server.api.deployment.v1.ValidateWorkerControllerInstanceSpecInput
-	(*UpdateVersionComputeConfigArgs)(nil),                    // 53: temporal.server.api.deployment.v1.UpdateVersionComputeConfigArgs
+	(*UpdateComputeConfigArgs)(nil),                           // 53: temporal.server.api.deployment.v1.UpdateComputeConfigArgs
 	(*ScalingGroupUpdate)(nil),                                // 54: temporal.server.api.deployment.v1.ScalingGroupUpdate
-	(*UpdateVersionComputeConfigResponse)(nil),                // 55: temporal.server.api.deployment.v1.UpdateVersionComputeConfigResponse
+	(*UpdateComputeConfigResponse)(nil),                       // 55: temporal.server.api.deployment.v1.UpdateComputeConfigResponse
 	(*ForceCANDeploymentSignalArgs)(nil),                      // 56: temporal.server.api.deployment.v1.ForceCANDeploymentSignalArgs
 	(*ForceCANVersionSignalArgs)(nil),                         // 57: temporal.server.api.deployment.v1.ForceCANVersionSignalArgs
 	nil,                                                       // 58: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamiliesEntry
@@ -4327,7 +4327,7 @@ var file_temporal_server_api_deployment_v1_message_proto_goTypes = []any{
 	nil, // 68: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueuesAndTypesEntry
 	(*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes)(nil), // 69: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueueTypes
 	nil,                                   // 70: temporal.server.api.deployment.v1.ValidateWorkerControllerInstanceSpecInput.ScalingGroupsEntry
-	nil,                                   // 71: temporal.server.api.deployment.v1.UpdateVersionComputeConfigArgs.UpsertScalingGroupsEntry
+	nil,                                   // 71: temporal.server.api.deployment.v1.UpdateComputeConfigArgs.UpsertScalingGroupsEntry
 	(*timestamppb.Timestamp)(nil),         // 72: google.protobuf.Timestamp
 	(v1.WorkerDeploymentVersionStatus)(0), // 73: temporal.api.enums.v1.WorkerDeploymentVersionStatus
 	(*v11.VersionDrainageInfo)(nil),       // 74: temporal.api.deployment.v1.VersionDrainageInfo
@@ -4424,7 +4424,7 @@ var file_temporal_server_api_deployment_v1_message_proto_depIdxs = []int32{
 	81, // 78: temporal.server.api.deployment.v1.WorkerDeploymentSummary.current_version_summary:type_name -> temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary
 	81, // 79: temporal.server.api.deployment.v1.WorkerDeploymentSummary.ramping_version_summary:type_name -> temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary
 	70, // 80: temporal.server.api.deployment.v1.ValidateWorkerControllerInstanceSpecInput.scaling_groups:type_name -> temporal.server.api.deployment.v1.ValidateWorkerControllerInstanceSpecInput.ScalingGroupsEntry
-	71, // 81: temporal.server.api.deployment.v1.UpdateVersionComputeConfigArgs.upsert_scaling_groups:type_name -> temporal.server.api.deployment.v1.UpdateVersionComputeConfigArgs.UpsertScalingGroupsEntry
+	71, // 81: temporal.server.api.deployment.v1.UpdateComputeConfigArgs.upsert_scaling_groups:type_name -> temporal.server.api.deployment.v1.UpdateComputeConfigArgs.UpsertScalingGroupsEntry
 	82, // 82: temporal.server.api.deployment.v1.ScalingGroupUpdate.scaling_group:type_name -> temporal.api.compute.v1.ComputeConfigScalingGroup
 	83, // 83: temporal.server.api.deployment.v1.ScalingGroupUpdate.update_mask:type_name -> google.protobuf.FieldMask
 	7,  // 84: temporal.server.api.deployment.v1.ForceCANDeploymentSignalArgs.override_state:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentLocalState
@@ -4440,7 +4440,7 @@ var file_temporal_server_api_deployment_v1_message_proto_depIdxs = []int32{
 	69, // 94: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueuesAndTypesEntry.value:type_name -> temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueueTypes
 	79, // 95: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueueTypes.types:type_name -> temporal.api.enums.v1.TaskQueueType
 	82, // 96: temporal.server.api.deployment.v1.ValidateWorkerControllerInstanceSpecInput.ScalingGroupsEntry.value:type_name -> temporal.api.compute.v1.ComputeConfigScalingGroup
-	54, // 97: temporal.server.api.deployment.v1.UpdateVersionComputeConfigArgs.UpsertScalingGroupsEntry.value:type_name -> temporal.server.api.deployment.v1.ScalingGroupUpdate
+	54, // 97: temporal.server.api.deployment.v1.UpdateComputeConfigArgs.UpsertScalingGroupsEntry.value:type_name -> temporal.server.api.deployment.v1.ScalingGroupUpdate
 	98, // [98:98] is the sub-list for method output_type
 	98, // [98:98] is the sub-list for method input_type
 	98, // [98:98] is the sub-list for extension type_name

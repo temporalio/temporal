@@ -2241,7 +2241,7 @@ func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_Success() {
 	s.env.OnActivity(a.ValidateWorkerControllerInstanceSpec, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
-		args := &deploymentspb.UpdateVersionComputeConfigArgs{
+		args := &deploymentspb.UpdateComputeConfigArgs{
 			Identity:  tv.ClientIdentity(),
 			RequestId: "req-1",
 			UpsertScalingGroups: map[string]*deploymentspb.ScalingGroupUpdate{
@@ -2314,7 +2314,7 @@ func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_RejectedWhenDeleted() {
 		}, &deploymentspb.DeleteVersionArgs{
 			SkipDrainage: true,
 		})
-		args := &deploymentspb.UpdateVersionComputeConfigArgs{
+		args := &deploymentspb.UpdateComputeConfigArgs{
 			Identity:  tv.ClientIdentity(),
 			RequestId: "req-1",
 			UpsertScalingGroups: map[string]*deploymentspb.ScalingGroupUpdate{
@@ -2362,7 +2362,7 @@ func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_ValidationFailure_DoesNo
 	).Once()
 
 	s.env.RegisterDelayedCallback(func() {
-		args := &deploymentspb.UpdateVersionComputeConfigArgs{
+		args := &deploymentspb.UpdateComputeConfigArgs{
 			Identity:  tv.ClientIdentity(),
 			RequestId: "req-1",
 			UpsertScalingGroups: map[string]*deploymentspb.ScalingGroupUpdate{

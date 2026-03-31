@@ -1966,35 +1966,35 @@ func (this *ValidateWorkerControllerInstanceSpecInput) Equal(that interface{}) b
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type UpdateVersionComputeConfigArgs to the protobuf v3 wire format
-func (val *UpdateVersionComputeConfigArgs) Marshal() ([]byte, error) {
+// Marshal an object of type UpdateComputeConfigArgs to the protobuf v3 wire format
+func (val *UpdateComputeConfigArgs) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type UpdateVersionComputeConfigArgs from the protobuf v3 wire format
-func (val *UpdateVersionComputeConfigArgs) Unmarshal(buf []byte) error {
+// Unmarshal an object of type UpdateComputeConfigArgs from the protobuf v3 wire format
+func (val *UpdateComputeConfigArgs) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *UpdateVersionComputeConfigArgs) Size() int {
+func (val *UpdateComputeConfigArgs) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two UpdateVersionComputeConfigArgs values are equivalent by recursively
+// Equal returns whether two UpdateComputeConfigArgs values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *UpdateVersionComputeConfigArgs) Equal(that interface{}) bool {
+func (this *UpdateComputeConfigArgs) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *UpdateVersionComputeConfigArgs
+	var that1 *UpdateComputeConfigArgs
 	switch t := that.(type) {
-	case *UpdateVersionComputeConfigArgs:
+	case *UpdateComputeConfigArgs:
 		that1 = t
-	case UpdateVersionComputeConfigArgs:
+	case UpdateComputeConfigArgs:
 		that1 = &t
 	default:
 		return false
@@ -2040,35 +2040,35 @@ func (this *ScalingGroupUpdate) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type UpdateVersionComputeConfigResponse to the protobuf v3 wire format
-func (val *UpdateVersionComputeConfigResponse) Marshal() ([]byte, error) {
+// Marshal an object of type UpdateComputeConfigResponse to the protobuf v3 wire format
+func (val *UpdateComputeConfigResponse) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type UpdateVersionComputeConfigResponse from the protobuf v3 wire format
-func (val *UpdateVersionComputeConfigResponse) Unmarshal(buf []byte) error {
+// Unmarshal an object of type UpdateComputeConfigResponse from the protobuf v3 wire format
+func (val *UpdateComputeConfigResponse) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *UpdateVersionComputeConfigResponse) Size() int {
+func (val *UpdateComputeConfigResponse) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two UpdateVersionComputeConfigResponse values are equivalent by recursively
+// Equal returns whether two UpdateComputeConfigResponse values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *UpdateVersionComputeConfigResponse) Equal(that interface{}) bool {
+func (this *UpdateComputeConfigResponse) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *UpdateVersionComputeConfigResponse
+	var that1 *UpdateComputeConfigResponse
 	switch t := that.(type) {
-	case *UpdateVersionComputeConfigResponse:
+	case *UpdateComputeConfigResponse:
 		that1 = t
-	case UpdateVersionComputeConfigResponse:
+	case UpdateComputeConfigResponse:
 		that1 = &t
 	default:
 		return false

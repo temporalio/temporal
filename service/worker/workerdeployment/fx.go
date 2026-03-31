@@ -41,12 +41,12 @@ type (
 
 	activityDeps struct {
 		fx.In
-		MetricsHandler              metrics.Handler
-		Logger                      log.Logger
-		ClientFactory               sdk.ClientFactory
-		MatchingClient              resource.MatchingClient
-		HistoryClient               resource.HistoryClient
-		WorkerDeploymentClient      Client
+		MetricsHandler                 metrics.Handler
+		Logger                         log.Logger
+		ClientFactory                  sdk.ClientFactory
+		MatchingClient                 resource.MatchingClient
+		HistoryClient                  resource.HistoryClient
+		WorkerDeploymentClient         Client
 		WorkerControllerInstanceClient wciclient.Client
 	}
 
