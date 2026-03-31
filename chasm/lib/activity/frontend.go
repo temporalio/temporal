@@ -465,7 +465,7 @@ func (h *frontendHandler) PauseActivityExecution(
 	ctx context.Context,
 	req *workflowservice.PauseActivityExecutionRequest,
 ) (*workflowservice.PauseActivityExecutionResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
+	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
 		return nil, ErrStandaloneActivityDisabled
 	}
 
@@ -488,7 +488,7 @@ func (h *frontendHandler) UnpauseActivityExecution(
 	ctx context.Context,
 	req *workflowservice.UnpauseActivityExecutionRequest,
 ) (*workflowservice.UnpauseActivityExecutionResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
+	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
 		return nil, ErrStandaloneActivityDisabled
 	}
 
@@ -511,7 +511,7 @@ func (h *frontendHandler) ResetActivityExecution(
 	ctx context.Context,
 	req *workflowservice.ResetActivityExecutionRequest,
 ) (*workflowservice.ResetActivityExecutionResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
+	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
 		return nil, ErrStandaloneActivityDisabled
 	}
 
@@ -534,7 +534,7 @@ func (h *frontendHandler) UpdateActivityExecutionOptions(
 	ctx context.Context,
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
 ) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
+	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
 		return nil, ErrStandaloneActivityDisabled
 	}
 
