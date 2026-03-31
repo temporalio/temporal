@@ -239,20 +239,11 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionComputeConfig(
 		requestID = uuid.NewString()
 	}
 
-	// Convert API scaling group updates to internal proto type.
-	upsertScalingGroups := make(map[string]*deploymentspb.ScalingGroupUpdate, len(request.GetComputeConfigScalingGroups()))
-	for name, apiUpdate := range request.GetComputeConfigScalingGroups() {
-		upsertScalingGroups[name] = &deploymentspb.ScalingGroupUpdate{
-			ScalingGroup: apiUpdate.GetScalingGroup(),
-			UpdateMask:   apiUpdate.GetUpdateMask(),
-		}
-	}
-
 	err = wh.workerDeploymentClient.UpdateVersionComputeConfig(
 		ctx,
 		namespaceEntry,
 		request.GetDeploymentVersion(),
-		upsertScalingGroups,
+		request.GetComputeConfigScalingGroups(),
 		request.GetRemoveComputeConfigScalingGroups(),
 		request.Identity,
 		requestID,
@@ -287,20 +278,11 @@ func (wh *WorkflowHandler) ValidateWorkerDeploymentVersionComputeConfig(
 		return nil, err
 	}
 
-	// Convert API scaling group updates to internal proto type.
-	upsertScalingGroups := make(map[string]*deploymentspb.ScalingGroupUpdate, len(request.GetComputeConfigScalingGroups()))
-	for name, apiUpdate := range request.GetComputeConfigScalingGroups() {
-		upsertScalingGroups[name] = &deploymentspb.ScalingGroupUpdate{
-			ScalingGroup: apiUpdate.GetScalingGroup(),
-			UpdateMask:   apiUpdate.GetUpdateMask(),
-		}
-	}
-
 	err = wh.workerDeploymentClient.ValidateComputeConfig(
 		ctx,
 		namespaceEntry,
 		request.GetDeploymentVersion(),
-		upsertScalingGroups,
+		request.GetComputeConfigScalingGroups(),
 		request.GetRemoveComputeConfigScalingGroups(),
 		request.Identity,
 	)

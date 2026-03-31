@@ -1929,43 +1929,6 @@ func (this *WorkerDeploymentSummary) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type ValidateWorkerControllerInstanceSpecInput to the protobuf v3 wire format
-func (val *ValidateWorkerControllerInstanceSpecInput) Marshal() ([]byte, error) {
-	return proto.Marshal(val)
-}
-
-// Unmarshal an object of type ValidateWorkerControllerInstanceSpecInput from the protobuf v3 wire format
-func (val *ValidateWorkerControllerInstanceSpecInput) Unmarshal(buf []byte) error {
-	return proto.Unmarshal(buf, val)
-}
-
-// Size returns the size of the object, in bytes, once serialized
-func (val *ValidateWorkerControllerInstanceSpecInput) Size() int {
-	return proto.Size(val)
-}
-
-// Equal returns whether two ValidateWorkerControllerInstanceSpecInput values are equivalent by recursively
-// comparing the message's fields.
-// For more information see the documentation for
-// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *ValidateWorkerControllerInstanceSpecInput) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	var that1 *ValidateWorkerControllerInstanceSpecInput
-	switch t := that.(type) {
-	case *ValidateWorkerControllerInstanceSpecInput:
-		that1 = t
-	case ValidateWorkerControllerInstanceSpecInput:
-		that1 = &t
-	default:
-		return false
-	}
-
-	return proto.Equal(this, that1)
-}
-
 // Marshal an object of type UpdateWorkerControllerInstanceInput to the protobuf v3 wire format
 func (val *UpdateWorkerControllerInstanceInput) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -2069,43 +2032,6 @@ func (this *UpdateVersionComputeConfigArgs) Equal(that interface{}) bool {
 	case *UpdateVersionComputeConfigArgs:
 		that1 = t
 	case UpdateVersionComputeConfigArgs:
-		that1 = &t
-	default:
-		return false
-	}
-
-	return proto.Equal(this, that1)
-}
-
-// Marshal an object of type ScalingGroupUpdate to the protobuf v3 wire format
-func (val *ScalingGroupUpdate) Marshal() ([]byte, error) {
-	return proto.Marshal(val)
-}
-
-// Unmarshal an object of type ScalingGroupUpdate from the protobuf v3 wire format
-func (val *ScalingGroupUpdate) Unmarshal(buf []byte) error {
-	return proto.Unmarshal(buf, val)
-}
-
-// Size returns the size of the object, in bytes, once serialized
-func (val *ScalingGroupUpdate) Size() int {
-	return proto.Size(val)
-}
-
-// Equal returns whether two ScalingGroupUpdate values are equivalent by recursively
-// comparing the message's fields.
-// For more information see the documentation for
-// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *ScalingGroupUpdate) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	var that1 *ScalingGroupUpdate
-	switch t := that.(type) {
-	case *ScalingGroupUpdate:
-		that1 = t
-	case ScalingGroupUpdate:
 		that1 = &t
 	default:
 		return false

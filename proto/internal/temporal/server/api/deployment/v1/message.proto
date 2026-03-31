@@ -7,7 +7,6 @@ option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/enums/v1/deployment.proto";
 import "temporal/api/compute/v1/config.proto";
-import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
@@ -558,12 +557,6 @@ message WorkerDeploymentSummary {
     temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary ramping_version_summary = 6;
 }
 
-// used as activity input for validating compute config scaling groups via
-// the Worker Controller Instance client.
-message ValidateWorkerControllerInstanceSpecInput {
-    map<string, temporal.api.compute.v1.ComputeConfigScalingGroup> scaling_groups = 1;
-}
-
 // used as activity input for creating or updating a Worker Controller Instance
 // via the WCI client.
 message UpdateWorkerControllerInstanceInput {
@@ -584,14 +577,9 @@ message UpdateVersionComputeConfigArgs {
     string identity = 1;
     string request_id = 2;
     // Scaling groups to add or update.
-    map<string, ScalingGroupUpdate> upsert_scaling_groups = 3;
+    map<string, temporal.api.compute.v1.ComputeConfigScalingGroupUpdate> upsert_scaling_groups = 3;
     // Names of scaling groups to remove.
     repeated string remove_scaling_groups = 4;
-}
-
-message ScalingGroupUpdate {
-    temporal.api.compute.v1.ComputeConfigScalingGroup scaling_group = 1;
-    google.protobuf.FieldMask update_mask = 2;
 }
 
 // used as Worker Deployment Version workflow update response:
