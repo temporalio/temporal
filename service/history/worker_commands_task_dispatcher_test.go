@@ -33,7 +33,7 @@ func testWorkerCommandsTask() *tasks.WorkerCommandsTask {
 	}
 }
 
-func requireDispatchOutcome(t *testing.T, snap map[string][]*metricstest.CapturedRecording, expectedOutcome string) {
+func requireMetricValue(t *testing.T, snap map[string][]*metricstest.CapturedRecording, expectedOutcome string) {
 	t.Helper()
 	recordings := snap[metrics.WorkerCommandsSent.Name()]
 	require.Len(t, recordings, 1, "expected exactly 1 dispatch metric recording")
@@ -102,7 +102,7 @@ func TestExecute_DispatchSuccess(t *testing.T) {
 	err := d.execute(context.Background(), task)
 	require.NoError(t, err)
 
-	requireDispatchOutcome(t, capture.Snapshot(), "success")
+	requireMetricValue(t, capture.Snapshot(), "success")
 }
 
 func TestExecute_DispatchRPCError(t *testing.T) {
@@ -129,7 +129,7 @@ func TestExecute_DispatchRPCError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "connection refused")
 
-	requireDispatchOutcome(t, capture.Snapshot(), "rpc_error")
+	requireMetricValue(t, capture.Snapshot(), "rpc_error")
 }
 
 func TestExecute_UpstreamTimeout(t *testing.T) {
@@ -163,7 +163,7 @@ func TestExecute_UpstreamTimeout(t *testing.T) {
 	require.ErrorAs(t, err, &he)
 	assert.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, he.Type)
 
-	requireDispatchOutcome(t, capture.Snapshot(), "no_poller")
+	requireMetricValue(t, capture.Snapshot(), "no_poller")
 }
 
 func TestHandleError_OperationError_ReturnNil(t *testing.T) {
@@ -184,7 +184,7 @@ func TestHandleError_OperationError_ReturnNil(t *testing.T) {
 	err := d.handleError(opErr, task)
 	require.NoError(t, err, "operation errors are permanent and should be swallowed")
 
-	requireDispatchOutcome(t, capture.Snapshot(), "operation_error")
+	requireMetricValue(t, capture.Snapshot(), "operation_error")
 }
 
 func TestHandleError_UpstreamTimeout_ReturnRetryable(t *testing.T) {
@@ -206,7 +206,7 @@ func TestHandleError_UpstreamTimeout_ReturnRetryable(t *testing.T) {
 	require.ErrorAs(t, err, &he)
 	assert.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, he.Type)
 
-	requireDispatchOutcome(t, capture.Snapshot(), "no_poller")
+	requireMetricValue(t, capture.Snapshot(), "no_poller")
 }
 
 func TestHandleError_OtherHandlerError_ReturnRetryable(t *testing.T) {
@@ -224,5 +224,5 @@ func TestHandleError_OtherHandlerError_ReturnRetryable(t *testing.T) {
 	err := d.handleError(handlerErr, task)
 	require.Error(t, err, "transport errors should be retried")
 
-	requireDispatchOutcome(t, capture.Snapshot(), "transport_error")
+	requireMetricValue(t, capture.Snapshot(), "transport_error")
 }
