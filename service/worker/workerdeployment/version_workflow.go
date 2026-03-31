@@ -82,7 +82,7 @@ func VersionWorkflow(
 		a:       nil,
 		logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", versionWorkflowArgs.NamespaceName),
 		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": versionWorkflowArgs.NamespaceName}),
-		lock: workflow.NewMutex(ctx),
+		lock:    workflow.NewMutex(ctx),
 		// Compute config is independent from version status and routing info so it has its own lock.
 		// Lock ordering: always acquire `lock` before `computeConfigLock`.
 		computeConfigLock:                 workflow.NewMutex(ctx),

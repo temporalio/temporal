@@ -1,9 +1,8 @@
 package workerdeployment
 
 import (
-	"go.temporal.io/api/serviceerror"
-
 	computepb "go.temporal.io/api/compute/v1"
+	"go.temporal.io/api/serviceerror"
 	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
