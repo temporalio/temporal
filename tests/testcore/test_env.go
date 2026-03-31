@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -70,9 +71,11 @@ type TestEnv struct {
 	tv         *testvars.TestVars
 	ctx        context.Context
 
-	sdkClient       sdkclient.Client
-	worker          sdkworker.Worker
-	workerTaskQueue string
+	sdkClientOnce sync.Once
+	sdkClient     sdkclient.Client
+	sdkWorkerOnce sync.Once
+	sdkWorker     sdkworker.Worker
+	sdkWorkerTQ   string
 }
 
 type TestOption func(*testOptions)
@@ -81,7 +84,6 @@ type testOptions struct {
 	dedicatedCluster      bool
 	dynamicConfigSettings []dynamicConfigOverride
 	timeout               time.Duration
-	sdkWorker             bool
 }
 
 type dynamicConfigOverride struct {
@@ -97,11 +99,9 @@ func WithDedicatedCluster() TestOption {
 	}
 }
 
-// WithSdkWorker sets up an SDK client and worker for the test.
-// Cleanup is handled automatically via t.Cleanup().
+// Deprecated: this option is no longer required and will be removed once all callers have been updated.
 func WithSdkWorker() TestOption {
 	return func(o *testOptions) {
-		o.sdkWorker = true
 	}
 }
 
@@ -178,6 +178,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		t:                  t,
 		tv:                 testvars.New(t),
 		ctx:                setupTestTimeoutWithContext(t, options.timeout),
+		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 	}
 
 	// For shared clusters, apply all dynamic config settings as overrides.
@@ -185,10 +186,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		for _, override := range options.dynamicConfigSettings {
 			env.OverrideDynamicConfig(override.setting, override.value)
 		}
-	}
-
-	if options.sdkWorker {
-		env.setupSdk()
 	}
 
 	return env
@@ -248,64 +245,52 @@ func (e *TestEnv) Context() context.Context {
 	return e.ctx
 }
 
-// SdkClient returns the SDK client created by WithSdkWorker.
-// Panics if WithSdkWorker was not passed to NewEnv.
+// SdkClient returns the SDK client. It is lazily initialized on the first call.
 func (e *TestEnv) SdkClient() sdkclient.Client {
-	if e.sdkClient == nil {
-		panic("SdkClient() requires WithSdkWorker option to be passed to NewEnv")
-	}
+	e.sdkClientOnce.Do(func() {
+		clientOptions := sdkclient.Options{
+			HostPort:  e.FrontendGRPCAddress(),
+			Namespace: e.nsName.String(),
+			Logger:    log.NewSdkLogger(e.Logger),
+		}
+
+		if provider := e.cluster.host.tlsConfigProvider; provider != nil {
+			clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
+		}
+
+		if interceptor := e.cluster.host.grpcClientInterceptor; interceptor != nil {
+			clientOptions.ConnectionOptions.DialOptions = []grpc.DialOption{
+				grpc.WithUnaryInterceptor(interceptor.Unary()),
+				grpc.WithStreamInterceptor(interceptor.Stream()),
+			}
+		}
+
+		var err error
+		e.sdkClient, err = sdkclient.Dial(clientOptions)
+		if err != nil {
+			e.t.Fatalf("Failed to create SDK client: %v", err)
+		}
+		e.t.Cleanup(func() { e.sdkClient.Close() })
+	})
 	return e.sdkClient
 }
 
-// SdkWorker returns the SDK worker created by WithSdkWorker.
-// Panics if WithSdkWorker was not passed to NewEnv.
+// SdkWorker returns the SDK worker. It is lazily initialized on the first call.
 func (e *TestEnv) SdkWorker() sdkworker.Worker {
-	if e.worker == nil {
-		panic("SdkWorker() requires WithSdkWorker option to be passed to NewEnv")
-	}
-	return e.worker
+	e.sdkWorkerOnce.Do(func() {
+		client := e.SdkClient() // Ensure client is initialized
+		e.sdkWorker = sdkworker.New(client, e.sdkWorkerTQ, sdkworker.Options{})
+		if err := e.sdkWorker.Start(); err != nil {
+			e.t.Fatalf("Failed to start SDK worker: %v", err)
+		}
+		e.t.Cleanup(func() { e.sdkWorker.Stop() })
+	})
+	return e.sdkWorker
 }
 
 // WorkerTaskQueue returns the task queue name used by the SDK Worker.
-// Panics if WithSdkWorker was not passed to NewEnv.
 func (e *TestEnv) WorkerTaskQueue() string {
-	if e.workerTaskQueue == "" {
-		panic("WorkerTaskQueue() requires WithSdkWorker option to be passed to NewEnv")
-	}
-	return e.workerTaskQueue
-}
-
-func (e *TestEnv) setupSdk() {
-	clientOptions := sdkclient.Options{
-		HostPort:  e.FrontendGRPCAddress(),
-		Namespace: e.nsName.String(),
-		Logger:    log.NewSdkLogger(e.Logger),
-	}
-
-	if provider := e.cluster.host.tlsConfigProvider; provider != nil {
-		clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
-	}
-
-	if interceptor := e.cluster.host.grpcClientInterceptor; interceptor != nil {
-		clientOptions.ConnectionOptions.DialOptions = []grpc.DialOption{
-			grpc.WithUnaryInterceptor(interceptor.Unary()),
-			grpc.WithStreamInterceptor(interceptor.Stream()),
-		}
-	}
-
-	var err error
-	e.sdkClient, err = sdkclient.Dial(clientOptions)
-	if err != nil {
-		e.t.Fatalf("Failed to create SDK client: %v", err)
-	}
-	e.t.Cleanup(func() { e.sdkClient.Close() })
-
-	e.workerTaskQueue = RandomizeStr(e.t.Name())
-	e.worker = sdkworker.New(e.sdkClient, e.workerTaskQueue, sdkworker.Options{})
-	if err = e.worker.Start(); err != nil {
-		e.t.Fatalf("Failed to start SDK worker: %v", err)
-	}
-	e.t.Cleanup(func() { e.worker.Stop() })
+	return e.sdkWorkerTQ
 }
 
 // OverrideDynamicConfig overrides a dynamic config setting for the duration of this test.
