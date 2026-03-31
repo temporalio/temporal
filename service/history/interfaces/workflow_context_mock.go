@@ -58,20 +58,6 @@ func (mr *MockWorkflowContextMockRecorder) Clear() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Clear", reflect.TypeOf((*MockWorkflowContext)(nil).Clear))
 }
 
-// GetArchetypeID mocks base method.
-func (m *MockWorkflowContext) GetArchetypeID() chasm.ArchetypeID {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetArchetypeID")
-	ret0, _ := ret[0].(chasm.ArchetypeID)
-	return ret0
-}
-
-// GetArchetypeID indicates an expected call of GetArchetypeID.
-func (mr *MockWorkflowContextMockRecorder) GetArchetypeID() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetArchetypeID", reflect.TypeOf((*MockWorkflowContext)(nil).GetArchetypeID))
-}
-
 // ConflictResolveWorkflowExecution mocks base method.
 func (m *MockWorkflowContext) ConflictResolveWorkflowExecution(ctx context.Context, shardContext ShardContext, conflictResolveMode persistence0.ConflictResolveWorkflowMode, resetMutableState MutableState, newContext WorkflowContext, newMutableState MutableState, currentContext WorkflowContext, currentMutableState MutableState, resetWorkflowTransactionPolicy TransactionPolicy, newWorkflowTransactionPolicy, currentTransactionPolicy *TransactionPolicy) error {
 	m.ctrl.T.Helper()
@@ -98,6 +84,20 @@ func (m *MockWorkflowContext) CreateWorkflowExecution(ctx context.Context, shard
 func (mr *MockWorkflowContextMockRecorder) CreateWorkflowExecution(ctx, shardContext, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents, transactionPolicy any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockWorkflowContext)(nil).CreateWorkflowExecution), ctx, shardContext, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents, transactionPolicy)
+}
+
+// GetArchetypeID mocks base method.
+func (m *MockWorkflowContext) GetArchetypeID() chasm.ArchetypeID {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetArchetypeID")
+	ret0, _ := ret[0].(chasm.ArchetypeID)
+	return ret0
+}
+
+// GetArchetypeID indicates an expected call of GetArchetypeID.
+func (mr *MockWorkflowContextMockRecorder) GetArchetypeID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetArchetypeID", reflect.TypeOf((*MockWorkflowContext)(nil).GetArchetypeID))
 }
 
 // GetWorkflowKey mocks base method.
