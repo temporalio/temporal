@@ -948,8 +948,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) (retErr error) {
 	// DeleteWorkflowExecution is a 4 stages process (order is very important and should not be changed):
-	// 1. Add visibility delete task, i.e. schedule visibility record delete,
-	// 1.5. Add delete execution replication task (if enabled, active cluster only),
+	// 1. Add visibility delete task and delete execution replication task,
 	// 2. Delete current workflow execution pointer,
 	// 3. Delete workflow mutable state,
 	// 4. Delete history branch.
@@ -1013,11 +1012,11 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 			}
 			defer s.ioSemaphoreRelease()
 
-			// Stage 1. Delete visibility.
-			if deleteVisibilityRecord && !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageVisibility) {
-				// TODO: move to existing task generator logic
-				newTasks := map[tasks.Category][]tasks.Task{
-					tasks.CategoryVisibility: {
+			// Stage 1. Add visibility delete task and delete execution replication task.
+			if !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageVisibility) {
+				newTasks := make(map[tasks.Category][]tasks.Task)
+				if deleteVisibilityRecord {
+					newTasks[tasks.CategoryVisibility] = []tasks.Task{
 						&tasks.DeleteExecutionVisibilityTask{
 							// TaskID is set by addTasks
 							WorkflowKey:                    key,
@@ -1025,38 +1024,22 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 							CloseExecutionVisibilityTaskID: closeVisibilityTaskId,
 							CloseTime:                      workflowCloseTime,
 						},
-					},
+					}
 				}
-				addTasksRequest := &persistence.AddHistoryTasksRequest{
-					ShardID:     s.shardID,
-					NamespaceID: key.NamespaceID,
-					WorkflowID:  key.WorkflowID,
-					ArchetypeID: archetypeID,
-
-					Tasks: newTasks,
-				}
-				err := s.addTasksSemaphoreAcquired(ctx, addTasksRequest)
-				if persistence.OperationPossiblySucceeded(err) {
-					engine.NotifyNewTasks(newTasks)
-				}
-				if err != nil {
-					return err
-				}
-			}
-			stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageVisibility)
-
-			// Stage 1.5. Replicate deletion to passive clusters before mutable state is deleted.
-			if s.config.EnableDeleteWorkflowExecutionReplication() && !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageReplication) {
-				if nsEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(
-					namespace.ID(key.NamespaceID),
-				); err == nil && nsEntry.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) {
-					newTasks := map[tasks.Category][]tasks.Task{
-						tasks.CategoryReplication: {
+				// Piggyback replication task on the same write to save a DB operation.
+				if s.config.EnableDeleteWorkflowExecutionReplication() &&
+					!stage.IsProcessed(tasks.DeleteWorkflowExecutionStageReplication) {
+					if nsEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(
+						namespace.ID(key.NamespaceID),
+					); err == nil && nsEntry.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) {
+						newTasks[tasks.CategoryReplication] = []tasks.Task{
 							&tasks.DeleteExecutionReplicationTask{
 								WorkflowKey: key,
 							},
-						},
+						}
 					}
+				}
+				if len(newTasks) > 0 {
 					addTasksRequest := &persistence.AddHistoryTasksRequest{
 						ShardID:     s.shardID,
 						NamespaceID: key.NamespaceID,
@@ -1073,6 +1056,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					}
 				}
 			}
+			stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageVisibility)
 			stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageReplication)
 
 			// Stage 2. Delete current workflow execution pointer.

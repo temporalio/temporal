@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/service/history/api/deleteworkflow"
 	"go.temporal.io/server/service/history/api/describemutablestate"
 	"go.temporal.io/server/service/history/api/describeworkflow"
-	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionhistory"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionhistoryreverse"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistory"
@@ -697,26 +696,6 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 	request *historyservice.DeleteWorkflowExecutionRequest,
 ) (*historyservice.DeleteWorkflowExecutionResponse, error) {
 	return deleteworkflow.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker, e.workflowDeleteManager)
-}
-
-func (e *historyEngineImpl) ForceDeleteWorkflowExecution(
-	ctx context.Context,
-	request *historyservice.ForceDeleteWorkflowExecutionRequest,
-) (*historyservice.ForceDeleteWorkflowExecutionResponse, error) {
-	shardID := common.WorkflowIDToHistoryShard(
-		request.GetNamespaceId(),
-		request.GetRequest().GetExecution().GetWorkflowId(),
-		e.config.NumberOfShards,
-	)
-	return forcedeleteworkflowexecution.Invoke(
-		ctx,
-		request,
-		shardID,
-		e.shardContext.ChasmRegistry(),
-		e.executionManager,
-		e.persistenceVisibilityMgr,
-		e.logger,
-	)
 }
 
 // RecordChildExecutionCompleted records the completion of child execution into parent execution history

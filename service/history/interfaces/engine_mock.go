@@ -159,21 +159,6 @@ func (mr *MockEngineMockRecorder) ExecuteMultiOperation(ctx, request any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteMultiOperation", reflect.TypeOf((*MockEngine)(nil).ExecuteMultiOperation), ctx, request)
 }
 
-// ForceDeleteWorkflowExecution mocks base method.
-func (m *MockEngine) ForceDeleteWorkflowExecution(ctx context.Context, request *historyservice.ForceDeleteWorkflowExecutionRequest) (*historyservice.ForceDeleteWorkflowExecutionResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ForceDeleteWorkflowExecution", ctx, request)
-	ret0, _ := ret[0].(*historyservice.ForceDeleteWorkflowExecutionResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ForceDeleteWorkflowExecution indicates an expected call of ForceDeleteWorkflowExecution.
-func (mr *MockEngineMockRecorder) ForceDeleteWorkflowExecution(ctx, request any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceDeleteWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).ForceDeleteWorkflowExecution), ctx, request)
-}
-
 // GenerateLastHistoryReplicationTasks mocks base method.
 func (m *MockEngine) GenerateLastHistoryReplicationTasks(ctx context.Context, request *historyservice.GenerateLastHistoryReplicationTasksRequest) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
 	m.ctrl.T.Helper()

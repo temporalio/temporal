@@ -7,7 +7,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -103,14 +102,13 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 		return err
 	}
 
-	_, err = engine.ForceDeleteWorkflowExecution(ctx, &historyservice.ForceDeleteWorkflowExecutionRequest{
+	// Use the normal delete path (same as active cluster) to avoid race conditions
+	// with visibility record deletion that ForceDeleteWorkflowExecution can cause.
+	_, err = engine.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
 		NamespaceId: e.NamespaceID,
-		Request: &adminservice.DeleteWorkflowExecutionRequest{
-			Namespace: namespaceName,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: e.WorkflowID,
-				RunId:      e.RunID,
-			},
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: e.WorkflowID,
+			RunId:      e.RunID,
 		},
 	})
 	return err
