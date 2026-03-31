@@ -33,7 +33,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/maruel/panicparse/v2 v2.4.0
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/nexus-rpc/sdk-go v0.5.2-0.20260211051645-26b0b4c584e5
+	github.com/nexus-rpc/sdk-go v0.6.0
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/pkg/errors v0.9.1
@@ -174,4 +174,4 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace go.temporal.io/api => github.com/temporalio/api-go v1.62.2-0.20260313212811-d44912090759
+replace go.temporal.io/api => github.com/temporalio/api-go v1.62.2-0.20260314000959-bbb2a94130c3

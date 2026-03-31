@@ -8,6 +8,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -142,7 +143,7 @@ func TestDispatchCancelToWorker(t *testing.T) {
 
 	startOp := nexusPollResp.Request.GetStartOperation()
 	env.NotNil(startOp, "Expected StartOperation in Nexus request")
-	env.Equal("temporal.api.nexusservices.workerservice.v1.WorkerService", startOp.Service, "Expected WorkerService")
-	env.Equal("ExecuteCommands", startOp.Operation, "Expected ExecuteCommands operation")
+	env.Equal(workerservicepb.WorkerService.ServiceName, startOp.Service, "Expected WorkerService")
+	env.Equal(workerservicepb.WorkerService.ExecuteCommands.Name(), startOp.Operation, "Expected ExecuteCommands operation")
 	t.Log("SUCCESS: Received ExecuteCommands Nexus request on control queue")
 }
