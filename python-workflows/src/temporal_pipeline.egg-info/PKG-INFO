@@ -1,9 +1,0 @@
-Metadata-Version: 2.4
-Name: temporal-pipeline
-Version: 0.1.0
-Summary: Durable ML pipeline orchestration on Temporal
-Requires-Python: >=3.10
-Requires-Dist: temporalio>=1.9.0
-Provides-Extra: dev
-Requires-Dist: pytest>=7.0; extra == "dev"
-Requires-Dist: pytest-asyncio>=0.21; extra == "dev"
