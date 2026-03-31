@@ -19,18 +19,14 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
-	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/resource"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
-	"go.uber.org/fx"
 )
 
 var (
@@ -52,22 +48,6 @@ func (o *operationTimeoutBelowMinError) Error() string {
 
 // ClientProvider provides a nexus client for a given endpoint.
 type ClientProvider func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error)
-
-// OperationInvocationTaskHandlerOptions is the fx parameter object for the invocation task executor.
-type OperationInvocationTaskHandlerOptions struct {
-	fx.In
-
-	Config                 *Config
-	NamespaceRegistry      namespace.Registry
-	MetricsHandler         metrics.Handler
-	Logger                 log.Logger
-	CallbackTokenGenerator *commonnexus.CallbackTokenGenerator
-	ClientProvider         ClientProvider
-	EndpointRegistry       commonnexus.EndpointRegistry
-	HTTPTraceProvider      commonnexus.HTTPClientTraceProvider
-	HistoryClient          resource.HistoryClient
-	ChasmRegistry          *chasm.Registry
-}
 
 // startArgs holds the arguments needed to start a Nexus operation invocation.
 type startArgs struct {
@@ -133,80 +113,14 @@ type saveResultInput struct {
 	retryPolicy func() backoff.RetryPolicy
 }
 
-// loadStartArgs is a ReadComponent callback that loads the start arguments from the operation.
-func (o *Operation) loadStartArgs(
-	ctx chasm.Context,
-	_ chasm.NoValue,
-) (startArgs, error) {
-	invocationData, err := o.GetInvocationData(ctx)
-	if err != nil {
-		return startArgs{}, err
-	}
-
-	return startArgs{
-		endpointName:           o.GetEndpoint(),
-		endpointID:             o.GetEndpointId(),
-		service:                o.GetService(),
-		operation:              o.GetOperation(),
-		requestID:              o.GetRequestId(),
-		currentTime:            ctx.Now(o),
-		scheduledTime:          o.GetScheduledTime().AsTime(),
-		scheduleToCloseTimeout: o.GetScheduleToCloseTimeout().AsDuration(),
-		scheduleToStartTimeout: o.GetScheduleToStartTimeout().AsDuration(),
-		startToCloseTimeout:    o.GetStartToCloseTimeout().AsDuration(),
-		payload:                invocationData.Input,
-		header:                 invocationData.Header,
-		nexusLink:              invocationData.NexusLink,
-	}, nil
-}
-
-// saveResult is an UpdateComponent callback that saves the invocation outcome.
-func (o *Operation) saveResult(
-	ctx chasm.MutableContext,
-	input saveResultInput,
-) (chasm.NoValue, error) {
-	switch r := input.result.(type) {
-	case invocationResultOK:
-		if r.response.Pending != nil {
-			return nil, o.OnStarted(ctx, o, r.response.Pending.Token, r.links)
-		}
-		return nil, o.OnCompleted(ctx, o, r.response.Successful, r.links)
-	case invocationResultFail:
-		return nil, o.OnFailed(ctx, o, r.failure)
-	case invocationResultCanceled:
-		return nil, o.OnCancelled(ctx, o, r.failure)
-	case invocationResultRetry:
-		return nil, transitionAttemptFailed.Apply(o, ctx, EventAttemptFailed{
-			Failure:     r.failure,
-			RetryPolicy: input.retryPolicy(),
-		})
-	case invocationResultTimeout:
-		return nil, o.OnTimedOut(ctx, o, &failurepb.Failure{
-			Message: "operation timed out",
-			FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
-				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-					TimeoutType: r.timeoutType,
-				},
-			},
-		})
-	default:
-		return nil, queueserrors.NewUnprocessableTaskError(
-			fmt.Sprintf("unrecognized invocation result %T", input.result),
-		)
-	}
-}
-
-// isValidForInvocation returns true if the operation is in a state where it can be invoked.
-func isValidForInvocation(op *Operation) bool {
-	return op.Status == nexusoperationpb.OPERATION_STATUS_SCHEDULED
-}
-
 func buildCallbackURL(
 	useSystemCallback bool,
 	callbackTemplate string,
 	ns *namespace.Namespace,
 	endpoint *persistencespb.NexusEndpointEntry,
 ) (string, error) {
+	// endpoint is nil for system-internal operations where endpoint lookup is skipped.
+	// These always use the system callback URL since the callback is handled internally.
 	if endpoint == nil {
 		return commonnexus.SystemCallbackURL, nil
 	}
