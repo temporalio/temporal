@@ -1,0 +1,25 @@
+[project]
+name = "temporal-pipeline"
+version = "0.1.0"
+description = "Durable ML pipeline orchestration on Temporal"
+requires-python = ">=3.10"
+dependencies = [
+    "temporalio>=1.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["src/temporal_pipeline"]
+asyncio_mode = "auto"
