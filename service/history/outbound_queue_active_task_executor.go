@@ -26,7 +26,7 @@ const (
 
 type outboundQueueActiveTaskExecutor struct {
 	stateMachineEnvironment
-	chasmEngine                   chasm.Engine
+	chasmEngine                  chasm.Engine
 	workerCommandsTaskDispatcher *workerCommandsTaskDispatcher
 }
 

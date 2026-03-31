@@ -1,7 +1,6 @@
 package history
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -10,7 +9,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
-	matchingservice "go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -31,7 +30,7 @@ func TestDispatchResponseToError_SyncSuccess(t *testing.T) {
 		},
 	}
 	err := dispatchResponseToError(resp)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestDispatchResponseToError_AsyncSuccess(t *testing.T) {
@@ -51,7 +50,7 @@ func TestDispatchResponseToError_AsyncSuccess(t *testing.T) {
 		},
 	}
 	err := dispatchResponseToError(resp)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestDispatchResponseToError_RequestTimeout(t *testing.T) {
@@ -64,7 +63,7 @@ func TestDispatchResponseToError_RequestTimeout(t *testing.T) {
 	require.Error(t, err)
 
 	var handlerErr *nexus.HandlerError
-	require.True(t, errors.As(err, &handlerErr))
+	require.ErrorAs(t, err, &handlerErr)
 	assert.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, handlerErr.Type)
 }
 
@@ -81,7 +80,7 @@ func TestDispatchResponseToError_DeprecatedHandlerError(t *testing.T) {
 	require.Error(t, err)
 
 	var handlerErr *nexus.HandlerError
-	require.True(t, errors.As(err, &handlerErr))
+	require.ErrorAs(t, err, &handlerErr)
 	assert.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
 	assert.Equal(t, nexus.HandlerErrorRetryBehaviorNonRetryable, handlerErr.RetryBehavior)
 }
@@ -104,7 +103,7 @@ func TestDispatchResponseToError_FailureWithHandlerErrorInfo(t *testing.T) {
 	require.Error(t, err)
 
 	var handlerErr *nexus.HandlerError
-	require.True(t, errors.As(err, &handlerErr))
+	require.ErrorAs(t, err, &handlerErr)
 	assert.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
 }
 
@@ -131,7 +130,7 @@ func TestDispatchResponseToError_OperationErrorVariant(t *testing.T) {
 	require.Error(t, err)
 
 	var opErr *nexus.OperationError
-	require.True(t, errors.As(err, &opErr))
+	require.ErrorAs(t, err, &opErr)
 	assert.Equal(t, nexus.OperationStateFailed, opErr.State)
 }
 
@@ -160,7 +159,7 @@ func TestDispatchResponseToError_FailureVariant_OperationFailure(t *testing.T) {
 	require.Error(t, err)
 
 	var opErr *nexus.OperationError
-	require.True(t, errors.As(err, &opErr))
+	require.ErrorAs(t, err, &opErr)
 	assert.Equal(t, nexus.OperationStateFailed, opErr.State)
 }
 
@@ -187,7 +186,7 @@ func TestDispatchResponseToError_FailureVariant_CanceledFailure(t *testing.T) {
 	require.Error(t, err)
 
 	var opErr *nexus.OperationError
-	require.True(t, errors.As(err, &opErr))
+	require.ErrorAs(t, err, &opErr)
 	assert.Equal(t, nexus.OperationStateCanceled, opErr.State)
 }
 
@@ -197,7 +196,7 @@ func TestDispatchResponseToError_EmptyOutcome(t *testing.T) {
 	require.Error(t, err)
 
 	var handlerErr *nexus.HandlerError
-	require.True(t, errors.As(err, &handlerErr))
+	require.ErrorAs(t, err, &handlerErr)
 	assert.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
 }
 
@@ -216,7 +215,7 @@ func TestHandleError_OperationError_ReturnNil(t *testing.T) {
 		Message: "worker bug",
 	}
 	err := d.handleError(opErr, "/temporal-sys/worker-commands/test-ns/key1")
-	assert.NoError(t, err, "operation errors are permanent and should be swallowed")
+	require.NoError(t, err, "operation errors are permanent and should be swallowed")
 
 	snap := capture.Snapshot()
 	assert.Len(t, snap[metrics.WorkerCommandsOperationFailure.Name()], 1)
@@ -237,7 +236,7 @@ func TestHandleError_UpstreamTimeout_ReturnRetryable(t *testing.T) {
 	require.Error(t, err, "upstream timeout should be retried")
 
 	var he *nexus.HandlerError
-	require.True(t, errors.As(err, &he))
+	require.ErrorAs(t, err, &he)
 	assert.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, he.Type)
 
 	snap := capture.Snapshot()

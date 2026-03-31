@@ -12,7 +12,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	matchingservice "go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -176,8 +176,8 @@ func dispatchResponseToError(resp *matchingservice.DispatchNexusTaskResponse) er
 	switch t := resp.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_Failure:
 		return handlerErrorFromTemporalFailure(t.Failure)
-	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
-		return handlerErrorFromDeprecatedProto(t.HandlerError)
+	case *matchingservice.DispatchNexusTaskResponse_HandlerError: //nolint:staticcheck // Deprecated case kept for backward compatibility.
+		return handlerErrorFromDeprecatedProto(t.HandlerError) //nolint:staticcheck // Deprecated field kept for backward compatibility.
 	case *matchingservice.DispatchNexusTaskResponse_RequestTimeout:
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
 	case *matchingservice.DispatchNexusTaskResponse_Response:
@@ -237,6 +237,7 @@ func handlerErrorFromDeprecatedProto(he *nexuspb.HandlerError) *nexus.HandlerErr
 		retryBehavior = nexus.HandlerErrorRetryBehaviorRetryable
 	case enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE:
 		retryBehavior = nexus.HandlerErrorRetryBehaviorNonRetryable
+	default:
 	}
 	//nolint:staticcheck // Deprecated function still in use for backward compatibility.
 	cause := commonnexus.ProtoFailureToNexusFailure(he.GetFailure())
