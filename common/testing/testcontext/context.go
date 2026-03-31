@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"sync"
-	"testing"
 	"time"
 
 	"go.temporal.io/server/common/debug"
@@ -14,13 +13,23 @@ const defaultTimeout = 90 * time.Second
 
 type contextStore struct {
 	sync.Mutex
-	byTest map[*testing.T]*contextState
+	byTest map[TB]*contextState
 }
 
 // testContexts is process-global so repeated helpers in the same test share
 // one context and one cleanup.
 var testContexts = contextStore{
-	byTest: make(map[*testing.T]*contextState),
+	byTest: make(map[TB]*contextState),
+}
+
+// TB is the subset of testing.TB required to own a test-scoped context.
+type TB interface {
+	Helper()
+	Context() context.Context
+	Cleanup(func())
+	Errorf(string, ...any)
+	Fatal(...any)
+	Fatalf(string, ...any)
 }
 
 type config struct {
@@ -40,7 +49,7 @@ type contextDecorator struct {
 // The first call creates the per-test context and fixes its timeout. Later calls
 // may add decorators, but an explicit different timeout fails instead of being
 // silently ignored.
-func New(t *testing.T, opts ...Option) context.Context {
+func New(t TB, opts ...Option) context.Context {
 	t.Helper()
 
 	cfg := config{timeout: effectiveTimeout(0)}
@@ -86,7 +95,7 @@ type contextState struct {
 	decorators map[any]struct{}
 }
 
-func getContextState(t *testing.T, timeout time.Duration) *contextState {
+func getContextState(t TB, timeout time.Duration) *contextState {
 	t.Helper()
 
 	testContexts.Lock()
@@ -117,7 +126,7 @@ func getContextState(t *testing.T, timeout time.Duration) *contextState {
 	return st
 }
 
-func (s *contextState) configure(t *testing.T, cfg config) {
+func (s *contextState) configure(t TB, cfg config) {
 	t.Helper()
 
 	s.mu.Lock()

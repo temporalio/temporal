@@ -1,24 +1,32 @@
 package parallelsuite
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	testifysuite "github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testcontext"
 )
 
 // testingSuite is the constraint for suite types.
 type testingSuite interface {
 	testifysuite.TestingSuite
-	copySuite(t *testing.T) testingSuite
-	initSuite(t *testing.T)
+	copySuite(t *testing.T, assertT require.TestingT, ctx contextOverride) testingSuite
+	initSuite(t *testing.T, assertT require.TestingT, ctx contextOverride)
+}
+
+type contextOverride struct {
+	ctx context.Context
 }
 
 // Suite provides parallel test execution with require-style (fail-fast) assertions.
@@ -32,23 +40,28 @@ type Suite[T testingSuite] struct {
 	historyrequire.HistoryRequire
 
 	guardT guardT
+	ctx    context.Context
 }
 
 // copySuite creates a fresh suite instance initialized for the given *testing.T.
-func (s *Suite[T]) copySuite(t *testing.T) testingSuite {
+// assertT overrides which TestingT assertions are bound to; nil means use the copy's own guardT.
+func (s *Suite[T]) copySuite(t *testing.T, assertT require.TestingT, ctx contextOverride) testingSuite {
 	cp := reflect.New(reflect.TypeFor[T]().Elem()).Interface().(T)
-	cp.initSuite(t)
+	cp.initSuite(t, assertT, ctx)
 	return cp
 }
 
-func (s *Suite[T]) initSuite(t *testing.T) {
+func (s *Suite[T]) initSuite(t *testing.T, assertT require.TestingT, ctx contextOverride) {
 	g := &s.guardT
 	g.name = t.Name()
 	g.T = t
-	g.hasSubtests.Store(false)
-	s.Assertions = require.New(g)
-	s.ProtoAssertions = protorequire.New(g)
-	s.HistoryRequire = historyrequire.New(g)
+	s.ctx = ctx.ctx
+	if assertT == nil {
+		assertT = g
+	}
+	s.Assertions = require.New(assertT)
+	s.ProtoAssertions = protorequire.New(assertT)
+	s.HistoryRequire = historyrequire.New(assertT)
 }
 
 // T returns the *testing.T, panicking if the guard has been sealed.
@@ -59,6 +72,15 @@ func (s *Suite[T]) T() *testing.T {
 	return s.guardT.T
 }
 
+// Context returns the test-scoped context (created from [testcontext]).
+// Inside an [Await] callback, it returns the await-scoped context.
+func (s *Suite[T]) Context() context.Context {
+	if s.ctx != nil {
+		return s.ctx
+	}
+	return testcontext.New(s.T())
+}
+
 // Run creates a parallel subtest. The callback receives a fresh copy of the
 // concrete suite type, initialized for the subtest's *testing.T.
 func (s *Suite[T]) Run(name string, fn func(T)) bool {
@@ -66,8 +88,33 @@ func (s *Suite[T]) Run(name string, fn func(T)) bool {
 	s.guardT.markHasSubtests()
 	return pt.Run(name, func(t *testing.T) {
 		t.Parallel() //nolint:testifylint // parallelsuite intentionally supports parallel subtests
-		fn(s.copySuite(t).(T))
+		fn(s.copySuite(t, nil, contextOverride{}).(T))
 	})
+}
+
+// Await calls fn repeatedly until all assertions pass or timeout is reached.
+func (s *Suite[T]) Await(fn func(T), timeout, interval time.Duration) {
+	s.Awaitf(fn, timeout, interval, "")
+}
+
+// Awaitf is like [Await] but includes a format string appended to the failure message.
+func (s *Suite[T]) Awaitf(fn func(T), timeout, interval time.Duration, msg string, args ...any) {
+	t := s.T()
+	await.Requiref(s.Context(), t, func(at *await.T) {
+		fn(s.copySuite(t, at, contextOverride{ctx: at.Context()}).(T))
+	}, timeout, interval, msg, args...)
+}
+
+// AwaitTrue calls fn repeatedly until it returns true or timeout is reached.
+//
+// Use it for simple local predicates only. Do not use assertions or side effects; use [Await] instead.
+func (s *Suite[T]) AwaitTrue(fn func() bool, timeout, interval time.Duration) {
+	s.AwaitTruef(fn, timeout, interval, "")
+}
+
+// AwaitTruef is like [AwaitTrue] but includes a format string appended to the failure message.
+func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, msg string, args ...any) {
+	await.RequireTruef(s.T(), fn, timeout, interval, msg, args...)
 }
 
 // Run discovers and runs all exported Test* methods on the given suite in parallel.
@@ -109,7 +156,7 @@ func Run[T testingSuite](t *testing.T, s T, args ...any) {
 		t.Run(method.Name, func(t *testing.T) {
 			t.Parallel()
 
-			cpS := s.copySuite(t)
+			cpS := s.copySuite(t, nil, contextOverride{})
 			callArgs := append([]reflect.Value{reflect.ValueOf(cpS)}, argVals...)
 			method.Func.Call(callArgs)
 		})
