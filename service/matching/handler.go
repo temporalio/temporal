@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -149,6 +150,14 @@ func (h *Handler) opMetricsHandler(
 		h.config.BreakdownMetricsByTaskQueue(nsName.String(), partition.TaskQueue().Name(), partition.TaskType()),
 		h.config.BreakdownMetricsByPartition(nsName.String(), partition.TaskQueue().Name(), partition.TaskType()),
 	)
+}
+
+func (h *Handler) withClientNameTag(ctx context.Context, handler metrics.Handler) metrics.Handler {
+	clientName, _ := headers.GetClientNameAndVersion(ctx)
+	if clientName != "" {
+		return handler.WithTags(metrics.ClientNameTag(clientName))
+	}
+	return handler
 }
 
 // AddActivityTask - adds an activity task.
@@ -503,6 +512,7 @@ func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservi
 		enumspb.TASK_QUEUE_TYPE_NEXUS,
 		metrics.MatchingPollWorkflowTaskQueueScope,
 	)
+	opMetrics = h.withClientNameTag(ctx, opMetrics)
 
 	if request.GetForwardedSource() != "" {
 		h.reportForwardedPerTaskQueueCounter(opMetrics, namespace.ID(request.GetNamespaceId()))
@@ -526,6 +536,7 @@ func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchi
 		enumspb.TASK_QUEUE_TYPE_NEXUS,
 		metrics.MatchingRespondNexusTaskCompletedScope,
 	)
+	opMetrics = h.withClientNameTag(ctx, opMetrics)
 
 	return h.engine.RespondNexusTaskCompleted(ctx, request, opMetrics)
 }
@@ -538,6 +549,7 @@ func (h *Handler) RespondNexusTaskFailed(ctx context.Context, request *matchings
 		enumspb.TASK_QUEUE_TYPE_NEXUS,
 		metrics.MatchingRespondNexusTaskFailedScope,
 	)
+	opMetrics = h.withClientNameTag(ctx, opMetrics)
 
 	return h.engine.RespondNexusTaskFailed(ctx, request, opMetrics)
 }
