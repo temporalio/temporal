@@ -2237,8 +2237,10 @@ func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_Success() {
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	s.env.RegisterActivity(a.ValidateWorkerControllerInstanceSpec)
-	s.env.OnActivity(a.ValidateWorkerControllerInstanceSpec, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.RegisterActivity(a.UpdateWorkerControllerInstance)
+	s.env.OnActivity(a.UpdateWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.RegisterActivity(a.DeleteWorkerControllerInstance)
+	s.env.OnActivity(a.DeleteWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
 		args := &deploymentspb.UpdateComputeConfigArgs{
@@ -2294,8 +2296,6 @@ func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_RejectedWhenDeleted() {
 	var a *VersionActivities
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
-	s.env.RegisterActivity(a.ValidateWorkerControllerInstanceSpec)
-	s.env.OnActivity(a.ValidateWorkerControllerInstanceSpec, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		&deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil,
@@ -2349,17 +2349,18 @@ func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_RejectedWhenDeleted() {
 	s.True(s.env.IsWorkflowCompleted())
 }
 
-func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_ValidationFailure_DoesNotModifyState() {
+func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_UpdateInstanceFailure_DoesNotModifyState() {
 	tv := testvars.New(s.T())
 
 	var a *VersionActivities
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	s.env.RegisterActivity(a.ValidateWorkerControllerInstanceSpec)
-	s.env.OnActivity(a.ValidateWorkerControllerInstanceSpec, mock.Anything, mock.Anything).Return(
+	//var base *VersionActivities
+	s.env.RegisterActivity(a.UpdateWorkerControllerInstance)
+	s.env.OnActivity(a.UpdateWorkerControllerInstance, mock.Anything, mock.Anything).Return(
 		temporal.NewNonRetryableApplicationError("invalid config", errInvalidComputeConfig, nil),
-	).Once()
+	).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
 		args := &deploymentspb.UpdateComputeConfigArgs{

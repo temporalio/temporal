@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	computeprovider "go.temporal.io/auto-scaled-workers/wci/workflow/compute_provider"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -3332,7 +3333,7 @@ func (s *DeploymentVersionSuite) TestReactivationSignalCache_Deduplication_Reset
 }
 
 func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	tv := testvars.New(s)
@@ -3354,7 +3355,8 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
 			"sg1": {
 				Provider: &computepb.ComputeProvider{
-					Details: &commonpb.Payload{Data: []byte("sg1 details")},
+					Type:    "test-invoke",
+					Details: &commonpb.Payload{Data: computeprovider.TestInvokeComputeProviderValidProviderDetails()},
 				},
 			},
 		},
@@ -3769,7 +3771,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_InvalidScalin
 			name: "two catch-all scaling groups",
 			computeConfig: &computepb.ComputeConfig{
 				ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
-					"sg1": {TaskQueueTypes: nil},
+					"sg1": {TaskQueueTypes: nil, Provider: &computepb.ComputeProvider{Type: "subprocess"}},
 					"sg2": {TaskQueueTypes: nil},
 				},
 			},

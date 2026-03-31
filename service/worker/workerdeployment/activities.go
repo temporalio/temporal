@@ -276,10 +276,9 @@ func (a *Activities) StartWorkerDeploymentVersionWorkflow(
 	return a.WorkerDeploymentClient.StartWorkerDeploymentVersion(ctx, a.namespace, input.DeploymentName, input.BuildId, identity, input.RequestId, input.ComputeConfig)
 }
 
-func (a *Activities) ValidateWorkerControllerInstanceSpec(ctx context.Context, input *deploymentspb.ValidateWorkerControllerInstanceSpecInput) error {
-	identity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+func (a *Activities) UpdateWorkerControllerInstanceFromDeployment(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) error {
 	spec := computeConfigScalingGroupsToWCISpec(input.GetScalingGroups())
-	if err := a.WorkerControllerInstanceClient.ValidateWorkerControllerInstanceSpec(ctx, a.namespace, spec, identity); err != nil {
+	if err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), spec); err != nil {
 		return temporal.NewApplicationError(err.Error(), errInvalidComputeConfig)
 	}
 	return nil

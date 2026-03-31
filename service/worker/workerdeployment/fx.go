@@ -56,9 +56,14 @@ type (
 	}
 )
 
-var Module = fx.Options(
-	fx.Provide(NewResult),
+var ClientModule = fx.Options(
+	wciclient.Module,
 	fx.Provide(ClientProvider),
+)
+
+var Module = fx.Options(
+	ClientModule,
+	fx.Provide(NewResult),
 )
 
 func ClientProvider(
@@ -66,6 +71,7 @@ func ClientProvider(
 	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
 	visibilityManager manager.VisibilityManager,
+	workerControllerInstanceClient wciclient.Client,
 	dc *dynamicconfig.Collection,
 	testHooks testhooks.TestHooks,
 	metricsHandler metrics.Handler,
@@ -75,6 +81,7 @@ func ClientProvider(
 		historyClient:                    historyClient,
 		visibilityManager:                visibilityManager,
 		matchingClient:                   matchingClient,
+		workerControllerInstanceClient:   workerControllerInstanceClient,
 		maxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),
 		visibilityMaxPageSize:            dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 		maxTaskQueuesInDeploymentVersion: dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Get(dc),
