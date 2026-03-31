@@ -116,7 +116,8 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 		namespaceID,
 		opts,
 		attributes.GetPriority(),
-		runTimeout)
+		runTimeout,
+		attributes.TaskQueue.GetName())
 
 	if err != nil {
 		return failedCause, err
