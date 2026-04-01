@@ -75,9 +75,6 @@ const (
 	queueMetricUpdateInterval = 5 * time.Minute
 
 	pendingMaxReplicationTaskID = math.MaxInt64
-
-	defaultWorkflowIDRateLimiterCacheSize = 10000
-	defaultWorkflowIDRateLimiterCacheTTL  = 60 * time.Second
 )
 
 var (
