@@ -243,7 +243,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestBatchTerminate_NamespaceIso
 	sleepWorkflow := func(ctx workflow.Context) error {
 		return workflow.Sleep(ctx, 24*time.Hour)
 	}
-	s.SdkWorker().RegisterWorkflowWithOptions(sleepWorkflow, workflow.RegisterOptions{Name: wfTypeName})
+	s.Worker().RegisterWorkflowWithOptions(sleepWorkflow, workflow.RegisterOptions{Name: wfTypeName})
 
 	// Start two workflows in the primary namespace (worker is registered and will execute them).
 	startWf := func(client sdkclient.Client, taskQueue string) sdkclient.WorkflowRun {
