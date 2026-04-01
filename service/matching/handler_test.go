@@ -28,7 +28,7 @@ import (
 // passed to Nexus handler methods. It embeds the Engine interface so only the
 // methods under test need to be implemented.
 type nexusMetricsCaptureEngine struct {
-	Engine // embedded to satisfy all other interface methods (will panic if called)
+	Engine          // embedded to satisfy all other interface methods (will panic if called)
 	capturedMetrics metrics.Handler
 }
 
@@ -52,7 +52,6 @@ func (e *nexusMetricsCaptureEngine) RespondNexusTaskCompleted(
 	e.capturedMetrics = opMetrics
 	return &matchingservice.RespondNexusTaskCompletedResponse{}, nil
 }
-
 
 // ctxWithClientName creates a context with the given client-name set in incoming
 // gRPC metadata and a deadline (required by PollNexusTaskQueue).

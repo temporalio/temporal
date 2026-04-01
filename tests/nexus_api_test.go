@@ -683,7 +683,7 @@ func (s *NexusApiTestSuite) TestNexusClientNameMetricPropagation() {
 	s.Eventually(func() bool {
 		_, err = nexusrpc.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
 		var handlerErr *nexus.HandlerError
-		return err == nil || !(errors.As(err, &handlerErr) && handlerErr.Type == nexus.HandlerErrorTypeNotFound)
+		return err == nil || (!errors.As(err, &handlerErr) || handlerErr.Type != nexus.HandlerErrorTypeNotFound)
 	}, 10*time.Second, 500*time.Millisecond)
 	s.NoError(err)
 	s.NoError(<-pollerErrCh)
