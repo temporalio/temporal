@@ -39,3 +39,12 @@ func WildCardStringsToRegexp(patterns []string) (*regexp.Regexp, error) {
 	result.WriteRune('$')
 	return regexp.Compile(result.String())
 }
+
+// MustWildCardStringsToRegexp is like WildCardStringsToRegexp but panics on error.
+func MustWildCardStringsToRegexp(patterns []string) *regexp.Regexp {
+	re, err := WildCardStringsToRegexp(patterns)
+	if err != nil {
+		panic(err) //nolint:forbidigo // Must* functions conventionally panic on error.
+	}
+	return re
+}

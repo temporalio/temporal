@@ -87,6 +87,7 @@ ifeq ($(OTEL),true)
 	export OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
 	export OTEL_TRACES_EXPORTER=otlp
 	export TEMPORAL_OTEL_DEBUG=true
+	export TEMPORAL_TEST_DATA_ENCODING=json
 endif
 
 MODULE_ROOT := $(lastword $(shell grep -e "^module " go.mod))
@@ -408,7 +409,7 @@ lint-protos: $(BUF) $(INTERNAL_BINPB) $(CHASM_BINPB)
 	@$(BUF) lint $(INTERNAL_BINPB)
 	@$(BUF) lint --config chasm/lib/buf.yaml $(CHASM_BINPB)
 
-fmt: fmt-gofix fmt-imports fmt-yaml
+fmt: fmt-gofix fmt-imports fmt-protos fmt-yaml
 
 # Some fixes enable others (e.g. rangeint may expose minmax opportunities),
 # so - as recommended by the Go team - we run go fix in a loop until it reaches
@@ -436,6 +437,11 @@ fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, w
 parallelize-tests:
 	@printf $(COLOR) "Add t.Parallel() to tests..."
 	@go run ./cmd/tools/parallelize $(INTEGRATION_TEST_DIRS)
+
+fmt-protos: $(BUF)
+	@printf $(COLOR) "Formatting proto files..."
+	@$(BUF) format -w $(PROTO_ROOT)/internal
+	@$(BUF) format -w --config chasm/lib/buf.yaml chasm/lib
 
 fmt-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Formatting YAML files..."

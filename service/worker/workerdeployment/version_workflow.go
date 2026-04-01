@@ -37,7 +37,7 @@ type (
 		logger  sdklog.Logger
 		metrics sdkclient.MetricsHandler
 		lock    workflow.Mutex
-		// Compute config is independent from version status and routing info so it has its own lock.
+		// Compute config is independent of version status and routing info so it has its own lock.
 		// Lock ordering: always acquire `lock` before `computeConfigLock`.
 		computeConfigLock                 workflow.Mutex
 		unsafeWorkflowVersionGetter       func() DeploymentWorkflowVersion
@@ -55,7 +55,7 @@ type (
 		// Track if async propagations are in progress (prevents CaN)
 		asyncPropagationsInProgress int
 		// When true, all the ongoing propagations should cancel themselves
-		// Deprecated. With version data revision number, we don't need to cancel propagations anymore.
+		// Used when delete happens while there are ongoing propagations.
 		cancelPropagations bool
 		// workflowVersion is set at workflow start based on the dynamic config of the worker
 		// that completes the first task. It remains constant for the lifetime of the run and
@@ -156,6 +156,13 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 
 			c.Receive(ctx, nil) // No payload needed
 
+			if d.deleteVersion {
+				// This is only possible if delete happened between the time that history checked for version presence and before the signal arrived to the workflow.
+				// Note that generally History is supposed to not allow VersioningOverrides for deleted versions, but this race condition is possible.
+				// We should drop the signal in this case to be consistent with the case where the same signal arrived after this workflow is closed.
+				// In that case signal fails completely and the error is ignored by History.
+				return
+			}
 			// Only reactivate if DRAINED or INACTIVE
 			if d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED ||
 				d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE {
@@ -166,8 +173,6 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 					LastChangedTime: timestamppb.New(workflow.Now(ctx)),
 					LastCheckedTime: timestamppb.New(workflow.Now(ctx)),
 				}
-
-				d.deleteVersion = false // Clear deletion flag if set
 
 				// Use existing function to update status and sync to task queues
 				d.updateVersionStatusAfterDrainageStatusChange(ctx, enumspb.VERSION_DRAINAGE_STATUS_DRAINING)
@@ -289,8 +294,8 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		return (d.deleteVersion && d.asyncPropagationsInProgress == 0) || // version is deleted -> it's ok to drop all signals and updates.
 			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
 			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
-				// And there is a force CaN or a propagated state change
-				(d.forceCAN || (d.stateChanged && d.asyncPropagationsInProgress == 0)))
+				// And there is a force CaN or a propagated state change or history got too large
+				(d.forceCAN || (d.stateChanged && d.asyncPropagationsInProgress == 0) || workflow.GetInfo(ctx).GetContinueAsNewSuggested()))
 	})
 	if err != nil {
 		return err
@@ -513,8 +518,13 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 
 	if args.AsyncPropagation {
 		d.deleteVersion = true
-		if d.hasMinVersion(VersionDataRevisionNumber) {
-			d.syncTaskQueuesAsync(ctx, nil, true)
+		if workflow.GetVersion(ctx, "serialDelete", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+			if d.hasMinVersion(VersionDataRevisionNumber) {
+				d.syncTaskQueuesAsync(ctx, nil, true)
+			} else {
+				d.asyncPropagationsInProgress++
+				workflow.Go(ctx, d.deleteVersionFromTaskQueuesAsync)
+			}
 		} else {
 			d.asyncPropagationsInProgress++
 			workflow.Go(ctx, d.deleteVersionFromTaskQueuesAsync)
@@ -655,16 +665,29 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		err = workflow.Await(ctx, func() bool {
 			return d.asyncPropagationsInProgress == 0
 		})
+		if err != nil {
+			return err
+		}
 	}
-	if err != nil {
-		return err
-	}
+
 	if d.deleteVersion {
-		// In case it was marked as deleted we make it undeleted
-		d.deleteVersion = false
-		if withRevisionNumbers {
-			// If we're changing the version data, we need to increment the revision number
-			d.GetVersionState().RevisionNumber++
+		if workflow.GetVersion(ctx, "awaitSerialDelete", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+			// In case it was marked as deleted we make it undeleted
+			d.deleteVersion = false
+			if withRevisionNumbers {
+				// If we're changing the version data, we need to increment the revision number
+				d.GetVersionState().RevisionNumber++
+			}
+		} else {
+			// In case this version just got deleted, we wait until it finished propagating delete to all task queues before reviving it.
+			// This is because the deleted flag propagation is not protected by revision number and if done parallel to other propagations, it can cause a race condition.
+			err = workflow.Await(ctx, func() bool {
+				return d.asyncPropagationsInProgress == 0
+			})
+			if err != nil {
+				return err
+			}
+			d.reviveDeleted(ctx)
 		}
 	}
 
@@ -700,6 +723,14 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		err = d.syncRegisteredTaskQueueOld(ctx, args)
 	}
 	return err
+}
+
+func (d *VersionWorkflowRunner) reviveDeleted(ctx workflow.Context) {
+	// Resetting state to get rid of the info from the past life.
+	state := makeNewVersionState(d.VersionState.Version.DeploymentName, d.VersionState.Version.BuildId, workflow.Now(ctx), "",
+		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, d.VersionState.SyncBatchSize)
+	d.VersionState = state
+	d.deleteVersion = false
 }
 
 func (d *VersionWorkflowRunner) syncRegisteredTaskQueueOld(ctx workflow.Context, args *deploymentspb.RegisterWorkerInVersionArgs) error {

@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Client interface {
@@ -2022,22 +2021,7 @@ func (d *ClientImpl) makeVersionWorkflowArgs(
 	return &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
 		NamespaceName: namespaceEntry.Name().String(),
 		NamespaceId:   namespaceEntry.ID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
-				DeploymentName: deploymentName,
-				BuildId:        buildID,
-			},
-			CreateTime:           timestamppb.Now(),
-			RoutingUpdateTime:    nil,
-			CurrentSinceTime:     nil,                                 // not current
-			RampingSinceTime:     nil,                                 // not ramping
-			RampPercentage:       0,                                   // not ramping
-			DrainageInfo:         &deploymentpb.VersionDrainageInfo{}, // not draining or drained
-			Metadata:             nil,
-			SyncBatchSize:        d.getSyncBatchSize(),
-			Status:               initialStatus,
-			LastModifierIdentity: identity,
-		},
+		VersionState:  makeNewVersionState(deploymentName, buildID, time.Now(), identity, initialStatus, d.getSyncBatchSize()),
 	}
 }
 

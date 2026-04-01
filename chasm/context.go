@@ -27,7 +27,7 @@ type Context interface {
 	ExecutionCloseTime() time.Time
 	// Logger returns a logger tagged with execution key and other chasm framework internal information.
 	Logger() log.Logger
-	// MetricsHandler returns a metrics handler with bare minimum tags (no namespace tag).
+	// MetricsHandler returns a metrics handler with namespace tag.
 	MetricsHandler() metrics.Handler
 	// Value returns the value associated with this context for key. The behavior is the same as context.Context.Value().
 	// Use WithContextValues RegistrableComponentOption to set key values pair for a component upon registration.
@@ -50,7 +50,7 @@ type MutableContext interface {
 	Context
 
 	// AddTask adds a task to be emitted as part of the current transaction.
-	// The task is associated with the given component and will be invoked via the registered executor for the given task
+	// The task is associated with the given component and will be invoked via the registered handler for the given task
 	// referencing the component.
 	AddTask(Component, TaskAttributes, any)
 

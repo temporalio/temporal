@@ -201,6 +201,8 @@ type WorkerDeploymentVersionData struct {
 	// immediately delete the version data from task queues. instead, we mark them as deleted while
 	// keeping the revision number.
 	// Old enough deleted versions are GCed based on update_time.
+	// Deprecated. This mechanism is not safe against reactivation of versions after delete.
+	// Use forget_version flag for synchronous deletion of the version data from TQ.
 	Deleted       bool                             `protobuf:"varint,3,opt,name=deleted,proto3" json:"deleted,omitempty"`
 	Status        v1.WorkerDeploymentVersionStatus `protobuf:"varint,6,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkerDeploymentVersionStatus" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -3996,7 +3998,7 @@ var File_temporal_server_api_deployment_v1_message_proto protoreflect.FileDescri
 
 const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"/temporal/server/api/deployment/v1/message.proto\x12!temporal.server.api.deployment.v1\x1a&temporal/api/enums/v1/task_queue.proto\x1a&temporal/api/enums/v1/deployment.proto\x1a$temporal/api/compute/v1/config.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a(temporal/api/deployment/v1/message.proto\x1a$temporal/api/common/v1/message.proto\"]\n" +
+	"/temporal/server/api/deployment/v1/message.proto\x12!temporal.server.api.deployment.v1\x1a$temporal/api/compute/v1/config.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a&temporal/api/enums/v1/deployment.proto\x1a&temporal/api/enums/v1/task_queue.proto\"]\n" +
 	"\x17WorkerDeploymentVersion\x12'\n" +
 	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12\x19\n" +
 	"\bbuild_id\x18\x02 \x01(\tR\abuildId\"\xc4\x03\n" +

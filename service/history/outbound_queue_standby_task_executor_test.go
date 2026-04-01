@@ -350,8 +350,12 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask_Discard() 
 	})
 
 	s.Run("WithoutHandler", func() {
-		executor, executable := setupDiscard(&nonDiscardableTaskTestLibrary{}, "non_discard_task", func(_ *historyi.MockChasmTree) {})
-		// Without a discard handler, discardChasmSideEffectTask returns ErrTaskDiscarded directly.
+		executor, executable := setupDiscard(&nonDiscardableTaskTestLibrary{}, "non_discard_task", func(tree *historyi.MockChasmTree) {
+			// The default Discard (from SideEffectTaskHandlerBase) returns ErrTaskDiscarded.
+			tree.EXPECT().ExecuteSideEffectDiscardTask(
+				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+			).Return(chasm.ErrTaskDiscarded).Times(1)
+		})
 		result := executor.Execute(context.Background(), executable)
 		s.ErrorIs(result.ExecutionErr, consts.ErrTaskDiscarded)
 		s.False(result.ExecutedAsActive)

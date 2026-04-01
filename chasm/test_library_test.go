@@ -2,40 +2,18 @@
 package chasm
 
 import (
-	"context"
-
 	"go.uber.org/mock/gomock"
 )
-
-// mockDiscardableSideEffectExecutor wraps MockSideEffectTaskExecutor and adds SideEffectTaskDiscarder support for
-// testing ExecuteSideEffectDiscardTask.
-type mockDiscardableSideEffectExecutor struct {
-	*MockSideEffectTaskExecutor[any, *TestDiscardableSideEffectTask]
-	discardFn func(ctx context.Context, ref ComponentRef, attrs TaskAttributes, task *TestDiscardableSideEffectTask) error
-}
-
-func (m *mockDiscardableSideEffectExecutor) Discard(
-	ctx context.Context,
-	ref ComponentRef,
-	attrs TaskAttributes,
-	task *TestDiscardableSideEffectTask,
-) error {
-	return m.discardFn(ctx, ref, attrs, task)
-}
 
 type TestLibrary struct {
 	UnimplementedLibrary
 
 	controller *gomock.Controller
 
-	mockSideEffectTaskValidator            *MockTaskValidator[any, *TestSideEffectTask]
-	mockSideEffectTaskExecutor             *MockSideEffectTaskExecutor[any, *TestSideEffectTask]
-	mockDiscardableSideEffectTaskValidator *MockTaskValidator[any, *TestDiscardableSideEffectTask]
-	mockDiscardableSideEffectExecutor      *mockDiscardableSideEffectExecutor
-	mockOutboundSideEffectTaskValidator    *MockTaskValidator[any, TestOutboundSideEffectTask]
-	mockOutboundSideEffectTaskExecutor     *MockSideEffectTaskExecutor[any, TestOutboundSideEffectTask]
-	mockPureTaskValidator                  *MockTaskValidator[any, *TestPureTask]
-	mockPureTaskExecutor                   *MockPureTaskExecutor[any, *TestPureTask]
+	mockSideEffectTaskHandler         *MockSideEffectTaskHandler[any, *TestSideEffectTask]
+	mockDiscardableSideEffectHandler  *MockSideEffectTaskHandler[any, *TestDiscardableSideEffectTask]
+	mockOutboundSideEffectTaskHandler *MockSideEffectTaskHandler[any, TestOutboundSideEffectTask]
+	mockPureTaskHandler               *MockPureTaskHandler[any, *TestPureTask]
 }
 
 func newTestLibrary(
@@ -44,16 +22,10 @@ func newTestLibrary(
 	return &TestLibrary{
 		controller: controller,
 
-		mockSideEffectTaskValidator:            NewMockTaskValidator[any, *TestSideEffectTask](controller),
-		mockSideEffectTaskExecutor:             NewMockSideEffectTaskExecutor[any, *TestSideEffectTask](controller),
-		mockDiscardableSideEffectTaskValidator: NewMockTaskValidator[any, *TestDiscardableSideEffectTask](controller),
-		mockDiscardableSideEffectExecutor: &mockDiscardableSideEffectExecutor{
-			MockSideEffectTaskExecutor: NewMockSideEffectTaskExecutor[any, *TestDiscardableSideEffectTask](controller),
-		},
-		mockOutboundSideEffectTaskValidator: NewMockTaskValidator[any, TestOutboundSideEffectTask](controller),
-		mockOutboundSideEffectTaskExecutor:  NewMockSideEffectTaskExecutor[any, TestOutboundSideEffectTask](controller),
-		mockPureTaskValidator:               NewMockTaskValidator[any, *TestPureTask](controller),
-		mockPureTaskExecutor:                NewMockPureTaskExecutor[any, *TestPureTask](controller),
+		mockSideEffectTaskHandler:         NewMockSideEffectTaskHandler[any, *TestSideEffectTask](controller),
+		mockDiscardableSideEffectHandler:  NewMockSideEffectTaskHandler[any, *TestDiscardableSideEffectTask](controller),
+		mockOutboundSideEffectTaskHandler: NewMockSideEffectTaskHandler[any, TestOutboundSideEffectTask](controller),
+		mockPureTaskHandler:               NewMockPureTaskHandler[any, *TestPureTask](controller),
 	}
 }
 
@@ -78,24 +50,20 @@ func (l *TestLibrary) Tasks() []*RegistrableTask {
 	return []*RegistrableTask{
 		NewRegistrableSideEffectTask(
 			testSideEffectTaskName,
-			l.mockSideEffectTaskValidator,
-			l.mockSideEffectTaskExecutor,
+			l.mockSideEffectTaskHandler,
 		),
 		NewRegistrableSideEffectTask(
 			testDiscardableSideEffectTaskName,
-			l.mockDiscardableSideEffectTaskValidator,
-			l.mockDiscardableSideEffectExecutor,
+			l.mockDiscardableSideEffectHandler,
 		),
 		NewRegistrableSideEffectTask(
 			// NOTE this task is registered as a struct, instead of pointer to struct.
 			testOutboundSideEffectTaskName,
-			l.mockOutboundSideEffectTaskValidator,
-			l.mockOutboundSideEffectTaskExecutor,
+			l.mockOutboundSideEffectTaskHandler,
 		),
 		NewRegistrablePureTask(
 			testPureTaskName,
-			l.mockPureTaskValidator,
-			l.mockPureTaskExecutor,
+			l.mockPureTaskHandler,
 		),
 	}
 }

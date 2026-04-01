@@ -33,7 +33,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/maruel/panicparse/v2 v2.4.0
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/nexus-rpc/sdk-go v0.5.2-0.20260211051645-26b0b4c584e5
+	github.com/nexus-rpc/sdk-go v0.6.0
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/prometheus/client_golang v1.21.0
@@ -60,7 +60,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.40.0
 	go.opentelemetry.io/otel/trace v1.40.0
 	go.temporal.io/api v1.62.3-0.20260327234204-dbc016f3811d
-	go.temporal.io/auto-scaled-workers v0.0.0-20260401222227-be9fb43363ad
+	go.temporal.io/auto-scaled-workers v0.0.0-20260401235702-f2721a623799
 	go.temporal.io/sdk v1.38.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/mock v0.6.0

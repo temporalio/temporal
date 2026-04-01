@@ -149,7 +149,7 @@ type (
 		timeSource                    clock.TimeSource
 		visibilityManager             manager.VisibilityManager
 		nexusEndpointClient           *nexusEndpointClient
-		nexusEndpointsOwnershipLostCh chan struct{}
+		nexusEndpointsOwnershipLostCh atomic.Value // stores chan struct{}
 		saMapperProvider              searchattribute.MapperProvider
 		saProvider                    searchattribute.Provider
 		metricsHandler                metrics.Handler
@@ -275,29 +275,29 @@ func NewEngine(
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
-		status:                        common.DaemonStatusInitialized,
-		taskManager:                   taskManager,
-		fairTaskManager:               fairTaskManager,
-		historyClient:                 historyClient,
-		matchingRawClient:             matchingRawClient,
-		tokenSerializer:               tasktoken.NewSerializer(),
-		workerDeploymentClient:        workerDeploymentClient,
-		historySerializer:             historySerializer,
-		logger:                        log.With(logger, tag.ComponentMatchingEngine),
-		throttledLogger:               log.With(throttledLogger, tag.ComponentMatchingEngine),
-		namespaceRegistry:             namespaceRegistry,
-		hostInfoProvider:              hostInfoProvider,
-		serviceResolver:               resolver,
-		membershipChangedCh:           make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
-		clusterMeta:                   clusterMeta,
-		timeSource:                    clock.NewRealTimeSource(), // No need to mock this at the moment
-		visibilityManager:             visibilityManager,
-		nexusEndpointClient:           newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
-		nexusEndpointsOwnershipLostCh: make(chan struct{}),
-		saProvider:                    saProvider,
-		saMapperProvider:              saMapperProvider,
-		metricsHandler:                scopedMetricsHandler,
-		partitions:                    make(map[tqid.PartitionKey]taskQueuePartitionManager),
+		status:                 common.DaemonStatusInitialized,
+		taskManager:            taskManager,
+		fairTaskManager:        fairTaskManager,
+		historyClient:          historyClient,
+		matchingRawClient:      matchingRawClient,
+		tokenSerializer:        tasktoken.NewSerializer(),
+		workerDeploymentClient: workerDeploymentClient,
+		historySerializer:      historySerializer,
+		logger:                 log.With(logger, tag.ComponentMatchingEngine),
+		throttledLogger:        log.With(throttledLogger, tag.ComponentMatchingEngine),
+		namespaceRegistry:      namespaceRegistry,
+		hostInfoProvider:       hostInfoProvider,
+		serviceResolver:        resolver,
+		membershipChangedCh:    make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
+		clusterMeta:            clusterMeta,
+		timeSource:             clock.NewRealTimeSource(), // No need to mock this at the moment
+		visibilityManager:      visibilityManager,
+		nexusEndpointClient:    newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
+		// nexusEndpointsOwnershipLostCh initialized below
+		saProvider:       saProvider,
+		saMapperProvider: saMapperProvider,
+		metricsHandler:   scopedMetricsHandler,
+		partitions:       make(map[tqid.PartitionKey]taskQueuePartitionManager),
 		gaugeMetrics: gaugeMetrics{
 			loadedTaskQueueFamilyCount:    make(map[taskQueueCounterKey]int),
 			loadedTaskQueueCount:          make(map[taskQueueCounterKey]int),
@@ -317,6 +317,7 @@ func NewEngine(
 		rateLimiter:               rateLimiter,
 		taskHookFactories:         taskHookFactories,
 	}
+	e.nexusEndpointsOwnershipLostCh.Store(make(chan struct{}))
 	e.reachabilityCache = newReachabilityCache(
 		metrics.NoopMetricsHandler,
 		visibilityManager,
@@ -2105,7 +2106,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 						deploymentData.UnversionedRampData = vd
 
 					}
-				} else if idx := worker_versioning.FindDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
+				} else if idx := worker_versioning.FindOldDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
 					old := deploymentData.Versions[idx]
 					if old.GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
 						continue
@@ -2127,19 +2128,17 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					clearVersionFromRoutingConfig(workerDeploymentData, nil, vd)
 				}
 			} else if v := req.GetForgetVersion(); v != nil {
-				if idx := worker_versioning.FindDeploymentVersion(deploymentData, v); idx >= 0 {
+				// Go through the new and old deployment data format for this deployment and remove the version if present.
+				workerDeploymentData := deploymentData.GetDeploymentsData()[v.GetDeploymentName()]
+				deleted := removeDeploymentVersions(
+					deploymentData,
+					v.GetDeploymentName(),
+					workerDeploymentData,
+					[]string{v.GetBuildId()},
+					/* removeOldFormat */ true,
+				)
+				if deleted {
 					changed = true
-					deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
-
-					// Go through the new deployment data format for this deployment and remove the version if present.
-					workerDeploymentData := deploymentData.GetDeploymentsData()[v.GetDeploymentName()]
-					_ = removeDeploymentVersions(
-						deploymentData,
-						v.GetDeploymentName(),
-						workerDeploymentData,
-						[]string{v.GetBuildId()},
-						/* removeOldFormat */ false,
-					)
 				}
 			} else {
 
@@ -2756,7 +2755,7 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 func (e *matchingEngineImpl) checkNexusEndpointsOwnership() (bool, <-chan struct{}, error) {
 	// Get the channel before checking the condition to prevent the channel from being closed while we're running this
 	// check.
-	ch := e.nexusEndpointsOwnershipLostCh
+	ch := e.nexusEndpointsOwnershipLostCh.Load().(chan struct{}) //nolint:revive // type is always chan struct{}
 	self := e.hostInfoProvider.HostInfo().Identity()
 	owner, err := e.serviceResolver.Lookup(nexusEndpointsTablePartitionRoutingKey)
 	if err != nil {
@@ -2774,8 +2773,7 @@ func (e *matchingEngineImpl) notifyNexusEndpointsOwnershipChange() {
 		return
 	}
 	if !isOwner {
-		close(e.nexusEndpointsOwnershipLostCh)
-		e.nexusEndpointsOwnershipLostCh = make(chan struct{})
+		close(e.nexusEndpointsOwnershipLostCh.Swap(make(chan struct{})).(chan struct{})) //nolint:revive // type is always chan struct{}
 	}
 	e.nexusEndpointClient.notifyOwnershipChanged(isOwner)
 }
@@ -3611,6 +3609,10 @@ func (e *matchingEngineImpl) UpdateFairnessState(
 	return &matchingservice.UpdateFairnessStateResponse{}, nil
 }
 
+func (e *matchingEngineImpl) newTaskTracker() *taskTracker {
+	return newTaskTracker(e.timeSource, 5*time.Second, 30*time.Second)
+}
+
 // migrateOldFormatVersions moves versions present in the given deployment from the
 // deprecated old-format slice into the new per-deployment map.
 //
@@ -3651,15 +3653,15 @@ func removeDeploymentVersions(
 	buildIDs []string,
 	removeOldFormat bool,
 ) bool {
-	if workerDeploymentData == nil {
+	if workerDeploymentData == nil && !removeOldFormat {
 		return false
 	}
 	changed := false
 	deletedInNew := false
 
 	for _, buildID := range buildIDs {
-		if _, exists := workerDeploymentData.Versions[buildID]; exists {
-			delete(workerDeploymentData.Versions, buildID)
+		if _, exists := workerDeploymentData.GetVersions()[buildID]; exists {
+			delete(workerDeploymentData.GetVersions(), buildID)
 			deletedInNew = true
 			changed = true
 		}
@@ -3678,7 +3680,7 @@ func removeDeploymentVersions(
 	}
 
 	// Only remove the deployment entry if versions were actually deleted from the new-format map.
-	if deletedInNew && len(workerDeploymentData.Versions) == 0 {
+	if workerDeploymentData != nil && deletedInNew && len(workerDeploymentData.GetVersions()) == 0 {
 		delete(deploymentData.GetDeploymentsData(), deploymentName)
 	}
 	return changed
