@@ -152,6 +152,7 @@ func recordActivityTaskStarted(
 		if ai.RequestId == requestID {
 			response.StartedTime = ai.StartedTime
 			response.Attempt = ai.Attempt
+			response.Clock = ai.StartedClock
 			return response, rejectCodeAccepted, nil
 		}
 
@@ -238,6 +239,17 @@ func recordActivityTaskStarted(
 		}
 	}
 
+	// Create the shard clock before recording the start event. Matching uses the returned clock
+	// to build the task token sent to the worker. We store it in ActivityInfo so that history
+	// can later reconstruct the same task token that matching created (e.g. for cancel worker
+	// commands). On retries of this RPC, we return the stored clock from the early return
+	// path above.
+	clock, err := shardContext.NewVectorClock()
+	if err != nil {
+		return nil, rejectCodeUndefined, err
+	}
+	ai.StartedClock = clock
+
 	versioningStamp := worker_versioning.StampFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
 	if _, err := mutableState.AddActivityTaskStartedEvent(
 		ai, scheduledEventID, requestID, request.PollRequest.GetIdentity(),
@@ -260,6 +272,8 @@ func recordActivityTaskStarted(
 				enumspb.TASK_QUEUE_TYPE_ACTIVITY),
 		),
 	).Record(scheduleToStartLatency)
+
+	response.Clock = clock
 
 	response.StartedTime = ai.StartedTime
 	response.Attempt = ai.Attempt

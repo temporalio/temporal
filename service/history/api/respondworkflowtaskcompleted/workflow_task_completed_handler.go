@@ -655,7 +655,6 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 	if ai != nil {
 		// If ai is nil, the activity has already been canceled/completed/timedout. The cancel request
 		// will be recorded in the history, but no further action will be taken.
-
 		if ai.StartedEventId == common.EmptyEventID {
 			// We haven't started the activity yet, we can cancel the activity right away and
 			// schedule a workflow task to ensure the workflow makes progress.
@@ -680,7 +679,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 				ai.ActivityId,
 				ai.ActivityType.GetName(),
 				ai.Attempt,
-				nil, // Clock not needed for cancel
+				ai.StartedClock,
 				ai.Version,
 				ai.StartVersion,
 				nil,

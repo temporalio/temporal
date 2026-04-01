@@ -147,7 +147,8 @@ func TestDispatchCancelToWorker(t *testing.T) {
 	env.Equal(workerservicepb.WorkerService.ServiceName, startOp.Service, "Expected WorkerService")
 	env.Equal(workerservicepb.WorkerService.ExecuteCommands.Name(), startOp.Operation, "Expected ExecuteCommands operation")
 
-	// Verify the payload contains the expected CancelActivity command with a valid task token.
+	// Verify the payload contains the expected CancelActivity command with a task token
+	// that matches the one sent to the worker when the activity started.
 	env.NotNil(startOp.Payload, "Expected payload in StartOperation request")
 	var executeReq workerservicepb.ExecuteCommandsRequest
 	err = payload.Decode(startOp.Payload, &executeReq)
@@ -156,5 +157,9 @@ func TestDispatchCancelToWorker(t *testing.T) {
 	cancelCmd := executeReq.Commands[0].GetCancelActivity()
 	env.NotNil(cancelCmd, "Expected CancelActivity command")
 	env.NotEmpty(cancelCmd.TaskToken, "Expected non-empty task token in CancelActivity command")
-	t.Log("SUCCESS: Received ExecuteCommands Nexus request on control queue with valid CancelActivity payload")
+	// The cancel command's task token must match the one from the activity poll response.
+	// The SDK uses exact task token bytes to look up and cancel running activities.
+	env.Equal(activityPollResp.TaskToken, cancelCmd.TaskToken,
+		"Cancel command task token must match the activity's original task token")
+	t.Log("SUCCESS: Received ExecuteCommands Nexus request on control queue with matching CancelActivity task token")
 }

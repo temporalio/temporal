@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
@@ -16,10 +17,10 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -95,9 +96,20 @@ func (d *workerCommandsTaskDispatcher) dispatchToWorker(
 	request := &workerservicepb.ExecuteCommandsRequest{
 		Commands: task.Commands,
 	}
-	requestPayload, err := payload.Encode(request)
+	// Encode as binary/protobuf using the standard Temporal payload format.
+	// Worker commands are handled directly by SDK Core (not by lang-SDK Nexus handlers),
+	// so we use binary/protobuf which Core can decode natively via prost. The standard
+	// payload.Encode() uses json/protobuf encoding, which Core does not support because
+	// it normally delegates Nexus payload deserialization to the lang SDK.
+	requestData, err := proto.Marshal(request)
 	if err != nil {
 		return fmt.Errorf("failed to encode worker commands request: %w", err)
+	}
+	requestPayload := &commonpb.Payload{
+		Metadata: map[string][]byte{
+			"encoding": []byte("binary/protobuf"),
+		},
+		Data: requestData,
 	}
 
 	nexusRequest := &nexuspb.Request{
