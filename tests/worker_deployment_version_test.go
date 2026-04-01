@@ -1527,7 +1527,6 @@ func (s *DeploymentVersionSuite) TestValidateComputeConfig_Valid() {
 }
 
 func (s *DeploymentVersionSuite) TestValidateComputeConfig_InvalidProvider() {
-	s.T().Skip() // until WCI validate timeout issue is fixed.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -1553,7 +1552,6 @@ func (s *DeploymentVersionSuite) TestValidateComputeConfig_InvalidProvider() {
 }
 
 func (s *DeploymentVersionSuite) TestValidateComputeConfig_VersionNotFound() {
-	s.T().Skip() // until WCI validate timeout issue is fixed.
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
