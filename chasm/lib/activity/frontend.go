@@ -460,7 +460,6 @@ func activityOptionsFromStartRequest(req *workflowservice.StartActivityExecution
 	}
 }
 
-// applyActivityOptionsToStartRequest copies normalized values from ActivityOptions
 func (h *frontendHandler) PauseActivityExecution(
 	ctx context.Context,
 	req *workflowservice.PauseActivityExecutionRequest,
@@ -555,7 +554,7 @@ func (h *frontendHandler) UpdateActivityExecutionOptions(
 	}, nil
 }
 
-// back to the StartActivityExecutionRequest.
+// applyActivityOptionsToStartRequest copies normalized values from ActivityOptions back to the StartActivityExecutionRequest.
 func applyActivityOptionsToStartRequest(opts *apiactivitypb.ActivityOptions, req *workflowservice.StartActivityExecutionRequest) {
 	req.TaskQueue = opts.TaskQueue
 	req.ScheduleToCloseTimeout = opts.ScheduleToCloseTimeout
