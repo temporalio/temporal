@@ -397,7 +397,7 @@ func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, numValidEx
 		RangeID:       1,
 		TaskQueueInfo: queueInfo,
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	var dbTasks []*persistencespb.AllocatedTaskInfo
 	numValid := 0
@@ -424,7 +424,7 @@ func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, numValidEx
 		TaskQueueInfo: &persistence.PersistedTaskQueueInfo{Data: queueInfo, RangeID: 1},
 		Tasks:         dbTasks,
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	// Capture tasks delivered to the matcher.
 	var mu sync.Mutex
@@ -439,7 +439,7 @@ func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, numValidEx
 	// Start backlog manager.
 	s.blm.Start()
 	defer s.blm.Stop()
-	s.NoError(s.blm.WaitUntilInitialized(context.Background()))
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
 
 	// Wait for all valid tasks to be delivered.
 	s.Require().Eventually(func() bool {
