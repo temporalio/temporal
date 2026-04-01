@@ -49,7 +49,7 @@ func TestExecute_FeatureFlagOff_DropsTask(t *testing.T) {
 	}
 
 	task := testWorkerCommandsTask()
-	err := d.execute(context.Background(), task, 1)
+	err := d.execute(context.Background(), task, 1 /* attempt */)
 	require.NoError(t, err, "task should be silently dropped when feature flag is off")
 }
 
@@ -63,7 +63,7 @@ func TestExecute_EmptyCommands_DropsTask(t *testing.T) {
 
 	task := testWorkerCommandsTask()
 	task.Commands = nil
-	err := d.execute(context.Background(), task, 1)
+	err := d.execute(context.Background(), task, 1 /* attempt */)
 	require.NoError(t, err, "task with no commands should be dropped")
 }
 
@@ -157,7 +157,7 @@ func TestExecute_DispatchSuccess(t *testing.T) {
 		}, nil)
 
 	task := testWorkerCommandsTask()
-	err := d.execute(context.Background(), task, 1)
+	err := d.execute(context.Background(), task, 1 /* attempt */)
 	require.NoError(t, err)
 
 	requireMetricValue(t, capture.Snapshot(), "success")
@@ -183,7 +183,7 @@ func TestExecute_DispatchRPCError(t *testing.T) {
 		nil, errors.New("connection refused"))
 
 	task := testWorkerCommandsTask()
-	err := d.execute(context.Background(), task, 1)
+	err := d.execute(context.Background(), task, 1 /* attempt */)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "connection refused")
 
@@ -214,7 +214,7 @@ func TestExecute_UpstreamTimeout(t *testing.T) {
 		}, nil)
 
 	task := testWorkerCommandsTask()
-	err := d.execute(context.Background(), task, 1)
+	err := d.execute(context.Background(), task, 1 /* attempt */)
 	require.Error(t, err)
 
 	var he *nexus.HandlerError
