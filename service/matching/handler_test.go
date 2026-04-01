@@ -126,6 +126,8 @@ func TestNexusHandlersEmitClientNameMetric(t *testing.T) {
 			"should have client_name tag, got: %v", snap)
 		require.True(t, findMetricWithTag(snap, nexusTaskRequestsMetric, "operation", "PollNexusTaskQueue"),
 			"should have operation tag, got: %v", snap)
+		require.True(t, findMetricWithTag(snap, nexusTaskRequestsMetric, "is_internal", "false"),
+			"should have is_internal=false, got: %v", snap)
 	})
 
 	t.Run("RespondNexusTaskCompleted", func(t *testing.T) {
@@ -148,6 +150,8 @@ func TestNexusHandlersEmitClientNameMetric(t *testing.T) {
 			"should have client_name tag, got: %v", snap)
 		require.True(t, findMetricWithTag(snap, nexusTaskRequestsMetric, "operation", "RespondNexusTaskCompleted"),
 			"should have operation tag, got: %v", snap)
+		require.True(t, findMetricWithTag(snap, nexusTaskRequestsMetric, "is_internal", "false"),
+			"should have is_internal=false, got: %v", snap)
 	})
 
 	t.Run("no client_name when header absent", func(t *testing.T) {
@@ -174,7 +178,7 @@ func TestNexusHandlersEmitClientNameMetric(t *testing.T) {
 			"should not have client_name tag when header is absent, got: %v", snap)
 	})
 
-	t.Run("excluded for internal task queue", func(t *testing.T) {
+	t.Run("is_internal for /temporal-sys/ task queue", func(t *testing.T) {
 		captureHandler := metricstest.NewCaptureHandler()
 		capture := captureHandler.StartCapture()
 		defer captureHandler.StopCapture(capture)
@@ -195,8 +199,9 @@ func TestNexusHandlersEmitClientNameMetric(t *testing.T) {
 		require.NoError(t, err)
 
 		snap := capture.Snapshot()
-		assert.Empty(t, snap[nexusTaskRequestsMetric],
-			"nexus_task_requests should not be emitted for internal task queues, got: %v", snap)
+		require.NotEmpty(t, snap[nexusTaskRequestsMetric])
+		require.True(t, findMetricWithTag(snap, nexusTaskRequestsMetric, "is_internal", "true"),
+			"should have is_internal=true for /temporal-sys/ task queue, got: %v", snap)
 	})
 }
 

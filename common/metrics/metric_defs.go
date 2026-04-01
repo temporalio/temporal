@@ -1160,7 +1160,7 @@ var (
 	RespondNexusTaskFailedPerTaskQueueCounter         = NewCounterDef("respond_nexus_failed")
 	NexusTaskRequests = NewCounterDef(
 		"nexus_task_requests",
-		WithDescription("The number of Nexus task poll and respond requests received by the matching service, broken down by namespace, operation, and SDK client name."),
+		WithDescription("The number of Nexus task poll and respond requests received by the matching service, broken down by namespace, operation, client_name, and is_internal."),
 	)
 	SyncThrottlePerTaskQueueCounter                   = NewCounterDef("sync_throttle_count")
 	BufferThrottlePerTaskQueueCounter                 = NewCounterDef("buffer_throttle_count")

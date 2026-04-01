@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -153,24 +154,23 @@ func (h *Handler) opMetricsHandler(
 	)
 }
 
-// internalNexusTaskQueuePrefix is used to identify server-internal Nexus task
-// queues (e.g. /temporal-sys/worker-commands/...) which should be excluded from
-// the adoption metric.
+// internalNexusTaskQueuePrefix identifies server-internal Nexus task queues
+// (e.g. /temporal-sys/worker-commands/{namespace}/{worker_grouping_key}).
+// Note: BreakdownMetricsByTaskQueue should NOT be enabled for these queues as
+// they are per-worker and will cause cardinality explosion.
 const internalNexusTaskQueuePrefix = "/temporal-sys/"
 
 // recordNexusTaskRequest emits the nexus_task_requests metric with namespace,
-// operation, and client_name tags to match the Envoy-based adoption metric.
-// Requests on internal task queues (prefixed with /temporal-sys/) are excluded.
+// operation, client_name, and is_internal tags.
 func (h *Handler) recordNexusTaskRequest(ctx context.Context, namespaceID string, taskQueueName string, operation string) {
-	if strings.HasPrefix(taskQueueName, internalNexusTaskQueuePrefix) {
-		return
-	}
 	nsName := h.namespaceName(namespace.ID(namespaceID))
 	clientName, _ := headers.GetClientNameAndVersion(ctx)
+	isInternal := strings.HasPrefix(taskQueueName, internalNexusTaskQueuePrefix)
 	metrics.NexusTaskRequests.With(h.metricsHandler).Record(1,
 		metrics.NamespaceTag(nsName.String()),
 		metrics.OperationTag(operation),
 		metrics.ClientNameTag(clientName),
+		metrics.StringTag("is_internal", strconv.FormatBool(isInternal)),
 	)
 }
 
