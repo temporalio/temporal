@@ -184,11 +184,6 @@ func NewRegistry(
 	}
 }
 
-// DefaultNamespaceStateChangedFnProvider returns the default NamespaceStateChangedFn for fx injection.
-func DefaultNamespaceStateChangedFnProvider() namespace.NamespaceStateChangedFn {
-	return DefaultNamespaceStateChanged
-}
-
 // DefaultNamespaceStateChanged is the default implementation that checks whether a namespace
 // state change is significant enough to trigger callbacks.
 func DefaultNamespaceStateChanged(currentClusterName string, oldNS *namespace.Namespace, newNS *namespace.Namespace) bool {

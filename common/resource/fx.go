@@ -86,7 +86,7 @@ var Module = fx.Options(
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
 	fx.Provide(NamespaceRegistryProvider),
-	fx.Provide(nsregistry.DefaultNamespaceStateChangedFnProvider),
+	fx.Provide(func() namespace.NamespaceStateChangedFn { return nsregistry.DefaultNamespaceStateChanged }),
 	nsregistry.RegistryLifetimeHooksModule,
 	fx.Provide(fx.Annotate(
 		func(p namespace.Registry) pingable.Pingable { return p },
