@@ -513,6 +513,8 @@ func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservi
 		metrics.MatchingPollWorkflowTaskQueueScope,
 	)
 	opMetrics = h.withClientNameTag(ctx, opMetrics)
+	// Only record on the initial handler call (ForwardedSource == ""), not on
+	// the forwarded call to the root partition, to avoid double-counting.
 	if request.GetForwardedSource() == "" {
 		metrics.NexusTaskRequestsPerTaskQueue.With(opMetrics).Record(1)
 	}
