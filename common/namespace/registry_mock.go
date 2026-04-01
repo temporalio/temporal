@@ -201,6 +201,18 @@ func (mr *MockRegistryMockRecorder) RegisterStateChangeCallback(key, cb any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterStateChangeCallback", reflect.TypeOf((*MockRegistry)(nil).RegisterStateChangeCallback), key, cb)
 }
 
+// RegisterStateChangeCallbackV2 mocks base method.
+func (m *MockRegistry) RegisterStateChangeCallbackV2(key any, cb StateChangeCallbackFnV2) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RegisterStateChangeCallbackV2", key, cb)
+}
+
+// RegisterStateChangeCallbackV2 indicates an expected call of RegisterStateChangeCallbackV2.
+func (mr *MockRegistryMockRecorder) RegisterStateChangeCallbackV2(key, cb any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterStateChangeCallbackV2", reflect.TypeOf((*MockRegistry)(nil).RegisterStateChangeCallbackV2), key, cb)
+}
+
 // Start mocks base method.
 func (m *MockRegistry) Start() {
 	m.ctrl.T.Helper()
@@ -235,4 +247,16 @@ func (m *MockRegistry) UnregisterStateChangeCallback(key any) {
 func (mr *MockRegistryMockRecorder) UnregisterStateChangeCallback(key any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterStateChangeCallback", reflect.TypeOf((*MockRegistry)(nil).UnregisterStateChangeCallback), key)
+}
+
+// UnregisterStateChangeCallbackV2 mocks base method.
+func (m *MockRegistry) UnregisterStateChangeCallbackV2(key any) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UnregisterStateChangeCallbackV2", key)
+}
+
+// UnregisterStateChangeCallbackV2 indicates an expected call of UnregisterStateChangeCallbackV2.
+func (mr *MockRegistryMockRecorder) UnregisterStateChangeCallbackV2(key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterStateChangeCallbackV2", reflect.TypeOf((*MockRegistry)(nil).UnregisterStateChangeCallbackV2), key)
 }

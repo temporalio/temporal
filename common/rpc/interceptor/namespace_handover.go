@@ -120,7 +120,7 @@ func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(
 	if err != nil {
 		return nil, err
 	}
-	if namespaceData.ReplicationState() == enumspb.REPLICATION_STATE_HANDOVER {
+	if namespaceData.ReplicationState("") == enumspb.REPLICATION_STATE_HANDOVER {
 		cbID := uuid.New()
 		waitReplicationStateUpdate := make(chan struct{})
 		i.namespaceRegistry.RegisterStateChangeCallback(cbID, func(ns *namespace.Namespace, deletedFromDb bool) {
@@ -129,7 +129,7 @@ func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(
 			}
 			if ns.State() != enumspb.NAMESPACE_STATE_REGISTERED ||
 				deletedFromDb ||
-				ns.ReplicationState() != enumspb.REPLICATION_STATE_HANDOVER ||
+				ns.ReplicationState("") != enumspb.REPLICATION_STATE_HANDOVER ||
 				!ns.IsGlobalNamespace() {
 				// Stop wait on state change if:
 				// 1. namespace is deleting/deleted

@@ -259,6 +259,8 @@ func GrpcServerOptionsProvider(
 		maskInternalErrorDetailsInterceptor.Intercept,
 		interceptor.ServiceErrorInterceptor,
 		interceptor.NewFrontendServiceErrorInterceptor(logger),
+		// BusinessID interceptor extracts business ID and adds it to context for use by redirection policy
+		businessIDInterceptor.Intercept,
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		metrics.NewServerMetricsContextInjectorInterceptor(),
@@ -266,8 +268,6 @@ func GrpcServerOptionsProvider(
 		// Handover interceptor has to above redirection because the request will route to the correct cluster after handover completed.
 		// And retry cannot be performed before customInterceptors.
 		namespaceHandoverInterceptor.Intercept,
-		// BusinessID interceptor extracts business ID and adds it to context for use by redirection policy
-		businessIDInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
 		// Telemetry interceptor must be after redirection to ensure metrics are recorded in the correct cluster
 		telemetryInterceptor.UnaryIntercept,
@@ -554,14 +554,21 @@ func NamespaceCountLimitInterceptorProvider(
 	)
 }
 
+type NamespaceValidatorInterceptorParams struct {
+	fx.In
+	ServiceConfig                          *Config
+	NamespaceRegistry                      namespace.Registry
+	AdditionalAllowedMethodsDuringHandover []string `group:"additionalAllowedMethodsDuringHandover"`
+}
+
 func NamespaceValidatorInterceptorProvider(
-	serviceConfig *Config,
-	namespaceRegistry namespace.Registry,
+	params NamespaceValidatorInterceptorParams,
 ) *interceptor.NamespaceValidatorInterceptor {
 	return interceptor.NewNamespaceValidatorInterceptor(
-		namespaceRegistry,
-		serviceConfig.EnableTokenNamespaceEnforcement,
-		serviceConfig.MaxIDLengthLimit,
+		params.NamespaceRegistry,
+		params.ServiceConfig.EnableTokenNamespaceEnforcement,
+		params.ServiceConfig.MaxIDLengthLimit,
+		params.AdditionalAllowedMethodsDuringHandover,
 	)
 }
 

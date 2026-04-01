@@ -433,7 +433,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
-	if err := c.NamespaceValidationInterceptor.ValidateState(c.namespace, apiName); err != nil {
+	if err := c.NamespaceValidationInterceptor.ValidateState(c.namespace, apiName, ""); err != nil {
 		c.outcomeTag = metrics.OutcomeTag("invalid_namespace_state")
 		return commonnexus.ConvertGRPCError(err, false)
 	}

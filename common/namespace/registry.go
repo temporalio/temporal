@@ -12,6 +12,13 @@ type (
 	// is no guarantee about when these are called.
 	StateChangeCallbackFn func(ns *Namespace, deletedFromDb bool)
 
+	// StateChangeCallbackFnV2 is like StateChangeCallbackFn but also receives the old namespace state.
+	StateChangeCallbackFnV2 func(oldNs *Namespace, newNs *Namespace, deletedFromDb bool)
+
+	// NamespaceStateChangedFn determines whether a namespace state change is significant enough
+	// to trigger callbacks.
+	NamespaceStateChangedFn func(currentClusterName string, oldNs *Namespace, newNs *Namespace) bool
+
 	// Registry provides access to Namespace objects by name or by ID.
 	Registry interface {
 		pingable.Pingable
@@ -28,6 +35,8 @@ type (
 		// State, ReplicationState, ActiveCluster, or isGlobalNamespace config changed.
 		RegisterStateChangeCallback(key any, cb StateChangeCallbackFn)
 		UnregisterStateChangeCallback(key any)
+		RegisterStateChangeCallbackV2(key any, cb StateChangeCallbackFnV2)
+		UnregisterStateChangeCallbackV2(key any)
 		// GetCustomSearchAttributesMapper is a temporary solution to be able to get search attributes
 		// with from persistence if forceSearchAttributesCacheRefreshOnRead is true.
 		GetCustomSearchAttributesMapper(name Name) (CustomSearchAttributesMapper, error)

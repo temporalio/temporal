@@ -179,8 +179,12 @@ func (ns *Namespace) State() enumspb.NamespaceState {
 	return ns.info.State
 }
 
-func (ns *Namespace) ReplicationState() enumspb.ReplicationState {
-	return ns.replicationResolver.ReplicationState()
+func (ns *Namespace) ReplicationState(businessID string) enumspb.ReplicationState {
+	return ns.replicationResolver.ReplicationState(businessID)
+}
+
+func (ns *Namespace) ReplicationResolver() ReplicationResolver {
+	return ns.replicationResolver
 }
 
 // ActiveClusterName observes the name of the cluster that is currently active

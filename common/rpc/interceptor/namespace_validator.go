@@ -23,10 +23,11 @@ type (
 
 	// NamespaceValidatorInterceptor contains NamespaceValidateIntercept and StateValidationIntercept
 	NamespaceValidatorInterceptor struct {
-		namespaceRegistry               namespace.Registry
-		tokenSerializer                 *tasktoken.Serializer
-		enableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn
-		maxNamespaceLength              dynamicconfig.IntPropertyFn
+		namespaceRegistry                      namespace.Registry
+		tokenSerializer                        *tasktoken.Serializer
+		enableTokenNamespaceEnforcement        dynamicconfig.BoolPropertyFn
+		maxNamespaceLength                     dynamicconfig.IntPropertyFn
+		additionalAllowedMethodsDuringHandover map[string]struct{}
 	}
 )
 
@@ -92,12 +93,18 @@ func NewNamespaceValidatorInterceptor(
 	namespaceRegistry namespace.Registry,
 	enableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn,
 	maxNamespaceLength dynamicconfig.IntPropertyFn,
+	additionalAllowedMethodsDuringHandover []string,
 ) *NamespaceValidatorInterceptor {
+	additional := make(map[string]struct{}, len(additionalAllowedMethodsDuringHandover))
+	for _, m := range additionalAllowedMethodsDuringHandover {
+		additional[m] = struct{}{}
+	}
 	return &NamespaceValidatorInterceptor{
-		namespaceRegistry:               namespaceRegistry,
-		tokenSerializer:                 tasktoken.NewSerializer(),
-		enableTokenNamespaceEnforcement: enableTokenNamespaceEnforcement,
-		maxNamespaceLength:              maxNamespaceLength,
+		namespaceRegistry:                      namespaceRegistry,
+		tokenSerializer:                        tasktoken.NewSerializer(),
+		enableTokenNamespaceEnforcement:        enableTokenNamespaceEnforcement,
+		additionalAllowedMethodsDuringHandover: additional,
+		maxNamespaceLength:                     maxNamespaceLength,
 	}
 }
 
@@ -203,7 +210,7 @@ func (ni *NamespaceValidatorInterceptor) StateValidationIntercept(
 		return nil, err
 	}
 
-	if err := ni.ValidateState(namespaceEntry, info.FullMethod); err != nil {
+	if err := ni.ValidateState(namespaceEntry, info.FullMethod, GetBusinessIDFromContext(ctx)); err != nil {
 		return nil, err
 	}
 
@@ -216,11 +223,11 @@ func (ni *NamespaceValidatorInterceptor) StateValidationIntercept(
 // 3. Namespace exists.
 // 4. Namespace from request match namespace from task token, if check is enabled with dynamic config.
 // 5. Namespace is in correct state.
-func (ni *NamespaceValidatorInterceptor) ValidateState(namespaceEntry *namespace.Namespace, fullMethod string) error {
+func (ni *NamespaceValidatorInterceptor) ValidateState(namespaceEntry *namespace.Namespace, fullMethod string, businessID string) error {
 	if err := ni.checkNamespaceState(namespaceEntry, fullMethod); err != nil {
 		return err
 	}
-	return ni.checkReplicationState(namespaceEntry, fullMethod)
+	return ni.checkReplicationState(namespaceEntry, fullMethod, businessID)
 }
 
 func (ni *NamespaceValidatorInterceptor) extractNamespace(req any) (*namespace.Namespace, error) {
@@ -378,17 +385,20 @@ func (ni *NamespaceValidatorInterceptor) checkNamespaceState(namespaceEntry *nam
 	return serviceerror.NewNamespaceInvalidState(namespaceEntry.Name().String(), namespaceEntry.State(), allowedStates)
 }
 
-func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *namespace.Namespace, fullMethod string) error {
+func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *namespace.Namespace, fullMethod string, businessID string) error {
 	if namespaceEntry == nil {
 		return nil
 	}
-	if namespaceEntry.ReplicationState() != enumspb.REPLICATION_STATE_HANDOVER {
+	if namespaceEntry.ReplicationState(businessID) != enumspb.REPLICATION_STATE_HANDOVER {
 		return nil
 	}
 
 	methodName := api.MethodName(fullMethod)
 
 	if _, ok := allowedMethodsDuringHandover[methodName]; ok {
+		return nil
+	}
+	if _, ok := ni.additionalAllowedMethodsDuringHandover[methodName]; ok {
 		return nil
 	}
 

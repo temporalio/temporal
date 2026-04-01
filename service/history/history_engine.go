@@ -376,15 +376,18 @@ func (e *historyEngineImpl) Stop() {
 	e.replicationProcessorMgr.Stop()
 	// unset the failover callback
 	e.shardContext.GetNamespaceRegistry().UnregisterStateChangeCallback(e)
+	e.shardContext.GetNamespaceRegistry().UnregisterStateChangeCallbackV2(e)
 }
 
 func (e *historyEngineImpl) registerNamespaceStateChangeCallback() {
 
-	e.shardContext.GetNamespaceRegistry().RegisterStateChangeCallback(e, func(ns *namespace.Namespace, deletedFromDb bool) {
+	e.shardContext.GetNamespaceRegistry().RegisterStateChangeCallbackV2(e, func(oldNs *namespace.Namespace, newNs *namespace.Namespace, deletedFromDb bool) {
 		if e.shardContext.GetClusterMetadata().IsGlobalNamespaceEnabled() {
-			e.shardContext.UpdateHandoverNamespace(ns, deletedFromDb)
+			e.shardContext.UpdateHandoverNamespace(newNs, deletedFromDb)
 		}
+	})
 
+	e.shardContext.GetNamespaceRegistry().RegisterStateChangeCallback(e, func(ns *namespace.Namespace, deletedFromDb bool) {
 		if deletedFromDb {
 			return
 		}

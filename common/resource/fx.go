@@ -214,22 +214,29 @@ func SearchAttributeValidatorProvider(
 	)
 }
 
-func NamespaceRegistryProvider(
-	logger log.SnTaggedLogger,
-	metricsHandler metrics.Handler,
-	clusterMetadata cluster.Metadata,
-	metadataManager persistence.MetadataManager,
-	dynamicCollection *dynamicconfig.Collection,
-	replicationResolverFactory namespace.ReplicationResolverFactory,
-) namespace.Registry {
+type NamespaceRegistryParams struct {
+	fx.In
+
+	Logger                     log.SnTaggedLogger
+	MetricsHandler             metrics.Handler
+	ClusterMetadata            cluster.Metadata
+	MetadataManager            persistence.MetadataManager
+	DynamicCollection          *dynamicconfig.Collection
+	ReplicationResolverFactory namespace.ReplicationResolverFactory
+	RegistryOptions            []nsregistry.RegistryOption `group:"namespaceRegistryOptions"`
+}
+
+func NamespaceRegistryProvider(params NamespaceRegistryParams) namespace.Registry {
 	return nsregistry.NewRegistry(
-		metadataManager,
-		clusterMetadata.IsGlobalNamespaceEnabled(),
-		dynamicconfig.NamespaceCacheRefreshInterval.Get(dynamicCollection),
-		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection),
-		metricsHandler,
-		logger,
-		replicationResolverFactory,
+		params.MetadataManager,
+		params.ClusterMetadata.IsGlobalNamespaceEnabled(),
+		params.ClusterMetadata.GetCurrentClusterName(),
+		dynamicconfig.NamespaceCacheRefreshInterval.Get(params.DynamicCollection),
+		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(params.DynamicCollection),
+		params.MetricsHandler,
+		params.Logger,
+		params.ReplicationResolverFactory,
+		params.RegistryOptions...,
 	)
 }
 
