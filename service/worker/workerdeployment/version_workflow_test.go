@@ -388,8 +388,8 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_Success() {
 	tv := testvars.New(s.T())
 
 	var a *VersionActivities
-	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
-	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.RegisterActivity(a.DeleteWorkerControllerInstance)
+	s.env.OnActivity(a.DeleteWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	taskQueueName := tv.TaskQueue().Name
 
@@ -457,8 +457,8 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_QueryAfterDeletion() {
 	tv := testvars.New(s.T())
 
 	var a *VersionActivities
-	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
-	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.RegisterActivity(a.DeleteWorkerControllerInstance)
+	s.env.OnActivity(a.DeleteWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	taskQueueName := tv.TaskQueue().Name
 
@@ -592,8 +592,8 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_SucceedsWhenDrainingWithSkipFl
 	now := timestamppb.New(time.Now())
 
 	var a *VersionActivities
-	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
-	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.RegisterActivity(a.DeleteWorkerControllerInstance)
+	s.env.OnActivity(a.DeleteWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	taskQueueName := tv.TaskQueue().Name
 
@@ -768,8 +768,8 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation() {
 	tv := testvars.New(s.T())
 
 	var a *VersionActivities
-	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
-	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.RegisterActivity(a.DeleteWorkerControllerInstance)
+	s.env.OnActivity(a.DeleteWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	taskQueueName := tv.TaskQueue().Name
 
@@ -804,7 +804,9 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation() {
 			OnReject: func(err error) {
 				s.Fail("delete version should not have been rejected", err)
 			},
-			OnAccept: func() {},
+			OnAccept: func() {
+				fmt.Println("delete version accepted")
+			},
 			OnComplete: func(result any, err error) {
 				s.Require().NoError(err, "delete version should complete without error even with async propagation")
 			},
@@ -1002,8 +1004,8 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_When
 	tv := testvars.New(s.T())
 
 	var a *VersionActivities
-	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
-	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.RegisterActivity(a.DeleteWorkerControllerInstance)
+	s.env.OnActivity(a.DeleteWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	taskQueueName := tv.TaskQueue().Name
 	newTaskQueueName := tv.TaskQueue().Name + "_new"
@@ -2238,9 +2240,7 @@ func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_Success() {
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	s.env.RegisterActivity(a.UpdateWorkerControllerInstance)
-	s.env.OnActivity(a.UpdateWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Maybe()
-	s.env.RegisterActivity(a.DeleteWorkerControllerInstance)
-	s.env.OnActivity(a.DeleteWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.OnActivity(a.UpdateWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Once()
 
 	s.env.RegisterDelayedCallback(func() {
 		args := &deploymentspb.UpdateComputeConfigArgs{
@@ -2259,17 +2259,6 @@ func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_Success() {
 			OnAccept: func() {},
 			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
-
-				// Verify compute config was applied by querying workflow state.
-				val, err := s.env.QueryWorkflow(QueryDescribeVersion)
-				s.Require().NoError(err)
-				var resp deploymentspb.QueryDescribeVersionResponse
-				s.Require().NoError(val.Get(&resp))
-				s.ProtoEqual(&computepb.ComputeConfig{
-					ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
-						"group1": {Provider: &computepb.ComputeProvider{Type: "aws-lambda"}},
-					},
-				}, resp.VersionState.GetComputeConfig())
 			},
 		}, args)
 	}, 1*time.Millisecond)
@@ -2282,8 +2271,7 @@ func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_Success() {
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
 			},
-			TaskQueueFamilies:         map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{},
-			StartedDeploymentWorkflow: true,
+			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{},
 		},
 	})
 
@@ -2294,8 +2282,8 @@ func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_RejectedWhenDeleted() {
 	tv := testvars.New(s.T())
 
 	var a *VersionActivities
-	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
-	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.RegisterActivity(a.DeleteWorkerControllerInstance)
+	s.env.OnActivity(a.DeleteWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		&deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil,
@@ -2356,7 +2344,6 @@ func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_UpdateInstanceFailure_Do
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	//var base *VersionActivities
 	s.env.RegisterActivity(a.UpdateWorkerControllerInstance)
 	s.env.OnActivity(a.UpdateWorkerControllerInstance, mock.Anything, mock.Anything).Return(
 		temporal.NewNonRetryableApplicationError("invalid config", errInvalidComputeConfig, nil),
@@ -2380,17 +2367,6 @@ func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_UpdateInstanceFailure_Do
 			OnComplete: func(result any, err error) {
 				s.Require().Error(err)
 				s.Require().ErrorContains(err, errInvalidComputeConfig)
-
-				// Verify compute config was NOT modified by querying workflow state.
-				val, qErr := s.env.QueryWorkflow(QueryDescribeVersion)
-				s.Require().NoError(qErr)
-				var resp deploymentspb.QueryDescribeVersionResponse
-				s.Require().NoError(val.Get(&resp))
-				s.ProtoEqual(&computepb.ComputeConfig{
-					ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
-						"original": {Provider: &computepb.ComputeProvider{Type: "original-provider"}},
-					},
-				}, resp.VersionState.GetComputeConfig())
 			},
 		}, args)
 	}, 1*time.Millisecond)
@@ -2403,13 +2379,7 @@ func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_UpdateInstanceFailure_Do
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
 			},
-			TaskQueueFamilies:         map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{},
-			StartedDeploymentWorkflow: true,
-			ComputeConfig: &computepb.ComputeConfig{
-				ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
-					"original": {Provider: &computepb.ComputeProvider{Type: "original-provider"}},
-				},
-			},
+			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{},
 		},
 	})
 

@@ -285,8 +285,5 @@ func (a *Activities) UpdateWorkerControllerInstanceFromDeployment(ctx context.Co
 }
 
 func (a *Activities) DeleteWorkerControllerInstanceFromDeployment(ctx context.Context, input *deploymentspb.DeleteWorkerControllerInstanceInput) error {
-	if err := a.WorkerControllerInstanceClient.DeleteWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), input.GetIdentity()); err != nil {
-		return err
-	}
-	return nil
+	return a.WorkerControllerInstanceClient.DeleteWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), input.GetIdentity())
 }

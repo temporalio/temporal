@@ -1264,9 +1264,10 @@ func (d *ClientImpl) CreateWorkerDeploymentVersion(
 	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
 	updateArgs, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.CreateWorkerDeploymentVersionArgs{
-		Identity:  identity,
-		RequestId: requestID,
-		Version:   version,
+		Identity:      identity,
+		RequestId:     requestID,
+		Version:       version,
+		ComputeConfig: computeConfig,
 	})
 	if err != nil {
 		return err

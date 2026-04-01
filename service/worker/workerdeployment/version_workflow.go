@@ -33,10 +33,12 @@ type (
 	// VersionWorkflowRunner holds the local state for a deployment workflow
 	VersionWorkflowRunner struct {
 		*deploymentspb.WorkerDeploymentVersionWorkflowArgs
-		a                                 *VersionActivities
-		logger                            sdklog.Logger
-		metrics                           sdkclient.MetricsHandler
-		lock                              workflow.Mutex
+		a       *VersionActivities
+		logger  sdklog.Logger
+		metrics sdkclient.MetricsHandler
+		lock    workflow.Mutex
+		// Compute config is independent from version status and routing info so it has its own lock.
+		// Lock ordering: always acquire `lock` before `computeConfigLock`.
 		computeConfigLock                 workflow.Mutex
 		unsafeWorkflowVersionGetter       func() DeploymentWorkflowVersion
 		unsafeRefreshIntervalGetter       func() time.Duration
@@ -79,12 +81,10 @@ func VersionWorkflow(
 	versionWorkflowRunner := &VersionWorkflowRunner{
 		WorkerDeploymentVersionWorkflowArgs: versionWorkflowArgs,
 
-		a:       nil,
-		logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", versionWorkflowArgs.NamespaceName),
-		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": versionWorkflowArgs.NamespaceName}),
-		lock:    workflow.NewMutex(ctx),
-		// Compute config is independent from version status and routing info so it has its own lock.
-		// Lock ordering: always acquire `lock` before `computeConfigLock`.
+		a:                                 nil,
+		logger:                            sdklog.With(workflow.GetLogger(ctx), "wf-namespace", versionWorkflowArgs.NamespaceName),
+		metrics:                           workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": versionWorkflowArgs.NamespaceName}),
+		lock:                              workflow.NewMutex(ctx),
 		computeConfigLock:                 workflow.NewMutex(ctx),
 		unsafeWorkflowVersionGetter:       unsafeWorkflowVersionGetter,
 		unsafeRefreshIntervalGetter:       unsafeRefreshIntervalGetter,
@@ -497,16 +497,18 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 		return err
 	}
 
-	apiVersion := &deploymentpb.WorkerDeploymentVersion{
-		DeploymentName: d.VersionState.Version.DeploymentName,
-		BuildId:        d.VersionState.Version.BuildId,
-	}
-	err = workflow.ExecuteActivity(activityCtx, d.a.DeleteWorkerControllerInstance, &deploymentspb.DeleteWorkerControllerInstanceInput{
-		Version:  apiVersion,
-		Identity: args.GetIdentity(),
-	}).Get(ctx, nil)
-	if err != nil {
-		return serviceerror.NewInternalf("delete worker controller instance: %v", err)
+	if workflow.GetVersion(ctx, "delete-wci", workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+		apiVersion := &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: d.VersionState.Version.DeploymentName,
+			BuildId:        d.VersionState.Version.BuildId,
+		}
+		err = workflow.ExecuteActivity(activityCtx, d.a.DeleteWorkerControllerInstance, &deploymentspb.DeleteWorkerControllerInstanceInput{
+			Version:  apiVersion,
+			Identity: args.GetIdentity(),
+		}).Get(ctx, nil)
+		if err != nil {
+			return serviceerror.NewInternalf("delete worker controller instance: %v", err)
+		}
 	}
 
 	if args.AsyncPropagation {

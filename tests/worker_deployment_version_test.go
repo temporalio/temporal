@@ -1254,10 +1254,7 @@ func (s *DeploymentVersionSuite) TestLastModifierIdentity_UpdateComputeConfig() 
 	computeConfig := &computepb.ComputeConfig{
 		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
 			"sg1": {
-				Provider: &computepb.ComputeProvider{
-					Type:    "test-invoke",
-					Details: &commonpb.Payload{Data: computeprovider.TestInvokeComputeProviderValidProviderDetails()},
-				},
+				Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider(),
 			},
 		},
 	}
@@ -1296,10 +1293,7 @@ func (s *DeploymentVersionSuite) TestLastModifierIdentity_UpdateComputeConfig() 
 		ComputeConfigScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
 			"sg1": {
 				ScalingGroup: &computepb.ComputeConfigScalingGroup{
-					Provider: &computepb.ComputeProvider{
-						Type:    "test-invoke",
-						Details: &commonpb.Payload{Data: computeprovider.TestInvokeComputeProviderValidProviderDetails()},
-					},
+					Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider(),
 				},
 			},
 		},
@@ -3455,10 +3449,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 	computeConfig := &computepb.ComputeConfig{
 		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
 			"sg1": {
-				Provider: &computepb.ComputeProvider{
-					Type:    "test-invoke",
-					Details: &commonpb.Payload{Data: computeprovider.TestInvokeComputeProviderValidProviderDetails()},
-				},
+				Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider(),
 			},
 		},
 	}
@@ -3774,20 +3765,14 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_MultipleVersi
 	computeConfig1 := &computepb.ComputeConfig{
 		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
 			"sg1": {
-				Provider: &computepb.ComputeProvider{
-					Type:    "test-invoke",
-					Details: &commonpb.Payload{Data: computeprovider.TestInvokeComputeProviderValidProviderDetails()},
-				},
+				Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider(),
 			},
 		},
 	}
 	computeConfig2 := &computepb.ComputeConfig{
 		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
 			"sg2": {
-				Provider: &computepb.ComputeProvider{
-					Type:    "test-invoke",
-					Details: &commonpb.Payload{Data: computeprovider.TestInvokeComputeProviderValidProviderDetails()},
-				},
+				Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider(),
 			},
 		},
 	}
@@ -3866,7 +3851,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_InvalidScalin
 	})
 	s.NoError(err)
 
-	validProvider := &computepb.ComputeProvider{Type: "test-invoke", Details: &commonpb.Payload{Data: computeprovider.TestInvokeComputeProviderValidProviderDetails()}}
+	validProvider := computeprovider.TestInvokeComputeProviderValidComputeProvider()
 
 	testCases := []struct {
 		name          string
@@ -3886,10 +3871,10 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_InvalidScalin
 			name: "invalid compute provider details",
 			computeConfig: &computepb.ComputeConfig{
 				ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
-					"sg1": {TaskQueueTypes: nil, Provider: &computepb.ComputeProvider{Type: "test-invoke", Details: &commonpb.Payload{Data: computeprovider.TestInvokeComputeProviderInvalidProviderDetails()}}},
+					"sg1": {TaskQueueTypes: nil, Provider: computeprovider.TestInvokeComputeProviderInvalidSpec()},
 				},
 			},
-			expectedError: "invalid compute provider type",
+			expectedError: "illegal_field found in config",
 		},
 		{
 			name: "two catch-all scaling groups",
