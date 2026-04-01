@@ -3,6 +3,7 @@ package workerdeployment
 import (
 	computepb "go.temporal.io/api/compute/v1"
 	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
+	"go.temporal.io/sdk/workflow"
 )
 
 func computeConfigScalingGroupsToWCISpec(scalingGroups map[string]*computepb.ComputeConfigScalingGroup) *wciiface.WorkerControllerInstanceSpec {
@@ -77,7 +78,9 @@ func wciSpecToComputeConfig(spec *wciiface.WorkerControllerInstanceSpec) *comput
 
 func scalingGroupsToUpsertUpdates(scalingGroups map[string]*computepb.ComputeConfigScalingGroup) map[string]*computepb.ComputeConfigScalingGroupUpdate {
 	updates := make(map[string]*computepb.ComputeConfigScalingGroupUpdate, len(scalingGroups))
-	for name, sg := range scalingGroups {
+	names := workflow.DeterministicKeys(scalingGroups)
+	for _, name := range names {
+		sg := scalingGroups[name]
 		updates[name] = &computepb.ComputeConfigScalingGroupUpdate{
 			ScalingGroup: sg,
 		}
