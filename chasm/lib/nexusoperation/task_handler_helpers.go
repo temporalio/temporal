@@ -211,37 +211,22 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 
 // classifyStartOperationError classifies the call error and returns an invocation result.
 func classifyStartOperationError(callErr error) invocationResult {
-	if _, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
-		if !common.IsRetryableRPCError(callErr) {
-			failure, err := callErrToFailure(callErr, false)
-			if err != nil {
-				failure = &failurepb.Failure{Message: callErr.Error()}
-			}
-			return invocationResultFail{failure: failure}
-		}
-	} else if opErr, ok := errors.AsType[*nexus.OperationError](callErr); ok {
+	if _, ok := errors.AsType[serviceerror.ServiceError](callErr); ok && !common.IsRetryableRPCError(callErr) {
+		return nonRetryableFailResult(callErr)
+	}
+	if opErr, ok := errors.AsType[*nexus.OperationError](callErr); ok {
 		return classifyOperationError(opErr)
-	} else if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok && !handlerErr.Retryable() {
-		failure, err := callErrToFailure(callErr, false)
-		if err != nil {
-			failure = &failurepb.Failure{Message: callErr.Error()}
-		}
-		return invocationResultFail{failure: failure}
-	} else if errors.Is(callErr, ErrResponseBodyTooLarge) {
-		failure, err := callErrToFailure(callErr, false)
-		if err != nil {
-			failure = &failurepb.Failure{Message: callErr.Error()}
-		}
-		return invocationResultFail{failure: failure}
-	} else if errors.Is(callErr, ErrInvalidOperationToken) {
-		failure, err := callErrToFailure(callErr, false)
-		if err != nil {
-			failure = &failurepb.Failure{Message: callErr.Error()}
-		}
-		return invocationResultFail{failure: failure}
-	} else if opTimeoutBelowMinErr, ok := errors.AsType[*operationTimeoutBelowMinError](callErr); ok {
+	}
+	if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok && !handlerErr.Retryable() {
+		return nonRetryableFailResult(callErr)
+	}
+	if errors.Is(callErr, ErrResponseBodyTooLarge) || errors.Is(callErr, ErrInvalidOperationToken) {
+		return nonRetryableFailResult(callErr)
+	}
+	if opTimeoutBelowMinErr, ok := errors.AsType[*operationTimeoutBelowMinError](callErr); ok {
 		return invocationResultTimeout{timeoutType: opTimeoutBelowMinErr.timeoutType}
-	} else if errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled) {
+	}
+	if errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled) {
 		callErr = errRequestTimedOut
 	}
 
@@ -251,6 +236,14 @@ func classifyStartOperationError(callErr error) invocationResult {
 		failure = &failurepb.Failure{Message: callErr.Error()}
 	}
 	return invocationResultRetry{failure: failure}
+}
+
+func nonRetryableFailResult(callErr error) invocationResultFail {
+	failure, err := callErrToFailure(callErr, false)
+	if err != nil {
+		failure = &failurepb.Failure{Message: callErr.Error()}
+	}
+	return invocationResultFail{failure: failure}
 }
 
 // classifyOperationError converts a Nexus OperationError to the appropriate invocation result.
