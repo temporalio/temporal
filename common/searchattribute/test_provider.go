@@ -61,6 +61,10 @@ func TestEsNameTypeMap() NameTypeMap {
 	return NewNameTypeMap(csa)
 }
 
+func TestSearchAttributesToRegister() map[string]enumspb.IndexedValueType {
+	return maps.Clone(esCustomSearchAttributes)
+}
+
 func TestEsNameTypeMapWithScheduleID() NameTypeMap {
 	res := TestEsNameTypeMap()
 	res.customSearchAttributes[sadefs.ScheduleID] = enumspb.INDEXED_VALUE_TYPE_KEYWORD
@@ -134,12 +138,8 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 	return "", serviceerror.NewInvalidArgument("unknown namespace")
 }
 
-func NewNoopMapper() Mapper {
-	return &noopMapper{}
-}
-
 func NewTestMapperProvider(customMapper Mapper) MapperProvider {
-	return NewMapperProvider(customMapper, nil, NewTestProvider(), false)
+	return NewMapperProvider(customMapper, nil, NewTestProvider())
 }
 
 func NewNameTypeMapStub(attributes map[string]enumspb.IndexedValueType) NameTypeMap {

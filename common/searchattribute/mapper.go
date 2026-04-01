@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -20,15 +21,12 @@ type (
 		GetFieldName(alias string, namespace string) (string, error)
 	}
 
-	noopMapper struct{}
-
-	// This mapper is to be backwards compatible with versions before v1.20.
-	// Users using standard visibility might have registered custom search attributes.
-	// Those search attributes won't be searchable, as they weren't before version v1.20.
-	// Thus, this mapper will allow those search attributes to be used without being alised.
-	backCompMapper_v1_20 struct {
-		mapper                 Mapper
-		emptyStringNameTypeMap NameTypeMap
+	// This mapper preserves legacy custom search attribute behavior by falling back
+	// to identity mapping when the wrapped mapper misses but cluster metadata still
+	// recognizes the name as a legacy custom search attribute.
+	backCompMapper struct {
+		mapper               Mapper
+		fallbackNameTypeMaps []NameTypeMap
 	}
 
 	MapperProvider interface {
@@ -36,31 +34,21 @@ type (
 	}
 
 	mapperProviderImpl struct {
-		customMapper              Mapper
-		namespaceRegistry         namespace.Registry
-		searchAttributesProvider  Provider
-		enableMapperFromNamespace bool
+		customMapper             Mapper
+		namespaceRegistry        namespace.Registry
+		searchAttributesProvider Provider
+		fallbackIndexNames       []string
 	}
 )
 
-var _ Mapper = (*noopMapper)(nil)
-var _ Mapper = (*backCompMapper_v1_20)(nil)
+var _ Mapper = (*backCompMapper)(nil)
 var _ Mapper = (*namespace.CustomSearchAttributesMapper)(nil)
 var _ MapperProvider = (*mapperProviderImpl)(nil)
 
-func (m *noopMapper) GetAlias(fieldName string, _ string) (string, error) {
-	return fieldName, nil
-}
-
-func (m *noopMapper) GetFieldName(alias string, _ string) (string, error) {
-	return alias, nil
-}
-
-func (m *backCompMapper_v1_20) GetAlias(fieldName string, namespaceName string) (string, error) {
+func (m *backCompMapper) GetAlias(fieldName string, namespaceName string) (string, error) {
 	alias, firstErr := m.mapper.GetAlias(fieldName, namespaceName)
 	if firstErr != nil {
-		_, err := m.emptyStringNameTypeMap.getType(fieldName, customCategory)
-		if err != nil {
+		if !m.isLegacyCustomSearchAttribute(fieldName) {
 			return "", firstErr
 		}
 		// this is custom search attribute registered in pre-v1.20
@@ -69,11 +57,10 @@ func (m *backCompMapper_v1_20) GetAlias(fieldName string, namespaceName string) 
 	return alias, nil
 }
 
-func (m *backCompMapper_v1_20) GetFieldName(alias string, namespaceName string) (string, error) {
+func (m *backCompMapper) GetFieldName(alias string, namespaceName string) (string, error) {
 	fieldName, firstErr := m.mapper.GetFieldName(alias, namespaceName)
 	if firstErr != nil {
-		_, err := m.emptyStringNameTypeMap.getType(alias, customCategory)
-		if err != nil {
+		if !m.isLegacyCustomSearchAttribute(alias) {
 			return "", firstErr
 		}
 		// this is custom search attribute registered in pre-v1.20
@@ -82,17 +69,26 @@ func (m *backCompMapper_v1_20) GetFieldName(alias string, namespaceName string) 
 	return fieldName, nil
 }
 
+func (m *backCompMapper) isLegacyCustomSearchAttribute(name string) bool {
+	for _, nameTypeMap := range m.fallbackNameTypeMaps {
+		if _, err := nameTypeMap.getType(name, customCategory); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 func NewMapperProvider(
 	customMapper Mapper,
 	namespaceRegistry namespace.Registry,
 	searchAttributesProvider Provider,
-	enableMapperFromNamespace bool,
+	fallbackIndexNames ...string,
 ) MapperProvider {
 	return &mapperProviderImpl{
-		customMapper:              customMapper,
-		namespaceRegistry:         namespaceRegistry,
-		searchAttributesProvider:  searchAttributesProvider,
-		enableMapperFromNamespace: enableMapperFromNamespace,
+		customMapper:             customMapper,
+		namespaceRegistry:        namespaceRegistry,
+		searchAttributesProvider: searchAttributesProvider,
+		fallbackIndexNames:       fallbackIndexNames,
 	}
 }
 
@@ -100,19 +96,35 @@ func (m *mapperProviderImpl) GetMapper(nsName namespace.Name) (Mapper, error) {
 	if m.customMapper != nil {
 		return m.customMapper, nil
 	}
-	if !m.enableMapperFromNamespace {
-		return &noopMapper{}, nil
+	if m.namespaceRegistry == nil {
+		return nil, nil
 	}
 	saMapper, err := m.namespaceRegistry.GetCustomSearchAttributesMapper(nsName)
 	if err != nil {
 		return nil, err
 	}
-	// if there's an error, it returns an empty object, which is expected here
-	emptyStringNameTypeMap, _ := m.searchAttributesProvider.GetSearchAttributes("", false)
-	return &backCompMapper_v1_20{
-		mapper:                 &saMapper,
-		emptyStringNameTypeMap: emptyStringNameTypeMap,
+	fallbackIndexNames := append(append([]string(nil), m.fallbackIndexNames...), "")
+	fallbackNameTypeMaps := make([]NameTypeMap, 0, len(fallbackIndexNames))
+	for _, indexName := range fallbackIndexNames {
+		// If there is an error, it returns an empty object, which is expected here.
+		nameTypeMap, _ := m.searchAttributesProvider.GetSearchAttributes(indexName, false)
+		fallbackNameTypeMaps = append(fallbackNameTypeMaps, legacyCustomSearchAttributes(nameTypeMap))
+	}
+	return &backCompMapper{
+		mapper:               &saMapper,
+		fallbackNameTypeMaps: fallbackNameTypeMaps,
 	}, nil
+}
+
+func legacyCustomSearchAttributes(nameTypeMap NameTypeMap) NameTypeMap {
+	legacyCustomSearchAttributes := make(map[string]enumspb.IndexedValueType)
+	for name, valueType := range nameTypeMap.Custom() {
+		if sadefs.IsPreallocatedCSAFieldName(name, valueType) {
+			continue
+		}
+		legacyCustomSearchAttributes[name] = valueType
+	}
+	return NewNameTypeMap(legacyCustomSearchAttributes)
 }
 
 // AliasFields returns SearchAttributes struct where each custom search attribute name is replaced with alias.
