@@ -5876,6 +5876,7 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 	if err != nil {
 		return nil, err
 	}
+
 	var identity string
 	encodedBatcherIdentity := executionInfo.GetSearchAttributes().GetIndexedFields()[sadefs.BatcherUser]
 	err = payload.Decode(encodedBatcherIdentity, &identity)

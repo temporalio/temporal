@@ -3,12 +3,12 @@ syntax = "proto3";
 package temporal.server.api.batch.v1;
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 import "temporal/api/enums/v1/batch_operation.proto";
 import "temporal/api/workflowservice/v1/request_response.proto";
 import "temporal/server/api/adminservice/v1/request_response.proto";
 
 option go_package = "go.temporal.io/server/api/batch/v1;batch";
-
 message BatchOperationInput {
   string namespace_id = 1;
 
@@ -30,4 +30,6 @@ message BatchOperationInput {
   // The request to start an admin batch operation.
   // Mutually exclusive with StartBatchOperationRequest request.
   temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest admin_request = 8;
+
+  google.protobuf.Timestamp batch_start_time = 9;
 }

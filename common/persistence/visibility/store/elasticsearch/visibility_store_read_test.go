@@ -227,7 +227,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		matchNamespaceQuery,
 		newBoolQuery().Filter(filterQuery).MustNot(namespaceDivisionExists),
 	)
-	p, err := s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
+	p, _, err := s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.NoError(err)
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
@@ -243,7 +243,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	// note namespace division appears in the filterQuery, not the boolQuery like the negative version
 	filterQuery = newBoolQuery().Filter(elastic.NewTermQuery(sadefs.WorkflowID, "guid-2208"), matchNSDivision)
 	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery, filterQuery)
-	p, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
+	p, _, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.NoError(err)
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
@@ -259,7 +259,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery, namespaceDivisionIsNull)
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.Name()).Return(metrics.NoopCounterMetricFunc)
-	p, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
+	p, _, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.NoError(err)
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
@@ -275,7 +275,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 
 	// test for wrong query
 	request.Query = "invalid query"
-	p, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
+	p, _, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.Nil(p)
 	s.Error(err)
 	request.Query = ""
@@ -300,7 +300,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2DisableOrderByClause() {
 		matchNamespaceQuery,
 		newBoolQuery().Filter(filterQuery).MustNot(namespaceDivisionExists),
 	)
-	p, err := s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
+	p, _, err := s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.NoError(err)
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
@@ -313,7 +313,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2DisableOrderByClause() {
 
 	// test invalid query with ORDER BY
 	request.Query = `ORDER BY WorkflowId`
-	p, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
+	p, _, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.Nil(p)
 	s.Error(err)
 	var invalidArgumentErr *serviceerror.InvalidArgument
@@ -651,7 +651,8 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 		Hits: &elastic.SearchHits{
 			TotalHits: &elastic.TotalHits{},
 		}}
-	resp, err := s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 1, nil)
+	queryTime := time.Date(2026, 3, 31, 17, 0, 0, 0, time.UTC)
+	resp, err := s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 1, nil, queryTime)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(0, len(resp.Executions))
@@ -674,14 +675,17 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	}
 	searchResult.Hits.Hits = []*elastic.SearchHit{searchHit}
 	searchResult.Hits.TotalHits.Value = 1
-	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 1, nil)
+	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 1, nil, queryTime)
 	s.NoError(err)
-	serializedToken, _ := s.visibilityStore.serializePageToken(&visibilityPageToken{SearchAfter: []any{1547596872371234567, "e481009e-14b3-45ae-91af-dce6e2a88365"}})
+	serializedToken, _ := s.visibilityStore.serializePageToken(&visibilityPageToken{
+		SearchAfter: []any{1547596872371234567, "e481009e-14b3-45ae-91af-dce6e2a88365"},
+		QueryTime:   queryTime,
+	})
 	s.Equal(serializedToken, resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
 
 	// test for last page hits
-	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 2, nil)
+	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 2, nil, queryTime)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(1, len(resp.Executions))
@@ -692,7 +696,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 		searchResult.Hits.Hits = append(searchResult.Hits.Hits, searchHit)
 	}
 	numOfHits := len(searchResult.Hits.Hits)
-	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits, nil)
+	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits, nil, queryTime)
 	s.NoError(err)
 	s.Equal(numOfHits, len(resp.Executions))
 	nextPageToken, err := s.visibilityStore.deserializePageToken(resp.NextPageToken)
@@ -701,8 +705,9 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.NoError(err)
 	s.Equal(int64(1547596872371234567), resultSortValue)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", nextPageToken.SearchAfter[1])
+	s.Equal(queryTime, nextPageToken.QueryTime)
 	// for last page
-	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits+1, nil)
+	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits+1, nil, queryTime)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(numOfHits, len(resp.Executions))
@@ -721,7 +726,10 @@ func (s *ESVisibilitySuite) TestDeserializePageToken() {
 	s.NoError(err)
 	s.Nil(result)
 
-	token := &visibilityPageToken{SearchAfter: []any{int64(1629936710090695939), "unique"}}
+	token := &visibilityPageToken{
+		SearchAfter: []any{int64(1629936710090695939), "unique"},
+		QueryTime:   time.Date(2026, 3, 31, 17, 0, 0, 0, time.UTC),
+	}
 	data, err := s.visibilityStore.serializePageToken(token)
 	s.NoError(err)
 	result, err = s.visibilityStore.deserializePageToken(data)
@@ -729,6 +737,7 @@ func (s *ESVisibilitySuite) TestDeserializePageToken() {
 	resultSortValue, err := result.SearchAfter[0].(json.Number).Int64()
 	s.NoError(err)
 	s.Equal(token.SearchAfter[0].(int64), resultSortValue)
+	s.Equal(token.QueryTime, result.QueryTime)
 }
 
 func (s *ESVisibilitySuite) TestSerializePageToken() {
@@ -741,7 +750,10 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 
 	sortTime := int64(123)
 	tieBreaker := "unique"
-	newToken := &visibilityPageToken{SearchAfter: []any{sortTime, tieBreaker}}
+	newToken := &visibilityPageToken{
+		SearchAfter: []any{sortTime, tieBreaker},
+		QueryTime:   time.Date(2026, 3, 31, 17, 0, 0, 0, time.UTC),
+	}
 	data, err = s.visibilityStore.serializePageToken(newToken)
 	s.NoError(err)
 	s.True(len(data) > 0)
@@ -751,6 +763,7 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 	s.NoError(err)
 	s.Equal(newToken.SearchAfter[0], resultSortValue)
 	s.Equal(newToken.SearchAfter[1], token.SearchAfter[1])
+	s.Equal(newToken.QueryTime, token.QueryTime)
 }
 
 func (s *ESVisibilitySuite) TestParseESDoc() {
@@ -2119,7 +2132,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2_ChasmMapper() {
 		matchNamespaceQuery,
 		newBoolQuery().Filter(filterQuery).MustNot(namespaceDivisionExists),
 	)
-	p, err := s.visibilityStore.BuildChasmSearchParameters(
+	p, _, err := s.visibilityStore.BuildChasmSearchParameters(
 		&visibilityservice.ListChasmExecutionsRequest{
 			NamespaceId: testNamespaceID.String(),
 			Namespace:   testNamespace.String(),
@@ -2146,7 +2159,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2_ChasmMapper() {
 	)
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.Name()).Return(metrics.NoopCounterMetricFunc)
-	p, err = s.visibilityStore.BuildChasmSearchParameters(
+	p, _, err = s.visibilityStore.BuildChasmSearchParameters(
 		&visibilityservice.ListChasmExecutionsRequest{
 			NamespaceId: testNamespaceID.String(),
 			Namespace:   testNamespace.String(),

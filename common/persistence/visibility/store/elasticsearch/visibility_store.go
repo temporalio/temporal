@@ -58,6 +58,7 @@ type (
 
 	visibilityPageToken struct {
 		SearchAfter []any
+		QueryTime   time.Time `json:",omitempty"`
 	}
 
 	esQueryParams struct {
@@ -376,7 +377,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListExecutionsResponse, error) {
-	p, err := s.BuildSearchParametersV2(request, s.GetListFieldSorter)
+	p, queryTime, err := s.BuildSearchParametersV2(request, s.GetListFieldSorter)
 	if err != nil {
 		return nil, err
 	}
@@ -386,7 +387,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 		return nil, ConvertElasticsearchClientError("ListWorkflowExecutions failed", err)
 	}
 
-	return s.GetListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, nil)
+	return s.GetListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, nil, queryTime)
 }
 
 func (s *VisibilityStore) ListChasmExecutions(
@@ -399,7 +400,7 @@ func (s *VisibilityStore) ListChasmExecutions(
 	}
 	chasmMapper := rc.SearchAttributesMapper()
 
-	p, err := s.BuildChasmSearchParameters(request, s.GetListFieldSorter, chasmMapper)
+	p, queryTime, err := s.BuildChasmSearchParameters(request, s.GetListFieldSorter, chasmMapper)
 	if err != nil {
 		return nil, err
 	}
@@ -414,6 +415,7 @@ func (s *VisibilityStore) ListChasmExecutions(
 		namespace.Name(request.Namespace),
 		int(request.PageSize),
 		chasmMapper,
+		queryTime,
 	)
 }
 
@@ -429,11 +431,19 @@ func (s *VisibilityStore) CountChasmExecutions(
 
 	var queryParams *esQueryParams
 	var err error
+	resolvedQuery, err := query.ResolveRelativeTimes(request.Query, time.Now().UTC())
+	if err != nil {
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, converterErr.ToInvalidArgument()
+		}
+		return nil, err
+	}
 	if s.enableUnifiedQueryConverter() {
 		queryParams, err = s.convertQuery(
 			namespace.Name(request.Namespace),
 			namespace.ID(request.NamespaceId),
-			request.Query,
+			resolvedQuery,
 			mapper,
 			request.ArchetypeId,
 		)
@@ -444,7 +454,7 @@ func (s *VisibilityStore) CountChasmExecutions(
 		queryParamsLegacy, err := s.convertQueryLegacy(
 			namespace.Name(request.Namespace),
 			namespace.ID(request.NamespaceId),
-			request.Query,
+			resolvedQuery,
 			mapper,
 			request.ArchetypeId,
 		)
@@ -472,13 +482,21 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 ) (*store.InternalCountExecutionsResponse, error) {
 	var queryParams *esQueryParams
 	var err error
+	resolvedQuery, err := query.ResolveRelativeTimes(request.Query, time.Now().UTC())
+	if err != nil {
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, converterErr.ToInvalidArgument()
+		}
+		return nil, err
+	}
 	if s.enableUnifiedQueryConverter() {
-		queryParams, err = s.convertQuery(request.Namespace, request.NamespaceID, request.Query, nil, chasm.UnspecifiedArchetypeID)
+		queryParams, err = s.convertQuery(request.Namespace, request.NamespaceID, resolvedQuery, nil, chasm.UnspecifiedArchetypeID)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		queryParamsLegacy, err := s.convertQueryLegacy(request.Namespace, request.NamespaceID, request.Query, nil, chasm.UnspecifiedArchetypeID)
+		queryParamsLegacy, err := s.convertQueryLegacy(request.Namespace, request.NamespaceID, resolvedQuery, nil, chasm.UnspecifiedArchetypeID)
 		if err != nil {
 			return nil, err
 		}
@@ -577,7 +595,7 @@ func (s *VisibilityStore) GetWorkflowExecution(
 func (s *VisibilityStore) BuildSearchParametersV2(
 	request *manager.ListWorkflowExecutionsRequestV2,
 	getFieldSorter func([]elastic.Sorter) ([]elastic.Sorter, error),
-) (*client.SearchParameters, error) {
+) (*client.SearchParameters, time.Time, error) {
 	return s.buildSearchParametersInternal(&searchParametersInternal{
 		NamespaceName: request.Namespace,
 		NamespaceID:   request.NamespaceID,
@@ -593,7 +611,7 @@ func (s *VisibilityStore) BuildChasmSearchParameters(
 	request *visibilityservice.ListChasmExecutionsRequest,
 	getFieldSorter func([]elastic.Sorter) ([]elastic.Sorter, error),
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
-) (*client.SearchParameters, error) {
+) (*client.SearchParameters, time.Time, error) {
 	return s.buildSearchParametersInternal(&searchParametersInternal{
 		NamespaceName: namespace.Name(request.Namespace),
 		NamespaceID:   namespace.ID(request.NamespaceId),
@@ -607,24 +625,41 @@ func (s *VisibilityStore) BuildChasmSearchParameters(
 
 func (s *VisibilityStore) buildSearchParametersInternal(
 	params *searchParametersInternal,
-) (*client.SearchParameters, error) {
+) (*client.SearchParameters, time.Time, error) {
+	pageToken, err := s.deserializePageToken(params.NextPageToken)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	queryTime := time.Now().UTC()
+	if pageToken != nil && !pageToken.QueryTime.IsZero() {
+		queryTime = pageToken.QueryTime.UTC()
+	}
+
+	resolvedQuery, err := query.ResolveRelativeTimes(params.Query, queryTime)
+	if err != nil {
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, time.Time{}, converterErr.ToInvalidArgument()
+		}
+		return nil, time.Time{}, err
+	}
+
 	var queryParams *esQueryParams
-	var err error
 	if s.enableUnifiedQueryConverter() {
-		queryParams, err = s.convertQuery(params.NamespaceName, params.NamespaceID, params.Query, params.ChasmMapper, params.ArchetypeID)
+		queryParams, err = s.convertQuery(params.NamespaceName, params.NamespaceID, resolvedQuery, params.ChasmMapper, params.ArchetypeID)
 		if err != nil {
-			return nil, err
+			return nil, time.Time{}, err
 		}
 	} else {
 		queryParamsLegacy, err := s.convertQueryLegacy(
 			params.NamespaceName,
 			params.NamespaceID,
-			params.Query,
+			resolvedQuery,
 			params.ChasmMapper,
 			params.ArchetypeID,
 		)
 		if err != nil {
-			return nil, err
+			return nil, time.Time{}, err
 		}
 		queryParams = (*esQueryParams)(queryParamsLegacy)
 	}
@@ -636,7 +671,7 @@ func (s *VisibilityStore) buildSearchParametersInternal(
 	}
 
 	if len(queryParams.GroupBy) > 0 {
-		return nil, serviceerror.NewInvalidArgument("GROUP BY clause is not supported")
+		return nil, time.Time{}, serviceerror.NewInvalidArgument("GROUP BY clause is not supported")
 	}
 
 	// TODO(rodrigozhou): investigate possible solutions to slow ORDER BY.
@@ -645,7 +680,7 @@ func (s *VisibilityStore) buildSearchParametersInternal(
 	// writes for unreasonably long, this option forbids the usage of ORDER BY
 	// clause to prevent slow down issues.
 	if s.disableOrderByClause(params.NamespaceName.String()) && len(queryParams.Sorter) > 0 {
-		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
+		return nil, time.Time{}, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
 	}
 
 	if len(queryParams.Sorter) > 0 {
@@ -656,19 +691,15 @@ func (s *VisibilityStore) buildSearchParametersInternal(
 
 	searchParams.Sorter, err = s.GetListFieldSorter(queryParams.Sorter)
 	if err != nil {
-		return nil, err
+		return nil, time.Time{}, err
 	}
 
-	pageToken, err := s.deserializePageToken(params.NextPageToken)
-	if err != nil {
-		return nil, err
-	}
 	err = s.processPageToken(searchParams, pageToken, params.NamespaceName)
 	if err != nil {
-		return nil, err
+		return nil, time.Time{}, err
 	}
 
-	return searchParams, nil
+	return searchParams, queryTime, nil
 }
 
 func (s *VisibilityStore) processPageToken(
@@ -857,6 +888,7 @@ func (s *VisibilityStore) GetListWorkflowExecutionsResponse(
 	namespace namespace.Name,
 	pageSize int,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	queryTime time.Time,
 ) (*store.InternalListExecutionsResponse, error) {
 	if searchResult.Hits == nil || len(searchResult.Hits.Hits) == 0 {
 		return &store.InternalListExecutionsResponse{}, nil
@@ -883,6 +915,7 @@ func (s *VisibilityStore) GetListWorkflowExecutionsResponse(
 	if len(searchResult.Hits.Hits) == pageSize { // this means the response might not the last page
 		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
 			SearchAfter: lastHitSort,
+			QueryTime:   queryTime.UTC(),
 		})
 		if err != nil {
 			return nil, err
