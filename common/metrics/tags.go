@@ -60,6 +60,7 @@ const (
 	toUnversioned                                  = "to_unversioned"
 	queryTypeTag                                   = "query_type"
 	namespaceAllValue                              = "all"
+	clientName                                     = "client_name"
 	activityTargetingMethod                        = "activity_targeting_method"
 	unknownValue                                   = "_unknown_"
 	totalMetricSuffix                              = "_total"
@@ -549,6 +550,14 @@ func ToUnversionedTag(version string) Tag {
 var TaskExpireStageReadTag = Tag{Key: taskExpireStage, Value: "read"}
 var TaskExpireStageMemoryTag = Tag{Key: taskExpireStage, Value: "memory"}
 var TaskInvalidTag = Tag{Key: taskExpireStage, Value: "invalid"}
+
+// ClientNameTag returns a new client_name tag for the SDK client name.
+func ClientNameTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: clientName, Value: value}
+}
 
 func PersistenceDBKindTag(kind string) Tag {
 	return Tag{Key: PersistenceDBKindTagName, Value: kind}
