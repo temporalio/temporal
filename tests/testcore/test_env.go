@@ -40,6 +40,7 @@ var (
 )
 
 type Env interface {
+	// T returns the *testing.T. Deprecated: use the suite's T() method instead.
 	T() *testing.T
 	Namespace() namespace.Name
 	NamespaceID() namespace.ID
@@ -225,6 +226,7 @@ func (e *TestEnv) TaskPoller() *taskpoller.TaskPoller {
 	return e.taskPoller
 }
 
+// T returns the *testing.T. Deprecated: use the suite's T() method instead.
 func (e *TestEnv) T() *testing.T {
 	return e.t
 }
