@@ -42,6 +42,9 @@ const (
 //     the worker contract requires success for all defined commands, so this indicates a bug
 //     or version incompatibility.
 //
+// Retryable errors are capped at workerCommandsMaxTaskAttempt attempts (in-memory). These
+// commands are best-effort — the activity will eventually time out anyway — so excessive
+// retries waste resources. The counter resets on shard movement, which is acceptable.
 type workerCommandsTaskDispatcher struct {
 	matchingRawClient resource.MatchingRawClient
 	config            *configs.Config
