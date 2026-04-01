@@ -3238,16 +3238,16 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
 
-	// GetMaxAutoSkipDuration is not nil with a valid (non-negative) duration is valid
+	// GetMaxSkippedDuration is not nil with a valid (non-negative) duration is valid
 	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
-		Enabled:             true,
-		MaxAutoSkipDuration: durationpb.New(30 * time.Minute),
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(30 * time.Minute)},
 	}, s.testNamespace))
 
-	// GetMaxAutoSkipDuration with a negative duration returns an error
+	// GetMaxSkippedDuration with a negative duration returns an error
 	s.Error(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
-		Enabled:             true,
-		MaxAutoSkipDuration: durationpb.New(-1 * time.Second),
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(-1 * time.Second)},
 	}, s.testNamespace))
 }
 

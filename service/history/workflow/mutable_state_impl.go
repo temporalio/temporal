@@ -2762,7 +2762,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	if tsc := startRequest.GetStartRequest().GetTimeSkippingConfig(); tsc.GetEnabled() {
 		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Enabled:             true,
-			MaxAutoSkipDuration: tsc.GetMaxAutoSkipDuration(),
+			MaxAutoSkipDuration: tsc.GetMaxSkippedDuration(),
 		}
 		ms.timeSource = clock.NewTimeSkippingTimeSource(ms.timeSource, nil)
 	}
@@ -3985,7 +3985,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippedEvent(ctx context.C
 	if ts, ok := ms.timeSource.(*clock.TimeSkippingTimeSource); ok {
 		ts.Advance(newDetails.GetDuration().AsDuration())
 	}
-	if event.GetWorkflowExecutionTimeSkippedEventAttributes().GetBoundReachedAndTimeSkippingDisabled() {
+	if event.GetWorkflowExecutionTimeSkippedEventAttributes().GetDisabledAfterBound() {
 		executionInfo.TimeSkippingInfo.Enabled = false
 	}
 	return NewTaskRefresher(ms.shard).Refresh(ctx, ms, false)
@@ -3995,10 +3995,10 @@ func buildTimeSkippedDetails(
 	event *historypb.HistoryEvent,
 ) *persistencespb.TimeSkippedDetails {
 	attrs := event.GetWorkflowExecutionTimeSkippedEventAttributes()
-	skipDuration := attrs.GetToTime().AsTime().Sub(event.GetEventTime().AsTime())
+	skipDuration := attrs.GetTargetTime().AsTime().Sub(event.GetEventTime().AsTime())
 	return &persistencespb.TimeSkippedDetails{
 		Duration:      durationpb.New(skipDuration),
-		VirtualToTime: attrs.GetToTime(),
+		VirtualToTime: attrs.GetTargetTime(),
 	}
 }
 
@@ -5591,7 +5591,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 			ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{}
 		}
 		ms.executionInfo.TimeSkippingInfo.Enabled = tsc.GetEnabled()
-		ms.executionInfo.TimeSkippingInfo.MaxAutoSkipDuration = tsc.GetMaxAutoSkipDuration()
+		ms.executionInfo.TimeSkippingInfo.MaxAutoSkipDuration = tsc.GetMaxSkippedDuration()
 
 		if tsc.GetEnabled() {
 			if _, alreadySkipping := ms.timeSource.(*clock.TimeSkippingTimeSource); !alreadySkipping {

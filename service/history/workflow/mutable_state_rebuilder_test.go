@@ -2176,7 +2176,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimeSkippe
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionTimeSkippedEventAttributes{
 			WorkflowExecutionTimeSkippedEventAttributes: &historypb.WorkflowExecutionTimeSkippedEventAttributes{
-				ToTime: timestamppb.New(now.Add(time.Hour)),
+				TargetTime: timestamppb.New(now.Add(time.Hour)),
 			},
 		},
 	}

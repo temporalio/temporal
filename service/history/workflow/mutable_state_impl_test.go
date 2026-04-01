@@ -6164,7 +6164,7 @@ func (s *mutableStateSuite) TestBuildTimeSkippedDetails_FirstSkip() {
 		EventTime: timestamppb.New(realTime),
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionTimeSkippedEventAttributes{
 			WorkflowExecutionTimeSkippedEventAttributes: &historypb.WorkflowExecutionTimeSkippedEventAttributes{
-				ToTime: timestamppb.New(targetVirtualTime),
+				TargetTime: timestamppb.New(targetVirtualTime),
 			},
 		},
 	}
@@ -6187,7 +6187,7 @@ func (s *mutableStateSuite) TestBuildTimeSkippedDetails_SecondSkip() {
 		EventTime: timestamppb.New(eventTime),
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionTimeSkippedEventAttributes{
 			WorkflowExecutionTimeSkippedEventAttributes: &historypb.WorkflowExecutionTimeSkippedEventAttributes{
-				ToTime: timestamppb.New(targetTime),
+				TargetTime: timestamppb.New(targetTime),
 			},
 		},
 	}
@@ -6212,7 +6212,7 @@ func (s *mutableStateSuite) TestBuildTimeSkippedDetails_ThreeSkips_VirtualTimeAc
 			EventTime: timestamppb.New(eventTime),
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionTimeSkippedEventAttributes{
 				WorkflowExecutionTimeSkippedEventAttributes: &historypb.WorkflowExecutionTimeSkippedEventAttributes{
-					ToTime: timestamppb.New(target),
+					TargetTime: timestamppb.New(target),
 				},
 			},
 		}
@@ -6261,8 +6261,8 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionTimeSkippedEvent_NoMaxDurati
 	s.NoError(err)
 
 	attrs := event.GetWorkflowExecutionTimeSkippedEventAttributes()
-	s.False(attrs.GetBoundReachedAndTimeSkippingDisabled())
-	s.WithinDuration(virtualNow.Add(advanceBy), attrs.GetToTime().AsTime(), time.Second)
+	s.False(attrs.GetDisabledAfterBound())
+	s.WithinDuration(virtualNow.Add(advanceBy), attrs.GetTargetTime().AsTime(), time.Second)
 	s.True(s.mutableState.executionInfo.TimeSkippingInfo.Enabled)
 }
 
@@ -6286,8 +6286,8 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionTimeSkippedEvent_WithinLimit
 	s.NoError(err)
 
 	attrs := event.GetWorkflowExecutionTimeSkippedEventAttributes()
-	s.False(attrs.GetBoundReachedAndTimeSkippingDisabled())
-	s.WithinDuration(virtualNow.Add(advanceBy), attrs.GetToTime().AsTime(), time.Second)
+	s.False(attrs.GetDisabledAfterBound())
+	s.WithinDuration(virtualNow.Add(advanceBy), attrs.GetTargetTime().AsTime(), time.Second)
 	s.True(s.mutableState.executionInfo.TimeSkippingInfo.Enabled)
 }
 
@@ -6312,8 +6312,8 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionTimeSkippedEvent_ExceedsLimi
 	s.NoError(err)
 
 	attrs := event.GetWorkflowExecutionTimeSkippedEventAttributes()
-	s.True(attrs.GetBoundReachedAndTimeSkippingDisabled())
-	s.WithinDuration(virtualNow.Add(30*time.Minute), attrs.GetToTime().AsTime(), time.Second)
+	s.True(attrs.GetDisabledAfterBound())
+	s.WithinDuration(virtualNow.Add(30*time.Minute), attrs.GetTargetTime().AsTime(), time.Second)
 	s.False(s.mutableState.executionInfo.TimeSkippingInfo.Enabled)
 }
 
@@ -6328,8 +6328,8 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippedEvent_BoundReac
 		EventTime: timestamppb.New(now),
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionTimeSkippedEventAttributes{
 			WorkflowExecutionTimeSkippedEventAttributes: &historypb.WorkflowExecutionTimeSkippedEventAttributes{
-				ToTime:                              timestamppb.New(now.Add(30 * time.Minute)),
-				BoundReachedAndTimeSkippingDisabled: true,
+				TargetTime:                              timestamppb.New(now.Add(30 * time.Minute)),
+				DisabledAfterBound: true,
 			},
 		},
 	}

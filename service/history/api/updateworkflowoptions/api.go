@@ -183,10 +183,13 @@ func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowEx
 		}
 	}
 	if timeSkippingInfo := ms.GetExecutionInfo().GetTimeSkippingInfo(); timeSkippingInfo != nil {
-		opts.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{
-			Enabled:             timeSkippingInfo.GetEnabled(),
-			MaxAutoSkipDuration: timeSkippingInfo.GetMaxAutoSkipDuration(),
+		tsc := &workflowpb.TimeSkippingConfig{
+			Enabled: timeSkippingInfo.GetEnabled(),
 		}
+		if dur := timeSkippingInfo.GetMaxAutoSkipDuration(); dur != nil {
+			tsc.Bound = &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: dur}
+		}
+		opts.TimeSkippingConfig = tsc
 	}
 	return opts
 }

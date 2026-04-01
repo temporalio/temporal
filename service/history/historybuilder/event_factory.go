@@ -1067,8 +1067,8 @@ func (b *EventFactory) CreateWorkflowExecutionTimePointAdvancedEvent(
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionTimeSkippedEventAttributes{
 		WorkflowExecutionTimeSkippedEventAttributes: &historypb.WorkflowExecutionTimeSkippedEventAttributes{
-			ToTime:                              timestamppb.New(advanceToTimePoint),
-			BoundReachedAndTimeSkippingDisabled: boundReachedAndTimeSkippingDisabled,
+			TargetTime:         timestamppb.New(advanceToTimePoint),
+			DisabledAfterBound: boundReachedAndTimeSkippingDisabled,
 		},
 	}
 	event.WorkerMayIgnore = true
