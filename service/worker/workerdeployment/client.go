@@ -169,6 +169,7 @@ type Client interface {
 		identity string,
 		requestID string,
 		computeConfig *computepb.ComputeConfig,
+		modifierIdentity string,
 	) error
 
 	// Used internally by the Worker Deployment workflow in its SyncWorkerDeploymentVersion Activity
@@ -1340,6 +1341,7 @@ func (d *ClientImpl) StartWorkerDeploymentVersion(
 	identity string,
 	requestID string,
 	computeConfig *computepb.ComputeConfig,
+	modifierIdentity string,
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("StartWorkerDeploymentVersion", deploymentName, &retErr, namespaceEntry.Name(), identity)()
@@ -1356,6 +1358,7 @@ func (d *ClientImpl) StartWorkerDeploymentVersion(
 	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
 	args := d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED)
 	args.VersionState.ComputeConfig = computeConfig
+	args.VersionState.LastModifierIdentity = modifierIdentity
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(args)
 	if err != nil {
 		return err
@@ -1640,18 +1643,19 @@ func versionStateToVersionInfo(
 	}
 
 	return &deploymentpb.WorkerDeploymentVersionInfo{
-		Version:            worker_versioning.WorkerDeploymentVersionToStringV31(state.Version),
-		DeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromVersion(state.Version),
-		Status:             state.Status,
-		CreateTime:         state.CreateTime,
-		RoutingChangedTime: state.RoutingUpdateTime,
-		CurrentSinceTime:   state.CurrentSinceTime,
-		RampingSinceTime:   state.RampingSinceTime,
-		RampPercentage:     state.RampPercentage,
-		TaskQueueInfos:     infos,
-		DrainageInfo:       drainageInfo,
-		Metadata:           state.Metadata,
-		ComputeConfig:      state.ComputeConfig,
+		Version:              worker_versioning.WorkerDeploymentVersionToStringV31(state.Version),
+		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromVersion(state.Version),
+		Status:               state.Status,
+		CreateTime:           state.CreateTime,
+		RoutingChangedTime:   state.RoutingUpdateTime,
+		CurrentSinceTime:     state.CurrentSinceTime,
+		RampingSinceTime:     state.RampingSinceTime,
+		RampPercentage:       state.RampPercentage,
+		TaskQueueInfos:       infos,
+		DrainageInfo:         drainageInfo,
+		Metadata:             state.Metadata,
+		ComputeConfig:        state.ComputeConfig,
+		LastModifierIdentity: state.LastModifierIdentity,
 	}
 }
 

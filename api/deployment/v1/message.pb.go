@@ -331,8 +331,12 @@ type VersionLocalState struct {
 	//
 	// Worker compute configuration for this version. May not be present.
 	ComputeConfig *v12.ComputeConfig `protobuf:"bytes,17,opt,name=compute_config,json=computeConfig,proto3" json:"compute_config,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Identity of the last client who modified the configuration of this Version.
+	// Covers changes through: CreateWorkerDeploymentVersion, UpdateWorkerDeploymentVersionComputeConfig,
+	// UpdateWorkerDeploymentVersionMetadata.
+	LastModifierIdentity string `protobuf:"bytes,18,opt,name=last_modifier_identity,json=lastModifierIdentity,proto3" json:"last_modifier_identity,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *VersionLocalState) Reset() {
@@ -483,6 +487,13 @@ func (x *VersionLocalState) GetComputeConfig() *v12.ComputeConfig {
 		return x.ComputeConfig
 	}
 	return nil
+}
+
+func (x *VersionLocalState) GetLastModifierIdentity() string {
+	if x != nil {
+		return x.LastModifierIdentity
+	}
+	return ""
 }
 
 // Data specific to a task queue, from the perspective of a worker deployment version.
@@ -1769,6 +1780,7 @@ type StartWorkerDeploymentVersionRequest struct {
 	BuildId        string                 `protobuf:"bytes,2,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
 	RequestId      string                 `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	ComputeConfig  *v12.ComputeConfig     `protobuf:"bytes,4,opt,name=compute_config,json=computeConfig,proto3" json:"compute_config,omitempty"`
+	Identity       string                 `protobuf:"bytes,5,opt,name=identity,proto3" json:"identity,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1829,6 +1841,13 @@ func (x *StartWorkerDeploymentVersionRequest) GetComputeConfig() *v12.ComputeCon
 		return x.ComputeConfig
 	}
 	return nil
+}
+
+func (x *StartWorkerDeploymentVersionRequest) GetIdentity() string {
+	if x != nil {
+		return x.Identity
+	}
+	return ""
 }
 
 // used as Worker Deployment Version workflow activity input:
@@ -4006,7 +4025,7 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\vupdate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"updateTime\x12\x18\n" +
 	"\adeleted\x18\x03 \x01(\bR\adeleted\x12L\n" +
-	"\x06status\x18\x06 \x01(\x0e24.temporal.api.enums.v1.WorkerDeploymentVersionStatusR\x06status\"\x83\r\n" +
+	"\x06status\x18\x06 \x01(\x0e24.temporal.api.enums.v1.WorkerDeploymentVersionStatusR\x06status\"\xb9\r\n" +
 	"\x11VersionLocalState\x12T\n" +
 	"\aversion\x18\x01 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x12;\n" +
 	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -4026,7 +4045,8 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x0fsync_batch_size\x18\v \x01(\x05R\rsyncBatchSize\x12L\n" +
 	"\x06status\x18\x0e \x01(\x0e24.temporal.api.enums.v1.WorkerDeploymentVersionStatusR\x06status\x12'\n" +
 	"\x0frevision_number\x18\x0f \x01(\x03R\x0erevisionNumber\x12M\n" +
-	"\x0ecompute_config\x18\x11 \x01(\v2&.temporal.api.compute.v1.ComputeConfigR\rcomputeConfig\x1a\x8e\x01\n" +
+	"\x0ecompute_config\x18\x11 \x01(\v2&.temporal.api.compute.v1.ComputeConfigR\rcomputeConfig\x124\n" +
+	"\x16last_modifier_identity\x18\x12 \x01(\tR\x14lastModifierIdentity\x1a\x8e\x01\n" +
 	"\x16TaskQueueFamiliesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12^\n" +
 	"\x05value\x18\x02 \x01(\v2H.temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyDataR\x05value:\x028\x01\x1a\x88\x02\n" +
@@ -4127,13 +4147,14 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x1cStartWorkerDeploymentRequest\x12'\n" +
 	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x02 \x01(\tR\trequestId\"\xd7\x01\n" +
+	"request_id\x18\x02 \x01(\tR\trequestId\"\xf3\x01\n" +
 	"#StartWorkerDeploymentVersionRequest\x12'\n" +
 	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12\x19\n" +
 	"\bbuild_id\x18\x02 \x01(\tR\abuildId\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x03 \x01(\tR\trequestId\x12M\n" +
-	"\x0ecompute_config\x18\x04 \x01(\v2&.temporal.api.compute.v1.ComputeConfigR\rcomputeConfig\"\xb4\x05\n" +
+	"\x0ecompute_config\x18\x04 \x01(\v2&.temporal.api.compute.v1.ComputeConfigR\rcomputeConfig\x12\x1a\n" +
+	"\bidentity\x18\x05 \x01(\tR\bidentity\"\xb4\x05\n" +
 	"$SyncDeploymentVersionUserDataRequest\x12'\n" +
 	"\x0fdeployment_name\x18\x04 \x01(\tR\x0edeploymentName\x12T\n" +
 	"\aversion\x18\x01 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x12h\n" +

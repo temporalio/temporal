@@ -577,6 +577,7 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 		BuildId:        versionObj.BuildId,
 		RequestId:      args.GetRequestId(),
 		ComputeConfig:  args.GetComputeConfig(),
+		Identity:       args.GetIdentity(),
 	}).Get(ctx, nil)
 	if err != nil {
 		return nil, err

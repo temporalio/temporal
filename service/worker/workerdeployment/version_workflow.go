@@ -350,6 +350,8 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 		delete(d.VersionState.Metadata.GetEntries(), key) // if m is nil, delete is a no-op
 	}
 
+	d.VersionState.LastModifierIdentity = args.GetIdentity()
+
 	// although the handler might have not changed the metadata at all, still
 	// it's better to CaN because some history events are built now.
 	d.setStateChanged()
@@ -411,6 +413,7 @@ func (d *VersionWorkflowRunner) handleUpdateVersionComputeConfig(ctx workflow.Co
 
 	// Apply the validated config to state.
 	d.VersionState.ComputeConfig = newConfig
+	d.VersionState.LastModifierIdentity = args.GetIdentity()
 	d.setStateChanged()
 
 	return &deploymentspb.UpdateComputeConfigResponse{}, nil

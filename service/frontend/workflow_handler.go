@@ -4247,8 +4247,7 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Con
 		version = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(request.GetVersion())
 	}
 
-	identity := uuid.NewString()
-	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, version, request.UpsertEntries, request.RemoveEntries, identity)
+	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, version, request.UpsertEntries, request.RemoveEntries, request.Identity)
 	if err != nil {
 		return nil, err
 	}

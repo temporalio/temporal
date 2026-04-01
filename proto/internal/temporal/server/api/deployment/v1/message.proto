@@ -145,6 +145,11 @@ message VersionLocalState {
     //     aip.dev/not-precedent: compute_config is optional for versions. --)
     // Worker compute configuration for this version. May not be present.
     temporal.api.compute.v1.ComputeConfig compute_config = 17;
+
+    // Identity of the last client who modified the configuration of this Version.
+    // Covers changes through: CreateWorkerDeploymentVersion, UpdateWorkerDeploymentVersionComputeConfig,
+    // UpdateWorkerDeploymentVersionMetadata.
+    string last_modifier_identity = 18;
 }
 
 // Data specific to a task queue, from the perspective of a worker deployment version.
@@ -337,6 +342,7 @@ message StartWorkerDeploymentVersionRequest {
     string build_id = 2;
     string request_id = 3;
     temporal.api.compute.v1.ComputeConfig compute_config = 4;
+    string identity = 5;
 }
 
 // used as Worker Deployment Version workflow activity input:

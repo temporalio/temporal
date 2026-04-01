@@ -272,8 +272,8 @@ func (a *Activities) StartWorkerDeploymentVersionWorkflow(
 ) error {
 	logger := activity.GetLogger(ctx)
 	logger.Info("starting worker deployment version workflow", "deploymentName", input.DeploymentName, "buildID", input.BuildId)
-	identity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	return a.WorkerDeploymentClient.StartWorkerDeploymentVersion(ctx, a.namespace, input.DeploymentName, input.BuildId, identity, input.RequestId, input.ComputeConfig)
+	startIdentity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+	return a.WorkerDeploymentClient.StartWorkerDeploymentVersion(ctx, a.namespace, input.DeploymentName, input.BuildId, startIdentity, input.RequestId, input.ComputeConfig, input.GetIdentity())
 }
 
 func (a *Activities) UpdateWorkerControllerInstanceFromDeployment(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) error {
