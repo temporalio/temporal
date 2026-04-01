@@ -72,7 +72,7 @@ func TestMigrateScheduleToChasm_SentinelBlocked(t *testing.T) {
 		NamespaceId: testNamespaceID,
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "blocked by sentinel")
+	require.Contains(t, err.Error(), "schedule is a sentinel")
 }
 
 func TestMigrateScheduleToChasm_OtherError(t *testing.T) {
