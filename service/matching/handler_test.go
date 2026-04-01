@@ -24,12 +24,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// nexusMetricsCaptureEngine is a stub Engine that captures the opMetrics handler
-// passed to Nexus handler methods. It embeds the Engine interface so only the
-// methods under test need to be implemented.
+// nexusMetricsCaptureEngine is a stub Engine for Nexus handler tests. It embeds
+// the Engine interface so only the methods under test need to be implemented.
 type nexusMetricsCaptureEngine struct {
-	Engine          // embedded to satisfy all other interface methods (will panic if called)
-	capturedMetrics metrics.Handler
+	Engine // embedded to satisfy all other interface methods (will panic if called)
 }
 
 func (e *nexusMetricsCaptureEngine) Start() {}
@@ -38,18 +36,16 @@ func (e *nexusMetricsCaptureEngine) Stop()  {}
 func (e *nexusMetricsCaptureEngine) PollNexusTaskQueue(
 	_ context.Context,
 	_ *matchingservice.PollNexusTaskQueueRequest,
-	opMetrics metrics.Handler,
+	_ metrics.Handler,
 ) (*matchingservice.PollNexusTaskQueueResponse, error) {
-	e.capturedMetrics = opMetrics
 	return &matchingservice.PollNexusTaskQueueResponse{}, nil
 }
 
 func (e *nexusMetricsCaptureEngine) RespondNexusTaskCompleted(
 	_ context.Context,
 	_ *matchingservice.RespondNexusTaskCompletedRequest,
-	opMetrics metrics.Handler,
+	_ metrics.Handler,
 ) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
-	e.capturedMetrics = opMetrics
 	return &matchingservice.RespondNexusTaskCompletedResponse{}, nil
 }
 
@@ -127,7 +123,9 @@ func TestNexusHandlersEmitClientNameMetric(t *testing.T) {
 		snap := capture.Snapshot()
 		require.NotEmpty(t, snap[nexusTaskRequestsMetric])
 		require.True(t, findMetricWithTag(snap, nexusTaskRequestsMetric, "client_name", expectedClientName),
-			"PollNexusTaskQueue should emit nexus_task_requests with client_name tag, got: %v", snap)
+			"should have client_name tag, got: %v", snap)
+		require.True(t, findMetricWithTag(snap, nexusTaskRequestsMetric, "operation", "PollNexusTaskQueue"),
+			"should have operation tag, got: %v", snap)
 	})
 
 	t.Run("RespondNexusTaskCompleted", func(t *testing.T) {
@@ -147,7 +145,9 @@ func TestNexusHandlersEmitClientNameMetric(t *testing.T) {
 		snap := capture.Snapshot()
 		require.NotEmpty(t, snap[nexusTaskRequestsMetric])
 		require.True(t, findMetricWithTag(snap, nexusTaskRequestsMetric, "client_name", expectedClientName),
-			"RespondNexusTaskCompleted should emit nexus_task_requests with client_name tag, got: %v", snap)
+			"should have client_name tag, got: %v", snap)
+		require.True(t, findMetricWithTag(snap, nexusTaskRequestsMetric, "operation", "RespondNexusTaskCompleted"),
+			"should have operation tag, got: %v", snap)
 	})
 
 	t.Run("no client_name when header absent", func(t *testing.T) {

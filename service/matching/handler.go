@@ -152,12 +152,16 @@ func (h *Handler) opMetricsHandler(
 	)
 }
 
-func (h *Handler) withClientNameTag(ctx context.Context, handler metrics.Handler) metrics.Handler {
+// recordNexusTaskRequest emits the nexus_task_requests metric with namespace,
+// operation, and client_name tags to match the Envoy-based adoption metric.
+func (h *Handler) recordNexusTaskRequest(ctx context.Context, namespaceID string, operation string) {
+	nsName := h.namespaceName(namespace.ID(namespaceID))
 	clientName, _ := headers.GetClientNameAndVersion(ctx)
-	if clientName != "" {
-		return handler.WithTags(metrics.ClientNameTag(clientName))
-	}
-	return handler
+	metrics.NexusTaskRequests.With(h.metricsHandler).Record(1,
+		metrics.NamespaceTag(nsName.String()),
+		metrics.OperationTag(operation),
+		metrics.ClientNameTag(clientName),
+	)
 }
 
 // AddActivityTask - adds an activity task.
@@ -512,11 +516,10 @@ func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservi
 		enumspb.TASK_QUEUE_TYPE_NEXUS,
 		metrics.MatchingPollWorkflowTaskQueueScope,
 	)
-	opMetrics = h.withClientNameTag(ctx, opMetrics)
 	// Only record on the initial handler call (ForwardedSource == ""), not on
 	// the forwarded call to the root partition, to avoid double-counting.
 	if request.GetForwardedSource() == "" {
-		metrics.NexusTaskRequestsPerTaskQueue.With(opMetrics).Record(1)
+		h.recordNexusTaskRequest(ctx, request.GetNamespaceId(), "PollNexusTaskQueue")
 	}
 
 	if request.GetForwardedSource() != "" {
@@ -541,8 +544,7 @@ func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchi
 		enumspb.TASK_QUEUE_TYPE_NEXUS,
 		metrics.MatchingRespondNexusTaskCompletedScope,
 	)
-	opMetrics = h.withClientNameTag(ctx, opMetrics)
-	metrics.NexusTaskRequestsPerTaskQueue.With(opMetrics).Record(1)
+	h.recordNexusTaskRequest(ctx, request.GetNamespaceId(), "RespondNexusTaskCompleted")
 
 	return h.engine.RespondNexusTaskCompleted(ctx, request, opMetrics)
 }
@@ -555,8 +557,7 @@ func (h *Handler) RespondNexusTaskFailed(ctx context.Context, request *matchings
 		enumspb.TASK_QUEUE_TYPE_NEXUS,
 		metrics.MatchingRespondNexusTaskFailedScope,
 	)
-	opMetrics = h.withClientNameTag(ctx, opMetrics)
-	metrics.NexusTaskRequestsPerTaskQueue.With(opMetrics).Record(1)
+	h.recordNexusTaskRequest(ctx, request.GetNamespaceId(), "RespondNexusTaskFailed")
 
 	return h.engine.RespondNexusTaskFailed(ctx, request, opMetrics)
 }
