@@ -68,16 +68,23 @@ func TestExecute_EmptyCommands_DropsTask(t *testing.T) {
 }
 
 func TestExecute_ExceedsMaxAttempts_DropsTask(t *testing.T) {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
 	d := &workerCommandsTaskDispatcher{
 		config: &configs.Config{
 			EnableCancelActivityWorkerCommand: func() bool { return true },
 		},
-		logger: log.NewNoopLogger(),
+		metricsHandler: metricsHandler,
+		logger:         log.NewNoopLogger(),
 	}
 
 	task := testWorkerCommandsTask()
 	err := d.execute(context.Background(), task, workerCommandsMaxTaskAttempt+1)
 	require.NoError(t, err, "task should be dropped when max attempts exceeded")
+
+	requireMetricValue(t, capture.Snapshot(), "max_attempts_exceeded")
 }
 
 func TestExecute_AtMaxAttempt_StillExecutes(t *testing.T) {

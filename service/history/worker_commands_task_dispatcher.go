@@ -78,6 +78,7 @@ func (d *workerCommandsTaskDispatcher) execute(
 			tag.NewStringTag("control_queue", task.Destination),
 			tag.Attempt(int32(attempt)),
 		)
+		metrics.WorkerCommandsSent.With(d.metricsHandler).Record(1, metrics.OutcomeTag("max_attempts_exceeded"))
 		return nil
 	}
 
