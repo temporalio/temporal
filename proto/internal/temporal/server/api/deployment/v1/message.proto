@@ -7,7 +7,6 @@ option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/enums/v1/deployment.proto";
 import "temporal/api/compute/v1/config.proto";
-import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
@@ -142,10 +141,10 @@ message VersionLocalState {
     // than what is already in the TQ will be ignored to avoid stale writes during async operations.
     int64 revision_number = 15;
 
-    // (-- api-linter: core::0203::optional=disabled
-    //     aip.dev/not-precedent: compute_config is optional for versions. --)
-    // Worker compute configuration for this version. May not be present.
-    temporal.api.compute.v1.ComputeConfig compute_config = 17;
+    // Identity of the last client who modified the configuration of this Version.
+    // Covers changes through: CreateWorkerDeploymentVersion, UpdateWorkerDeploymentVersionComputeConfig,
+    // UpdateWorkerDeploymentVersionMetadata.
+    string last_modifier_identity = 17;
 }
 
 // Data specific to a task queue, from the perspective of a worker deployment version.
@@ -183,8 +182,6 @@ message WorkerDeploymentLocalState {
     map<string, PropagatingRevisions> propagating_revisions = 8;
     // Request ID used to create this worker deployment.
     string create_request_id = 9;
-    // Compute config provided during deployment creation.
-    temporal.api.compute.v1.ComputeConfig compute_config = 10;
 }
 
 // Tracks revision numbers that are currently propagating for a specific build ID
@@ -339,7 +336,7 @@ message StartWorkerDeploymentVersionRequest {
     string deployment_name = 1;
     string build_id = 2;
     string request_id = 3;
-    temporal.api.compute.v1.ComputeConfig compute_config = 4;
+    string identity = 4;
 }
 
 // used as Worker Deployment Version workflow activity input:
@@ -566,19 +563,30 @@ message ValidateWorkerControllerInstanceSpecInput {
     map<string, temporal.api.compute.v1.ComputeConfigScalingGroup> scaling_groups = 1;
 }
 
+// used as activity input for creating or updating a Worker Controller Instance
+// via the WCI client.
+message UpdateWorkerControllerInstanceInput {
+  temporal.api.deployment.v1.WorkerDeploymentVersion version = 1;
+  string identity = 2;
+  map<string, temporal.api.compute.v1.ComputeConfigScalingGroupUpdate> upsert_scaling_groups = 3;
+  repeated string remove_scaling_groups = 4;
+}
+
+// used as activity input for deleting a Worker Controller Instance
+// via the WCI client.
+message DeleteWorkerControllerInstanceInput {
+  temporal.api.deployment.v1.WorkerDeploymentVersion version = 1;
+  string identity = 2;
+}
+
 // Input for the UpdateComputeConfig workflow update on a version workflow.
 message UpdateComputeConfigArgs {
     string identity = 1;
     string request_id = 2;
     // Scaling groups to add or update.
-    map<string, ScalingGroupUpdate> upsert_scaling_groups = 3;
+    map<string, temporal.api.compute.v1.ComputeConfigScalingGroupUpdate> upsert_scaling_groups = 3;
     // Names of scaling groups to remove. Names that don't match an existing group are ignored.
-    repeated string remove_scaling_groups = 4;
-}
-
-message ScalingGroupUpdate {
-    temporal.api.compute.v1.ComputeConfigScalingGroup scaling_group = 1;
-    google.protobuf.FieldMask update_mask = 2;
+  repeated string remove_scaling_groups = 4;
 }
 
 // Response for the UpdateComputeConfig workflow update on a version workflow.
@@ -587,14 +595,14 @@ message UpdateComputeConfigResponse {
 
 // Signal input for force-continue-as-new on Deployment workflow
 message ForceCANDeploymentSignalArgs {
-    // If provided, this state will be used instead of the current state
-    // when performing continue-as-new.
-    WorkerDeploymentLocalState override_state = 1;
+  // If provided, this state will be used instead of the current state
+  // when performing continue-as-new.
+  WorkerDeploymentLocalState override_state = 1;
 }
 
 // Signal input for force-continue-as-new on Version workflow
 message ForceCANVersionSignalArgs {
-    // If provided, this state will be used instead of the current state
+  // If provided, this state will be used instead of the current state
     // when performing continue-as-new.
     VersionLocalState override_state = 1;
 }

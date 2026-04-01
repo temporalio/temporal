@@ -19,6 +19,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	wciclient "go.temporal.io/auto-scaled-workers/wci/client"
 	"go.temporal.io/sdk/temporal"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -138,7 +139,7 @@ type Client interface {
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		version *deploymentpb.WorkerDeploymentVersion,
-		upsertScalingGroups map[string]*deploymentspb.ScalingGroupUpdate,
+		upsertScalingGroups map[string]*computepb.ComputeConfigScalingGroupUpdate,
 		removeScalingGroups []string,
 		identity string,
 		requestID string,
@@ -164,10 +165,7 @@ type Client interface {
 	StartWorkerDeploymentVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		deploymentName, buildID string,
-		identity string,
-		requestID string,
-		computeConfig *computepb.ComputeConfig,
+		deploymentName, buildID, identity, requestID, modifierIdentity string,
 	) error
 
 	// Used internally by the Worker Deployment workflow in its SyncWorkerDeploymentVersion Activity
@@ -212,6 +210,15 @@ type Client interface {
 		namespaceEntry *namespace.Namespace,
 		deploymentName, buildID string,
 	) error
+
+	ValidateComputeConfig(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		version *deploymentpb.WorkerDeploymentVersion,
+		upsertScalingGroups map[string]*computepb.ComputeConfigScalingGroupUpdate,
+		removeScalingGroups []string,
+		identity string,
+	) error
 }
 
 type ErrRegister struct{ error }
@@ -224,6 +231,7 @@ type ClientImpl struct {
 	historyClient                    historyservice.HistoryServiceClient
 	visibilityManager                manager.VisibilityManager
 	matchingClient                   resource.MatchingClient
+	workerControllerInstanceClient   wciclient.Client
 	maxIDLengthLimit                 dynamicconfig.IntPropertyFn
 	visibilityMaxPageSize            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	maxTaskQueuesInDeploymentVersion dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -414,54 +422,34 @@ func (d *ClientImpl) DescribeVersion(
 		return nil, nil, err
 	}
 
-	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
-
-	req := &historyservice.QueryWorkflowRequest{
-		NamespaceId: namespaceEntry.ID().String(),
-		Request: &workflowservice.QueryWorkflowRequest{
-			Namespace: namespaceEntry.Name().String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-			},
-			Query: &querypb.WorkflowQuery{QueryType: QueryDescribeVersion},
-		},
-	}
-
-	res, err := d.queryWorkflowWithRetry(ctx, req)
-
+	versionState, err := d.queryVersionState(ctx, namespaceEntry, deploymentName, buildID)
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
 			return nil, nil, serviceerror.NewNotFound("Worker Deployment Version not found")
 		}
-		var queryFailed *serviceerror.QueryFailed
-		if errors.As(err, &queryFailed) && queryFailed.Error() == errVersionDeleted {
-			return nil, nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentVersionNotFound, buildID, deploymentName)
+		return nil, nil, err
+	}
+
+	tqInfos, err := d.getTaskQueueDetails(ctx, namespaceEntry.ID(), versionState, reportTaskQueueStats)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	versionInfo := versionStateToVersionInfo(versionState, tqInfos)
+
+	apiVersion := worker_versioning.ExternalWorkerDeploymentVersionFromVersion(versionState.Version)
+	wciDesc, _, err := d.workerControllerInstanceClient.DescribeWorkerControllerInstance(ctx, namespaceEntry, apiVersion)
+	if err != nil {
+		// WCI may not exist if no compute config was ever set.
+		var notFound *serviceerror.NotFound
+		if !errors.As(err, &notFound) {
+			return nil, nil, err
 		}
-		return nil, nil, err
+	} else {
+		versionInfo.ComputeConfig = wciSpecToComputeConfig(wciDesc.Spec)
 	}
 
-	if rej := res.GetResponse().GetQueryRejected(); rej != nil {
-		// This should not happen
-		return nil, nil, serviceerror.NewInternalf("describe deployment query rejected with status %s", rej.GetStatus())
-	}
-
-	if res.GetResponse().GetQueryResult() == nil {
-		return nil, nil, serviceerror.NewInternal("Did not receive deployment info")
-	}
-
-	var queryResponse deploymentspb.QueryDescribeVersionResponse
-	err = sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	tqInfos, err := d.getTaskQueueDetails(ctx, namespaceEntry.ID(), queryResponse.VersionState, reportTaskQueueStats)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	versionInfo := versionStateToVersionInfo(queryResponse.VersionState, tqInfos)
 	return versionInfo, tqInfos, nil
 }
 
@@ -521,7 +509,7 @@ func (d *ClientImpl) UpdateVersionComputeConfig(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	version *deploymentpb.WorkerDeploymentVersion,
-	upsertScalingGroups map[string]*deploymentspb.ScalingGroupUpdate,
+	upsertScalingGroups map[string]*computepb.ComputeConfigScalingGroupUpdate,
 	removeScalingGroups []string,
 	identity string,
 	requestID string,
@@ -1358,10 +1346,7 @@ func (d *ClientImpl) StartWorkerDeployment(
 func (d *ClientImpl) StartWorkerDeploymentVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
-	deploymentName, buildID string,
-	identity string,
-	requestID string,
-	computeConfig *computepb.ComputeConfig,
+	deploymentName, buildID, identity, requestID, modifierIdentity string,
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("StartWorkerDeploymentVersion", deploymentName, &retErr, namespaceEntry.Name(), identity)()
@@ -1376,8 +1361,7 @@ func (d *ClientImpl) StartWorkerDeploymentVersion(
 	}
 
 	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
-	args := d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED)
-	args.VersionState.ComputeConfig = computeConfig
+	args := d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry, modifierIdentity, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED)
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(args)
 	if err != nil {
 		return err
@@ -1551,7 +1535,7 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 	}
 
 	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
-	input, err := sdk.PreferProtoDataConverter.ToPayloads(d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE))
+	input, err := sdk.PreferProtoDataConverter.ToPayloads(d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry, "", enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE))
 	if err != nil {
 		return nil, err
 	}
@@ -1662,18 +1646,18 @@ func versionStateToVersionInfo(
 	}
 
 	return &deploymentpb.WorkerDeploymentVersionInfo{
-		Version:            worker_versioning.WorkerDeploymentVersionToStringV31(state.Version),
-		DeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromVersion(state.Version),
-		Status:             state.Status,
-		CreateTime:         state.CreateTime,
-		RoutingChangedTime: state.RoutingUpdateTime,
-		CurrentSinceTime:   state.CurrentSinceTime,
-		RampingSinceTime:   state.RampingSinceTime,
-		RampPercentage:     state.RampPercentage,
-		TaskQueueInfos:     infos,
-		DrainageInfo:       drainageInfo,
-		Metadata:           state.Metadata,
-		ComputeConfig:      state.ComputeConfig,
+		Version:              worker_versioning.WorkerDeploymentVersionToStringV31(state.Version),
+		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromVersion(state.Version),
+		Status:               state.Status,
+		CreateTime:           state.CreateTime,
+		RoutingChangedTime:   state.RoutingUpdateTime,
+		CurrentSinceTime:     state.CurrentSinceTime,
+		RampingSinceTime:     state.RampingSinceTime,
+		RampPercentage:       state.RampPercentage,
+		TaskQueueInfos:       infos,
+		DrainageInfo:         drainageInfo,
+		Metadata:             state.Metadata,
+		LastModifierIdentity: state.LastModifierIdentity,
 	}
 }
 
@@ -2032,6 +2016,7 @@ func (d *ClientImpl) getSyncBatchSize() int32 {
 func (d *ClientImpl) makeVersionWorkflowArgs(
 	deploymentName, buildID string,
 	namespaceEntry *namespace.Namespace,
+	identity string,
 	initialStatus enumspb.WorkerDeploymentVersionStatus,
 ) *deploymentspb.WorkerDeploymentVersionWorkflowArgs {
 	return &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
@@ -2042,15 +2027,72 @@ func (d *ClientImpl) makeVersionWorkflowArgs(
 				DeploymentName: deploymentName,
 				BuildId:        buildID,
 			},
-			CreateTime:        timestamppb.Now(),
-			RoutingUpdateTime: nil,
-			CurrentSinceTime:  nil,                                 // not current
-			RampingSinceTime:  nil,                                 // not ramping
-			RampPercentage:    0,                                   // not ramping
-			DrainageInfo:      &deploymentpb.VersionDrainageInfo{}, // not draining or drained
-			Metadata:          nil,
-			SyncBatchSize:     d.getSyncBatchSize(),
-			Status:            initialStatus,
+			CreateTime:           timestamppb.Now(),
+			RoutingUpdateTime:    nil,
+			CurrentSinceTime:     nil,                                 // not current
+			RampingSinceTime:     nil,                                 // not ramping
+			RampPercentage:       0,                                   // not ramping
+			DrainageInfo:         &deploymentpb.VersionDrainageInfo{}, // not draining or drained
+			Metadata:             nil,
+			SyncBatchSize:        d.getSyncBatchSize(),
+			Status:               initialStatus,
+			LastModifierIdentity: identity,
 		},
 	}
+}
+
+func (d *ClientImpl) ValidateComputeConfig(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	version *deploymentpb.WorkerDeploymentVersion,
+	upsertScalingGroups map[string]*computepb.ComputeConfigScalingGroupUpdate,
+	removeScalingGroups []string,
+	identity string,
+) error {
+	upserts := scalingGroupUpdatesToWCI(upsertScalingGroups)
+	if err := d.workerControllerInstanceClient.ValidateWorkerControllerInstanceSpec(ctx, namespaceEntry, version, identity, upserts, removeScalingGroups); err != nil {
+		return serviceerror.NewInvalidArgument(err.Error())
+	}
+	return nil
+}
+
+// queryVersionState queries the version workflow for its current state.
+func (d *ClientImpl) queryVersionState(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName, buildID string,
+) (*deploymentspb.VersionLocalState, error) {
+	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
+	req := &historyservice.QueryWorkflowRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		Request: &workflowservice.QueryWorkflowRequest{
+			Namespace: namespaceEntry.Name().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+			},
+			Query: &querypb.WorkflowQuery{QueryType: QueryDescribeVersion},
+		},
+	}
+	res, err := d.queryWorkflowWithRetry(ctx, req)
+	if err != nil {
+		var queryFailed *serviceerror.QueryFailed
+		if errors.As(err, &queryFailed) && queryFailed.Error() == errVersionDeleted {
+			return nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentVersionNotFound, buildID, deploymentName)
+		}
+		return nil, err
+	}
+
+	if rej := res.GetResponse().GetQueryRejected(); rej != nil {
+		return nil, serviceerror.NewInternalf("describe deployment query rejected with status %s", rej.GetStatus())
+	}
+
+	if res.GetResponse().GetQueryResult() == nil {
+		return nil, serviceerror.NewInternal("Did not receive deployment info")
+	}
+
+	var queryResponse deploymentspb.QueryDescribeVersionResponse
+	if err := sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse); err != nil {
+		return nil, err
+	}
+	return queryResponse.VersionState, nil
 }

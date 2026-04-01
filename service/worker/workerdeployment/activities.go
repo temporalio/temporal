@@ -272,15 +272,18 @@ func (a *Activities) StartWorkerDeploymentVersionWorkflow(
 ) error {
 	logger := activity.GetLogger(ctx)
 	logger.Info("starting worker deployment version workflow", "deploymentName", input.DeploymentName, "buildID", input.BuildId)
-	identity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	return a.WorkerDeploymentClient.StartWorkerDeploymentVersion(ctx, a.namespace, input.DeploymentName, input.BuildId, identity, input.RequestId, input.ComputeConfig)
+	startIdentity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+	return a.WorkerDeploymentClient.StartWorkerDeploymentVersion(ctx, a.namespace, input.DeploymentName, input.BuildId, startIdentity, input.RequestId, input.GetIdentity())
 }
 
-func (a *Activities) ValidateWorkerControllerInstanceSpec(ctx context.Context, input *deploymentspb.ValidateWorkerControllerInstanceSpecInput) error {
-	identity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	spec := computeConfigScalingGroupsToWCISpec(input.GetScalingGroups())
-	if err := a.WorkerControllerInstanceClient.ValidateWorkerControllerInstanceSpec(ctx, a.namespace, spec, identity); err != nil {
+func (a *Activities) UpdateWorkerControllerInstanceFromDeployment(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) error {
+	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
+	if err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups()); err != nil {
 		return temporal.NewApplicationError(err.Error(), errInvalidComputeConfig)
 	}
 	return nil
+}
+
+func (a *Activities) DeleteWorkerControllerInstanceFromDeployment(ctx context.Context, input *deploymentspb.DeleteWorkerControllerInstanceInput) error {
+	return a.WorkerControllerInstanceClient.DeleteWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), input.GetIdentity())
 }

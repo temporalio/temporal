@@ -239,20 +239,11 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionComputeConfig(
 		requestID = uuid.NewString()
 	}
 
-	// Convert API scaling group updates to internal proto type.
-	upsertScalingGroups := make(map[string]*deploymentspb.ScalingGroupUpdate, len(request.GetComputeConfigScalingGroups()))
-	for name, apiUpdate := range request.GetComputeConfigScalingGroups() {
-		upsertScalingGroups[name] = &deploymentspb.ScalingGroupUpdate{
-			ScalingGroup: apiUpdate.GetScalingGroup(),
-			UpdateMask:   apiUpdate.GetUpdateMask(),
-		}
-	}
-
 	err = wh.workerDeploymentClient.UpdateVersionComputeConfig(
 		ctx,
 		namespaceEntry,
 		request.GetDeploymentVersion(),
-		upsertScalingGroups,
+		request.GetComputeConfigScalingGroups(),
 		request.GetRemoveComputeConfigScalingGroups(),
 		request.Identity,
 		requestID,
@@ -267,9 +258,39 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionComputeConfig(
 func (wh *WorkflowHandler) ValidateWorkerDeploymentVersionComputeConfig(
 	ctx context.Context,
 	request *workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest,
-) (*workflowservice.ValidateWorkerDeploymentVersionComputeConfigResponse, error) {
-	// TODO implement me
-	return nil, serviceerror.NewUnimplemented("ValidateWorkerDeploymentVersionComputeConfig not implemented")
+) (_ *workflowservice.ValidateWorkerDeploymentVersionComputeConfigResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentVersionsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	err = wh.workerDeploymentClient.ValidateComputeConfig(
+		ctx,
+		namespaceEntry,
+		request.GetDeploymentVersion(),
+		request.GetComputeConfigScalingGroups(),
+		request.GetRemoveComputeConfigScalingGroups(),
+		request.Identity,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.ValidateWorkerDeploymentVersionComputeConfigResponse{}, nil
 }
 
 // NewWorkflowHandler creates a gRPC handler for workflowservice
@@ -4226,8 +4247,7 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Con
 		version = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(request.GetVersion())
 	}
 
-	identity := uuid.NewString()
-	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, version, request.UpsertEntries, request.RemoveEntries, identity)
+	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, version, request.UpsertEntries, request.RemoveEntries, request.Identity)
 	if err != nil {
 		return nil, err
 	}

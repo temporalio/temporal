@@ -33,10 +33,12 @@ type (
 	// VersionWorkflowRunner holds the local state for a deployment workflow
 	VersionWorkflowRunner struct {
 		*deploymentspb.WorkerDeploymentVersionWorkflowArgs
-		a                                 *VersionActivities
-		logger                            sdklog.Logger
-		metrics                           sdkclient.MetricsHandler
-		lock                              workflow.Mutex
+		a       *VersionActivities
+		logger  sdklog.Logger
+		metrics sdkclient.MetricsHandler
+		lock    workflow.Mutex
+		// Compute config is independent from version status and routing info so it has its own lock.
+		// Lock ordering: always acquire `lock` before `computeConfigLock`.
 		computeConfigLock                 workflow.Mutex
 		unsafeWorkflowVersionGetter       func() DeploymentWorkflowVersion
 		unsafeRefreshIntervalGetter       func() time.Duration
@@ -79,12 +81,10 @@ func VersionWorkflow(
 	versionWorkflowRunner := &VersionWorkflowRunner{
 		WorkerDeploymentVersionWorkflowArgs: versionWorkflowArgs,
 
-		a:       nil,
-		logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", versionWorkflowArgs.NamespaceName),
-		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": versionWorkflowArgs.NamespaceName}),
-		lock:    workflow.NewMutex(ctx),
-		// Compute config is independent from version status and routing info so it has its own lock.
-		// Lock ordering: always acquire `lock` before `computeConfigLock`.
+		a:                                 nil,
+		logger:                            sdklog.With(workflow.GetLogger(ctx), "wf-namespace", versionWorkflowArgs.NamespaceName),
+		metrics:                           workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": versionWorkflowArgs.NamespaceName}),
+		lock:                              workflow.NewMutex(ctx),
 		computeConfigLock:                 workflow.NewMutex(ctx),
 		unsafeWorkflowVersionGetter:       unsafeWorkflowVersionGetter,
 		unsafeRefreshIntervalGetter:       unsafeRefreshIntervalGetter,
@@ -350,6 +350,8 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 		delete(d.VersionState.Metadata.GetEntries(), key) // if m is nil, delete is a no-op
 	}
 
+	d.VersionState.LastModifierIdentity = args.GetIdentity()
+
 	// although the handler might have not changed the metadata at all, still
 	// it's better to CaN because some history events are built now.
 	d.setStateChanged()
@@ -374,29 +376,27 @@ func (d *VersionWorkflowRunner) handleUpdateVersionComputeConfig(ctx workflow.Co
 	}
 	defer d.computeConfigLock.Unlock()
 
-	// Build the new compute config by applying changes to a copy of the current one.
-	newConfig, err := buildUpdatedComputeConfig(d.VersionState.GetComputeConfig(), args)
+	// Update or delete the Worker Controller Instance based on the new config.
+	apiVersion := &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: d.VersionState.Version.DeploymentName,
+		BuildId:        d.VersionState.Version.BuildId,
+	}
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	err := workflow.ExecuteActivity(activityCtx, d.a.UpdateWorkerControllerInstance, &deploymentspb.UpdateWorkerControllerInstanceInput{
+		Version:             apiVersion,
+		Identity:            args.GetIdentity(),
+		UpsertScalingGroups: args.GetUpsertScalingGroups(),
+		RemoveScalingGroups: args.GetRemoveScalingGroups(),
+	}).Get(ctx, nil)
 	if err != nil {
-		return nil, err
-	}
-
-	// Validate the new config via the Worker Controller Instance client.
-	if len(newConfig.GetScalingGroups()) > 0 {
-		validateCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-		err := workflow.ExecuteActivity(validateCtx, d.a.ValidateWorkerControllerInstanceSpec, &deploymentspb.ValidateWorkerControllerInstanceSpecInput{
-			ScalingGroups: newConfig.GetScalingGroups(),
-		}).Get(ctx, nil)
-		if err != nil {
-			var appErr *temporal.ApplicationError
-			if errors.As(err, &appErr) && appErr.Type() == errInvalidComputeConfig {
-				return nil, appErr
-			}
-			return nil, serviceerror.NewInternalf("validate compute config: %v", err)
+		var appErr *temporal.ApplicationError
+		if errors.As(err, &appErr) && appErr.Type() == errInvalidComputeConfig {
+			return nil, appErr
 		}
+		return nil, serviceerror.NewInternalf("update worker controller instance: %v", err)
 	}
 
-	// Apply the validated config to state.
-	d.VersionState.ComputeConfig = newConfig
+	d.VersionState.LastModifierIdentity = args.GetIdentity()
 	d.setStateChanged()
 
 	return &deploymentspb.UpdateComputeConfigResponse{}, nil
@@ -495,6 +495,20 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 	if err != nil {
 		// some other error allowing activity retries
 		return err
+	}
+
+	if workflow.GetVersion(ctx, "delete-wci", workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+		apiVersion := &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: d.VersionState.Version.DeploymentName,
+			BuildId:        d.VersionState.Version.BuildId,
+		}
+		err = workflow.ExecuteActivity(activityCtx, d.a.DeleteWorkerControllerInstance, &deploymentspb.DeleteWorkerControllerInstanceInput{
+			Version:  apiVersion,
+			Identity: args.GetIdentity(),
+		}).Get(ctx, nil)
+		if err != nil {
+			return serviceerror.NewInternalf("delete worker controller instance: %v", err)
+		}
 	}
 
 	if args.AsyncPropagation {

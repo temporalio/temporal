@@ -553,18 +553,21 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
 	}
 
-	// Validate the compute config via the Worker Controller Instance client.
-	if computeConfig := args.GetComputeConfig(); computeConfig != nil {
-		validateCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-		err = workflow.ExecuteActivity(validateCtx, d.a.ValidateWorkerControllerInstanceSpec, &deploymentspb.ValidateWorkerControllerInstanceSpecInput{
-			ScalingGroups: computeConfig.GetScalingGroups(),
+	// Create or update the Worker Controller Instance for this version.
+	computeConfig := args.GetComputeConfig()
+	if computeConfig != nil {
+		updateCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+		err = workflow.ExecuteActivity(updateCtx, d.a.UpdateWorkerControllerInstanceFromDeployment, &deploymentspb.UpdateWorkerControllerInstanceInput{
+			Version:             worker_versioning.ExternalWorkerDeploymentVersionFromVersion(versionObj),
+			Identity:            args.GetIdentity(),
+			UpsertScalingGroups: scalingGroupsToUpsertUpdates(computeConfig.GetScalingGroups()),
 		}).Get(ctx, nil)
 		if err != nil {
 			var appErr *temporal.ApplicationError
 			if errors.As(err, &appErr) && appErr.Type() == errInvalidComputeConfig {
 				return nil, appErr
 			}
-			return nil, serviceerror.NewInternalf("validate compute config: %v", err)
+			return nil, serviceerror.NewInternalf("update worker controller instance: %v", err)
 		}
 	}
 
@@ -574,9 +577,19 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 		DeploymentName: versionObj.DeploymentName,
 		BuildId:        versionObj.BuildId,
 		RequestId:      args.GetRequestId(),
-		ComputeConfig:  args.GetComputeConfig(),
+		Identity:       args.GetIdentity(),
 	}).Get(ctx, nil)
 	if err != nil {
+		if computeConfig != nil {
+			deleteCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+			err = workflow.ExecuteActivity(deleteCtx, d.a.DeleteWorkerControllerInstanceFromDeployment, &deploymentspb.DeleteWorkerControllerInstanceInput{
+				Version:  worker_versioning.ExternalWorkerDeploymentVersionFromVersion(versionObj),
+				Identity: args.GetIdentity(),
+			}).Get(ctx, nil)
+			if err != nil {
+				d.logger.Warn("Failed to delete worker controller instance", "error", err)
+			}
+		}
 		return nil, err
 	}
 

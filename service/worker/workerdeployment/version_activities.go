@@ -198,11 +198,14 @@ func (a *VersionActivities) GetVersionDrainageStatus(ctx context.Context, versio
 	}, nil
 }
 
-func (a *VersionActivities) ValidateWorkerControllerInstanceSpec(ctx context.Context, input *deploymentspb.ValidateWorkerControllerInstanceSpecInput) error {
-	identity := "version workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	spec := computeConfigScalingGroupsToWCISpec(input.GetScalingGroups())
-	if err := a.WorkerControllerInstanceClient.ValidateWorkerControllerInstanceSpec(ctx, a.namespace, spec, identity); err != nil {
+func (a *VersionActivities) UpdateWorkerControllerInstance(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) error {
+	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
+	if err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups()); err != nil {
 		return temporal.NewApplicationError(err.Error(), errInvalidComputeConfig)
 	}
 	return nil
+}
+
+func (a *VersionActivities) DeleteWorkerControllerInstance(ctx context.Context, input *deploymentspb.DeleteWorkerControllerInstanceInput) error {
+	return a.WorkerControllerInstanceClient.DeleteWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), input.GetIdentity())
 }
