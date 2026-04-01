@@ -14,11 +14,12 @@ func TestSerializePageToken(t *testing.T) {
 		CloseTime: time.Date(2023, 3, 21, 14, 20, 32, 0, time.UTC),
 		StartTime: time.Date(2023, 3, 21, 14, 10, 32, 0, time.UTC),
 		RunID:     "test-run-id",
+		QueryTime: time.Date(2023, 3, 21, 14, 0, 32, 0, time.UTC),
 	}
 	data, err := serializePageTokenLegacy(&token)
 	s.NoError(err)
 	s.Equal(
-		[]byte(`{"CloseTime":"2023-03-21T14:20:32Z","StartTime":"2023-03-21T14:10:32Z","RunID":"test-run-id"}`),
+		[]byte(`{"CloseTime":"2023-03-21T14:20:32Z","StartTime":"2023-03-21T14:10:32Z","RunID":"test-run-id","QueryTime":"2023-03-21T14:00:32Z"}`),
 		data,
 	)
 }
@@ -35,7 +36,7 @@ func TestDeserializePageToken(t *testing.T) {
 	s.Nil(token)
 
 	token, err = deserializePageTokenLegacy(
-		[]byte(`{"CloseTime":"2023-03-21T14:20:32Z","StartTime":"2023-03-21T14:10:32Z","RunID":"test-run-id"}`),
+		[]byte(`{"CloseTime":"2023-03-21T14:20:32Z","StartTime":"2023-03-21T14:10:32Z","RunID":"test-run-id","QueryTime":"2023-03-21T14:00:32Z"}`),
 	)
 	s.NoError(err)
 	s.NotNil(token)
@@ -44,6 +45,7 @@ func TestDeserializePageToken(t *testing.T) {
 			CloseTime: time.Date(2023, 3, 21, 14, 20, 32, 0, time.UTC),
 			StartTime: time.Date(2023, 3, 21, 14, 10, 32, 0, time.UTC),
 			RunID:     "test-run-id",
+			QueryTime: time.Date(2023, 3, 21, 14, 0, 32, 0, time.UTC),
 		},
 		*token,
 	)

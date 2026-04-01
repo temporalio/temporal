@@ -17,6 +17,7 @@ import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -40,9 +41,10 @@ type BatchOperationInput struct {
 	Request *v11.StartBatchOperationRequest `protobuf:"bytes,7,opt,name=request,proto3" json:"request,omitempty"`
 	// The request to start an admin batch operation.
 	// Mutually exclusive with StartBatchOperationRequest request.
-	AdminRequest  *v12.StartAdminBatchOperationRequest `protobuf:"bytes,8,opt,name=admin_request,json=adminRequest,proto3" json:"admin_request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	AdminRequest   *v12.StartAdminBatchOperationRequest `protobuf:"bytes,8,opt,name=admin_request,json=adminRequest,proto3" json:"admin_request,omitempty"`
+	BatchStartTime *timestamppb.Timestamp               `protobuf:"bytes,9,opt,name=batch_start_time,json=batchStartTime,proto3" json:"batch_start_time,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *BatchOperationInput) Reset() {
@@ -131,11 +133,18 @@ func (x *BatchOperationInput) GetAdminRequest() *v12.StartAdminBatchOperationReq
 	return nil
 }
 
+func (x *BatchOperationInput) GetBatchStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.BatchStartTime
+	}
+	return nil
+}
+
 var File_temporal_server_api_batch_v1_request_response_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_batch_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"3temporal/server/api/batch/v1/request_response.proto\x12\x1ctemporal.server.api.batch.v1\x1a\x1egoogle/protobuf/duration.proto\x1a+temporal/api/enums/v1/batch_operation.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a:temporal/server/api/adminservice/v1/request_response.proto\"\xb0\x04\n" +
+	"3temporal/server/api/batch/v1/request_response.proto\x12\x1ctemporal.server.api.batch.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a+temporal/api/enums/v1/batch_operation.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a:temporal/server/api/adminservice/v1/request_response.proto\"\xf6\x04\n" +
 	"\x13BatchOperationInput\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12 \n" +
 	"\vconcurrency\x18\x02 \x01(\x03R\vconcurrency\x12=\n" +
@@ -145,7 +154,8 @@ const file_temporal_server_api_batch_v1_request_response_proto_rawDesc = "" +
 	"\n" +
 	"batch_type\x18\x06 \x01(\x0e2).temporal.api.enums.v1.BatchOperationTypeR\tbatchType\x12U\n" +
 	"\arequest\x18\a \x01(\v2;.temporal.api.workflowservice.v1.StartBatchOperationRequestR\arequest\x12i\n" +
-	"\radmin_request\x18\b \x01(\v2D.temporal.server.api.adminservice.v1.StartAdminBatchOperationRequestR\fadminRequestB*Z(go.temporal.io/server/api/batch/v1;batchb\x06proto3"
+	"\radmin_request\x18\b \x01(\v2D.temporal.server.api.adminservice.v1.StartAdminBatchOperationRequestR\fadminRequest\x12D\n" +
+	"\x10batch_start_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x0ebatchStartTimeB*Z(go.temporal.io/server/api/batch/v1;batchb\x06proto3"
 
 var (
 	file_temporal_server_api_batch_v1_request_response_proto_rawDescOnce sync.Once
@@ -166,17 +176,19 @@ var file_temporal_server_api_batch_v1_request_response_proto_goTypes = []any{
 	(v1.BatchOperationType)(0),                  // 2: temporal.api.enums.v1.BatchOperationType
 	(*v11.StartBatchOperationRequest)(nil),      // 3: temporal.api.workflowservice.v1.StartBatchOperationRequest
 	(*v12.StartAdminBatchOperationRequest)(nil), // 4: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest
+	(*timestamppb.Timestamp)(nil),               // 5: google.protobuf.Timestamp
 }
 var file_temporal_server_api_batch_v1_request_response_proto_depIdxs = []int32{
 	1, // 0: temporal.server.api.batch.v1.BatchOperationInput.activity_heartbeat_timeout:type_name -> google.protobuf.Duration
 	2, // 1: temporal.server.api.batch.v1.BatchOperationInput.batch_type:type_name -> temporal.api.enums.v1.BatchOperationType
 	3, // 2: temporal.server.api.batch.v1.BatchOperationInput.request:type_name -> temporal.api.workflowservice.v1.StartBatchOperationRequest
 	4, // 3: temporal.server.api.batch.v1.BatchOperationInput.admin_request:type_name -> temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	5, // 4: temporal.server.api.batch.v1.BatchOperationInput.batch_start_time:type_name -> google.protobuf.Timestamp
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_batch_v1_request_response_proto_init() }
