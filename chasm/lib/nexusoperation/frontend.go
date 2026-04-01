@@ -81,7 +81,7 @@ func (h *frontendHandler) StartNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := validateAndNormalizeStartRequest(req, h.config, h.saMapperProvider, h.saValidator); err != nil {
+	if err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator); err != nil {
 		return nil, err
 	}
 
@@ -110,7 +110,7 @@ func (h *frontendHandler) DescribeNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := validateDescribeNexusOperationExecutionRequest(req, h.config); err != nil {
+	if err := validateAndNormalizeDescribeRequest(req, h.config); err != nil {
 		return nil, err
 	}
 
@@ -220,18 +220,60 @@ func (h *frontendHandler) CountNexusOperationExecutions(
 	}, nil
 }
 
-func (h *frontendHandler) RequestCancelNexusOperationExecution(_ context.Context, req *workflowservice.RequestCancelNexusOperationExecutionRequest) (*workflowservice.RequestCancelNexusOperationExecutionResponse, error) {
+func (h *frontendHandler) RequestCancelNexusOperationExecution(
+	ctx context.Context,
+	req *workflowservice.RequestCancelNexusOperationExecutionRequest,
+) (*workflowservice.RequestCancelNexusOperationExecutionResponse, error) {
 	if !h.isStandaloneNexusOperationEnabled(req.GetNamespace()) {
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
-	return nil, serviceerror.NewUnimplemented("RequestCancelNexusOperationExecution not implemented")
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := validateAndNormalizeCancelRequest(req, h.config); err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.RequestCancelNexusOperation(ctx, &nexusoperationpb.RequestCancelNexusOperationRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.RequestCancelNexusOperationExecutionResponse{}, nil
 }
 
-func (h *frontendHandler) TerminateNexusOperationExecution(_ context.Context, req *workflowservice.TerminateNexusOperationExecutionRequest) (*workflowservice.TerminateNexusOperationExecutionResponse, error) {
+func (h *frontendHandler) TerminateNexusOperationExecution(
+	ctx context.Context,
+	req *workflowservice.TerminateNexusOperationExecutionRequest,
+) (*workflowservice.TerminateNexusOperationExecutionResponse, error) {
 	if !h.isStandaloneNexusOperationEnabled(req.GetNamespace()) {
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
-	return nil, serviceerror.NewUnimplemented("TerminateNexusOperationExecution not implemented")
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := validateAndNormalizeTerminateRequest(req, h.config); err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.TerminateNexusOperation(ctx, &nexusoperationpb.TerminateNexusOperationRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.TerminateNexusOperationExecutionResponse{}, nil
 }
 
 func (h *frontendHandler) DeleteNexusOperationExecution(_ context.Context, req *workflowservice.DeleteNexusOperationExecutionRequest) (*workflowservice.DeleteNexusOperationExecutionResponse, error) {

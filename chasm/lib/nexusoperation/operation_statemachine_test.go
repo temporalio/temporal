@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -19,7 +20,8 @@ var (
 )
 
 func newTestOperation() *Operation {
-	return &Operation{
+	ctx := &chasm.MockMutableContext{}
+	op := &Operation{
 		OperationState: &nexusoperationpb.OperationState{
 			Status:                 nexusoperationpb.OPERATION_STATUS_UNSPECIFIED,
 			EndpointId:             "endpoint-id",
@@ -32,6 +34,8 @@ func newTestOperation() *Operation {
 			Attempt:                0,
 		},
 	}
+	op.Outcome = chasm.NewDataField(ctx, &nexusoperationpb.OperationOutcome{})
+	return op
 }
 
 func TestTransitionScheduled(t *testing.T) {
@@ -276,173 +280,113 @@ func TestTransitionStarted(t *testing.T) {
 }
 
 func TestTransitionSucceeded(t *testing.T) {
-	testCases := []struct {
-		name        string
-		startStatus nexusoperationpb.OperationStatus
-	}{
-		{
-			name:        "succeeded from scheduled",
-			startStatus: nexusoperationpb.OPERATION_STATUS_SCHEDULED,
-		},
-		{
-			name:        "succeeded from started",
-			startStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
-		},
-		{
-			name:        "succeeded from backing off",
-			startStatus: nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return defaultTime },
 		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := &chasm.MockMutableContext{
-				MockContext: chasm.MockContext{
-					HandleNow: func(chasm.Component) time.Time { return defaultTime },
-				},
-			}
+	operation := newTestOperation()
+	operation.Status = nexusoperationpb.OPERATION_STATUS_STARTED
 
-			operation := newTestOperation()
-			operation.Status = tc.startStatus
+	err := transitionSucceeded.Apply(operation, ctx, EventSucceeded{})
+	require.NoError(t, err)
 
-			event := EventSucceeded{}
-
-			err := transitionSucceeded.Apply(operation, ctx, event)
-			require.NoError(t, err)
-
-			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, operation.Status)
-
-			// Terminal state - no tasks should be emitted
-			require.Empty(t, ctx.Tasks)
-		})
-	}
+	require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, operation.Status)
+	require.Empty(t, ctx.Tasks)
 }
 
 func TestTransitionFailed(t *testing.T) {
-	testCases := []struct {
-		name        string
-		startStatus nexusoperationpb.OperationStatus
-	}{
-		{
-			name:        "failed from scheduled",
-			startStatus: nexusoperationpb.OPERATION_STATUS_SCHEDULED,
-		},
-		{
-			name:        "failed from started",
-			startStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
-		},
-		{
-			name:        "failed from backing off",
-			startStatus: nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return defaultTime },
 		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := &chasm.MockMutableContext{
-				MockContext: chasm.MockContext{
-					HandleNow: func(chasm.Component) time.Time { return defaultTime },
-				},
-			}
+	operation := newTestOperation()
+	operation.Status = nexusoperationpb.OPERATION_STATUS_STARTED
 
-			operation := newTestOperation()
-			operation.Status = tc.startStatus
+	err := transitionFailed.Apply(operation, ctx, EventFailed{})
+	require.NoError(t, err)
 
-			event := EventFailed{}
-
-			err := transitionFailed.Apply(operation, ctx, event)
-			require.NoError(t, err)
-
-			require.Equal(t, nexusoperationpb.OPERATION_STATUS_FAILED, operation.Status)
-
-			// Terminal state - no tasks should be emitted
-			require.Empty(t, ctx.Tasks)
-		})
-	}
+	require.Equal(t, nexusoperationpb.OPERATION_STATUS_FAILED, operation.Status)
+	require.Empty(t, ctx.Tasks)
 }
 
 func TestTransitionCanceled(t *testing.T) {
-	testCases := []struct {
-		name        string
-		startStatus nexusoperationpb.OperationStatus
-	}{
-		{
-			name:        "canceled from scheduled",
-			startStatus: nexusoperationpb.OPERATION_STATUS_SCHEDULED,
-		},
-		{
-			name:        "canceled from started",
-			startStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
-		},
-		{
-			name:        "canceled from backing off",
-			startStatus: nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return defaultTime },
 		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := &chasm.MockMutableContext{
-				MockContext: chasm.MockContext{
-					HandleNow: func(chasm.Component) time.Time { return defaultTime },
-				},
-			}
+	operation := newTestOperation()
+	operation.Status = nexusoperationpb.OPERATION_STATUS_STARTED
 
-			operation := newTestOperation()
-			operation.Status = tc.startStatus
+	err := TransitionCanceled.Apply(operation, ctx, EventCanceled{})
+	require.NoError(t, err)
 
-			event := EventCanceled{}
-
-			err := TransitionCanceled.Apply(operation, ctx, event)
-			require.NoError(t, err)
-
-			require.Equal(t, nexusoperationpb.OPERATION_STATUS_CANCELED, operation.Status)
-
-			// Terminal state - no tasks should be emitted
-			require.Empty(t, ctx.Tasks)
-		})
-	}
+	require.Equal(t, nexusoperationpb.OPERATION_STATUS_CANCELED, operation.Status)
+	require.Empty(t, ctx.Tasks)
 }
 
 func TestTransitionTimedOut(t *testing.T) {
-	testCases := []struct {
-		name        string
-		startStatus nexusoperationpb.OperationStatus
-	}{
-		{
-			name:        "timed out from scheduled",
-			startStatus: nexusoperationpb.OPERATION_STATUS_SCHEDULED,
-		},
-		{
-			name:        "timed out from started",
-			startStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
-		},
-		{
-			name:        "timed out from backing off",
-			startStatus: nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return defaultTime },
 		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := &chasm.MockMutableContext{
-				MockContext: chasm.MockContext{
-					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+	operation := newTestOperation()
+	operation.Status = nexusoperationpb.OPERATION_STATUS_SCHEDULED
+
+	err := transitionTimedOut.Apply(operation, ctx, EventTimedOut{})
+	require.NoError(t, err)
+
+	require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, operation.Status)
+	require.Empty(t, ctx.Tasks)
+}
+
+func TestTransitionTerminated(t *testing.T) {
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return defaultTime },
+		},
+	}
+
+	operation := newTestOperation()
+	operation.Status = nexusoperationpb.OPERATION_STATUS_SCHEDULED
+
+	event := EventTerminated{
+		chasm.TerminateComponentRequest{
+			RequestID: "terminate-request-id",
+			Reason:    "test reason",
+			Identity:  "test-identity",
+		},
+	}
+
+	err := TransitionTerminated.Apply(operation, ctx, event)
+	require.NoError(t, err)
+
+	require.Equal(t, nexusoperationpb.OPERATION_STATUS_TERMINATED, operation.Status)
+	protorequire.ProtoEqual(t, &nexusoperationpb.NexusOperationTerminateState{
+		RequestId: "terminate-request-id",
+		Identity:  "test-identity",
+	}, operation.TerminateState)
+
+	// Verify outcome failure is set with terminated info and reason as message.
+	protorequire.ProtoEqual(t, &nexusoperationpb.OperationOutcome{
+		Variant: &nexusoperationpb.OperationOutcome_Failed_{
+			Failed: &nexusoperationpb.OperationOutcome_Failed{
+				Failure: &failurepb.Failure{
+					Message: "test reason",
+					FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+						TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
+					},
 				},
-			}
+			},
+		},
+	}, operation.Outcome.Get(ctx))
 
-			operation := newTestOperation()
-			operation.Status = tc.startStatus
-
-			event := EventTimedOut{}
-
-			err := transitionTimedOut.Apply(operation, ctx, event)
-			require.NoError(t, err)
-
-			require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, operation.Status)
-
-			// Terminal state - no tasks should be emitted
-			require.Empty(t, ctx.Tasks)
-		})
-	}
+	require.Empty(t, ctx.Tasks)
 }

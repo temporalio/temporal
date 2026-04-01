@@ -25,3 +25,21 @@ message DescribeNexusOperationRequest {
 message DescribeNexusOperationResponse {
     temporal.api.workflowservice.v1.DescribeNexusOperationExecutionResponse frontend_response = 1;
 }
+
+message RequestCancelNexusOperationRequest {
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.RequestCancelNexusOperationExecutionRequest frontend_request = 2;
+}
+
+message RequestCancelNexusOperationResponse {
+}
+
+message TerminateNexusOperationRequest {
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.TerminateNexusOperationExecutionRequest frontend_request = 2;
+}
+
+message TerminateNexusOperationResponse {
+}
