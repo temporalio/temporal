@@ -311,8 +311,8 @@ func (w *Workflow) PendingNexusOperationCount() int {
 	return len(w.Operations)
 }
 
-// GetNexusOperationInvocationData loads invocation data from the scheduled history event.
-func (w *Workflow) GetNexusOperationInvocationData(
+// NexusOperationInvocationData loads invocation data from the scheduled history event.
+func (w *Workflow) NexusOperationInvocationData(
 	ctx chasm.Context,
 	op *nexusoperation.Operation,
 ) (nexusoperation.InvocationData, error) {

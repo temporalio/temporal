@@ -40,8 +40,8 @@ type OperationStore interface {
 	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation, result *commonpb.Payload, links []*commonpb.Link) error
-	// GetNexusOperationInvocationData loads invocation data (Input, Header, NexusLink) from the scheduled history event.
-	GetNexusOperationInvocationData(ctx chasm.Context, operation *Operation) (InvocationData, error)
+	// NexusOperationInvocationData loads invocation data (Input, Header, NexusLink) from the scheduled history event.
+	NexusOperationInvocationData(ctx chasm.Context, operation *Operation) (InvocationData, error)
 }
 
 // Operation is a CHASM component that represents a Nexus operation.
@@ -170,7 +170,7 @@ func (o *Operation) loadStartArgs(
 		// TODO: For standalone operations, load invocation data from the operation state.
 		return startArgs{}, serviceerror.NewInternal("no store available to load invocation data")
 	}
-	invocationData, err := store.GetNexusOperationInvocationData(ctx, o)
+	invocationData, err := store.NexusOperationInvocationData(ctx, o)
 	if err != nil {
 		return startArgs{}, err
 	}
