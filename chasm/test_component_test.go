@@ -80,6 +80,7 @@ var (
 
 	_ VisibilitySearchAttributesProvider = (*TestComponent)(nil)
 	_ VisibilityMemoProvider             = (*TestComponent)(nil)
+	_ RootComponent                      = (*TestComponent)(nil)
 )
 
 func (tc *TestComponent) LifecycleState(_ Context) LifecycleState {
@@ -107,6 +108,11 @@ func (tc *TestComponent) Complete(_ MutableContext) {
 
 func (tc *TestComponent) Fail(_ MutableContext) {
 	tc.ComponentData.Status = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+}
+
+func (tc *TestComponent) ContextMetadata(_ Context) map[string]string {
+	// TODO: Export context metadata from this test root.
+	return nil
 }
 
 // SearchAttributes implements VisibilitySearchAttributesProvider interface.

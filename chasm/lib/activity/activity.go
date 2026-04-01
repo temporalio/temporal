@@ -106,6 +106,11 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	}
 }
 
+func (a *Activity) ContextMetadata(_ chasm.Context) map[string]string {
+	// TODO: Export standalone activity context metadata.
+	return nil
+}
+
 // NewStandaloneActivity creates a new activity component and adds associated tasks to start execution.
 func NewStandaloneActivity(
 	ctx chasm.MutableContext,

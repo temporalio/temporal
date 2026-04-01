@@ -550,7 +550,7 @@ func (s *chasmEngineSuite) TestSetContextMetadata_StateAndRequestScopedValues() 
 		},
 	)
 
-	chasmTree, err := chasmTreeFromMutableState(mutableState)
+	chasmTree, err := chasmTreeFromMutableState(s.mockShard.GetLogger(), mutableState)
 	s.NoError(err)
 
 	requestCtx := newTestMetadataContext("helper-request")
@@ -575,7 +575,7 @@ func (s *chasmEngineSuite) TestSetContextMetadata_NoProvider() {
 		},
 	)
 
-	chasmTree, err := chasmTreeFromMutableState(mutableState)
+	chasmTree, err := chasmTreeFromMutableState(s.mockShard.GetLogger(), mutableState)
 	s.NoError(err)
 
 	requestCtx := contextutil.WithMetadataContext(context.Background())
@@ -2002,7 +2002,7 @@ func (s *chasmEngineSuite) newTestMutableState(
 		s.mockShard.GetTimeSource().Now(),
 	)
 
-	chasmTree, err := chasmTreeFromMutableState(mutableState)
+	chasmTree, err := chasmTreeFromMutableState(s.mockShard.GetLogger(), mutableState)
 	s.NoError(err)
 	s.NoError(chasmTree.SetRootComponent(rootComponent))
 
@@ -2043,7 +2043,8 @@ var (
 
 	_ chasm.VisibilitySearchAttributesProvider = (*testComponent)(nil)
 	_ chasm.VisibilityMemoProvider             = (*testComponent)(nil)
-	_ chasm.ContextMetadataProvider            = (*testComponent)(nil)
+	_ chasm.RootComponent                      = (*testComponent)(nil)
+	_ chasm.RootComponent                      = (*testComponentNoMetadata)(nil)
 )
 
 type testRequestContextKey struct{}
@@ -2097,6 +2098,11 @@ type testComponentNoMetadata struct {
 
 func (l *testComponentNoMetadata) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
+}
+
+func (l *testComponentNoMetadata) ContextMetadata(_ chasm.Context) map[string]string {
+	// TODO: Export context metadata from this root.
+	return nil
 }
 
 func (l *testComponentNoMetadata) Terminate(

@@ -128,12 +128,17 @@ func (e *ChasmEngine) setContextMetadata(
 		return chasmContext
 	}
 
-	provider, ok := rootComponent.(chasm.ContextMetadataProvider)
+	root, ok := rootComponent.(chasm.RootComponent)
 	if !ok {
+		softassert.Fail(
+			e.logger,
+			"root node must implement RootComponent interface",
+			tag.NewStringTag("component_type", fmt.Sprintf("%T", rootComponent)),
+		)
 		return chasmContext
 	}
 
-	for key, value := range provider.ContextMetadata(chasmContext) {
+	for key, value := range root.ContextMetadata(chasmContext) {
 		contextutil.ContextMetadataSet(ctx, key, value)
 	}
 
@@ -141,14 +146,15 @@ func (e *ChasmEngine) setContextMetadata(
 }
 
 func chasmTreeFromMutableState(
+	logger log.Logger,
 	mutableState historyi.MutableState,
 ) (*chasm.Node, error) {
 	chasmTree, ok := mutableState.ChasmTree().(*chasm.Node)
 	if !ok {
-		return nil, serviceerror.NewInternalf(
-			"CHASM tree implementation not properly wired up, encountered type: %T, expected type: %T",
-			mutableState.ChasmTree(),
-			&chasm.Node{},
+		return nil, softassert.UnexpectedInternalErr(
+			logger,
+			"CHASM tree implementation not properly wired up",
+			fmt.Errorf("encountered type: %T, expected type: %T", mutableState.ChasmTree(), &chasm.Node{}),
 		)
 	}
 	return chasmTree, nil
@@ -158,7 +164,7 @@ func (e *ChasmEngine) setContextMetadataFromMutableState(
 	ctx context.Context,
 	mutableState historyi.MutableState,
 ) {
-	chasmTree, err := chasmTreeFromMutableState(mutableState)
+	chasmTree, err := chasmTreeFromMutableState(e.logger, mutableState)
 	if err != nil {
 		e.logger.Error("Failed to resolve CHASM tree for context metadata", tag.Error(err))
 		return
@@ -413,7 +419,7 @@ func (e *ChasmEngine) applyUpdateWithLease(
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 ) ([]byte, error) {
 	mutableState := executionLease.GetMutableState()
-	chasmTree, err := chasmTreeFromMutableState(mutableState)
+	chasmTree, err := chasmTreeFromMutableState(shardContext.GetLogger(), mutableState)
 	if err != nil {
 		return nil, err
 	}
@@ -641,7 +647,7 @@ func (e *ChasmEngine) readComponent(
 		executionLease.GetReleaseFn()(nil)
 	}()
 
-	chasmTree, err := chasmTreeFromMutableState(executionLease.GetMutableState())
+	chasmTree, err := chasmTreeFromMutableState(e.logger, executionLease.GetMutableState())
 	if err != nil {
 		return err
 	}
@@ -743,7 +749,7 @@ func (e *ChasmEngine) predicateSatisfied(
 	ref chasm.ComponentRef,
 	executionLease api.WorkflowLease,
 ) ([]byte, error) {
-	chasmTree, err := chasmTreeFromMutableState(executionLease.GetMutableState())
+	chasmTree, err := chasmTreeFromMutableState(e.logger, executionLease.GetMutableState())
 	if err != nil {
 		return nil, err
 	}

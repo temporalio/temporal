@@ -288,6 +288,11 @@ func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
+func (s *Scheduler) ContextMetadata(_ chasm.Context) map[string]string {
+	// TODO: Export scheduler context metadata.
+	return nil
+}
+
 // Terminate implements the chasm.RootComponent interface.
 func (s *Scheduler) Terminate(
 	_ chasm.MutableContext,
