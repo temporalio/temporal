@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -152,9 +153,18 @@ func (h *Handler) opMetricsHandler(
 	)
 }
 
+// internalNexusTaskQueuePrefix is used to identify server-internal Nexus task
+// queues (e.g. /temporal-sys/worker-commands/...) which should be excluded from
+// the adoption metric.
+const internalNexusTaskQueuePrefix = "/temporal-sys/"
+
 // recordNexusTaskRequest emits the nexus_task_requests metric with namespace,
 // operation, and client_name tags to match the Envoy-based adoption metric.
-func (h *Handler) recordNexusTaskRequest(ctx context.Context, namespaceID string, operation string) {
+// Requests on internal task queues (prefixed with /temporal-sys/) are excluded.
+func (h *Handler) recordNexusTaskRequest(ctx context.Context, namespaceID string, taskQueueName string, operation string) {
+	if strings.HasPrefix(taskQueueName, internalNexusTaskQueuePrefix) {
+		return
+	}
 	nsName := h.namespaceName(namespace.ID(namespaceID))
 	clientName, _ := headers.GetClientNameAndVersion(ctx)
 	metrics.NexusTaskRequests.With(h.metricsHandler).Record(1,
@@ -519,7 +529,7 @@ func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservi
 	// Only record on the initial handler call (ForwardedSource == ""), not on
 	// the forwarded call to the root partition, to avoid double-counting.
 	if request.GetForwardedSource() == "" {
-		h.recordNexusTaskRequest(ctx, request.GetNamespaceId(), "PollNexusTaskQueue")
+		h.recordNexusTaskRequest(ctx, request.GetNamespaceId(), request.GetRequest().GetTaskQueue().GetName(), "PollNexusTaskQueue")
 	}
 
 	if request.GetForwardedSource() != "" {
@@ -544,7 +554,7 @@ func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchi
 		enumspb.TASK_QUEUE_TYPE_NEXUS,
 		metrics.MatchingRespondNexusTaskCompletedScope,
 	)
-	h.recordNexusTaskRequest(ctx, request.GetNamespaceId(), "RespondNexusTaskCompleted")
+	h.recordNexusTaskRequest(ctx, request.GetNamespaceId(), request.GetTaskQueue().GetName(), "RespondNexusTaskCompleted")
 
 	return h.engine.RespondNexusTaskCompleted(ctx, request, opMetrics)
 }
@@ -557,7 +567,7 @@ func (h *Handler) RespondNexusTaskFailed(ctx context.Context, request *matchings
 		enumspb.TASK_QUEUE_TYPE_NEXUS,
 		metrics.MatchingRespondNexusTaskFailedScope,
 	)
-	h.recordNexusTaskRequest(ctx, request.GetNamespaceId(), "RespondNexusTaskFailed")
+	h.recordNexusTaskRequest(ctx, request.GetNamespaceId(), request.GetTaskQueue().GetName(), "RespondNexusTaskFailed")
 
 	return h.engine.RespondNexusTaskFailed(ctx, request, opMetrics)
 }

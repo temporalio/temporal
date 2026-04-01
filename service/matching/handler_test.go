@@ -173,6 +173,31 @@ func TestNexusHandlersEmitClientNameMetric(t *testing.T) {
 		assert.False(t, findMetricWithTag(snap, nexusTaskRequestsMetric, "client_name", expectedClientName),
 			"should not have client_name tag when header is absent, got: %v", snap)
 	})
+
+	t.Run("excluded for internal task queue", func(t *testing.T) {
+		captureHandler := metricstest.NewCaptureHandler()
+		capture := captureHandler.StartCapture()
+		defer captureHandler.StopCapture(capture)
+
+		h, _ := newTestHandler(t, captureHandler)
+		ctx := ctxWithClientName(t, expectedClientName)
+		internalTQ := &taskqueuepb.TaskQueue{
+			Name: "/temporal-sys/worker-commands/ns/grouping-key",
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		}
+
+		_, err := h.PollNexusTaskQueue(ctx, &matchingservice.PollNexusTaskQueueRequest{
+			NamespaceId: "test-ns-id",
+			Request: &workflowservice.PollNexusTaskQueueRequest{
+				TaskQueue: internalTQ,
+			},
+		})
+		require.NoError(t, err)
+
+		snap := capture.Snapshot()
+		assert.Empty(t, snap[nexusTaskRequestsMetric],
+			"nexus_task_requests should not be emitted for internal task queues, got: %v", snap)
+	})
 }
 
 func TestWorkerHeartbeatToListInfo_AllFieldsSet(t *testing.T) {
