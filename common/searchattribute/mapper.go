@@ -4,6 +4,7 @@ package searchattribute
 
 import (
 	"errors"
+	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -51,7 +52,7 @@ func (m *backCompMapper) GetAlias(fieldName string, namespaceName string) (strin
 		if !m.isLegacyCustomSearchAttribute(fieldName) {
 			return "", firstErr
 		}
-		// this is custom search attribute registered in pre-v1.20
+		// this is a custom search attribute registered through cluster metadata.
 		return fieldName, nil
 	}
 	return alias, nil
@@ -63,7 +64,7 @@ func (m *backCompMapper) GetFieldName(alias string, namespaceName string) (strin
 		if !m.isLegacyCustomSearchAttribute(alias) {
 			return "", firstErr
 		}
-		// this is custom search attribute registered in pre-v1.20
+		// this is a custom search attribute registered through cluster metadata.
 		return alias, nil
 	}
 	return fieldName, nil
@@ -96,9 +97,6 @@ func (m *mapperProviderImpl) GetMapper(nsName namespace.Name) (Mapper, error) {
 	if m.customMapper != nil {
 		return m.customMapper, nil
 	}
-	if m.namespaceRegistry == nil {
-		return nil, nil
-	}
 	saMapper, err := m.namespaceRegistry.GetCustomSearchAttributesMapper(nsName)
 	if err != nil {
 		return nil, err
@@ -106,8 +104,10 @@ func (m *mapperProviderImpl) GetMapper(nsName namespace.Name) (Mapper, error) {
 	fallbackIndexNames := append(append([]string(nil), m.fallbackIndexNames...), "")
 	fallbackNameTypeMaps := make([]NameTypeMap, 0, len(fallbackIndexNames))
 	for _, indexName := range fallbackIndexNames {
-		// If there is an error, it returns an empty object, which is expected here.
-		nameTypeMap, _ := m.searchAttributesProvider.GetSearchAttributes(indexName, false)
+		nameTypeMap, err := m.searchAttributesProvider.GetSearchAttributes(indexName, false)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load search attributes for fallback index %q: %w", indexName, err)
+		}
 		fallbackNameTypeMaps = append(fallbackNameTypeMaps, legacyCustomSearchAttributes(nameTypeMap))
 	}
 	return &backCompMapper{

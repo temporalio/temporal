@@ -7,12 +7,17 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
 	TestProvider struct {
 		es bool
+	}
+
+	testMapperProvider struct {
+		mapper Mapper
 	}
 
 	TestMapper struct {
@@ -23,6 +28,7 @@ type (
 
 var _ Provider = (*TestProvider)(nil)
 var _ Mapper = (*TestMapper)(nil)
+var _ MapperProvider = (*testMapperProvider)(nil)
 
 var (
 	esCustomSearchAttributes = map[string]enumspb.IndexedValueType{
@@ -139,7 +145,11 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 }
 
 func NewTestMapperProvider(customMapper Mapper) MapperProvider {
-	return NewMapperProvider(customMapper, nil, NewTestProvider())
+	return &testMapperProvider{mapper: customMapper}
+}
+
+func (p *testMapperProvider) GetMapper(namespace.Name) (Mapper, error) {
+	return p.mapper, nil
 }
 
 func NewNameTypeMapStub(attributes map[string]enumspb.IndexedValueType) NameTypeMap {

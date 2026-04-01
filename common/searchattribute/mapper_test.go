@@ -1,6 +1,7 @@
 package searchattribute
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -143,9 +144,13 @@ func Test_UnaliasFields(t *testing.T) {
 
 type staticSearchAttributesProvider struct {
 	nameTypeMaps map[string]NameTypeMap
+	err          error
 }
 
 func (s staticSearchAttributesProvider) GetSearchAttributes(indexName string, _ bool) (NameTypeMap, error) {
+	if s.err != nil {
+		return NameTypeMap{}, s.err
+	}
 	if nameTypeMap, ok := s.nameTypeMaps[indexName]; ok {
 		return nameTypeMap, nil
 	}
@@ -224,4 +229,27 @@ func TestMapperProviderDoesNotTreatPreallocatedFieldsAsLegacyCustomAttributes(t 
 	require.Error(t, err)
 	var invalidArgumentErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgumentErr)
+}
+
+func TestMapperProviderReturnsFallbackLookupError(t *testing.T) {
+	controller := gomock.NewController(t)
+	nsRegistry := namespace.NewMockRegistry(controller)
+	nsRegistry.EXPECT().
+		GetCustomSearchAttributesMapper(namespace.Name("test-namespace")).
+		Return(namespace.CustomSearchAttributesMapper{}, nil)
+
+	expectedErr := errors.New("boom")
+	mapperProvider := NewMapperProvider(
+		nil,
+		nsRegistry,
+		staticSearchAttributesProvider{
+			err: expectedErr,
+		},
+		"test-visibility-index",
+	)
+
+	_, err := mapperProvider.GetMapper(namespace.Name("test-namespace"))
+	require.Error(t, err)
+	require.ErrorContains(t, err, `failed to load search attributes for fallback index "test-visibility-index"`)
+	require.ErrorContains(t, err, expectedErr.Error())
 }
