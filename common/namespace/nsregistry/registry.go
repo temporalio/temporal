@@ -941,15 +941,15 @@ func (r *registry) namespaceStateChanged(oldNS *namespace.Namespace, newNS *name
 }
 
 // dispatchStateChangeCallbacks invokes all registered V1 and V2 state change callbacks.
-func (r *registry) dispatchStateChangeCallbacks(oldNs *namespace.Namespace, newNs *namespace.Namespace, deletedFromDb bool) {
+func (r *registry) dispatchStateChangeCallbacks(oldNs *namespace.Namespace, newNs *namespace.Namespace, deletedFromDB bool) {
 	r.stateChangeCallbacks.Range(func(_, value any) bool {
 		//revive:disable-next-line:unchecked-type-assertion
-		value.(namespace.StateChangeCallbackFn)(newNs, deletedFromDb)
+		value.(namespace.StateChangeCallbackFn)(newNs, deletedFromDB)
 		return true
 	})
 	r.stateChangeCallbacksV2.Range(func(_, value any) bool {
 		//revive:disable-next-line:unchecked-type-assertion
-		value.(namespace.StateChangeCallbackFnV2)(oldNs, newNs, deletedFromDb)
+		value.(namespace.StateChangeCallbackFnV2)(oldNs, newNs, deletedFromDB)
 		return true
 	})
 }
