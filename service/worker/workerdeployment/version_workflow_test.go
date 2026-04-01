@@ -3,6 +3,7 @@ package workerdeployment
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1223,21 +1224,21 @@ func (s *VersionWorkflowSuite) Test_MultipleSyncStates_BlocksCaNUntilAllComplete
 
 	taskQueueName := tv.TaskQueue().Name
 
-	syncCallCount := 0
+	var syncCallCount atomic.Int32
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
-			syncCallCount++
+			count := syncCallCount.Add(1)
 			return &deploymentspb.SyncDeploymentVersionUserDataResponse{
-				TaskQueueMaxVersions: map[string]int64{taskQueueName: int64(syncCallCount * 10)},
+				TaskQueueMaxVersions: map[string]int64{taskQueueName: int64(count * 10)},
 			}, nil
 		},
 	).Maybe()
 
 	// Mock propagation check with delay to simulate slow propagation
-	propagationCheckCount := 0
+	var propagationCheckCount atomic.Int32
 	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).
 		Return(func(ctx context.Context, req *deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest) error {
-			propagationCheckCount++
+			propagationCheckCount.Add(1)
 			return nil
 		}).
 		After(100 * time.Millisecond).
@@ -1319,7 +1320,7 @@ func (s *VersionWorkflowSuite) Test_MultipleSyncStates_BlocksCaNUntilAllComplete
 
 	s.True(s.env.IsWorkflowCompleted())
 	// Both propagations should have completed before CaN
-	s.Equal(2, propagationCheckCount, "Both propagations should complete before CaN")
+	s.Equal(2, int(propagationCheckCount.Load()), "Both propagations should complete before CaN")
 }
 
 // Test_SyncState_And_RegisterWorker_ConcurrentPropagations tests concurrent async propagations
@@ -1335,10 +1336,10 @@ func (s *VersionWorkflowSuite) Test_SyncState_And_RegisterWorker_ConcurrentPropa
 	taskQueueName := tv.TaskQueue().Name
 	newTaskQueueName := tv.TaskQueue().Name + "_new"
 
-	syncActivityCalls := 0
+	var syncActivityCalls atomic.Int32
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
-			syncActivityCalls++
+			syncActivityCalls.Add(1)
 			if req.UpdateRoutingConfig != nil && len(req.Sync) == 1 && req.Sync[0].Name == taskQueueName {
 				// This is the SyncState propagation
 				return &deploymentspb.SyncDeploymentVersionUserDataResponse{
@@ -1352,10 +1353,10 @@ func (s *VersionWorkflowSuite) Test_SyncState_And_RegisterWorker_ConcurrentPropa
 		},
 	).Maybe()
 
-	propagationChecks := 0
+	var propagationChecks atomic.Int32
 	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).
 		Return(func(ctx context.Context, req *deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest) error {
-			propagationChecks++
+			propagationChecks.Add(1)
 			return nil
 		}).
 		After(50 * time.Millisecond).
@@ -1438,9 +1439,9 @@ func (s *VersionWorkflowSuite) Test_SyncState_And_RegisterWorker_ConcurrentPropa
 
 	s.True(s.env.IsWorkflowCompleted())
 	// Both syncs should complete
-	s.GreaterOrEqual(syncActivityCalls, 2, "Both propagations should complete before CaN")
+	s.GreaterOrEqual(int(syncActivityCalls.Load()), 2, "Both propagations should complete before CaN")
 	// Only syncVersionState should wait for propagation
-	s.GreaterOrEqual(propagationChecks, 1, "Both propagations should complete before CaN")
+	s.GreaterOrEqual(int(propagationChecks.Load()), 1, "Both propagations should complete before CaN")
 }
 
 // Test_SyncState_SignalsPropagationComplete_WithCorrectRevisionNumber tests that the deployment
