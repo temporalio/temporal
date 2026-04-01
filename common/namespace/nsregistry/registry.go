@@ -164,9 +164,9 @@ func NewRegistry(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	replicationResolverFactory namespace.ReplicationResolverFactory,
-	opts ...RegistryOption,
+	namespaceStateChangedFn namespace.NamespaceStateChangedFn,
 ) *registry {
-	reg := &registry{
+	return &registry{
 		persistence:              aPersistence,
 		globalNamespacesEnabled:  enableGlobalNamespaces,
 		currentClusterName:       currentClusterName,
@@ -180,24 +180,13 @@ func NewRegistry(
 
 		forceSearchAttributesCacheRefreshOnRead: forceSearchAttributesCacheRefreshOnRead,
 		replicationResolverFactory:              replicationResolverFactory,
+		namespaceStateChangedFn:                 namespaceStateChangedFn,
 	}
-	for _, opt := range opts {
-		opt(reg)
-	}
-	if reg.namespaceStateChangedFn == nil {
-		reg.namespaceStateChangedFn = DefaultNamespaceStateChanged
-	}
-	return reg
 }
 
-// RegistryOption is a functional option for NewRegistry.
-type RegistryOption func(*registry)
-
-// WithNamespaceStateChangedFn overrides the default namespace state change detection function.
-func WithNamespaceStateChangedFn(fn namespace.NamespaceStateChangedFn) RegistryOption {
-	return func(r *registry) {
-		r.namespaceStateChangedFn = fn
-	}
+// DefaultNamespaceStateChangedFnProvider returns the default NamespaceStateChangedFn for fx injection.
+func DefaultNamespaceStateChangedFnProvider() namespace.NamespaceStateChangedFn {
+	return DefaultNamespaceStateChanged
 }
 
 // DefaultNamespaceStateChanged is the default implementation that checks whether a namespace

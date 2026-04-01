@@ -86,6 +86,7 @@ var Module = fx.Options(
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
 	fx.Provide(NamespaceRegistryProvider),
+	fx.Provide(nsregistry.DefaultNamespaceStateChangedFnProvider),
 	nsregistry.RegistryLifetimeHooksModule,
 	fx.Provide(fx.Annotate(
 		func(p namespace.Registry) pingable.Pingable { return p },
@@ -223,7 +224,7 @@ type NamespaceRegistryParams struct {
 	MetadataManager            persistence.MetadataManager
 	DynamicCollection          *dynamicconfig.Collection
 	ReplicationResolverFactory namespace.ReplicationResolverFactory
-	RegistryOptions            []nsregistry.RegistryOption `group:"namespaceRegistryOptions"`
+	NamespaceStateChangedFn    namespace.NamespaceStateChangedFn
 }
 
 func NamespaceRegistryProvider(params NamespaceRegistryParams) namespace.Registry {
@@ -236,7 +237,7 @@ func NamespaceRegistryProvider(params NamespaceRegistryParams) namespace.Registr
 		params.MetricsHandler,
 		params.Logger,
 		params.ReplicationResolverFactory,
-		params.RegistryOptions...,
+		params.NamespaceStateChangedFn,
 	)
 }
 
