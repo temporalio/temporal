@@ -102,8 +102,6 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 		return err
 	}
 
-	// Use the normal delete path (same as active cluster) to avoid race conditions
-	// with visibility record deletion that ForceDeleteWorkflowExecution can cause.
 	_, err = engine.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
 		NamespaceId: e.NamespaceID,
 		WorkflowExecution: &commonpb.WorkflowExecution{

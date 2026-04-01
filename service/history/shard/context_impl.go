@@ -948,7 +948,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) (retErr error) {
 	// DeleteWorkflowExecution is a 4 stages process (order is very important and should not be changed):
-	// 1. Add visibility delete task and delete execution replication task,
+	// 1. Add visibility delete task, i.e. schedule visibility record delete, and execution replication delete task,
 	// 2. Delete current workflow execution pointer,
 	// 3. Delete workflow mutable state,
 	// 4. Delete history branch.
@@ -1026,7 +1026,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 						},
 					}
 				}
-				// Piggyback replication task on the same write to save a DB operation.
+				// Piggyback delete execution replication task on the same write to save a DB operation.
 				if s.config.EnableDeleteWorkflowExecutionReplication() &&
 					!stage.IsProcessed(tasks.DeleteWorkflowExecutionStageReplication) {
 					if nsEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(
