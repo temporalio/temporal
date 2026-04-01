@@ -45,6 +45,20 @@ func (m *MockExecutable) EXPECT() *MockExecutableMockRecorder {
 	return m.recorder
 }
 
+// Attempt mocks base method.
+func (m *MockExecutable) Attempt() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Attempt")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// Attempt indicates an expected call of Attempt.
+func (mr *MockExecutableMockRecorder) Attempt() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Attempt", reflect.TypeOf((*MockExecutable)(nil).Attempt))
+}
+
 // Abort mocks base method.
 func (m *MockExecutable) Abort() {
 	m.ctrl.T.Helper()

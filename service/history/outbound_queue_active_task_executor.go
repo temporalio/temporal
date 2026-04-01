@@ -105,7 +105,7 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 	case *tasks.ChasmTask:
 		return respond(e.executeChasmSideEffectTask(ctx, task))
 	case *tasks.WorkerCommandsTask:
-		return respond(e.workerCommandsTaskDispatcher.execute(ctx, task))
+		return respond(e.workerCommandsTaskDispatcher.execute(ctx, task, executable.Attempt()))
 	}
 
 	return respond(queueserrors.NewUnprocessableTaskError(fmt.Sprintf("unknown task type '%T'", task)))

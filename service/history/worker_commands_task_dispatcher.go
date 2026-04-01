@@ -24,7 +24,8 @@ import (
 )
 
 const (
-	workerCommandsTaskTimeout = time.Second * 10 * debug.TimeoutMultiplier
+	workerCommandsTaskTimeout    = time.Second * 10 * debug.TimeoutMultiplier
+	workerCommandsMaxTaskAttempt = 3
 )
 
 // workerCommandsTaskDispatcher dispatches worker commands to workers via Nexus.
@@ -41,9 +42,6 @@ const (
 //     the worker contract requires success for all defined commands, so this indicates a bug
 //     or version incompatibility.
 //
-// TODO: Add a worker-commands-specific retry cap (e.g., 5 attempts) instead of relying on the
-// shared outbound queue HistoryTaskDLQUnexpectedErrorAttempts (default 70). These commands are
-// best-effort with heartbeat timeout as fallback, so excessive retries waste resources.
 type workerCommandsTaskDispatcher struct {
 	matchingRawClient resource.MatchingRawClient
 	config            *configs.Config
@@ -68,7 +66,18 @@ func newWorkerCommandsTaskDispatcher(
 func (d *workerCommandsTaskDispatcher) execute(
 	ctx context.Context,
 	task *tasks.WorkerCommandsTask,
+	attempt int,
 ) error {
+	if attempt > workerCommandsMaxTaskAttempt {
+		d.logger.Info("Worker commands task exceeded max attempts, dropping",
+			tag.WorkflowID(task.WorkflowID),
+			tag.WorkflowRunID(task.RunID),
+			tag.NewStringTag("control_queue", task.Destination),
+			tag.Attempt(int32(attempt)),
+		)
+		return nil
+	}
+
 	if !d.config.EnableCancelActivityWorkerCommand() {
 		d.logger.Info("Worker commands feature disabled, dropping task",
 			tag.WorkflowID(task.WorkflowID),

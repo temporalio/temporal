@@ -43,6 +43,7 @@ type (
 		ctasks.Task
 		tasks.Task
 
+		Attempt() int
 		GetTask() tasks.Task
 		GetPriority() ctasks.Priority
 		GetScheduledTime() time.Time
@@ -712,6 +713,10 @@ func (e *executableImpl) State() ctasks.State {
 	defer e.Unlock()
 
 	return e.state
+}
+
+func (e *executableImpl) Attempt() int {
+	return e.attempt
 }
 
 func (e *executableImpl) GetPriority() ctasks.Priority {
