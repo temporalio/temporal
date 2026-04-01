@@ -12,7 +12,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -124,15 +123,17 @@ func validateAndNormalizeStartRequest(
 		return serviceerror.NewInvalidArgument(err.Error())
 	}
 
-	if err := validateBlobSize(
-		req.GetOperationId(),
-		"StartNexusOperationExecution",
-		config.PayloadSizeLimit(ns),
-		config.PayloadSizeLimitWarn(ns),
-		req.GetInput().Size(),
-		logger,
-		ns); err != nil {
-		return serviceerror.NewInvalidArgument("input exceeds size limit")
+	inputSize := req.GetInput().Size()
+	if inputSize > config.PayloadSizeLimitWarn(ns) {
+		logger.Warn("Nexus Start Operation input size exceeds the warning limit.",
+			tag.WorkflowNamespace(ns),
+			tag.OperationID(req.GetOperationId()),
+			tag.BlobSize(int64(inputSize)),
+			tag.BlobSizeViolationOperation("StartNexusOperationExecution"))
+	}
+	if inputSize > config.PayloadSizeLimit(ns) {
+		return serviceerror.NewInvalidArgumentf("input exceeds size limit. Length=%d Limit=%d",
+			inputSize, config.PayloadSizeLimit(ns))
 	}
 
 	loweredHeaders, err := ValidateAndLowercaseNexusHeaders(req.GetNexusHeader(), config.DisallowedOperationHeaders(), config.MaxOperationHeaderSize(ns))
@@ -162,8 +163,7 @@ func validateAndNormalizeDeleteRequest(req *workflowservice.DeleteNexusOperation
 			len(req.GetOperationId()), config.MaxIDLengthLimit())
 	}
 	if req.GetRunId() != "" {
-		_, err := uuid.Parse(req.GetRunId())
-		if err != nil {
+		if err := uuid.Validate(req.GetRunId()); err != nil {
 			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
 		}
 	}
@@ -178,15 +178,16 @@ func validateAndNormalizeDescribeRequest(req *workflowservice.DescribeNexusOpera
 		return serviceerror.NewInvalidArgumentf("operation_id exceeds length limit. Length=%d Limit=%d",
 			len(req.GetOperationId()), config.MaxIDLengthLimit())
 	}
-	if len(req.GetRunId()) > config.MaxIDLengthLimit() {
-		return serviceerror.NewInvalidArgumentf("run_id exceeds length limit. Length=%d Limit=%d",
-			len(req.GetRunId()), config.MaxIDLengthLimit())
+	if runID := req.GetRunId(); runID != "" {
+		if err := uuid.Validate(runID); err != nil {
+			return serviceerror.NewInvalidArgument("run_id is not a valid UUID")
+		}
 	}
 	// TODO: Add long-poll validation (run_id required when long_poll_token is set).
 	return nil
 }
 
-func validateAndNormalizeCancelRequest(req *workflowservice.RequestCancelNexusOperationExecutionRequest, config *Config, logger log.Logger) error {
+func validateAndNormalizeCancelRequest(req *workflowservice.RequestCancelNexusOperationExecutionRequest, config *Config) error {
 	if req.GetRequestId() == "" {
 		req.RequestId = uuid.NewString()
 	} else if len(req.GetRequestId()) > config.MaxIDLengthLimit() {
@@ -200,32 +201,24 @@ func validateAndNormalizeCancelRequest(req *workflowservice.RequestCancelNexusOp
 		return serviceerror.NewInvalidArgumentf("operation_id exceeds length limit. Length=%d Limit=%d",
 			len(req.GetOperationId()), config.MaxIDLengthLimit())
 	}
-	if len(req.GetRunId()) > config.MaxIDLengthLimit() {
-		return serviceerror.NewInvalidArgumentf("run_id exceeds length limit. Length=%d Limit=%d",
-			len(req.GetRunId()), config.MaxIDLengthLimit())
+	if runID := req.GetRunId(); runID != "" {
+		if err := uuid.Validate(runID); err != nil {
+			return serviceerror.NewInvalidArgument("run_id is not a valid UUID")
+		}
 	}
 	if len(req.GetIdentity()) > config.MaxIDLengthLimit() {
 		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
 			len(req.GetIdentity()), config.MaxIDLengthLimit())
 	}
-
-	// TODO: use different config for limit
-	err := validateBlobSize(
-		req.GetOperationId(),
-		"RequestCancelNexusOperationExecution",
-		config.PayloadSizeLimit(req.GetNamespace()),
-		config.PayloadSizeLimitWarn(req.GetNamespace()),
-		len(req.GetReason()),
-		logger,
-		req.GetNamespace())
-	if err != nil {
-		return serviceerror.NewInvalidArgument("reason exceeds length limit")
+	if len(req.GetReason()) > config.MaxReasonLength(req.GetNamespace()) {
+		return serviceerror.NewInvalidArgumentf("reason exceeds length limit. Length=%d Limit=%d",
+			len(req.GetReason()), config.MaxReasonLength(req.GetNamespace()))
 	}
 
 	return nil
 }
 
-func validateAndNormalizeTerminateRequest(req *workflowservice.TerminateNexusOperationExecutionRequest, config *Config, logger log.Logger) error {
+func validateAndNormalizeTerminateRequest(req *workflowservice.TerminateNexusOperationExecutionRequest, config *Config) error {
 	if req.GetRequestId() == "" {
 		req.RequestId = uuid.NewString()
 	} else if len(req.GetRequestId()) > config.MaxIDLengthLimit() {
@@ -239,26 +232,18 @@ func validateAndNormalizeTerminateRequest(req *workflowservice.TerminateNexusOpe
 		return serviceerror.NewInvalidArgumentf("operation_id exceeds length limit. Length=%d Limit=%d",
 			len(req.GetOperationId()), config.MaxIDLengthLimit())
 	}
-	if len(req.GetRunId()) > config.MaxIDLengthLimit() {
-		return serviceerror.NewInvalidArgumentf("run_id exceeds length limit. Length=%d Limit=%d",
-			len(req.GetRunId()), config.MaxIDLengthLimit())
+	if runID := req.GetRunId(); runID != "" {
+		if err := uuid.Validate(runID); err != nil {
+			return serviceerror.NewInvalidArgument("run_id is not a valid UUID")
+		}
 	}
 	if len(req.GetIdentity()) > config.MaxIDLengthLimit() {
 		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
 			len(req.GetIdentity()), config.MaxIDLengthLimit())
 	}
-
-	// TODO: use different config for limit
-	err := validateBlobSize(
-		req.GetOperationId(),
-		"TerminateNexusOperationExecution",
-		config.PayloadSizeLimit(req.GetNamespace()),
-		config.PayloadSizeLimitWarn(req.GetNamespace()),
-		len(req.GetReason()),
-		logger,
-		req.GetNamespace())
-	if err != nil {
-		return serviceerror.NewInvalidArgument("reason exceeds length limit")
+	if len(req.GetReason()) > config.MaxReasonLength(req.GetNamespace()) {
+		return serviceerror.NewInvalidArgumentf("reason exceeds length limit. Length=%d Limit=%d",
+			len(req.GetReason()), config.MaxReasonLength(req.GetNamespace()))
 	}
 
 	return nil
@@ -286,28 +271,4 @@ func validateAndNormalizeSearchAttributes(
 	}
 
 	return saValidator.ValidateSize(saToValidate, namespaceName)
-}
-
-func validateBlobSize(
-	operationID string,
-	blobSizeViolationTagValue string,
-	blobSizeLimitError int,
-	blobSizeLimitWarn int,
-	blobSize int,
-	logger log.Logger,
-	namespaceName string,
-) error {
-	if blobSize > blobSizeLimitWarn {
-		logger.Warn("Nexus Operation blob size exceeds the warning limit.",
-			tag.WorkflowNamespace(namespaceName),
-			tag.OperationID(operationID),
-			tag.OperationSize(int64(blobSize)),
-			tag.BlobSizeViolationOperation(blobSizeViolationTagValue))
-	}
-
-	if blobSize > blobSizeLimitError {
-		return common.ErrBlobSizeExceedsLimit
-	}
-
-	return nil
 }

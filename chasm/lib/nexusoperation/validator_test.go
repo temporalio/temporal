@@ -283,11 +283,11 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 			errMsg: "operation_id exceeds length limit",
 		},
 		{
-			name: "run_id - exceeds length limit",
+			name: "run_id - not a valid UUID",
 			mutate: func(r *workflowservice.DescribeNexusOperationExecutionRequest) {
-				r.RunId = "this-run-id-is-too-long!!"
+				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id exceeds length limit",
+			errMsg: "run_id is not a valid UUID",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -312,11 +312,9 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 
 func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 	config := &Config{
-		MaxIDLengthLimit:     func() int { return 20 },
-		PayloadSizeLimit:     func(string) int { return 20 },
-		PayloadSizeLimitWarn: func(string) int { return 10 },
+		MaxIDLengthLimit: func() int { return 20 },
+		MaxReasonLength:  func(string) int { return 20 },
 	}
-	logger := log.NewNoopLogger()
 
 	for _, tc := range []struct {
 		name   string
@@ -333,7 +331,7 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 				r.RequestId = ""
 			},
 			check: func(t *testing.T, r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
-				require.Len(t, r.RequestId, 36) // UUID length
+				require.Len(t, r.RequestId, 36)
 			},
 		},
 		{
@@ -358,11 +356,11 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			errMsg: "request_id exceeds length limit",
 		},
 		{
-			name: "run_id - exceeds length limit",
+			name: "run_id - not a valid UUID",
 			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
-				r.RunId = "this-run-id-is-too-long!!"
+				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id exceeds length limit",
+			errMsg: "run_id is not a valid UUID",
 		},
 		{
 			name: "identity - exceeds length limit",
@@ -372,13 +370,7 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			errMsg: "identity exceeds length limit",
 		},
 		{
-			name: "reason - exceeds warning limit but within hard limit",
-			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
-				r.Reason = "exceed-warn-limit"
-			},
-		},
-		{
-			name: "reason - exceeds size limit",
+			name: "reason - exceeds length limit",
 			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
 				r.Reason = "this-reason-is-longer-than-twenty-characters"
 			},
@@ -393,7 +385,7 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizeCancelRequest(validReq, config, logger)
+			err := validateAndNormalizeCancelRequest(validReq, config)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -471,11 +463,9 @@ func TestValidateDeleteNexusOperationExecutionRequest(t *testing.T) {
 
 func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 	config := &Config{
-		MaxIDLengthLimit:     func() int { return 20 },
-		PayloadSizeLimit:     func(string) int { return 20 },
-		PayloadSizeLimitWarn: func(string) int { return 10 },
+		MaxIDLengthLimit: func() int { return 20 },
+		MaxReasonLength:  func(string) int { return 20 },
 	}
-	logger := log.NewNoopLogger()
 
 	for _, tc := range []struct {
 		name   string
@@ -492,7 +482,7 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 				r.RequestId = ""
 			},
 			check: func(t *testing.T, r *workflowservice.TerminateNexusOperationExecutionRequest) {
-				require.Len(t, r.RequestId, 36) // UUID length
+				require.Len(t, r.RequestId, 36)
 			},
 		},
 		{
@@ -517,11 +507,11 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 			errMsg: "request_id exceeds length limit",
 		},
 		{
-			name: "run_id - exceeds length limit",
+			name: "run_id - not a valid UUID",
 			mutate: func(r *workflowservice.TerminateNexusOperationExecutionRequest) {
-				r.RunId = "this-run-id-is-too-long!!"
+				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id exceeds length limit",
+			errMsg: "run_id is not a valid UUID",
 		},
 		{
 			name: "identity - exceeds length limit",
@@ -531,13 +521,7 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 			errMsg: "identity exceeds length limit",
 		},
 		{
-			name: "reason - exceeds warning limit but within hard limit",
-			mutate: func(r *workflowservice.TerminateNexusOperationExecutionRequest) {
-				r.Reason = "exceed-warn-limit"
-			},
-		},
-		{
-			name: "reason - exceeds size limit",
+			name: "reason - exceeds length limit",
 			mutate: func(r *workflowservice.TerminateNexusOperationExecutionRequest) {
 				r.Reason = "this-reason-is-longer-than-twenty-characters"
 			},
@@ -552,7 +536,7 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizeTerminateRequest(validReq, config, logger)
+			err := validateAndNormalizeTerminateRequest(validReq, config)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)

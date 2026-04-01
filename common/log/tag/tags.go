@@ -932,11 +932,6 @@ func ActivitySize(activitySize int64) ZapTag {
 	return NewInt64("activity-size", activitySize)
 }
 
-// OperationSize returns a tag for a standalone nexus operation size
-func OperationSize(operationSize int64) ZapTag {
-	return NewInt64("operation-size", operationSize)
-}
-
 // WorkflowTaskRequestId returns a tag for workflow task RequestId
 func WorkflowTaskRequestId(s string) ZapTag {
 	return NewStringTag("workflow-task-request-id", s)

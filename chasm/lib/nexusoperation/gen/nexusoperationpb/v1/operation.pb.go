@@ -412,6 +412,7 @@ type NexusOperationTerminateState struct {
 	// Request ID used to deduplicate terminate requests.
 	RequestId string `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	// The identity of the client who requested termination.
+	// TODO: remove if identity is added to TerminatedFailureInfo instead
 	Identity      string `protobuf:"bytes,2,opt,name=identity,proto3" json:"identity,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -791,8 +792,10 @@ func (x *OperationOutcome_Successful) GetResult() *v11.Payload {
 }
 
 type OperationOutcome_Failed struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Failure       *v1.Failure            `protobuf:"bytes,1,opt,name=failure,proto3" json:"failure,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Only filled on schedule-to-start timeouts, schedule-to-close timeouts or terminations. All other attempt
+	// failures will be recorded in OperationState.last_attempt_failure.
+	Failure       *v1.Failure `protobuf:"bytes,1,opt,name=failure,proto3" json:"failure,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

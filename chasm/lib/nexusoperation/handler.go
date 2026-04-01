@@ -92,7 +92,7 @@ func (h *handler) RequestCancelNexusOperation(
 		ctx,
 		ref,
 		func(o *Operation, ctx chasm.MutableContext, req *nexusoperationpb.RequestCancelNexusOperationRequest) (*nexusoperationpb.RequestCancelNexusOperationResponse, error) {
-			if err := o.requestCancel(ctx, &nexusoperationpb.CancellationState{
+			if err := o.RequestCancel(ctx, &nexusoperationpb.CancellationState{
 				RequestId: req.GetFrontendRequest().GetRequestId(),
 				Identity:  req.GetFrontendRequest().GetIdentity(),
 				Reason:    req.GetFrontendRequest().GetReason(),
@@ -160,7 +160,6 @@ func (h *handler) DeleteNexusOperation(
 
 	return &nexusoperationpb.DeleteNexusOperationResponse{}, nil
 }
-
 func idReusePolicyFromProto(p enumspb.NexusOperationIdReusePolicy) chasm.BusinessIDReusePolicy {
 	switch p {
 	case enumspb.NEXUS_OPERATION_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY:

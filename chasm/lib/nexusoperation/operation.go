@@ -1,6 +1,8 @@
 package nexusoperation
 
 import (
+	"fmt"
+
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -10,7 +12,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
-	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -63,6 +64,8 @@ type Operation struct {
 	Cancellation chasm.Field[*Cancellation]
 
 	// Outcome stores the terminal outcome of the operation.
+	// Only used for standalone Nexus operations; for workflow-embedded operations,
+	// outcome is stored in the workflow's history events.
 	Outcome chasm.Field[*nexusoperationpb.OperationOutcome]
 
 	// Visibility holds custom search attributes for this operation.
@@ -131,49 +134,33 @@ func (o *Operation) SetStateMachineState(status nexusoperationpb.OperationStatus
 	o.Status = status
 }
 
-// Cancel requests cancellation of the operation. It creates a Cancellation child component and, if the
+// RequestCancel requests cancellation of the operation. It creates a Cancellation child component and, if the
 // operation has already started, schedules the cancellation request to be sent to the Nexus endpoint.
-// parentData is opaque data injected by the parent (e.g. workflow) for its own bookkeeping.
-func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) error {
-	if !TransitionCanceled.Possible(o) {
-		return ErrOperationAlreadyCompleted
-	}
-	if _, ok := o.Cancellation.TryGet(ctx); ok {
-		return ErrCancellationAlreadyRequested
-	}
-
-	return o.handleCancellation(ctx, newCancellation(&nexusoperationpb.CancellationState{
-		ParentData: parentData,
-	}))
-}
-
-func (o *Operation) requestCancel(
+func (o *Operation) RequestCancel(
 	ctx chasm.MutableContext,
 	req *nexusoperationpb.CancellationState,
 ) error {
+	if !TransitionCanceled.Possible(o) {
+		return ErrOperationAlreadyCompleted
+	}
+
 	if existingCancellation, ok := o.Cancellation.TryGet(ctx); ok {
 		existingReqID := existingCancellation.GetRequestId()
 		newReqID := req.GetRequestId()
 
 		if existingReqID != newReqID {
-			return serviceerror.NewFailedPreconditionf("cancellation already requested with request ID %s", existingReqID)
+			return fmt.Errorf("%w with request ID %s", ErrCancellationAlreadyRequested, existingReqID)
 		}
 		return nil
 	}
 
-	return o.handleCancellation(ctx, newCancellation(req))
-}
-
-func (o *Operation) handleCancellation(
-	ctx chasm.MutableContext,
-	cancellation *Cancellation,
-) error {
-	o.Cancellation = chasm.NewComponentField(ctx, cancellation)
+	cancel := newCancellation(req)
+	o.Cancellation = chasm.NewComponentField(ctx, cancel)
 
 	// Once started, the handler returns a token that can be used in the cancelation request.
 	// Until then, no need to schedule the cancelation.
 	if o.Status == nexusoperationpb.OPERATION_STATUS_STARTED {
-		return transitionCancellationScheduled.Apply(cancellation, ctx, EventCancellationScheduled{})
+		return transitionCancellationScheduled.Apply(cancel, ctx, EventCancellationScheduled{})
 	}
 
 	return nil
@@ -196,7 +183,7 @@ func (o *Operation) Terminate(
 		return chasm.TerminateComponentResponse{}, nil
 	}
 
-	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(o, ctx, EventTerminated{Request: req})
+	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(o, ctx, EventTerminated{TerminateComponentRequest: req})
 }
 
 // SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface.
@@ -226,6 +213,7 @@ func (o *Operation) buildDescribeResponse(
 	}
 
 	// Include output, if available and requested
+	// TODO: get failure from last attempt for running operation, if available
 	if req.GetFrontendRequest().GetIncludeOutcome() && o.LifecycleState(ctx).IsClosed() {
 		outcome := o.Outcome.Get(ctx)
 		if successful := outcome.GetSuccessful(); successful != nil {
