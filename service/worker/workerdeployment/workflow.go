@@ -554,12 +554,13 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 	}
 
 	// Create or update the Worker Controller Instance for this version.
-	if computeConfig := args.GetComputeConfig(); computeConfig != nil {
+	computeConfig := args.GetComputeConfig()
+	if computeConfig != nil {
 		updateCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 		err = workflow.ExecuteActivity(updateCtx, d.a.UpdateWorkerControllerInstanceFromDeployment, &deploymentspb.UpdateWorkerControllerInstanceInput{
-			Version:       worker_versioning.ExternalWorkerDeploymentVersionFromVersion(versionObj),
-			ScalingGroups: computeConfig.GetScalingGroups(),
-			Identity:      args.GetIdentity(),
+			Version:             worker_versioning.ExternalWorkerDeploymentVersionFromVersion(versionObj),
+			Identity:            args.GetIdentity(),
+			UpsertScalingGroups: scalingGroupsToUpsertUpdates(computeConfig.GetScalingGroups()),
 		}).Get(ctx, nil)
 		if err != nil {
 			var appErr *temporal.ApplicationError
@@ -576,10 +577,16 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 		DeploymentName: versionObj.DeploymentName,
 		BuildId:        versionObj.BuildId,
 		RequestId:      args.GetRequestId(),
-		ComputeConfig:  args.GetComputeConfig(),
 		Identity:       args.GetIdentity(),
 	}).Get(ctx, nil)
 	if err != nil {
+		if computeConfig != nil {
+			deleteCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+			_ = workflow.ExecuteActivity(deleteCtx, d.a.DeleteWorkerControllerInstanceFromDeployment, &deploymentspb.DeleteWorkerControllerInstanceInput{
+				Version:  worker_versioning.ExternalWorkerDeploymentVersionFromVersion(versionObj),
+				Identity: args.GetIdentity(),
+			}).Get(ctx, nil)
+		}
 		return nil, err
 	}
 

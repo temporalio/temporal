@@ -199,8 +199,8 @@ func (a *VersionActivities) GetVersionDrainageStatus(ctx context.Context, versio
 }
 
 func (a *VersionActivities) UpdateWorkerControllerInstance(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) error {
-	spec := computeConfigScalingGroupsToWCISpec(input.GetScalingGroups())
-	if err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), spec); err != nil {
+	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
+	if err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups()); err != nil {
 		return temporal.NewApplicationError(err.Error(), errInvalidComputeConfig)
 	}
 	return nil

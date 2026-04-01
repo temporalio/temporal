@@ -165,11 +165,7 @@ type Client interface {
 	StartWorkerDeploymentVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		deploymentName, buildID string,
-		identity string,
-		requestID string,
-		computeConfig *computepb.ComputeConfig,
-		modifierIdentity string,
+		deploymentName, buildID, identity, requestID, modifierIdentity string,
 	) error
 
 	// Used internally by the Worker Deployment workflow in its SyncWorkerDeploymentVersion Activity
@@ -441,6 +437,19 @@ func (d *ClientImpl) DescribeVersion(
 	}
 
 	versionInfo := versionStateToVersionInfo(versionState, tqInfos)
+
+	apiVersion := worker_versioning.ExternalWorkerDeploymentVersionFromVersion(versionState.Version)
+	wciDesc, _, err := d.workerControllerInstanceClient.DescribeWorkerControllerInstance(ctx, namespaceEntry, apiVersion)
+	if err != nil {
+		// WCI may not exist if no compute config was ever set.
+		var notFound *serviceerror.NotFound
+		if !errors.As(err, &notFound) {
+			return nil, nil, err
+		}
+	} else {
+		versionInfo.ComputeConfig = wciSpecToComputeConfig(wciDesc.Spec)
+	}
+
 	return versionInfo, tqInfos, nil
 }
 
@@ -1255,10 +1264,9 @@ func (d *ClientImpl) CreateWorkerDeploymentVersion(
 	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
 	updateArgs, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.CreateWorkerDeploymentVersionArgs{
-		Identity:      identity,
-		RequestId:     requestID,
-		Version:       version,
-		ComputeConfig: computeConfig,
+		Identity:  identity,
+		RequestId: requestID,
+		Version:   version,
 	})
 	if err != nil {
 		return err
@@ -1337,11 +1345,7 @@ func (d *ClientImpl) StartWorkerDeployment(
 func (d *ClientImpl) StartWorkerDeploymentVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
-	deploymentName, buildID string,
-	identity string,
-	requestID string,
-	computeConfig *computepb.ComputeConfig,
-	modifierIdentity string,
+	deploymentName, buildID, identity, requestID, modifierIdentity string,
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("StartWorkerDeploymentVersion", deploymentName, &retErr, namespaceEntry.Name(), identity)()
@@ -1356,9 +1360,7 @@ func (d *ClientImpl) StartWorkerDeploymentVersion(
 	}
 
 	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
-	args := d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED)
-	args.VersionState.ComputeConfig = computeConfig
-	args.VersionState.LastModifierIdentity = modifierIdentity
+	args := d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry, modifierIdentity, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED)
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(args)
 	if err != nil {
 		return err
@@ -1532,7 +1534,7 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 	}
 
 	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
-	input, err := sdk.PreferProtoDataConverter.ToPayloads(d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE))
+	input, err := sdk.PreferProtoDataConverter.ToPayloads(d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry, "", enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE))
 	if err != nil {
 		return nil, err
 	}
@@ -1654,7 +1656,6 @@ func versionStateToVersionInfo(
 		TaskQueueInfos:       infos,
 		DrainageInfo:         drainageInfo,
 		Metadata:             state.Metadata,
-		ComputeConfig:        state.ComputeConfig,
 		LastModifierIdentity: state.LastModifierIdentity,
 	}
 }
@@ -2014,6 +2015,7 @@ func (d *ClientImpl) getSyncBatchSize() int32 {
 func (d *ClientImpl) makeVersionWorkflowArgs(
 	deploymentName, buildID string,
 	namespaceEntry *namespace.Namespace,
+	identity string,
 	initialStatus enumspb.WorkerDeploymentVersionStatus,
 ) *deploymentspb.WorkerDeploymentVersionWorkflowArgs {
 	return &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
@@ -2024,15 +2026,16 @@ func (d *ClientImpl) makeVersionWorkflowArgs(
 				DeploymentName: deploymentName,
 				BuildId:        buildID,
 			},
-			CreateTime:        timestamppb.Now(),
-			RoutingUpdateTime: nil,
-			CurrentSinceTime:  nil,                                 // not current
-			RampingSinceTime:  nil,                                 // not ramping
-			RampPercentage:    0,                                   // not ramping
-			DrainageInfo:      &deploymentpb.VersionDrainageInfo{}, // not draining or drained
-			Metadata:          nil,
-			SyncBatchSize:     d.getSyncBatchSize(),
-			Status:            initialStatus,
+			CreateTime:           timestamppb.Now(),
+			RoutingUpdateTime:    nil,
+			CurrentSinceTime:     nil,                                 // not current
+			RampingSinceTime:     nil,                                 // not ramping
+			RampPercentage:       0,                                   // not ramping
+			DrainageInfo:         &deploymentpb.VersionDrainageInfo{}, // not draining or drained
+			Metadata:             nil,
+			SyncBatchSize:        d.getSyncBatchSize(),
+			Status:               initialStatus,
+			LastModifierIdentity: identity,
 		},
 	}
 }
@@ -2045,29 +2048,8 @@ func (d *ClientImpl) ValidateComputeConfig(
 	removeScalingGroups []string,
 	identity string,
 ) error {
-	// If the version exists, merge changes with the existing config.
-	var existingConfig *computepb.ComputeConfig
-	existingState, err := d.queryVersionState(ctx, namespaceEntry, version.GetDeploymentName(), version.GetBuildId())
-	if err != nil {
-		var notFound *serviceerror.NotFound
-		if !errors.As(err, &notFound) {
-			return err
-		}
-		// Version doesn't exist yet — apply changes to empty config.
-	} else {
-		existingConfig = existingState.GetComputeConfig()
-	}
-
-	mergedConfig, err := buildUpdatedComputeConfig(existingConfig, &deploymentspb.UpdateComputeConfigArgs{
-		UpsertScalingGroups: upsertScalingGroups,
-		RemoveScalingGroups: removeScalingGroups,
-	})
-	if err != nil {
-		return err
-	}
-
-	spec := computeConfigScalingGroupsToWCISpec(mergedConfig.GetScalingGroups())
-	if err = d.workerControllerInstanceClient.ValidateWorkerControllerInstanceSpec(ctx, namespaceEntry, spec, identity); err != nil {
+	upserts := scalingGroupUpdatesToWCI(upsertScalingGroups)
+	if err := d.workerControllerInstanceClient.ValidateWorkerControllerInstanceSpec(ctx, namespaceEntry, version, identity, upserts, removeScalingGroups); err != nil {
 		return serviceerror.NewInvalidArgument(err.Error())
 	}
 	return nil

@@ -141,15 +141,10 @@ message VersionLocalState {
     // than what is already in the TQ will be ignored to avoid stale writes during async operations.
     int64 revision_number = 15;
 
-    // (-- api-linter: core::0203::optional=disabled
-    //     aip.dev/not-precedent: compute_config is optional for versions. --)
-    // Worker compute configuration for this version. May not be present.
-    temporal.api.compute.v1.ComputeConfig compute_config = 17;
-
     // Identity of the last client who modified the configuration of this Version.
     // Covers changes through: CreateWorkerDeploymentVersion, UpdateWorkerDeploymentVersionComputeConfig,
     // UpdateWorkerDeploymentVersionMetadata.
-    string last_modifier_identity = 18;
+    string last_modifier_identity = 17;
 }
 
 // Data specific to a task queue, from the perspective of a worker deployment version.
@@ -341,8 +336,7 @@ message StartWorkerDeploymentVersionRequest {
     string deployment_name = 1;
     string build_id = 2;
     string request_id = 3;
-    temporal.api.compute.v1.ComputeConfig compute_config = 4;
-    string identity = 5;
+    string identity = 4;
 }
 
 // used as Worker Deployment Version workflow activity input:
@@ -573,8 +567,9 @@ message ValidateWorkerControllerInstanceSpecInput {
 // via the WCI client.
 message UpdateWorkerControllerInstanceInput {
   temporal.api.deployment.v1.WorkerDeploymentVersion version = 1;
-  map<string, temporal.api.compute.v1.ComputeConfigScalingGroup> scaling_groups = 2;
-  string identity = 3;
+  string identity = 2;
+  map<string, temporal.api.compute.v1.ComputeConfigScalingGroupUpdate> upsert_scaling_groups = 3;
+  repeated string remove_scaling_groups = 4;
 }
 
 // used as activity input for deleting a Worker Controller Instance

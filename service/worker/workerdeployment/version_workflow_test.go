@@ -2246,7 +2246,7 @@ func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_Success() {
 		args := &deploymentspb.UpdateComputeConfigArgs{
 			Identity:  tv.ClientIdentity(),
 			RequestId: "req-1",
-			UpsertScalingGroups: map[string]*deploymentspb.ScalingGroupUpdate{
+			UpsertScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
 				"group1": {ScalingGroup: &computepb.ComputeConfigScalingGroup{
 					Provider: &computepb.ComputeProvider{Type: "aws-lambda"},
 				}},
@@ -2317,7 +2317,7 @@ func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_RejectedWhenDeleted() {
 		args := &deploymentspb.UpdateComputeConfigArgs{
 			Identity:  tv.ClientIdentity(),
 			RequestId: "req-1",
-			UpsertScalingGroups: map[string]*deploymentspb.ScalingGroupUpdate{
+			UpsertScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
 				"group1": {ScalingGroup: &computepb.ComputeConfigScalingGroup{
 					Provider: &computepb.ComputeProvider{Type: "aws-lambda"},
 				}},
@@ -2366,7 +2366,7 @@ func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_UpdateInstanceFailure_Do
 		args := &deploymentspb.UpdateComputeConfigArgs{
 			Identity:  tv.ClientIdentity(),
 			RequestId: "req-1",
-			UpsertScalingGroups: map[string]*deploymentspb.ScalingGroupUpdate{
+			UpsertScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
 				"group1": {ScalingGroup: &computepb.ComputeConfigScalingGroup{
 					Provider: &computepb.ComputeProvider{Type: "bad-provider"},
 				}},
