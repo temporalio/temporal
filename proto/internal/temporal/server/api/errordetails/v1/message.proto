@@ -4,58 +4,53 @@ syntax = "proto3";
 
 package temporal.server.api.errordetails.v1;
 
-option go_package = "go.temporal.io/server/api/errordetails/v1;errordetails";
-
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/hsm.proto";
 
-message TaskAlreadyStartedFailure {
-}
+option go_package = "go.temporal.io/server/api/errordetails/v1;errordetails";
+
+message TaskAlreadyStartedFailure {}
 
 message CurrentBranchChangedFailure {
-    bytes current_branch_token = 1;
-    bytes request_branch_token = 2;
-    temporal.server.api.persistence.v1.VersionedTransition current_versioned_transition = 3;
-    temporal.server.api.persistence.v1.VersionedTransition request_versioned_transition = 4;
+  bytes current_branch_token = 1;
+  bytes request_branch_token = 2;
+  temporal.server.api.persistence.v1.VersionedTransition current_versioned_transition = 3;
+  temporal.server.api.persistence.v1.VersionedTransition request_versioned_transition = 4;
 }
 
 message ShardOwnershipLostFailure {
-    string owner_host = 1;
-    string current_host = 2;
+  string owner_host = 1;
+  string current_host = 2;
 }
 
 message RetryReplicationFailure {
-    string namespace_id = 1;
-    string workflow_id = 2;
-    string run_id = 3;
-    int64 start_event_id = 4;
-    int64 start_event_version = 5;
-    int64 end_event_id = 6;
-    int64 end_event_version = 7;
+  string namespace_id = 1;
+  string workflow_id = 2;
+  string run_id = 3;
+  int64 start_event_id = 4;
+  int64 start_event_version = 5;
+  int64 end_event_id = 6;
+  int64 end_event_version = 7;
 }
 
 message SyncStateFailure {
-    string namespace_id = 1;
-    string workflow_id = 2;
-    string run_id = 3;
-    temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 4;
-    temporal.server.api.history.v1.VersionHistories version_histories = 5;
-    // (-- api-linter: core::0141::forbidden-types=disabled --)
-    uint32 archetype_id = 6; 
+  string namespace_id = 1;
+  string workflow_id = 2;
+  string run_id = 3;
+  temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 4;
+  temporal.server.api.history.v1.VersionHistories version_histories = 5;
+  // (-- api-linter: core::0141::forbidden-types=disabled --)
+  uint32 archetype_id = 6;
 }
 
-message StickyWorkerUnavailableFailure {
-}
+message StickyWorkerUnavailableFailure {}
 
 // Deprecated. Only used in WV2. [cleanup-old-wv]
-message ObsoleteDispatchBuildIdFailure {
-}
+message ObsoleteDispatchBuildIdFailure {}
 
 // Returned when History determines a task that Matching wants to dispatch is no longer valid.
-message ObsoleteMatchingTaskFailure {
-}
+message ObsoleteMatchingTaskFailure {}
 
 // Returned when an activity start is rejected by History because the workflow is in a transitioning
 // between worker deployments.
-message ActivityStartDuringTransitionFailure {
-}
+message ActivityStartDuringTransitionFailure {}
