@@ -545,14 +545,19 @@ func (e *matchingEngineImpl) loggerAndMetricsForPartition(
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
 		tag.WorkflowNamespace(nsName))
-	metricsHandler := metrics.GetPerTaskQueuePartitionIDScope(
-		e.metricsHandler,
-		nsName,
-		partition,
-		tqConfig.BreakdownMetricsByTaskQueue(),
-		tqConfig.BreakdownMetricsByPartition(),
-		metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope),
-	).WithTags(metrics.NamespaceStateTag(nsState))
+	var metricsHandler metrics.Handler
+	if strings.HasPrefix(partition.TaskQueue().Name(), internalTaskQueuePrefix) {
+		metricsHandler = metrics.NoopMetricsHandler
+	} else {
+		metricsHandler = metrics.GetPerTaskQueuePartitionIDScope(
+			e.metricsHandler,
+			nsName,
+			partition,
+			tqConfig.BreakdownMetricsByTaskQueue(),
+			tqConfig.BreakdownMetricsByPartition(),
+			metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope),
+		).WithTags(metrics.NamespaceStateTag(nsState))
+	}
 	return logger, throttledLogger, metricsHandler
 }
 

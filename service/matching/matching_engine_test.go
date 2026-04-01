@@ -5223,6 +5223,46 @@ func (*testTaskManager) CountTaskQueuesByBuildId(context.Context, *persistence.C
 	return 0, nil
 }
 
+func TestLoggerAndMetricsForPartition_InternalTaskQueue(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	ns, mockNamespaceCache := createMockNamespaceCache(controller, matchingTestNamespace)
+	config := defaultTestConfig()
+	e := createTestMatchingEngine(log.NewTestLogger(), controller, config, nil, mockNamespaceCache)
+	e.metricsHandler = metricstest.NewCaptureHandler()
+
+	tests := []struct {
+		name       string
+		tqName     string
+		expectNoop bool
+	}{
+		{
+			name:       "normal task queue gets real metrics handler",
+			tqName:     "my-task-queue",
+			expectNoop: false,
+		},
+		{
+			name:       "internal nexus task queue gets noop metrics handler",
+			tqName:     "/temporal-sys/worker-commands/ns/key",
+			expectNoop: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			prtn := newRootPartition(ns.ID().String(), tc.tqName, enumspb.TASK_QUEUE_TYPE_NEXUS)
+			tqConfig := newTaskQueueConfig(prtn.TaskQueue(), config, matchingTestNamespace)
+			_, _, handler := e.loggerAndMetricsForPartition(ns, prtn, tqConfig)
+			if tc.expectNoop {
+				assert.Equal(t, metrics.NoopMetricsHandler, handler)
+			} else {
+				assert.NotEqual(t, metrics.NoopMetricsHandler, handler)
+			}
+		})
+	}
+}
+
 func TestConvertPollWorkflowTaskQueueResponse(t *testing.T) {
 	t.Parallel()
 
