@@ -419,6 +419,25 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	}
 
 	attempt := a.LastAttempt.Get(ctx)
+
+	// Recalculate the current retry interval based on the (possibly updated) retry policy.
+	// This ensures a shortened retry interval takes effect immediately on re-dispatch.
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED && attempt.GetCurrentRetryInterval() != nil {
+		newInterval := backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.GetCount()-1)
+		attempt.CurrentRetryInterval = durationpb.New(newInterval)
+	}
+
+	// Add a new ScheduleToCloseTimeoutTask at the (possibly updated) deadline.
+	// This ensures a shortened schedule-to-close timeout fires at the new deadline.
+	if timeout := a.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
+		deadline := a.GetScheduleTime().AsTime().Add(timeout)
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{ScheduledTime: deadline},
+			&activitypb.ScheduleToCloseTimeoutTask{},
+		)
+	}
+
 	attempt.Stamp++
 
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {

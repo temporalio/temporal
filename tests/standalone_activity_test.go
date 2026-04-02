@@ -4842,12 +4842,13 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 			StartToCloseTimeout:    durationpb.New(30 * time.Minute),
 			ScheduleToCloseTimeout: durationpb.New(30 * time.Minute),
 			RetryPolicy: &commonpb.RetryPolicy{
-				MaximumAttempts: 1,
+				MaximumAttempts: 0,                                // unlimited retries
+				InitialInterval: durationpb.New(10 * time.Minute), // long backoff keeps activity in SCHEDULED state
 			},
 		})
 		require.NoError(t, err)
 
-		// Start and fail the activity once.
+		// Start and fail the activity once — it enters backoff (SCHEDULED state).
 		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
 			Namespace: s.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},

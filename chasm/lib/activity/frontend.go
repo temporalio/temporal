@@ -536,11 +536,23 @@ func (h *frontendHandler) UpdateActivityExecutionOptions(
 	ctx context.Context,
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
 ) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
+	// Standalone path requires the feature to be enabled. Workflow path (workflow_id != "")
+	// is always permitted and routes to the history service.
 	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	// TODO: validate request fields (e.g. namespace, identity length, update mask)
+	if err := validateUpdateActivityExecutionOptionsRequest(
+		req,
+		h.config.MaxIDLengthLimit(),
+		h.config.BlobSizeLimitError,
+		h.config.BlobSizeLimitWarn,
+		h.logger,
+	); err != nil {
+		return nil, err
+	}
+
+
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err
