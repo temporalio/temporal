@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package temporal.server.api.deployment.v1;
 
-import "temporal/api/compute/v1/config.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
+import "temporal/api/compute/v1/config.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/enums/v1/deployment.proto";
 import "temporal/api/enums/v1/task_queue.proto";
@@ -321,8 +321,8 @@ message QueryDescribeWorkerDeploymentResponse {
 
 // used as Worker Deployment workflow query response:
 message CreateRequestIDQueryResponse {
-    string request_id = 1;
-    bytes conflict_token = 2;
+  string request_id = 1;
+  bytes conflict_token = 2;
 }
 
 // used as Worker Deployment Version workflow activity input:
@@ -408,36 +408,35 @@ message SetCurrentVersionResponse {
 
 // used as Worker Deployment workflow update input:
 message CreateWorkerDeploymentArgs {
-    string identity = 1;
+  string identity = 1;
 
-    // Retrying with same request id is a successful no-op.
-    // Retrying with different request id is an error.
-    // One deployment is deleted, same or different request id will re-create it.
-    string request_id = 2;
+  // Retrying with same request id is a successful no-op.
+  // Retrying with different request id is an error.
+  // One deployment is deleted, same or different request id will re-create it.
+  string request_id = 2;
 }
 
 // used as Worker Deployment update response:
 message CreateWorkerDeploymentResponse {
-    bytes conflict_token = 1;
+  bytes conflict_token = 1;
 }
 
 // used as Worker Deployment workflow update input:
 message CreateWorkerDeploymentVersionArgs {
-    string identity = 1;
+  string identity = 1;
 
-    // Retrying with same request id is a successful no-op.
-    // Retrying with different request id (including auto-created) is an error.
-    string request_id = 2;
+  // Retrying with same request id is a successful no-op.
+  // Retrying with different request id (including auto-created) is an error.
+  string request_id = 2;
 
-    // Version string (<deployment_name>.<build_id>)
-    string version = 3;
+  // Version string (<deployment_name>.<build_id>)
+  string version = 3;
 
-    temporal.api.compute.v1.ComputeConfig compute_config = 4;
+  temporal.api.compute.v1.ComputeConfig compute_config = 4;
 }
 
 // used as Worker Deployment update response:
-message CreateWorkerDeploymentVersionResponse {
-}
+message CreateWorkerDeploymentVersionResponse {}
 
 // used as Worker Deployment workflow update input:
 message DeleteVersionArgs {
@@ -560,7 +559,7 @@ message WorkerDeploymentSummary {
 // Input for the activity that validates compute config scaling groups via
 // the Worker Controller Instance client.
 message ValidateWorkerControllerInstanceSpecInput {
-    map<string, temporal.api.compute.v1.ComputeConfigScalingGroup> scaling_groups = 1;
+  map<string, temporal.api.compute.v1.ComputeConfigScalingGroup> scaling_groups = 1;
 }
 
 // used as activity input for creating or updating a Worker Controller Instance
@@ -581,17 +580,16 @@ message DeleteWorkerControllerInstanceInput {
 
 // Input for the UpdateComputeConfig workflow update on a version workflow.
 message UpdateComputeConfigArgs {
-    string identity = 1;
-    string request_id = 2;
-    // Scaling groups to add or update.
-    map<string, temporal.api.compute.v1.ComputeConfigScalingGroupUpdate> upsert_scaling_groups = 3;
-    // Names of scaling groups to remove. Names that don't match an existing group are ignored.
+  string identity = 1;
+  string request_id = 2;
+  // Scaling groups to add or update.
+  map<string, temporal.api.compute.v1.ComputeConfigScalingGroupUpdate> upsert_scaling_groups = 3;
+  // Names of scaling groups to remove. Names that don't match an existing group are ignored.
   repeated string remove_scaling_groups = 4;
 }
 
 // Response for the UpdateComputeConfig workflow update on a version workflow.
-message UpdateComputeConfigResponse {
-}
+message UpdateComputeConfigResponse {}
 
 // Signal input for force-continue-as-new on Deployment workflow
 message ForceCANDeploymentSignalArgs {
