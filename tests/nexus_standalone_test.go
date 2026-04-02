@@ -2,6 +2,7 @@ package tests
 
 import (
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -59,44 +60,53 @@ func TestStartStandaloneNexusOperation(t *testing.T) {
 		s.NoError(err)
 		s.True(startResp.GetStarted())
 
-		// Describe without IncludeInput.
-		descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
-			OperationId: "test-op",
-			RunId:       startResp.RunId,
-		})
-		s.NoError(err)
-		s.Equal(startResp.RunId, descResp.RunId)
-		s.Nil(descResp.GetInput()) // not included by default
+		for _, tc := range []struct {
+			name  string
+			runID string
+		}{
+			{name: "WithRunID", runID: startResp.RunId},
+			{name: "WithEmptyRunID", runID: ""},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+					Namespace:   s.Namespace().String(),
+					OperationId: "test-op",
+					RunId:       tc.runID,
+				})
+				s.NoError(err)
+				s.Equal(startResp.RunId, descResp.RunId)
 
-		info := descResp.GetInfo()
-		protorequire.ProtoEqual(t, &nexuspb.NexusOperationExecutionInfo{
-			OperationId:            "test-op",
-			RunId:                  startResp.RunId,
-			Endpoint:               endpointName,
-			Service:                "test-service",
-			Operation:              "test-operation",
-			Status:                 enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING,
-			State:                  enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED,
-			ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
-			NexusHeader:            testHeader,
-			UserMetadata:           testUserMetadata,
-			SearchAttributes:       testSearchAttributes,
-			Attempt:                0,
-			StateTransitionCount:   1,
-			// Dynamic fields copied from actual response for comparison.
-			RequestId:         info.GetRequestId(),
-			ScheduleTime:      info.GetScheduleTime(),
-			ExpirationTime:    info.GetExpirationTime(),
-			ExecutionDuration: info.GetExecutionDuration(),
-		}, info)
-		s.NotEmpty(info.GetRequestId())
-		s.NotNil(info.GetScheduleTime())
-		s.NotNil(info.GetExpirationTime())
-		s.NotNil(info.GetExecutionDuration())
+				info := descResp.GetInfo()
+				protorequire.ProtoEqual(t, &nexuspb.NexusOperationExecutionInfo{
+					OperationId:            "test-op",
+					RunId:                  startResp.RunId,
+					Endpoint:               endpointName,
+					Service:                "test-service",
+					Operation:              "test-operation",
+					Status:                 enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING,
+					State:                  enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED,
+					ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
+					NexusHeader:            testHeader,
+					UserMetadata:           testUserMetadata,
+					SearchAttributes:       testSearchAttributes,
+					Attempt:                0,
+					StateTransitionCount:   1,
+					// Dynamic fields copied from actual response for comparison.
+					RequestId:         info.GetRequestId(),
+					ScheduleTime:      info.GetScheduleTime(),
+					ExpirationTime:    info.GetExpirationTime(),
+					ExecutionDuration: info.GetExecutionDuration(),
+				}, info)
+				s.NotEmpty(descResp.GetLongPollToken())
+				s.NotEmpty(info.GetRequestId())
+				s.NotNil(info.GetScheduleTime())
+				s.NotNil(info.GetExpirationTime())
+				s.NotNil(info.GetExecutionDuration())
+			})
+		}
 
 		// Describe with IncludeInput.
-		descResp, err = s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+		descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
 			Namespace:    s.Namespace().String(),
 			OperationId:  "test-op",
 			RunId:        startResp.RunId,
@@ -171,49 +181,6 @@ func TestStartStandaloneNexusOperation(t *testing.T) {
 func TestDescribeStandaloneNexusOperation(t *testing.T) {
 	t.Parallel()
 
-	t.Run("EmptyRunID", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
-
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
-			OperationId: "test-op",
-			Endpoint:    endpointName,
-		})
-		s.NoError(err)
-
-		descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
-			OperationId: "test-op",
-		})
-		s.NoError(err)
-		protorequire.ProtoEqual(t, &workflowservice.DescribeNexusOperationExecutionResponse{
-			RunId:         startResp.RunId,
-			LongPollToken: descResp.GetLongPollToken(),
-			Info: &nexuspb.NexusOperationExecutionInfo{
-				OperationId:            "test-op",
-				RunId:                  startResp.RunId,
-				Endpoint:               endpointName,
-				Service:                "test-service",
-				Operation:              "test-operation",
-				Status:                 enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING,
-				State:                  enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED,
-				ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
-				NexusHeader:            map[string]string{},
-				SearchAttributes:       &commonpb.SearchAttributes{},
-				Attempt:                0,
-				StateTransitionCount:   1,
-				RequestId:              descResp.GetInfo().GetRequestId(),
-				ScheduleTime:           descResp.GetInfo().GetScheduleTime(),
-				ExpirationTime:         descResp.GetInfo().GetExpirationTime(),
-				ExecutionDuration:      descResp.GetInfo().GetExecutionDuration(),
-			},
-		}, descResp)
-		s.NotEmpty(descResp.GetInfo().GetRequestId())
-		s.NotNil(descResp.GetInfo().GetScheduleTime())
-		s.NotNil(descResp.GetInfo().GetExpirationTime())
-		s.NotNil(descResp.GetInfo().GetExecutionDuration())
-	})
-
 	t.Run("NotFound", func(t *testing.T) {
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 
@@ -244,6 +211,126 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 		s.ErrorAs(err, &notFound)
 	})
 
+	t.Run("LongPollStateChange", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
+
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		s.NoError(err)
+
+		// Obtain longpoll token.
+		firstResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		s.NoError(err)
+		s.NotEmpty(firstResp.GetLongPollToken())
+		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING, firstResp.GetInfo().GetStatus())
+
+		ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+		defer cancel()
+
+		// Start polling.
+		type describeResult struct {
+			resp *workflowservice.DescribeNexusOperationExecutionResponse
+			err  error
+		}
+		describeResultCh := make(chan describeResult, 1)
+
+		go func() {
+			resp, err := s.FrontendClient().DescribeNexusOperationExecution(ctx, &workflowservice.DescribeNexusOperationExecutionRequest{
+				Namespace:      s.Namespace().String(),
+				OperationId:    "test-op",
+				RunId:          startResp.RunId,
+				IncludeOutcome: true,
+				LongPollToken:  firstResp.GetLongPollToken(),
+			})
+			describeResultCh <- describeResult{resp: resp, err: err}
+		}()
+
+		// Wait 1s to ensure the poll is still active.
+		select {
+		case result := <-describeResultCh:
+			require.NoError(t, result.err)
+			t.Fatal("DescribeNexusOperationExecution returned before the state changed")
+		case <-time.After(1 * time.Second):
+		}
+
+		// Terminate the operation.
+		terminateErrCh := make(chan error, 1)
+		go func() {
+			_, err := s.FrontendClient().TerminateNexusOperationExecution(ctx, &workflowservice.TerminateNexusOperationExecutionRequest{
+				Namespace:   s.Namespace().String(),
+				OperationId: "test-op",
+				RunId:       startResp.RunId,
+				Reason:      "test termination",
+			})
+			terminateErrCh <- err
+		}()
+
+		select {
+		case err := <-terminateErrCh:
+			require.NoError(t, err)
+		case <-ctx.Done():
+			t.Fatal("TerminateNexusOperationExecution timed out")
+		}
+
+		// Verify the longpoll result.
+		var longPollResp *workflowservice.DescribeNexusOperationExecutionResponse
+		select {
+		case result := <-describeResultCh:
+			require.NoError(t, result.err)
+			longPollResp = result.resp
+		case <-ctx.Done():
+			t.Fatal("DescribeNexusOperationExecution timed out")
+		}
+
+		s.Equal(startResp.RunId, longPollResp.GetRunId())
+		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TERMINATED, longPollResp.GetInfo().GetStatus())
+		s.Greater(longPollResp.GetInfo().GetStateTransitionCount(), firstResp.GetInfo().GetStateTransitionCount())
+	})
+
+	t.Run("LongPollTimeoutReturnsEmptyResponse", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
+
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		s.NoError(err)
+
+		firstResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		s.NoError(err)
+		s.NotEmpty(firstResp.GetLongPollToken())
+
+		// Lower the long poll timeout and buffer to ensure the first response is returned quickly.
+		s.OverrideDynamicConfig(nexusoperation.LongPollBuffer, time.Second)
+		s.OverrideDynamicConfig(nexusoperation.LongPollTimeout, 10*time.Millisecond)
+
+		ctx, cancel := context.WithTimeout(s.Context(), 5*time.Second)
+		defer cancel()
+
+		longPollResp, err := s.FrontendClient().DescribeNexusOperationExecution(ctx, &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:     s.Namespace().String(),
+			OperationId:   "test-op",
+			RunId:         startResp.RunId,
+			LongPollToken: firstResp.GetLongPollToken(),
+		})
+		s.NoError(err)
+		protorequire.ProtoEqual(t, &workflowservice.DescribeNexusOperationExecutionResponse{}, longPollResp)
+	})
+
+	// Validates that request validation is wired up in the frontend.
+	// Exhaustive validation cases are covered in unit tests.
 	t.Run("Validation", func(t *testing.T) {
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 
@@ -727,8 +814,7 @@ func TestListStandaloneNexusOperation(t *testing.T) {
 		}, testcore.WaitForESToSettle, 100*time.Millisecond)
 
 		// Override max page size to 1.
-		cleanup := s.OverrideDynamicConfig(dynamicconfig.FrontendVisibilityMaxPageSize, 1)
-		defer cleanup()
+		s.OverrideDynamicConfig(dynamicconfig.FrontendVisibilityMaxPageSize, 1)
 
 		// PageSize 0 should default to max (1), returning only 1 result.
 		resp, err := s.FrontendClient().ListNexusOperationExecutions(s.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
@@ -1058,6 +1144,215 @@ func TestDeleteStandaloneNexusOperation(t *testing.T) {
 		})
 		s.Error(err)
 		s.ErrorContains(err, "operation_id is required")
+	})
+}
+
+func TestStandaloneNexusOperationPoll(t *testing.T) {
+	t.Parallel()
+
+	t.Run("WaitStageClosed", func(t *testing.T) {
+		for _, tc := range []struct {
+			name      string
+			withRunID bool
+		}{
+			{name: "WithEmptyRunID"},
+			{name: "WithRunID", withRunID: true},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				s := testcore.NewEnv(t, nexusStandaloneOpts...)
+				endpointName := createNexusEndpoint(s)
+
+				startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+					OperationId: "test-op",
+					Endpoint:    endpointName,
+				})
+				require.NoError(t, err)
+
+				ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+				defer cancel()
+
+				// Start pollling.
+				type pollResult struct {
+					resp *workflowservice.PollNexusOperationExecutionResponse
+					err  error
+				}
+				pollResultCh := make(chan pollResult, 1)
+
+				go func() {
+					runID := ""
+					if tc.withRunID {
+						runID = startResp.RunId
+					}
+
+					resp, err := s.FrontendClient().PollNexusOperationExecution(ctx, &workflowservice.PollNexusOperationExecutionRequest{
+						Namespace:   s.Namespace().String(),
+						OperationId: "test-op",
+						RunId:       runID,
+						WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+					})
+					pollResultCh <- pollResult{resp: resp, err: err}
+				}()
+
+				// Wait 1s to ensure the poll is still active.
+				select {
+				case result := <-pollResultCh:
+					require.NoError(t, result.err)
+					t.Fatal("PollNexusOperationExecution returned before the state changed")
+				case <-time.After(1 * time.Second):
+				case <-ctx.Done():
+					t.Fatal("PollNexusOperationExecution timed out before termination")
+				}
+
+				// Terminate the operation.
+				terminateErrCh := make(chan error, 1)
+				go func() {
+					_, err := s.FrontendClient().TerminateNexusOperationExecution(ctx, &workflowservice.TerminateNexusOperationExecutionRequest{
+						Namespace:   s.Namespace().String(),
+						OperationId: "test-op",
+						RunId:       startResp.RunId,
+						Reason:      "test termination",
+					})
+					terminateErrCh <- err
+				}()
+
+				select {
+				case err := <-terminateErrCh:
+					require.NoError(t, err)
+				case <-ctx.Done():
+					t.Fatal("TerminateNexusOperationExecution timed out")
+				}
+
+				// Verify the poll result.
+				var result pollResult
+				select {
+				case result = <-pollResultCh:
+				case <-ctx.Done():
+					t.Fatal("PollNexusOperationExecution did not resolve before timeout")
+				}
+				require.NoError(t, result.err)
+				pollResp := result.resp
+
+				protorequire.ProtoEqual(t, &workflowservice.PollNexusOperationExecutionResponse{
+					RunId:          startResp.RunId,
+					WaitStage:      enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+					OperationToken: pollResp.GetOperationToken(),
+					Outcome: &workflowservice.PollNexusOperationExecutionResponse_Failure{
+						Failure: pollResp.GetFailure(),
+					},
+				}, pollResp)
+				require.NotNil(t, pollResp.GetFailure().GetTerminatedFailureInfo())
+			})
+		}
+	})
+
+	t.Run("UnspecifiedWaitStageDefaultsToClosed", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
+
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		require.NoError(t, err)
+
+		// Terminate the operation.
+		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			Reason:      "test termination",
+		})
+		require.NoError(t, err)
+
+		// Poll with UNSPECIFIED WaitStage — should behave the same as CLOSED.
+		pollResp, err := s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_UNSPECIFIED,
+		})
+		require.NoError(t, err)
+		protorequire.ProtoEqual(t, &workflowservice.PollNexusOperationExecutionResponse{
+			RunId:          startResp.RunId,
+			WaitStage:      enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+			OperationToken: pollResp.GetOperationToken(),
+			Outcome: &workflowservice.PollNexusOperationExecutionResponse_Failure{
+				Failure: pollResp.GetFailure(),
+			},
+		}, pollResp)
+		require.NotNil(t, pollResp.GetFailure().GetTerminatedFailureInfo())
+	})
+
+	t.Run("NotFound", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
+
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		require.NoError(t, err)
+
+		var notFoundErr *serviceerror.NotFound
+		var namespaceNotFoundErr *serviceerror.NamespaceNotFound
+
+		testCases := []struct {
+			name        string
+			request     *workflowservice.PollNexusOperationExecutionRequest
+			expectedErr error
+		}{
+			{
+				name: "NonExistentNamespace",
+				request: &workflowservice.PollNexusOperationExecutionRequest{
+					Namespace:   "non-existent-namespace",
+					OperationId: "test-op",
+					RunId:       startResp.RunId,
+					WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+				},
+				expectedErr: namespaceNotFoundErr,
+			},
+			{
+				name: "NonExistentOperationID",
+				request: &workflowservice.PollNexusOperationExecutionRequest{
+					Namespace:   s.Namespace().String(),
+					OperationId: "non-existent-op",
+					RunId:       startResp.RunId,
+					WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+				},
+				expectedErr: notFoundErr,
+			},
+			{
+				name: "NonExistentRunID",
+				request: &workflowservice.PollNexusOperationExecutionRequest{
+					Namespace:   s.Namespace().String(),
+					OperationId: "test-op",
+					RunId:       "11111111-2222-3333-4444-555555555555",
+					WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+				},
+				expectedErr: notFoundErr,
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				_, err := s.FrontendClient().PollNexusOperationExecution(s.Context(), tc.request)
+				require.ErrorAs(t, err, &tc.expectedErr) //nolint:testifylint
+			})
+		}
+	})
+
+	// Validates that request validation is wired up in the frontend.
+	// Exhaustive validation cases are covered in unit tests.
+	t.Run("Validation", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+
+		_, err := s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "", // required field
+			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+		})
+		s.Error(err)
+		s.Contains(err.Error(), "operation_id is required")
 	})
 }
 

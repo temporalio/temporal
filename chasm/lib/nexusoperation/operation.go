@@ -197,10 +197,15 @@ func (o *Operation) buildDescribeResponse(
 	ctx chasm.Context,
 	req *nexusoperationpb.DescribeNexusOperationRequest,
 ) (*nexusoperationpb.DescribeNexusOperationResponse, error) {
+	token, err := ctx.Ref(o)
+	if err != nil {
+		return nil, err
+	}
+
 	resp := &workflowservice.DescribeNexusOperationExecutionResponse{
-		RunId: ctx.ExecutionKey().RunID,
-		Info:  o.buildExecutionInfo(ctx),
-		// TODO: Add LongPollToken support.
+		RunId:         ctx.ExecutionKey().RunID,
+		Info:          o.buildExecutionInfo(ctx),
+		LongPollToken: token,
 	}
 
 	// Include input, if requested
@@ -210,7 +215,7 @@ func (o *Operation) buildDescribeResponse(
 
 	// Include output, if available and requested
 	// TODO: get failure from last attempt for running operation, if available
-	if req.GetFrontendRequest().GetIncludeOutcome() && o.LifecycleState(ctx).IsClosed() {
+	if req.GetFrontendRequest().GetIncludeOutcome() && o.isClosed() {
 		outcome := o.Outcome.Get(ctx)
 		if successful := outcome.GetSuccessful(); successful != nil {
 			resp.Outcome = &workflowservice.DescribeNexusOperationExecutionResponse_Result{
@@ -226,6 +231,53 @@ func (o *Operation) buildDescribeResponse(
 	return &nexusoperationpb.DescribeNexusOperationResponse{
 		FrontendResponse: resp,
 	}, nil
+}
+
+func (o *Operation) buildPollResponse(
+	ctx chasm.Context,
+) *nexusoperationpb.PollNexusOperationResponse {
+	resp := &workflowservice.PollNexusOperationExecutionResponse{
+		RunId:          ctx.ExecutionKey().RunID,
+		OperationToken: o.OperationToken,
+	}
+
+	if o.isClosed() {
+		resp.WaitStage = enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED
+		outcome := o.Outcome.Get(ctx)
+		if successful := outcome.GetSuccessful(); successful != nil {
+			resp.Outcome = &workflowservice.PollNexusOperationExecutionResponse_Result{
+				Result: successful.GetResult(),
+			}
+		} else if failure := outcome.GetFailed().GetFailure(); failure != nil {
+			resp.Outcome = &workflowservice.PollNexusOperationExecutionResponse_Failure{
+				Failure: failure,
+			}
+		}
+	} else {
+		resp.WaitStage = enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED
+	}
+
+	return &nexusoperationpb.PollNexusOperationResponse{
+		FrontendResponse: resp,
+	}
+}
+
+// isWaitStageReached checks if the operation has reached the requested wait stage.
+// NOTE: WaitStage.UNSPECIFIED is normalized to CLOSED by the frontend validator.
+func (o *Operation) isWaitStageReached(_ chasm.Context, waitStage enumspb.NexusOperationWaitStage) bool {
+	switch waitStage {
+	case enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED:
+		return o.Status == nexusoperationpb.OPERATION_STATUS_STARTED || o.isClosed()
+	case enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED:
+		return o.isClosed()
+	default:
+		return false
+	}
+}
+
+// isClosed returns true if the operation is in a terminal state.
+func (o *Operation) isClosed() bool {
+	return o.LifecycleState(nil).IsClosed()
 }
 
 func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperationExecutionInfo {

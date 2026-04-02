@@ -178,12 +178,34 @@ func validateAndNormalizeDescribeRequest(req *workflowservice.DescribeNexusOpera
 		return serviceerror.NewInvalidArgumentf("operation_id exceeds length limit. Length=%d Limit=%d",
 			len(req.GetOperationId()), config.MaxIDLengthLimit())
 	}
+	if len(req.GetLongPollToken()) > 0 && req.GetRunId() == "" {
+		return serviceerror.NewInvalidArgument("run_id is required when long_poll_token is provided")
+	}
+	if req.GetRunId() != "" {
+		if err := uuid.Validate(req.GetRunId()); err != nil {
+			return serviceerror.NewInvalidArgument("run_id is not a valid UUID")
+		}
+	}
+	return nil
+}
+
+func validateAndNormalizePollRequest(req *workflowservice.PollNexusOperationExecutionRequest, config *Config) error {
+	// Normalize wait stage: UNSPECIFIED defaults to CLOSED.
+	if req.GetWaitStage() == enumspb.NEXUS_OPERATION_WAIT_STAGE_UNSPECIFIED {
+		req.WaitStage = enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED
+	}
+	if req.GetOperationId() == "" {
+		return serviceerror.NewInvalidArgument("operation_id is required")
+	}
+	if len(req.GetOperationId()) > config.MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgumentf("operation_id exceeds length limit. Length=%d Limit=%d",
+			len(req.GetOperationId()), config.MaxIDLengthLimit())
+	}
 	if runID := req.GetRunId(); runID != "" {
 		if err := uuid.Validate(runID); err != nil {
 			return serviceerror.NewInvalidArgument("run_id is not a valid UUID")
 		}
 	}
-	// TODO: Add long-poll validation (run_id required when long_poll_token is set).
 	return nil
 }
 

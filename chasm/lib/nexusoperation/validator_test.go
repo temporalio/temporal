@@ -550,3 +550,89 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 		})
 	}
 }
+
+func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
+	config := &Config{
+		MaxIDLengthLimit: func() int { return 20 },
+	}
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(*workflowservice.PollNexusOperationExecutionRequest)
+		errMsg string
+		check  func(*testing.T, *workflowservice.PollNexusOperationExecutionRequest)
+	}{
+		{
+			name: "valid request",
+		},
+		{
+			name: "operation_id - required",
+			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
+				r.OperationId = ""
+			},
+			errMsg: "operation_id is required",
+		},
+		{
+			name: "operation_id - exceeds length limit",
+			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
+				r.OperationId = "this-operation-id-is-too-long"
+			},
+			errMsg: "operation_id exceeds length limit",
+		},
+		{
+			name: "run_id - not a valid UUID",
+			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
+				r.RunId = "not-a-uuid"
+			},
+			errMsg: "run_id is not a valid UUID",
+		},
+		{
+			name: "wait_stage - normalizes UNSPECIFIED to CLOSED",
+			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
+				r.WaitStage = enumspb.NEXUS_OPERATION_WAIT_STAGE_UNSPECIFIED
+			},
+			check: func(t *testing.T, r *workflowservice.PollNexusOperationExecutionRequest) {
+				require.Equal(t, enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED, r.WaitStage)
+			},
+		},
+		{
+			name: "wait_stage - preserves STARTED",
+			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
+				r.WaitStage = enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED
+			},
+			check: func(t *testing.T, r *workflowservice.PollNexusOperationExecutionRequest) {
+				require.Equal(t, enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED, r.WaitStage)
+			},
+		},
+		{
+			name: "wait_stage - preserves CLOSED",
+			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
+				r.WaitStage = enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED
+			},
+			check: func(t *testing.T, r *workflowservice.PollNexusOperationExecutionRequest) {
+				require.Equal(t, enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED, r.WaitStage)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			validReq := &workflowservice.PollNexusOperationExecutionRequest{
+				Namespace:   "default",
+				OperationId: "operation-id",
+			}
+			if tc.mutate != nil {
+				tc.mutate(validReq)
+			}
+			err := validateAndNormalizePollRequest(validReq, config)
+			if tc.errMsg != "" {
+				var invalidArgErr *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgErr)
+				require.Contains(t, err.Error(), tc.errMsg)
+			} else {
+				require.NoError(t, err)
+			}
+			if tc.check != nil {
+				tc.check(t, validReq)
+			}
+		})
+	}
+}

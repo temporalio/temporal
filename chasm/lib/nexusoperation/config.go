@@ -10,6 +10,20 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 )
 
+var LongPollTimeout = dynamicconfig.NewNamespaceDurationSetting(
+	"nexusoperation.longPollTimeout",
+	20*time.Second,
+	`Timeout for nexus operation long-poll requests.`,
+)
+
+var LongPollBuffer = dynamicconfig.NewNamespaceDurationSetting(
+	"nexusoperation.longPollBuffer",
+	time.Second,
+	`A buffer used to adjust the nexus operation long-poll timeouts.
+ Specifically, nexus operation long-poll requests are timed out at a time which leaves at least the buffer's duration
+ remaining before the caller's deadline, if permitted by the caller's deadline.`,
+)
+
 var Enabled = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.enableStandalone",
 	false,
@@ -165,6 +179,8 @@ type Config struct {
 	Enabled                             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmEnabled                        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmNexusEnabled                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	LongPollBuffer                      dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	LongPollTimeout                     dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MinRequestTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentOperations             dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -190,6 +206,8 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 		Enabled:                            Enabled.Get(dc),
 		ChasmEnabled:                       dynamicconfig.EnableChasm.Get(dc),
 		ChasmNexusEnabled:                  ChasmNexusEnabled.Get(dc),
+		LongPollBuffer:                     LongPollBuffer.Get(dc),
+		LongPollTimeout:                    LongPollTimeout.Get(dc),
 		RequestTimeout:                     RequestTimeout.Get(dc),
 		MinRequestTimeout:                  MinRequestTimeout.Get(dc),
 		MaxConcurrentOperations:            MaxConcurrentOperations.Get(dc),

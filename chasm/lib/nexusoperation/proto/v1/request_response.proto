@@ -52,3 +52,13 @@ message DeleteNexusOperationRequest {
 
 message DeleteNexusOperationResponse {
 }
+
+message PollNexusOperationRequest {
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.PollNexusOperationExecutionRequest frontend_request = 2;
+}
+
+message PollNexusOperationResponse {
+    temporal.api.workflowservice.v1.PollNexusOperationExecutionResponse frontend_response = 1;
+}
