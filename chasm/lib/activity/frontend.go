@@ -2,7 +2,6 @@ package activity
 
 import (
 	"context"
-	"sync/atomic"
 
 	"github.com/google/uuid"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
@@ -35,10 +34,6 @@ type FrontendHandler interface {
 }
 
 var ErrStandaloneActivityDisabled = serviceerror.NewUnimplemented("Standalone activity is disabled")
-
-// TestStartFailOnce, when set to true, causes the next StartActivityExecution to return Unavailable
-// after the activity is created. It fires once (CAS to false).
-var TestStartFailOnce atomic.Bool
 
 type frontendHandler struct {
 	FrontendHandler
@@ -105,13 +100,6 @@ func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workf
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: modifiedReq,
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	if TestStartFailOnce.CompareAndSwap(true, false) {
-		return nil, serviceerror.NewUnavailable("test: injected failure after successful creation")
-	}
 
 	return resp.GetFrontendResponse(), err
 }
