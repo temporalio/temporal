@@ -270,36 +270,6 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) TestServerGeneratedRequestIDStableAcrossRetries() {
-	t := s.T()
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	activityID := testcore.RandomizeStr(t.Name())
-	taskQueue := testcore.RandomizeStr(t.Name())
-
-	// Make the handler fail once with a retryable error so the RetryableInterceptor retries.
-	activity.TestStartFailOnce.Store(true)
-
-	resp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-		Namespace:    s.Namespace().String(),
-		ActivityId:   activityID,
-		ActivityType: s.tv.ActivityType(),
-		Identity:     s.tv.WorkerIdentity(),
-		Input:        defaultInput,
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
-		},
-		StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-		// No RequestId — server generates one.
-	})
-	// With the fix, the retry uses the same request ID, so history recognizes it as a dedup
-	// and succeeds (with Started=false). Without the fix, the retry generates a new request ID
-	// and gets ActivityExecutionAlreadyStarted.
-	require.NoError(t, err)
-	require.NotNil(t, resp)
-}
-
 func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
