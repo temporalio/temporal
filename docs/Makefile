@@ -4,8 +4,8 @@ DIAGRAMS := $(wildcard ./_assets/*.d2)
 
 install-d2:
 	@printf $(COLOR) "Install d2..."
-	@go install oss.terrastruct.com/d2@v0.6.3
+	@go install oss.terrastruct.com/d2@v0.7.1
 
 update-diagrams: install-d2
 	@printf $(COLOR) "Update diagrams"
-	$(foreach DIAGRAM, $(DIAGRAMS), $(shell d2 --layout elk --theme 7 --dark-theme 200 $(DIAGRAM) $(NEWLINE)))
+	$(foreach DIAGRAM, $(DIAGRAMS), $(shell d2 --theme 7 --dark-theme 200 $(DIAGRAM) $(NEWLINE)))

@@ -37,8 +37,8 @@ const (
 	serviceName             = "service_name"
 	actionType              = "action_type"
 	workerVersion           = "worker_version"
-	workerDeploymentName    = "temporal_worker_deployment_name"
-	workerDeploymentBuildID = "temporal_worker_deployment_build_id"
+	workerDeploymentName    = "worker_deployment_name"
+	workerDeploymentBuildID = "worker_build_id"
 	destination             = "destination"
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
@@ -278,6 +278,20 @@ func TaskTypeTag(value string) Tag {
 		value = unknownValue
 	}
 	return Tag{Key: TaskTypeTagName, Value: value}
+}
+
+func ArchetypeTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: ArchetypeTagName, Value: value}
+}
+
+func ChasmTaskTypeTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: ChasmTaskTypeTagName, Value: value}
 }
 
 func PartitionTag(partition string) Tag {

@@ -69,6 +69,9 @@ linters:
         # internal server pbs have their own suffix to avoid naming conflicts
         - pkg: go.temporal.io/server/api/(\w+)/v1
           alias: ${1}spb
+    testifylint:
+      disable:
+        - suite-method-signature # parallelsuite.Run supports extra args passed to Test* methods
     exhaustive:
       # Presence of "default" case in switch statements satisfies exhaustiveness,
       # even if all enum members are not listed.

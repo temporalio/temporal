@@ -22,6 +22,50 @@ func TestParseTestTimeouts(t *testing.T) {
 	require.Equal(t, string(logOutput), stacktrace)
 }
 
+func TestParseFailedTestsFromOutput(t *testing.T) {
+	t.Run("ExtractsFailedTestNames", func(t *testing.T) {
+		stdout := `
+=== RUN   TestFoo
+=== RUN   TestFoo/SubTest1
+    foo_test.go:42: assertion failed
+--- FAIL: TestFoo/SubTest1 (1.23s)
+--- FAIL: TestFoo (1.23s)
+=== RUN   TestBar
+--- PASS: TestBar (0.00s)
+=== RUN   TestBaz
+    baz_test.go:10: something wrong
+--- FAIL: TestBaz (0.50s)
+FAIL
+`
+		got := parseFailedTestsFromOutput(stdout)
+		require.Equal(t, []string{"TestFoo/SubTest1", "TestFoo", "TestBaz"}, got)
+	})
+
+	t.Run("DeduplicatesDuplicateLines", func(t *testing.T) {
+		stdout := `
+--- FAIL: TestDupe (0.10s)
+--- FAIL: TestDupe (0.10s)
+--- FAIL: TestOther (0.20s)
+`
+		got := parseFailedTestsFromOutput(stdout)
+		require.Equal(t, []string{"TestDupe", "TestOther"}, got)
+	})
+
+	t.Run("ReturnsEmptyWhenNoFailures", func(t *testing.T) {
+		stdout := `
+=== RUN   TestPass
+--- PASS: TestPass (0.01s)
+ok  	go.temporal.io/server/tests
+`
+		got := parseFailedTestsFromOutput(stdout)
+		require.Empty(t, got)
+	})
+
+	t.Run("ReturnsEmptyOnEmptyInput", func(t *testing.T) {
+		require.Empty(t, parseFailedTestsFromOutput(""))
+	})
+}
+
 func TestParseAlerts_DataRaceAndPanic(t *testing.T) {
 	input, err := os.ReadFile("testdata/alerts-input.log")
 	require.NoError(t, err)
