@@ -10,8 +10,8 @@ func SetDefaultWorkflowIdReusePolicy(f *enumspb.WorkflowIdReusePolicy) {
 	}
 }
 
-// SetDefaultWorkflowIdPolicies migrates and applies defaults to both WorkflowId policies.
-func SetDefaultWorkflowIdPolicies(
+// SetDefaultWorkflowIDPolicies migrates and applies defaults to both Workflow ID policies.
+func SetDefaultWorkflowIDPolicies(
 	reusePolicy *enumspb.WorkflowIdReusePolicy,
 	conflictPolicy *enumspb.WorkflowIdConflictPolicy,
 	defaultConflictPolicy enumspb.WorkflowIdConflictPolicy,

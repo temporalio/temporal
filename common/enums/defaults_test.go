@@ -45,8 +45,8 @@ func TestSetDefaultWorkflowIdPolicies(t *testing.T) {
 		},
 		{
 			name: "terminate-if-running reuse policy is migrated to terminate-existing conflict policy",
-			input: policies{ //nolint:staticcheck // SA1019: intentional migration of deprecated policy
-				reuse:    enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
+			input: policies{
+				reuse:    enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING, //nolint:staticcheck // SA1019: intentional migration coverage for deprecated policy
 				conflict: enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED,
 			},
 			defaultConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
@@ -57,23 +57,23 @@ func TestSetDefaultWorkflowIdPolicies(t *testing.T) {
 		},
 		{
 			name: "terminate-if-running reuse policy with an explicit conflict policy is not migrated",
-			input: policies{ //nolint:staticcheck // SA1019: intentional migration of deprecated policy
-				reuse:    enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
+			input: policies{
+				reuse:    enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING, //nolint:staticcheck // SA1019: intentional migration coverage for deprecated policy
 				conflict: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 			},
 			defaultConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
-			want: policies{ //nolint:staticcheck // SA1019: intentional migration of deprecated policy
-				reuse:    enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
-				conflict: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING, // same as before!
+			want: policies{
+				reuse:    enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING, //nolint:staticcheck // SA1019: intentional migration coverage for deprecated policy
+				conflict: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,      // same as before!
 			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			SetDefaultWorkflowIdPolicies(&tc.input.reuse, &tc.input.conflict, tc.defaultConflictPolicy)
+			SetDefaultWorkflowIDPolicies(&tc.input.reuse, &tc.input.conflict, tc.defaultConflictPolicy)
 			require.Equal(t, tc.want, tc.input)
 
 			// check idempotency
-			SetDefaultWorkflowIdPolicies(&tc.input.reuse, &tc.input.conflict, tc.defaultConflictPolicy)
+			SetDefaultWorkflowIDPolicies(&tc.input.reuse, &tc.input.conflict, tc.defaultConflictPolicy)
 			require.Equal(t, tc.want, tc.input)
 		})
 	}

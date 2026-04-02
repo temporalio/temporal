@@ -457,7 +457,7 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	}
 
 	// Apply defaults before validation; must be first for idempotency on internal retries.
-	enums.SetDefaultWorkflowIdPolicies(
+	enums.SetDefaultWorkflowIDPolicies(
 		&request.WorkflowIdReusePolicy,
 		&request.WorkflowIdConflictPolicy,
 		enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
@@ -2132,7 +2132,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	// Apply defaults before validation; must be first for idempotency on internal retries.
-	enums.SetDefaultWorkflowIdPolicies(
+	enums.SetDefaultWorkflowIDPolicies(
 		&request.WorkflowIdReusePolicy,
 		&request.WorkflowIdConflictPolicy,
 		enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,

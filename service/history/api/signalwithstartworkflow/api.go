@@ -53,7 +53,7 @@ func Invoke(
 		return nil, err
 	}
 
-	enums.SetDefaultWorkflowIdPolicies(
+	enums.SetDefaultWorkflowIDPolicies(
 		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdReusePolicy,
 		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdConflictPolicy,
 		enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
