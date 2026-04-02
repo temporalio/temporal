@@ -9,10 +9,10 @@ const (
 
 const (
 	DeleteWorkflowExecutionStageVisibility DeleteWorkflowExecutionStage = 1 << iota
+	DeleteWorkflowExecutionStageReplication
 	DeleteWorkflowExecutionStageCurrent
 	DeleteWorkflowExecutionStageMutableState
 	DeleteWorkflowExecutionStageHistory
-	DeleteWorkflowExecutionStageReplication
 )
 
 func (s *DeleteWorkflowExecutionStage) MarkProcessed(stage DeleteWorkflowExecutionStage) {

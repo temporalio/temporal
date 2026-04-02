@@ -1028,13 +1028,17 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 				}
 				// Piggyback delete execution replication task on the same write to save a DB operation.
 				if s.config.EnableDeleteWorkflowExecutionReplication() &&
-					!stage.IsProcessed(tasks.DeleteWorkflowExecutionStageReplication) {
+					!stage.IsProcessed(tasks.DeleteWorkflowExecutionStageReplication) &&
+					archetypeID == chasm.WorkflowArchetypeID {
 					if nsEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(
 						namespace.ID(key.NamespaceID),
-					); err == nil && nsEntry.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) {
+					); err == nil &&
+						nsEntry.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) &&
+						nsEntry.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster {
 						newTasks[tasks.CategoryReplication] = []tasks.Task{
 							&tasks.DeleteExecutionReplicationTask{
 								WorkflowKey: key,
+								ArchetypeID: archetypeID,
 							},
 						}
 					}

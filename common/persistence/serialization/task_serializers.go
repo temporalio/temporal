@@ -1507,6 +1507,7 @@ func replicationDeleteExecutionTaskToProto(
 		TaskType:       enumsspb.TASK_TYPE_REPLICATION_DELETE_EXECUTION,
 		TaskId:         task.TaskID,
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
+		ArchetypeId:    task.ArchetypeID,
 	}
 }
 
@@ -1525,5 +1526,6 @@ func replicationDeleteExecutionTaskFromProto(
 		),
 		VisibilityTimestamp: visibilityTimestamp,
 		TaskID:              info.TaskId,
+		ArchetypeID:         info.ArchetypeId,
 	}
 }

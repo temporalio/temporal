@@ -1227,6 +1227,7 @@ type HistoryTaskAttributes struct {
 	BaseExecutionInfo *v17.BaseExecutionInfo `protobuf:"bytes,8,opt,name=base_execution_info,json=baseExecutionInfo,proto3" json:"base_execution_info,omitempty"`
 	NewRunId          string                 `protobuf:"bytes,9,opt,name=new_run_id,json=newRunId,proto3" json:"new_run_id,omitempty"`
 	EventsBatches     []*v11.DataBlob        `protobuf:"bytes,10,rep,name=events_batches,json=eventsBatches,proto3" json:"events_batches,omitempty"`
+	ArchetypeId       uint32                 `protobuf:"varint,11,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -1322,6 +1323,13 @@ func (x *HistoryTaskAttributes) GetEventsBatches() []*v11.DataBlob {
 		return x.EventsBatches
 	}
 	return nil
+}
+
+func (x *HistoryTaskAttributes) GetArchetypeId() uint32 {
+	if x != nil {
+		return x.ArchetypeId
+	}
+	return 0
 }
 
 type SyncWorkflowStateTaskAttributes struct {
@@ -2221,7 +2229,7 @@ const file_temporal_server_api_replication_v1_message_proto_rawDesc = "" +
 	"\x16retry_maximum_interval\x18\x17 \x01(\v2\x19.google.protobuf.DurationR\x14retryMaximumInterval\x124\n" +
 	"\x16retry_maximum_attempts\x18\x18 \x01(\x05R\x14retryMaximumAttempts\x12:\n" +
 	"\x19retry_backoff_coefficient\x18\x19 \x01(\x01R\x17retryBackoffCoefficient\x12#\n" +
-	"\rstart_version\x18\x1a \x01(\x03R\fstartVersion\"\xad\x04\n" +
+	"\rstart_version\x18\x1a \x01(\x03R\fstartVersion\"\xd0\x04\n" +
 	"\x15HistoryTaskAttributes\x12!\n" +
 	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x03 \x01(\tR\n" +
@@ -2234,7 +2242,8 @@ const file_temporal_server_api_replication_v1_message_proto_rawDesc = "" +
 	"\n" +
 	"new_run_id\x18\t \x01(\tR\bnewRunId\x12G\n" +
 	"\x0eevents_batches\x18\n" +
-	" \x03(\v2 .temporal.api.common.v1.DataBlobR\reventsBatchesJ\x04\b\x01\x10\x02\"\xf4\x01\n" +
+	" \x03(\v2 .temporal.api.common.v1.DataBlobR\reventsBatches\x12!\n" +
+	"\farchetype_id\x18\v \x01(\rR\varchetypeIdJ\x04\b\x01\x10\x02\"\xf4\x01\n" +
 	"\x1fSyncWorkflowStateTaskAttributes\x12_\n" +
 	"\x0eworkflow_state\x18\x01 \x01(\v28.temporal.server.api.persistence.v1.WorkflowMutableStateR\rworkflowState\x120\n" +
 	"\x14is_force_replication\x18\x02 \x01(\bR\x12isForceReplication\x12>\n" +

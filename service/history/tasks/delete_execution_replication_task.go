@@ -13,6 +13,7 @@ type DeleteExecutionReplicationTask struct {
 	definition.WorkflowKey
 	VisibilityTimestamp time.Time
 	TaskID              int64
+	ArchetypeID         uint32
 }
 
 func (a *DeleteExecutionReplicationTask) GetKey() Key {

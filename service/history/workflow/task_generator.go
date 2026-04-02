@@ -83,7 +83,6 @@ type (
 			eventBatches [][]*historypb.HistoryEvent,
 		) ([]tasks.Task, error)
 		GenerateMigrationTasks(targetClusters []string) ([]tasks.Task, int64, error)
-		GenerateDeleteExecutionReplicationTask() (*tasks.DeleteExecutionReplicationTask, error)
 
 		// Generate tasks for any updated state machines on mutable state.
 		// Looks up machine definition in the provided registry.
@@ -367,13 +366,6 @@ func (r *TaskGeneratorImpl) GenerateDeleteExecutionTask() (*tasks.DeleteExecutio
 		// TaskID, VisibilityTimestamp is set by shard
 		WorkflowKey: r.mutableState.GetWorkflowKey(),
 		ArchetypeID: r.mutableState.ChasmTree().ArchetypeID(),
-	}, nil
-}
-
-func (r *TaskGeneratorImpl) GenerateDeleteExecutionReplicationTask() (*tasks.DeleteExecutionReplicationTask, error) {
-	return &tasks.DeleteExecutionReplicationTask{
-		// TaskID, VisibilityTimestamp is set by shard
-		WorkflowKey: r.mutableState.GetWorkflowKey(),
 	}, nil
 }
 
