@@ -303,7 +303,7 @@ func TestSelectTopFlakyTests(t *testing.T) {
 
 	t.Run("limits to TopN results", func(t *testing.T) {
 		var runs []TestRun
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			runs = append(runs, makeRunsForTest("TestFlaky"+string(rune('A'+i)), 40, 10)...)
 		}
 		cfg := BisectConfig{TopN: 3, MinFailures: 5, MinRuns: 30}
@@ -324,10 +324,10 @@ func TestSelectTopFlakyTests(t *testing.T) {
 	t.Run("normalizes test names", func(t *testing.T) {
 		// Retry suffix should be stripped; all runs collapse to one test
 		var runs []TestRun
-		for i := 0; i < 30; i++ {
+		for range 30 {
 			runs = append(runs, TestRun{Name: "TestFlaky", Failed: false})
 		}
-		for i := 0; i < 8; i++ {
+		for range 8 {
 			runs = append(runs, TestRun{Name: "TestFlaky (retry 1)", Failed: true})
 		}
 		cfg := BisectConfig{TopN: 10, MinFailures: 5, MinRuns: 30}
