@@ -142,8 +142,8 @@ func TestRunBisect(t *testing.T) {
 		assert.InDelta(t, 1.0, sum, 1e-10)
 
 		// The top result should be sha3 (index 3) — the transition point
-		assert.Equal(t, "sha3", results[0].CommitSHA, "sha3 should be the top suspect")
-		assert.Greater(t, results[0].Probability, 0.5, "top suspect should have >50% probability")
+		require.Equal(t, "sha3", results[0].CommitSHA, "sha3 should be the top suspect")
+		require.Greater(t, results[0].Probability, 0.5, "top suspect should have >50% probability")
 
 		// Results should be sorted by probability descending
 		for i := 1; i < len(results); i++ {

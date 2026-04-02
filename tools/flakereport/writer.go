@@ -112,6 +112,11 @@ func countQualifyingBisectReports(reports []TestBisectReport) int {
 	return n
 }
 
+// escapeTableCell replaces pipe characters so they don't corrupt GFM table rows.
+func escapeTableCell(s string) string {
+	return strings.ReplaceAll(s, "|", "&#124;")
+}
+
 // writeBisectTable writes all suspect (test, commit) pairs into a single flat table.
 func writeBisectTable(sb *strings.Builder, reports []TestBisectReport, repo string) {
 	sb.WriteString("| Test | Prob | Commit | Date | Author | Before | After | Note |\n")
@@ -135,18 +140,19 @@ func writeBisectTable(sb *strings.Builder, reports []TestBisectReport, repo stri
 			afterStr := fmt.Sprintf("%d/%d (%.0f%%)", s.FailsAfter, s.PassesAfter+s.FailsAfter,
 				pct(s.FailsAfter, s.PassesAfter+s.FailsAfter))
 			fmt.Fprintf(sb, "| `%s` | %.1f%% | [%s](%s) %s | %s | %s | %s | %s | %s |\n",
-				r.TestName, s.Probability*100, shortSHA, commitURL, title,
-				s.CommitDate, s.CommitAuthor, beforeStr, afterStr, s.HeuristicNote)
+				escapeTableCell(r.TestName), s.Probability*100, shortSHA, commitURL, escapeTableCell(title),
+				s.CommitDate, escapeTableCell(s.CommitAuthor), beforeStr, afterStr, escapeTableCell(s.HeuristicNote))
 		}
 	}
 	sb.WriteString("\n")
 }
 
 // generateBisectSummary creates the markdown section for bisect results to append to the GitHub summary.
-func generateBisectSummary(reports []TestBisectReport, repo string) string {
+func generateBisectSummary(reports []TestBisectReport, repo string, minProb float64) string {
 	qualifying := countQualifyingBisectReports(reports)
 
 	skipped := len(reports) - qualifying
+	threshold := fmt.Sprintf("%.0f%%", minProb*100)
 
 	var sb strings.Builder
 	sb.WriteString("\n## Bayesian Commit Suspects\n\n")
@@ -154,13 +160,13 @@ func generateBisectSummary(reports []TestBisectReport, repo string) string {
 	if qualifying == 0 {
 		sb.WriteString("No actionable commit suspects found")
 		if skipped > 0 {
-			sb.WriteString(fmt.Sprintf(" — %d tests analyzed but none above 50%% confidence", skipped))
+			sb.WriteString(fmt.Sprintf(" — %d tests analyzed but none above %s confidence", skipped, threshold))
 		}
 		sb.WriteString("\n")
 		return sb.String()
 	}
 
-	sb.WriteString(fmt.Sprintf("%d tests with actionable suspects (≥50%% confidence)", qualifying))
+	sb.WriteString(fmt.Sprintf("%d tests with actionable suspects (≥%s confidence)", qualifying, threshold))
 	if skipped > 0 {
 		sb.WriteString(fmt.Sprintf(", %d below confidence threshold", skipped))
 	}

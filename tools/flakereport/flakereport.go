@@ -361,7 +361,7 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	fmt.Println("\n=== Writing GitHub summary ===")
 	summaryContent := generateGitHubSummary(summary, runID, maxLinks)
 	if len(bisectReports) > 0 {
-		summaryContent += generateBisectSummary(bisectReports, repo)
+		summaryContent += generateBisectSummary(bisectReports, repo, bisectMinProbability)
 	}
 	if err := writeGitHubSummary(summaryContent, outputDir); err != nil {
 		fmt.Printf("Warning: Failed to write GitHub summary: %v\n", err)

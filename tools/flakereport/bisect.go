@@ -238,16 +238,6 @@ func allFilesMatchSuffixes(files, suffixes []string) bool {
 	return true
 }
 
-// anyFileMatchesPrefix returns true if any file starts with the given prefix.
-func anyFileMatchesPrefix(files []string, prefix string) bool {
-	for _, f := range files {
-		if strings.HasPrefix(f, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
 // runBisectForTest runs the full bisect pipeline for a single test name.
 // commitMetas is a pre-populated, read-only cache of commit metadata (SHA → CommitMeta).
 func runBisectForTest(cfg BisectConfig, testName string, allRuns []TestRun, commitOrderSlice []string, runToSHA map[int64]string, commitMetas map[string]CommitMeta) TestBisectReport {
@@ -277,8 +267,7 @@ func runBisectForTest(cfg BisectConfig, testName string, allRuns []TestRun, comm
 	// Apply heuristics from the pre-fetched commit metadata cache.
 	for i := range obs {
 		if meta, ok := commitMetas[obs[i].CommitSHA]; ok {
-			weight, _ := commitPriorWeight(meta, testName)
-			obs[i].Prior = weight
+			obs[i].Prior, obs[i].HeuristicNote = commitPriorWeight(meta, testName)
 		}
 	}
 
@@ -290,15 +279,21 @@ func runBisectForTest(cfg BisectConfig, testName string, allRuns []TestRun, comm
 		}
 	}
 
+	// Build a SHA → note lookup from the obs slice (already computed above).
+	obsNotes := make(map[string]string, len(obs))
+	for _, o := range obs {
+		obsNotes[o.CommitSHA] = o.HeuristicNote
+	}
+
 	// Annotate results with commit metadata
 	for i := range results {
+		results[i].HeuristicNote = obsNotes[results[i].CommitSHA]
 		if meta, ok := commitMetas[results[i].CommitSHA]; ok {
 			results[i].CommitTitle = meta.Title
 			results[i].CommitAuthor = meta.Author
 			if !meta.CommittedAt.IsZero() {
 				results[i].CommitDate = meta.CommittedAt.Format("2006-01-02")
 			}
-			_, results[i].HeuristicNote = commitPriorWeight(meta, testName)
 		}
 	}
 
@@ -413,6 +408,9 @@ func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allRuns []TestRun,
 	commitOrderSlice, err := commitOrder(ctx, oldestSHA)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get commit order: %w", err)
+	}
+	if len(commitOrderSlice) == 0 {
+		return nil, fmt.Errorf("commit order is empty for anchor %s: SHA may not be an ancestor of HEAD (force-push or unrelated branch?)", oldestSHA[:7])
 	}
 	fmt.Printf("Commit range: %d commits\n", len(commitOrderSlice))
 

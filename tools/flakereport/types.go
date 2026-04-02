@@ -94,11 +94,12 @@ type ArtifactsResponse struct {
 
 // CommitObservation holds aggregated pass/fail data for a single (test, commit) pair.
 type CommitObservation struct {
-	CommitSHA string
-	CommitIdx int     // chronological index (0 = oldest)
-	Prior     float64 // prior weight (1.0 = uniform; adjusted by heuristics)
-	Passes    int
-	Fails     int
+	CommitSHA     string
+	CommitIdx     int     // chronological index (0 = oldest)
+	Prior         float64 // prior weight (1.0 = uniform; adjusted by heuristics)
+	HeuristicNote string  // reason for prior adjustment, if any
+	Passes        int
+	Fails         int
 }
 
 // BisectResult is one candidate culprit commit with its posterior probability.
