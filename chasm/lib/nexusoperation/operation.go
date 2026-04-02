@@ -140,6 +140,10 @@ func (o *Operation) RequestCancel(
 	ctx chasm.MutableContext,
 	req *nexusoperationpb.CancellationState,
 ) error {
+	if !TransitionCanceled.Possible(o) {
+		return ErrOperationAlreadyCompleted
+	}
+
 	if existingCancellation, ok := o.Cancellation.TryGet(ctx); ok {
 		existingReqID := existingCancellation.GetRequestId()
 		newReqID := req.GetRequestId()
@@ -179,7 +183,7 @@ func (o *Operation) Terminate(
 		return chasm.TerminateComponentResponse{}, nil
 	}
 
-	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(o, ctx, EventTerminated{req})
+	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(o, ctx, EventTerminated{TerminateComponentRequest: req})
 }
 
 // SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface.

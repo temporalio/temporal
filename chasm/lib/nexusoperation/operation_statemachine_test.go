@@ -348,45 +348,70 @@ func TestTransitionTimedOut(t *testing.T) {
 }
 
 func TestTransitionTerminated(t *testing.T) {
-	ctx := &chasm.MockMutableContext{
-		MockContext: chasm.MockContext{
-			HandleNow: func(chasm.Component) time.Time { return defaultTime },
+	testCases := []struct {
+		name        string
+		startStatus nexusoperationpb.OperationStatus
+	}{
+		{
+			name:        "terminated from scheduled",
+			startStatus: nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+		},
+		{
+			name:        "terminated from started",
+			startStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
+		},
+		{
+			name:        "terminated from backing off",
+			startStatus: nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+		},
+		{
+			name:        "terminated from canceled",
+			startStatus: nexusoperationpb.OPERATION_STATUS_CANCELED,
 		},
 	}
 
-	operation := newTestOperation()
-	operation.Status = nexusoperationpb.OPERATION_STATUS_SCHEDULED
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{
+				MockContext: chasm.MockContext{
+					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+				},
+			}
 
-	event := EventTerminated{
-		chasm.TerminateComponentRequest{
-			RequestID: "terminate-request-id",
-			Reason:    "test reason",
-			Identity:  "test-identity",
-		},
-	}
+			operation := newTestOperation()
+			operation.Status = tc.startStatus
 
-	err := TransitionTerminated.Apply(operation, ctx, event)
-	require.NoError(t, err)
+			event := EventTerminated{TerminateComponentRequest: chasm.TerminateComponentRequest{
+				RequestID: "terminate-request-id",
+				Reason:    "test reason",
+				Identity:  "test-identity",
+			}}
 
-	require.Equal(t, nexusoperationpb.OPERATION_STATUS_TERMINATED, operation.Status)
-	protorequire.ProtoEqual(t, &nexusoperationpb.NexusOperationTerminateState{
-		RequestId: "terminate-request-id",
-		Identity:  "test-identity",
-	}, operation.TerminateState)
+			err := TransitionTerminated.Apply(operation, ctx, event)
+			require.NoError(t, err)
 
-	// Verify outcome failure is set with terminated info and reason as message.
-	protorequire.ProtoEqual(t, &nexusoperationpb.OperationOutcome{
-		Variant: &nexusoperationpb.OperationOutcome_Failed_{
-			Failed: &nexusoperationpb.OperationOutcome_Failed{
-				Failure: &failurepb.Failure{
-					Message: "test reason",
-					FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
-						TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
+			require.Equal(t, nexusoperationpb.OPERATION_STATUS_TERMINATED, operation.Status)
+			protorequire.ProtoEqual(t, &nexusoperationpb.NexusOperationTerminateState{
+				RequestId: "terminate-request-id",
+				Identity:  "test-identity",
+			}, operation.TerminateState)
+
+			// Verify outcome failure is set with terminated info and reason as message.
+			protorequire.ProtoEqual(t, &nexusoperationpb.OperationOutcome{
+				Variant: &nexusoperationpb.OperationOutcome_Failed_{
+					Failed: &nexusoperationpb.OperationOutcome_Failed{
+						Failure: &failurepb.Failure{
+							Message: "test reason",
+							FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+								TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
+							},
+						},
 					},
 				},
-			},
-		},
-	}, operation.Outcome.Get(ctx))
+			}, operation.Outcome.Get(ctx))
 
-	require.Empty(t, ctx.Tasks)
+			// Terminal state - no tasks should be emitted
+			require.Empty(t, ctx.Tasks)
+		})
+	}
 }
