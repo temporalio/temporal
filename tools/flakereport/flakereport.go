@@ -102,7 +102,7 @@ func NewCliApp() *cli.App {
 				},
 				&cli.Float64Flag{
 					Name:  "bisect-min-probability",
-					Value: 0.50,
+					Value: 0.65,
 					Usage: "Only report tests where the top suspect commit has at least this probability (0–1)",
 				},
 			},

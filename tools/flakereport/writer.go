@@ -189,8 +189,8 @@ func writeBisectPerTestTable(sb *strings.Builder, reports []TestBisectReport, re
 			overallRate = float64(allFails) / float64(r.TotalObs) * 100.0
 		}
 		fmt.Fprintf(sb, "**`%s`** (%.1f%% flake, %d runs)\n\n", r.TestName, overallRate, r.TotalObs)
-		sb.WriteString("| Prob | Commit | Before | After | Note |\n")
-		sb.WriteString("|------|--------|--------|-------|------|\n")
+		sb.WriteString("| Prob | Commit | Author | Before | After | Note |\n")
+		sb.WriteString("|------|--------|--------|--------|-------|------|\n")
 		for _, s := range r.TopSuspects {
 			shortSHA := s.CommitSHA
 			if len(shortSHA) > 7 {
@@ -205,8 +205,8 @@ func writeBisectPerTestTable(sb *strings.Builder, reports []TestBisectReport, re
 			if title == s.CommitSHA || title == "" {
 				title = shortSHA
 			}
-			fmt.Fprintf(sb, "| %.1f%% | [%s](%s) %s | %s | %s | %s |\n",
-				s.Probability*100, shortSHA, commitURL, title,
+			fmt.Fprintf(sb, "| %.1f%% | [%s](%s) %s | %s | %s | %s | %s |\n",
+				s.Probability*100, shortSHA, commitURL, title, s.CommitAuthor,
 				beforeStr, afterStr, s.HeuristicNote)
 		}
 		sb.WriteString("\n")

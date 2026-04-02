@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -247,8 +249,8 @@ func anyFileMatchesPrefix(files []string, prefix string) bool {
 }
 
 // runBisectForTest runs the full bisect pipeline for a single test name.
-// It builds observations, optionally applies heuristics, runs the inference, and returns the report.
-func runBisectForTest(ctx context.Context, cfg BisectConfig, testName string, allRuns []TestRun, commitOrderSlice []string, runToSHA map[int64]string) TestBisectReport {
+// commitMetas is a pre-populated, read-only cache of commit metadata (SHA → CommitMeta).
+func runBisectForTest(cfg BisectConfig, testName string, allRuns []TestRun, commitOrderSlice []string, runToSHA map[int64]string, commitMetas map[string]CommitMeta) TestBisectReport {
 	obs := buildObservations(testName, allRuns, commitOrderSlice, runToSHA)
 
 	totalPasses, totalFails := 0, 0
@@ -272,17 +274,12 @@ func runBisectForTest(ctx context.Context, cfg BisectConfig, testName string, al
 		}
 	}
 
-	// Fetch commit metadata and apply heuristics to adjust priors.
-	// commitMetas maps SHA → metadata for use in annotating results
-	commitMetas := make(map[string]CommitMeta)
+	// Apply heuristics from the pre-fetched commit metadata cache.
 	for i := range obs {
-		meta, err := fetchCommitMeta(ctx, cfg.Repo, obs[i].CommitSHA)
-		if err != nil {
-			continue
+		if meta, ok := commitMetas[obs[i].CommitSHA]; ok {
+			weight, _ := commitPriorWeight(meta, testName)
+			obs[i].Prior = weight
 		}
-		weight, _ := commitPriorWeight(meta, testName)
-		obs[i].Prior = weight
-		commitMetas[obs[i].CommitSHA] = meta
 	}
 
 	results := runBisect(obs)
@@ -426,12 +423,60 @@ func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allRuns []TestRun,
 			len(targetTests), cfg.MinFailures, cfg.MinRuns)
 	}
 
+	// Pre-fetch commit metadata for all unique SHAs that appear in the run set.
+	// Fetching once here (deduplicated, in parallel) avoids O(tests × commits) serial
+	// subprocess calls — the dominant cost of the bisect pipeline.
+	uniqueSHAs := make([]string, 0, len(runToSHA))
+	seenSHA := make(map[string]struct{}, len(runToSHA))
+	for _, sha := range runToSHA {
+		if _, ok := seenSHA[sha]; !ok {
+			seenSHA[sha] = struct{}{}
+			uniqueSHAs = append(uniqueSHAs, sha)
+		}
+	}
+	commitMetas := fetchCommitMetasParallel(ctx, cfg.Repo, uniqueSHAs, defaultConcurrency)
+	fmt.Printf("Fetched metadata for %d/%d unique commits\n", len(commitMetas), len(uniqueSHAs))
+
 	// Run bisect for each test
 	reports := make([]TestBisectReport, 0, len(targetTests))
 	for _, testName := range targetTests {
-		fmt.Printf("  Bisecting: %s\n", testName)
-		reports = append(reports, runBisectForTest(ctx, cfg, testName, allRuns, commitOrderSlice, runToSHA))
+		start := time.Now()
+		report := runBisectForTest(cfg, testName, allRuns, commitOrderSlice, runToSHA, commitMetas)
+		fmt.Printf("  Bisected %s in %s (skipped=%v)\n", testName, time.Since(start).Round(time.Millisecond), report.Skipped)
+		reports = append(reports, report)
 	}
 
 	return reports, nil
+}
+
+// fetchCommitMetasParallel fetches commit metadata for a list of SHAs concurrently,
+// bounded by maxConcurrency. Returns an immutable map of SHA → CommitMeta; failed
+// fetches are logged and omitted (heuristic priors fall back to 1.0).
+func fetchCommitMetasParallel(ctx context.Context, repo string, shas []string, maxConcurrency int) map[string]CommitMeta {
+	metas := make([]CommitMeta, len(shas))
+	ok := make([]bool, len(shas))
+
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(maxConcurrency)
+	for i, sha := range shas {
+		g.Go(func() error {
+			meta, err := fetchCommitMeta(ctx, repo, sha)
+			if err != nil {
+				fmt.Printf("Warning: failed to fetch metadata for commit %s: %v\n", sha[:7], err)
+				return nil
+			}
+			metas[i] = meta
+			ok[i] = true
+			return nil
+		})
+	}
+	_ = g.Wait()
+
+	commitMetas := make(map[string]CommitMeta, len(shas))
+	for i, sha := range shas {
+		if ok[i] {
+			commitMetas[sha] = metas[i]
+		}
+	}
+	return commitMetas
 }

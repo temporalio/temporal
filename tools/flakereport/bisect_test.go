@@ -303,7 +303,7 @@ func TestSelectTopFlakyTests(t *testing.T) {
 
 	t.Run("limits to TopN results", func(t *testing.T) {
 		var runs []TestRun
-		for range 5 {
+		for i := range 5 {
 			runs = append(runs, makeRunsForTest("TestFlaky"+string(rune('A'+i)), 40, 10)...)
 		}
 		cfg := BisectConfig{TopN: 3, MinFailures: 5, MinRuns: 30}
