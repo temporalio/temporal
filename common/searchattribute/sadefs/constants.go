@@ -112,6 +112,14 @@ const (
 	// "category=<category> cause=<cause>".
 	TemporalReportedProblems = "TemporalReportedProblems"
 
+	// TemporalWorkerVersioningRampThreshold is a DOUBLE in [0, 100) deterministically
+	// derived from the workflow ID. If this value is <= the rampingPercentage of the
+	// workflow's Worker Deployment, the workflow will use the ramping version instead
+	// of the current version (upgrade-on-continue-as-new). Users can include
+	// `TemporalWorkerVersioningRampThreshold <= X` in batch-signal visibility queries
+	// to target only workflows that will upgrade when woken.
+	TemporalWorkerVersioningRampThreshold = "TemporalWorkerVersioningRampThreshold"
+
 	// TemporalExternalPayloadCount is the count of external payloads referenced in the
 	// entire history tree of the execution.
 	TemporalExternalPayloadCount = "TemporalExternalPayloadCount"
@@ -172,21 +180,22 @@ var (
 		BinaryChecksums:       enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		// This SA is deprecated as of Versioning GA. Instead, users should use one of the following SAs for different purposes:
 		// TemporalWorkflowVersioningBehavior, TemporalWorkerDeployment, TemporalWorkerDeploymentVersion, TemporalUsedWorkerDeploymentVersions.
-		BuildIds:                             enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		BatcherNamespace:                     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		BatcherUser:                          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalScheduledStartTime:           enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		TemporalScheduledById:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalSchedulePaused:               enumspb.INDEXED_VALUE_TYPE_BOOL,
-		TemporalNamespaceDivision:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalPauseInfo:                    enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		TemporalReportedProblems:             enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		TemporalWorkerDeploymentVersion:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalWorkflowVersioningBehavior:   enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalWorkerDeployment:             enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalUsedWorkerDeploymentVersions: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		TemporalExternalPayloadCount:         enumspb.INDEXED_VALUE_TYPE_INT,
-		TemporalExternalPayloadSizeBytes:     enumspb.INDEXED_VALUE_TYPE_INT,
+		BuildIds:                              enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BatcherNamespace:                      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BatcherUser:                           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalScheduledStartTime:            enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		TemporalScheduledById:                 enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalSchedulePaused:                enumspb.INDEXED_VALUE_TYPE_BOOL,
+		TemporalNamespaceDivision:             enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalPauseInfo:                     enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalReportedProblems:              enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalWorkerDeploymentVersion:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalWorkflowVersioningBehavior:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalWorkerDeployment:              enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalUsedWorkerDeploymentVersions:  enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalWorkerVersioningRampThreshold: enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+		TemporalExternalPayloadCount:          enumspb.INDEXED_VALUE_TYPE_INT,
+		TemporalExternalPayloadSizeBytes:      enumspb.INDEXED_VALUE_TYPE_INT,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.

@@ -744,7 +744,7 @@ func FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
 }
 
 func WorkflowIdIsInRampGroup(workflowId string, rampingPercentage float32) bool {
-	wfRampThreshold := calcRampThreshold(workflowId)
+	wfRampThreshold := CalcRampThreshold(workflowId)
 	return wfRampThreshold <= float64(rampingPercentage)
 }
 
@@ -825,9 +825,9 @@ func PickFinalCurrentAndRamping(
 	return finalCurrent, finalCurrentRev, finalCurrentUpdateTime, finalRamping, isRamping, finalRampPercentage, finalRampingRev, finalRampingUpdateTime
 }
 
-// calcRampThreshold returns a number in [0, 100) that is deterministically calculated based on the
+// CalcRampThreshold returns a number in [0, 100) that is deterministically calculated based on the
 // passed id. If id is empty, a random threshold is returned.
-func calcRampThreshold(id string) float64 {
+func CalcRampThreshold(id string) float64 {
 	if id == "" {
 		return rand.Float64()
 	}

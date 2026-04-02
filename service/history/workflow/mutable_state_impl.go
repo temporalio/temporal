@@ -2897,6 +2897,17 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.executionInfo.SearchAttributes = event.SearchAttributes.GetIndexedFields()
 	}
 
+	rampThresholdPayload, err := sadefs.EncodeValue(
+		worker_versioning.CalcRampThreshold(execution.GetWorkflowId()),
+		enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+	)
+	if err != nil {
+		return err
+	}
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{
+		sadefs.TemporalWorkerVersioningRampThreshold: rampThresholdPayload,
+	})
+
 	if event.GetVersioningOverride() != nil {
 		if ms.executionInfo.VersioningInfo == nil {
 			ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
