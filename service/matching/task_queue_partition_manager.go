@@ -9,6 +9,7 @@ import (
 	"math/bits"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -86,8 +87,12 @@ type (
 		initCtx               context.Context
 		initCancel            func()
 
+		autoEnable *atomic.Bool
+
 		cancelNewMatcherSub func()
 		cancelFairnessSub   func()
+		cancelAutoEnableSub func()
+		subLock             *sync.Mutex
 
 		// rateLimitManager is used to manage the rate limit for task queues.
 		rateLimitManager *rateLimitManager
@@ -136,6 +141,8 @@ func newTaskQueuePartitionManager(
 		rateLimitManager:      rateLimitManager,
 		defaultQueueFuture:    future.NewFuture[physicalTaskQueueManager](),
 		autoEnableRateLimiter: quotas.NewRateLimiter(1.0/60, 1),
+		autoEnable:            &atomic.Bool{},
+		subLock:               &sync.Mutex{},
 	}
 	pm.initCtx, pm.initCancel = context.WithCancel(context.Background())
 
@@ -166,10 +173,15 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	}
 
 	pm.fairnessState = data.GetFairnessState()
+	changeKey := pm.partition.GradualChangeKey()
+	var autoEnable bool
+	autoEnable, pm.cancelAutoEnableSub = dynamicconfig.SubscribeGradualChange(
+		pm.config.AutoEnableV2Sub, changeKey, pm.autoEnableChanged, pm.engine.timeSource)
+	pm.autoEnable.Store(autoEnable)
+
 	switch {
-	case !pm.config.AutoEnableV2() || pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED:
+	case !autoEnable || pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED:
 		var fairness bool
-		changeKey := pm.partition.GradualChangeKey()
 		fairness, pm.cancelFairnessSub = dynamicconfig.SubscribeGradualChange(
 			pm.config.EnableFairnessSub, changeKey, unload, pm.engine.timeSource)
 		// Fairness is disabled for sticky queues for now so that we can still use TTLs.
@@ -243,12 +255,17 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 		pm.emitZeroLogicalBacklogForQueue(queue.QueueKey().Version(), queue)
 	}
 
+	pm.subLock.Lock()
 	if pm.cancelFairnessSub != nil {
 		pm.cancelFairnessSub()
 	}
 	if pm.cancelNewMatcherSub != nil {
 		pm.cancelNewMatcherSub()
 	}
+	if pm.cancelAutoEnableSub != nil {
+		pm.cancelAutoEnableSub()
+	}
+	pm.subLock.Unlock()
 
 	pm.versionedQueuesLock.Lock()
 	for version, vq := range pm.versionedQueues {
@@ -291,6 +308,63 @@ func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Contex
 	return queue.WaitUntilInitialized(ctx)
 }
 
+func (pm *taskQueuePartitionManagerImpl) autoEnableChanged(en bool) {
+	_, err := pm.defaultQueueFuture.Get(pm.initCtx)
+	if err != nil {
+		return
+	}
+	pm.autoEnable.Store(en)
+
+	// Unspecified still has subscriptions to the base dynamic config values
+	if pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED {
+		return
+	}
+
+	var newMatcher, enableFairness bool
+	switch pm.fairnessState {
+	case enumsspb.FAIRNESS_STATE_V0:
+		newMatcher = false
+		enableFairness = false
+	case enumsspb.FAIRNESS_STATE_V1:
+		newMatcher = true
+		enableFairness = false
+	case enumsspb.FAIRNESS_STATE_V2:
+		newMatcher = true
+		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
+			enableFairness = false
+		} else {
+			enableFairness = true
+		}
+	default:
+		softassert.Fail(pm.logger, "unknown fairnessstate in autoEnableChanged")
+		return
+	}
+	if newMatcher != pm.config.NewMatcher || enableFairness != pm.config.EnableFairness {
+		pm.unloadFromEngine(unloadCauseConfigChange)
+		return
+	}
+	pm.subLock.Lock()
+	defer pm.subLock.Unlock()
+	if en {
+		pm.cancelFairnessSub()
+		pm.cancelNewMatcherSub()
+		pm.cancelFairnessSub = nil
+		pm.cancelNewMatcherSub = nil
+	} else {
+		unload := func(bool) {
+			pm.unloadFromEngine(unloadCauseConfigChange)
+		}
+		changeKey := pm.partition.GradualChangeKey()
+		var fairness bool
+		fairness, pm.cancelFairnessSub = dynamicconfig.SubscribeGradualChange(
+			pm.config.EnableFairnessSub, changeKey, unload, pm.engine.timeSource)
+		if !fairness {
+			pm.config.NewMatcher, pm.cancelNewMatcherSub = dynamicconfig.SubscribeGradualChange(
+				pm.config.NewMatcherSub, changeKey, unload, pm.engine.timeSource)
+		}
+	}
+}
+
 func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context, params addTaskParams) {
 	if pm.fairnessState != enumsspb.FAIRNESS_STATE_UNSPECIFIED {
 		return
@@ -304,7 +378,7 @@ func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context,
 			return
 		}
 	}
-	if !pm.Partition().IsRoot() || pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY || !pm.config.AutoEnableV2() {
+	if !pm.Partition().IsRoot() || pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY || !pm.autoEnable.Load() {
 		return
 	}
 	if !pm.autoEnableRateLimiter.Allow() {
