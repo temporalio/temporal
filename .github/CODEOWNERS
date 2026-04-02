@@ -92,3 +92,5 @@
 /service/worker/replicator/ @temporalio/cgs
 
 /service/worker/parentclosepolicy/ @temporalio/oss-foundations @temporalio/act
+
+/tools/ @temporalio/server
