@@ -134,6 +134,9 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	ms historyi.MutableState,
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
+	// Skip replication for retention-based deletion. Both clusters have independent retention
+	// timers and will delete on their own schedule.
+	stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageReplication)
 
 	return m.deleteWorkflowExecutionInternal(ctx, nsID, we, weCtx, ms, stage, m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryProcessDeleteHistoryEventScope)))
 }
