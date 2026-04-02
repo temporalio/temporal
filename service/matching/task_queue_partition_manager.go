@@ -321,6 +321,7 @@ func (pm *taskQueuePartitionManagerImpl) autoEnableChanged(en bool) {
 	}
 
 	var newMatcher, enableFairness bool
+	isSticky := pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY
 	switch pm.fairnessState {
 	case enumsspb.FAIRNESS_STATE_V0:
 		newMatcher = false
@@ -330,34 +331,49 @@ func (pm *taskQueuePartitionManagerImpl) autoEnableChanged(en bool) {
 		enableFairness = false
 	case enumsspb.FAIRNESS_STATE_V2:
 		newMatcher = true
-		enableFairness = pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY
+		enableFairness = !isSticky
 	default:
 		softassert.Fail(pm.logger, "unknown fairnessstate in autoEnableChanged")
 		return
 	}
-	if newMatcher != pm.config.NewMatcher || enableFairness != pm.config.EnableFairness {
+	// off -> on, we have subscriptions already, check to see if we actually change anything
+	if en && (newMatcher != pm.config.NewMatcher || enableFairness != pm.config.EnableFairness) {
 		pm.unloadFromEngine(unloadCauseConfigChange)
 		return
 	}
 	pm.subLock.Lock()
-	defer pm.subLock.Unlock()
 	if en {
+		// off -> on, no change, cancel subs to be consistent but dont unload
 		pm.cancelFairnessSub()
 		pm.cancelNewMatcherSub()
 		pm.cancelFairnessSub = nil
 		pm.cancelNewMatcherSub = nil
+		pm.subLock.Unlock()
+		return
+	}
+	// on -> off, we need to grab base values from d.c. first.
+	// If our feature set would change on reload, do that,
+	// otherwise, just setup subscriptions and continue on.
+	// Since we only continue on if the feature set matches
+	// we can avoid updating EnableFairness and NewMatcher values in the config
+	unload := func(bool) {
+		pm.unloadFromEngine(unloadCauseConfigChange)
+	}
+	changeKey := pm.partition.GradualChangeKey()
+	var fairness, prio bool
+	fairness, pm.cancelFairnessSub = dynamicconfig.SubscribeGradualChange(
+		pm.config.EnableFairnessSub, changeKey, unload, pm.engine.timeSource)
+	if fairness {
+		prio = true
 	} else {
-		unload := func(bool) {
-			pm.unloadFromEngine(unloadCauseConfigChange)
-		}
-		changeKey := pm.partition.GradualChangeKey()
-		var fairness bool
-		fairness, pm.cancelFairnessSub = dynamicconfig.SubscribeGradualChange(
-			pm.config.EnableFairnessSub, changeKey, unload, pm.engine.timeSource)
-		if !fairness {
-			pm.config.NewMatcher, pm.cancelNewMatcherSub = dynamicconfig.SubscribeGradualChange(
-				pm.config.NewMatcherSub, changeKey, unload, pm.engine.timeSource)
-		}
+		prio, pm.cancelNewMatcherSub = dynamicconfig.SubscribeGradualChange(
+			pm.config.NewMatcherSub, changeKey, unload, pm.engine.timeSource)
+	}
+	fairness = fairness && !isSticky
+	// Stop will take this lock, cant call unload with it held
+	pm.subLock.Unlock()
+	if fairness != enableFairness || prio != newMatcher {
+		pm.unloadFromEngine(unloadCauseConfigChange)
 	}
 }
 
