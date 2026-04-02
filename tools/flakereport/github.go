@@ -289,7 +289,8 @@ func fetchCommitMeta(ctx context.Context, repo, sha string) (CommitMeta, error) 
 		Commit struct {
 			Message string `json:"message"`
 			Author  struct {
-				Name string `json:"name"`
+				Name string    `json:"name"`
+				Date time.Time `json:"date"`
 			} `json:"author"`
 		} `json:"commit"`
 		Files []struct {
@@ -313,9 +314,10 @@ func fetchCommitMeta(ctx context.Context, repo, sha string) (CommitMeta, error) 
 	}
 
 	return CommitMeta{
-		SHA:    sha,
-		Title:  title,
-		Author: response.Commit.Author.Name,
-		Files:  files,
+		SHA:         sha,
+		Title:       title,
+		Author:      response.Commit.Author.Name,
+		CommittedAt: response.Commit.Author.Date,
+		Files:       files,
 	}, nil
 }

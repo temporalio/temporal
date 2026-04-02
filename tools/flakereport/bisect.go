@@ -295,6 +295,9 @@ func runBisectForTest(cfg BisectConfig, testName string, allRuns []TestRun, comm
 		if meta, ok := commitMetas[results[i].CommitSHA]; ok {
 			results[i].CommitTitle = meta.Title
 			results[i].CommitAuthor = meta.Author
+			if !meta.CommittedAt.IsZero() {
+				results[i].CommitDate = meta.CommittedAt.Format("2006-01-02")
+			}
 			_, results[i].HeuristicNote = commitPriorWeight(meta, testName)
 		}
 	}

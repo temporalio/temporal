@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -102,19 +101,6 @@ func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) s
 	return content
 }
 
-// bisectHotCommit groups commit-level data used when building cross-test summaries.
-type bisectHotCommit struct {
-	title string
-	tests []string
-	prob  float64
-}
-
-// bisectHotEntry pairs a SHA with its cross-test data for sorting.
-type bisectHotEntry struct {
-	sha string
-	cc  *bisectHotCommit
-}
-
 // countQualifyingBisectReports returns the number of non-skipped reports.
 func countQualifyingBisectReports(reports []TestBisectReport) int {
 	n := 0
@@ -126,91 +112,35 @@ func countQualifyingBisectReports(reports []TestBisectReport) int {
 	return n
 }
 
-// buildBisectHotList builds a sorted list of commits that are the #1 suspect in 2+ tests.
-func buildBisectHotList(reports []TestBisectReport) []bisectHotEntry {
-	hotCommits := make(map[string]*bisectHotCommit)
+
+// writeBisectTable writes all suspect (test, commit) pairs into a single flat table.
+func writeBisectTable(sb *strings.Builder, reports []TestBisectReport, repo string) {
+	sb.WriteString("| Test | Prob | Commit | Date | Author | Before | After | Note |\n")
+	sb.WriteString("|------|------|--------|------|--------|--------|-------|------|\n")
 	for _, r := range reports {
 		if r.Skipped || len(r.TopSuspects) == 0 {
 			continue
 		}
-		top := r.TopSuspects[0]
-		if _, ok := hotCommits[top.CommitSHA]; !ok {
-			hotCommits[top.CommitSHA] = &bisectHotCommit{title: top.CommitTitle, prob: top.Probability}
-		}
-		hotCommits[top.CommitSHA].tests = append(hotCommits[top.CommitSHA].tests, r.TestName)
-	}
-	var hotList []bisectHotEntry
-	for sha, cc := range hotCommits {
-		if len(cc.tests) >= 2 {
-			hotList = append(hotList, bisectHotEntry{sha, cc})
-		}
-	}
-	sort.Slice(hotList, func(i, j int) bool {
-		return len(hotList[i].cc.tests) > len(hotList[j].cc.tests)
-	})
-	return hotList
-}
-
-// writeBisectHotCommitsTable writes the cross-test hot commits markdown table into sb.
-func writeBisectHotCommitsTable(sb *strings.Builder, hotList []bisectHotEntry, repo string) {
-	if len(hotList) == 0 {
-		return
-	}
-	sb.WriteString("### Cross-Test Hot Commits\n\n")
-	sb.WriteString("| Commit | Tests | Title |\n")
-	sb.WriteString("|--------|-------|-------|\n")
-	for _, h := range hotList {
-		shortSHA := h.sha
-		if len(shortSHA) > 7 {
-			shortSHA = shortSHA[:7]
-		}
-		commitURL := fmt.Sprintf("https://github.com/%s/commit/%s", repo, h.sha)
-		title := h.cc.title
-		if title == h.sha || title == "" {
-			title = shortSHA
-		}
-		fmt.Fprintf(sb, "| [%s](%s) | %d | %s |\n",
-			shortSHA, commitURL, len(h.cc.tests), title)
-	}
-	sb.WriteString("\n")
-}
-
-// writeBisectPerTestTable writes per-test suspect tables into sb.
-func writeBisectPerTestTable(sb *strings.Builder, reports []TestBisectReport, repo string) {
-	sb.WriteString("### Per-Test Suspects\n\n")
-	for _, r := range reports {
-		if r.Skipped || len(r.TopSuspects) == 0 {
-			continue
-		}
-		overallRate := 0.0
-		if r.TotalObs > 0 {
-			top := r.TopSuspects[0]
-			allFails := top.FailsBefore + top.FailsAfter
-			overallRate = float64(allFails) / float64(r.TotalObs) * 100.0
-		}
-		fmt.Fprintf(sb, "**`%s`** (%.1f%% flake, %d runs)\n\n", r.TestName, overallRate, r.TotalObs)
-		sb.WriteString("| Prob | Commit | Author | Before | After | Note |\n")
-		sb.WriteString("|------|--------|--------|--------|-------|------|\n")
 		for _, s := range r.TopSuspects {
 			shortSHA := s.CommitSHA
 			if len(shortSHA) > 7 {
 				shortSHA = shortSHA[:7]
 			}
 			commitURL := fmt.Sprintf("https://github.com/%s/commit/%s", repo, s.CommitSHA)
-			beforeStr := fmt.Sprintf("%d/%d (%.0f%%)", s.FailsBefore, s.PassesBefore+s.FailsBefore,
-				pct(s.FailsBefore, s.PassesBefore+s.FailsBefore))
-			afterStr := fmt.Sprintf("%d/%d (%.0f%%)", s.FailsAfter, s.PassesAfter+s.FailsAfter,
-				pct(s.FailsAfter, s.PassesAfter+s.FailsAfter))
 			title := s.CommitTitle
 			if title == s.CommitSHA || title == "" {
 				title = shortSHA
 			}
-			fmt.Fprintf(sb, "| %.1f%% | [%s](%s) %s | %s | %s | %s | %s |\n",
-				s.Probability*100, shortSHA, commitURL, title, s.CommitAuthor,
-				beforeStr, afterStr, s.HeuristicNote)
+			beforeStr := fmt.Sprintf("%d/%d (%.0f%%)", s.FailsBefore, s.PassesBefore+s.FailsBefore,
+				pct(s.FailsBefore, s.PassesBefore+s.FailsBefore))
+			afterStr := fmt.Sprintf("%d/%d (%.0f%%)", s.FailsAfter, s.PassesAfter+s.FailsAfter,
+				pct(s.FailsAfter, s.PassesAfter+s.FailsAfter))
+			fmt.Fprintf(sb, "| `%s` | %.1f%% | [%s](%s) %s | %s | %s | %s | %s | %s |\n",
+				r.TestName, s.Probability*100, shortSHA, commitURL, title,
+				s.CommitDate, s.CommitAuthor, beforeStr, afterStr, s.HeuristicNote)
 		}
-		sb.WriteString("\n")
 	}
+	sb.WriteString("\n")
 }
 
 // generateBisectSummary creates the markdown section for bisect results to append to the GitHub summary.
@@ -237,9 +167,7 @@ func generateBisectSummary(reports []TestBisectReport, repo string) string {
 	}
 	sb.WriteString("\n\n")
 
-	hotList := buildBisectHotList(reports)
-	writeBisectHotCommitsTable(&sb, hotList, repo)
-	writeBisectPerTestTable(&sb, reports, repo)
+	writeBisectTable(&sb, reports, repo)
 	return sb.String()
 }
 

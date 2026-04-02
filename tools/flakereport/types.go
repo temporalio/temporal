@@ -110,9 +110,9 @@ type BisectResult struct {
 	FailsBefore  int
 	PassesAfter  int
 	FailsAfter   int
-	// Populated if --bisect-heuristics is used:
 	CommitTitle   string
 	CommitAuthor  string
+	CommitDate    string // formatted date of the commit, e.g. "2024-01-15"
 	HeuristicNote string // e.g. "only touches .github/ — deprioritized"
 }
 
@@ -127,10 +127,11 @@ type TestBisectReport struct {
 // CommitMeta holds changed-file info fetched from the GitHub API.
 // GET /repos/{owner}/{repo}/commits/{sha}
 type CommitMeta struct {
-	SHA    string
-	Title  string
-	Author string
-	Files  []string // relative paths of changed files
+	SHA         string
+	Title       string
+	Author      string
+	CommittedAt time.Time
+	Files       []string // relative paths of changed files
 }
 
 // BisectConfig holds configuration for a bisect analysis run.
