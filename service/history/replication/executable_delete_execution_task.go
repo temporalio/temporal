@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
@@ -87,6 +88,11 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 		return nil
 	}
 
+	// Only process workflow archetype deletion for now.
+	if e.archetypeID() != chasm.WorkflowArchetypeID {
+		return nil
+	}
+
 	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
 
@@ -110,6 +116,13 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 		},
 	})
 	return err
+}
+
+func (e *ExecutableDeleteExecutionTask) archetypeID() uint32 {
+	if rawInfo := e.ReplicationTask().GetRawTaskInfo(); rawInfo != nil {
+		return rawInfo.ArchetypeId
+	}
+	return chasm.UnspecifiedArchetypeID
 }
 
 func (e *ExecutableDeleteExecutionTask) HandleErr(err error) error {

@@ -8,6 +8,7 @@ import (
 )
 
 var _ Task = (*DeleteExecutionReplicationTask)(nil)
+var _ HasArchetypeID = (*DeleteExecutionReplicationTask)(nil)
 
 type DeleteExecutionReplicationTask struct {
 	definition.WorkflowKey
@@ -49,4 +50,8 @@ func (a *DeleteExecutionReplicationTask) GetCategory() Category {
 
 func (a *DeleteExecutionReplicationTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_REPLICATION_DELETE_EXECUTION
+}
+
+func (a *DeleteExecutionReplicationTask) GetArchetypeID() uint32 {
+	return a.ArchetypeID
 }
