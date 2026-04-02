@@ -65,7 +65,9 @@ jobs:
             --slack-webhook "$SLACK_WEBHOOK" \
             --run-id "$RUN_ID" \
             --ref-name "$REF_NAME" \
-            --sha "$SHA"
+            --sha "$SHA" \
+            --bisect \
+            --bisect-days 28
 
       - name: Upload generated reports
         uses: actions/upload-artifact@v6
