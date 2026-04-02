@@ -70,13 +70,13 @@ clusterMetadata:
       initialFailoverVersion: 3
       rpcName: "frontend"
       rpcAddress: "localhost:9233"
-# Use temporal --address 127.0.0.1:9233 operator cluster upsert --frontend-address "127.0.0.1:7233 --enable-connection"
+# Use temporal --address 127.0.0.1:9233 operator cluster upsert --frontend-address "127.0.0.1:7233 --enable-connection --enable-replication"
 #    active:
 #      enabled: true
 #      initialFailoverVersion: 1
 #      rpcName: "frontend"
 #      rpcAddress: "localhost:7233"
-# Use temporal --address 127.0.0.1:9233 operator cluster upsert --frontend-address "127.0.0.1:8233 --enable-connection"
+# Use temporal --address 127.0.0.1:9233 operator cluster upsert --frontend-address "127.0.0.1:8233 --enable-connection --enable-replication"
 #    standby:
 #      enabled: true
 #      initialFailoverVersion: 2
