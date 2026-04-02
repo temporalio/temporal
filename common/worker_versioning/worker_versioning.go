@@ -300,7 +300,7 @@ func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient, v
 		}
 
 		// Cache miss — resolve via matching RPC.
-		isMember, isDrainedOrInactive, err := checkTaskQueueVersionMembership(ctx, matchingClient, namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW, version)
+		isMember, isDrainedOrInactive, err := checkVersionMembershipAndReactivationEligibility(ctx, matchingClient, namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW, version)
 		if err != nil {
 			return false, err
 		}
@@ -315,10 +315,11 @@ func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient, v
 	}
 }
 
-// checkTaskQueueVersionMembership calls matching to check if a task queue belongs to a version,
-// falling back to fetching the full user data if the CheckTaskQueueVersionMembership RPC is not implemented. (this can happen
-// during rolling upgrades of matching and history services where in history would be on a higher version than matching)
-func checkTaskQueueVersionMembership(
+// checkVersionMembershipAndReactivationEligibility calls matching to check if a task queue belongs to a version
+// and whether the version is eligible for reactivation (i.e., drained or inactive).
+// Falls back to fetching the full user data if the CheckTaskQueueVersionMembership RPC is not implemented
+// (this can happen during rolling upgrades where history is on a higher version than matching).
+func checkVersionMembershipAndReactivationEligibility(
 	ctx context.Context,
 	matchingClient resource.MatchingClient,
 	namespaceID, tq string,
@@ -409,6 +410,7 @@ func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploym
 	return false
 }
 
+//nolint:staticcheck
 // IsVersionDrainedOrInactive checks the version's status in the task queue's deployment data.
 // Returns nil if the version is not found in the deployment data (cannot determine status).
 func IsVersionDrainedOrInactive(
@@ -416,6 +418,16 @@ func IsVersionDrainedOrInactive(
 	deploymentName string,
 	buildID string,
 ) *bool {
+	// Check old format first (deprecated versions list).
+	for _, vd := range deployments.GetVersions() {
+		if vd.GetVersion().GetDeploymentName() == deploymentName && vd.GetVersion().GetBuildId() == buildID {
+			result := vd.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED ||
+				vd.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
+			return &result
+		}
+	}
+
+	// Check new format (deployments_data map).
 	deploymentData := deployments.GetDeploymentsData()[deploymentName]
 	versionData := deploymentData.GetVersions()[buildID]
 	if versionData == nil {
@@ -642,7 +654,7 @@ func ExtractVersioningBehaviorFromOverride(override *workflowpb.VersioningOverri
 	return override.GetBehavior()
 }
 
-func validatePinnedVersionInTaskQueue(ctx context.Context,
+func validateVersionAndGetReactivationEligibility(ctx context.Context,
 	pinnedVersion *deploymentpb.WorkerDeploymentVersion,
 	matchingClient resource.MatchingClient,
 	versionCache VersionMembershipAndReactivationStatusCache,
@@ -666,7 +678,7 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 		)
 	}
 
-	isMember, isDrainedOrInactive, err := checkTaskQueueVersionMembership(ctx, matchingClient, namespaceID, tq, tqType, pinnedVersion)
+	isMember, isDrainedOrInactive, err := checkVersionMembershipAndReactivationEligibility(ctx, matchingClient, namespaceID, tq, tqType, pinnedVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -689,7 +701,7 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 	return isDrainedOrInactive, nil
 }
 
-func ValidateVersioningOverride(ctx context.Context,
+func ValidateVersioningOverrideAndGetReactivationEligibility(ctx context.Context,
 	override *workflowpb.VersioningOverride,
 	matchingClient resource.MatchingClient,
 	versionCache VersionMembershipAndReactivationStatusCache,
@@ -709,7 +721,7 @@ func ValidateVersioningOverride(ctx context.Context,
 		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
 			return nil, serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
 		}
-		return validatePinnedVersionInTaskQueue(ctx, p.GetVersion(), matchingClient, versionCache, tq, tqType, namespaceID)
+		return validateVersionAndGetReactivationEligibility(ctx, p.GetVersion(), matchingClient, versionCache, tq, tqType, namespaceID)
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
@@ -723,7 +735,7 @@ func ValidateVersioningOverride(ctx context.Context,
 				return nil, err
 			}
 
-			return validatePinnedVersionInTaskQueue(ctx, ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()), matchingClient, versionCache, tq, tqType, namespaceID)
+			return validateVersionAndGetReactivationEligibility(ctx, ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()), matchingClient, versionCache, tq, tqType, namespaceID)
 
 		} else {
 			return nil, serviceerror.NewInvalidArgument("must provide deployment (deprecated) or pinned version if behavior is 'PINNED'")

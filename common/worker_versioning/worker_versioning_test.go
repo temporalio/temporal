@@ -788,7 +788,7 @@ func TestWorkerDeploymentVersionFromStringV32(t *testing.T) {
 	}
 }
 
-func TestValidateVersioningOverride(t *testing.T) {
+func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 	testNamespaceID := "test-namespace-id"
 	testTaskQueue := "test-task-queue"
 	testVersion := &deploymentpb.WorkerDeploymentVersion{
@@ -1251,7 +1251,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 			if tqType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
 				tqType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
 			}
-			isDrainedOrInactive, err := ValidateVersioningOverride(
+			isDrainedOrInactive, err := ValidateVersioningOverrideAndGetReactivationEligibility(
 				context.Background(),
 				tt.override,
 				mockMatchingClient,

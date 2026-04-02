@@ -757,6 +757,8 @@ message VersionReactivationEligibility {
 message CheckTaskQueueVersionMembershipResponse {
     bool is_member = 1;
     // Indicates whether the version is eligible for reactivation (i.e., drained or inactive).
+    // Reactivation signals are only sent to drained or inactive versions, as users may start
+    // workflows pinned to such versions and they need to be brought back to a draining state.
     // When absent, the caller should send the signal unconditionally for backwards compatibility.
     VersionReactivationEligibility reactivation_eligibility = 2;
 }

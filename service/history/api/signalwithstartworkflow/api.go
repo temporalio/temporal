@@ -77,7 +77,7 @@ func Invoke(
 	}
 
 	// Validation for versioning override, if any.
-	isDrainedOrInactive, err := worker_versioning.ValidateVersioningOverride(ctx, request.GetVersioningOverride(), matchingClient, versionCache, request.GetTaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID.String())
+	isDrainedOrInactive, err := worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, request.GetVersioningOverride(), matchingClient, versionCache, request.GetTaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID.String())
 	if err != nil {
 		return nil, err
 	}

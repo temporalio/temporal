@@ -221,8 +221,9 @@ func GetResetReapplyExcludeTypes(
 }
 
 // validatePostResetOperationInputs validates the optional post reset operation inputs.
-// Returns a slice of *bool (one per operation) indicating whether each operation's
-// pinned version is drained/inactive, for use when sending reactivation signals.
+// Also returns a slice of *bool (one per operation) indicating whether each operation's
+// pinned version is drained or inactive, used to decide whether to send reactivation signals.
+// This is only populated for UpdateWorkflowOptions operations; other operation types default to nil.
 func validatePostResetOperationInputs(ctx context.Context,
 	postResetOperations []*workflowpb.PostResetOperation,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -234,7 +235,7 @@ func validatePostResetOperationInputs(ctx context.Context,
 		switch op := operation.GetVariant().(type) {
 		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
 			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
-			isDrainedOrInactive, err := worker_versioning.ValidateVersioningOverride(ctx, opts.GetVersioningOverride(), matchingClient, versionCache, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID)
+			isDrainedOrInactive, err := worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, opts.GetVersioningOverride(), matchingClient, versionCache, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID)
 			if err != nil {
 				return nil, err
 			}

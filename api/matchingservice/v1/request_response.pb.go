@@ -5421,6 +5421,8 @@ type CheckTaskQueueVersionMembershipResponse struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	IsMember bool                   `protobuf:"varint,1,opt,name=is_member,json=isMember,proto3" json:"is_member,omitempty"`
 	// Indicates whether the version is eligible for reactivation (i.e., drained or inactive).
+	// Reactivation signals are only sent to drained or inactive versions, as users may start
+	// workflows pinned to such versions and they need to be brought back to a draining state.
 	// When absent, the caller should send the signal unconditionally for backwards compatibility.
 	ReactivationEligibility *VersionReactivationEligibility `protobuf:"bytes,2,opt,name=reactivation_eligibility,json=reactivationEligibility,proto3" json:"reactivation_eligibility,omitempty"`
 	unknownFields           protoimpl.UnknownFields

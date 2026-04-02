@@ -143,7 +143,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 	}
 
 	// Validation for versioning override, if any.
-	s.isDrainedOrInactive, err = worker_versioning.ValidateVersioningOverride(ctx, request.GetVersioningOverride(), s.matchingClient, s.versionCache, request.GetTaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, s.namespace.ID().String())
+	s.isDrainedOrInactive, err = worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, request.GetVersioningOverride(), s.matchingClient, s.versionCache, request.GetTaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, s.namespace.ID().String())
 	if err != nil {
 		return err
 	}

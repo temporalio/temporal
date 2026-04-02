@@ -9,7 +9,7 @@ import (
 
 // VersionMembershipAndReactivationStatusCache caches results of Matching's
 // CheckTaskQueueVersionMembership calls. It stores two pieces of information per version:
-//   - isMember: whether the version exists in the task queue (used for pinned override validation).
+//   - isMember: whether the task queue exists in the version (used for pinned override validation).
 //   - isDrainedOrInactive: whether the version's status is DRAINED or INACTIVE, used to decide
 //     if a reactivation signal should be sent. nil means unknown (e.g. old matching server).
 //
