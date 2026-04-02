@@ -582,11 +582,11 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 	if err != nil {
 		if computeConfig != nil {
 			deleteCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-			err = workflow.ExecuteActivity(deleteCtx, d.a.DeleteWorkerControllerInstanceFromDeployment, &deploymentspb.DeleteWorkerControllerInstanceInput{
+			deleteErr := workflow.ExecuteActivity(deleteCtx, d.a.DeleteWorkerControllerInstanceFromDeployment, &deploymentspb.DeleteWorkerControllerInstanceInput{
 				Version:  worker_versioning.ExternalWorkerDeploymentVersionFromVersion(versionObj),
 				Identity: args.GetIdentity(),
 			}).Get(ctx, nil)
-			if err != nil {
+			if deleteErr != nil {
 				d.logger.Warn("Failed to delete worker controller instance", "error", err)
 			}
 		}
@@ -602,6 +602,9 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 	}
 	d.metrics.Counter(metrics.WorkerDeploymentVersionCreated.Name()).Inc(1)
 
+	if err := d.updateMemo(ctx); err != nil {
+		return nil, err
+	}
 	return &deploymentspb.CreateWorkerDeploymentVersionResponse{}, nil
 }
 

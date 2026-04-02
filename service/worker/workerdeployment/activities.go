@@ -3,9 +3,11 @@ package workerdeployment
 import (
 	"cmp"
 	"context"
+	"errors"
 	"sync"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
@@ -279,7 +281,11 @@ func (a *Activities) StartWorkerDeploymentVersionWorkflow(
 func (a *Activities) UpdateWorkerControllerInstanceFromDeployment(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) error {
 	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
 	if err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups()); err != nil {
-		return temporal.NewApplicationError(err.Error(), errInvalidComputeConfig)
+		var invalidArgs *serviceerror.InvalidArgument
+		if errors.As(err, &invalidArgs) {
+			return temporal.NewApplicationError(err.Error(), errInvalidComputeConfig)
+		}
+		return err
 	}
 	return nil
 }
