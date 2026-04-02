@@ -42,7 +42,7 @@ service ActivityService {
     rpc PauseActivityExecution(PauseActivityExecutionRequest) returns (PauseActivityExecutionResponse) {
         option (temporal.server.api.routing.v1.routing) = {
             business_id: "frontend_request.workflow_id"
-            business_id_fallback: "frontend_request.activity_id"
+            business_id: "frontend_request.activity_id"
         };
         option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
@@ -50,7 +50,7 @@ service ActivityService {
     rpc UnpauseActivityExecution(UnpauseActivityExecutionRequest) returns (UnpauseActivityExecutionResponse) {
         option (temporal.server.api.routing.v1.routing) = {
             business_id: "frontend_request.workflow_id"
-            business_id_fallback: "frontend_request.activity_id"
+            business_id: "frontend_request.activity_id"
         };
         option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
@@ -58,7 +58,7 @@ service ActivityService {
     rpc ResetActivityExecution(ResetActivityExecutionRequest) returns (ResetActivityExecutionResponse) {
         option (temporal.server.api.routing.v1.routing) = {
             business_id: "frontend_request.workflow_id"
-            business_id_fallback: "frontend_request.activity_id"
+            business_id: "frontend_request.activity_id"
         };
         option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
@@ -66,7 +66,7 @@ service ActivityService {
     rpc UpdateActivityExecutionOptions(UpdateActivityExecutionOptionsRequest) returns (UpdateActivityExecutionOptionsResponse) {
         option (temporal.server.api.routing.v1.routing) = {
             business_id: "frontend_request.workflow_id"
-            business_id_fallback: "frontend_request.activity_id"
+            business_id: "frontend_request.activity_id"
         };
         option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
