@@ -424,7 +424,7 @@ func (s *TransientTaskSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents
 	_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	env.Error(err)
-	env.IsType(&serviceerror.InvalidArgument{}, err)
+	env.ErrorAs(err, new(*serviceerror.InvalidArgument))
 	env.Equal("UnhandledCommand", err.Error())
 
 	// second workflow task, which will complete the workflow
