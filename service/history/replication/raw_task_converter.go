@@ -685,7 +685,7 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 
 	progress := c.replicationCache.Get(taskInfo.RunID, targetClusterID)
 
-	if progress.VersionedTransitionSent(taskInfo.VersionedTransition) {
+	if progress != nil && progress.VersionedTransitionSent(taskInfo.VersionedTransition) {
 		return c.generateVerifyVersionedTransitionTask(taskInfo, mutableState)
 	}
 

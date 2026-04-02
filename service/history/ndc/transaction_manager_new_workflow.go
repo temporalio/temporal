@@ -71,6 +71,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 		return err
 	}
 	if currentRunID == targetRunID {
+		// Need to reload the mutable state to verify the duplication
 		return consts.ErrDuplicate
 	}
 

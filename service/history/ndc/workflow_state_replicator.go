@@ -793,7 +793,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	}
 	snapshot := attribute.State
 	if localMutableState == nil {
-		return r.applySnapshotWhenWorkflowNotExist(
+		err := r.applySnapshotWhenWorkflowNotExist(
 			ctx,
 			namespaceID,
 			workflowID,
@@ -807,6 +807,23 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 			true,
 			versionedTransition.IsCloseTransferTaskAcked && versionedTransition.IsForceReplication,
 		)
+		if errors.Is(err, consts.ErrDuplicate) {
+			ms, msErr := wfCtx.LoadMutableState(ctx, r.shardContext)
+			switch msErr.(type) {
+			case *serviceerror.NotFound:
+				return err
+			case nil:
+				// The previous run may replicate the first batch of workflow
+				// and this mutable state may update after acquire the workflow lock.
+				// Retry to apply snapshot with mutable state
+				localMutableState = ms
+			default:
+				return err
+			}
+		}
+		if err != nil {
+			return err
+		}
 	}
 	return r.applySnapshotWhenWorkflowExist(
 		ctx,
