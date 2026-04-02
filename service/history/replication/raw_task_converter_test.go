@@ -1987,5 +1987,4 @@ func (s *rawTaskConverterSuite) TestConvertDeleteExecutionReplicationTask() {
 	s.Equal(s.namespaceID, attrs.NamespaceId)
 	s.Equal(s.workflowID, attrs.WorkflowId)
 	s.Equal(s.runID, attrs.RunId)
-	s.Equal(chasm.WorkflowArchetypeID, attrs.ArchetypeId)
 }

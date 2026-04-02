@@ -332,7 +332,6 @@ func convertDeleteExecutionReplicationTask(
 				NamespaceId: taskInfo.NamespaceID,
 				WorkflowId:  taskInfo.WorkflowID,
 				RunId:       taskInfo.RunID,
-				ArchetypeId: taskInfo.ArchetypeID,
 			},
 		},
 		VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),

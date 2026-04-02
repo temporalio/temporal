@@ -173,7 +173,6 @@ message HistoryTaskAttributes {
   temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 8;
   string new_run_id = 9;
   repeated temporal.api.common.v1.DataBlob events_batches = 10;
-  uint32 archetype_id = 11;
 }
 
 message SyncWorkflowStateTaskAttributes {
