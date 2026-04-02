@@ -3474,8 +3474,27 @@ func (e *matchingEngineImpl) CheckTaskQueueVersionMembership(
 	}
 
 	typedUserData := userData.GetData().GetPerType()[int32(request.GetTaskQueueType())]
-	present := worker_versioning.HasDeploymentVersion(typedUserData.GetDeploymentData(), request.GetVersion())
-	return &matchingservice.CheckTaskQueueVersionMembershipResponse{IsMember: present}, nil
+	deploymentData := typedUserData.GetDeploymentData()
+	present := worker_versioning.HasDeploymentVersion(deploymentData, request.GetVersion())
+
+	// Check the version's status so callers can skip sending reactivation signals
+	// for versions that are not drained or inactive, avoiding unnecessary RPCs and
+	// workflow history events on the version workflow.
+	var reactivationEligibility *matchingservice.VersionReactivationEligibility
+	if isDrainedOrInactive := worker_versioning.IsVersionDrainedOrInactive(
+		deploymentData,
+		request.GetVersion().GetDeploymentName(),
+		request.GetVersion().GetBuildId(),
+	); isDrainedOrInactive != nil {
+		reactivationEligibility = &matchingservice.VersionReactivationEligibility{
+			IsDrainedOrInactive: *isDrainedOrInactive,
+		}
+	}
+
+	return &matchingservice.CheckTaskQueueVersionMembershipResponse{
+		IsMember:                present,
+		ReactivationEligibility: reactivationEligibility,
+	}, nil
 }
 
 func (e *matchingEngineImpl) UpdateTaskQueueConfig(

@@ -31,25 +31,26 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
-type noopVersionMembershipCache struct{}
+type noopVersionCache struct{}
 
-func (noopVersionMembershipCache) Get(
+func (noopVersionCache) Get(
 	_ string,
 	_ string,
 	_ enumspb.TaskQueueType,
 	_ string,
 	_ string,
-) (isMember bool, ok bool) {
-	return false, false
+) (isMember bool, isDrainedOrInactive *bool, ok bool) {
+	return false, nil, false
 }
 
-func (noopVersionMembershipCache) Put(
+func (noopVersionCache) Put(
 	_ string,
 	_ string,
 	_ enumspb.TaskQueueType,
 	_ string,
 	_ string,
 	_ bool,
+	_ *bool,
 ) {
 }
 
@@ -275,7 +276,7 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 		s.shardContext,
 		s.workflowConsistencyChecker,
 		s.mockMatchingClient,
-		noopVersionMembershipCache{},  // cache not meant to be used in this test
+		noopVersionCache{},  // cache not meant to be used in this test
 		noopReactivationSignalCache{}, // cache not meant to be used in this test
 		noopReactivationSignaler,      // signaler not meant to be used in this test
 	)

@@ -404,7 +404,7 @@ func VersionMembershipCacheProvider(
 	lc fx.Lifecycle,
 	serviceConfig *configs.Config,
 	metricsHandler metrics.Handler,
-) worker_versioning.VersionMembershipCache {
+) worker_versioning.VersionMembershipAndReactivationStatusCache {
 	c := commoncache.New(serviceConfig.VersionMembershipCacheMaxSize(), &commoncache.Options{
 		TTL: max(1*time.Second, serviceConfig.VersionMembershipCacheTTL()),
 	})
@@ -414,7 +414,7 @@ func VersionMembershipCacheProvider(
 			return nil
 		},
 	})
-	return worker_versioning.NewVersionMembershipCache(c, metricsHandler)
+	return worker_versioning.NewVersionMembershipAndReactivationStatusCache(c, metricsHandler)
 }
 
 func ReactivationSignalCacheProvider(

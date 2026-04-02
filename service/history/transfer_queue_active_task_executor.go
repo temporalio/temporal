@@ -54,7 +54,7 @@ type (
 
 		workflowResetter        ndc.WorkflowResetter
 		parentClosePolicyClient parentclosepolicy.Client
-		versionMembershipCache  worker_versioning.VersionMembershipCache
+		versionCache            worker_versioning.VersionMembershipAndReactivationStatusCache
 	}
 )
 
@@ -69,7 +69,7 @@ func newTransferQueueActiveTaskExecutor(
 	matchingRawClient resource.MatchingRawClient,
 	visibilityManager manager.VisibilityManager,
 	chasmEngine chasm.Engine,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 ) queues.Executor {
 	return &transferQueueActiveTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
@@ -93,7 +93,7 @@ func newTransferQueueActiveTaskExecutor(
 			sdkClientFactory,
 			config.NumParentClosePolicySystemWorkflows(),
 		),
-		versionMembershipCache: versionMembershipCache,
+		versionCache: versionCache,
 	}
 }
 
@@ -924,7 +924,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		if attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit pinned version if child is in a different namespace
 			inheritedPinnedVersion = nil
 		} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
-			newTQInPinnedVersion, err = worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient, t.versionMembershipCache)(ctx, attributes.GetNamespaceId(), newTQ, inheritedPinnedVersion)
+			newTQInPinnedVersion, err = worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient, t.versionCache)(ctx, attributes.GetNamespaceId(), newTQ, inheritedPinnedVersion)
 			if err != nil {
 				return fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
 			}
@@ -962,7 +962,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			if attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit auto upgrade info if child is in a different namespace
 				inheritedAutoUpgradeInfo = nil
 			} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
-				TQInSourceDeploymentVersion, err := worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient, t.versionMembershipCache)(ctx, attributes.GetNamespaceId(), newTQ, inheritedAutoUpgradeInfo.GetSourceDeploymentVersion())
+				TQInSourceDeploymentVersion, err := worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient, t.versionCache)(ctx, attributes.GetNamespaceId(), newTQ, inheritedAutoUpgradeInfo.GetSourceDeploymentVersion())
 				if err != nil {
 					return fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
 				}

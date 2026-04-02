@@ -750,8 +750,15 @@ message CheckTaskQueueVersionMembershipRequest {
     temporal.server.api.deployment.v1.WorkerDeploymentVersion version = 4;
 }
 
+message VersionReactivationEligibility {
+    bool is_drained_or_inactive = 1;
+}
+
 message CheckTaskQueueVersionMembershipResponse {
     bool is_member = 1;
+    // Indicates whether the version is eligible for reactivation (i.e., drained or inactive).
+    // When absent, the caller should send the signal unconditionally for backwards compatibility.
+    VersionReactivationEligibility reactivation_eligibility = 2;
 }
 
 // PollConditions are extra conditions to set on the poll. Only supported with new matcher.

@@ -62,7 +62,7 @@ type (
 		persistenceVisibilityMgr       manager.VisibilityManager
 		commandHandlerRegistry         *workflow.CommandHandlerRegistry
 		matchingClient                 matchingservice.MatchingServiceClient
-		versionMembershipCache         worker_versioning.VersionMembershipCache
+		versionCache                   worker_versioning.VersionMembershipAndReactivationStatusCache
 	}
 )
 
@@ -75,7 +75,7 @@ func NewWorkflowTaskCompletedHandler(
 	visibilityManager manager.VisibilityManager,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 ) *WorkflowTaskCompletedHandler {
 	return &WorkflowTaskCompletedHandler{
 		config:                     shardContext.GetConfig(),
@@ -98,7 +98,7 @@ func NewWorkflowTaskCompletedHandler(
 		persistenceVisibilityMgr:       visibilityManager,
 		commandHandlerRegistry:         commandHandlerRegistry,
 		matchingClient:                 matchingClient,
-		versionMembershipCache:         versionMembershipCache,
+		versionCache:                   versionCache,
 	}
 }
 
@@ -404,7 +404,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			hasBufferedEventsOrMessages,
 			handler.commandHandlerRegistry,
 			handler.matchingClient,
-			handler.versionMembershipCache,
+			handler.versionCache,
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(

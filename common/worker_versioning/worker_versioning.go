@@ -286,13 +286,13 @@ func MakeDirectiveForWorkflowTask(
 
 type IsWFTaskQueueInVersionDetector = func(ctx context.Context, namespaceID, tq string, version *deploymentpb.WorkerDeploymentVersion) (bool, error)
 
-func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient, versionMembershipCache VersionMembershipCache) IsWFTaskQueueInVersionDetector {
+func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient, versionCache VersionMembershipAndReactivationStatusCache) IsWFTaskQueueInVersionDetector {
 	return func(ctx context.Context,
 		namespaceID, tq string,
 		version *deploymentpb.WorkerDeploymentVersion) (bool, error) {
 
 		// Check cache first.
-		if isMember, ok := versionMembershipCache.Get(
+		if isMember, _, ok := versionCache.Get(
 			namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			version.GetDeploymentName(), version.GetBuildId(),
 		); ok {
@@ -300,16 +300,16 @@ func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient, v
 		}
 
 		// Cache miss — resolve via matching RPC.
-		isMember, err := checkTaskQueueVersionMembership(ctx, matchingClient, namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW, version)
+		isMember, isDrainedOrInactive, err := checkTaskQueueVersionMembership(ctx, matchingClient, namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW, version)
 		if err != nil {
 			return false, err
 		}
 
 		// Add result to cache
-		versionMembershipCache.Put(
+		versionCache.Put(
 			namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			version.GetDeploymentName(), version.GetBuildId(),
-			isMember,
+			isMember, isDrainedOrInactive,
 		)
 		return isMember, nil
 	}
@@ -324,7 +324,7 @@ func checkTaskQueueVersionMembership(
 	namespaceID, tq string,
 	tqType enumspb.TaskQueueType,
 	version *deploymentpb.WorkerDeploymentVersion,
-) (bool, error) {
+) (isMember bool, isDrainedOrInactive *bool, err error) {
 	resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
 		NamespaceId:   namespaceID,
 		TaskQueue:     tq,
@@ -338,9 +338,14 @@ func checkTaskQueueVersionMembership(
 		if errors.As(err, &unimplErr) {
 			return checkVersionMembershipViaUserData(ctx, matchingClient, namespaceID, tq, tqType, version)
 		}
-		return false, err
+		return false, nil, err
 	}
-	return resp.GetIsMember(), nil
+	var drainedOrInactive *bool
+	if eligibility := resp.GetReactivationEligibility(); eligibility != nil {
+		v := eligibility.GetIsDrainedOrInactive()
+		drainedOrInactive = &v
+	}
+	return resp.GetIsMember(), drainedOrInactive, nil
 }
 
 // checkVersionMembershipViaUserData is the fallback for when matching doesn't support
@@ -353,7 +358,7 @@ func checkVersionMembershipViaUserData(
 	tq string,
 	tqType enumspb.TaskQueueType,
 	version *deploymentpb.WorkerDeploymentVersion,
-) (bool, error) {
+) (bool, *bool, error) {
 	resp, err := matchingClient.GetTaskQueueUserData(ctx,
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:   namespaceID,
@@ -361,13 +366,16 @@ func checkVersionMembershipViaUserData(
 			TaskQueueType: tqType,
 		})
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(tqType)]
 	if !ok {
-		return false, nil
+		return false, nil, nil
 	}
-	return HasDeploymentVersion(tqData.GetDeploymentData(), DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version))), nil
+	deploymentData := tqData.GetDeploymentData()
+	isMember := HasDeploymentVersion(deploymentData, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version)))
+	isDrainedOrInactive := IsVersionDrainedOrInactive(deploymentData, version.GetDeploymentName(), version.GetBuildId())
+	return isMember, isDrainedOrInactive, nil
 }
 
 func FindOldDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) int {
@@ -399,6 +407,23 @@ func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploym
 	}
 
 	return false
+}
+
+// IsVersionDrainedOrInactive checks the version's status in the task queue's deployment data.
+// Returns nil if the version is not found in the deployment data (cannot determine status).
+func IsVersionDrainedOrInactive(
+	deployments *persistencespb.DeploymentData,
+	deploymentName string,
+	buildID string,
+) *bool {
+	deploymentData := deployments.GetDeploymentsData()[deploymentName]
+	versionData := deploymentData.GetVersions()[buildID]
+	if versionData == nil {
+		return nil
+	}
+	result := versionData.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED ||
+		versionData.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
+	return &result
 }
 
 func CountDeploymentVersions(deployments *persistencespb.DeploymentData) int {
@@ -620,13 +645,13 @@ func ExtractVersioningBehaviorFromOverride(override *workflowpb.VersioningOverri
 func validatePinnedVersionInTaskQueue(ctx context.Context,
 	pinnedVersion *deploymentpb.WorkerDeploymentVersion,
 	matchingClient resource.MatchingClient,
-	versionMembershipCache VersionMembershipCache,
+	versionCache VersionMembershipAndReactivationStatusCache,
 	tq string,
 	tqType enumspb.TaskQueueType,
-	namespaceID string) error {
+	namespaceID string) (isDrainedOrInactive *bool, err error) {
 
 	// Check if we have recently queried matching to validate if this version exists in the task queue.
-	if isMember, ok := versionMembershipCache.Get(
+	if isMember, cachedDrainedOrInactive, ok := versionCache.Get(
 		namespaceID,
 		tq,
 		tqType,
@@ -634,88 +659,89 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 		pinnedVersion.BuildId,
 	); ok {
 		if isMember {
-			return nil
+			return cachedDrainedOrInactive, nil
 		}
-		return serviceerror.NewFailedPrecondition(
+		return nil, serviceerror.NewFailedPrecondition(
 			FormatPinnedVersionNotInTaskQueueError(pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId(), tq, tqType),
 		)
 	}
 
-	isMember, err := checkTaskQueueVersionMembership(ctx, matchingClient, namespaceID, tq, tqType, pinnedVersion)
+	isMember, isDrainedOrInactive, err := checkTaskQueueVersionMembership(ctx, matchingClient, namespaceID, tq, tqType, pinnedVersion)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Add result to cache
-	versionMembershipCache.Put(
+	versionCache.Put(
 		namespaceID,
 		tq,
 		tqType,
 		pinnedVersion.DeploymentName,
 		pinnedVersion.BuildId,
 		isMember,
+		isDrainedOrInactive,
 	)
 	if !isMember {
-		return serviceerror.NewFailedPrecondition(
+		return nil, serviceerror.NewFailedPrecondition(
 			FormatPinnedVersionNotInTaskQueueError(pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId(), tq, tqType),
 		)
 	}
-	return nil
+	return isDrainedOrInactive, nil
 }
 
 func ValidateVersioningOverride(ctx context.Context,
 	override *workflowpb.VersioningOverride,
 	matchingClient resource.MatchingClient,
-	versionMembershipCache VersionMembershipCache,
+	versionCache VersionMembershipAndReactivationStatusCache,
 	tq string,
 	tqType enumspb.TaskQueueType,
-	namespaceID string) error {
+	namespaceID string) (isDrainedOrInactive *bool, err error) {
 	if override == nil {
-		return nil
+		return nil, nil
 	}
 
 	if override.GetAutoUpgrade() { // v0.32
-		return nil
+		return nil, nil
 	} else if p := override.GetPinned(); p != nil {
 		if p.GetVersion() == nil {
-			return serviceerror.NewInvalidArgument("must provide version if override is pinned.")
+			return nil, serviceerror.NewInvalidArgument("must provide version if override is pinned.")
 		}
 		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
-			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
+			return nil, serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
 		}
-		return validatePinnedVersionInTaskQueue(ctx, p.GetVersion(), matchingClient, versionMembershipCache, tq, tqType, namespaceID)
+		return validatePinnedVersionInTaskQueue(ctx, p.GetVersion(), matchingClient, versionCache, tq, tqType, namespaceID)
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
 	switch override.GetBehavior() {
 	case enumspb.VERSIONING_BEHAVIOR_PINNED:
 		if override.GetDeployment() != nil {
-			return ValidateDeployment(override.GetDeployment())
+			return nil, ValidateDeployment(override.GetDeployment())
 		} else if override.GetPinnedVersion() != "" {
 			_, err := ValidateDeploymentVersionStringV31(override.GetPinnedVersion())
 			if err != nil {
-				return err
+				return nil, err
 			}
 
-			return validatePinnedVersionInTaskQueue(ctx, ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()), matchingClient, versionMembershipCache, tq, tqType, namespaceID)
+			return validatePinnedVersionInTaskQueue(ctx, ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()), matchingClient, versionCache, tq, tqType, namespaceID)
 
 		} else {
-			return serviceerror.NewInvalidArgument("must provide deployment (deprecated) or pinned version if behavior is 'PINNED'")
+			return nil, serviceerror.NewInvalidArgument("must provide deployment (deprecated) or pinned version if behavior is 'PINNED'")
 		}
 	case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
 		if override.GetDeployment() != nil {
-			return serviceerror.NewInvalidArgument("only provide deployment if behavior is 'PINNED'")
+			return nil, serviceerror.NewInvalidArgument("only provide deployment if behavior is 'PINNED'")
 		}
 		if override.GetPinnedVersion() != "" {
-			return serviceerror.NewInvalidArgument("only provide pinned version if behavior is 'PINNED'")
+			return nil, serviceerror.NewInvalidArgument("only provide pinned version if behavior is 'PINNED'")
 		}
 	case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
-		return serviceerror.NewInvalidArgument("override behavior is required")
+		return nil, serviceerror.NewInvalidArgument("override behavior is required")
 	default:
 		//nolint:staticcheck // SA1019 deprecated stamp will clean up later
-		return serviceerror.NewInvalidArgumentf("override behavior %s not recognized", override.GetBehavior())
+		return nil, serviceerror.NewInvalidArgumentf("override behavior %s not recognized", override.GetBehavior())
 	}
-	return nil
+	return nil, nil
 }
 
 // FindTargetDeploymentVersionAndRevisionNumberForWorkflowID returns the deployment version and revision number (if applicable) for

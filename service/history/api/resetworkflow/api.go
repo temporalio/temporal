@@ -28,7 +28,7 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	reactivationSignalCache worker_versioning.ReactivationSignalCache,
 	reactivationSignaler api.VersionReactivationSignalerFn,
 ) (_ *historyservice.ResetWorkflowExecutionResponse, retError error) {
@@ -64,7 +64,7 @@ func Invoke(
 	}
 
 	// Validate versioning override, if any.
-	err = validatePostResetOperationInputs(ctx, request.GetPostResetOperations(), matchingClient, versionMembershipCache,
+	isDrainedOrInactivePerOp, err := validatePostResetOperationInputs(ctx, request.GetPostResetOperations(), matchingClient, versionCache,
 		baseMutableState.GetExecutionInfo().GetTaskQueue(), namespaceID.String())
 	if err != nil {
 		return nil, err
@@ -180,10 +180,10 @@ func Invoke(
 	}
 
 	// Notify version workflow if we're pinning to a potentially drained version via post-reset operations
-	for _, operation := range request.GetPostResetOperations() {
+	for i, operation := range request.GetPostResetOperations() {
 		if updateOpts, ok := operation.GetVariant().(*workflowpb.PostResetOperation_UpdateWorkflowOptions_); ok {
 			api.ReactivateVersionWorkflowIfPinned(ctx, namespaceEntry,
-				updateOpts.UpdateWorkflowOptions.GetWorkflowExecutionOptions().GetVersioningOverride(), reactivationSignalCache, reactivationSignaler, shardContext.GetConfig().EnableVersionReactivationSignals())
+				updateOpts.UpdateWorkflowOptions.GetWorkflowExecutionOptions().GetVersioningOverride(), reactivationSignalCache, reactivationSignaler, shardContext.GetConfig().EnableVersionReactivationSignals(), isDrainedOrInactivePerOp[i])
 		}
 	}
 
@@ -221,22 +221,27 @@ func GetResetReapplyExcludeTypes(
 }
 
 // validatePostResetOperationInputs validates the optional post reset operation inputs.
+// Returns a slice of *bool (one per operation) indicating whether each operation's
+// pinned version is drained/inactive, for use when sending reactivation signals.
 func validatePostResetOperationInputs(ctx context.Context,
 	postResetOperations []*workflowpb.PostResetOperation,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	taskQueue string,
-	namespaceID string) error {
-	for _, operation := range postResetOperations {
+	namespaceID string) ([]*bool, error) {
+	isDrainedOrInactivePerOp := make([]*bool, len(postResetOperations))
+	for i, operation := range postResetOperations {
 		switch op := operation.GetVariant().(type) {
 		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
 			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
-			if err := worker_versioning.ValidateVersioningOverride(ctx, opts.GetVersioningOverride(), matchingClient, versionMembershipCache, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID); err != nil {
-				return err
+			isDrainedOrInactive, err := worker_versioning.ValidateVersioningOverride(ctx, opts.GetVersioningOverride(), matchingClient, versionCache, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID)
+			if err != nil {
+				return nil, err
 			}
+			isDrainedOrInactivePerOp[i] = isDrainedOrInactive
 		default:
-			return serviceerror.NewInvalidArgumentf("unsupported post reset operation: %T", op)
+			return nil, serviceerror.NewInvalidArgumentf("unsupported post reset operation: %T", op)
 		}
 	}
-	return nil
+	return isDrainedOrInactivePerOp, nil
 }

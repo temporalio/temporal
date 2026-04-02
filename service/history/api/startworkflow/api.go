@@ -59,9 +59,10 @@ type Starter struct {
 	request                    *historyservice.StartWorkflowExecutionRequest
 	namespace                  *namespace.Namespace
 	createOrUpdateLeaseFn      api.CreateOrUpdateLeaseFunc
-	versionMembershipCache     worker_versioning.VersionMembershipCache
+	versionCache               worker_versioning.VersionMembershipAndReactivationStatusCache
 	reactivationSignalCache    worker_versioning.ReactivationSignalCache
 	reactivationSignaler       api.VersionReactivationSignalerFn
+	isDrainedOrInactive        *bool
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -90,7 +91,7 @@ func NewStarter(
 	tokenSerializer *tasktoken.Serializer,
 	request *historyservice.StartWorkflowExecutionRequest,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	reactivationSignalCache worker_versioning.ReactivationSignalCache,
 	reactivationSignaler api.VersionReactivationSignalerFn,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
@@ -110,7 +111,7 @@ func NewStarter(
 		request:                    request,
 		namespace:                  namespaceEntry,
 		createOrUpdateLeaseFn:      createLeaseFn,
-		versionMembershipCache:     versionMembershipCache,
+		versionCache:     versionCache,
 		reactivationSignalCache:    reactivationSignalCache,
 		reactivationSignaler:       reactivationSignaler,
 	}, nil
@@ -142,7 +143,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 	}
 
 	// Validation for versioning override, if any.
-	err = worker_versioning.ValidateVersioningOverride(ctx, request.GetVersioningOverride(), s.matchingClient, s.versionMembershipCache, request.GetTaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, s.namespace.ID().String())
+	s.isDrainedOrInactive, err = worker_versioning.ValidateVersioningOverride(ctx, request.GetVersioningOverride(), s.matchingClient, s.versionCache, request.GetTaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, s.namespace.ID().String())
 	if err != nil {
 		return err
 	}
@@ -219,7 +220,7 @@ func (s *Starter) Invoke(
 				// Notify version workflow if we are starting a workflow execution on a potentially drained version.
 				// Only signal when a new workflow was actually created (StartNew), not for deduped retries
 				// (StartDeduped) or reused existing workflows (StartReused) where the pinned override is not applied.
-				api.ReactivateVersionWorkflowIfPinned(ctx, s.namespace, s.request.StartRequest.GetVersioningOverride(), s.reactivationSignalCache, s.reactivationSignaler, s.shardContext.GetConfig().EnableVersionReactivationSignals())
+				api.ReactivateVersionWorkflowIfPinned(ctx, s.namespace, s.request.StartRequest.GetVersioningOverride(), s.reactivationSignalCache, s.reactivationSignaler, s.shardContext.GetConfig().EnableVersionReactivationSignals(), s.isDrainedOrInactive)
 			}
 			return resp, outcome, conflictErr
 		}
@@ -227,7 +228,7 @@ func (s *Starter) Invoke(
 	}
 
 	// Notify version workflow if we're pinning to a potentially drained version
-	api.ReactivateVersionWorkflowIfPinned(ctx, s.namespace, s.request.StartRequest.GetVersioningOverride(), s.reactivationSignalCache, s.reactivationSignaler, s.shardContext.GetConfig().EnableVersionReactivationSignals())
+	api.ReactivateVersionWorkflowIfPinned(ctx, s.namespace, s.request.StartRequest.GetVersioningOverride(), s.reactivationSignalCache, s.reactivationSignaler, s.shardContext.GetConfig().EnableVersionReactivationSignals(), s.isDrainedOrInactive)
 
 	resp, err = s.generateResponse(
 		creationParams.runID,

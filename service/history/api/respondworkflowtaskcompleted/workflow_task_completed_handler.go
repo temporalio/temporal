@@ -79,7 +79,7 @@ type (
 		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
 		matchingClient         matchingservice.MatchingServiceClient
-		versionMembershipCache worker_versioning.VersionMembershipCache
+		versionCache worker_versioning.VersionMembershipAndReactivationStatusCache
 	}
 
 	workflowTaskFailedCause struct {
@@ -119,7 +119,7 @@ func newWorkflowTaskCompletedHandler(
 	hasBufferedEventsOrMessages bool,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 ) *workflowTaskCompletedHandler {
 	return &workflowTaskCompletedHandler{
 		identity:                identity,
@@ -152,7 +152,7 @@ func newWorkflowTaskCompletedHandler(
 		tokenSerializer:        tasktoken.NewSerializer(),
 		commandHandlerRegistry: commandHandlerRegistry,
 		matchingClient:         matchingClient,
-		versionMembershipCache: versionMembershipCache,
+		versionCache: versionCache,
 	}
 }
 
@@ -1031,7 +1031,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 		handler.workflowTaskCompletedID,
 		parentNamespace,
 		attr,
-		worker_versioning.GetIsWFTaskQueueInVersionDetector(handler.matchingClient, handler.versionMembershipCache),
+		worker_versioning.GetIsWFTaskQueueInVersionDetector(handler.matchingClient, handler.versionCache),
 	)
 	if err != nil {
 		return nil, err

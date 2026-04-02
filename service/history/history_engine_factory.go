@@ -50,7 +50,7 @@ type (
 		PersistenceRateLimiter          replication.PersistenceRateLimiter
 		TestHooks                       testhooks.TestHooks
 		ChasmEngine                     chasm.Engine
-		VersionMembershipCache          worker_versioning.VersionMembershipCache
+		VersionMembershipCache          worker_versioning.VersionMembershipAndReactivationStatusCache
 		ReactivationSignalCache         worker_versioning.ReactivationSignalCache
 		WorkerDeploymentClient          workerdeployment.Client
 		RoutingInfoCache                worker_versioning.RoutingInfoCache

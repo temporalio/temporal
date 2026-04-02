@@ -31,9 +31,16 @@ func ReactivateVersionWorkflowIfPinned(
 	signalCache worker_versioning.ReactivationSignalCache,
 	signaler VersionReactivationSignalerFn,
 	enabled bool,
+	isDrainedOrInactive *bool,
 ) {
 	// Check if signals are enabled globally
 	if !enabled {
+		return
+	}
+
+	// Skip signal if matching confirmed the version is NOT drained/inactive.
+	// nil means unknown (old matching server) — send signal to preserve current behavior.
+	if isDrainedOrInactive != nil && !*isDrainedOrInactive {
 		return
 	}
 

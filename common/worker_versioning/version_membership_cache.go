@@ -7,20 +7,22 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
-// VersionMembershipCache is used to cache results of Matching's CheckTaskQueueVersionMembership
-// calls (used internally by the worker versioning pinned override validation).
+// VersionMembershipAndReactivationStatusCache caches results of Matching's
+// CheckTaskQueueVersionMembership calls. It stores two pieces of information per version:
+//   - isMember: whether the version exists in the task queue (used for pinned override validation).
+//   - isDrainedOrInactive: whether the version's status is DRAINED or INACTIVE, used to decide
+//     if a reactivation signal should be sent. nil means unknown (e.g. old matching server).
 //
 // Implementations are expected to be safe for concurrent use.
 type (
-	VersionMembershipCache interface {
-		// Get returns (isMember, ok). ok=false means there was no cached value.
+	VersionMembershipAndReactivationStatusCache interface {
 		Get(
 			namespaceID string,
 			taskQueue string,
 			taskQueueType enumspb.TaskQueueType,
 			deploymentName string,
 			buildID string,
-		) (isMember bool, ok bool)
+		) (isMember bool, isDrainedOrInactive *bool, ok bool)
 
 		Put(
 			namespaceID string,
@@ -29,6 +31,7 @@ type (
 			deploymentName string,
 			buildID string,
 			isMember bool,
+			isDrainedOrInactive *bool,
 		)
 	}
 
@@ -40,28 +43,33 @@ type (
 		buildID        string
 	}
 
-	VersionMembershipCacheImpl struct {
+	versionTaskQueueInfoCacheValue struct {
+		isMember            bool
+		isDrainedOrInactive *bool // nil = unknown (old matching server)
+	}
+
+	VersionMembershipAndReactivationStatusCacheImpl struct {
 		cache.Cache
 		metricsHandler metrics.Handler
 	}
 )
 
-// NewVersionMembershipCache wraps the provided cache with a typed API and metrics.
-func NewVersionMembershipCache(c cache.Cache, metricsHandler metrics.Handler) VersionMembershipCache {
+// NewVersionMembershipAndReactivationStatusCache wraps the provided cache with a typed API and metrics.
+func NewVersionMembershipAndReactivationStatusCache(c cache.Cache, metricsHandler metrics.Handler) VersionMembershipAndReactivationStatusCache {
 	h := metricsHandler.WithTags(metrics.CacheTypeTag(metrics.VersionMembershipCacheTypeTagValue))
-	return &VersionMembershipCacheImpl{
+	return &VersionMembershipAndReactivationStatusCacheImpl{
 		Cache:          c,
 		metricsHandler: h,
 	}
 }
 
-func (c *VersionMembershipCacheImpl) Get(
+func (c *VersionMembershipAndReactivationStatusCacheImpl) Get(
 	namespaceID string,
 	taskQueue string,
 	taskQueueType enumspb.TaskQueueType,
 	deploymentName string,
 	buildID string,
-) (isMember bool, ok bool) {
+) (isMember bool, isDrainedOrInactive *bool, ok bool) {
 	handler := c.metricsHandler.WithTags(metrics.OperationTag(metrics.VersionMembershipCacheGetScope), metrics.NamespaceIDTag(namespaceID))
 	metrics.CacheRequests.With(handler).Record(1)
 
@@ -75,24 +83,25 @@ func (c *VersionMembershipCacheImpl) Get(
 	v := c.Cache.Get(key)
 	if v == nil {
 		metrics.CacheMissCounter.With(handler).Record(1)
-		return false, false
+		return false, nil, false
 	}
-	isMember, ok = v.(bool)
+	value, ok := v.(versionTaskQueueInfoCacheValue)
 	if !ok {
 		// Unexpected type: treat as miss to avoid false positives.
 		metrics.CacheMissCounter.With(handler).Record(1)
-		return false, false
+		return false, nil, false
 	}
-	return isMember, true
+	return value.isMember, value.isDrainedOrInactive, true
 }
 
-func (c *VersionMembershipCacheImpl) Put(
+func (c *VersionMembershipAndReactivationStatusCacheImpl) Put(
 	namespaceID string,
 	taskQueue string,
 	taskQueueType enumspb.TaskQueueType,
 	deploymentName string,
 	buildID string,
 	isMember bool,
+	isDrainedOrInactive *bool,
 ) {
 	handler := c.metricsHandler.WithTags(metrics.OperationTag(metrics.VersionMembershipCachePutScope), metrics.NamespaceIDTag(namespaceID))
 	metrics.CacheRequests.With(handler).Record(1)
@@ -104,5 +113,8 @@ func (c *VersionMembershipCacheImpl) Put(
 		deploymentName: deploymentName,
 		buildID:        buildID,
 	}
-	c.Cache.Put(key, isMember)
+	c.Cache.Put(key, versionTaskQueueInfoCacheValue{
+		isMember:            isMember,
+		isDrainedOrInactive: isDrainedOrInactive,
+	})
 }
