@@ -6328,7 +6328,7 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippedEvent_BoundReac
 		EventTime: timestamppb.New(now),
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionTimeSkippedEventAttributes{
 			WorkflowExecutionTimeSkippedEventAttributes: &historypb.WorkflowExecutionTimeSkippedEventAttributes{
-				TargetTime:                              timestamppb.New(now.Add(30 * time.Minute)),
+				TargetTime:         timestamppb.New(now.Add(30 * time.Minute)),
 				DisabledAfterBound: true,
 			},
 		},
