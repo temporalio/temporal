@@ -198,7 +198,6 @@ func (a *activities) WaitReplication(ctx context.Context, waitRequest waitReplic
 
 // Check if remote cluster has caught up on all shards on replication tasks
 func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitReplicationRequest) (bool, error) {
-
 	resp, err := a.historyClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
 		RemoteClusters: []string{waitRequest.RemoteCluster},
 	})
@@ -209,54 +208,60 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 		return false, fmt.Errorf("GetReplicationStatus returns %d shards, expecting %d", len(resp.Shards), waitRequest.ShardCount)
 	}
 
-	// check that every shard has caught up
-	readyShardCount := 0
-	logged := false
+	var (
+		readyShardCount int
+
+		maxLaggingTasksShardID int32
+		maxLaggingTasks        int64
+
+		maxTimeLagShardID int32
+		maxTimeLag        time.Duration
+	)
 
 	sort.SliceStable(resp.Shards, func(i, j int) bool {
 		return resp.Shards[i].ShardId < resp.Shards[j].ShardId
 	})
 
-	for _, shard := range resp.Shards {
-		clusterInfo, hasClusterInfo := shard.RemoteClusters[waitRequest.RemoteCluster]
-		if hasClusterInfo {
-			// WE are all caught up
-			if shard.MaxReplicationTaskId == clusterInfo.AckedTaskId {
-				readyShardCount++
-				continue
-			}
+	// shard id -> task id
+	shardSnapshots := waitRequest.WaitForTaskIds
 
-			// Caught up to the last checked IDs, and within allowed lagging range
-			if clusterInfo.AckedTaskId >= waitRequest.WaitForTaskIds[shard.ShardId] &&
-				(shard.MaxReplicationTaskId-clusterInfo.AckedTaskId <= waitRequest.AllowedLaggingTasks ||
-					shard.MaxReplicationTaskVisibilityTime.AsTime().Sub(clusterInfo.AckedTaskVisibilityTime.AsTime()) <= waitRequest.AllowedLagging) {
-				readyShardCount++
-				continue
-			}
+	for _, localShard := range resp.Shards {
+		remoteShardProgress, hasRemoteShardProgress := localShard.RemoteClusters[waitRequest.RemoteCluster]
+		if !hasRemoteShardProgress {
+			a.logger.Info("Wait catchup missing remote cluster info", tag.ShardID(localShard.ShardId), tag.ClusterName(waitRequest.RemoteCluster))
+
+			// this is not expected, so fail activity to surface the error, but retryPolicy will keep retrying.
+			return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", localShard.ShardId, waitRequest.RemoteCluster)
 		}
 
-		// shard is not ready, log first non-ready shard
-		if !logged {
-			logged = true
-			if !hasClusterInfo {
-				a.logger.Info("Wait catchup missing remote cluster info", tag.ShardID(shard.ShardId), tag.ClusterName(waitRequest.RemoteCluster))
-				// this is not expected, so fail activity to surface the error, but retryPolicy will keep retrying.
-				return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", shard.ShardId, waitRequest.RemoteCluster)
-			}
-			a.logger.Info("Wait catchup not ready",
-				tag.Int32("ShardId", shard.ShardId),
-				tag.String("RemoteCluster", waitRequest.RemoteCluster),
-				tag.Int64("AckedTaskId", clusterInfo.AckedTaskId),
-				tag.Int64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),
-				tag.Duration("AllowedLagging", waitRequest.AllowedLagging),
-				tag.Duration("ActualLagging", shard.MaxReplicationTaskVisibilityTime.AsTime().Sub(clusterInfo.AckedTaskVisibilityTime.AsTime())),
-				tag.Int64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
-				tag.Time("MaxReplicationTaskVisibilityTime", shard.MaxReplicationTaskVisibilityTime.AsTime()),
-				tag.Time("AckedTaskVisibilityTime", clusterInfo.AckedTaskVisibilityTime.AsTime()),
-				tag.Int64("AllowedLaggingTasks", waitRequest.AllowedLaggingTasks),
-				tag.Int64("ActualLaggingTasks", shard.MaxReplicationTaskId-clusterInfo.AckedTaskId),
-			)
+		// WE are all caught up
+		if localShard.MaxReplicationTaskId == remoteShardProgress.AckedTaskId {
+			readyShardCount++
+			continue
 		}
+
+		if remoteShardProgress.AckedTaskId < shardSnapshots[localShard.ShardId] {
+			continue
+		}
+
+		laggingTasks := localShard.MaxReplicationTaskId - remoteShardProgress.AckedTaskId
+		timeLag := localShard.MaxReplicationTaskVisibilityTime.AsTime().Sub(remoteShardProgress.AckedTaskVisibilityTime.AsTime())
+
+		if laggingTasks > maxLaggingTasks {
+			maxLaggingTasks = laggingTasks
+			maxLaggingTasksShardID = localShard.ShardId
+		}
+		if timeLag > maxTimeLag {
+			maxTimeLag = timeLag
+			maxTimeLagShardID = localShard.ShardId
+		}
+
+		if laggingTasks > waitRequest.AllowedLaggingTasks &&
+			timeLag > waitRequest.AllowedLagging {
+			continue
+		}
+
+		readyShardCount++
 	}
 
 	// emit metrics about how many shards are ready
@@ -265,7 +270,24 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 		metrics.OperationTag(metrics.MigrationWorkflowScope),
 		metrics.TargetClusterTag(waitRequest.RemoteCluster))
 
-	return readyShardCount == len(resp.Shards), nil
+	isReady := readyShardCount == len(resp.Shards)
+
+	if !isReady {
+		a.logger.Info("Wait catchup not ready",
+			tag.String("RemoteCluster", waitRequest.RemoteCluster),
+			tag.Int("TotalShards", len(resp.Shards)),
+			tag.Int("ReadyShards", readyShardCount),
+			tag.Int("NotReadyShards", len(resp.Shards)-readyShardCount),
+			tag.Duration("AllowedLagging", waitRequest.AllowedLagging),
+			tag.Int64("AllowedLaggingTasks", waitRequest.AllowedLaggingTasks),
+			tag.Int32("MaxLaggingTasksShardID", maxLaggingTasksShardID),
+			tag.Int64("MaxLaggingTasks", maxLaggingTasks),
+			tag.Int32("MaxTimeLagShardID", maxTimeLagShardID),
+			tag.Duration("MaxTimeLag", maxTimeLag),
+		)
+	}
+
+	return isReady, nil
 }
 
 func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverRequest) error {
