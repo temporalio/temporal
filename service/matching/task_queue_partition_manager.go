@@ -330,11 +330,7 @@ func (pm *taskQueuePartitionManagerImpl) autoEnableChanged(en bool) {
 		enableFairness = false
 	case enumsspb.FAIRNESS_STATE_V2:
 		newMatcher = true
-		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-			enableFairness = false
-		} else {
-			enableFairness = true
-		}
+		enableFairness = pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY
 	default:
 		softassert.Fail(pm.logger, "unknown fairnessstate in autoEnableChanged")
 		return
