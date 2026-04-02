@@ -20,20 +20,22 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestWorkflowFailuresTestSuite(t *testing.T) {
-	t.Parallel()
-	t.Run("TestWorkflowTimeout", workflowFailuresTestWorkflowTimeout)
-	t.Run("TestWorkflowTaskFailed", workflowFailuresTestWorkflowTaskFailed)
-	t.Run("TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalidArgument", workflowFailuresTestRespondWorkflowTaskCompletedReturnsErrorIfInvalidArgument)
+type WorkflowFailuresSuite struct {
+	parallelsuite.Suite[*WorkflowFailuresSuite]
 }
 
-func workflowFailuresTestWorkflowTimeout(t *testing.T) {
-	s := testcore.NewEnv(t)
+func TestWorkflowFailuresTestSuite(t *testing.T) {
+	parallelsuite.Run(t, &WorkflowFailuresSuite{})
+}
+
+func (suite *WorkflowFailuresSuite) TestWorkflowTimeout() {
+	s := testcore.NewEnv(suite.T())
 	startTime := time.Now().UTC()
 
 	id := "functional-workflow-timeout"
@@ -110,8 +112,8 @@ ListClosedLoop:
 	s.Equal(1, closedCount)
 }
 
-func workflowFailuresTestWorkflowTaskFailed(t *testing.T) {
-	s := testcore.NewEnv(t)
+func (suite *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
+	s := testcore.NewEnv(suite.T())
 	id := "functional-workflowtask-failed-test"
 	wt := "functional-workflowtask-failed-test-type"
 	tl := "functional-workflowtask-failed-test-taskqueue"
@@ -318,8 +320,8 @@ func workflowFailuresTestWorkflowTaskFailed(t *testing.T) {
 	s.GreaterOrEqual(wfCompletedEvent.GetEventTime().AsTime().Sub(lastWorkflowTaskTime), time.Second)
 }
 
-func workflowFailuresTestRespondWorkflowTaskCompletedReturnsErrorIfInvalidArgument(t *testing.T) {
-	s := testcore.NewEnv(t)
+func (suite *WorkflowFailuresSuite) TestRespondWorkflowTaskCompletedReturnsErrorIfInvalidArgument() {
+	s := testcore.NewEnv(suite.T())
 	id := "functional-respond-workflow-task-completed-test"
 	wt := "functional-respond-workflow-task-completed-test-type"
 	tq := "functional-respond-workflow-task-completed-test-taskqueue"
