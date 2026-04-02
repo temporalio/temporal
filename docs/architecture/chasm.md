@@ -71,7 +71,9 @@ A Component's state is made up of typed Fields. CHASM uses these to persist and 
 - **`ParentPtr`** — a typed reference to the parent Component. Allows a child to read its parent's state and call its methods.
 - Transient fields — plain Go fields (not wrapped in a `Field`) that hold in-memory derived state. Not persisted; invalidated and recomputed as needed.
 
-`T` can be either a Protobuf message or a child Component.
+`T` determines the field kind:
+- **Data Field** — `T` is a Protobuf message; stores serialized data.
+- **Component Field** — `T` is a child Component; stores a nested component subtree.
 
 > [!NOTE]
 > `Field` and `Map` children are each persisted as separate nodes. Use a separate field for data that changes at a different frequency, is large, or is only read in certain operations.
@@ -339,10 +341,14 @@ When a callback arrives, the Engine loads the Node at the given ComponentPath an
    <td width="500">
 
 ### Search Attributes
-Indexed key-value pairs that make Executions queryable (e.g. by status, custom tags). A Component can provide them by implementing the search attributes provider interface.
+Indexed key-value pairs that make Executions queryable. There are two sources:
+- **User-defined** custom Search Attributes stored by the archetype user (e.g. custom tags on a workflow execution).
+- **Component-defined** Search Attributes computed dynamically from the root component's state, provided by implementing the search attributes provider interface.
 
 ### Memo
-Unindexed key-value metadata attached to an Execution. A Component can provide them by implementing the memo provider interface.
+Unindexed key-value metadata attached to an Execution. There are two sources:
+- **User-defined** custom Memo stored by the archetype user.
+- **Component-defined** Memo computed dynamically from the root component's state, provided by implementing the memo provider interface.
 
    </td>
   </tr>
@@ -363,5 +369,5 @@ my_asm/
 ├── frontend.go            # Frontend gRPC handler to map API calls to Engine operations
 ├── fx.go                  # fx module to wire the Library into the application
 ├── library.go             # Registers component and task types with the Library
-└── statemachine.go        # Transition declarations
+└── statemachine.go        # (optional) Transition declarations using the statemachine framework
 ```
