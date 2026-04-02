@@ -229,6 +229,20 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	defer func() { resetWorkflow.GetReleaseFn()(retError) }()
 
 	resetMS := resetWorkflow.GetMutableState()
+
+	// Inherit time-skipping from the base run if it was enabled there but not yet
+	// set on the reset run (the initial enable via StartWorkflowRequest is not in
+	// history events, so it would be lost after state rebuilding).
+	if baseWorkflow.GetMutableState().GetExecutionInfo().GetTimeSkippingInfo().GetEnabled() &&
+		!resetMS.GetExecutionInfo().GetTimeSkippingInfo().GetEnabled() {
+		if _, err := resetMS.AddWorkflowExecutionOptionsUpdatedEvent(
+			nil, false, "", nil, nil, "", nil,
+			&workflowpb.TimeSkippingConfig{Enabled: true},
+		); err != nil {
+			return err
+		}
+	}
+
 	if err := reapplyEventsFn(ctx, resetMS); err != nil {
 		return err
 	}

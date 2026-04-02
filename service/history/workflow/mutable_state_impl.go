@@ -2577,6 +2577,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		CompletionCallbacks:   completionCallbacks,
 		Links:                 links,
 		Priority:              previousExecutionInfo.Priority,
+		TimeSkippingConfig:    inheritedTimeSkippingConfig(previousExecutionInfo.GetTimeSkippingInfo()),
 	}
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
@@ -2656,6 +2657,16 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		),
 	).Record(1)
 	return event, nil
+}
+
+// inheritedTimeSkippingConfig converts a TimeSkippingInfo from executionInfo to
+// a TimeSkippingConfig suitable for a new workflow start request, so that
+// continue-as-new and child workflows inherit the time-skipping setting.
+func inheritedTimeSkippingConfig(tsi *persistencespb.TimeSkippingInfo) *workflowpb.TimeSkippingConfig {
+	if !tsi.GetEnabled() {
+		return nil
+	}
+	return &workflowpb.TimeSkippingConfig{Enabled: true}
 }
 
 // computeDeclinedTargetVersionUpgrade determines what declined-upgrade value to
