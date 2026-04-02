@@ -250,7 +250,7 @@ func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowTaskTimeout: durationpb.New(60 * time.Second),
-		Identity:            testcore.RandomizeStr("worker"),
+		Identity:            "worker",
 	}
 
 	we, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
@@ -295,7 +295,7 @@ func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 		Namespace:         env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()},
 		SignalName:        "signal-name",
-		Identity:          testcore.RandomizeStr("worker"),
+		Identity:          "worker",
 		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err)
@@ -345,7 +345,7 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-		Identity:            testcore.RandomizeStr("worker"),
+		Identity:            "worker",
 	}
 
 	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
@@ -406,7 +406,7 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 		},
 		SignalName: "another signal",
 		Input:      payloads.EncodeString("another signal input"),
-		Identity:   testcore.RandomizeStr("worker"),
+		Identity:   "worker",
 	})
 
 	s.EqualError(signalErr, consts.ErrWorkflowCompleted.Error())
@@ -474,7 +474,7 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByHistorySizeLimit() {
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            testcore.RandomizeStr("worker"),
+		Identity:            "worker",
 	}
 
 	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
@@ -498,7 +498,7 @@ SignalLoop:
 			},
 			SignalName: signalName,
 			Input:      signalInput,
-			Identity:   testcore.RandomizeStr("worker"),
+			Identity:   "worker",
 		})
 
 		if signalErr != nil {
