@@ -485,7 +485,11 @@ func MakeBuildIdDirective(buildId string) *taskqueuespb.TaskVersionDirective {
 	return &taskqueuespb.TaskVersionDirective{BuildId: &taskqueuespb.TaskVersionDirective_AssignedBuildId{AssignedBuildId: buildId}}
 }
 
-func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.WorkerVersionStamp {
+func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities, options *deploymentpb.WorkerDeploymentOptions) *commonpb.WorkerVersionStamp {
+	if options.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED && options.GetDeploymentName() != "" {
+		// Versioning 3, do not return stamp.
+		return nil
+	}
 	if cap.GetUseVersioning() && cap.GetDeploymentSeriesName() != "" {
 		// Versioning 3, do not return stamp.
 		return nil
