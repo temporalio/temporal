@@ -8,7 +8,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -52,12 +51,6 @@ func Invoke(
 	default:
 		return nil, err
 	}
-
-	enums.SetDefaultWorkflowIDPolicies(
-		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdReusePolicy,
-		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdConflictPolicy,
-		enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-	)
 
 	startRequest := ConvertToStartRequest(
 		namespaceID,
