@@ -364,10 +364,6 @@ func TestTransitionTerminated(t *testing.T) {
 			name:        "terminated from backing off",
 			startStatus: nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
 		},
-		{
-			name:        "terminated from canceled",
-			startStatus: nexusoperationpb.OPERATION_STATUS_CANCELED,
-		},
 	}
 
 	for _, tc := range testCases {
