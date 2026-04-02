@@ -737,11 +737,15 @@ func FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
 		return ramping, rampingRevisionNumber
 	}
 	// Partial ramp. Decide based on workflow ID
-	wfRampThreshold := calcRampThreshold(workflowId)
-	if wfRampThreshold <= float64(rampingPercentage) {
+	if WorkflowIdIsInRampGroup(workflowId, rampingPercentage) {
 		return ramping, rampingRevisionNumber
 	}
 	return current, currentRevisionNumber
+}
+
+func WorkflowIdIsInRampGroup(workflowId string, rampingPercentage float32) bool {
+	wfRampThreshold := calcRampThreshold(workflowId)
+	return wfRampThreshold <= float64(rampingPercentage)
 }
 
 // PickFinalCurrentAndRamping determines the effective "current" and "ramping" deployment versions
@@ -836,13 +840,13 @@ func calcRampThreshold(id string) float64 {
 //revive:disable-next-line:cognitive-complexity,confusing-results,function-result-limit,cyclomatic
 func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData) (
 	*deploymentspb.WorkerDeploymentVersion, // current version
-	int64, // current revision number
-	time.Time, // current update time
+	int64,                                  // current revision number
+	time.Time,                              // current update time
 	*deploymentspb.WorkerDeploymentVersion, // ramping version
-	bool, // is ramping (ramping_since_time != nil)
-	float32, // ramp percentage
-	int64, // ramping revision number
-	time.Time, // ramping update time
+	bool,                                   // is ramping (ramping_since_time != nil)
+	float32,                                // ramp percentage
+	int64,                                  // ramping revision number
+	time.Time,                              // ramping update time
 ) {
 	if deployments == nil {
 		return nil, 0, time.Time{}, nil, false, 0, 0, time.Time{}

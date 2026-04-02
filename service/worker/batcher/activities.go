@@ -136,8 +136,13 @@ func fetchPage(
 		return nil, err
 	}
 
+	//rampPercentageQueryFilter := batchProcessorConfig.RampPercentageQueryFilter
+	rampPercentageQueryFilter := float32(50)
 	executionInfos := make([]*workflowpb.WorkflowExecutionInfo, 0, len(resp.Executions))
 	for _, wf := range resp.Executions {
+		if rampPercentageQueryFilter > 0 && !worker_versioning.WorkflowIdIsInRampGroup(wf.Execution.WorkflowId, rampPercentageQueryFilter) {
+			continue
+		}
 		executionInfos = append(executionInfos, wf)
 	}
 
