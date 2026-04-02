@@ -112,7 +112,6 @@ func countQualifyingBisectReports(reports []TestBisectReport) int {
 	return n
 }
 
-
 // writeBisectTable writes all suspect (test, commit) pairs into a single flat table.
 func writeBisectTable(sb *strings.Builder, reports []TestBisectReport, repo string) {
 	sb.WriteString("| Test | Prob | Commit | Date | Author | Before | After | Note |\n")

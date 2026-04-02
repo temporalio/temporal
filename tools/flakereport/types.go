@@ -103,13 +103,13 @@ type CommitObservation struct {
 
 // BisectResult is one candidate culprit commit with its posterior probability.
 type BisectResult struct {
-	CommitSHA    string
-	CommitIdx    int
-	Probability  float64 // posterior P(this commit introduced the flakiness)
-	PassesBefore int
-	FailsBefore  int
-	PassesAfter  int
-	FailsAfter   int
+	CommitSHA     string
+	CommitIdx     int
+	Probability   float64 // posterior P(this commit introduced the flakiness)
+	PassesBefore  int
+	FailsBefore   int
+	PassesAfter   int
+	FailsAfter    int
 	CommitTitle   string
 	CommitAuthor  string
 	CommitDate    string // formatted date of the commit, e.g. "2024-01-15"
