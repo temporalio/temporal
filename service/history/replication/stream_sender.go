@@ -51,7 +51,6 @@ type (
 		taskConverter           SourceTaskConverter
 		metrics                 metrics.Handler
 		logger                  log.Logger
-		throttledLogger         log.Logger
 		status                  int32
 		clientClusterName       string
 		clientShardKey          ClusterShardKey
@@ -93,7 +92,6 @@ func NewStreamSender(
 		taskConverter:           taskConverter,
 		metrics:                 shardContext.GetMetricsHandler(),
 		logger:                  logger,
-		throttledLogger:         log.NewThrottledLogger(logger, func() float64 { return float64(config.ThrottledLogRPS()) }),
 		status:                  common.DaemonStatusInitialized,
 		clientClusterName:       clientClusterName,
 		clientShardKey:          clientShardKey,
@@ -739,7 +737,7 @@ func (s *StreamSenderImpl) recordRetry(
 	attempt int64,
 	err error,
 ) error {
-	s.throttledLogger.Warn("Replication task send retry",
+	s.shardContext.GetThrottledLogger().Warn("Replication task send retry",
 		tag.TaskID(item.GetTaskID()),
 		tag.WorkflowNamespaceID(item.GetNamespaceID()),
 		tag.WorkflowID(item.GetWorkflowID()),
