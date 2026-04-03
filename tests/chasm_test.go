@@ -802,8 +802,7 @@ func (s *ChasmTestSuite) TestMutableStateRebuilder() {
 	s.Equal(storeID, visRecord.BusinessID)
 
 	// payloadStore archetype is not the workflow archetype, should fail the rebuild.
-	archetype, _ := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentFqnByID(tests.ArchetypeID)
-	s.NotEqual(archetype, chasm.WorkflowArchetype, "Archetype should not be the workflow archetype")
+	s.NotEqual(tests.Archetype, chasm.WorkflowArchetype, "Archetype should not be the workflow archetype")
 
 	_, err = s.AdminClient().RebuildMutableState(testcore.NewContext(), &adminservice.RebuildMutableStateRequest{
 		Namespace: s.Namespace().String(),
