@@ -148,10 +148,6 @@ func (c *immutableCtx) ExecutionInfo() ExecutionInfo {
 	}
 }
 
-func (c *immutableCtx) StateTransitionCount() int64 {
-	return c.root.backend.GetExecutionInfo().GetStateTransitionCount()
-}
-
 func (c *immutableCtx) Logger() log.Logger {
 	return c.root.logger
 }
