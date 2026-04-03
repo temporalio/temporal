@@ -9,8 +9,8 @@ deps:
 breaking:
   use:
     - WIRE
-  # Uncomment this to temporarily ignore specific files or directories:
-  # ignore:
+    # Uncomment this to temporarily ignore specific files or directories:
+    # ignore:
     # example: - temporal/server/api/.../message.proto
 lint:
   use:
