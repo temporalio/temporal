@@ -87,10 +87,9 @@ func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	engine.partitions[prtn.Key()] = prtnMgr
 
 	if s.fairness {
-		prtnMgr.config.NewMatcher = true
 		prtnMgr.config.EnableFairness = true
-	} else if s.newMatcher {
-		prtnMgr.config.NewMatcher = true
+	} else if !s.newMatcher {
+		prtnMgr.config.NewMatcher = false
 	}
 
 	s.tqMgr, err = newPhysicalTaskQueueManager(prtnMgr, s.physicalTaskQueueKey)
@@ -173,6 +172,15 @@ func runOneShotPoller(ctx context.Context, tqm physicalTaskQueueManager) (*goro.
 
 func defaultTqId() *PhysicalTaskQueueKey {
 	return newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
+}
+
+// getTaskManager returns the underlying testTaskManager (which is accessed differently
+// depending on mode)
+func (s *PhysicalTaskQueueManagerTestSuite) getTaskManager() *testTaskManager {
+	if s.fairness {
+		return s.tqMgr.partitionMgr.engine.fairTaskManager.(*testTaskManager)
+	}
+	return s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager)
 }
 
 // TODO(pri): old matcher cleanup
@@ -353,15 +361,12 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher")
-	}
-
 	s.config.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Second)
+	s.config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	s.tqMgr.Start()
 	defer s.tqMgr.Stop(unloadCauseShuttingDown)
 
-	tm, _ := s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager)
+	tm := s.getTaskManager()
 	s.EventuallyWithT(func(collect *assert.CollectT) {
 		// will unload due to idleness
 		require.Equal(collect, 1, tm.getUpdateCount(s.physicalTaskQueueKey))
@@ -371,17 +376,13 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload()
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnershipLost() {
 	// TODO: use mocks instead of testTaskManager so we can do synchronization better instead of sleeps
 	s.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
+	s.config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	s.tqMgr.Start()
 
 	// wait for goroutines to start and to acquire rangeid lock
 	time.Sleep(10 * time.Millisecond) // nolint:forbidigo
 
-	var tm *testTaskManager
-	if s.fairness {
-		tm = s.tqMgr.partitionMgr.engine.fairTaskManager.(*testTaskManager) // nolint:revive
-	} else {
-		tm = s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager) // nolint:revive
-	}
+	tm := s.getTaskManager()
 	s.Equal(0, tm.getUpdateCount(s.physicalTaskQueueKey))
 
 	// simulate stolen lock

@@ -12,23 +12,24 @@ import (
 	"go.uber.org/fx"
 )
 
-type activityDispatchTaskExecutorOptions struct {
+type activityDispatchTaskHandlerOptions struct {
 	fx.In
 
 	MatchingClient resource.MatchingClient
 }
 
-type activityDispatchTaskExecutor struct {
-	opts activityDispatchTaskExecutorOptions
+type activityDispatchTaskHandler struct {
+	chasm.SideEffectTaskHandlerBase[*activitypb.ActivityDispatchTask]
+	opts activityDispatchTaskHandlerOptions
 }
 
-func newActivityDispatchTaskExecutor(opts activityDispatchTaskExecutorOptions) *activityDispatchTaskExecutor {
-	return &activityDispatchTaskExecutor{
-		opts,
+func newActivityDispatchTaskHandler(opts activityDispatchTaskHandlerOptions) *activityDispatchTaskHandler {
+	return &activityDispatchTaskHandler{
+		opts: opts,
 	}
 }
 
-func (e *activityDispatchTaskExecutor) Validate(
+func (h *activityDispatchTaskHandler) Validate(
 	ctx chasm.Context,
 	activity *Activity,
 	_ chasm.TaskAttributes,
@@ -39,27 +40,27 @@ func (e *activityDispatchTaskExecutor) Validate(
 		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp()), nil
 }
 
-func (e *activityDispatchTaskExecutor) Execute(
+func (h *activityDispatchTaskHandler) Execute(
 	ctx context.Context,
 	activityRef chasm.ComponentRef,
 	_ chasm.TaskAttributes,
 	_ *activitypb.ActivityDispatchTask,
 ) error {
-	return e.pushToMatching(ctx, activityRef)
+	return h.pushToMatching(ctx, activityRef)
 }
 
 // Discard spills the task to matching instead of silently discarding it on standby clusters when the activity
 // dispatch task has been pending past the discard delay.
-func (e *activityDispatchTaskExecutor) Discard(
+func (h *activityDispatchTaskHandler) Discard(
 	ctx context.Context,
 	activityRef chasm.ComponentRef,
 	_ chasm.TaskAttributes,
 	_ *activitypb.ActivityDispatchTask,
 ) error {
-	return e.pushToMatching(ctx, activityRef)
+	return h.pushToMatching(ctx, activityRef)
 }
 
-func (e *activityDispatchTaskExecutor) pushToMatching(
+func (h *activityDispatchTaskHandler) pushToMatching(
 	ctx context.Context,
 	activityRef chasm.ComponentRef,
 ) error {
@@ -73,19 +74,20 @@ func (e *activityDispatchTaskExecutor) pushToMatching(
 		return err
 	}
 
-	_, err = e.opts.MatchingClient.AddActivityTask(ctx, request)
+	_, err = h.opts.MatchingClient.AddActivityTask(ctx, request)
 
 	return err
 }
 
-type scheduleToStartTimeoutTaskExecutor struct {
+type scheduleToStartTimeoutTaskHandler struct {
+	chasm.PureTaskHandlerBase
 }
 
-func newScheduleToStartTimeoutTaskExecutor() *scheduleToStartTimeoutTaskExecutor {
-	return &scheduleToStartTimeoutTaskExecutor{}
+func newScheduleToStartTimeoutTaskHandler() *scheduleToStartTimeoutTaskHandler {
+	return &scheduleToStartTimeoutTaskHandler{}
 }
 
-func (e *scheduleToStartTimeoutTaskExecutor) Validate(
+func (h *scheduleToStartTimeoutTaskHandler) Validate(
 	ctx chasm.Context,
 	activity *Activity,
 	_ chasm.TaskAttributes,
@@ -95,7 +97,7 @@ func (e *scheduleToStartTimeoutTaskExecutor) Validate(
 		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp()), nil
 }
 
-func (e *scheduleToStartTimeoutTaskExecutor) Execute(
+func (h *scheduleToStartTimeoutTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	activity *Activity,
 	_ chasm.TaskAttributes,
@@ -115,13 +117,13 @@ func (e *scheduleToStartTimeoutTaskExecutor) Execute(
 	return TransitionTimedOut.Apply(activity, ctx, event)
 }
 
-type scheduleToCloseTimeoutTaskExecutor struct{}
+type scheduleToCloseTimeoutTaskHandler struct{ chasm.PureTaskHandlerBase }
 
-func newScheduleToCloseTimeoutTaskExecutor() *scheduleToCloseTimeoutTaskExecutor {
-	return &scheduleToCloseTimeoutTaskExecutor{}
+func newScheduleToCloseTimeoutTaskHandler() *scheduleToCloseTimeoutTaskHandler {
+	return &scheduleToCloseTimeoutTaskHandler{}
 }
 
-func (e *scheduleToCloseTimeoutTaskExecutor) Validate(
+func (h *scheduleToCloseTimeoutTaskHandler) Validate(
 	_ chasm.Context,
 	activity *Activity,
 	_ chasm.TaskAttributes,
@@ -130,7 +132,7 @@ func (e *scheduleToCloseTimeoutTaskExecutor) Validate(
 	return TransitionTimedOut.Possible(activity), nil
 }
 
-func (e *scheduleToCloseTimeoutTaskExecutor) Execute(
+func (h *scheduleToCloseTimeoutTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	activity *Activity,
 	_ chasm.TaskAttributes,
@@ -149,13 +151,13 @@ func (e *scheduleToCloseTimeoutTaskExecutor) Execute(
 	return TransitionTimedOut.Apply(activity, ctx, event)
 }
 
-type startToCloseTimeoutTaskExecutor struct{}
+type startToCloseTimeoutTaskHandler struct{ chasm.PureTaskHandlerBase }
 
-func newStartToCloseTimeoutTaskExecutor() *startToCloseTimeoutTaskExecutor {
-	return &startToCloseTimeoutTaskExecutor{}
+func newStartToCloseTimeoutTaskHandler() *startToCloseTimeoutTaskHandler {
+	return &startToCloseTimeoutTaskHandler{}
 }
 
-func (e *startToCloseTimeoutTaskExecutor) Validate(
+func (h *startToCloseTimeoutTaskHandler) Validate(
 	ctx chasm.Context,
 	activity *Activity,
 	_ chasm.TaskAttributes,
@@ -168,7 +170,7 @@ func (e *startToCloseTimeoutTaskExecutor) Validate(
 
 // Execute executes a StartToCloseTimeoutTask. It fails the attempt, leading to retry or activity
 // failure.
-func (e *startToCloseTimeoutTaskExecutor) Execute(
+func (h *startToCloseTimeoutTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	activity *Activity,
 	_ chasm.TaskAttributes,
@@ -198,14 +200,14 @@ func (e *startToCloseTimeoutTaskExecutor) Execute(
 }
 
 // HeartbeatTimeoutTask is a pure task that enforces heartbeat timeouts.
-type heartbeatTimeoutTaskExecutor struct{}
+type heartbeatTimeoutTaskHandler struct{ chasm.PureTaskHandlerBase }
 
-func newHeartbeatTimeoutTaskExecutor() *heartbeatTimeoutTaskExecutor {
-	return &heartbeatTimeoutTaskExecutor{}
+func newHeartbeatTimeoutTaskHandler() *heartbeatTimeoutTaskHandler {
+	return &heartbeatTimeoutTaskHandler{}
 }
 
 // Validate validates a HeartbeatTimeoutTask.
-func (e *heartbeatTimeoutTaskExecutor) Validate(
+func (h *heartbeatTimeoutTaskHandler) Validate(
 	ctx chasm.Context,
 	activity *Activity,
 	taskAttrs chasm.TaskAttributes,
@@ -247,7 +249,7 @@ func (e *heartbeatTimeoutTaskExecutor) Validate(
 
 // Execute executes a HeartbeatTimeoutTask. It fails the attempt, leading to retry or activity
 // failure.
-func (e *heartbeatTimeoutTaskExecutor) Execute(
+func (h *heartbeatTimeoutTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	activity *Activity,
 	_ chasm.TaskAttributes,

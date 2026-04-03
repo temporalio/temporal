@@ -11,8 +11,8 @@ import (
 	"go.uber.org/fx"
 )
 
-// OperationTaskExecutorOptions is the fx parameter object for common options supplied to all operation task executors.
-type OperationTaskExecutorOptions struct {
+// OperationTaskHandlerOptions is the fx parameter object for common options supplied to all operation task handlers.
+type OperationTaskHandlerOptions struct {
 	fx.In
 
 	Config *Config
@@ -21,22 +21,23 @@ type OperationTaskExecutorOptions struct {
 	Logger         log.Logger
 }
 
-type OperationInvocationTaskExecutor struct {
+type OperationInvocationTaskHandler struct {
+	chasm.SideEffectTaskHandlerBase[*nexusoperationpb.InvocationTask]
 	config *Config
 
 	metricsHandler metrics.Handler
 	logger         log.Logger
 }
 
-func NewOperationInvocationTaskExecutor(opts OperationTaskExecutorOptions) *OperationInvocationTaskExecutor {
-	return &OperationInvocationTaskExecutor{
+func NewOperationInvocationTaskHandler(opts OperationTaskHandlerOptions) *OperationInvocationTaskHandler {
+	return &OperationInvocationTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
 		logger:         opts.Logger,
 	}
 }
 
-func (e *OperationInvocationTaskExecutor) Validate(
+func (h *OperationInvocationTaskHandler) Validate(
 	ctx chasm.Context,
 	op *Operation,
 	attrs chasm.TaskAttributes,
@@ -45,7 +46,7 @@ func (e *OperationInvocationTaskExecutor) Validate(
 	return false, serviceerror.NewUnimplemented("unimplemented")
 }
 
-func (e *OperationInvocationTaskExecutor) Execute(
+func (h *OperationInvocationTaskHandler) Execute(
 	ctx context.Context,
 	opRef chasm.ComponentRef,
 	attrs chasm.TaskAttributes,
@@ -54,22 +55,23 @@ func (e *OperationInvocationTaskExecutor) Execute(
 	return serviceerror.NewUnimplemented("unimplemented")
 }
 
-type OperationBackoffTaskExecutor struct {
+type OperationBackoffTaskHandler struct {
+	chasm.PureTaskHandlerBase
 	config *Config
 
 	metricsHandler metrics.Handler
 	logger         log.Logger
 }
 
-func NewOperationBackoffTaskExecutor(opts OperationTaskExecutorOptions) *OperationBackoffTaskExecutor {
-	return &OperationBackoffTaskExecutor{
+func NewOperationBackoffTaskHandler(opts OperationTaskHandlerOptions) *OperationBackoffTaskHandler {
+	return &OperationBackoffTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
 		logger:         opts.Logger,
 	}
 }
 
-func (e *OperationBackoffTaskExecutor) Validate(
+func (h *OperationBackoffTaskHandler) Validate(
 	ctx chasm.Context,
 	op *Operation,
 	attrs chasm.TaskAttributes,
@@ -78,7 +80,7 @@ func (e *OperationBackoffTaskExecutor) Validate(
 	return false, serviceerror.NewUnimplemented("unimplemented")
 }
 
-func (e *OperationBackoffTaskExecutor) Execute(
+func (h *OperationBackoffTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	op *Operation,
 	attrs chasm.TaskAttributes,
@@ -87,22 +89,23 @@ func (e *OperationBackoffTaskExecutor) Execute(
 	return serviceerror.NewUnimplemented("unimplemented")
 }
 
-type OperationTimeoutTaskExecutor struct {
+type OperationTimeoutTaskHandler struct {
+	chasm.PureTaskHandlerBase
 	config *Config
 
 	metricsHandler metrics.Handler
 	logger         log.Logger
 }
 
-func NewOperationTimeoutTaskExecutor(opts OperationTaskExecutorOptions) *OperationTimeoutTaskExecutor {
-	return &OperationTimeoutTaskExecutor{
+func NewOperationTimeoutTaskHandler(opts OperationTaskHandlerOptions) *OperationTimeoutTaskHandler {
+	return &OperationTimeoutTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
 		logger:         opts.Logger,
 	}
 }
 
-func (e *OperationTimeoutTaskExecutor) Validate(
+func (h *OperationTimeoutTaskHandler) Validate(
 	ctx chasm.Context,
 	op *Operation,
 	attrs chasm.TaskAttributes,
@@ -111,7 +114,7 @@ func (e *OperationTimeoutTaskExecutor) Validate(
 	return false, serviceerror.NewUnimplemented("unimplemented")
 }
 
-func (e *OperationTimeoutTaskExecutor) Execute(
+func (h *OperationTimeoutTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	op *Operation,
 	attrs chasm.TaskAttributes,

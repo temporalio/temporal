@@ -31,6 +31,8 @@ const (
 	WorkerPluginNameTagName        = "worker_plugin_name"
 	WorkerStorageDriverTypeTagName = "worker_storage_driver_type"
 	headerCallsiteTagName          = "header_callsite"
+	ArchetypeTagName               = "archetype"
+	ChasmTaskTypeTagName           = "chasm_task_type"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -556,6 +558,8 @@ const (
 	UnknownTaskScope = "UnknownTask"
 	// ParentClosePolicyProcessorScope is scope used by all metrics emitted by worker.ParentClosePolicyProcessor
 	ParentClosePolicyProcessorScope = "ParentClosePolicyProcessor"
+	// DeleteExecutionReplicationTaskScope is the scope used by delete execution replication task processing
+	DeleteExecutionReplicationTaskScope = "DeleteExecutionReplicationTask"
 )
 
 // History task type
@@ -666,6 +670,7 @@ var (
 	TlsCertsExpired                          = NewGaugeDef("certificates_expired")
 	TlsCertsExpiring                         = NewGaugeDef("certificates_expiring")
 	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
+	NamespaceRateLimitWaitLatency            = NewTimerDef("namespace_rate_limit_poll_wait_latency")
 	EventBlobSize                            = NewBytesHistogramDef("event_blob_size")
 	BlobSizeError                            = NewCounterDef(
 		"blob_size_error",
@@ -873,7 +878,15 @@ var (
 		"task_errors_throttled",
 		WithDescription("The number of history task processing errors caused by resource exhausted errors, excluding workflow busy case."),
 	)
-	TaskCorruptionCounter       = NewCounterDef("task_errors_corruption")
+	TaskCorruptionCounter = NewCounterDef("task_errors_corruption")
+	ChasmPureTaskRequests = NewCounterDef(
+		"chasm_pure_task_requests",
+		WithDescription("The number of CHASM pure tasks executed."),
+	)
+	ChasmPureTaskErrors = NewCounterDef(
+		"chasm_pure_task_errors",
+		WithDescription("The number of errors during CHASM pure task execution."),
+	)
 	TaskScheduleToStartLatency  = NewTimerDef("task_schedule_to_start_latency")
 	TaskBatchCompleteCounter    = NewCounterDef("task_batch_complete_counter")
 	TaskReschedulerPendingTasks = NewDimensionlessHistogramDef("task_rescheduler_pending_tasks")
@@ -1036,7 +1049,8 @@ var (
 	ReplicationOrphanedHistoryBranch = NewCounterDef("replication_orphaned_history_branch")
 	// ReplicationTasksLag is a heuristic for how far behind the remote DC is for a given cluster. It measures the
 	// difference between task IDs so its unit should be "tasks".
-	ReplicationTasksLag = NewDimensionlessHistogramDef("replication_tasks_lag")
+	ReplicationTasksLag                             = NewDimensionlessHistogramDef("replication_tasks_lag")
+	ReplicationDeleteExecutionTaskGenerationFailure = NewCounterDef("replication_delete_execution_task_generation_failure")
 	// ReplicationTasksFetched records the number of tasks fetched by the poller.
 	ReplicationTasksFetched                        = NewDimensionlessHistogramDef("replication_tasks_fetched")
 	ReplicationLatency                             = NewTimerDef("replication_latency")
@@ -1108,8 +1122,12 @@ var (
 	ExecutionQueueSchedulerTaskLatency    = NewTimerDef("execution_queue_scheduler_task_latency")
 	ExecutionQueueSchedulerQueueWaitTime  = NewTimerDef("execution_queue_scheduler_queue_wait_time")
 
-	PausedActivitiesCounter   = NewCounterDef("paused_activities")
-	ExternalPayloadUploadSize = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
+	PausedActivitiesCounter       = NewCounterDef("paused_activities")
+	ActivityPauseRequests         = NewCounterDef("activity_pause_requests")
+	ActivityUnpauseRequests       = NewCounterDef("activity_unpause_requests")
+	ActivityResetRequests         = NewCounterDef("activity_reset_requests")
+	ActivityUpdateOptionsRequests = NewCounterDef("activity_update_options_requests")
+	ExternalPayloadUploadSize     = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
 
 	// Deadlock detector metrics
 	DDSuspectedDeadlocks                 = NewCounterDef("dd_suspected_deadlocks")

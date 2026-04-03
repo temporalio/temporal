@@ -90,7 +90,7 @@ func (q SpeculativeWorkflowTaskTimeoutQueue) NotifyNewTasks(ts []tasks.Task) {
 				q.chasmRegistry,
 				GetTaskTypeTagValue,
 				q.logger,
-				q.metricsHandler.WithTags(defaultExecutableMetricsTags...),
+				q.metricsHandler,
 				q.tracer,
 			), wttt)
 			q.timeoutQueue.Add(executable)

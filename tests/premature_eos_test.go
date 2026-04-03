@@ -8,8 +8,17 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 )
+
+type PrematureEosTestSuite struct {
+	parallelsuite.Suite[*PrematureEosTestSuite]
+}
+
+func TestPrematureEosTestSuite(t *testing.T) {
+	parallelsuite.Run(t, &PrematureEosTestSuite{})
+}
 
 // Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination demonstrates the
 // "premature end of stream" bug in a scenario mimicking SDK workflow cache eviction:
@@ -34,7 +43,7 @@ import (
 //	  returns events 8 and 9; assembled history has 9 events (no premature EOS).
 //
 // This test asserts the FIXED behavior.
-func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) {
+func (s *PrematureEosTestSuite) Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination() {
 	// MaximumPageSize controls the number of DB event batches per page, not individual
 	// events. The 7 persisted events are stored in 5 batches:
 	//   [1,2] StartWorkflow, [3] WFTStarted, [4,5] WFTCompleted+WFTScheduled,
@@ -43,9 +52,9 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
 	// leaving batches [6] and [7] for the second page.
 	const maxBatchesPerPage = 3
 
-	s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
-	tv := s.Tv()
-	runID := mustStartWorkflow(s, tv)
+	env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
+	tv := env.Tv()
+	runID := mustStartWorkflow(env, tv)
 	wfExecution := &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID}
 
 	// Build 7 persisted events:
@@ -56,7 +65,7 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
 	//   5: WorkflowTaskScheduled  (force-created)
 	//   6: WorkflowTaskStarted
 	//   7: WorkflowTaskCompleted
-	_, err := s.TaskPoller().PollAndHandleWorkflowTask(tv,
+	_, err := env.TaskPoller().PollAndHandleWorkflowTask(tv,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				ForceCreateNewWorkflowTask: true,
@@ -64,7 +73,7 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
 		})
 	s.NoError(err)
 
-	_, err = s.TaskPoller().PollAndHandleWorkflowTask(tv,
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
 		})
@@ -73,7 +82,7 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
 	// Send an update to create a speculative WFT (event 8 in memory, scheduled but not polled).
 	ctx, cancel := context.WithCancel(testcore.NewContext())
 	defer cancel()
-	updateCh := sendUpdate(ctx, s, tv)
+	updateCh := sendUpdate(ctx, env, tv)
 	defer func() { go func() { <-updateCh }() }()
 
 	// Wait until the speculative WFT is scheduled before fetching page 1.
@@ -84,9 +93,9 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
 	// would only add event 8 (SignalReceived) with freshNextEventId=9, producing 8 events
 	// instead of the expected 9 and causing a false test failure.
 	s.Eventually(func() bool {
-		desc, descErr := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(),
+		desc, descErr := env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(),
 			&workflowservice.DescribeWorkflowExecutionRequest{
-				Namespace: s.Namespace().String(),
+				Namespace: env.Namespace().String(),
 				Execution: wfExecution,
 			})
 		return descErr == nil && desc.GetPendingWorkflowTask() != nil
@@ -99,10 +108,10 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
 	// batches are returned ([1,2]+[3]+[4,5] = events 1..5), leaving batches [6] and [7] for
 	// the next page. The continuation token encodes NextEventId=8 and PersistenceToken
 	// pointing to the next DB batch — this is the "stale token" that exercises the bug.
-	histPage1, err := s.FrontendClient().GetWorkflowExecutionHistory(
+	histPage1, err := env.FrontendClient().GetWorkflowExecutionHistory(
 		testcore.NewContext(),
 		&workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace:       s.Namespace().String(),
+			Namespace:       env.Namespace().String(),
 			Execution:       wfExecution,
 			MaximumPageSize: maxBatchesPerPage,
 		},
@@ -110,7 +119,7 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
 	s.NoError(err)
 	s.NotNil(histPage1.NextPageToken,
 		"NextPageToken must be set: with maxBatchesPerPage=3 and 5 total batches, page 1 must not be the last page")
-	t.Logf("NEXTPAGETOKEN: %s", histPage1.NextPageToken)
+	s.T().Logf("NEXTPAGETOKEN: %s", histPage1.NextPageToken)
 
 	firstPageEvents := histPage1.History.Events
 	staleNextPageToken := histPage1.NextPageToken
@@ -120,9 +129,9 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
 	//   8: WorkflowTaskScheduled  (normal WFT scheduled to handle the pending update)
 	//   9: WorkflowExecutionSignaled  (flushed immediately: HasStartedWorkflowTask=false)
 	// After this transaction, freshNextEventId=10.
-	_, signalErr := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(),
+	_, signalErr := env.FrontendClient().SignalWorkflowExecution(testcore.NewContext(),
 		&workflowservice.SignalWorkflowExecutionRequest{
-			Namespace:         s.Namespace().String(),
+			Namespace:         env.Namespace().String(),
 			WorkflowExecution: wfExecution,
 			SignalName:        tv.Any().String(),
 		})
@@ -132,9 +141,9 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
 	allEvents := make([]*historypb.HistoryEvent, len(firstPageEvents))
 	copy(allEvents, firstPageEvents)
 	for nextPageToken := staleNextPageToken; nextPageToken != nil; {
-		histResp, histErr := s.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(),
+		histResp, histErr := env.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(),
 			&workflowservice.GetWorkflowExecutionHistoryRequest{
-				Namespace:       s.Namespace().String(),
+				Namespace:       env.Namespace().String(),
 				Execution:       wfExecution,
 				NextPageToken:   nextPageToken,
 				MaximumPageSize: maxBatchesPerPage,
