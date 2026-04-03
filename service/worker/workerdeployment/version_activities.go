@@ -197,3 +197,19 @@ func (a *VersionActivities) GetVersionDrainageStatus(ctx context.Context, versio
 		LastCheckedTime: timestamppb.Now(),
 	}, nil
 }
+
+func (a *VersionActivities) UpdateWorkerControllerInstance(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) error {
+	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
+	if err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups()); err != nil {
+		var invalidArgs *serviceerror.InvalidArgument
+		if errors.As(err, &invalidArgs) {
+			return temporal.NewApplicationError(err.Error(), errInvalidComputeConfig)
+		}
+		return err
+	}
+	return nil
+}
+
+func (a *VersionActivities) DeleteWorkerControllerInstance(ctx context.Context, input *deploymentspb.DeleteWorkerControllerInstanceInput) error {
+	return a.WorkerControllerInstanceClient.DeleteWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), input.GetIdentity())
+}
