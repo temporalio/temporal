@@ -2854,6 +2854,10 @@ func (e *matchingEngineImpl) pollTask(
 	// returned to the handler before a context timeout error is generated.
 	workerInstanceKey := pollMetadata.workerInstanceKey
 	if workerInstanceKey != "" && e.shutdownWorkers.Get(workerInstanceKey) != nil {
+		e.logger.Info("Rejecting poll from recently-shutdown worker",
+			tag.WorkflowTaskQueueName(partition.TaskQueue().Name()),
+			tag.NewStringTag("worker-instance-key", workerInstanceKey),
+		)
 		return nil, false, errNoTasks
 	}
 
