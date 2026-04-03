@@ -234,6 +234,8 @@ func (s *StandaloneCallbackSuite) TestNexusOperationCompletionViaStandaloneCallb
 	s.NotNil(descResp.GetInfo())
 	s.Equal(callbackID, descResp.GetInfo().GetCallbackId())
 	s.NotNil(descResp.GetInfo().GetCreateTime())
+	s.Equal(enumspb.CALLBACK_EXECUTION_STATUS_SUCCEEDED, descResp.GetInfo().GetStatus())
+	s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, descResp.GetInfo().GetState())
 
 	// Poll to verify the outcome is a success with no failure.
 	pollResp, err := s.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
@@ -324,6 +326,53 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 		s.NotNil(result.resp.GetOutcome().GetFailure())
 		s.Equal("testing poll blocks", result.resp.GetOutcome().GetFailure().GetMessage())
 	})
+
+	s.Run("returns_run_id", func() {
+		callbackID := "poll-runid-" + uuid.NewString()
+		startResp := s.mustStartCallbackExecution(ctx, callbackID, nil, nil, time.Minute)
+		runID := startResp.GetRunId()
+
+		// Terminate so poll returns immediately.
+		_, err := s.FrontendClient().TerminateCallbackExecution(ctx, &workflowservice.TerminateCallbackExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			CallbackId: callbackID,
+			Identity:   "test",
+			RequestId:  uuid.NewString(),
+			Reason:     "testing run_id",
+		})
+		s.NoError(err)
+
+		pollResp, err := s.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			CallbackId: callbackID,
+		})
+		s.NoError(err)
+		s.Equal(runID, pollResp.GetRunId())
+		s.NotNil(pollResp.GetOutcome().GetFailure())
+	})
+
+	s.Run("poll_after_timeout", func() {
+		callbackID := "poll-timeout-" + uuid.NewString()
+		// Start with a very short schedule-to-close timeout so it times out quickly.
+		s.mustStartCallbackExecution(ctx, callbackID, nil, nil, time.Second)
+
+		// Wait for the callback to time out, then poll for the outcome.
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			pollResp, err := s.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				CallbackId: callbackID,
+			})
+			if !assert.NoError(t, err) {
+				return
+			}
+			if !assert.NotNil(t, pollResp.GetOutcome()) {
+				return
+			}
+			assert.NotNil(t, pollResp.GetOutcome().GetFailure())
+			assert.NotNil(t, pollResp.GetOutcome().GetFailure().GetTimeoutFailureInfo())
+			assert.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, pollResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+		}, 10*time.Second, 200*time.Millisecond)
+	})
 }
 
 // TestDeleteCallbackExecution tests that a standalone callback execution can be deleted.
@@ -347,6 +396,7 @@ func (s *StandaloneCallbackSuite) TestDeleteCallbackExecution() {
 	s.NoError(err)
 	s.Equal(callbackID, descResp.GetInfo().GetCallbackId())
 	s.Equal(runID, descResp.GetInfo().GetRunId())
+	s.Equal(enumspb.CALLBACK_EXECUTION_STATUS_RUNNING, descResp.GetInfo().GetStatus())
 
 	// Delete with wrong run_id should fail.
 	_, err = s.FrontendClient().DeleteCallbackExecution(ctx, &workflowservice.DeleteCallbackExecutionRequest{
@@ -364,15 +414,15 @@ func (s *StandaloneCallbackSuite) TestDeleteCallbackExecution() {
 	})
 	s.NoError(err)
 
-	// Describe after delete — the callback should be in TERMINATED state.
-	descResp, err = s.FrontendClient().DescribeCallbackExecution(ctx, &workflowservice.DescribeCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
-		CallbackId: callbackID,
-		RunId:      runID,
-	})
-	s.NoError(err)
-	s.Equal(enumspb.CALLBACK_EXECUTION_STATE_TERMINATED, descResp.GetInfo().GetState())
-	s.NotNil(descResp.GetInfo().GetCloseTime())
+	// Describe after delete — the callback should eventually be not found.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		_, err := s.FrontendClient().DescribeCallbackExecution(ctx, &workflowservice.DescribeCallbackExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			CallbackId: callbackID,
+			RunId:      runID,
+		})
+		assert.ErrorContains(t, err, "not found")
+	}, 5*time.Second, 100*time.Millisecond)
 }
 
 // TestNexusOperationFailureViaStandaloneCallback tests that a standalone callback can deliver
@@ -602,31 +652,52 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_InvalidArguments() 
 }
 
 // TestStartCallbackExecution_DuplicateID verifies that starting a callback with
-// an already-used callback_id returns an AlreadyExists error with the existing run_id.
+// an already-used callback_id returns an AlreadyExists error with a different request_id,
+// and that the same request_id is idempotent (returns the existing run_id without error).
 func (s *StandaloneCallbackSuite) TestStartCallbackExecution_DuplicateID() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
 	callbackID := "dup-test-" + uuid.NewString()
+	requestID := uuid.NewString()
+
+	// Build the request explicitly so we can reuse the same request_id.
+	req := &workflowservice.StartCallbackExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		Identity:   "test",
+		RequestId:  requestID,
+		CallbackId: callbackID,
+		Callback: &commonpb.Callback{
+			Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{
+					Url: "http://localhost:1/nonexistent",
+				},
+			},
+		},
+		Input: &workflowservice.StartCallbackExecutionRequest_Completion{Completion: &callbackpb.CallbackExecutionCompletion{
+			Result: &callbackpb.CallbackExecutionCompletion_Success{
+				Success: testcore.MustToPayload(s.T(), "some-result"),
+			},
+		}},
+		ScheduleToCloseTimeout: durationpb.New(time.Minute),
+	}
 
 	// First call succeeds.
-	startResp := s.mustStartCallbackExecution(ctx, callbackID, nil, nil, time.Minute)
+	startResp, err := s.FrontendClient().StartCallbackExecution(ctx, req)
+	s.NoError(err)
 	existingRunID := startResp.GetRunId()
+	s.NotEmpty(existingRunID)
 
-	// Second call with same callback_id should fail with AlreadyExists.
-	_, err := s.startCallbackExecution(ctx, callbackID, nil, nil, time.Minute)
+	// Same callback_id + same request_id should be idempotent (return existing run_id).
+	dupResp, err := s.FrontendClient().StartCallbackExecution(ctx, req)
+	s.NoError(err)
+	s.Equal(existingRunID, dupResp.GetRunId())
+
+	// Same callback_id + different request_id should fail with AlreadyExists.
+	req.RequestId = uuid.NewString()
+	_, err = s.FrontendClient().StartCallbackExecution(ctx, req)
 	s.Error(err)
 	s.Contains(err.Error(), "already exists")
-
-	// Verify the existing execution is still accessible via the run_id from the first start.
-	descResp, err := s.FrontendClient().DescribeCallbackExecution(ctx, &workflowservice.DescribeCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
-		CallbackId: callbackID,
-		RunId:      existingRunID,
-	})
-	s.NoError(err)
-	s.Equal(callbackID, descResp.GetInfo().GetCallbackId())
-	s.Equal(existingRunID, descResp.GetInfo().GetRunId())
 }
 
 // TestListAndCountCallbackExecutions tests that standalone callback executions
@@ -843,7 +914,8 @@ func (s *StandaloneCallbackSuite) TestTerminateCallbackExecution() {
 		RunId:      runID,
 	})
 	s.NoError(err)
-	s.Equal(enumspb.CALLBACK_EXECUTION_STATE_TERMINATED, descResp.GetInfo().GetState())
+	s.Equal(enumspb.CALLBACK_EXECUTION_STATUS_TERMINATED, descResp.GetInfo().GetStatus())
+	s.Equal(enumspb.CALLBACK_STATE_TERMINATED, descResp.GetInfo().GetState())
 	s.NotNil(descResp.GetInfo().GetCloseTime())
 	s.Equal(runID, descResp.GetInfo().GetRunId())
 
@@ -1056,7 +1128,8 @@ func (s *StandaloneCallbackSuite) TestScheduleToCloseTimeout() {
 		IncludeOutcome: true,
 	})
 	s.NoError(err)
-	s.Equal(enumspb.CALLBACK_EXECUTION_STATE_FAILED, descResp.GetInfo().GetState())
+	s.Equal(enumspb.CALLBACK_EXECUTION_STATUS_FAILED, descResp.GetInfo().GetStatus())
+	s.Equal(enumspb.CALLBACK_STATE_FAILED, descResp.GetInfo().GetState())
 	s.NotNil(descResp.GetInfo().GetCloseTime())
 	s.NotNil(descResp.GetOutcome().GetFailure())
 	s.NotNil(descResp.GetOutcome().GetFailure().GetTimeoutFailureInfo())

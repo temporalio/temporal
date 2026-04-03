@@ -164,7 +164,8 @@ func (e *CallbackExecution) Describe(ctx chasm.Context) (*callbackpb.CallbackExe
 		CallbackId:              e.CallbackId,
 		RunId:                   ctx.ExecutionKey().RunID,
 		Callback:                apiCb,
-		State:                   callbackStatusToAPIExecutionState(cb.Status),
+		Status:                  callbackStatusToAPIExecutionStatus(cb.Status),
+		State:                   callbackStatusToAPIState(cb.Status),
 		Attempt:                 cb.Attempt,
 		CreateTime:              e.CreateTime,
 		LastAttemptCompleteTime: cb.LastAttemptCompleteTime,
@@ -197,21 +198,41 @@ func (e *CallbackExecution) GetOutcome(ctx chasm.Context) (*callbackpb.CallbackE
 	}
 }
 
-// callbackStatusToAPIExecutionState maps internal CallbackStatus to public API CallbackExecutionState.
-func callbackStatusToAPIExecutionState(status callbackspb.CallbackStatus) enumspb.CallbackExecutionState {
+// callbackStatusToAPIExecutionStatus maps internal CallbackStatus to public API CallbackExecutionStatus.
+func callbackStatusToAPIExecutionStatus(status callbackspb.CallbackStatus) enumspb.CallbackExecutionStatus {
 	switch status {
 	case callbackspb.CALLBACK_STATUS_STANDBY,
 		callbackspb.CALLBACK_STATUS_SCHEDULED,
 		callbackspb.CALLBACK_STATUS_BACKING_OFF:
-		return enumspb.CALLBACK_EXECUTION_STATE_RUNNING
+		return enumspb.CALLBACK_EXECUTION_STATUS_RUNNING
 	case callbackspb.CALLBACK_STATUS_FAILED:
-		return enumspb.CALLBACK_EXECUTION_STATE_FAILED
+		return enumspb.CALLBACK_EXECUTION_STATUS_FAILED
 	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
-		return enumspb.CALLBACK_EXECUTION_STATE_SUCCEEDED
+		return enumspb.CALLBACK_EXECUTION_STATUS_SUCCEEDED
 	case callbackspb.CALLBACK_STATUS_TERMINATED:
-		return enumspb.CALLBACK_EXECUTION_STATE_TERMINATED
+		return enumspb.CALLBACK_EXECUTION_STATUS_TERMINATED
 	default:
-		return enumspb.CALLBACK_EXECUTION_STATE_UNSPECIFIED
+		return enumspb.CALLBACK_EXECUTION_STATUS_UNSPECIFIED
+	}
+}
+
+// callbackStatusToAPIState maps internal CallbackStatus to public API CallbackState.
+func callbackStatusToAPIState(status callbackspb.CallbackStatus) enumspb.CallbackState {
+	switch status {
+	case callbackspb.CALLBACK_STATUS_STANDBY:
+		return enumspb.CALLBACK_STATE_STANDBY
+	case callbackspb.CALLBACK_STATUS_SCHEDULED:
+		return enumspb.CALLBACK_STATE_SCHEDULED
+	case callbackspb.CALLBACK_STATUS_BACKING_OFF:
+		return enumspb.CALLBACK_STATE_BACKING_OFF
+	case callbackspb.CALLBACK_STATUS_FAILED:
+		return enumspb.CALLBACK_STATE_FAILED
+	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
+		return enumspb.CALLBACK_STATE_SUCCEEDED
+	case callbackspb.CALLBACK_STATUS_TERMINATED:
+		return enumspb.CALLBACK_STATE_TERMINATED
+	default:
+		return enumspb.CALLBACK_STATE_UNSPECIFIED
 	}
 }
 
@@ -219,7 +240,7 @@ func callbackStatusToAPIExecutionState(status callbackspb.CallbackStatus) enumsp
 func (e *CallbackExecution) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeKeyValue {
 	cb := e.Callback.Get(ctx)
 	return []chasm.SearchAttributeKeyValue{
-		executionStatusSearchAttribute.Value(callbackStatusToAPIExecutionState(cb.Status).String()),
+		executionStatusSearchAttribute.Value(callbackStatusToAPIExecutionStatus(cb.Status).String()),
 	}
 }
 
@@ -229,7 +250,7 @@ func (e *CallbackExecution) Memo(ctx chasm.Context) proto.Message {
 	cb := e.Callback.Get(ctx)
 	return &callbackpb.CallbackExecutionListInfo{
 		CallbackId: e.CallbackId,
-		State:      callbackStatusToAPIExecutionState(cb.Status),
+		Status:     callbackStatusToAPIExecutionStatus(cb.Status),
 		CreateTime: e.CreateTime,
 		CloseTime:  cb.CloseTime,
 	}

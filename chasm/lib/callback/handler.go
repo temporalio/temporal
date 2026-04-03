@@ -172,6 +172,7 @@ func (h *callbackExecutionHandler) PollCallbackExecution(
 		}
 		return &callbackspb.PollCallbackExecutionResponse{
 			FrontendResponse: &workflowservice.PollCallbackExecutionResponse{
+				RunId:   ctx.ExecutionKey().RunID,
 				Outcome: outcome,
 			},
 		}, true, nil
