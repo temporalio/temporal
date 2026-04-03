@@ -119,6 +119,11 @@ func (h *handler) DescribeActivityExecution(
 		RunID:       req.GetFrontendRequest().GetRunId(),
 	})
 
+	token := req.GetFrontendRequest().GetLongPollToken()
+	if len(token) == 0 {
+		return chasm.ReadComponent(ctx, ref, (*Activity).buildDescribeActivityExecutionResponse, req)
+	}
+
 	// Below, we send an empty non-error response on context deadline expiry. Here we compute a
 	// deadline that causes us to send that response before the caller's own deadline (see
 	// chasm.activity.longPollBuffer). We also cap the caller's deadline at
@@ -131,10 +136,6 @@ func (h *handler) DescribeActivityExecution(
 	)
 	defer cancel()
 
-	token := req.GetFrontendRequest().GetLongPollToken()
-	if len(token) == 0 {
-		return chasm.ReadComponent(ctx, ref, (*Activity).buildDescribeActivityExecutionResponse, req)
-	}
 	response, _, err = chasm.PollComponent(ctx, ref, func(
 		a *Activity,
 		ctx chasm.Context,

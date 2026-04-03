@@ -1962,3 +1962,29 @@ func (s *rawTaskConverterSuite) TestIsCloseTransferTaskAcked_TaskNotAcked_Contai
 	result := converter.isCloseTransferTaskAcked(closeTransferTask)
 	s.False(result)
 }
+
+func (s *rawTaskConverterSuite) TestConvertDeleteExecutionReplicationTask() {
+	taskID := int64(1444)
+	task := &tasks.DeleteExecutionReplicationTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID,
+			s.workflowID,
+			s.runID,
+		),
+		VisibilityTimestamp: time.Now().UTC(),
+		TaskID:              taskID,
+		ArchetypeID:         chasm.WorkflowArchetypeID,
+	}
+
+	result, err := convertDeleteExecutionReplicationTask(task)
+	s.NoError(err)
+	s.NotNil(result)
+	s.Equal(enumsspb.REPLICATION_TASK_TYPE_DELETE_EXECUTION_TASK, result.TaskType)
+	s.Equal(taskID, result.SourceTaskId)
+
+	attrs := result.GetHistoryTaskAttributes()
+	s.NotNil(attrs)
+	s.Equal(s.namespaceID, attrs.NamespaceId)
+	s.Equal(s.workflowID, attrs.WorkflowId)
+	s.Equal(s.runID, attrs.RunId)
+}
