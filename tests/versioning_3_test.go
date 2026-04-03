@@ -387,13 +387,7 @@ func (s *Versioning3Suite) testPinnedQuery_DrainedVersion(pollersPresent bool, r
 	tv := testvars.New(s)
 
 	// create version v1 and make it current
-	idlePollerDone := make(chan struct{})
-	go func() {
-		s.idlePollWorkflow(context.Background(), tv, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
-		close(idlePollerDone)
-	}()
-	s.setCurrentDeployment(tv)
-	s.WaitForChannel(ctx, idlePollerDone)
+	s.pollAndSetCurrent(ctx, tv)
 
 	wftCompleted := make(chan struct{})
 	s.pollWftAndHandle(tv, false, wftCompleted,
@@ -407,14 +401,8 @@ func (s *Versioning3Suite) testPinnedQuery_DrainedVersion(pollersPresent bool, r
 	s.verifyWorkflowVersioning(s.Assertions, tv, vbPinned, tv.Deployment(), tv.VersioningOverridePinned(), nil)
 
 	// create version v2 and make it current which shall make v1 go from current -> draining/drained
-	idlePollerDone = make(chan struct{})
 	tv2 := tv.WithBuildIDNumber(2)
-	go func() {
-		s.idlePollWorkflow(context.Background(), tv2, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
-		close(idlePollerDone)
-	}()
-	s.setCurrentDeployment(tv2)
-	s.WaitForChannel(ctx, idlePollerDone)
+	s.pollAndSetCurrent(ctx, tv2)
 
 	// wait for v1 to become drained
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -804,8 +792,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionsToNe
 
 	// Register the new version and set it to current
 	tv2 := tv1.WithBuildIDNumber(2)
-	s.idlePollWorkflow(context.Background(), tv2, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
-	s.setCurrentDeployment(tv2)
+	s.pollAndSetCurrent(context.Background(), tv2)
 
 	// Send update
 	updateResultCh := sendUpdateNoError(s, tv2)
@@ -890,9 +877,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_FailedUpdate_DoesNotTransitionTo
 
 	// Register the new version and set it to current
 	tv2 := tv1.WithBuildIDNumber(2)
-	s.idlePollWorkflow(context.Background(), tv2, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
-
-	s.setCurrentDeployment(tv2)
+	s.pollAndSetCurrent(context.Background(), tv2)
 
 	// Send update
 	updateResultCh := sendUpdateNoError(s, tv2)
@@ -2330,11 +2315,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 		s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), override, nil)
 		s.verifyVersioningSAs(tv1, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, tv1)
 
-		// Register v2 poller before setting it as current
-		s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "should not get any tasks yet")
-
-		// Set v2 as current
-		s.setCurrentDeployment(tv2)
+		s.pollAndSetCurrent(ctx, tv2)
 
 		// Mode-specific: trigger the WFT
 		var updateResultCh <-chan *workflowservice.UpdateWorkflowExecutionResponse
@@ -2552,11 +2533,7 @@ func (s *Versioning3Suite) TestAutoUpgradeCaN_UpgradeOnCaN() {
 		// Verify workflow is now versioned (AutoUpgrade) and running on v1
 		s.verifyWorkflowVersioning(s.Assertions, tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 
-		// Register v2 poller before setting it as current
-		s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "should not get any tasks yet")
-
-		// Set v2 as current
-		s.setCurrentDeployment(tv2)
+		s.pollAndSetCurrent(ctx, tv2)
 
 		// Signal the workflow again to trigger the WFT with ContinueAsNewSuggested=true and reasons=[NewTargetVersion]
 		_, err := s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
@@ -3102,6 +3079,29 @@ func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(tv)
+}
+
+// pollAndSetCurrent registers a versioned poller for the given deployment (so the version
+// is known to the task queue) and then sets it as the current deployment version.
+// The idle poll continues until setCurrent completes to ensure we do not end polling too early.
+func (s *Versioning3Suite) pollAndSetCurrent(ctx context.Context, tv *testvars.TestVars) {
+	pollCtx, cancel := context.WithCancel(ctx)
+	go func() {
+		for pollCtx.Err() == nil {
+			s.idlePollWorkflow(pollCtx, tv, true, ver3MinPollTime, "should not get any tasks yet")
+		}
+	}()
+	// Wait until the version is visible before attempting to set it as current.
+	s.Eventually(func() bool {
+		_, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv.DeploymentVersionString(),
+		})
+		var notFound *serviceerror.NotFound
+		return !errors.As(err, &notFound)
+	}, 30*time.Second, 100*time.Millisecond)
+	s.setCurrentDeployment(tv)
+	cancel()
 }
 
 func (s *Versioning3Suite) unsetCurrentDeployment(tv *testvars.TestVars) {
@@ -5241,11 +5241,7 @@ func (s *Versioning3Suite) TestVersionedQueueUnload() {
 
 	tv1 := testvars.New(s)
 
-	// Register v1 poller before setting it as current
-	s.idlePollWorkflow(ctx, tv1, true, ver3MinPollTime, "should not get any tasks yet")
-
-	// Set current version to v1
-	s.setCurrentDeployment(tv1)
+	s.pollAndSetCurrent(ctx, tv1)
 	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf)
 
 	// Start workflow with autoUpgrade behavior without any poller
@@ -5324,8 +5320,8 @@ func (s *Versioning3Suite) testTransitionDuringTransientTask(withSignal bool) {
 
 	// We need to keep pollers until the task queues are properly registered
 	pollCtx, pollCtxCancel := context.WithTimeout(ctx, 60*time.Second)
-	go s.idlePollWorkflow(pollCtx, tv1, true, ver3MinPollTime, "should not get any tasks yet")
-	go s.idlePollActivity(pollCtx, tv1, true, ver3MinPollTime, "should not get any tasks yet")
+	go s.idlePollWorkflow(pollCtx, tv1, true, 60*time.Second, "should not get any tasks yet")
+	go s.idlePollActivity(pollCtx, tv1, true, 60*time.Second, "should not get any tasks yet")
 	s.waitForDeploymentDataPropagation(tv1, versionStatusInactive, false, tqTypeWf, tqTypeAct)
 	pollCtxCancel()
 
@@ -5483,9 +5479,7 @@ func (s *Versioning3Suite) TestPinnedCaN_NoAUOnCaN_NoInfiniteLoop() {
 	s.WaitForChannel(ctx, wftCompleted)
 	s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), nil, nil)
 
-	// Register v2 poller before setting it as current
-	s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "should not get any tasks yet")
-	s.setCurrentDeployment(tv2)
+	s.pollAndSetCurrent(ctx, tv2)
 
 	// Trigger WFT via signal
 	s.triggerNormalWFT(ctx, tv1, execution)
@@ -5582,9 +5576,7 @@ func (s *Versioning3Suite) TestOverride_SuppressesTargetVersionChangedSignal() {
 	})
 	s.NoError(err)
 
-	// Register v2 poller before setting it as current
-	s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "should not get any tasks yet")
-	s.setCurrentDeployment(tv2)
+	s.pollAndSetCurrent(ctx, tv2)
 
 	// Trigger WFT via signal
 	s.triggerNormalWFT(ctx, tv1, execution)
@@ -5632,9 +5624,7 @@ func (s *Versioning3Suite) TestAutoUpgrade_SuppressesTargetVersionChangedSignal(
 	s.WaitForChannel(ctx, wftCompleted)
 	s.verifyWorkflowVersioning(s.Assertions, tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 
-	// Register v2 poller before setting it as current
-	s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "should not get any tasks yet")
-	s.setCurrentDeployment(tv2)
+	s.pollAndSetCurrent(ctx, tv2)
 
 	// Trigger WFT via signal
 	s.triggerNormalWFT(ctx, tv1, execution)
@@ -5685,9 +5675,7 @@ func (s *Versioning3Suite) TestPinnedCaN_TargetChangesAgain_SignalsTrue() {
 	s.WaitForChannel(ctx, wftCompleted)
 	s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), nil, nil)
 
-	// Register v2 poller before setting it as current
-	s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "should not get any tasks yet")
-	s.setCurrentDeployment(tv2)
+	s.pollAndSetCurrent(ctx, tv2)
 
 	// Trigger WFT via signal
 	s.triggerNormalWFT(ctx, tv1, execution)
@@ -5727,8 +5715,7 @@ func (s *Versioning3Suite) TestPinnedCaN_TargetChangesAgain_SignalsTrue() {
 		})
 
 	// Now change current to v3 (target changes from v2 to v3)
-	s.idlePollWorkflow(ctx, tv3, true, ver3MinPollTime, "should not get any tasks yet")
-	s.setCurrentDeployment(tv3)
+	s.pollAndSetCurrent(ctx, tv3)
 	s.waitForDeploymentDataPropagation(tv3, versionStatusCurrent, false, tqTypeWf)
 
 	// New run starts on v1 (pinned). Since target changed from v2→v3,
@@ -5789,8 +5776,7 @@ func (s *Versioning3Suite) TestRemoveOverride_ClearsDeclinedState() {
 	s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), nil, nil)
 
 	// Set v2 as current, trigger signal
-	s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "should not get any tasks yet")
-	s.setCurrentDeployment(tv2)
+	s.pollAndSetCurrent(ctx, tv2)
 	s.triggerNormalWFT(ctx, tv1, execution)
 
 	// Run 1: targetDeploymentVersionChanged=true → CaN without AU (decline v2)
@@ -5984,8 +5970,7 @@ func (s *Versioning3Suite) TestRetryOfDeclinedCaN_SignalsOnNewTarget() {
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Set v2 as current, signal workflow to CaN without AU (decline upgrade).
-	s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "v2 idle poll")
-	s.setCurrentDeployment(tv2)
+	s.pollAndSetCurrent(ctx, tv2)
 	s.waitForDeploymentDataPropagation(tv2, versionStatusCurrent, false, tqTypeWf)
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, wfID, run0.GetRunID(), "proceed", nil))
 
@@ -6080,9 +6065,7 @@ func (s *Versioning3Suite) TestPinnedCaN_RollbackResetsDeclined() {
 	s.WaitForChannel(ctx, wftCompleted)
 	s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), nil, nil)
 
-	// Register v2 poller before setting it as current
-	s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "should not get any tasks yet")
-	s.setCurrentDeployment(tv2)
+	s.pollAndSetCurrent(ctx, tv2)
 
 	// Trigger WFT via signal
 	s.triggerNormalWFT(ctx, tv1, execution)
