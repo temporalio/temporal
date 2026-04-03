@@ -83,6 +83,7 @@ var Module = fx.Options(
 	fx.Provide(EventNotifierProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
+	fx.Provide(HistoryServiceServerProvider),
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(ReplicationProgressCacheProvider),
@@ -153,6 +154,10 @@ func HandlerProvider(args NewHandlerArgs) (*Handler, error) {
 	}
 
 	return handler, nil
+}
+
+func HistoryServiceServerProvider(handler *Handler) historyservice.HistoryServiceServer {
+	return handler
 }
 
 func buildNexusHandler(chasmRegistry *chasm.Registry) (nexus.Handler, error) {

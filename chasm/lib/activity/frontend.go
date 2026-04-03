@@ -468,6 +468,7 @@ func (h *frontendHandler) PauseActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
+	// TODO: validate request fields (e.g. namespace, identity length)
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -491,6 +492,7 @@ func (h *frontendHandler) UnpauseActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
+	// TODO: validate request fields (e.g. namespace, identity length)
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -514,6 +516,7 @@ func (h *frontendHandler) ResetActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
+	// TODO: validate request fields (e.g. namespace, identity length)
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -537,6 +540,7 @@ func (h *frontendHandler) UpdateActivityExecutionOptions(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
+	// TODO: validate request fields (e.g. namespace, identity length, update mask)
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err

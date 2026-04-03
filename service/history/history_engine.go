@@ -1139,30 +1139,3 @@ func (e *historyEngineImpl) UnpauseWorkflowExecution(
 	return unpauseworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
 }
 
-func (e *historyEngineImpl) UpdateActivityExecutionOptions(
-	ctx context.Context,
-	req *historyservice.UpdateActivityExecutionOptionsRequest,
-) (resp *historyservice.UpdateActivityExecutionOptionsResponse, retError error) {
-	return &historyservice.UpdateActivityExecutionOptionsResponse{}, nil
-}
-
-func (e *historyEngineImpl) PauseActivityExecution(
-	ctx context.Context,
-	req *historyservice.PauseActivityExecutionRequest,
-) (resp *historyservice.PauseActivityExecutionResponse, retError error) {
-	return &historyservice.PauseActivityExecutionResponse{}, nil
-}
-
-func (e *historyEngineImpl) UnpauseActivityExecution(
-	ctx context.Context,
-	req *historyservice.UnpauseActivityExecutionRequest,
-) (resp *historyservice.UnpauseActivityExecutionResponse, retError error) {
-	return &historyservice.UnpauseActivityExecutionResponse{}, nil
-}
-
-func (e *historyEngineImpl) ResetActivityExecution(
-	ctx context.Context,
-	req *historyservice.ResetActivityExecutionRequest,
-) (resp *historyservice.ResetActivityExecutionResponse, retError error) {
-	return &historyservice.ResetActivityExecutionResponse{}, nil
-}

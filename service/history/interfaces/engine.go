@@ -98,10 +98,6 @@ type (
 		ResetActivity(ctx context.Context, request *historyservice.ResetActivityRequest) (*historyservice.ResetActivityResponse, error)
 		PauseWorkflowExecution(ctx context.Context, request *historyservice.PauseWorkflowExecutionRequest) (*historyservice.PauseWorkflowExecutionResponse, error)
 		UnpauseWorkflowExecution(ctx context.Context, request *historyservice.UnpauseWorkflowExecutionRequest) (*historyservice.UnpauseWorkflowExecutionResponse, error)
-		UpdateActivityExecutionOptions(ctx context.Context, request *historyservice.UpdateActivityExecutionOptionsRequest) (*historyservice.UpdateActivityExecutionOptionsResponse, error)
-		PauseActivityExecution(ctx context.Context, request *historyservice.PauseActivityExecutionRequest) (*historyservice.PauseActivityExecutionResponse, error)
-		UnpauseActivityExecution(ctx context.Context, request *historyservice.UnpauseActivityExecutionRequest) (*historyservice.UnpauseActivityExecutionResponse, error)
-		ResetActivityExecution(ctx context.Context, request *historyservice.ResetActivityExecutionRequest) (*historyservice.ResetActivityExecutionResponse, error)
 
 		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTasks(tasks map[tasks.Category][]tasks.Task)

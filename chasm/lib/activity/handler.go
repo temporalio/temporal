@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/resource"
 )
 
 var (
@@ -34,16 +33,16 @@ var (
 type handler struct {
 	activitypb.UnimplementedActivityServiceServer
 	config            *Config
-	historyClient     resource.HistoryClient
+	historyHandler    historyservice.HistoryServiceServer
 	logger            log.Logger
 	metricsHandler    metrics.Handler
 	namespaceRegistry namespace.Registry
 }
 
-func newHandler(config *Config, historyClient resource.HistoryClient, metricsHandler metrics.Handler, logger log.Logger, namespaceRegistry namespace.Registry) *handler {
+func newHandler(config *Config, historyHandler historyservice.HistoryServiceServer, metricsHandler metrics.Handler, logger log.Logger, namespaceRegistry namespace.Registry) *handler {
 	return &handler{
 		config:            config,
-		historyClient:     historyClient,
+		historyHandler:    historyHandler,
 		logger:            logger,
 		metricsHandler:    metricsHandler,
 		namespaceRegistry: namespaceRegistry,
@@ -303,7 +302,7 @@ func (h *handler) RequestCancelActivityExecution(
 func (h *handler) PauseActivityExecution(ctx context.Context, req *activitypb.PauseActivityExecutionRequest) (*activitypb.PauseActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
 	if frontendReq.GetWorkflowId() != "" {
-		_, err := h.historyClient.PauseActivity(ctx, &historyservice.PauseActivityRequest{
+		_, err := h.historyHandler.PauseActivity(ctx, &historyservice.PauseActivityRequest{
 			NamespaceId: req.GetNamespaceId(),
 			FrontendRequest: &workflowservice.PauseActivityRequest{
 				Namespace: frontendReq.GetNamespace(),
@@ -327,7 +326,7 @@ func (h *handler) PauseActivityExecution(ctx context.Context, req *activitypb.Pa
 func (h *handler) UnpauseActivityExecution(ctx context.Context, req *activitypb.UnpauseActivityExecutionRequest) (*activitypb.UnpauseActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
 	if frontendReq.GetWorkflowId() != "" {
-		_, err := h.historyClient.UnpauseActivity(ctx, &historyservice.UnpauseActivityRequest{
+		_, err := h.historyHandler.UnpauseActivity(ctx, &historyservice.UnpauseActivityRequest{
 			NamespaceId: req.GetNamespaceId(),
 			FrontendRequest: &workflowservice.UnpauseActivityRequest{
 				Namespace: frontendReq.GetNamespace(),
@@ -353,7 +352,7 @@ func (h *handler) UnpauseActivityExecution(ctx context.Context, req *activitypb.
 func (h *handler) ResetActivityExecution(ctx context.Context, req *activitypb.ResetActivityExecutionRequest) (*activitypb.ResetActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
 	if frontendReq.GetWorkflowId() != "" {
-		_, err := h.historyClient.ResetActivity(ctx, &historyservice.ResetActivityRequest{
+		_, err := h.historyHandler.ResetActivity(ctx, &historyservice.ResetActivityRequest{
 			NamespaceId: req.GetNamespaceId(),
 			FrontendRequest: &workflowservice.ResetActivityRequest{
 				Namespace: frontendReq.GetNamespace(),
@@ -379,7 +378,7 @@ func (h *handler) ResetActivityExecution(ctx context.Context, req *activitypb.Re
 func (h *handler) UpdateActivityExecutionOptions(ctx context.Context, req *activitypb.UpdateActivityExecutionOptionsRequest) (*activitypb.UpdateActivityExecutionOptionsResponse, error) {
 	frontendReq := req.GetFrontendRequest()
 	if frontendReq.GetWorkflowId() != "" {
-		resp, err := h.historyClient.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
+		resp, err := h.historyHandler.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
 			NamespaceId: req.GetNamespaceId(),
 			UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
 				Namespace: frontendReq.GetNamespace(),
