@@ -807,7 +807,11 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 			true,
 			versionedTransition.IsCloseTransferTaskAcked && versionedTransition.IsForceReplication,
 		)
-		if errors.Is(err, consts.ErrDuplicate) {
+		if err != nil {
+			if !errors.Is(err, consts.ErrDuplicate) {
+				return err
+			}
+			// Handle duplicate error
 			ms, msErr := wfCtx.LoadMutableState(ctx, r.shardContext)
 			switch msErr.(type) {
 			case *serviceerror.NotFound:
@@ -817,12 +821,16 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 				// and this mutable state may update after acquire the workflow lock.
 				// Retry to apply snapshot with mutable state
 				localMutableState = ms
+				r.logger.Warn("duplicate error applying snapshot for new workflow; mutable state already exists, retrying with existing state",
+					tag.WorkflowNamespaceID(namespaceID.String()),
+					tag.WorkflowID(workflowID),
+					tag.WorkflowRunID(runID),
+					tag.ArchetypeID(archetypeID),
+					tag.Error(err),
+				)
 			default:
 				return err
 			}
-		}
-		if err != nil {
-			return err
 		}
 	}
 	return r.applySnapshotWhenWorkflowExist(
