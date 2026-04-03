@@ -33,7 +33,7 @@ func logInternalError(logger log.Logger, internalMsg string, internalErr error) 
 	return fmt.Errorf("internal error, reference-id: %v", referenceID)
 }
 
-// invocableInternal is an invokable that delivers the Nexus operation completion data to History for cross-shard
+// invocableInternal is an invocable that delivers the Nexus operation completion data to History for cross-shard
 // callbacks.
 type invocableInternal struct {
 	callback   *callbackspb.Callback_Nexus

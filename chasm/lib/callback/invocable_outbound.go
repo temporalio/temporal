@@ -19,7 +19,7 @@ import (
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 )
 
-// invocableOutbound is an invokable that delivers the Nexus operation completion data to an external destination for
+// invocableOutbound is an invocable that delivers the Nexus operation completion data to an external destination for
 // cross-namespace or cross-cell callbacks.
 type invocableOutbound struct {
 	callback          *callbackspb.Callback_Nexus
