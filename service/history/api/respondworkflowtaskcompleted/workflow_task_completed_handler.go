@@ -452,6 +452,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 				namespaceID,
 				attr,
 				executionInfo.WorkflowRunTimeout,
+				executionInfo.TaskQueue,
 			)
 		},
 	); err != nil || handler.stopProcessing {

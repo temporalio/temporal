@@ -71,7 +71,8 @@ func TestValidateSuccess(t *testing.T) {
 			defaultNamespaceID,
 			&defaultActivityOptions,
 			&defaultPriority,
-			durationpb.New(0))
+			durationpb.New(0),
+			defaultTaskQueue)
 		require.NoError(t, err)
 	})
 }
@@ -326,8 +327,31 @@ func TestEmbeddedActivityTaskQueueValidations(t *testing.T) {
 			defaultNamespaceID,
 			options,
 			&defaultPriority,
-			durationpb.New(0))
+			durationpb.New(0),
+			primitives.PerNSWorkerTaskQueue)
 		require.NoError(t, err)
+	})
+
+	t.Run("Disallow PerNSWorkerTaskQueue TaskQueue", func(t *testing.T) {
+		options := &activitypb.ActivityOptions{
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+			ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+		}
+
+		err := ValidateAndNormalizeEmbeddedActivity(
+			defaultActivityID,
+			defaultActivityType,
+			getDefaultRetrySettings,
+			defaultMaxIDLengthLimit,
+			defaultNamespaceID,
+			options,
+			&defaultPriority,
+			durationpb.New(0),
+			defaultTaskQueue)
+
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, invalidArgErr.Error(), "cannot use internal per-namespace task queue")
 	})
 
 	t.Run("Disallow Internal TaskQueue Prefix", func(t *testing.T) {
@@ -344,7 +368,8 @@ func TestEmbeddedActivityTaskQueueValidations(t *testing.T) {
 			defaultNamespaceID,
 			options,
 			&defaultPriority,
-			durationpb.New(0))
+			durationpb.New(0),
+			defaultTaskQueue)
 
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
@@ -365,7 +390,8 @@ func TestEmbeddedActivityTaskQueueValidations(t *testing.T) {
 			defaultNamespaceID,
 			options,
 			&defaultPriority,
-			durationpb.New(0))
+			durationpb.New(0),
+			defaultTaskQueue)
 
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
