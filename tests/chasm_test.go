@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"strconv"
 	"testing"
@@ -232,7 +233,7 @@ func (s *ChasmTestSuite) TestListExecutions() {
 
 	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND PayloadStoreId = '%s'", archetypeID, storeID)
 
-	var visRecord *chasm.ExecutionInfo[*testspb.TestPayloadStore]
+	var visRecord *chasm.ExecutionVisibilityInfo[*testspb.TestPayloadStore]
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
@@ -668,7 +669,7 @@ func (s *ChasmTestSuite) TestListExecutions_ExecutionStatusAsAlias() {
 	// This tests that CHASM components can use "ExecutionStatus" as an alias for their own search attribute
 	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running' AND PayloadStoreId = '%s'", archetypeID, storeID)
 
-	var visRecord *chasm.ExecutionInfo[*testspb.TestPayloadStore]
+	var visRecord *chasm.ExecutionVisibilityInfo[*testspb.TestPayloadStore]
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
@@ -742,7 +743,7 @@ func (s *ChasmTestSuite) TestTaskQueuePreallocatedSearchAttribute() {
 	// Query using TaskQueue as a CHASM preallocated search attribute
 	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND TaskQueue = '%s' AND PayloadStoreId = '%s'", archetypeID, tests.DefaultPayloadStoreTaskQueue, storeID)
 
-	var visRecord *chasm.ExecutionInfo[*testspb.TestPayloadStore]
+	var visRecord *chasm.ExecutionVisibilityInfo[*testspb.TestPayloadStore]
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
@@ -791,7 +792,7 @@ func (s *ChasmTestSuite) TestMutableStateRebuilder() {
 	s.True(ok)
 	s.Equal(archetypeID, chasm.ArchetypeID(archetypeID))
 	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", archetypeID, storeID)
-	var visRecord *chasm.ExecutionInfo[*testspb.TestPayloadStore]
+	var visRecord *chasm.ExecutionVisibilityInfo[*testspb.TestPayloadStore]
 	var runID string
 	s.Eventually(
 		func() bool {
@@ -949,6 +950,73 @@ func (s *ChasmTestSuite) TestUpdateWithStartExecution_CreateNew() {
 	s.NoError(err)
 	s.False(descResp.State.Closed, "Store should not be closed")
 	s.Equal(int64(42), descResp.State.TotalCount) // Update was applied during creation.
+}
+
+func (s *ChasmTestSuite) TestPayloadStore_ApproximateExecutionSize() {
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	_, err := tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+
+	descResp, err := tests.DescribePayloadStoreHandler(
+		ctx,
+		tests.DescribePayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+	initialApproxSize := descResp.ApproximateStateSize
+
+	payloadSize := 100 * 1024 // 100KB
+	payloadData := make([]byte, payloadSize)
+	_, err = rand.Read(payloadData)
+	s.NoError(err)
+
+	_, err = tests.AddPayloadHandler(
+		ctx,
+		tests.AddPayloadRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+			PayloadKey:  "key1",
+			Payload:     payload.EncodeBytes(payloadData),
+		},
+	)
+	s.NoError(err)
+
+	descResp, err = tests.DescribePayloadStoreHandler(
+		ctx,
+		tests.DescribePayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+	currentApproxSize := descResp.ApproximateStateSize
+	sizeDelta := float64(100) // Allow 100 bytes of variance due to overhead, encoding, etc.
+	s.InDelta(payloadSize, currentApproxSize-initialApproxSize, sizeDelta)
+
+	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
+	s.True(ok)
+	adminDescResp, err := s.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: storeID,
+		},
+		ArchetypeId: archetypeID,
+	})
+	s.NoError(err)
+	s.InDelta(adminDescResp.DatabaseMutableState.Size(), currentApproxSize, sizeDelta)
 }
 
 // TODO: More tests here...
