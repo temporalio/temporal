@@ -228,12 +228,9 @@ func (s *ChasmTestSuite) TestListExecutions() {
 	)
 	s.NoError(err)
 
-	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND PayloadStoreId = '%s'", tests.ArchetypeID, storeID)
 
-	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND PayloadStoreId = '%s'", archetypeID, storeID)
-
-	var visRecord *chasm.ExecutionVisibilityInfo[*testspb.TestPayloadStore]
+	var visRecord *chasm.VisibilityExecutionInfo[*testspb.TestPayloadStore]
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
@@ -274,7 +271,7 @@ func (s *ChasmTestSuite) TestListExecutions() {
 	s.NoError(payload.Decode(visRecord.CustomSearchAttributes[sadefs.TemporalNamespaceDivision], &archetypeIDStr))
 	parsedArchetypeID, err := strconv.ParseUint(archetypeIDStr, 10, 32)
 	s.NoError(err)
-	s.Equal(archetypeID, chasm.ArchetypeID(parsedArchetypeID))
+	s.Equal(tests.ArchetypeID, chasm.ArchetypeID(parsedArchetypeID))
 
 	addPayloadResp, err := tests.AddPayloadHandler(
 		ctx,
@@ -518,9 +515,7 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 	s.NoError(err)
 
 	// Make sure visibility record is created, so that we can test its deletion later.
-	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
-	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", archetypeID, storeID)
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", tests.ArchetypeID, storeID)
 	var executionInfo *workflowpb.WorkflowExecutionInfo
 	s.Eventually(
 		func() bool {
@@ -544,9 +539,9 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 	s.NoError(payload.Decode(archetypePayload, &archetypeIDStr))
 	parsedArchetypeID, err := strconv.ParseUint(archetypeIDStr, 10, 32)
 	s.NoError(err)
-	s.Equal(archetypeID, chasm.ArchetypeID(parsedArchetypeID))
+	s.Equal(tests.ArchetypeID, chasm.ArchetypeID(parsedArchetypeID))
 
-	archetype, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentFqnByID(archetypeID)
+	archetype, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentFqnByID(tests.ArchetypeID)
 	s.True(ok)
 	_, err = s.AdminClient().DeleteWorkflowExecution(testcore.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
@@ -662,14 +657,11 @@ func (s *ChasmTestSuite) TestListExecutions_ExecutionStatusAsAlias() {
 	)
 	s.NoError(err)
 
-	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
-
 	// Query using "ExecutionStatus" as a CHASM alias (which maps to TemporalKeyword03)
 	// This tests that CHASM components can use "ExecutionStatus" as an alias for their own search attribute
-	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running' AND PayloadStoreId = '%s'", archetypeID, storeID)
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running' AND PayloadStoreId = '%s'", tests.ArchetypeID, storeID)
 
-	var visRecord *chasm.ExecutionVisibilityInfo[*testspb.TestPayloadStore]
+	var visRecord *chasm.VisibilityExecutionInfo[*testspb.TestPayloadStore]
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
@@ -704,7 +696,7 @@ func (s *ChasmTestSuite) TestListExecutions_ExecutionStatusAsAlias() {
 	)
 	s.NoError(err)
 
-	visQueryCanceled := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Canceled' AND PayloadStoreId = '%s'", archetypeID, storeID)
+	visQueryCanceled := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Canceled' AND PayloadStoreId = '%s'", tests.ArchetypeID, storeID)
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
@@ -737,13 +729,10 @@ func (s *ChasmTestSuite) TestTaskQueuePreallocatedSearchAttribute() {
 	)
 	s.NoError(err)
 
-	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
-
 	// Query using TaskQueue as a CHASM preallocated search attribute
-	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND TaskQueue = '%s' AND PayloadStoreId = '%s'", archetypeID, tests.DefaultPayloadStoreTaskQueue, storeID)
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND TaskQueue = '%s' AND PayloadStoreId = '%s'", tests.ArchetypeID, tests.DefaultPayloadStoreTaskQueue, storeID)
 
-	var visRecord *chasm.ExecutionVisibilityInfo[*testspb.TestPayloadStore]
+	var visRecord *chasm.VisibilityExecutionInfo[*testspb.TestPayloadStore]
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
@@ -788,11 +777,8 @@ func (s *ChasmTestSuite) TestMutableStateRebuilder() {
 	s.NoError(err)
 
 	// wait for the payload store to be created
-	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
-	s.Equal(archetypeID, chasm.ArchetypeID(archetypeID))
-	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", archetypeID, storeID)
-	var visRecord *chasm.ExecutionVisibilityInfo[*testspb.TestPayloadStore]
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", tests.ArchetypeID, storeID)
+	var visRecord *chasm.VisibilityExecutionInfo[*testspb.TestPayloadStore]
 	var runID string
 	s.Eventually(
 		func() bool {
@@ -816,7 +802,7 @@ func (s *ChasmTestSuite) TestMutableStateRebuilder() {
 	s.Equal(storeID, visRecord.BusinessID)
 
 	// payloadStore archetype is not the workflow archetype, should fail the rebuild.
-	archetype, _ := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentFqnByID(archetypeID)
+	archetype, _ := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentFqnByID(tests.ArchetypeID)
 	s.NotEqual(archetype, chasm.WorkflowArchetype, "Archetype should not be the workflow archetype")
 
 	_, err = s.AdminClient().RebuildMutableState(testcore.NewContext(), &adminservice.RebuildMutableStateRequest{
@@ -1006,14 +992,12 @@ func (s *ChasmTestSuite) TestPayloadStore_ApproximateExecutionSize() {
 	sizeDelta := float64(100) // Allow 100 bytes of variance due to overhead, encoding, etc.
 	s.InDelta(payloadSize, currentApproxSize-initialApproxSize, sizeDelta)
 
-	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
 	adminDescResp, err := s.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: storeID,
 		},
-		ArchetypeId: archetypeID,
+		ArchetypeId: tests.ArchetypeID,
 	})
 	s.NoError(err)
 	s.InDelta(adminDescResp.DatabaseMutableState.Size(), currentApproxSize, sizeDelta)

@@ -28,7 +28,7 @@ type VisibilityManager interface {
 	) (*visibilityservice.CountChasmExecutionsResponse, error)
 }
 
-type ExecutionVisibilityInfo[M proto.Message] struct {
+type VisibilityExecutionInfo[M proto.Message] struct {
 	BusinessID             string
 	RunID                  string
 	StartTime              time.Time
@@ -50,7 +50,7 @@ type ListExecutionsRequest struct {
 }
 
 type ListExecutionsResponse[M proto.Message] struct {
-	Executions    []*ExecutionVisibilityInfo[M]
+	Executions    []*VisibilityExecutionInfo[M]
 	NextPageToken []byte
 }
 
@@ -91,7 +91,7 @@ func ListExecutions[C Component, M proto.Message](
 	}
 
 	// Convert response: decode ChasmSearchAttributes and ChasmMemo to type M
-	executions := make([]*ExecutionVisibilityInfo[M], len(response.Executions))
+	executions := make([]*VisibilityExecutionInfo[M], len(response.Executions))
 	for i, execution := range response.Executions {
 		chasmSAs, err := newSearchAttributesMapFromProto(execution.ChasmSearchAttributes)
 		if err != nil {
@@ -106,7 +106,7 @@ func ListExecutions[C Component, M proto.Message](
 		if err := payload.Decode(execution.ChasmMemo, chasmMemo); err != nil {
 			return nil, serviceerror.NewInternalf("failed to decode chasm memo: %v", err)
 		}
-		executions[i] = &ExecutionVisibilityInfo[M]{
+		executions[i] = &VisibilityExecutionInfo[M]{
 			BusinessID:             execution.BusinessId,
 			RunID:                  execution.RunId,
 			StartTime:              execution.StartTime.AsTime(),
