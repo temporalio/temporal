@@ -76,6 +76,7 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 	namespaceID namespace.ID,
 	attributes *commandpb.ScheduleActivityTaskCommandAttributes,
 	runTimeout *durationpb.Duration,
+	workflowTaskQueue string,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES
 
@@ -116,7 +117,8 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 		namespaceID,
 		opts,
 		attributes.GetPriority(),
-		runTimeout)
+		runTimeout,
+		workflowTaskQueue)
 
 	if err != nil {
 		return failedCause, err
