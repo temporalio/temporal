@@ -1581,7 +1581,7 @@ func (s *Versioning3Suite) nexusTaskStaysOnCurrentDeployment() {
 	}}, []string{}, tqTypeNexus)
 
 	// Pollers of tv1 are there but should not get any task
-	go s.idlePollNexus(tv1, true, ver3MinPollTime, "nexus task should not go to the old deployment")
+	go s.idlePollNexus(context.Background(), tv1, true, ver3MinPollTime, "nexus task should not go to the old deployment")
 
 	s.pollAndDispatchNexusTask(tv2, nexusRequest)
 }
@@ -3114,6 +3114,10 @@ func (s *Versioning3Suite) pollUntilRegistered(ctx context.Context, tv *testvars
 					s.idlePollWorkflow(pollCtx, tv, true, ver3MinPollTime, "should not get any tasks yet")
 				case tqTypeAct:
 					s.idlePollActivity(pollCtx, tv, true, ver3MinPollTime, "should not get any tasks yet")
+				case tqTypeNexus:
+					s.idlePollNexus(pollCtx, tv, true, ver3MinPollTime, "should not get any tasks yet")
+				default:
+					panic("invalid task queue type")
 				}
 			}
 		}()
@@ -3884,6 +3888,7 @@ func (s *Versioning3Suite) idlePollActivity(
 }
 
 func (s *Versioning3Suite) idlePollNexus(
+	ctx context.Context,
 	tv *testvars.TestVars,
 	versioned bool,
 	timeout time.Duration,
@@ -3897,11 +3902,13 @@ func (s *Versioning3Suite) idlePollNexus(
 		tv,
 		func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error) {
 			if task != nil {
-				s.Fail(unexpectedTaskMessage)
+				a := s.Assert()
+				a.Fail(unexpectedTaskMessage)
 			}
 			return nil, nil
 		},
 		taskpoller.WithTimeout(timeout),
+		taskpoller.WithContext(ctx),
 	)
 }
 
