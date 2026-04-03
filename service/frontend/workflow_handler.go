@@ -5531,6 +5531,15 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, err
 	}
 
+	// Validate visibility query syntax before starting the batch workflow.
+	// Malformed queries (e.g. "()") would otherwise cause the batch activity
+	// to retry indefinitely since the error is not marked non-retryable.
+	if q := request.GetVisibilityQuery(); len(q) > 0 {
+		if _, err := sqlparser.Parse("select * from dummy where " + q); err != nil {
+			return nil, serviceerror.NewInvalidArgumentf("invalid visibility query: %v", err)
+		}
+	}
+
 	// Validate concurrent batch operation
 	maxConcurrentBatchOperation := wh.config.MaxConcurrentBatchOperation(request.GetNamespace())
 	countResp, err := wh.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
