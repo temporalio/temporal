@@ -189,6 +189,76 @@ func TestRunBisect(t *testing.T) {
 	})
 }
 
+func TestRunBisectInformationlessData(t *testing.T) {
+	t.Run("zero observations across many commits returns nil", func(t *testing.T) {
+		// With no observations at any commit, there is no data to localize a transition.
+		obs := []CommitObservation{
+			{CommitSHA: "sha0", CommitIdx: 0, Prior: 1.0},
+			{CommitSHA: "sha1", CommitIdx: 1, Prior: 1.0},
+			{CommitSHA: "sha2", CommitIdx: 2, Prior: 1.0},
+			{CommitSHA: "sha3", CommitIdx: 3, Prior: 1.0},
+			{CommitSHA: "sha4", CommitIdx: 4, Prior: 1.0},
+		}
+		result := runBisect(obs)
+		assert.Nil(t, result)
+	})
+
+	t.Run("balanced data (equal failures and successes per commit) yields symmetric posterior", func(t *testing.T) {
+		// Each commit has the same number of failures and successes (50% failure rate
+		// throughout), so there is no directional signal about where a transition occurred.
+		//
+		// The Beta-Binomial model does NOT produce posterior == prior in this case: placing
+		// all observations on one side of the transition is more parsimonious (one marginal
+		// distribution instead of two), so the model assigns slightly higher likelihood to
+		// extreme transition points. However, the posterior IS symmetric around the midpoint:
+		// prob[i] == prob[N-1-i] when priors are uniform and per-commit observations are
+		// identical.
+		obs := []CommitObservation{
+			{CommitSHA: "sha0", CommitIdx: 0, Prior: 1.0, Passes: 5, Fails: 5},
+			{CommitSHA: "sha1", CommitIdx: 1, Prior: 1.0, Passes: 5, Fails: 5},
+			{CommitSHA: "sha2", CommitIdx: 2, Prior: 1.0, Passes: 5, Fails: 5},
+			{CommitSHA: "sha3", CommitIdx: 3, Prior: 1.0, Passes: 5, Fails: 5},
+			{CommitSHA: "sha4", CommitIdx: 4, Prior: 1.0, Passes: 5, Fails: 5},
+		}
+		results := runBisect(obs)
+		require.NotNil(t, results)
+		require.Len(t, results, 5)
+
+		// Probabilities must be non-negative and sum to 1.0.
+		sum := 0.0
+		for _, r := range results {
+			assert.GreaterOrEqual(t, r.Probability, 0.0)
+			sum += r.Probability
+		}
+		assert.InDelta(t, 1.0, sum, 1e-10)
+
+		// With uniform priors and identical per-commit observations the distribution has
+		// a specific symmetry: the weight for transition at index i depends only on the
+		// total observations before/after the split. Because the "before" segment for
+		// index i mirrors the "after" segment for index N-1-i+1, the pairs (sha1, sha4)
+		// and (sha2, sha3) must have equal probability. sha0 is unpaired: its "before"
+		// segment is empty while no index has an empty "after" segment.
+		//
+		// Note: sha0 will have a higher probability than the others because placing all
+		// observations on one side of the transition is more parsimonious for the
+		// Beta-Binomial model than splitting them between two equal-rate distributions.
+		// The balanced data does not produce a diffuse uniform posterior.
+		probBySHA := make(map[string]float64, len(results))
+		for _, r := range results {
+			probBySHA[r.CommitSHA] = r.Probability
+		}
+		// No commit should dominate with balanced data (>50% would imply a spurious signal).
+		for sha, p := range probBySHA {
+			assert.Less(t, p, 0.5, "no single commit should dominate with balanced data (sha=%s)", sha)
+		}
+		// Paired commits must have equal probability.
+		assert.InDelta(t, probBySHA["sha1"], probBySHA["sha4"], 1e-10,
+			"symmetric pair: sha1 and sha4 should have equal probability")
+		assert.InDelta(t, probBySHA["sha2"], probBySHA["sha3"], 1e-10,
+			"symmetric pair: sha2 and sha3 should have equal probability")
+	})
+}
+
 func TestBuildObservations(t *testing.T) {
 	commitOrderSlice := []string{"sha-a", "sha-b", "sha-c", "sha-d"}
 	runToSHA := map[int64]string{
