@@ -462,4 +462,18 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_Failed() {
 	s.Error(err)
 	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+
+	// malformed visibility query should be rejected before the batch workflow starts
+	_, err = env.SdkClient().WorkflowService().StartBatchOperation(env.Context(), &workflowservice.StartBatchOperationRequest{
+		Namespace: env.Namespace().String(),
+		Operation: &workflowservice.StartBatchOperationRequest_DeletionOperation{
+			DeletionOperation: &batchpb.BatchOperationDeletion{},
+		},
+		VisibilityQuery: "()",
+		JobId:           uuid.NewString(),
+		Reason:          "test",
+	})
+	s.Error(err)
+	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }
