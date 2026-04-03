@@ -601,7 +601,7 @@ func (s *queryConverterSuite) TestConvertColName() {
 			),
 			err: nil,
 			setup: func() {
-				s.queryConverter.saTypeMap = searchattribute.TestEsNameTypeMapWithScheduleID()
+				s.queryConverter.saTypeMap = searchattribute.TestNameTypeMapWithScheduleID()
 				s.queryConverter.saMapper = newMapper(
 					func(alias, namespace string) (string, error) {
 						return alias, nil

@@ -26,6 +26,8 @@ import (
 	"go.temporal.io/server/common/namespace/nsmanager"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
+	vismanager "go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -43,6 +45,8 @@ type (
 		namespaceAttrValidator *nsmanager.Validator
 		archivalMetadata       archiver.ArchivalMetadata
 		archiverProvider       provider.ArchiverProvider
+		clusterMetadataManager persistence.ClusterMetadataManager
+		visibilityMgr          vismanager.VisibilityManager
 		timeSource             clock.TimeSource
 		config                 *Config
 	}
@@ -70,6 +74,8 @@ func newNamespaceHandler(
 	namespaceReplicator nsreplication.Replicator,
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
+	clusterMetadataManager persistence.ClusterMetadataManager,
+	visibilityMgr vismanager.VisibilityManager,
 	timeSource clock.TimeSource,
 	config *Config,
 ) *namespaceHandler {
@@ -81,6 +87,8 @@ func newNamespaceHandler(
 		namespaceAttrValidator: nsmanager.NewValidator(clusterMetadata),
 		archivalMetadata:       archivalMetadata,
 		archiverProvider:       archiverProvider,
+		clusterMetadataManager: clusterMetadataManager,
+		visibilityMgr:          visibilityMgr,
 		timeSource:             timeSource,
 		config:                 config,
 	}
@@ -197,6 +205,9 @@ func (d *namespaceHandler) RegisterNamespace(
 		VisibilityArchivalUri:        nextVisibilityArchivalState.URI,
 		BadBinaries:                  &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 		CustomSearchAttributeAliases: nil,
+	}
+	if err := d.seedIdentitySearchAttributeAliases(ctx, config); err != nil {
+		return nil, err
 	}
 	replicationConfig := &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: activeClusterName,
@@ -1077,6 +1088,39 @@ func (d *namespaceHandler) validateRetentionDuration(retention *durationpb.Durat
 	if timestamp.DurationValue(retention) < minRetention {
 		return errInvalidRetentionPeriod
 	}
+	return nil
+}
+
+func (d *namespaceHandler) seedIdentitySearchAttributeAliases(
+	ctx context.Context,
+	config *persistencespb.NamespaceConfig,
+) error {
+	if d.visibilityMgr == nil || d.clusterMetadataManager == nil {
+		return nil
+	}
+	if !d.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) {
+		return nil
+	}
+
+	clusterMetadataResponse, err := d.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
+	if err != nil {
+		return err
+	}
+
+	indexSearchAttrs := clusterMetadataResponse.IndexSearchAttributes[d.visibilityMgr.GetIndexName()]
+	if indexSearchAttrs == nil || len(indexSearchAttrs.CustomSearchAttributes) == 0 {
+		return nil
+	}
+
+	aliases := buildIdentitySearchAttributeAliases(
+		config.CustomSearchAttributeAliases,
+		indexSearchAttrs.CustomSearchAttributes,
+	)
+	if len(aliases) == 0 {
+		return nil
+	}
+
+	config.CustomSearchAttributeAliases = aliases
 	return nil
 }
 

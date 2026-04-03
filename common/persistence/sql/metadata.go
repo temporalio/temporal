@@ -153,11 +153,11 @@ func (m *sqlMetadataManagerV2) updateNamespace(
 			return err
 		}
 		if metadata.NotificationVersion != request.NotificationVersion {
-			return fmt.Errorf(
+			return &persistence.ConditionFailedError{Msg: fmt.Sprintf(
 				"conditional update error: expect: %v, actual: %v",
 				request.NotificationVersion,
 				metadata.NotificationVersion,
-			)
+			)}
 		}
 		result, err := tx.UpdateNamespace(ctx, &sqlplugin.NamespaceRow{
 			Name:                request.Name,
@@ -175,7 +175,7 @@ func (m *sqlMetadataManagerV2) updateNamespace(
 			return fmt.Errorf("rowsAffected error: %v", err)
 		}
 		if noRowsAffected != 1 {
-			return fmt.Errorf("%v rows updated instead of one", noRowsAffected)
+			return &persistence.ConditionFailedError{Msg: fmt.Sprintf("%v rows updated instead of one", noRowsAffected)}
 		}
 		return updateMetadata(ctx, tx, metadata.NotificationVersion)
 	})
@@ -273,7 +273,7 @@ func updateMetadata(
 	if err != nil {
 		return serviceerror.NewUnavailablef("Could not verify whether namespace metadata update occurred. Error: %v", err)
 	} else if rowsAffected != 1 {
-		return serviceerror.NewUnavailablef("Failed to update namespace metadata. <>1 rows affected. Error: %v", err)
+		return &persistence.ConditionFailedError{Msg: "Failed to update namespace metadata. <>1 rows affected."}
 	}
 
 	return nil

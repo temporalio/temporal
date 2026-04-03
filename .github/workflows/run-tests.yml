@@ -557,6 +557,10 @@ jobs:
         if: ${{ failure() && toJson(matrix.containers) != '[]' }}
         run: docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} logs --no-color
 
+      - name: Dump container logs
+        if: ${{ failure() && toJson(matrix.containers) != '[]' }}
+        run: docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} logs --no-color
+
       - name: Print memory snapshot
         if: always()
         run: cat /tmp/memory_snapshot.txt || true

@@ -3,7 +3,6 @@ package frontend
 import (
 	"context"
 	"fmt"
-	"maps"
 	"sync/atomic"
 	"time"
 
@@ -27,7 +26,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
@@ -184,90 +182,15 @@ func (h *OperatorHandlerImpl) addSearchAttributesInternal(
 	request *operatorservice.AddSearchAttributesRequest,
 	visManager manager.VisibilityManager,
 ) error {
-	storeName := visManager.GetStoreNames()[0]
-	if storeName == elasticsearch.PersistenceName {
-		return h.addSearchAttributesElasticsearch(ctx, request, visManager)
-	}
-	return h.addSearchAttributesSQL(ctx, request, visManager)
-}
-
-func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
-	ctx context.Context,
-	request *operatorservice.AddSearchAttributesRequest,
-	visManager manager.VisibilityManager,
-) error {
 	indexName := visManager.GetIndexName()
 	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 
-	// Check if custom search attribute already exists in cluster metadata.
-	// This check is not needed in SQL DB because all custom search attributes
-	// are pre-allocated, and only aliases are created.
-	customAttributesToAdd := map[string]enumspb.IndexedValueType{}
-	for saName, saType := range request.GetSearchAttributes() {
-		if !currentSearchAttributes.IsDefined(saName) {
-			customAttributesToAdd[saName] = saType
-		} else {
-			h.logger.Warn(
-				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
-				tag.String(visibilityIndexNameTagName, indexName),
-				tag.String(visibilitySearchAttributeTagName, saName),
-			)
-		}
-	}
-
-	// If the map is empty, then all custom search attributes already exists.
-	if len(customAttributesToAdd) == 0 {
-		return nil
-	}
-
-	if err := visManager.AddSearchAttributes(
-		ctx,
-		&manager.AddSearchAttributesRequest{SearchAttributes: customAttributesToAdd},
-	); err != nil {
-		return serviceerror.NewUnavailablef(errUnableToSaveSearchAttributesMessage, err)
-	}
-
-	newCustomSearchAttributes := util.CloneMapNonNil(currentSearchAttributes.Custom())
-	maps.Copy(newCustomSearchAttributes, customAttributesToAdd)
-	err = h.saManager.SaveSearchAttributes(ctx, indexName, newCustomSearchAttributes)
+	resp, err := h.getNamespaceInfo(ctx, request.GetNamespace())
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err))
-	}
-	return nil
-}
-
-func (h *OperatorHandlerImpl) addSearchAttributesSQL(
-	ctx context.Context,
-	request *operatorservice.AddSearchAttributesRequest,
-	visManager manager.VisibilityManager,
-) error {
-	indexName := visManager.GetIndexName()
-	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
-	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
-	}
-
-	_, client, err := h.clientFactory.NewLocalFrontendClientWithTimeout(
-		frontend.DefaultTimeout,
-		frontend.DefaultLongPollTimeout,
-	)
-	if err != nil {
-		return serviceerror.NewUnavailablef(errUnableToCreateFrontendClientMessage, err)
-	}
-
-	nsName := request.GetNamespace()
-	if nsName == "" {
-		return errNamespaceNotSet
-	}
-	resp, err := client.DescribeNamespace(
-		ctx,
-		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
-	)
-	if err != nil {
-		return serviceerror.NewUnavailablef(errUnableToGetNamespaceInfoMessage, nsName, err)
+		return err
 	}
 
 	cmCustomSearchAttributes := currentSearchAttributes.Custom()
@@ -279,8 +202,8 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		if _, ok := aliasToFieldMap[saName]; ok {
 			h.logger.Warn(
 				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
-				tag.String(namespaceTagName, nsName),
-				tag.String(visibilitySearchAttributeTagName, saName),
+				tag.NewStringTag(namespaceTagName, request.GetNamespace()),
+				tag.NewStringTag(visibilitySearchAttributeTagName, saName),
 			)
 			continue
 		}
@@ -306,24 +229,12 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		upsertFieldToAliasMap[targetFieldName] = saName
 	}
 
-	// If the map is empty, then all custom search attributes already exists.
+	// If the map is empty, then all custom search attributes already exist.
 	if len(upsertFieldToAliasMap) == 0 {
 		return nil
 	}
 
-	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
-		Namespace: nsName,
-		Config: &namespacepb.NamespaceConfig{
-			CustomSearchAttributeAliases: upsertFieldToAliasMap,
-		},
-	})
-	if err != nil {
-		if err.Error() == errCustomSearchAttributeFieldAlreadyAllocated.Error() {
-			return errRaceConditionAddingSearchAttributes
-		}
-		return serviceerror.NewUnavailablef(errUnableToSaveSearchAttributesMessage, err)
-	}
-	return nil
+	return h.updateNamespaceAliases(ctx, request.GetNamespace(), upsertFieldToAliasMap)
 }
 
 func (h *OperatorHandlerImpl) RemoveSearchAttributes(
@@ -366,78 +277,15 @@ func (h *OperatorHandlerImpl) removeSearchAttributesInternal(
 	request *operatorservice.RemoveSearchAttributesRequest,
 	visManager manager.VisibilityManager,
 ) error {
-	storeName := visManager.GetStoreNames()[0]
-	if storeName == elasticsearch.PersistenceName {
-		return h.removeSearchAttributesElasticsearch(ctx, request, visManager)
-	}
-	return h.removeSearchAttributesSQL(ctx, request, visManager)
-}
-
-func (h *OperatorHandlerImpl) removeSearchAttributesElasticsearch(
-	ctx context.Context,
-	request *operatorservice.RemoveSearchAttributesRequest,
-	visManager manager.VisibilityManager,
-) error {
-	indexName := h.visibilityMgr.GetIndexName()
+	indexName := visManager.GetIndexName()
 	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 
-	newCustomSearchAttributes := maps.Clone(currentSearchAttributes.Custom())
-	for _, saName := range request.GetSearchAttributes() {
-		if !currentSearchAttributes.IsDefined(saName) {
-			// Custom search attribute not found, skip it.
-			continue
-		}
-		if _, ok := newCustomSearchAttributes[saName]; !ok {
-			return serviceerror.NewInvalidArgumentf(
-				errUnableToRemoveNonCustomSearchAttributesMessage, saName,
-			)
-		}
-		delete(newCustomSearchAttributes, saName)
-	}
-
-	if len(newCustomSearchAttributes) == len(currentSearchAttributes.Custom()) {
-		return nil
-	}
-
-	err = h.saManager.SaveSearchAttributes(ctx, indexName, newCustomSearchAttributes)
+	resp, err := h.getNamespaceInfo(ctx, request.GetNamespace())
 	if err != nil {
-		return serviceerror.NewUnavailablef(errUnableToSaveSearchAttributesMessage, err)
-	}
-	return nil
-}
-
-func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
-	ctx context.Context,
-	request *operatorservice.RemoveSearchAttributesRequest,
-	visManager manager.VisibilityManager,
-) error {
-	indexName := h.visibilityMgr.GetIndexName()
-	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
-	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
-	}
-
-	_, client, err := h.clientFactory.NewLocalFrontendClientWithTimeout(
-		frontend.DefaultTimeout,
-		frontend.DefaultLongPollTimeout,
-	)
-	if err != nil {
-		return serviceerror.NewUnavailablef(errUnableToCreateFrontendClientMessage, err)
-	}
-
-	nsName := request.GetNamespace()
-	if nsName == "" {
-		return errNamespaceNotSet
-	}
-	resp, err := client.DescribeNamespace(
-		ctx,
-		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
-	)
-	if err != nil {
-		return serviceerror.NewUnavailablef(errUnableToGetNamespaceInfoMessage, nsName, err)
+		return err
 	}
 
 	upsertFieldToAliasMap := make(map[string]string)
@@ -458,13 +306,7 @@ func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
 		return nil
 	}
 
-	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
-		Namespace: nsName,
-		Config: &namespacepb.NamespaceConfig{
-			CustomSearchAttributeAliases: upsertFieldToAliasMap,
-		},
-	})
-	return err
+	return h.updateNamespaceAliases(ctx, request.GetNamespace(), upsertFieldToAliasMap)
 }
 
 func (h *OperatorHandlerImpl) ListSearchAttributes(
@@ -485,28 +327,35 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(
 		)
 	}
 
-	if h.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) {
-		return h.listSearchAttributesElasticsearch(ctx, indexName, searchAttributes)
+	resp, err := h.getNamespaceInfo(ctx, request.GetNamespace())
+	if err != nil {
+		return nil, err
 	}
-	return h.listSearchAttributesSQL(ctx, request, searchAttributes)
-}
 
-func (h *OperatorHandlerImpl) listSearchAttributesElasticsearch(
-	ctx context.Context,
-	indexName string,
-	searchAttributes searchattribute.NameTypeMap,
-) (*operatorservice.ListSearchAttributesResponse, error) {
+	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
+	customSearchAttributes := make(map[string]enumspb.IndexedValueType)
+	for field, tp := range searchAttributes.Custom() {
+		alias := field
+		if mappedAlias, ok := fieldToAliasMap[field]; ok {
+			alias = mappedAlias
+		}
+		customSearchAttributes[alias] = tp
+	}
 	return &operatorservice.ListSearchAttributesResponse{
-		CustomAttributes: searchAttributes.Custom(),
+		CustomAttributes: customSearchAttributes,
 		SystemAttributes: searchAttributes.System(),
 	}, nil
 }
 
-func (h *OperatorHandlerImpl) listSearchAttributesSQL(
+// Helper functions for search attribute management
+func (h *OperatorHandlerImpl) getNamespaceInfo(
 	ctx context.Context,
-	request *operatorservice.ListSearchAttributesRequest,
-	searchAttributes searchattribute.NameTypeMap,
-) (*operatorservice.ListSearchAttributesResponse, error) {
+	namespaceName string,
+) (*workflowservice.DescribeNamespaceResponse, error) {
+	if namespaceName == "" {
+		return nil, errNamespaceNotSet
+	}
+
 	_, client, err := h.clientFactory.NewLocalFrontendClientWithTimeout(
 		frontend.DefaultTimeout,
 		frontend.DefaultLongPollTimeout,
@@ -515,32 +364,43 @@ func (h *OperatorHandlerImpl) listSearchAttributesSQL(
 		return nil, serviceerror.NewUnavailablef(errUnableToCreateFrontendClientMessage, err)
 	}
 
-	nsName := request.GetNamespace()
-	if nsName == "" {
-		return nil, errNamespaceNotSet
-	}
 	resp, err := client.DescribeNamespace(
 		ctx,
-		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
+		&workflowservice.DescribeNamespaceRequest{Namespace: namespaceName},
 	)
 	if err != nil {
-		return nil, serviceerror.NewUnavailablef(
-			errUnableToGetNamespaceInfoMessage, nsName, err,
-		)
+		return nil, serviceerror.NewUnavailablef(errUnableToGetNamespaceInfoMessage, namespaceName, err)
 	}
 
-	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
-	customSearchAttributes := make(map[string]enumspb.IndexedValueType)
-	for field, tp := range searchAttributes.Custom() {
-		if alias, ok := fieldToAliasMap[field]; ok {
-			customSearchAttributes[alias] = tp
-		}
+	return resp, nil
+}
+
+func (h *OperatorHandlerImpl) updateNamespaceAliases(
+	ctx context.Context,
+	namespaceName string,
+	fieldToAliasMap map[string]string,
+) error {
+	_, client, err := h.clientFactory.NewLocalFrontendClientWithTimeout(
+		frontend.DefaultTimeout,
+		frontend.DefaultLongPollTimeout,
+	)
+	if err != nil {
+		return serviceerror.NewUnavailablef(errUnableToCreateFrontendClientMessage, err)
 	}
-	return &operatorservice.ListSearchAttributesResponse{
-		CustomAttributes: customSearchAttributes,
-		SystemAttributes: searchAttributes.System(),
-		StorageSchema:    nil,
-	}, nil
+
+	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespaceName,
+		Config: &namespacepb.NamespaceConfig{
+			CustomSearchAttributeAliases: fieldToAliasMap,
+		},
+	})
+	if err != nil {
+		if err.Error() == errCustomSearchAttributeFieldAlreadyAllocated.Error() {
+			return errRaceConditionAddingSearchAttributes
+		}
+		return serviceerror.NewUnavailablef(errUnableToSaveSearchAttributesMessage, err)
+	}
+	return nil
 }
 
 func (h *OperatorHandlerImpl) DeleteNamespace(
