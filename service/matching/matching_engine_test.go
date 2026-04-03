@@ -5815,4 +5815,36 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 0, engine.shutdownWorkers.Size())
 	})
+
+	t.Run("repeated calls are idempotent", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+		}
+
+		workerKey := "test-worker"
+		cancelCount := 0
+		engine.workerInstancePollers.Add(workerKey, "poller-1", func() { cancelCount++ })
+		engine.workerInstancePollers.Add(workerKey, "poller-2", func() { cancelCount++ })
+
+		req := &matchingservice.CancelOutstandingWorkerPollsRequest{
+			WorkerInstanceKey: workerKey,
+		}
+
+		// First call cancels both pollers.
+		resp1, err := engine.CancelOutstandingWorkerPolls(context.Background(), req)
+		require.NoError(t, err)
+		require.Equal(t, int32(2), resp1.CancelledCount)
+		require.Equal(t, 2, cancelCount)
+
+		// Second call succeeds with zero cancellations — pollers already gone.
+		resp2, err := engine.CancelOutstandingWorkerPolls(context.Background(), req)
+		require.NoError(t, err)
+		require.Equal(t, int32(0), resp2.CancelledCount)
+		require.Equal(t, 2, cancelCount, "cancel functions should not be called again")
+
+		// Worker remains in shutdown cache after both calls.
+		require.NotNil(t, engine.shutdownWorkers.Get(workerKey))
+	})
 }
