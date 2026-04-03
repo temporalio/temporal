@@ -71,7 +71,7 @@ func (r *defaultReplicationResolver) ClusterNames(businessID string) []string {
 	return out
 }
 
-func (r *defaultReplicationResolver) ReplicationState(businessID string) enumspb.ReplicationState {
+func (r *defaultReplicationResolver) ReplicationState(_ string) enumspb.ReplicationState {
 	if r.replicationConfig == nil {
 		return enumspb.REPLICATION_STATE_UNSPECIFIED
 	}

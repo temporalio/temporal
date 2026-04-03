@@ -259,7 +259,7 @@ func GrpcServerOptionsProvider(
 		maskInternalErrorDetailsInterceptor.Intercept,
 		interceptor.ServiceErrorInterceptor,
 		interceptor.NewFrontendServiceErrorInterceptor(logger),
-		// BusinessID interceptor extracts business ID and adds it to context for use by redirection policy
+		// BusinessID interceptor extracts business ID and adds it to context for use, must be before any interceptor that touches namespaces (namespaceValidator, handoverInterceptor)
 		businessIDInterceptor.Intercept,
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
