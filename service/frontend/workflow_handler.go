@@ -115,6 +115,7 @@ type (
 	WorkflowHandler struct {
 		workflowservice.UnsafeWorkflowServiceServer
 		activity.FrontendHandler
+		callback.CallbackExecutionFrontendHandler
 
 		status int32
 
@@ -133,7 +134,6 @@ type (
 		matchingClient                  matchingservice.MatchingServiceClient
 		workerDeploymentClient          workerdeployment.Client
 		schedulerClient                 schedulerpb.SchedulerServiceClient
-		callback.CallbackExecutionFrontendHandler
 		archiverProvider                provider.ArchiverProvider
 		payloadSerializer               serialization.Serializer
 		namespaceRegistry               namespace.Registry

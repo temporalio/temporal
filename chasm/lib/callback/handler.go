@@ -9,10 +9,10 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type callbackExecutionHandler struct {
