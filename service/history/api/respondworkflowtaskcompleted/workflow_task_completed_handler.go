@@ -79,7 +79,7 @@ type (
 		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
 		matchingClient         matchingservice.MatchingServiceClient
-		versionCache worker_versioning.VersionMembershipAndReactivationStatusCache
+		versionCache           worker_versioning.VersionMembershipAndReactivationStatusCache
 	}
 
 	workflowTaskFailedCause struct {
@@ -152,7 +152,7 @@ func newWorkflowTaskCompletedHandler(
 		tokenSerializer:        tasktoken.NewSerializer(),
 		commandHandlerRegistry: commandHandlerRegistry,
 		matchingClient:         matchingClient,
-		versionCache: versionCache,
+		versionCache:           versionCache,
 	}
 }
 

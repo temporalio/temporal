@@ -276,7 +276,7 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 		s.shardContext,
 		s.workflowConsistencyChecker,
 		s.mockMatchingClient,
-		noopVersionCache{},  // cache not meant to be used in this test
+		noopVersionCache{},            // cache not meant to be used in this test
 		noopReactivationSignalCache{}, // cache not meant to be used in this test
 		noopReactivationSignaler,      // signaler not meant to be used in this test
 	)

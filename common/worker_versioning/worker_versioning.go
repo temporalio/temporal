@@ -410,9 +410,10 @@ func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploym
 	return false
 }
 
-//nolint:staticcheck
 // IsVersionDrainedOrInactive checks the version's status in the task queue's deployment data.
 // Returns nil if the version is not found in the deployment data (cannot determine status).
+//
+//nolint:staticcheck
 func IsVersionDrainedOrInactive(
 	deployments *persistencespb.DeploymentData,
 	deploymentName string,

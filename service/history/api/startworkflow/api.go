@@ -111,7 +111,7 @@ func NewStarter(
 		request:                    request,
 		namespace:                  namespaceEntry,
 		createOrUpdateLeaseFn:      createLeaseFn,
-		versionCache:     versionCache,
+		versionCache:               versionCache,
 		reactivationSignalCache:    reactivationSignalCache,
 		reactivationSignaler:       reactivationSignaler,
 	}, nil
