@@ -541,15 +541,13 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 	s.NoError(err)
 	s.Equal(tests.ArchetypeID, chasm.ArchetypeID(parsedArchetypeID))
 
-	archetype, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentFqnByID(tests.ArchetypeID)
-	s.True(ok)
 	_, err = s.AdminClient().DeleteWorkflowExecution(testcore.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: storeID,
 			RunId:      createResp.RunID,
 		},
-		Archetype: archetype,
+		Archetype: tests.Archetype,
 	})
 	s.NoError(err)
 
