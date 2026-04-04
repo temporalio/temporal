@@ -135,7 +135,10 @@ type CallbackState struct {
 	// Request ID that added the callback.
 	RequestId string `protobuf:"bytes,9,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	// The time when the callback reached a terminal state.
-	CloseTime     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
+	CloseTime *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
+	// Failure from an external termination (timeout or terminate), stored separately
+	// from last_attempt_failure so the last invocation attempt's failure is preserved.
+	Failure       *v1.Failure `protobuf:"bytes,11,opt,name=failure,proto3" json:"failure,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -229,6 +232,13 @@ func (x *CallbackState) GetRequestId() string {
 func (x *CallbackState) GetCloseTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CloseTime
+	}
+	return nil
+}
+
+func (x *CallbackState) GetFailure() *v1.Failure {
+	if x != nil {
+		return x.Failure
 	}
 	return nil
 }
@@ -541,7 +551,7 @@ var File_temporal_server_chasm_lib_callback_proto_v1_message_proto protoreflect.
 
 const file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"9temporal/server/chasm/lib/callback/proto/v1/message.proto\x12,temporal.server.chasm.lib.callbacks.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\"\x8e\x05\n" +
+	"9temporal/server/chasm/lib/callback/proto/v1/message.proto\x12,temporal.server.chasm.lib.callbacks.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\"\xca\x05\n" +
 	"\rCallbackState\x12R\n" +
 	"\bcallback\x18\x01 \x01(\v26.temporal.server.chasm.lib.callbacks.proto.v1.CallbackR\bcallback\x12G\n" +
 	"\x11registration_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x10registrationTime\x12T\n" +
@@ -554,7 +564,8 @@ const file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc = "
 	"request_id\x18\t \x01(\tR\trequestId\x129\n" +
 	"\n" +
 	"close_time\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\x1a\x10\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\x12:\n" +
+	"\afailure\x18\v \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\x1a\x10\n" +
 	"\x0eWorkflowClosed\"\xb1\x03\n" +
 	"\x16CallbackExecutionState\x12P\n" +
 	"\x12success_completion\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadH\x00R\x11successCompletion\x12Q\n" +
@@ -623,18 +634,19 @@ var file_temporal_server_chasm_lib_callback_proto_v1_message_proto_depIdxs = []i
 	8,  // 4: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
 	7,  // 5: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.next_attempt_schedule_time:type_name -> google.protobuf.Timestamp
 	7,  // 6: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.close_time:type_name -> google.protobuf.Timestamp
-	9,  // 7: temporal.server.chasm.lib.callbacks.proto.v1.CallbackExecutionState.success_completion:type_name -> temporal.api.common.v1.Payload
-	8,  // 8: temporal.server.chasm.lib.callbacks.proto.v1.CallbackExecutionState.failure_completion:type_name -> temporal.api.failure.v1.Failure
-	7,  // 9: temporal.server.chasm.lib.callbacks.proto.v1.CallbackExecutionState.create_time:type_name -> google.protobuf.Timestamp
-	10, // 10: temporal.server.chasm.lib.callbacks.proto.v1.CallbackExecutionState.schedule_to_close_timeout:type_name -> google.protobuf.Duration
-	5,  // 11: temporal.server.chasm.lib.callbacks.proto.v1.Callback.nexus:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus
-	11, // 12: temporal.server.chasm.lib.callbacks.proto.v1.Callback.links:type_name -> temporal.api.common.v1.Link
-	6,  // 13: temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus.header:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus.HeaderEntry
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	8,  // 7: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.failure:type_name -> temporal.api.failure.v1.Failure
+	9,  // 8: temporal.server.chasm.lib.callbacks.proto.v1.CallbackExecutionState.success_completion:type_name -> temporal.api.common.v1.Payload
+	8,  // 9: temporal.server.chasm.lib.callbacks.proto.v1.CallbackExecutionState.failure_completion:type_name -> temporal.api.failure.v1.Failure
+	7,  // 10: temporal.server.chasm.lib.callbacks.proto.v1.CallbackExecutionState.create_time:type_name -> google.protobuf.Timestamp
+	10, // 11: temporal.server.chasm.lib.callbacks.proto.v1.CallbackExecutionState.schedule_to_close_timeout:type_name -> google.protobuf.Duration
+	5,  // 12: temporal.server.chasm.lib.callbacks.proto.v1.Callback.nexus:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus
+	11, // 13: temporal.server.chasm.lib.callbacks.proto.v1.Callback.links:type_name -> temporal.api.common.v1.Link
+	6,  // 14: temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus.header:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus.HeaderEntry
+	15, // [15:15] is the sub-list for method output_type
+	15, // [15:15] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_callback_proto_v1_message_proto_init() }

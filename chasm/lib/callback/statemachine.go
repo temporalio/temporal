@@ -144,7 +144,7 @@ var TransitionTerminated = chasm.NewTransition(
 		if reason == "" {
 			reason = "callback execution terminated"
 		}
-		cb.LastAttemptFailure = &failurepb.Failure{
+		cb.Failure = &failurepb.Failure{
 			Message:     reason,
 			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
 		}
@@ -164,7 +164,7 @@ var TransitionTimedOut = chasm.NewTransition(
 	callbackspb.CALLBACK_STATUS_FAILED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventTimedOut) error {
 		cb.CloseTime = timestamppb.New(ctx.Now(cb))
-		cb.LastAttemptFailure = &failurepb.Failure{
+		cb.Failure = &failurepb.Failure{
 			Message: "callback execution timed out",
 			FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
 				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{

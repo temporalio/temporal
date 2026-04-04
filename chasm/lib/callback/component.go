@@ -5,6 +5,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -69,6 +70,16 @@ func (c *Callback) StateMachineState() callbackspb.CallbackStatus {
 
 func (c *Callback) SetStateMachineState(status callbackspb.CallbackStatus) {
 	c.Status = status
+}
+
+// GetFailure returns the failure for a closed callback. It checks the dedicated Failure field
+// (set by external failures like timeout or terminate) first, then falls back to LastAttemptFailure
+// (set by invocation attempt failures).
+func (c *Callback) GetFailure() *failurepb.Failure {
+	if c.Failure != nil {
+		return c.Failure
+	}
+	return c.LastAttemptFailure
 }
 
 func (c *Callback) recordAttempt(ts time.Time) {

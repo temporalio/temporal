@@ -190,7 +190,7 @@ func (e *CallbackExecution) GetOutcome(ctx chasm.Context) (*callbackpb.CallbackE
 		callbackspb.CALLBACK_STATUS_TERMINATED:
 		return &callbackpb.CallbackExecutionOutcome{
 			Value: &callbackpb.CallbackExecutionOutcome_Failure{
-				Failure: cb.LastAttemptFailure,
+				Failure: cb.GetFailure(),
 			},
 		}, nil
 	default:

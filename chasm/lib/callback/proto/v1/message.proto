@@ -36,6 +36,9 @@ message CallbackState {
   string request_id = 9;
   // The time when the callback reached a terminal state.
   google.protobuf.Timestamp close_time = 10;
+  // Failure from an external termination (timeout or terminate), stored separately
+  // from last_attempt_failure so the last invocation attempt's failure is preserved.
+  temporal.api.failure.v1.Failure failure = 11;
 }
 
 // Status of a callback.
