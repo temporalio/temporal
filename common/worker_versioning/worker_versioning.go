@@ -431,7 +431,7 @@ func IsVersionDrainedOrInactive(
 	// Check new format (deployments_data map).
 	deploymentData := deployments.GetDeploymentsData()[deploymentName]
 	versionData := deploymentData.GetVersions()[buildID]
-	if versionData == nil {
+	if versionData == nil || versionData.GetDeleted() {
 		return nil
 	}
 	result := versionData.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED ||

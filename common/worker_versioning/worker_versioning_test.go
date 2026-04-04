@@ -96,6 +96,133 @@ func (c *testVersionMembershipCache) Put(
 	}] = versionTaskQueueInfoCacheValue{isMember: isMember, isDrainedOrInactive: isDrainedOrInactive}
 }
 
+func TestIsVersionDrainedOrInactive(t *testing.T) {
+	tests := []struct {
+		name           string
+		deployments    *persistencespb.DeploymentData
+		deploymentName string
+		buildID        string
+		expected       *bool
+	}{
+		{
+			name:           "nil deployments returns nil",
+			deployments:    nil,
+			deploymentName: "dep",
+			buildID:        "build",
+			expected:       nil,
+		},
+		{
+			name: "version not found returns nil",
+			deployments: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{},
+			},
+			deploymentName: "dep",
+			buildID:        "build",
+			expected:       nil,
+		},
+		{
+			name: "new format: DRAINED returns true",
+			deployments: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED},
+					}},
+				},
+			},
+			deploymentName: "dep",
+			buildID:        "build",
+			expected:       boolPtr(true),
+		},
+		{
+			name: "new format: INACTIVE returns true",
+			deployments: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE},
+					}},
+				},
+			},
+			deploymentName: "dep",
+			buildID:        "build",
+			expected:       boolPtr(true),
+		},
+		{
+			name: "new format: CURRENT returns false",
+			deployments: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT},
+					}},
+				},
+			},
+			deploymentName: "dep",
+			buildID:        "build",
+			expected:       boolPtr(false),
+		},
+		{
+			name: "new format: RAMPING returns false",
+			deployments: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING},
+					}},
+				},
+			},
+			deploymentName: "dep",
+			buildID:        "build",
+			expected:       boolPtr(false),
+		},
+		{
+			name: "new format: deleted version returns nil",
+			deployments: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED, Deleted: true},
+					}},
+				},
+			},
+			deploymentName: "dep",
+			buildID:        "build",
+			expected:       nil,
+		},
+		{
+			name: "old format: DRAINED returns true",
+			deployments: &persistencespb.DeploymentData{
+				Versions: []*deploymentspb.DeploymentVersionData{
+					{
+						Version: &deploymentspb.WorkerDeploymentVersion{DeploymentName: "dep", BuildId: "build"},
+						Status:  enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+					},
+				},
+			},
+			deploymentName: "dep",
+			buildID:        "build",
+			expected:       boolPtr(true),
+		},
+		{
+			name: "old format: CURRENT returns false",
+			deployments: &persistencespb.DeploymentData{
+				Versions: []*deploymentspb.DeploymentVersionData{
+					{
+						Version: &deploymentspb.WorkerDeploymentVersion{DeploymentName: "dep", BuildId: "build"},
+						Status:  enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+					},
+				},
+			},
+			deploymentName: "dep",
+			buildID:        "build",
+			expected:       boolPtr(false),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsVersionDrainedOrInactive(tt.deployments, tt.deploymentName, tt.buildID)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 	t1 := timestamp.TimePtr(time.Now().Add(-2 * time.Hour))
 	t2 := timestamp.TimePtr(time.Now().Add(-time.Hour))
