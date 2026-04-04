@@ -558,7 +558,7 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 			WorkflowId: storeID,
 			RunId:      createResp.RunID,
 		},
-		Archetype: archetype,
+		Archetype: tests.Archetype,
 	})
 	var notFoundErr *serviceerror.NotFound
 	s.ErrorAs(err, &notFoundErr)
