@@ -135,7 +135,7 @@ func testParentWorkflow(ctx workflow.Context) (string, error) {
 }
 
 func (s *ClientDataConverterSuite) TestClientDataConverter() {
-	env := testcore.NewEnv(s.T(), testcore.WithSdkWorker())
+	env := testcore.NewEnv(s.T())
 	env.T().SkipNow() // need to figure out what is going on
 	tl := "client-func-data-converter-activity-taskqueue"
 	dc := testcore.NewTestDataConverter()
@@ -172,7 +172,7 @@ func (s *ClientDataConverterSuite) TestClientDataConverter() {
 }
 
 func (s *ClientDataConverterSuite) TestClientDataConverterFailed() {
-	env := testcore.NewEnv(s.T(), testcore.WithSdkWorker())
+	env := testcore.NewEnv(s.T())
 	env.T().SkipNow()
 	tl := "client-func-data-converter-activity-failed-taskqueue"
 	sdkClient, newWorker := clientDataConverterStartWorker(env, tl, nil) // mismatch of data converter
@@ -222,7 +222,7 @@ func (s *ClientDataConverterSuite) TestClientDataConverterFailed() {
 }
 
 func (s *ClientDataConverterSuite) TestClientDataConverterWithChild() {
-	env := testcore.NewEnv(s.T(), testcore.WithSdkWorker())
+	env := testcore.NewEnv(s.T())
 	env.T().SkipNow()
 	dc := testcore.NewTestDataConverter()
 	sdkClient, testWorker := clientDataConverterStartWorker(env, childTaskQueue, dc)
