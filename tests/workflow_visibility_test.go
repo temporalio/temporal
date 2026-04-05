@@ -18,7 +18,6 @@ import (
 )
 
 func TestWorkflowVisibilityTestSuite(t *testing.T) {
-	t.Parallel()
 	s := testcore.NewEnv(t)
 	startTime := time.Now().UTC()
 
