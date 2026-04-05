@@ -13,20 +13,25 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+type stickyTqSuite struct {
+	parallelsuite.Suite[*stickyTqSuite]
+}
+
 func TestStickyTqTestSuite(t *testing.T) {
-	t.Parallel()
-	t.Run("TestStickyTimeout_NonTransientWorkflowTask", func(t *testing.T) {
-		s := testcore.NewEnv(t)
-		stickyTqTestStickyTimeoutNonTransientWorkflowTask(s)
-	})
-	t.Run("TestStickyTaskqueueResetThenTimeout", func(t *testing.T) {
-		s := testcore.NewEnv(t)
-		stickyTqTestStickyTaskqueueResetThenTimeout(s)
-	})
+	parallelsuite.Run(t, &stickyTqSuite{})
+}
+
+func (s *stickyTqSuite) TestStickyTimeoutNonTransientWorkflowTask() {
+	stickyTqTestStickyTimeoutNonTransientWorkflowTask(testcore.NewEnv(s.T()))
+}
+
+func (s *stickyTqSuite) TestStickyTaskqueueResetThenTimeout() {
+	stickyTqTestStickyTaskqueueResetThenTimeout(testcore.NewEnv(s.T()))
 }
 
 func stickyTqTestStickyTimeoutNonTransientWorkflowTask(s *testcore.TestEnv) {
