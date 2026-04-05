@@ -370,7 +370,7 @@ func checkVersionMembershipViaUserData(
 	return HasDeploymentVersion(tqData.GetDeploymentData(), DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version))), nil
 }
 
-func FindDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) int {
+func FindOldDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) int {
 	for i, vd := range deployments.GetVersions() {
 		if proto.Equal(v, vd.GetVersion()) {
 			return i
@@ -485,16 +485,20 @@ func MakeBuildIdDirective(buildId string) *taskqueuespb.TaskVersionDirective {
 	return &taskqueuespb.TaskVersionDirective{BuildId: &taskqueuespb.TaskVersionDirective_AssignedBuildId{AssignedBuildId: buildId}}
 }
 
-func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.WorkerVersionStamp {
-	if cap.GetUseVersioning() && cap.GetDeploymentSeriesName() != "" {
+func StampFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities, options *deploymentpb.WorkerDeploymentOptions) *commonpb.WorkerVersionStamp {
+	if options.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED && options.GetDeploymentName() != "" {
 		// Versioning 3, do not return stamp.
 		return nil
 	}
-	// TODO: remove `cap.BuildId != ""` condition after old versioning cleanup. this condition is used to differentiate
+	if capabilities.GetUseVersioning() && capabilities.GetDeploymentSeriesName() != "" {
+		// Versioning 3, do not return stamp.
+		return nil
+	}
+	// TODO: remove `capabilities.BuildId != ""` condition after old versioning cleanup. this condition is used to differentiate
 	// between old and new versioning in Record*TaskStart calls. [cleanup-old-wv]
 	// we don't want to add stamp for task started events in old versioning
-	if cap.GetBuildId() != "" {
-		return &commonpb.WorkerVersionStamp{UseVersioning: cap.UseVersioning, BuildId: cap.BuildId}
+	if capabilities.GetBuildId() != "" {
+		return &commonpb.WorkerVersionStamp{UseVersioning: capabilities.UseVersioning, BuildId: capabilities.BuildId}
 	}
 	return nil
 }
@@ -1139,6 +1143,8 @@ func WorkerDeploymentVersionFromStringV32(s string) (*deploymentspb.WorkerDeploy
 
 // CleanupOldDeletedVersions removes versions deleted more than 7 days ago. Also removes more deleted versions if
 // the limit is being exceeded. Never removes undeleted versions.
+// Deprecated. Versions now are deleted serially without using the deleted flag in versionData.
+// TODO: remove this cleanup logic after next major release.
 func CleanupOldDeletedVersions(deploymentData *persistencespb.WorkerDeploymentData, maxVersions int) bool {
 	now := time.Now()
 	aWeekAgo := now.Add(-time.Hour * 24 * 7)

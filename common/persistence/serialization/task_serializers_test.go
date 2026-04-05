@@ -411,6 +411,17 @@ func (s *taskSerializerSuite) TestSyncWorkflowStateTask() {
 	s.assertEqualTasks(syncWorkflowStateTask)
 }
 
+func (s *taskSerializerSuite) TestDeleteExecutionReplicationTask() {
+	deleteExecutionReplicationTask := &tasks.DeleteExecutionReplicationTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
+		TaskID:              rand.Int63(),
+		ArchetypeID:         rand.Uint32(),
+	}
+
+	s.assertEqualTasks(deleteExecutionReplicationTask)
+}
+
 func (s *taskSerializerSuite) TestDeleteExecutionTask() {
 	deleteExecutionTask := &tasks.DeleteExecutionTask{
 		WorkflowKey:         s.workflowKey,

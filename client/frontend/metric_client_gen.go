@@ -65,6 +65,34 @@ func (c *metricClient) CreateSchedule(
 	return c.client.CreateSchedule(ctx, request, opts...)
 }
 
+func (c *metricClient) CreateWorkerDeployment(
+	ctx context.Context,
+	request *workflowservice.CreateWorkerDeploymentRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.CreateWorkerDeploymentResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientCreateWorkerDeployment")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CreateWorkerDeployment(ctx, request, opts...)
+}
+
+func (c *metricClient) CreateWorkerDeploymentVersion(
+	ctx context.Context,
+	request *workflowservice.CreateWorkerDeploymentVersionRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.CreateWorkerDeploymentVersionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientCreateWorkerDeploymentVersion")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CreateWorkerDeploymentVersion(ctx, request, opts...)
+}
+
 func (c *metricClient) CreateWorkflowRule(
 	ctx context.Context,
 	request *workflowservice.CreateWorkflowRuleRequest,
@@ -1423,6 +1451,20 @@ func (c *metricClient) UpdateWorkerConfig(
 	return c.client.UpdateWorkerConfig(ctx, request, opts...)
 }
 
+func (c *metricClient) UpdateWorkerDeploymentVersionComputeConfig(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.UpdateWorkerDeploymentVersionComputeConfigResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientUpdateWorkerDeploymentVersionComputeConfig")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateWorkerDeploymentVersionComputeConfig(ctx, request, opts...)
+}
+
 func (c *metricClient) UpdateWorkerDeploymentVersionMetadata(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest,
@@ -1477,4 +1519,18 @@ func (c *metricClient) UpdateWorkflowExecutionOptions(
 	}()
 
 	return c.client.UpdateWorkflowExecutionOptions(ctx, request, opts...)
+}
+
+func (c *metricClient) ValidateWorkerDeploymentVersionComputeConfig(
+	ctx context.Context,
+	request *workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.ValidateWorkerDeploymentVersionComputeConfigResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientValidateWorkerDeploymentVersionComputeConfig")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ValidateWorkerDeploymentVersionComputeConfig(ctx, request, opts...)
 }
