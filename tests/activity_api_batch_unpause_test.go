@@ -15,6 +15,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -227,4 +228,85 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Failed
 	s.Error(err)
 	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+}
+
+// TestBatchTerminate_NamespaceIsolation verifies that a batch terminate operation
+// scoped to the primary namespace does not affect workflows in a separate namespace.
+// This is an end-to-end complement to the unit-level checkNamespace tests: it
+// exercises the full path from StartBatchOperation through the batcher worker.
+func (s *ActivityApiBatchUnpauseClientTestSuite) TestBatchTerminate_NamespaceIsolation() {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Register a uniquely-named workflow type to avoid interference from parallel tests.
+	wfTypeName := testcore.RandomizeStr("isolation-wf")
+	sleepWorkflow := func(ctx workflow.Context) error {
+		return workflow.Sleep(ctx, 24*time.Hour)
+	}
+	s.SdkWorker().RegisterWorkflowWithOptions(sleepWorkflow, workflow.RegisterOptions{Name: wfTypeName})
+
+	// Start two workflows in the primary namespace (worker is registered and will execute them).
+	startWf := func(client sdkclient.Client, taskQueue string) sdkclient.WorkflowRun {
+		run, err := client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			ID:        testcore.RandomizeStr("wf"),
+			TaskQueue: taskQueue,
+		}, wfTypeName)
+		s.NoError(err)
+		return run
+	}
+	primaryRun1 := startWf(s.SdkClient(), s.TaskQueue())
+	primaryRun2 := startWf(s.SdkClient(), s.TaskQueue())
+
+	// Create a client for the external namespace and start two workflows there.
+	// No worker polls this task queue in the external namespace, so these workflows
+	// will remain in RUNNING state without executing.
+	extClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.FrontendGRPCAddress(),
+		Namespace: s.ExternalNamespace().String(),
+	})
+	s.NoError(err)
+	defer extClient.Close()
+	extRun1 := startWf(extClient, s.TaskQueue())
+	extRun2 := startWf(extClient, s.TaskQueue())
+
+	// Wait for both primary-namespace workflows to be indexed in visibility before
+	// submitting the batch, which uses a visibility query to find its targets.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("WorkflowType='%s'", wfTypeName),
+			PageSize:  10,
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.GetExecutions(), 2)
+	}, 10*time.Second, 500*time.Millisecond)
+
+	// Batch-terminate all workflows of this type in the primary namespace only.
+	_, err = s.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace:       s.Namespace().String(),
+		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", wfTypeName),
+		JobId:           uuid.NewString(),
+		Reason:          "namespace-isolation-test",
+		Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
+			TerminationOperation: &batchpb.BatchOperationTermination{},
+		},
+	})
+	s.NoError(err)
+
+	// Primary-namespace workflows must reach TERMINATED status.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		for _, run := range []sdkclient.WorkflowRun{primaryRun1, primaryRun2} {
+			desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+			require.NoError(t, err)
+			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, desc.WorkflowExecutionInfo.Status)
+		}
+	}, 10*time.Second, 500*time.Millisecond)
+
+	// External-namespace workflows must remain RUNNING — the batch must not cross namespace boundaries.
+	for _, run := range []sdkclient.WorkflowRun{extRun1, extRun2} {
+		desc, err := extClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, desc.WorkflowExecutionInfo.Status,
+			"batch terminate in primary namespace must not affect external namespace workflows")
+	}
 }

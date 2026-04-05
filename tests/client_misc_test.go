@@ -829,6 +829,7 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 	// wait until first wf task started
 	wfStarted.Wait()
 
+	describeErrCh := make(chan error, 1)
 	go func() {
 		// sleep 2s to make sure DescribeMutableState is called after QueryWorkflow
 		time.Sleep(2 * time.Second) //nolint:forbidigo
@@ -841,7 +842,7 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 			},
 			Archetype: chasm.WorkflowArchetype,
 		})
-		s.Assert().NoError(err)
+		describeErrCh <- err
 	}()
 
 	// this query will be buffered in mutable state because workflow task is in-flight.
@@ -855,6 +856,7 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 
 	err = workflowRun.Get(ctx, nil)
 	s.NoError(err)
+	s.NoError(<-describeErrCh) // assert on test goroutine after workflow completes
 }
 
 func (s *ClientMiscTestSuite) assertHistory(wid, rid string, expected []enumspb.EventType) {

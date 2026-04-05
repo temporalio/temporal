@@ -158,7 +158,7 @@ func (c *operationContext) interceptRequest(
 	request *matchingservice.DispatchNexusTaskRequest,
 	header nexus.Header,
 ) error {
-	err := c.auth.Authorize(ctx, c.claims, &authorization.CallTarget{
+	_, err := c.auth.Authorize(ctx, c.claims, &authorization.CallTarget{
 		APIName:           c.apiName,
 		Namespace:         c.namespaceName,
 		NexusEndpointName: c.endpointName,

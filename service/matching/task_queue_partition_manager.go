@@ -7,6 +7,7 @@ import (
 	"maps"
 	"math"
 	"math/bits"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,6 +40,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/matching/hooks"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -76,6 +78,8 @@ type (
 		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
 		// TODO(stephanos): move cache out of partition manager
 		cache cache.Cache // non-nil for root-partition
+
+		taskHooks []hooks.TaskHook
 
 		goroGroup goro.Group
 
@@ -121,6 +125,17 @@ func newTaskQueuePartitionManager(
 		userDataManager,
 		tqConfig,
 		partition.TaskQueue().TaskType())
+	var taskHooks []hooks.TaskHook
+	for _, hookFactory := range e.taskHookFactories {
+		taskHook := hookFactory.Create(&hooks.TaskHookFactoryCreateDetails{
+			Namespace: ns,
+			Partition: partition,
+		})
+		if taskHook != nil {
+			taskHooks = append(taskHooks, taskHook)
+		}
+	}
+
 	pm := &taskQueuePartitionManagerImpl{
 		engine:                e,
 		partition:             partition,
@@ -135,6 +150,7 @@ func newTaskQueuePartitionManager(
 		rateLimitManager:      rateLimitManager,
 		defaultQueueFuture:    future.NewFuture[physicalTaskQueueManager](),
 		autoEnableRateLimiter: quotas.NewRateLimiter(1.0/60, 1),
+		taskHooks:             taskHooks,
 	}
 	pm.initCtx, pm.initCancel = context.WithCancel(context.Background())
 
@@ -228,6 +244,10 @@ func (pm *taskQueuePartitionManagerImpl) Start() {
 	pm.loadTime = time.Now()
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, 1)
 	pm.userDataManager.Start()
+	for _, hook := range pm.taskHooks {
+		hook.Start()
+	}
+
 	//nolint:errcheck
 	go pm.initialize()
 }
@@ -255,6 +275,10 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 		pm.emitZeroLogicalBacklogForQueue(version, vq)
 	}
 	pm.versionedQueuesLock.Unlock()
+
+	for _, hook := range pm.taskHooks {
+		hook.Stop()
+	}
 
 	// Then, stop user data manager to wrap up any reads/writes.
 	pm.userDataManager.Stop()
@@ -373,6 +397,7 @@ reredirectTask:
 	if isActive {
 		syncMatched, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
 		if syncMatched && !pm.shouldBacklogSyncMatchTaskOnError(err) {
+			pm.processTaskAddHooks(ctx, targetVersion, syncMatched)
 
 			// Build ID is not returned for sync match. The returned build ID is used by History to update
 			// mutable state (and visibility) when the first workflow task is spooled.
@@ -398,7 +423,21 @@ reredirectTask:
 		assignedBuildId = spoolQueue.QueueKey().Version().BuildId()
 	}
 
-	return assignedBuildId, false, spoolQueue.SpoolTask(params.taskInfo)
+	err = spoolQueue.SpoolTask(params.taskInfo)
+	if err == nil {
+		pm.processTaskAddHooks(ctx, targetVersion, false)
+	}
+
+	return assignedBuildId, false, err
+}
+
+func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context, targetVersion *deploymentspb.WorkerDeploymentVersion, syncMatched bool) {
+	for _, l := range pm.taskHooks {
+		l.ProcessTaskAdd(ctx, &hooks.TaskAddHookDetails{
+			DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(targetVersion),
+			IsSyncMatch:       syncMatched,
+		})
+	}
 }
 
 func (pm *taskQueuePartitionManagerImpl) shouldBacklogSyncMatchTaskOnError(err error) bool {
@@ -1030,7 +1069,7 @@ func (pm *taskQueuePartitionManagerImpl) describe(
 			unversionedCurrentShareByPriority, unversionedRampingShareByPriority =
 				splitStatsByPriorityByRampPercentage(unversionedStatsByPriority, rampPercentage)
 		} else if currentExists {
-			// If there exist no ramping version, weattribute the entire unversioned backlog to the current version.
+			// If there exist no ramping version, we attribute the entire unversioned backlog to the current version.
 			unversionedCurrentShareByPriority = cloneStatsByPriority(unversionedStatsByPriority)
 		}
 	}
@@ -1241,8 +1280,11 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 
 		pqInfo := vInfo.GetPhysicalTaskQueueInfo()
 
+		deploymentName, buildID := parseDeploymentFromVersionKey(versionKey)
 		versionHandler := pm.metricsHandler.WithTags(
 			metrics.WorkerVersionTag(versionKey, pm.config.BreakdownMetricsByBuildID()),
+			metrics.WorkerDeploymentNameTag(deploymentName, pm.config.BreakdownMetricsByBuildID()),
+			metrics.WorkerDeploymentBuildIDTag(buildID, pm.config.BreakdownMetricsByBuildID()),
 		)
 
 		// Per-priority backlog count
@@ -1278,13 +1320,28 @@ func (pm *taskQueuePartitionManagerImpl) emitZeroLogicalBacklogForQueue(version 
 	if !pm.config.BreakdownMetricsByTaskQueue() || !pm.config.BreakdownMetricsByPartition() {
 		return
 	}
+	deploymentName, buildID := parseDeploymentFromVersionKey(version.MetricsTagValue())
 	handler := pm.metricsHandler.WithTags(
 		metrics.WorkerVersionTag(version.MetricsTagValue(), pm.config.BreakdownMetricsByBuildID()),
+		metrics.WorkerDeploymentNameTag(deploymentName, pm.config.BreakdownMetricsByBuildID()),
+		metrics.WorkerDeploymentBuildIDTag(buildID, pm.config.BreakdownMetricsByBuildID()),
 	)
 	for pri := range pq.GetStatsByPriority(false) {
 		metrics.ApproximateBacklogCount.With(handler).Record(0, metrics.MatchingTaskPriorityTag(pri))
 	}
 	metrics.ApproximateBacklogAgeSeconds.With(handler).Record(0)
+}
+
+// parseDeploymentFromVersionKey extracts the deployment name and build ID from a version key
+// string used as the map key in DescribeTaskQueuePartitionResponse.VersionsInfoInternal.
+// The key format is "deploymentName:buildId" for V3 deployment-based versions, or empty for
+// unversioned queues. Returns empty strings when the delimiter is not found (unversioned or
+// V2 version-set keys).
+func parseDeploymentFromVersionKey(versionKey string) (deploymentName, buildID string) {
+	if name, id, found := strings.Cut(versionKey, worker_versioning.WorkerDeploymentVersionDelimiter); found {
+		return name, id
+	}
+	return "", ""
 }
 
 func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb.EphemeralData) {

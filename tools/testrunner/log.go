@@ -333,3 +333,21 @@ func isTestResultBoundary(line string) bool {
 func shouldStopOnTestBoundary(line string, _ int, _ int) bool {
 	return isTestResultBoundary(line)
 }
+
+// parseFailedTestsFromOutput extracts failing test names from gotestsum stdout.
+// It looks for "--- FAIL: TestName" lines produced as tests complete, and is
+// used when the test binary was killed externally before producing a JUnit XML.
+func parseFailedTestsFromOutput(stdout string) []string {
+	var failed []string
+	seen := make(map[string]struct{})
+	for _, line := range strings.Split(strings.ReplaceAll(stdout, "\r\n", "\n"), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "--- FAIL: ") {
+			continue
+		}
+		if name, ok := parseTripleDashTestName(line); ok {
+			addUniqueTest(&failed, seen, name)
+		}
+	}
+	return failed
+}
