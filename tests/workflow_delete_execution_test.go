@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -25,31 +26,23 @@ const (
 	// With few executions closed and deleted in parallel, it is hard to predict time needed for every DeleteExecutionTask
 	// to process. Set it to 20s here, as a minimum sufficient interval. Increase it, if tests in this file are failing with
 	// "Condition never satisfied" error.
-	// TODO(workflow-delete-execution-test): Revisit and reduce this timeout after queue-processing timing is stabilized.
 	waitForTaskProcessing = 20 * time.Second
 )
 
-func TestWorkflowDeleteExecutionSuite(t *testing.T) {
-	t.Parallel()
-	t.Run("TestDeleteWorkflowExecution_CompetedWorkflow", func(t *testing.T) {
-		workflowDeleteExecutionTestDeleteWorkflowExecutionCompetedWorkflow(workflowDeleteExecutionEnv(t))
-	})
-	t.Run("TestDeleteWorkflowExecution_RunningWorkflow", func(t *testing.T) {
-		workflowDeleteExecutionTestDeleteWorkflowExecutionRunningWorkflow(workflowDeleteExecutionEnv(t))
-	})
-	t.Run("TestDeleteWorkflowExecution_JustTerminatedWorkflow", func(t *testing.T) {
-		workflowDeleteExecutionTestDeleteWorkflowExecutionJustTerminatedWorkflow(workflowDeleteExecutionEnv(t))
-	})
+type WorkflowDeleteExecutionSuite struct {
+	parallelsuite.Suite[*WorkflowDeleteExecutionSuite]
 }
 
-func workflowDeleteExecutionEnv(t *testing.T) *testcore.TestEnv {
-	return testcore.NewEnv(t,
+func TestWorkflowDeleteExecutionSuite(t *testing.T) {
+	parallelsuite.Run(t, &WorkflowDeleteExecutionSuite{})
+}
+
+func (suite *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionCompletedWorkflow() {
+	s := testcore.NewEnv(suite.T(),
 		testcore.WithDynamicConfig(dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second),
 		testcore.WithDynamicConfig(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second),
 	)
-}
 
-func workflowDeleteExecutionTestDeleteWorkflowExecutionCompetedWorkflow(s *testcore.TestEnv) {
 	tv := testvars.New(s.T())
 
 	const numExecutions = 5
@@ -193,7 +186,12 @@ func workflowDeleteExecutionTestDeleteWorkflowExecutionCompetedWorkflow(s *testc
 	}
 }
 
-func workflowDeleteExecutionTestDeleteWorkflowExecutionRunningWorkflow(s *testcore.TestEnv) {
+func (suite *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionRunningWorkflow() {
+	s := testcore.NewEnv(suite.T(),
+		testcore.WithDynamicConfig(dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second),
+		testcore.WithDynamicConfig(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second),
+	)
+
 	tv := testvars.New(s.T())
 
 	const numExecutions = 5
@@ -308,7 +306,12 @@ func workflowDeleteExecutionTestDeleteWorkflowExecutionRunningWorkflow(s *testco
 	}
 }
 
-func workflowDeleteExecutionTestDeleteWorkflowExecutionJustTerminatedWorkflow(s *testcore.TestEnv) {
+func (suite *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionJustTerminatedWorkflow() {
+	s := testcore.NewEnv(suite.T(),
+		testcore.WithDynamicConfig(dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second),
+		testcore.WithDynamicConfig(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second),
+	)
+
 	tv := testvars.New(s.T())
 
 	const numExecutions = 3
