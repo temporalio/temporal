@@ -19,15 +19,9 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func TestUserTimersTestSuite(t *testing.T) {
-	t.Parallel()
-	t.Run("TestUserTimers_Sequential", func(t *testing.T) {
-		s := testcore.NewEnv(t)
-		testUserTimersSequential(s)
-	})
-}
+func TestUserTimersSequential(t *testing.T) {
+	s := testcore.NewEnv(t)
 
-func testUserTimersSequential(s *testcore.TestEnv) {
 	id := "functional-user-timers-sequential-test"
 	wt := "functional-user-timers-sequential-test-type"
 	tl := "functional-user-timers-sequential-test-taskqueue"
