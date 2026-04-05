@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -16,26 +15,28 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type WorkflowMemoTestSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*WorkflowMemoTestSuite]
 }
 
 func TestWorkflowMemoTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(WorkflowMemoTestSuite))
+	parallelsuite.Run(t, &WorkflowMemoTestSuite{})
 }
 
-type RunIdGetter interface {
+type RunIDGetter interface {
 	GetRunId() string
 }
-type startFunc func() (RunIdGetter, error)
+type startFunc func() (RunIDGetter, error)
 
 func (s *WorkflowMemoTestSuite) TestStartWithMemo() {
+	env := testcore.NewEnv(s.T())
+
 	id := "functional-start-with-memo-test"
 	wt := "functional-start-with-memo-test-type"
 	tl := "functional-start-with-memo-test-taskqueue"
@@ -49,7 +50,7 @@ func (s *WorkflowMemoTestSuite) TestStartWithMemo() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -60,10 +61,10 @@ func (s *WorkflowMemoTestSuite) TestStartWithMemo() {
 		Memo:                memo,
 	}
 
-	fn := func() (RunIdGetter, error) {
-		return s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	fn := func() (RunIDGetter, error) {
+		return env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	}
-	s.startWithMemoHelper(fn, id, &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, memo, `
+	startWithMemoHelper(env, fn, id, &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, memo, `
   1 WorkflowExecutionStarted {"Memo":{"Fields":{"Info":{"Data":"\"memo-value\""}}}}
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
@@ -72,6 +73,8 @@ func (s *WorkflowMemoTestSuite) TestStartWithMemo() {
 }
 
 func (s *WorkflowMemoTestSuite) TestSignalWithStartWithMemo() {
+	env := testcore.NewEnv(s.T())
+
 	id := "functional-signal-with-start-with-memo-test"
 	wt := "functional-signal-with-start-with-memo-test-type"
 	tl := "functional-signal-with-start-with-memo-test-taskqueue"
@@ -87,7 +90,7 @@ func (s *WorkflowMemoTestSuite) TestSignalWithStartWithMemo() {
 	signalInput := payloads.EncodeString("my signal input")
 	request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -100,10 +103,10 @@ func (s *WorkflowMemoTestSuite) TestSignalWithStartWithMemo() {
 		Memo:                memo,
 	}
 
-	fn := func() (RunIdGetter, error) {
-		return s.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), request)
+	fn := func() (RunIDGetter, error) {
+		return env.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), request)
 	}
-	s.startWithMemoHelper(fn, id, &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, memo, `
+	startWithMemoHelper(env, fn, id, &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, memo, `
   1 WorkflowExecutionStarted {"Memo":{"Fields":{"Info":{"Data":"\"memo-value\""}}}}
   2 WorkflowExecutionSignaled
   3 WorkflowTaskScheduled
@@ -113,7 +116,7 @@ func (s *WorkflowMemoTestSuite) TestSignalWithStartWithMemo() {
 }
 
 // helper function for TestStartWithMemo and TestSignalWithStartWithMemo to reduce duplicate code
-func (s *WorkflowMemoTestSuite) startWithMemoHelper(startFn startFunc, id string, taskQueue *taskqueuepb.TaskQueue, memo *commonpb.Memo, expectedHistory string) {
+func startWithMemoHelper(s *testcore.TestEnv, startFn startFunc, id string, taskQueue *taskqueuepb.TaskQueue, memo *commonpb.Memo, expectedHistory string) {
 	identity := "worker1"
 
 	we, err0 := startFn()
