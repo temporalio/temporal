@@ -27,14 +27,7 @@ func TestStickyTqTestSuite(t *testing.T) {
 }
 
 func (s *stickyTqSuite) TestStickyTimeoutNonTransientWorkflowTask() {
-	stickyTqTestStickyTimeoutNonTransientWorkflowTask(testcore.NewEnv(s.T()))
-}
-
-func (s *stickyTqSuite) TestStickyTaskqueueResetThenTimeout() {
-	stickyTqTestStickyTaskqueueResetThenTimeout(testcore.NewEnv(s.T()))
-}
-
-func stickyTqTestStickyTimeoutNonTransientWorkflowTask(s *testcore.TestEnv) {
+	env := testcore.NewEnv(s.T())
 	id := "functional-sticky-timeout-non-transient-workflow-task"
 	wt := "functional-sticky-timeout-non-transient-command-type"
 	tl := "functional-sticky-timeout-non-transient-workflow-taskqueue"
@@ -47,7 +40,7 @@ func stickyTqTestStickyTimeoutNonTransientWorkflowTask(s *testcore.TestEnv) {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -57,10 +50,10 @@ func stickyTqTestStickyTimeoutNonTransientWorkflowTask(s *testcore.TestEnv) {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.RunId,
@@ -112,23 +105,23 @@ func stickyTqTestStickyTimeoutNonTransientWorkflowTask(s *testcore.TestEnv) {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:                       s.FrontendClient(),
-		Namespace:                    s.Namespace().String(),
+		Client:                       env.FrontendClient(),
+		Namespace:                    env.Namespace().String(),
 		TaskQueue:                    &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:                     identity,
 		WorkflowTaskHandler:          wtHandler,
-		Logger:                       s.Logger,
-		T:                            s.T(),
+		Logger:                       env.Logger,
+		T:                            env.T(),
 		StickyTaskQueue:              stickyTaskQueue,
 		StickyScheduleToStartTimeout: stickyScheduleToStartTimeout,
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(testcore.WithRespondSticky)
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err = env.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalA",
 		Input:             payloads.EncodeString("signal input"),
@@ -141,7 +134,7 @@ func stickyTqTestStickyTimeoutNonTransientWorkflowTask(s *testcore.TestEnv) {
 	stickyTimeout := false
 WaitForStickyTimeoutLoop:
 	for range 10 {
-		events := s.GetHistory(s.Namespace().String(), workflowExecution)
+		events := env.GetHistory(env.Namespace().String(), workflowExecution)
 		for _, event := range events {
 			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT {
 				s.EqualHistoryEvents(`
@@ -164,12 +157,12 @@ WaitForStickyTimeoutLoop:
 
 	for i := 1; i <= 3; i++ {
 		_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithRespondSticky, testcore.WithExpectedAttemptCount(i))
-		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
 
-	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err = env.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalB",
 		Input:             payloads.EncodeString("signal input"),
@@ -180,11 +173,11 @@ WaitForStickyTimeoutLoop:
 
 	for i := 1; i <= 2; i++ {
 		_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithRespondSticky, testcore.WithExpectedAttemptCount(i))
-		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
 
-	events := s.GetHistory(s.Namespace().String(), workflowExecution)
+	events := env.GetHistory(env.Namespace().String(), workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -207,7 +200,7 @@ WaitForStickyTimeoutLoop:
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithRespondSticky, testcore.WithExpectedAttemptCount(3))
 	s.NoError(err)
 
-	events = s.GetHistory(s.Namespace().String(), workflowExecution)
+	events = env.GetHistory(env.Namespace().String(), workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -230,7 +223,8 @@ WaitForStickyTimeoutLoop:
  19 WorkflowExecutionCompleted // Workflow has completed`, events)
 }
 
-func stickyTqTestStickyTaskqueueResetThenTimeout(s *testcore.TestEnv) {
+func (s *stickyTqSuite) TestStickyTaskqueueResetThenTimeout() {
+	env := testcore.NewEnv(s.T())
 	id := "functional-reset-sticky-fire-schedule-to-start-timeout"
 	wt := "functional-reset-sticky-fire-schedule-to-start-timeout-type"
 	tl := "functional-reset-sticky-fire-schedule-to-start-timeout-taskqueue"
@@ -243,7 +237,7 @@ func stickyTqTestStickyTaskqueueResetThenTimeout(s *testcore.TestEnv) {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -253,10 +247,10 @@ func stickyTqTestStickyTaskqueueResetThenTimeout(s *testcore.TestEnv) {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.RunId,
@@ -294,23 +288,23 @@ func stickyTqTestStickyTaskqueueResetThenTimeout(s *testcore.TestEnv) {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:                       s.FrontendClient(),
-		Namespace:                    s.Namespace().String(),
+		Client:                       env.FrontendClient(),
+		Namespace:                    env.Namespace().String(),
 		TaskQueue:                    &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:                     identity,
 		WorkflowTaskHandler:          wtHandler,
-		Logger:                       s.Logger,
-		T:                            s.T(),
+		Logger:                       env.Logger,
+		T:                            env.T(),
 		StickyTaskQueue:              stickyTaskQueue,
 		StickyScheduleToStartTimeout: stickyScheduleToStartTimeout,
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(testcore.WithRespondSticky)
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err = env.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalA",
 		Input:             payloads.EncodeString("signal input"),
@@ -320,8 +314,8 @@ func stickyTqTestStickyTaskqueueResetThenTimeout(s *testcore.TestEnv) {
 	s.NoError(err)
 
 	// Reset sticky taskqueue before sticky workflow task starts
-	_, err = s.FrontendClient().ResetStickyTaskQueue(testcore.NewContext(), &workflowservice.ResetStickyTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.FrontendClient().ResetStickyTaskQueue(testcore.NewContext(), &workflowservice.ResetStickyTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		Execution: workflowExecution,
 	})
 	s.NoError(err)
@@ -330,7 +324,7 @@ func stickyTqTestStickyTaskqueueResetThenTimeout(s *testcore.TestEnv) {
 	stickyTimeout := false
 WaitForStickyTimeoutLoop:
 	for range 10 {
-		events := s.GetHistory(s.Namespace().String(), workflowExecution)
+		events := env.GetHistory(env.Namespace().String(), workflowExecution)
 		for _, event := range events {
 			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT {
 				s.EqualHistoryEvents(`
@@ -353,12 +347,12 @@ WaitForStickyTimeoutLoop:
 
 	for i := 1; i <= 3; i++ {
 		_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithRespondSticky, testcore.WithExpectedAttemptCount(i))
-		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
 
-	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err = env.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalB",
 		Input:             payloads.EncodeString("signal input"),
@@ -369,11 +363,11 @@ WaitForStickyTimeoutLoop:
 
 	for i := 1; i <= 2; i++ {
 		_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithRespondSticky, testcore.WithExpectedAttemptCount(i))
-		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+		env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
 
-	events := s.GetHistory(s.Namespace().String(), workflowExecution)
+	events := env.GetHistory(env.Namespace().String(), workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -396,7 +390,7 @@ WaitForStickyTimeoutLoop:
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithRespondSticky, testcore.WithExpectedAttemptCount(3))
 	s.NoError(err)
 
-	events = s.GetHistory(s.Namespace().String(), workflowExecution)
+	events = env.GetHistory(env.Namespace().String(), workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
