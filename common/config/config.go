@@ -484,6 +484,9 @@ type (
 		Filestore *FilestoreArchiver `yaml:"filestore"`
 		Gstorage  *GstorageArchiver  `yaml:"gstorage"`
 		S3store   *S3Archiver        `yaml:"s3store"`
+		// CustomStores contains the config for all custom history archivers
+		// The structure is a map of archiver name (scheme) to a map of config key-values
+		CustomStores map[string]map[string]any `yaml:"customStores"`
 	}
 
 	// VisibilityArchival contains the config for visibility archival
@@ -501,6 +504,9 @@ type (
 		Filestore *FilestoreArchiver `yaml:"filestore"`
 		S3store   *S3Archiver        `yaml:"s3store"`
 		Gstorage  *GstorageArchiver  `yaml:"gstorage"`
+		// CustomStores contains the config for all custom visibility archivers
+		// The structure is a map of archiver name (scheme) to a map of config key-values
+		CustomStores map[string]map[string]any `yaml:"customStores"`
 	}
 
 	// FilestoreArchiver contain the config for filestore archiver

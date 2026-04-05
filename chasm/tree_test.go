@@ -2240,11 +2240,11 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 	_, err = root.Component(mutableContext, ComponentRef{})
 	s.NoError(err)
 
-	s.testLibrary.mockSideEffectTaskValidator.EXPECT().
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(2)
-	s.testLibrary.mockOutboundSideEffectTaskValidator.EXPECT().
+	s.testLibrary.mockOutboundSideEffectTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
-	s.testLibrary.mockPureTaskValidator.EXPECT().
+	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(2)
 
 	mutation, err := root.CloseTransaction()
@@ -2317,7 +2317,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	s.NoError(err)
 
 	// Add a valid side effect task.
-	s.testLibrary.mockSideEffectTaskValidator.EXPECT().
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	testComponent := c.(*TestComponent)
 	mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSideEffectTask{
@@ -2326,7 +2326,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 
 	// Add an invalid outbound side effect task.
 	// the invalid task should not be created.
-	s.testLibrary.mockOutboundSideEffectTaskValidator.EXPECT().
+	s.testLibrary.mockOutboundSideEffectTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
 	mutableContext.AddTask(
 		testComponent,
@@ -2335,7 +2335,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	)
 
 	// Add a valid pure task.
-	s.testLibrary.mockPureTaskValidator.EXPECT().
+	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	mutableContext.AddTask(
 		testComponent,
@@ -2349,7 +2349,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 
 	// Add an invalid pure task.
 	// the invalid task should not be created.
-	s.testLibrary.mockPureTaskValidator.EXPECT().
+	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
 	mutableContext.AddTask(
 		testComponent,
@@ -2362,7 +2362,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	)
 
 	// Add a valid outbound side effect task to a sub-component.
-	s.testLibrary.mockOutboundSideEffectTaskValidator.EXPECT().
+	s.testLibrary.mockOutboundSideEffectTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	subComponent2 := testComponent.SubComponent2.Get(mutableContext)
 	mutableContext.AddTask(
@@ -2787,11 +2787,11 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 	)
 
 	// One valid task, one invalid task
-	s.testLibrary.mockPureTaskValidator.EXPECT().
+	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(false, nil).Times(1)
-	s.testLibrary.mockPureTaskValidator.EXPECT().
+	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(true, nil).Times(1)
-	s.testLibrary.mockPureTaskExecutor.EXPECT().
+	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Execute(
 			gomock.AssignableToTypeOf(&mutableCtx{}),
 			gomock.Any(),
@@ -2942,8 +2942,8 @@ func (s *nodeSuite) TestEachPureTask() {
 	s.NotNil(root)
 
 	processedTaskData := [][]byte{}
-	err = root.EachPureTask(now.Add(time.Minute), func(executor NodePureTask, taskAttributes TaskAttributes, task any) (bool, error) {
-		s.NotNil(executor)
+	err = root.EachPureTask(now.Add(time.Minute), func(handler NodePureTask, taskAttributes TaskAttributes, task any) (bool, error) {
+		s.NotNil(handler)
 		s.NotNil(taskAttributes)
 
 		testPureTask, ok := task.(*TestPureTask)
@@ -3013,7 +3013,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 	ctx := context.Background()
 
 	expectExecute := func(result error) {
-		s.testLibrary.mockPureTaskExecutor.EXPECT().
+		s.testLibrary.mockPureTaskHandler.EXPECT().
 			Execute(
 				gomock.AssignableToTypeOf(&mutableCtx{}),
 				gomock.AssignableToTypeOf(&TestComponent{}),
@@ -3023,7 +3023,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 	}
 
 	expectValidate := func(retValue bool, errValue error) {
-		s.testLibrary.mockPureTaskValidator.EXPECT().
+		s.testLibrary.mockPureTaskHandler.EXPECT().
 			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(retValue, errValue).Times(1)
 	}
 
@@ -3076,7 +3076,7 @@ func (s *nodeSuite) TestValidatePureTask() {
 
 	ctx := context.Background()
 	expectValidate := func(retValue bool, errValue error) {
-		s.testLibrary.mockPureTaskValidator.EXPECT().
+		s.testLibrary.mockPureTaskHandler.EXPECT().
 			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(retValue, errValue).Times(1)
 	}
 
@@ -3181,7 +3181,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	}
 	expectValidate := func(valid bool, validationErr error) {
 		backendValidtionFnCalled = false
-		s.testLibrary.mockSideEffectTaskValidator.EXPECT().Validate(
+		s.testLibrary.mockSideEffectTaskHandler.EXPECT().Validate(
 			gomock.Any(),
 			gomock.Any(),
 			gomock.Any(),
@@ -3189,7 +3189,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 		).Return(valid, validationErr).Times(1)
 	}
 	expectExecute := func(result error) {
-		s.testLibrary.mockSideEffectTaskExecutor.EXPECT().
+		s.testLibrary.mockSideEffectTaskHandler.EXPECT().
 			Execute(
 				gomock.Any(),
 				gomock.Any(),
@@ -3312,16 +3312,18 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 			return nil
 		}
 
-		s.testLibrary.mockDiscardableSideEffectTaskValidator.EXPECT().Validate(
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Validate(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(true, nil).Times(1)
-		s.testLibrary.mockDiscardableSideEffectExecutor.discardFn = func(
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Discard(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).DoAndReturn(func(
 			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
 			s.NotNil(ref.validationFn)
 			_, err := root.Component(chasmContext, ref)
 			return err
-		}
+		}).Times(1)
 
 		err := root.ExecuteSideEffectDiscardTask(ctx, executionKey, chasmTask, dummyValidationFn)
 		s.NoError(err)
@@ -3332,15 +3334,17 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 	s.Run("InvalidTask", func() {
 		root, chasmTask, executionKey, ctx, chasmContext := setup()
 
-		s.testLibrary.mockDiscardableSideEffectTaskValidator.EXPECT().Validate(
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Validate(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(false, nil).Times(1)
-		s.testLibrary.mockDiscardableSideEffectExecutor.discardFn = func(
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Discard(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).DoAndReturn(func(
 			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
 			_, err := root.Component(chasmContext, ref)
 			return err
-		}
+		}).Times(1)
 
 		err := root.ExecuteSideEffectDiscardTask(ctx, executionKey, chasmTask, func(_ NodeBackend, _ Context, _ Component) error { return nil })
 		s.ErrorAs(err, new(*serviceerror.NotFound))
@@ -3350,15 +3354,17 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 		root, chasmTask, executionKey, ctx, chasmContext := setup()
 
 		validationErr := errors.New("validation error")
-		s.testLibrary.mockDiscardableSideEffectTaskValidator.EXPECT().Validate(
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Validate(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(false, validationErr).Times(1)
-		s.testLibrary.mockDiscardableSideEffectExecutor.discardFn = func(
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Discard(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).DoAndReturn(func(
 			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
 			_, err := root.Component(chasmContext, ref)
 			return err
-		}
+		}).Times(1)
 
 		err := root.ExecuteSideEffectDiscardTask(
 			ctx, executionKey, chasmTask, func(_ NodeBackend, _ Context, _ Component) error { return nil })
@@ -3374,11 +3380,13 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 			return nil
 		}
 
-		s.testLibrary.mockDiscardableSideEffectTaskValidator.EXPECT().Validate(
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Validate(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(true, nil).Times(1)
 		discardErr := errors.New("discard error")
-		s.testLibrary.mockDiscardableSideEffectExecutor.discardFn = func(
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Discard(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).DoAndReturn(func(
 			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
 			s.NotNil(ref.validationFn)
@@ -3386,29 +3394,12 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 				return err
 			}
 			return discardErr
-		}
+		}).Times(1)
 
 		err := root.ExecuteSideEffectDiscardTask(ctx, executionKey, chasmTask, dummyValidationFn)
 		s.ErrorIs(err, discardErr)
 		s.True(validationFnCalled)
 	})
-}
-
-func (s *nodeSuite) TestHasDiscardHandler() {
-	// The discardable side effect task has an executor that implements SideEffectTaskDiscarder.
-	discardableTask, ok := s.registry.TaskByID(testDiscardableSideEffectTaskTypeID)
-	s.True(ok)
-	s.True(discardableTask.HasDiscardHandler())
-
-	// The regular side effect task does not.
-	regularTask, ok := s.registry.TaskByID(testSideEffectTaskTypeID)
-	s.True(ok)
-	s.False(regularTask.HasDiscardHandler())
-
-	// Pure tasks do not.
-	pureTask, ok := s.registry.TaskByID(testPureTaskTypeID)
-	s.True(ok)
-	s.False(pureTask.HasDiscardHandler())
 }
 
 func (s *nodeSuite) TestValidateSideEffectTask() {
@@ -3447,7 +3438,7 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	ctx := NewEngineContext(context.Background(), mockEngine)
 
 	expectValidate := func(componentType any, retValue bool, errValue error) {
-		s.testLibrary.mockSideEffectTaskValidator.EXPECT().
+		s.testLibrary.mockSideEffectTaskHandler.EXPECT().
 			Validate(
 				gomock.AssignableToTypeOf((*immutableCtx)(nil)),
 				gomock.AssignableToTypeOf(componentType),
@@ -3513,6 +3504,39 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	s.False(isValid)
 	s.NoError(err)
 	s.True(childChasmTask.DeserializedTask.IsValid())
+}
+
+func (s *nodeSuite) TestAndAllChildren_PathIndependence() {
+	// Build a tree deep enough to trigger Go's slice capacity doubling.
+	// append grows cap: 0→1→2→4. At depth 3, the path slice has len=3, cap=4,
+	// so a 4th append reuses the backing array. If node P at depth 3 has siblings
+	// S1 and S2 at depth 4, the second sibling's append overwrites S1's path.
+	//
+	// Tree: root → A → B → C → {S1, S2}
+	root := &Node{
+		nodeName: "",
+		children: map[string]*Node{
+			"A": {nodeName: "A", children: map[string]*Node{
+				"B": {nodeName: "B", children: map[string]*Node{
+					"C": {nodeName: "C", children: map[string]*Node{
+						"S1": {nodeName: "S1", children: map[string]*Node{}},
+						"S2": {nodeName: "S2", children: map[string]*Node{}},
+					}},
+				}},
+			}},
+		},
+	}
+
+	// Store raw path slices (not copies!) so we can detect mutation.
+	collected := make(map[string][]string)
+	for path, node := range root.andAllChildren() {
+		collected[node.nodeName] = path
+	}
+
+	// Verify S1/S2 do not have a corrupted path
+	// because append reused the backing array at depth 3→4.
+	s.Equal([]string{"A", "B", "C", "S1"}, collected["S1"])
+	s.Equal([]string{"A", "B", "C", "S2"}, collected["S2"])
 }
 
 func (s *nodeSuite) newTestTree(

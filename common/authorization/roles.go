@@ -31,6 +31,8 @@ type Claims struct {
 	Namespaces map[string]Role
 	// Free form bucket for extra data
 	Extensions any
+	// AuthType identifies the authentication method that produced these claims (e.g., "jwt", "mtls").
+	AuthType string
 }
 
 // @@@SNIPEND

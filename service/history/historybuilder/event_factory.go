@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -67,16 +68,18 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		FirstWorkflowTaskBackoff:        request.FirstWorkflowTaskBackoff,
 		FirstExecutionRunId:             firstRunID,
 		OriginalExecutionRunId:          originalRunID,
-		Memo:                            req.Memo,
-		SearchAttributes:                req.SearchAttributes,
-		WorkflowId:                      req.WorkflowId,
-		SourceVersionStamp:              request.SourceVersionStamp,
-		CompletionCallbacks:             req.CompletionCallbacks,
-		RootWorkflowExecution:           request.RootExecutionInfo.GetExecution(),
-		InheritedBuildId:                request.InheritedBuildId,
-		VersioningOverride:              worker_versioning.ConvertOverrideToV32(nonNilVersioningOverride),
-		Priority:                        req.GetPriority(),
-		InheritedPinnedVersion:          request.InheritedPinnedVersion,
+		// Filter nil values here rather than in the API layer because not all
+		// creation paths go through the frontend (e.g. continue-as-new, child workflows, replication).
+		Memo:                   payload.FilterNilMemo(req.Memo),
+		SearchAttributes:       payload.FilterNilSearchAttributes(req.SearchAttributes),
+		WorkflowId:             req.WorkflowId,
+		SourceVersionStamp:     request.SourceVersionStamp,
+		CompletionCallbacks:    req.CompletionCallbacks,
+		RootWorkflowExecution:  request.RootExecutionInfo.GetExecution(),
+		InheritedBuildId:       request.InheritedBuildId,
+		VersioningOverride:     worker_versioning.ConvertOverrideToV32(nonNilVersioningOverride),
+		Priority:               req.GetPriority(),
+		InheritedPinnedVersion: request.InheritedPinnedVersion,
 		// We expect the API handler to unset RequestEagerExecution if eager execution cannot be accepted.
 		EagerExecutionAccepted:       req.GetRequestEagerExecution(),
 		InheritedAutoUpgradeInfo:     request.InheritedAutoUpgradeInfo,
@@ -481,9 +484,12 @@ func (b EventFactory) CreateContinuedAsNewEvent(
 		Initiator:                    command.Initiator,
 		Failure:                      command.Failure,
 		LastCompletionResult:         command.LastCompletionResult,
-		Memo:                         command.Memo,
-		SearchAttributes:             command.SearchAttributes,
-		InheritBuildId:               command.InheritBuildId,
+		// Filter nil values here rather than in the API layer because not all
+		// creation paths go through the frontend (continue-as-new, child workflows, replication).
+		// This CaN event is created on the source workflow, so we need to filter nil values here.
+		Memo:             payload.FilterNilMemo(command.Memo),
+		SearchAttributes: payload.FilterNilSearchAttributes(command.SearchAttributes),
+		InheritBuildId:   command.InheritBuildId, //nolint:staticcheck // SA1019: worker versioning v0.2
 	}
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
 		WorkflowExecutionContinuedAsNewEventAttributes: attributes,
@@ -848,11 +854,14 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 			WorkflowIdReusePolicy:        command.WorkflowIdReusePolicy,
 			RetryPolicy:                  command.RetryPolicy,
 			CronSchedule:                 command.CronSchedule,
-			Memo:                         command.Memo,
-			SearchAttributes:             command.SearchAttributes,
-			ParentClosePolicy:            command.GetParentClosePolicy(),
-			InheritBuildId:               command.InheritBuildId,
-			Priority:                     command.Priority,
+			// Filter nil values here rather than in the API layer because not all
+			// creation paths go through the frontend (continue-as-new, child workflows, replication).
+			// This CaN event is created on the parent workflow, so we need to filter nil values here.
+			Memo:              payload.FilterNilMemo(command.Memo),
+			SearchAttributes:  payload.FilterNilSearchAttributes(command.SearchAttributes),
+			ParentClosePolicy: command.GetParentClosePolicy(),
+			InheritBuildId:    command.InheritBuildId, //nolint:staticcheck // SA1019: worker versioning v0.2
+			Priority:          command.Priority,
 		},
 	}
 	return event

@@ -2272,6 +2272,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
 	inputString := "unit test"
+	visibilityQuery := "WorkflowType='unit-test'"
 	jobId := uuid.NewString()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
@@ -2281,7 +2282,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 		BatchType:   enumspb.BATCH_OPERATION_TYPE_TERMINATE,
 		Request: &workflowservice.StartBatchOperationRequest{
 			Namespace:       testNamespace.String(),
-			VisibilityQuery: inputString,
+			VisibilityQuery: visibilityQuery,
 			JobId:           jobId,
 			Reason:          inputString,
 			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
@@ -2322,7 +2323,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 				Identity: inputString,
 			},
 		},
-		VisibilityQuery: inputString,
+		VisibilityQuery: visibilityQuery,
 	}
 
 	_, err = wh.StartBatchOperation(context.Background(), request)
@@ -2333,6 +2334,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
 	inputString := "unit test"
+	visibilityQuery := "WorkflowType='unit-test'"
 	jobId := uuid.NewString()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
@@ -2342,7 +2344,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 		BatchType:   enumspb.BATCH_OPERATION_TYPE_CANCEL,
 		Request: &workflowservice.StartBatchOperationRequest{
 			Namespace:       testNamespace.String(),
-			VisibilityQuery: inputString,
+			VisibilityQuery: visibilityQuery,
 			JobId:           jobId,
 			Reason:          inputString,
 			Operation: &workflowservice.StartBatchOperationRequest_CancellationOperation{
@@ -2383,7 +2385,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 				Identity: inputString,
 			},
 		},
-		VisibilityQuery: inputString,
+		VisibilityQuery: visibilityQuery,
 	}
 
 	_, err = wh.StartBatchOperation(context.Background(), request)
@@ -2394,6 +2396,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
 	inputString := "unit test"
+	visibilityQuery := "WorkflowType='unit-test'"
 	signalName := "signal name"
 	jobId := uuid.NewString()
 	config := s.newConfig()
@@ -2404,7 +2407,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 		BatchType:   enumspb.BATCH_OPERATION_TYPE_SIGNAL,
 		Request: &workflowservice.StartBatchOperationRequest{
 			Namespace:       testNamespace.String(),
-			VisibilityQuery: inputString,
+			VisibilityQuery: visibilityQuery,
 			JobId:           jobId,
 			Reason:          inputString,
 			Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
@@ -2449,7 +2452,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 			},
 		},
 		Reason:          inputString,
-		VisibilityQuery: inputString,
+		VisibilityQuery: visibilityQuery,
 	}
 
 	_, err = wh.StartBatchOperation(context.Background(), request)

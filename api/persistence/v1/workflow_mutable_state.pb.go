@@ -364,7 +364,7 @@ var File_temporal_server_api_persistence_v1_workflow_mutable_state_proto protore
 
 const file_temporal_server_api_persistence_v1_workflow_mutable_state_proto_rawDesc = "" +
 	"\n" +
-	"?temporal/server/api/persistence/v1/workflow_mutable_state.proto\x12\"temporal.server.api.persistence.v1\x1a%temporal/api/history/v1/message.proto\x1a3temporal/server/api/persistence/v1/executions.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\x1a.temporal/server/api/persistence/v1/chasm.proto\x1a/temporal/server/api/persistence/v1/update.proto\"\xd0\x0e\n" +
+	"?temporal/server/api/persistence/v1/workflow_mutable_state.proto\x12\"temporal.server.api.persistence.v1\x1a%temporal/api/history/v1/message.proto\x1a.temporal/server/api/persistence/v1/chasm.proto\x1a3temporal/server/api/persistence/v1/executions.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\x1a/temporal/server/api/persistence/v1/update.proto\"\xd0\x0e\n" +
 	"\x14WorkflowMutableState\x12r\n" +
 	"\x0eactivity_infos\x18\x01 \x03(\v2K.temporal.server.api.persistence.v1.WorkflowMutableState.ActivityInfosEntryR\ractivityInfos\x12i\n" +
 	"\vtimer_infos\x18\x02 \x03(\v2H.temporal.server.api.persistence.v1.WorkflowMutableState.TimerInfosEntryR\n" +
@@ -536,9 +536,9 @@ func file_temporal_server_api_persistence_v1_workflow_mutable_state_proto_init()
 	if File_temporal_server_api_persistence_v1_workflow_mutable_state_proto != nil {
 		return
 	}
+	file_temporal_server_api_persistence_v1_chasm_proto_init()
 	file_temporal_server_api_persistence_v1_executions_proto_init()
 	file_temporal_server_api_persistence_v1_hsm_proto_init()
-	file_temporal_server_api_persistence_v1_chasm_proto_init()
 	file_temporal_server_api_persistence_v1_update_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
