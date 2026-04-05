@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +26,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/queues/common"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
@@ -109,6 +112,32 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				var destDownErr *queueserrors.DestinationDownError
 				require.ErrorAs(t, err, &destDownErr)
 				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
+			},
+		},
+		{
+			name: "operation-not-started-retries-without-circuit-breaker",
+			caller: func(r *http.Request) (*http.Response, error) {
+				// Simulate the "operation not started yet" response from the server.
+				// The server converts serviceerror.NewUnavailable(msg) via
+				// ConvertGRPCError → HandlerError, then WriteFailure serializes it
+				// through the FailureConverter as a structured Failure JSON with
+				// metadata indicating it's a HandlerError.
+				body := `{"message":"` + nexusoperations.ErrMsgOperationNotStarted +
+					`","metadata":{"type":"nexus.HandlerError"},"details":{"type":"UNAVAILABLE"}}`
+				return &http.Response{
+					StatusCode: http.StatusServiceUnavailable,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(body)),
+				}, nil
+			},
+			expectedMetricOutcome: "handler-error:UNAVAILABLE",
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				// Should retry.
+				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
+				// Must NOT trigger the circuit breaker.
+				var destDownErr *queueserrors.DestinationDownError
+				require.False(t, errors.As(err, &destDownErr),
+					"invocationResultRetryNoCB must not produce a DestinationDownError")
 			},
 		},
 		{

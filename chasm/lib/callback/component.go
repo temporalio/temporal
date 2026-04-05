@@ -148,6 +148,13 @@ func (c *Callback) saveResult(
 			RetryPolicy: input.retryPolicy,
 		})
 		return nil, err
+	case invocationResultRetryNoCB:
+		err := TransitionAttemptFailed.Apply(c, ctx, EventAttemptFailed{
+			Time:        ctx.Now(c),
+			Err:         r.err,
+			RetryPolicy: input.retryPolicy,
+		})
+		return nil, err
 	case invocationResultFail:
 		err := TransitionFailed.Apply(c, ctx, EventFailed{
 			Time: ctx.Now(c),

@@ -140,6 +140,39 @@ func TestTerminatedTransition(t *testing.T) {
 	}
 }
 
+func TestSaveResult_RetryNoCB(t *testing.T) {
+	// invocationResultRetryNoCB should transition to BACKING_OFF just like
+	// invocationResultRetry, but without triggering the circuit breaker
+	// (circuit breaker is handled in WrapError, not saveResult).
+	cb := &Callback{
+		CallbackState: &callbackspb.CallbackState{
+			Callback: &callbackspb.Callback{
+				Variant: &callbackspb.Callback_Nexus_{
+					Nexus: &callbackspb.Callback_Nexus{
+						Url: "http://address:666/path",
+					},
+				},
+			},
+			Status: callbackspb.CALLBACK_STATUS_SCHEDULED,
+		},
+	}
+	mctx := &chasm.MockMutableContext{}
+	_, err := cb.saveResult(mctx, saveResultInput{
+		result:      invocationResultRetryNoCB{err: errors.New("operation not started")},
+		retryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
+	})
+	require.NoError(t, err)
+	require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.StateMachineState())
+	require.Equal(t, int32(1), cb.Attempt)
+	require.Equal(t, "operation not started", cb.LastAttemptFailure.Message)
+	require.False(t, cb.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
+	require.NotNil(t, cb.NextAttemptScheduleTime)
+
+	// Assert backoff task is generated
+	require.Len(t, mctx.Tasks, 1)
+	require.IsType(t, &callbackspb.BackoffTask{}, mctx.Tasks[0].Payload)
+}
+
 func TestSaveResult_TerminatedWhileInFlight(t *testing.T) {
 	// If the callback was terminated while an invocation was in-flight,
 	// saveResult should drop the result silently.
