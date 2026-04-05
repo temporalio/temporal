@@ -18,15 +18,15 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-type stickyTqSuite struct {
-	parallelsuite.Suite[*stickyTqSuite]
+type StickyTqTestSuite struct {
+	parallelsuite.Suite[*StickyTqTestSuite]
 }
 
 func TestStickyTqTestSuite(t *testing.T) {
-	parallelsuite.Run(t, &stickyTqSuite{})
+	parallelsuite.Run(t, &StickyTqTestSuite{})
 }
 
-func (s *stickyTqSuite) TestStickyTimeoutNonTransientWorkflowTask() {
+func (s *StickyTqTestSuite) TestStickyTimeoutNonTransientWorkflowTask() {
 	env := testcore.NewEnv(s.T())
 	id := "functional-sticky-timeout-non-transient-workflow-task"
 	wt := "functional-sticky-timeout-non-transient-command-type"
@@ -223,7 +223,7 @@ WaitForStickyTimeoutLoop:
  19 WorkflowExecutionCompleted // Workflow has completed`, events)
 }
 
-func (s *stickyTqSuite) TestStickyTaskqueueResetThenTimeout() {
+func (s *StickyTqTestSuite) TestStickyTaskqueueResetThenTimeout() {
 	env := testcore.NewEnv(s.T())
 	id := "functional-reset-sticky-fire-schedule-to-start-timeout"
 	wt := "functional-reset-sticky-fire-schedule-to-start-timeout-type"
