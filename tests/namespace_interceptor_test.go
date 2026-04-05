@@ -16,15 +16,8 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func TestNamespaceInterceptorTestSuite(t *testing.T) {
-	t.Parallel()
-	t.Run("TestServerRejectsInvalidRequests", func(t *testing.T) {
-		s := testcore.NewEnv(t)
-		testNSInterceptorServerRejectsInvalidRequests(s)
-	})
-}
-
-func testNSInterceptorServerRejectsInvalidRequests(s *testcore.TestEnv) {
+func TestNamespaceInterceptorServerRejectsInvalidRequests(t *testing.T) {
+	s := testcore.NewEnv(t)
 	sut := newNSInterceptorSutConnector(s)
 
 	customersNamespace := s.Namespace()
