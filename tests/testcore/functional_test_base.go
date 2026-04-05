@@ -346,6 +346,7 @@ func (s *FunctionalTestBase) SetupSubTest() {
 	s.initAssertions()
 }
 
+// TODO: remove once `parallelsuite` and testEnv is rolled out everywhere
 func (s *FunctionalTestBase) initAssertions() {
 	// `s.Assertions` (as well as other test helpers which depends on `s.T()`) must be initialized on
 	// both test and subtest levels (but not suite level, where `s.T()` is `nil`).

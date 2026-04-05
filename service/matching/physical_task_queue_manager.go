@@ -85,12 +85,11 @@ type (
 		clusterMeta         cluster.Metadata
 		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
-		pollerHistory               *pollerHistory
-		currentPolls                atomic.Int64
-		taskValidator               taskValidator
-		deploymentRegistrationCh    chan struct{}
-		deploymentVersionRegistered bool
-		pollerScalingRateLimiter    quotas.RateLimiter
+		pollerHistory            *pollerHistory
+		currentPolls             atomic.Int64
+		taskValidator            taskValidator
+		deploymentRegistrationCh chan struct{}
+		pollerScalingRateLimiter quotas.RateLimiter
 
 		taskTrackerLock sync.RWMutex
 		tasksAdded      map[priorityKey]*taskTracker
@@ -134,7 +133,10 @@ func newPhysicalTaskQueueManager(
 	buildIDTag := tag.WorkerVersion(versionTagValue)
 	taggedMetricsHandler := partitionMgr.metricsHandler.WithTags(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
-		metrics.WorkerVersionTag(versionTagValue, config.BreakdownMetricsByBuildID()))
+		metrics.WorkerVersionTag(versionTagValue, config.BreakdownMetricsByBuildID()),
+		metrics.WorkerDeploymentNameTag(queue.Version().Deployment().GetSeriesName(), config.BreakdownMetricsByBuildID()),
+		metrics.WorkerDeploymentBuildIDTag(queue.Version().Deployment().GetBuildId(), config.BreakdownMetricsByBuildID()),
+	)
 
 	tqCtx, tqCancel := context.WithCancel(partitionMgr.callerInfoContext(context.Background()))
 
@@ -713,6 +715,19 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		return errMissingDeploymentVersion
 	}
 
+	userData, _, err := c.partitionMgr.getPerTypeUserData()
+	if err != nil {
+		return err
+	}
+
+	deploymentData := userData.GetDeploymentData()
+	if worker_versioning.HasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
+		// already registered in user data, we can assume the workflow is running.
+		// TODO: consider replication scenarios where user data is replicated before
+		// the deployment workflow.
+		return nil
+	}
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -730,17 +745,13 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		}
 	}()
 
-	if c.deploymentVersionRegistered {
-		// deployment version already registered
-		return nil
-	}
-
-	userData, _, err := c.partitionMgr.GetUserDataManager().GetUserData()
+	// Recheck user data in case it was updated in the meantime while we were waiting for the lock.
+	userData, _, err = c.partitionMgr.getPerTypeUserData()
 	if err != nil {
 		return err
 	}
 
-	deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
+	deploymentData = userData.GetDeploymentData()
 	if worker_versioning.HasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
 		// already registered in user data, we can assume the workflow is running.
 		// TODO: consider replication scenarios where user data is replicated before
@@ -790,11 +801,11 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	// the deployment workflow will register itself in this task queue's user data.
 	// wait for it to propagate here.
 	for {
-		userData, userDataChanged, err := c.partitionMgr.GetUserDataManager().GetUserData()
+		userData, userDataChanged, err := c.partitionMgr.getPerTypeUserData()
 		if err != nil {
 			return err
 		}
-		deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
+		deploymentData := userData.GetDeploymentData()
 		if worker_versioning.HasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
 			break
 		}
@@ -806,7 +817,6 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		}
 	}
 
-	c.deploymentVersionRegistered = true
 	return nil
 }
 
