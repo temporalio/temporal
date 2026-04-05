@@ -57,10 +57,9 @@ func ValidateAndNormalizeEmbeddedActivity(
 	options *activitypb.ActivityOptions,
 	priority *commonpb.Priority,
 	runTimeout *durationpb.Duration,
+	workflowTaskQueueName string,
 ) error {
-	// We cannot use NormalizeAndValidateUserDefined for embedded activity task queue because embedded activities can
-	// use reserved task queues, which are not considered user defined.
-	if err := tqid.NormalizeAndValidate(options.TaskQueue, "", maxIDLengthLimit); err != nil {
+	if err := tqid.NormalizeAndValidateUserDefined(options.TaskQueue, "", workflowTaskQueueName, maxIDLengthLimit); err != nil {
 		return err
 	}
 

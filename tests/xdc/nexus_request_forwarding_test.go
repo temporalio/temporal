@@ -67,15 +67,11 @@ func TestNexusRequestForwardingTestSuite(t *testing.T) {
 }
 
 func (s *NexusRequestForwardingSuite) SetupSuite() {
-	re, err := dynamicconfig.ConvertWildcardStringListToRegexp([]string{"internal-test-*"})
-	if err != nil {
-		panic(err)
-	}
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key(): 1000,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                               1 * time.Millisecond,
-		dynamicconfig.FrontendNexusRequestHeadersBlacklist.Key():                       dynamicconfig.GetTypedPropertyFn(re),
+		dynamicconfig.FrontendNexusRequestHeadersBlacklist.Key():                       []string{"internal-test-*"},
 	}
 	s.setupSuite()
 }

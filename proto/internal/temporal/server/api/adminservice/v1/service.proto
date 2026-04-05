@@ -1,229 +1,230 @@
 syntax = "proto3";
 
 package temporal.server.api.adminservice.v1;
-option go_package = "go.temporal.io/server/api/adminservice/v1;adminservice";
 
 import "temporal/server/api/adminservice/v1/request_response.proto";
 import "temporal/server/api/common/v1/api_category.proto";
 
+option go_package = "go.temporal.io/server/api/adminservice/v1;adminservice";
+
 // AdminService provides advanced APIs for debugging and analysis with admin privilege
 service AdminService {
-    // RebuildMutableState attempts to rebuild mutable state according to persisted history events.
-    // NOTE: this is experimental API
-    rpc RebuildMutableState (RebuildMutableStateRequest) returns (RebuildMutableStateResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // RebuildMutableState attempts to rebuild mutable state according to persisted history events.
+  // NOTE: this is experimental API
+  rpc RebuildMutableState(RebuildMutableStateRequest) returns (RebuildMutableStateResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // ImportWorkflowExecution attempts to import workflow according to persisted history events.
-    // NOTE: this is experimental API
-    rpc ImportWorkflowExecution (ImportWorkflowExecutionRequest) returns (ImportWorkflowExecutionResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // ImportWorkflowExecution attempts to import workflow according to persisted history events.
+  // NOTE: this is experimental API
+  rpc ImportWorkflowExecution(ImportWorkflowExecutionRequest) returns (ImportWorkflowExecutionResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // DescribeWorkflowExecution returns information about the internal states of workflow execution.
-    rpc DescribeMutableState (DescribeMutableStateRequest) returns (DescribeMutableStateResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // DescribeWorkflowExecution returns information about the internal states of workflow execution.
+  rpc DescribeMutableState(DescribeMutableStateRequest) returns (DescribeMutableStateResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // DescribeHistoryHost returns information about the internal states of a history host
-    rpc DescribeHistoryHost (DescribeHistoryHostRequest) returns (DescribeHistoryHostResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // DescribeHistoryHost returns information about the internal states of a history host
+  rpc DescribeHistoryHost(DescribeHistoryHostRequest) returns (DescribeHistoryHostResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    rpc GetShard (GetShardRequest) returns (GetShardResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  rpc GetShard(GetShardRequest) returns (GetShardResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    rpc CloseShard (CloseShardRequest) returns (CloseShardResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  rpc CloseShard(CloseShardRequest) returns (CloseShardResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    rpc ListHistoryTasks (ListHistoryTasksRequest) returns (ListHistoryTasksResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  rpc ListHistoryTasks(ListHistoryTasksRequest) returns (ListHistoryTasksResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    rpc RemoveTask (RemoveTaskRequest) returns (RemoveTaskResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  rpc RemoveTask(RemoveTaskRequest) returns (RemoveTaskResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // Returns the raw history of specified workflow execution.  It fails with 'NotFound' if specified workflow
-    // execution in unknown to the service.
-    // StartEventId defines the beginning of the event to fetch. The first event is inclusive.
-    // EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
-    rpc GetWorkflowExecutionRawHistoryV2 (GetWorkflowExecutionRawHistoryV2Request) returns (GetWorkflowExecutionRawHistoryV2Response) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // Returns the raw history of specified workflow execution.  It fails with 'NotFound' if specified workflow
+  // execution in unknown to the service.
+  // StartEventId defines the beginning of the event to fetch. The first event is inclusive.
+  // EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
+  rpc GetWorkflowExecutionRawHistoryV2(GetWorkflowExecutionRawHistoryV2Request) returns (GetWorkflowExecutionRawHistoryV2Response) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // StartEventId defines the beginning of the event to fetch. The first event is inclusive.
-    // EndEventId and EndEventVersion defines the end of the event to fetch. The end event is inclusive.
-    rpc GetWorkflowExecutionRawHistory (GetWorkflowExecutionRawHistoryRequest) returns (GetWorkflowExecutionRawHistoryResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // StartEventId defines the beginning of the event to fetch. The first event is inclusive.
+  // EndEventId and EndEventVersion defines the end of the event to fetch. The end event is inclusive.
+  rpc GetWorkflowExecutionRawHistory(GetWorkflowExecutionRawHistoryRequest) returns (GetWorkflowExecutionRawHistoryResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // GetReplicationMessages returns new replication tasks since the read level provided in the token.
-    rpc GetReplicationMessages (GetReplicationMessagesRequest) returns (GetReplicationMessagesResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // GetReplicationMessages returns new replication tasks since the read level provided in the token.
+  rpc GetReplicationMessages(GetReplicationMessagesRequest) returns (GetReplicationMessagesResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task Id.
-    rpc GetNamespaceReplicationMessages (GetNamespaceReplicationMessagesRequest) returns (GetNamespaceReplicationMessagesResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task Id.
+  rpc GetNamespaceReplicationMessages(GetNamespaceReplicationMessagesRequest) returns (GetNamespaceReplicationMessagesResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // GetDLQReplicationMessages return replication messages based on DLQ info.
-    rpc GetDLQReplicationMessages(GetDLQReplicationMessagesRequest) returns (GetDLQReplicationMessagesResponse){
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // GetDLQReplicationMessages return replication messages based on DLQ info.
+  rpc GetDLQReplicationMessages(GetDLQReplicationMessagesRequest) returns (GetDLQReplicationMessagesResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // ReapplyEvents applies stale events to the current workflow and current run.
-    rpc ReapplyEvents (ReapplyEventsRequest) returns (ReapplyEventsResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // ReapplyEvents applies stale events to the current workflow and current run.
+  rpc ReapplyEvents(ReapplyEventsRequest) returns (ReapplyEventsResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // AddSearchAttributes add custom search attributes and returns comprehensive information about them.
-    // Deprecated. Use operatorservice instead.
-    rpc AddSearchAttributes (AddSearchAttributesRequest) returns (AddSearchAttributesResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // AddSearchAttributes add custom search attributes and returns comprehensive information about them.
+  // Deprecated. Use operatorservice instead.
+  rpc AddSearchAttributes(AddSearchAttributesRequest) returns (AddSearchAttributesResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // RemoveSearchAttributes removes custom search attributes and returns comprehensive information about them.
-    // Deprecated. Use operatorservice instead.
-    rpc RemoveSearchAttributes (RemoveSearchAttributesRequest) returns (RemoveSearchAttributesResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // RemoveSearchAttributes removes custom search attributes and returns comprehensive information about them.
+  // Deprecated. Use operatorservice instead.
+  rpc RemoveSearchAttributes(RemoveSearchAttributesRequest) returns (RemoveSearchAttributesResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // GetSearchAttributes returns comprehensive information about search attributes.
-    // Deprecated. Use operatorservice instead.
-    rpc GetSearchAttributes (GetSearchAttributesRequest) returns (GetSearchAttributesResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // GetSearchAttributes returns comprehensive information about search attributes.
+  // Deprecated. Use operatorservice instead.
+  rpc GetSearchAttributes(GetSearchAttributesRequest) returns (GetSearchAttributesResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // DescribeCluster returns information about Temporal cluster.
-    rpc DescribeCluster(DescribeClusterRequest) returns (DescribeClusterResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // DescribeCluster returns information about Temporal cluster.
+  rpc DescribeCluster(DescribeClusterRequest) returns (DescribeClusterResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // ListClusters returns information about Temporal clusters.
-    rpc ListClusters(ListClustersRequest) returns (ListClustersResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // ListClusters returns information about Temporal clusters.
+  rpc ListClusters(ListClustersRequest) returns (ListClustersResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // ListClusterMembers returns information about Temporal cluster members.
-    rpc ListClusterMembers(ListClusterMembersRequest) returns (ListClusterMembersResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // ListClusterMembers returns information about Temporal cluster members.
+  rpc ListClusterMembers(ListClusterMembersRequest) returns (ListClusterMembersResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // AddOrUpdateRemoteCluster adds or updates remote cluster.
-    rpc AddOrUpdateRemoteCluster(AddOrUpdateRemoteClusterRequest) returns (AddOrUpdateRemoteClusterResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // AddOrUpdateRemoteCluster adds or updates remote cluster.
+  rpc AddOrUpdateRemoteCluster(AddOrUpdateRemoteClusterRequest) returns (AddOrUpdateRemoteClusterResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // RemoveRemoteCluster removes remote cluster.
-    rpc RemoveRemoteCluster(RemoveRemoteClusterRequest) returns (RemoveRemoteClusterResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // RemoveRemoteCluster removes remote cluster.
+  rpc RemoveRemoteCluster(RemoveRemoteClusterRequest) returns (RemoveRemoteClusterResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // GetDLQMessages returns messages from DLQ.
-    rpc GetDLQMessages(GetDLQMessagesRequest) returns (GetDLQMessagesResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // GetDLQMessages returns messages from DLQ.
+  rpc GetDLQMessages(GetDLQMessagesRequest) returns (GetDLQMessagesResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // (-- api-linter: core::0165::response-message-name=disabled
-    //     aip.dev/not-precedent:  --)
-    // PurgeDLQMessages purges messages from DLQ.
-    rpc PurgeDLQMessages(PurgeDLQMessagesRequest) returns (PurgeDLQMessagesResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // (-- api-linter: core::0165::response-message-name=disabled
+  //     aip.dev/not-precedent:  --)
+  // PurgeDLQMessages purges messages from DLQ.
+  rpc PurgeDLQMessages(PurgeDLQMessagesRequest) returns (PurgeDLQMessagesResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // MergeDLQMessages merges messages from DLQ.
-    rpc MergeDLQMessages(MergeDLQMessagesRequest) returns (MergeDLQMessagesResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // MergeDLQMessages merges messages from DLQ.
+  rpc MergeDLQMessages(MergeDLQMessagesRequest) returns (MergeDLQMessagesResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // RefreshWorkflowTasks refreshes all tasks of a workflow.
-    rpc RefreshWorkflowTasks(RefreshWorkflowTasksRequest) returns (RefreshWorkflowTasksResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // RefreshWorkflowTasks refreshes all tasks of a workflow.
+  rpc RefreshWorkflowTasks(RefreshWorkflowTasksRequest) returns (RefreshWorkflowTasksResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // StartAdminBatchOperation starts an admin batch operation. Supports internal operations like RefreshWorkflowTasks.
-    rpc StartAdminBatchOperation(StartAdminBatchOperationRequest) returns (StartAdminBatchOperationResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // StartAdminBatchOperation starts an admin batch operation. Supports internal operations like RefreshWorkflowTasks.
+  rpc StartAdminBatchOperation(StartAdminBatchOperationRequest) returns (StartAdminBatchOperationResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // ResendReplicationTasks requests replication tasks from remote cluster and apply tasks to current cluster.
-    rpc ResendReplicationTasks(ResendReplicationTasksRequest) returns (ResendReplicationTasksResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // ResendReplicationTasks requests replication tasks from remote cluster and apply tasks to current cluster.
+  rpc ResendReplicationTasks(ResendReplicationTasksRequest) returns (ResendReplicationTasksResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // GetTaskQueueTasks returns tasks from task queue.
-    rpc GetTaskQueueTasks(GetTaskQueueTasksRequest) returns (GetTaskQueueTasksResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // GetTaskQueueTasks returns tasks from task queue.
+  rpc GetTaskQueueTasks(GetTaskQueueTasksRequest) returns (GetTaskQueueTasksResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // DeleteWorkflowExecution force deletes a workflow's visibility record, current & concrete execution record and history if possible
-    rpc DeleteWorkflowExecution(DeleteWorkflowExecutionRequest) returns (DeleteWorkflowExecutionResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // DeleteWorkflowExecution force deletes a workflow's visibility record, current & concrete execution record and history if possible
+  rpc DeleteWorkflowExecution(DeleteWorkflowExecutionRequest) returns (DeleteWorkflowExecutionResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    rpc StreamWorkflowReplicationMessages(stream StreamWorkflowReplicationMessagesRequest) returns (stream StreamWorkflowReplicationMessagesResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  rpc StreamWorkflowReplicationMessages(stream StreamWorkflowReplicationMessagesRequest) returns (stream StreamWorkflowReplicationMessagesResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    rpc GetNamespace(GetNamespaceRequest) returns (GetNamespaceResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  rpc GetNamespace(GetNamespaceRequest) returns (GetNamespaceResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    rpc GetDLQTasks (GetDLQTasksRequest) returns (GetDLQTasksResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
-    // (-- api-linter: core::0165::response-message-name=disabled
-    //     aip.dev/not-precedent:  --)
-    rpc PurgeDLQTasks (PurgeDLQTasksRequest) returns (PurgeDLQTasksResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  rpc GetDLQTasks(GetDLQTasksRequest) returns (GetDLQTasksResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
+  // (-- api-linter: core::0165::response-message-name=disabled
+  //     aip.dev/not-precedent:  --)
+  rpc PurgeDLQTasks(PurgeDLQTasksRequest) returns (PurgeDLQTasksResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    rpc MergeDLQTasks (MergeDLQTasksRequest) returns (MergeDLQTasksResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  rpc MergeDLQTasks(MergeDLQTasksRequest) returns (MergeDLQTasksResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    rpc DescribeDLQJob (DescribeDLQJobRequest) returns (DescribeDLQJobResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  rpc DescribeDLQJob(DescribeDLQJobRequest) returns (DescribeDLQJobResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    rpc CancelDLQJob (CancelDLQJobRequest) returns (CancelDLQJobResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  rpc CancelDLQJob(CancelDLQJobRequest) returns (CancelDLQJobResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    rpc AddTasks (AddTasksRequest) returns (AddTasksResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  rpc AddTasks(AddTasksRequest) returns (AddTasksResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    rpc ListQueues (ListQueuesRequest) returns (ListQueuesResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  rpc ListQueues(ListQueuesRequest) returns (ListQueuesResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    rpc DeepHealthCheck (DeepHealthCheckRequest) returns (DeepHealthCheckResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  rpc DeepHealthCheck(DeepHealthCheckRequest) returns (DeepHealthCheckResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    rpc SyncWorkflowState (SyncWorkflowStateRequest) returns (SyncWorkflowStateResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  rpc SyncWorkflowState(SyncWorkflowStateRequest) returns (SyncWorkflowStateResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    rpc GenerateLastHistoryReplicationTasks(GenerateLastHistoryReplicationTasksRequest) returns (GenerateLastHistoryReplicationTasksResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  rpc GenerateLastHistoryReplicationTasks(GenerateLastHistoryReplicationTasksRequest) returns (GenerateLastHistoryReplicationTasksResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    rpc DescribeTaskQueuePartition (DescribeTaskQueuePartitionRequest) returns (DescribeTaskQueuePartitionResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  rpc DescribeTaskQueuePartition(DescribeTaskQueuePartitionRequest) returns (DescribeTaskQueuePartitionResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    rpc ForceUnloadTaskQueuePartition (ForceUnloadTaskQueuePartitionRequest) returns (ForceUnloadTaskQueuePartitionResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  rpc ForceUnloadTaskQueuePartition(ForceUnloadTaskQueuePartitionRequest) returns (ForceUnloadTaskQueuePartitionResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 
-    // MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
-    rpc MigrateSchedule (MigrateScheduleRequest) returns (MigrateScheduleResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-    }
+  // MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
+  rpc MigrateSchedule(MigrateScheduleRequest) returns (MigrateScheduleResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 }

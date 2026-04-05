@@ -88,7 +88,7 @@ var Module = fx.Options(
 	fx.Provide(ReplicationProgressCacheProvider),
 	fx.Provide(VersionMembershipCacheProvider),
 	fx.Provide(ReactivationSignalCacheProvider),
-	fx.Provide(workerdeployment.ClientProvider),
+	workerdeployment.ClientModule,
 	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 

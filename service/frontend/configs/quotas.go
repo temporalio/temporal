@@ -107,55 +107,59 @@ var (
 		CompleteNexusOperation: 1,
 
 		// P2: Change State APIs
-		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelWorkflowExecution":        2,
-		"/temporal.api.workflowservice.v1.WorkflowService/TerminateWorkflowExecution":            2,
-		"/temporal.api.workflowservice.v1.WorkflowService/ResetWorkflowExecution":                2,
-		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkflowExecution":               2,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory":           2, // relatively high priority because it is required for replay
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateSchedule":                        2,
-		"/temporal.api.workflowservice.v1.WorkflowService/PatchSchedule":                         2,
-		"/temporal.api.workflowservice.v1.WorkflowService/DeleteSchedule":                        2,
-		"/temporal.api.workflowservice.v1.WorkflowService/StopBatchOperation":                    2,
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateActivityOptions":                 2,
-		"/temporal.api.workflowservice.v1.WorkflowService/PauseActivity":                         2,
-		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseActivity":                       2,
-		"/temporal.api.workflowservice.v1.WorkflowService/ResetActivity":                         2,
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecutionOptions":        2,
-		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeployment":                  2, // [cleanup-wv-pre-release]
-		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeploymentVersion":           2, // [cleanup-wv-pre-release]
-		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentCurrentVersion":     2,
-		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentRampingVersion":     2,
-		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentManager":            2,
-		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkerDeployment":                2,
-		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkerDeploymentVersion":         2,
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerDeploymentVersionMetadata": 2,
-		"/temporal.api.workflowservice.v1.WorkflowService/CreateWorkflowRule":                    2,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowRule":                  2,
-		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkflowRule":                    2,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowRules":                     2,
-		"/temporal.api.workflowservice.v1.WorkflowService/TriggerWorkflowRule":                   2,
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateTaskQueueConfig":                 2,
-		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelActivityExecution":        2,
-		"/temporal.api.workflowservice.v1.WorkflowService/TerminateActivityExecution":            2,
-		"/temporal.api.workflowservice.v1.WorkflowService/DeleteActivityExecution":               2,
-		"/temporal.api.workflowservice.v1.WorkflowService/PauseWorkflowExecution":                2,
-		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseWorkflowExecution":              2,
+		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelWorkflowExecution":             2,
+		"/temporal.api.workflowservice.v1.WorkflowService/TerminateWorkflowExecution":                 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/ResetWorkflowExecution":                     2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkflowExecution":                    2,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory":                2, // relatively high priority because it is required for replay
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateSchedule":                             2,
+		"/temporal.api.workflowservice.v1.WorkflowService/PatchSchedule":                              2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteSchedule":                             2,
+		"/temporal.api.workflowservice.v1.WorkflowService/StopBatchOperation":                         2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateActivityOptions":                      2,
+		"/temporal.api.workflowservice.v1.WorkflowService/PauseActivity":                              2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseActivity":                            2,
+		"/temporal.api.workflowservice.v1.WorkflowService/ResetActivity":                              2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecutionOptions":             2,
+		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeployment":                       2, // [cleanup-wv-pre-release]
+		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeploymentVersion":                2, // [cleanup-wv-pre-release]
+		"/temporal.api.workflowservice.v1.WorkflowService/CreateWorkerDeployment":                     2,
+		"/temporal.api.workflowservice.v1.WorkflowService/CreateWorkerDeploymentVersion":              2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerDeploymentVersionComputeConfig": 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentCurrentVersion":          2,
+		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentRampingVersion":          2,
+		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentManager":                 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkerDeployment":                     2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkerDeploymentVersion":              2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerDeploymentVersionMetadata":      2,
+		"/temporal.api.workflowservice.v1.WorkflowService/CreateWorkflowRule":                         2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowRule":                       2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkflowRule":                         2,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowRules":                          2,
+		"/temporal.api.workflowservice.v1.WorkflowService/TriggerWorkflowRule":                        2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateTaskQueueConfig":                      2,
+		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelActivityExecution":             2,
+		"/temporal.api.workflowservice.v1.WorkflowService/TerminateActivityExecution":                 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteActivityExecution":                    2,
+		"/temporal.api.workflowservice.v1.WorkflowService/PauseWorkflowExecution":                     2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseWorkflowExecution":                   2,
 
 		// P3: Status Querying APIs
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":       3,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution":       3,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":               3,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerBuildIdCompatibility":   3,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerVersioningRules":        3,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListTaskQueuePartitions":         3,
-		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":                   3,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeSchedule":                3,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListScheduleMatchingTimes":       3,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeBatchOperation":          3,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeDeployment":              3, // [cleanup-wv-pre-release]
-		"/temporal.api.workflowservice.v1.WorkflowService/GetCurrentDeployment":            3, // [cleanup-wv-pre-release]
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeploymentVersion": 3,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":        3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":                    3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution":                    3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":                            3,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerBuildIdCompatibility":                3,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerVersioningRules":                     3,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListTaskQueuePartitions":                      3,
+		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":                                3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeSchedule":                             3,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListScheduleMatchingTimes":                    3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeBatchOperation":                       3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeDeployment":                           3, // [cleanup-wv-pre-release]
+		"/temporal.api.workflowservice.v1.WorkflowService/GetCurrentDeployment":                         3, // [cleanup-wv-pre-release]
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeploymentVersion":              3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":                     3,
+		"/temporal.api.workflowservice.v1.WorkflowService/ValidateWorkerDeploymentVersionComputeConfig": 3,
 
 		// P3: Progress APIs for reporting cancellations and failures.
 		// They are relatively low priority as the tasks need to be retried anyway.
@@ -225,6 +229,12 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateNamespace":                  1,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerBuildIdCompatibility": 2,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerVersioningRules":      2,
+
+		// Anything that changes task queue user data also creates replication tasks.
+		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentCurrentVersion": 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentRampingVersion": 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkerDeploymentVersion":     2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateTaskQueueConfig":             2,
 	}
 
 	NamespaceReplicationInducingAPIPrioritiesOrdered = []int{0, 1, 2}
