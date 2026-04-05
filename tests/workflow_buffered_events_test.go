@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -19,20 +18,22 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-type WorkflowBufferedEventsTestSuite struct {
-	testcore.FunctionalTestBase
+type WorkflowBufferedEventsSuite struct {
+	parallelsuite.Suite[*WorkflowBufferedEventsSuite]
 }
 
 func TestWorkflowBufferedEventsTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(WorkflowBufferedEventsTestSuite))
+	parallelsuite.Run(t, &WorkflowBufferedEventsSuite{})
 }
 
-func (s *WorkflowBufferedEventsTestSuite) TestRateLimitBufferedEvents() {
+func (s *WorkflowBufferedEventsSuite) TestRateLimitBufferedEvents() {
+	env := testcore.NewEnv(s.T())
+
 	id := "functional-rate-limit-buffered-events-test"
 	wt := "functional-rate-limit-buffered-events-test-type"
 	tl := "functional-rate-limit-buffered-events-test-taskqueue"
@@ -41,7 +42,7 @@ func (s *WorkflowBufferedEventsTestSuite) TestRateLimitBufferedEvents() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -51,10 +52,10 @@ func (s *WorkflowBufferedEventsTestSuite) TestRateLimitBufferedEvents() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.RunId,
@@ -80,13 +81,13 @@ func (s *WorkflowBufferedEventsTestSuite) TestRateLimitBufferedEvents() {
 				buf := new(bytes.Buffer)
 				err := binary.Write(buf, binary.LittleEndian, byte(i))
 				s.NoError(err)
-				s.NoError(s.SendSignal(s.Namespace().String(), workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity))
+				s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity))
 			}
 
 			buf := new(bytes.Buffer)
 			err := binary.Write(buf, binary.LittleEndian, byte(101))
 			s.NoError(err)
-			signalErr := s.SendSignal(s.Namespace().String(), workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity)
+			signalErr := env.SendSignal(env.Namespace().String(), workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity)
 			s.NoError(signalErr)
 
 			// this command will be ignored as workflow task has already failed
@@ -103,33 +104,35 @@ func (s *WorkflowBufferedEventsTestSuite) TestRateLimitBufferedEvents() {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
 	// first workflow task to send 101 signals, the last signal will force fail workflow task and flush buffered events.
 	_, err := poller.PollAndProcessWorkflowTask()
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.Equal("Workflow task not found.", err.Error())
 
 	// Process signal in workflow
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.True(workflowComplete)
 	s.Equal(101, signalCount) // check that all 101 signals are received.
 }
 
-func (s *WorkflowBufferedEventsTestSuite) TestBufferedEvents() {
+func (s *WorkflowBufferedEventsSuite) TestBufferedEvents() {
+	env := testcore.NewEnv(s.T())
+
 	id := "functional-buffered-events-test"
 	wt := "functional-buffered-events-test-type"
 	tl := "functional-buffered-events-test-taskqueue"
@@ -139,7 +142,7 @@ func (s *WorkflowBufferedEventsTestSuite) TestBufferedEvents() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -149,10 +152,10 @@ func (s *WorkflowBufferedEventsTestSuite) TestBufferedEvents() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// workflow logic
 	workflowComplete := false
@@ -165,9 +168,9 @@ func (s *WorkflowBufferedEventsTestSuite) TestBufferedEvents() {
 			signalSent = true
 
 			// this will create new event when there is in-flight workflow task, and the new event will be buffered
-			_, err := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(),
+			_, err := env.FrontendClient().SignalWorkflowExecution(testcore.NewContext(),
 				&workflowservice.SignalWorkflowExecutionRequest{
-					Namespace: s.Namespace().String(),
+					Namespace: env.Namespace().String(),
 					WorkflowExecution: &commonpb.WorkflowExecution{
 						WorkflowId: id,
 					},
@@ -204,7 +207,7 @@ func (s *WorkflowBufferedEventsTestSuite) TestBufferedEvents() {
 			newRequestID := uuid.NewString()
 			newRequest := &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:                newRequestID,
-				Namespace:                s.Namespace().String(),
+				Namespace:                env.Namespace().String(),
 				WorkflowId:               id,
 				WorkflowType:             &commonpb.WorkflowType{Name: wt},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -217,18 +220,18 @@ func (s *WorkflowBufferedEventsTestSuite) TestBufferedEvents() {
 					AttachRequestId: true,
 				},
 			}
-			resp, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), newRequest)
+			resp, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), newRequest)
 			s.NoError(err)
 			s.False(resp.Started)
 
 			// check describe workflow request id infos map
 			descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
-				Namespace: s.Namespace().String(),
+				Namespace: env.Namespace().String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: id,
 				},
 			}
-			descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
+			descResp, err := env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
 			s.NoError(err)
 			requestIDInfos := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()
 			s.NotNil(requestIDInfos)
@@ -273,23 +276,23 @@ func (s *WorkflowBufferedEventsTestSuite) TestBufferedEvents() {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
 	// first workflow task, which sends signal and the signal event should be buffered to append after first workflow task closed
 	_, err := poller.PollAndProcessWorkflowTask()
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// check history, the signal event should be after the complete workflow task
-	historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+	historyEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.RunId,
 	})
@@ -308,14 +311,14 @@ func (s *WorkflowBufferedEventsTestSuite) TestBufferedEvents() {
 	// attach the request ID and have a WorkflowExecutionOptionsUpdated event buffered and appended
 	// after the workflow task is closed.
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(signalEvent)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
 	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 
 	// check history, the WorkflowExecutionOptionsUpdated event should be after the complete workflow task
-	historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+	historyEvents = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.RunId,
 	})
@@ -346,12 +349,12 @@ func (s *WorkflowBufferedEventsTestSuite) TestBufferedEvents() {
 	// Check after the buffered events are flushed, the request ID infos map has the correct event ID.
 	newRequestID := optionsUpdatedEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes().AttachedRequestId
 	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	}
-	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
+	descResp, err := env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
 	s.NoError(err)
 	requestIDInfos := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()
 	s.NotNil(requestIDInfos)
@@ -366,7 +369,9 @@ func (s *WorkflowBufferedEventsTestSuite) TestBufferedEvents() {
 	)
 }
 
-func (s *WorkflowBufferedEventsTestSuite) TestBufferedEventsOutOfOrder() {
+func (s *WorkflowBufferedEventsSuite) TestBufferedEventsOutOfOrder() {
+	env := testcore.NewEnv(s.T())
+
 	id := "functional-buffered-events-out-of-order-test"
 	wt := "functional-buffered-events-out-of-order-test-type"
 	tl := "functional-buffered-events-out-of-order-test-taskqueue"
@@ -375,7 +380,7 @@ func (s *WorkflowBufferedEventsTestSuite) TestBufferedEventsOutOfOrder() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -385,10 +390,10 @@ func (s *WorkflowBufferedEventsTestSuite) TestBufferedEventsOutOfOrder() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.RunId,
@@ -447,13 +452,13 @@ func (s *WorkflowBufferedEventsTestSuite) TestBufferedEventsOutOfOrder() {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
@@ -463,20 +468,20 @@ func (s *WorkflowBufferedEventsTestSuite) TestBufferedEventsOutOfOrder() {
 		testcore.WithExpectedAttemptCount(0),
 		testcore.WithRetries(1),
 		testcore.WithForceNewWorkflowTask)
-	s.Logger.Info("pollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("pollAndProcessWorkflowTask", tag.Error(err))
 	task := res.NewTask
 	s.NoError(err)
 
 	// This will cause activity start and complete to be buffered
 	err = poller.PollAndProcessActivityTask(false)
-	s.Logger.Info("pollAndProcessActivityTask", tag.Error(err))
+	env.Logger.Info("pollAndProcessActivityTask", tag.Error(err))
 	s.NoError(err)
 
 	// second workflow task, completes another local activity and forces flush of buffered activity events
 	newWorkflowTask := task.GetWorkflowTask()
 	s.NotNil(newWorkflowTask)
 	task, err = poller.HandlePartialWorkflowTask(newWorkflowTask, true)
-	s.Logger.Info("pollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("pollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(task)
 
@@ -484,11 +489,11 @@ func (s *WorkflowBufferedEventsTestSuite) TestBufferedEventsOutOfOrder() {
 	newWorkflowTask = task.GetWorkflowTask()
 	s.NotNil(newWorkflowTask)
 	task, err = poller.HandlePartialWorkflowTask(newWorkflowTask, true)
-	s.Logger.Info("pollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("pollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.Nil(task.WorkflowTask)
 
-	events := s.GetHistory(s.Namespace().String(), workflowExecution)
+	events := env.GetHistory(env.Namespace().String(), workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
