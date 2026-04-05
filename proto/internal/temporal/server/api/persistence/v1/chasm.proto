@@ -1,68 +1,69 @@
 syntax = "proto3";
 
 package temporal.server.api.persistence.v1;
-option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/server/api/persistence/v1/hsm.proto";
 
-message ChasmNode {
-    // Metadata present for all nodes. 
-    ChasmNodeMetadata metadata = 1;
+option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
-    // User data for any type of node that stores it.
-    temporal.api.common.v1.DataBlob data = 2;
+message ChasmNode {
+  // Metadata present for all nodes.
+  ChasmNodeMetadata metadata = 1;
+
+  // User data for any type of node that stores it.
+  temporal.api.common.v1.DataBlob data = 2;
 }
 
 message ChasmNodeMetadata {
-    // Versioned transition when the node was instantiated.
-    VersionedTransition initial_versioned_transition = 1;
-    // Versioned transition when the node was last updated.
-    VersionedTransition last_update_versioned_transition = 2;
+  // Versioned transition when the node was instantiated.
+  VersionedTransition initial_versioned_transition = 1;
+  // Versioned transition when the node was last updated.
+  VersionedTransition last_update_versioned_transition = 2;
 
-    oneof attributes {
-        ChasmComponentAttributes component_attributes = 11;
-        ChasmDataAttributes data_attributes = 12;
-        ChasmCollectionAttributes collection_attributes = 13;
-        ChasmPointerAttributes pointer_attributes = 14;
-    }
+  oneof attributes {
+    ChasmComponentAttributes component_attributes = 11;
+    ChasmDataAttributes data_attributes = 12;
+    ChasmCollectionAttributes collection_attributes = 13;
+    ChasmPointerAttributes pointer_attributes = 14;
+  }
 }
 
 message ChasmComponentAttributes {
-    message Task {
-        // Registered task's type ID.
-        // (-- api-linter: core::0141::forbidden-types=disabled --)
-        uint32 type_id = 1;
-        string destination = 2;
-        google.protobuf.Timestamp scheduled_time = 3;
-        temporal.api.common.v1.DataBlob data = 4;
-        // Versioned transition of the execution when the task was created.
-        VersionedTransition versioned_transition = 5;
-        // The xth task generated in this versioned transition.
-        // Together with the versioned transition, this is a unique identifier for
-        // this task.
-        int64 versioned_transition_offset = 6;
-        // If a physical task is created for this task in this cluster.
-        // NOTE: this is a cluster-specific field and can not be replicated.
-        // Changes to this field also doesn't require an increase in versioned transition. 
-        int32 physical_task_status = 7;
-    }
-
-    // Registered component's type ID.
+  message Task {
+    // Registered task's type ID.
     // (-- api-linter: core::0141::forbidden-types=disabled --)
     uint32 type_id = 1;
-    // Tasks are in their insertion order, 
-    // i.e. by versioned transtion and versioned_transition_offset.
-    repeated Task side_effect_tasks = 2;
-    // Tasks are ordered by their scheduled time, breaking ties by
-    // versioned transition and versioned_transition_offset. 
-    repeated Task pure_tasks = 3;
-    // When true, this component ignores parent lifecycle validation.
-    // Detached components can continue operating, accepting writes and executing
-    // tasks, even when their parent is closed/terminated.
-    bool detached = 4;
+    string destination = 2;
+    google.protobuf.Timestamp scheduled_time = 3;
+    temporal.api.common.v1.DataBlob data = 4;
+    // Versioned transition of the execution when the task was created.
+    VersionedTransition versioned_transition = 5;
+    // The xth task generated in this versioned transition.
+    // Together with the versioned transition, this is a unique identifier for
+    // this task.
+    int64 versioned_transition_offset = 6;
+    // If a physical task is created for this task in this cluster.
+    // NOTE: this is a cluster-specific field and can not be replicated.
+    // Changes to this field also doesn't require an increase in versioned transition.
+    int32 physical_task_status = 7;
+  }
+
+  // Registered component's type ID.
+  // (-- api-linter: core::0141::forbidden-types=disabled --)
+  uint32 type_id = 1;
+  // Tasks are in their insertion order,
+  // i.e. by versioned transtion and versioned_transition_offset.
+  repeated Task side_effect_tasks = 2;
+  // Tasks are ordered by their scheduled time, breaking ties by
+  // versioned transition and versioned_transition_offset.
+  repeated Task pure_tasks = 3;
+  // When true, this component ignores parent lifecycle validation.
+  // Detached components can continue operating, accepting writes and executing
+  // tasks, even when their parent is closed/terminated.
+  bool detached = 4;
 }
 
 message ChasmDataAttributes {}
@@ -70,62 +71,61 @@ message ChasmDataAttributes {}
 message ChasmCollectionAttributes {}
 
 message ChasmPointerAttributes {
-    repeated string node_path = 1;
+  repeated string node_path = 1;
 }
-
 
 // ChasmTaskInfo includes component-facing task metadata
 message ChasmTaskInfo {
-    // Initial versioned transition of the component being referenced.
-    VersionedTransition component_initial_versioned_transition = 1;
+  // Initial versioned transition of the component being referenced.
+  VersionedTransition component_initial_versioned_transition = 1;
 
-    // Last updated transition of the component being referenced at the time the
-    // reference was created. Can be used to invalidate this reference.
-    VersionedTransition component_last_update_versioned_transition = 2;
+  // Last updated transition of the component being referenced at the time the
+  // reference was created. Can be used to invalidate this reference.
+  VersionedTransition component_last_update_versioned_transition = 2;
 
-    // Path to the component.
-    repeated string path = 3;
+  // Path to the component.
+  repeated string path = 3;
 
-    // Registered task's type ID.
-    // (-- api-linter: core::0141::forbidden-types=disabled --)
-    uint32 type_id = 4;
+  // Registered task's type ID.
+  // (-- api-linter: core::0141::forbidden-types=disabled --)
+  uint32 type_id = 4;
 
-    // Opaque attached task data. May be nil. Usable by components, not the CHASM
-    // framework itself.
-    temporal.api.common.v1.DataBlob data = 5;
+  // Opaque attached task data. May be nil. Usable by components, not the CHASM
+  // framework itself.
+  temporal.api.common.v1.DataBlob data = 5;
 
-    // ArchetypeID of the execution that generated this task.
-    // (-- api-linter: core::0141::forbidden-types=disabled --)
-    uint32 archetype_id = 6;
+  // ArchetypeID of the execution that generated this task.
+  // (-- api-linter: core::0141::forbidden-types=disabled --)
+  uint32 archetype_id = 6;
 }
 
 // ChasmComponentRef references a specific chasm component.
 message ChasmComponentRef {
-    string namespace_id = 1;
-    string business_id = 2;
-    string run_id = 3;
+  string namespace_id = 1;
+  string business_id = 2;
+  string run_id = 3;
 
-    // Executions's root component's type ID.
-    // (-- api-linter: core::0141::forbidden-types=disabled --)
-    uint32 archetype_id = 4;
-    
-    VersionedTransition execution_versioned_transition = 5;
+  // Executions's root component's type ID.
+  // (-- api-linter: core::0141::forbidden-types=disabled --)
+  uint32 archetype_id = 4;
 
-    repeated string component_path = 6;
-    VersionedTransition component_initial_versioned_transition = 7;
+  VersionedTransition execution_versioned_transition = 5;
+
+  repeated string component_path = 6;
+  VersionedTransition component_initial_versioned_transition = 7;
 }
 
 // ChasmNexusCompletion includes details about a completed Nexus operation.
 message ChasmNexusCompletion {
-    oneof outcome {
-        // Result of a successful operation, only set if state == successful.
-        temporal.api.common.v1.Payload success = 1;
-        // Operation failure, only set if state != successful.
-        temporal.api.failure.v1.Failure failure = 2;
-    }
-    // Time when the operation was closed.
-    google.protobuf.Timestamp close_time = 3;
-    // Request ID embedded in the NexusOperationScheduledEvent.
-    // Allows completing a started operation after a workflow has been reset.
-    string request_id = 4;
+  oneof outcome {
+    // Result of a successful operation, only set if state == successful.
+    temporal.api.common.v1.Payload success = 1;
+    // Operation failure, only set if state != successful.
+    temporal.api.failure.v1.Failure failure = 2;
+  }
+  // Time when the operation was closed.
+  google.protobuf.Timestamp close_time = 3;
+  // Request ID embedded in the NexusOperationScheduledEvent.
+  // Allows completing a started operation after a workflow has been reset.
+  string request_id = 4;
 }

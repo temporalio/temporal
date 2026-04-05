@@ -39,7 +39,6 @@ type (
 		logger           sdklog.Logger
 		metrics          sdkclient.MetricsHandler
 		lock             workflow.Mutex
-		conflictToken    []byte
 		deleteDeployment bool
 		unsafeMaxVersion func() int
 		// stateChanged is used to track if the state of the workflow has undergone a local state change since the last signal/update.
@@ -140,11 +139,14 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 // syncVersionSummary ensures the version summary in the deployment workflow stays consistent
 // with the version workflow. This helps prevent discrepancies if they ever fall out of sync.
 func (d *WorkflowRunner) syncVersionSummaryFromVersionWorkflow(summary *deploymentspb.WorkerDeploymentVersionSummary) {
-	if _, ok := d.State.Versions[summary.GetVersion()]; !ok {
+	existing, ok := d.State.Versions[summary.GetVersion()]
+	if !ok {
 		d.logger.Error("received summary for a non-existing version, ignoring it", "version", summary.GetVersion())
 		return
 	}
 
+	// Preserve create_request_id since the version workflow doesn't know about it.
+	summary.CreateRequestId = existing.GetCreateRequestId()
 	d.State.Versions[summary.GetVersion()] = summary
 }
 
@@ -273,6 +275,42 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
+	err = workflow.SetQueryHandler(ctx, QueryCreateRequestID, func() (*deploymentspb.CreateRequestIDQueryResponse, error) {
+		if d.deleteDeployment {
+			return nil, errors.New(errDeploymentDeleted)
+		}
+		return &deploymentspb.CreateRequestIDQueryResponse{
+			RequestId:     d.GetState().GetCreateRequestId(),
+			ConflictToken: d.State.GetConflictToken(),
+		}, nil
+	})
+	if err != nil {
+		d.logger.Info("SetQueryHandler failed for WorkerDeployment create request-id query with error: " + err.Error())
+		return err
+	}
+
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		CreateWorkerDeployment,
+		d.handleCreateWorkerDeployment,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateCreateWorkerDeployment,
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		CreateWorkerDeploymentVersion,
+		d.handleCreateWorkerDeploymentVersion,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateCreateWorkerDeploymentVersion,
+		},
+	); err != nil {
+		return err
+	}
+
 	if err := workflow.SetUpdateHandler(
 		ctx,
 		RegisterWorkerInWorkerDeployment,
@@ -345,7 +383,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		canContinue := d.deleteDeployment || // deployment is deleted -> it's ok to drop all signals and updates.
 			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
 			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
-				(d.forceCAN || d.stateChanged))
+				(d.forceCAN || d.stateChanged || workflow.GetInfo(ctx).GetContinueAsNewSuggested()))
 
 		// TODO(carlydf): remove verbose logging
 		if canContinue {
@@ -417,6 +455,159 @@ func (d *WorkflowRunner) ensureNotDeleted() error {
 	return nil
 }
 
+func (d *WorkflowRunner) validateCreateWorkerDeployment(args *deploymentspb.CreateWorkerDeploymentArgs) error {
+	// Only valid if deployment is deleted or the request ID matches the current one.
+	if d.State.GetCreateRequestId() == args.GetRequestId() {
+		return nil
+	}
+
+	return temporal.NewNonRetryableApplicationError(errDeploymentAlreadyExists, errDeploymentAlreadyExists, nil)
+}
+
+func (d *WorkflowRunner) handleCreateWorkerDeployment(ctx workflow.Context, args *deploymentspb.CreateWorkerDeploymentArgs) (*deploymentspb.CreateWorkerDeploymentResponse, error) {
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	defer func() {
+		// Even if the update doesn't change the state we mark it as dirty because of created history events.
+		d.setStateChanged()
+		d.lock.Unlock()
+	}()
+
+	// Re-validate after acquiring lock
+	err = d.validateCreateWorkerDeployment(args)
+	if err != nil {
+		return nil, err
+	}
+
+	if d.State.GetCreateRequestId() == args.GetRequestId() {
+		// Duplicate request, return success without writing anything.
+		return &deploymentspb.CreateWorkerDeploymentResponse{
+			ConflictToken: d.State.ConflictToken,
+		}, nil
+	}
+
+	// At this point this a brand-new workflow.
+	d.State.LastModifierIdentity = args.GetIdentity()
+	d.State.CreateRequestId = args.GetRequestId()
+	d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
+
+	return &deploymentspb.CreateWorkerDeploymentResponse{
+		ConflictToken: d.State.ConflictToken,
+	}, nil
+}
+
+func (d *WorkflowRunner) validateCreateWorkerDeploymentVersion(args *deploymentspb.CreateWorkerDeploymentVersionArgs) error {
+	if d.deleteDeployment {
+		return temporal.NewNonRetryableApplicationError(errDeploymentDeleted, errDeploymentDeleted, nil)
+	}
+	if existing, ok := d.State.Versions[args.GetVersion()]; ok {
+		if existing.GetCreateRequestId() == args.GetRequestId() {
+			return nil
+		}
+		return temporal.NewNonRetryableApplicationError(errVersionAlreadyExists, errVersionAlreadyExists, nil)
+	}
+	return nil
+}
+
+func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Context, args *deploymentspb.CreateWorkerDeploymentVersionArgs) (*deploymentspb.CreateWorkerDeploymentVersionResponse, error) {
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	defer func() {
+		d.setStateChanged()
+		d.lock.Unlock()
+	}()
+
+	// Re-validate after acquiring lock.
+	err = d.validateCreateWorkerDeploymentVersion(args)
+	if err != nil {
+		return nil, err
+	}
+
+	// Idempotent: version exists with the same request ID.
+	if existing, ok := d.State.Versions[args.GetVersion()]; ok && existing.GetCreateRequestId() == args.GetRequestId() {
+		return &deploymentspb.CreateWorkerDeploymentVersionResponse{}, nil
+	}
+
+	// Check max versions limit.
+	maxVersions := d.getMaxVersions(ctx)
+	if len(d.State.Versions) >= maxVersions {
+		err := d.tryDeleteVersion(ctx)
+		if err != nil {
+			return nil, temporal.NewApplicationError(
+				fmt.Sprintf("cannot add version %s since maximum number of versions (%d) have been registered in the deployment", args.GetVersion(), maxVersions),
+				errTooManyVersions,
+			)
+		}
+	}
+
+	// Parse version string to get deployment name and build ID.
+	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(args.GetVersion())
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
+	}
+
+	// Create or update the Worker Controller Instance for this version.
+	computeConfig := args.GetComputeConfig()
+	if computeConfig != nil {
+		updateCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+		err = workflow.ExecuteActivity(updateCtx, d.a.UpdateWorkerControllerInstanceFromDeployment, &deploymentspb.UpdateWorkerControllerInstanceInput{
+			Version:             worker_versioning.ExternalWorkerDeploymentVersionFromVersion(versionObj),
+			Identity:            args.GetIdentity(),
+			UpsertScalingGroups: scalingGroupsToUpsertUpdates(computeConfig.GetScalingGroups()),
+		}).Get(ctx, nil)
+		if err != nil {
+			var appErr *temporal.ApplicationError
+			if errors.As(err, &appErr) && appErr.Type() == errInvalidComputeConfig {
+				return nil, appErr
+			}
+			return nil, serviceerror.NewInternalf("update worker controller instance: %v", err)
+		}
+	}
+
+	// Start the version workflow via activity.
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	err = workflow.ExecuteActivity(activityCtx, d.a.StartWorkerDeploymentVersionWorkflow, &deploymentspb.StartWorkerDeploymentVersionRequest{
+		DeploymentName: versionObj.DeploymentName,
+		BuildId:        versionObj.BuildId,
+		RequestId:      args.GetRequestId(),
+		Identity:       args.GetIdentity(),
+	}).Get(ctx, nil)
+	if err != nil {
+		if computeConfig != nil {
+			deleteCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+			deleteErr := workflow.ExecuteActivity(deleteCtx, d.a.DeleteWorkerControllerInstanceFromDeployment, &deploymentspb.DeleteWorkerControllerInstanceInput{
+				Version:  worker_versioning.ExternalWorkerDeploymentVersionFromVersion(versionObj),
+				Identity: args.GetIdentity(),
+			}).Get(ctx, nil)
+			if deleteErr != nil {
+				d.logger.Warn("Failed to delete worker controller instance", "error", err)
+			}
+		}
+		return nil, err
+	}
+
+	// Add version to local state.
+	d.State.Versions[args.GetVersion()] = &deploymentspb.WorkerDeploymentVersionSummary{
+		Version:         args.GetVersion(),
+		CreateTime:      timestamppb.New(workflow.Now(ctx)),
+		Status:          enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED,
+		CreateRequestId: args.GetRequestId(),
+	}
+	d.metrics.Counter(metrics.WorkerDeploymentVersionCreated.Name()).Inc(1)
+
+	if err := d.updateMemo(ctx); err != nil {
+		return nil, err
+	}
+	return &deploymentspb.CreateWorkerDeploymentVersionResponse{}, nil
+}
+
 func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionUpdateArgs) error {
 	if d.State.Versions == nil {
 		return nil
@@ -469,9 +660,11 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		d.lock.Unlock()
 	}()
 
+	version := worker_versioning.WorkerDeploymentVersionToStringV31(args.Version)
+
 	// Add version to local state of the workflow, if not already present.
 	err = d.addVersionToWorkerDeployment(ctx, &deploymentspb.AddVersionUpdateArgs{
-		Version:    worker_versioning.WorkerDeploymentVersionToStringV31(args.Version),
+		Version:    version,
 		CreateTime: timestamppb.New(workflow.Now(ctx)),
 	})
 	if err != nil {
@@ -488,7 +681,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		TaskQueueName: args.TaskQueueName,
 		TaskQueueType: args.TaskQueueType,
 		MaxTaskQueues: args.MaxTaskQueues,
-		Version:       worker_versioning.WorkerDeploymentVersionToStringV31(args.Version),
+		Version:       version,
 		RoutingConfig: routingConfigToSync,
 	}).Get(ctx, nil)
 	if err != nil {
@@ -502,6 +695,11 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 			}
 		}
 		return err
+	}
+
+	if d.State.Versions[version].Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED {
+		// now that a poller is seen, we should update the status to INACTIVE
+		d.State.Versions[version].Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
 	}
 
 	// update memo

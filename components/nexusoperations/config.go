@@ -107,6 +107,8 @@ var DisallowedOperationHeaders = dynamicconfig.NewGlobalTypedSettingWithConverte
 		headers.CallerNameHeaderName,
 		headers.CallerTypeHeaderName,
 		headers.CallOriginHeaderName,
+		headers.PrincipalTypeHeaderName,
+		headers.PrincipalNameHeaderName,
 	},
 	`Case insensitive list of disallowed header keys for Nexus Operations.
 ScheduleNexusOperation commands with a "nexus_header" field that contains any of these disallowed keys will be

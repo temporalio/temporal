@@ -18,6 +18,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -6364,6 +6365,101 @@ func (s *Versioning3Suite) TestPinnedCaN_UpgradeToUnversioned() {
 			})
 		s.WaitForChannel(ctx, wftNewRunDone)
 	})
+}
+
+func (s *Versioning3Suite) TestVersioning3_NoWorkerVersionOnStartedEvents() {
+	tv := testvars.New(s)
+	tvUpd1 := tv.WithUpdateIDNumber(1).WithMessageIDNumber(1)
+	tvUpd2 := tv.WithUpdateIDNumber(2)
+	stamp := &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: tv.BuildID()}
+
+	// Start workflow and drain first WFT.
+	execution, _ := s.drainWorkflowTaskAfterSetCurrent(tv)
+
+	// Send first update.
+	updateResultCh := sendUpdateNoError(s, tvUpd1)
+
+	// Poll and handle: accept + complete the first update.
+	s.pollWftAndHandle(tv, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.NotEmpty(task.Messages)
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands:           s.UpdateAcceptCompleteCommands(tvUpd1),
+				Messages:           s.UpdateAcceptCompleteMessages(tvUpd1, task.Messages[0]),
+				WorkerVersionStamp: stamp,
+				VersioningBehavior: vbUnpinned,
+				DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+					BuildId:              tv.BuildID(),
+					DeploymentName:       tv.DeploymentSeries(),
+					WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+				},
+			}, nil
+		})
+	<-updateResultCh
+
+	// Send second update.
+	updateResultCh2 := sendUpdate(context.Background(), s, tvUpd2)
+
+	// Poll and fail the WFT with deployment options to trigger a transient retry.
+	failCtx := testcore.NewContext()
+	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(failCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         s.Namespace().String(),
+		TaskQueue:         tv.TaskQueue(),
+		Identity:          tv.WorkerIdentity(),
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
+	})
+	s.NoError(err)
+	s.NotEmpty(pollResp.GetTaskToken())
+	_, err = s.FrontendClient().RespondWorkflowTaskFailed(failCtx, &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace:         s.Namespace().String(),
+		TaskToken:         pollResp.TaskToken,
+		Cause:             enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+		Identity:          tv.WorkerIdentity(),
+		WorkerVersion:     stamp,
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
+	})
+	s.NoError(err)
+
+	// Poll the retried (transient) WFT and fail the workflow.
+	s.pollWftAndHandle(tv, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{
+							FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+								Failure: &failurepb.Failure{Message: "workflow failed intentionally"},
+							},
+						},
+					},
+				},
+				WorkerVersionStamp: stamp,
+				VersioningBehavior: vbUnpinned,
+				DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+					BuildId:              tv.BuildID(),
+					DeploymentName:       tv.DeploymentSeries(),
+					WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+				},
+			}, nil
+		})
+
+	<-updateResultCh2
+
+	// Verify: no WorkflowTaskStarted event should have WorkerVersion set.
+	events := s.GetHistory(s.Namespace().String(), execution)
+	for _, event := range events {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+			s.Nil(
+				//nolint:staticcheck // SA1019
+				event.GetWorkflowTaskStartedEventAttributes().GetWorkerVersion(),
+				"WorkflowTaskStarted event %d should not have WorkerVersion set in V3",
+				event.GetEventId(),
+			)
+		}
+	}
 }
 
 func (s *Versioning3Suite) skipBeforeVersion(version workerdeployment.DeploymentWorkflowVersion) {

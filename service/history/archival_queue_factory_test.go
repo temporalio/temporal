@@ -31,7 +31,6 @@ func TestArchivalQueueFactory(t *testing.T) {
 			return metricsHandler
 		},
 	).Times(1)
-	metricsHandler.EXPECT().WithTags(gomock.Any()).Return(metricsHandler).Times(1)
 
 	mockShard := shard.NewTestContext(
 		ctrl,
