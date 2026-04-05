@@ -19,13 +19,7 @@ import (
 
 func TestWorkflowVisibilityTestSuite(t *testing.T) {
 	t.Parallel()
-	t.Run("TestVisibility", func(t *testing.T) {
-		s := testcore.NewEnv(t)
-		wvTestVisibility(s)
-	})
-}
-
-func wvTestVisibility(s *testcore.TestEnv) {
+	s := testcore.NewEnv(t)
 	startTime := time.Now().UTC()
 
 	// Start 2 workflow executions
