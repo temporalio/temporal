@@ -3,17 +3,20 @@ package workerdeployment
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
@@ -23,18 +26,20 @@ import (
 type VersionWorkflowSuite struct {
 	suite.Suite
 	testsuite.WorkflowTestSuite
+	protorequire.ProtoAssertions
 	controller             *gomock.Controller
 	env                    *testsuite.TestWorkflowEnvironment
 	workerDeploymentClient *ClientImpl
 	workflowVersion        DeploymentWorkflowVersion
 }
 
-func TestVersionWorkflowSuiteV2(t *testing.T) {
+func TestVersionWorkflowSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &VersionWorkflowSuite{workflowVersion: VersionDataRevisionNumber})
 }
 
 func (s *VersionWorkflowSuite) SetupTest() {
+	s.ProtoAssertions = protorequire.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
 
@@ -384,8 +389,8 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_Success() {
 	tv := testvars.New(s.T())
 
 	var a *VersionActivities
-	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
-	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.RegisterActivity(a.DeleteWorkerControllerInstance)
+	s.env.OnActivity(a.DeleteWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	taskQueueName := tv.TaskQueue().Name
 
@@ -453,8 +458,8 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_QueryAfterDeletion() {
 	tv := testvars.New(s.T())
 
 	var a *VersionActivities
-	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
-	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.RegisterActivity(a.DeleteWorkerControllerInstance)
+	s.env.OnActivity(a.DeleteWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	taskQueueName := tv.TaskQueue().Name
 
@@ -588,8 +593,8 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_SucceedsWhenDrainingWithSkipFl
 	now := timestamppb.New(time.Now())
 
 	var a *VersionActivities
-	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
-	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.RegisterActivity(a.DeleteWorkerControllerInstance)
+	s.env.OnActivity(a.DeleteWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	taskQueueName := tv.TaskQueue().Name
 
@@ -764,8 +769,8 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation() {
 	tv := testvars.New(s.T())
 
 	var a *VersionActivities
-	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
-	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.RegisterActivity(a.DeleteWorkerControllerInstance)
+	s.env.OnActivity(a.DeleteWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	taskQueueName := tv.TaskQueue().Name
 
@@ -800,7 +805,9 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation() {
 			OnReject: func(err error) {
 				s.Fail("delete version should not have been rejected", err)
 			},
-			OnAccept: func() {},
+			OnAccept: func() {
+				fmt.Println("delete version accepted")
+			},
 			OnComplete: func(result any, err error) {
 				s.Require().NoError(err, "delete version should complete without error even with async propagation")
 			},
@@ -990,16 +997,16 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation_BlocksWorkerR
 	s.True(workerRegistrationCompleted, "worker registration should have completed")
 }
 
-// Test_RegisterWorker_IncrementsRevisionNumber_WhenRevivingDeletedVersion tests that the revision number
-// is incremented when a worker registers on a version that was previously deleted
-func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_WhenRevivingDeletedVersion() {
+// Test_RegisterWorker_ResetRevisionNumber_WhenRevivingDeletedVersion tests that the revision number
+// is reset to 0 when a worker registers on a version that was previously deleted
+func (s *VersionWorkflowSuite) Test_RegisterWorker_ResetRevisionNumber_WhenRevivingDeletedVersion() {
 	s.skipBeforeVersion(VersionDataRevisionNumber)
 
 	tv := testvars.New(s.T())
 
 	var a *VersionActivities
-	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
-	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.RegisterActivity(a.DeleteWorkerControllerInstance)
+	s.env.OnActivity(a.DeleteWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	taskQueueName := tv.TaskQueue().Name
 	newTaskQueueName := tv.TaskQueue().Name + "_new"
@@ -1010,7 +1017,7 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_When
 	// Mock delete and register propagation
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
-			if req.UpsertVersionData != nil && req.UpsertVersionData.Deleted {
+			if req.GetForgetVersion() {
 				// This is the delete call
 				s.Equal(int64(6), req.UpsertVersionData.RevisionNumber, "Revision number should be incremented from 5 to 6 on delete")
 				return &deploymentspb.SyncDeploymentVersionUserDataResponse{
@@ -1020,7 +1027,7 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_When
 			// This is a register worker propagation call
 			s.NotNil(req.UpsertVersionData, "UpsertVersionData should be present for registration")
 			s.False(req.UpsertVersionData.Deleted, "Deleted should be false after revival")
-			s.Equal(int64(7), req.UpsertVersionData.RevisionNumber, "Revision number should be incremented from 6 to 7 on revival")
+			s.Equal(int64(0), req.UpsertVersionData.RevisionNumber, "Revision number should be reset to 0 on revival")
 			return &deploymentspb.SyncDeploymentVersionUserDataResponse{
 				TaskQueueMaxVersions: map[string]int64{newTaskQueueName: 1},
 			}, nil
@@ -1071,6 +1078,34 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_When
 			OnAccept: func() {},
 			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
+
+				// Capture state after revive
+				queryResp := &deploymentspb.QueryDescribeVersionResponse{}
+				val, err := s.env.QueryWorkflow(QueryDescribeVersion)
+				s.Require().NoError(err)
+				err = val.Get(queryResp)
+				s.Require().NoError(err)
+				stateAfterRevive := queryResp.VersionState
+
+				// Verify that status is reset to INACTIVE
+				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, stateAfterRevive.Status)
+
+				// Verify that timing fields are reset
+				s.Nil(stateAfterRevive.CurrentSinceTime, "CurrentSinceTime should be reset")
+				s.Nil(stateAfterRevive.RampingSinceTime, "RampingSinceTime should be reset")
+				s.Nil(stateAfterRevive.RoutingUpdateTime, "RoutingUpdateTime should be reset")
+				s.Nil(stateAfterRevive.FirstActivationTime, "FirstActivationTime should be reset")
+				s.Nil(stateAfterRevive.LastCurrentTime, "LastCurrentTime should be reset")
+				s.Nil(stateAfterRevive.LastDeactivationTime, "LastDeactivationTime should be reset")
+
+				// Verify that ramp percentage is reset
+				s.InDelta(float32(0), stateAfterRevive.RampPercentage, 0)
+
+				// Verify that drainage info is reset (drainage info is set to an empty struct and not nil)
+				s.Equal((&deploymentpb.VersionDrainageInfo{}).String(), stateAfterRevive.DrainageInfo.String(), "DrainageInfo should be reset")
+
+				// Verify that metadata is reset
+				s.Nil(stateAfterRevive.Metadata, "Metadata should be reset")
 			},
 		}, registerArgs)
 	}, 50*time.Millisecond)
@@ -1090,7 +1125,9 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_When
 					},
 				},
 			},
-			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+			DrainageInfo:              &deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED},
+			Metadata:                  &deploymentpb.VersionMetadata{},
 			RevisionNumber:            5,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
@@ -1193,21 +1230,21 @@ func (s *VersionWorkflowSuite) Test_MultipleSyncStates_BlocksCaNUntilAllComplete
 
 	taskQueueName := tv.TaskQueue().Name
 
-	syncCallCount := 0
+	var syncCallCount atomic.Int32
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
-			syncCallCount++
+			count := syncCallCount.Add(1)
 			return &deploymentspb.SyncDeploymentVersionUserDataResponse{
-				TaskQueueMaxVersions: map[string]int64{taskQueueName: int64(syncCallCount * 10)},
+				TaskQueueMaxVersions: map[string]int64{taskQueueName: int64(count * 10)},
 			}, nil
 		},
 	).Maybe()
 
 	// Mock propagation check with delay to simulate slow propagation
-	propagationCheckCount := 0
+	var propagationCheckCount atomic.Int32
 	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).
 		Return(func(ctx context.Context, req *deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest) error {
-			propagationCheckCount++
+			propagationCheckCount.Add(1)
 			return nil
 		}).
 		After(100 * time.Millisecond).
@@ -1289,7 +1326,7 @@ func (s *VersionWorkflowSuite) Test_MultipleSyncStates_BlocksCaNUntilAllComplete
 
 	s.True(s.env.IsWorkflowCompleted())
 	// Both propagations should have completed before CaN
-	s.Equal(2, propagationCheckCount, "Both propagations should complete before CaN")
+	s.Equal(2, int(propagationCheckCount.Load()), "Both propagations should complete before CaN")
 }
 
 // Test_SyncState_And_RegisterWorker_ConcurrentPropagations tests concurrent async propagations
@@ -1305,10 +1342,10 @@ func (s *VersionWorkflowSuite) Test_SyncState_And_RegisterWorker_ConcurrentPropa
 	taskQueueName := tv.TaskQueue().Name
 	newTaskQueueName := tv.TaskQueue().Name + "_new"
 
-	syncActivityCalls := 0
+	var syncActivityCalls atomic.Int32
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
-			syncActivityCalls++
+			syncActivityCalls.Add(1)
 			if req.UpdateRoutingConfig != nil && len(req.Sync) == 1 && req.Sync[0].Name == taskQueueName {
 				// This is the SyncState propagation
 				return &deploymentspb.SyncDeploymentVersionUserDataResponse{
@@ -1322,10 +1359,10 @@ func (s *VersionWorkflowSuite) Test_SyncState_And_RegisterWorker_ConcurrentPropa
 		},
 	).Maybe()
 
-	propagationChecks := 0
+	var propagationChecks atomic.Int32
 	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).
 		Return(func(ctx context.Context, req *deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest) error {
-			propagationChecks++
+			propagationChecks.Add(1)
 			return nil
 		}).
 		After(50 * time.Millisecond).
@@ -1408,9 +1445,9 @@ func (s *VersionWorkflowSuite) Test_SyncState_And_RegisterWorker_ConcurrentPropa
 
 	s.True(s.env.IsWorkflowCompleted())
 	// Both syncs should complete
-	s.GreaterOrEqual(syncActivityCalls, 2, "Both propagations should complete before CaN")
+	s.GreaterOrEqual(int(syncActivityCalls.Load()), 2, "Both propagations should complete before CaN")
 	// Only syncVersionState should wait for propagation
-	s.GreaterOrEqual(propagationChecks, 1, "Both propagations should complete before CaN")
+	s.GreaterOrEqual(int(propagationChecks.Load()), 1, "Both propagations should complete before CaN")
 }
 
 // Test_SyncState_SignalsPropagationComplete_WithCorrectRevisionNumber tests that the deployment
@@ -2226,6 +2263,160 @@ func (s *VersionWorkflowSuite) Test_DrainageStatusChange_TriggersAsyncPropagatio
 	s.True(asyncPropagationTriggered, "Async propagation should be triggered for drainage status change")
 }
 
+func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_Success() {
+	tv := testvars.New(s.T())
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	s.env.RegisterActivity(a.UpdateWorkerControllerInstance)
+	s.env.OnActivity(a.UpdateWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Once()
+
+	s.env.RegisterDelayedCallback(func() {
+		args := &deploymentspb.UpdateComputeConfigArgs{
+			Identity:  tv.ClientIdentity(),
+			RequestId: "req-1",
+			UpsertScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
+				"group1": {ScalingGroup: &computepb.ComputeConfigScalingGroup{
+					Provider: &computepb.ComputeProvider{Type: "aws-lambda"},
+				}},
+			},
+		}
+		s.env.UpdateWorkflow(UpdateVersionComputeConfig, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("update should not be rejected", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(result any, err error) {
+				s.Require().NoError(err)
+			},
+		}, args)
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_RejectedWhenDeleted() {
+	tv := testvars.New(s.T())
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.DeleteWorkerControllerInstance)
+	s.env.OnActivity(a.DeleteWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
+		&deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil,
+	).Maybe()
+	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.OnActivity(a.CheckIfTaskQueuesHavePollers, mock.Anything, mock.Anything).Return(false, nil).Maybe()
+
+	// First delete the version.
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) { s.Fail("delete should not be rejected", err) },
+			OnAccept: func() {},
+			OnComplete: func(result any, err error) {
+				s.Require().NoError(err)
+			},
+		}, &deploymentspb.DeleteVersionArgs{
+			SkipDrainage: true,
+		})
+		args := &deploymentspb.UpdateComputeConfigArgs{
+			Identity:  tv.ClientIdentity(),
+			RequestId: "req-1",
+			UpsertScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
+				"group1": {ScalingGroup: &computepb.ComputeConfigScalingGroup{
+					Provider: &computepb.ComputeProvider{Type: "aws-lambda"},
+				}},
+			},
+		}
+		// Send update at the same time as delete so both operations arrive before workflow completes.
+		s.env.UpdateWorkflow(UpdateVersionComputeConfig, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Require().ErrorContains(err, errVersionDeleted)
+			},
+			OnComplete: func(result any, err error) {
+				s.Fail("update should not complete on deleted version")
+			},
+		}, args)
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_UpdateInstanceFailure_DoesNotModifyState() {
+	tv := testvars.New(s.T())
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	s.env.RegisterActivity(a.UpdateWorkerControllerInstance)
+	s.env.OnActivity(a.UpdateWorkerControllerInstance, mock.Anything, mock.Anything).Return(
+		temporal.NewNonRetryableApplicationError("invalid config", errInvalidComputeConfig, nil),
+	).Maybe()
+
+	s.env.RegisterDelayedCallback(func() {
+		args := &deploymentspb.UpdateComputeConfigArgs{
+			Identity:  tv.ClientIdentity(),
+			RequestId: "req-1",
+			UpsertScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
+				"group1": {ScalingGroup: &computepb.ComputeConfigScalingGroup{
+					Provider: &computepb.ComputeProvider{Type: "bad-provider"},
+				}},
+			},
+		}
+		s.env.UpdateWorkflow(UpdateVersionComputeConfig, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("update should not be rejected at validation stage", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(result any, err error) {
+				s.Require().Error(err)
+				s.Require().ErrorContains(err, errInvalidComputeConfig)
+			},
+		}, args)
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
 func (s *VersionWorkflowSuite) skipBeforeVersion(version DeploymentWorkflowVersion) {
 	if s.workflowVersion < version {
 		s.T().Skipf("test supports version %v and newer", version)
@@ -2236,4 +2427,177 @@ func (s *VersionWorkflowSuite) skipFromVersion(version DeploymentWorkflowVersion
 	if s.workflowVersion >= version {
 		s.T().Skipf("test supports version older than %v", version)
 	}
+}
+
+// Test_ReactivateVersion_FromDrained tests that a drained version can be reactivated
+// via the ReactivateVersionSignal and properly resets its state
+func (s *VersionWorkflowSuite) Test_ReactivateVersion_FromDrained() {
+	tv := testvars.New(s.T())
+	now := timestamppb.New(time.Now())
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	// Mock SyncDeploymentVersionUserData for reactivation
+	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
+		&deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil,
+	).Maybe()
+
+	// Mock external signal to deployment workflow
+	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	// Schedule reactivation signal
+	s.env.RegisterDelayedCallback(func() {
+		// Send reactivation signal
+		s.env.SignalWorkflow(ReactivateVersionSignalName, nil)
+
+		// Wait a bit, then query to verify state
+		s.env.RegisterDelayedCallback(func() {
+			queryResp := &deploymentspb.QueryDescribeVersionResponse{}
+			val, err := s.env.QueryWorkflow(QueryDescribeVersion)
+			s.Require().NoError(err)
+			err = val.Get(queryResp)
+			s.Require().NoError(err)
+
+			// Verify that status is DRAINING after reactivation
+			s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, queryResp.VersionState.Status)
+
+			// Verify drainage info is set up for monitoring
+			s.NotNil(queryResp.VersionState.DrainageInfo)
+			s.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINING, queryResp.VersionState.DrainageInfo.Status)
+			s.NotNil(queryResp.VersionState.DrainageInfo.LastChangedTime)
+			s.NotNil(queryResp.VersionState.DrainageInfo.LastCheckedTime)
+		}, 10*time.Millisecond)
+	}, 10*time.Millisecond)
+
+	// Start workflow with DRAINED status
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+			DrainageInfo: &deploymentpb.VersionDrainageInfo{
+				Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
+				LastChangedTime: now,
+				LastCheckedTime: now,
+			},
+			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
+			StartedDeploymentWorkflow: true,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_ReactivateVersion_FromInactive tests that an inactive version can be reactivated
+func (s *VersionWorkflowSuite) Test_ReactivateVersion_FromInactive() {
+	tv := testvars.New(s.T())
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	// Mock SyncDeploymentVersionUserData for reactivation
+	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
+		&deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil,
+	).Maybe()
+
+	// Mock external signal to deployment workflow
+	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	// Schedule reactivation signal
+	s.env.RegisterDelayedCallback(func() {
+		// Send reactivation signal
+		s.env.SignalWorkflow(ReactivateVersionSignalName, nil)
+
+		// Wait a bit, then query to verify state
+		s.env.RegisterDelayedCallback(func() {
+			queryResp := &deploymentspb.QueryDescribeVersionResponse{}
+			val, err := s.env.QueryWorkflow(QueryDescribeVersion)
+			s.Require().NoError(err)
+			err = val.Get(queryResp)
+			s.Require().NoError(err)
+
+			// Verify that status is DRAINING after reactivation
+			s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, queryResp.VersionState.Status)
+
+			// Verify drainage info is set up
+			s.NotNil(queryResp.VersionState.DrainageInfo)
+			s.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINING, queryResp.VersionState.DrainageInfo.Status)
+		}, 10*time.Millisecond)
+	}, 10*time.Millisecond)
+
+	// Start workflow with INACTIVE status
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
+			StartedDeploymentWorkflow: true,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_ReactivateVersion_IgnoredWhenCurrent tests that reactivation signal is ignored
+// when the version is already CURRENT
+func (s *VersionWorkflowSuite) Test_ReactivateVersion_IgnoredWhenNotDrainedOrInactive() {
+	tv := testvars.New(s.T())
+	now := timestamppb.New(time.Now())
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	// No mocks for SyncDeploymentVersionUserData since reactivation should be ignored
+
+	// Schedule reactivation signal
+	s.env.RegisterDelayedCallback(func() {
+		// Send reactivation signal
+		s.env.SignalWorkflow(ReactivateVersionSignalName, nil)
+
+		// Wait a bit, then query to verify state hasn't changed
+		s.env.RegisterDelayedCallback(func() {
+			queryResp := &deploymentspb.QueryDescribeVersionResponse{}
+			val, err := s.env.QueryWorkflow(QueryDescribeVersion)
+			s.Require().NoError(err)
+			err = val.Get(queryResp)
+			s.Require().NoError(err)
+
+			// Verify that status remains CURRENT
+			s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, queryResp.VersionState.Status)
+
+			// Verify no drainage info is set
+			s.Nil(queryResp.VersionState.DrainageInfo)
+		}, 10*time.Millisecond)
+	}, 10*time.Millisecond)
+
+	// Start workflow with CURRENT status
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+			CurrentSinceTime:          now,
+			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
+			StartedDeploymentWorkflow: true,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
 }

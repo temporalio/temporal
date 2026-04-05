@@ -38,7 +38,7 @@ type (
 	}
 )
 
-func TestWorkerDeploymentSuiteV2(t *testing.T) {
+func TestWorkerDeploymentSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber})
 }
@@ -307,6 +307,7 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionLimits() {
 
 func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
 	// TODO (carly): check the error messages that poller receives in each case and make sense they are informative and appropriate (e.g. do not expose internal stuff)
+	// Also in TestCreateWorkerDeployment_MaxDeploymentsLimit
 	s.T().Skip() // Need to separate this test so other tests do not create deployment in the same NS
 
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxDeployments, 1)
@@ -319,6 +320,9 @@ func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
 	// First deployment version should be fine
 	go s.pollFromDeployment(ctx, tv)
 	s.ensureCreateVersionInDeployment(tv)
+
+	// wait for all existing deployments to show up in visibility
+	s.validateWorkerDeploymentCount(ctx, &workflowservice.ListWorkerDeploymentsRequest{Namespace: s.Namespace().String()}, 1)
 
 	// pollers of the second deployment version should be rejected
 	s.pollFromDeploymentExpectFail(ctx, tv.WithDeploymentSeriesNumber(2), "reached maximum deployments in namespace (1)")
@@ -3759,6 +3763,19 @@ func (s *WorkerDeploymentSuite) startAndValidateWorkerDeployments(
 	}, time.Second*10, time.Millisecond*1000)
 }
 
+func (s *WorkerDeploymentSuite) validateWorkerDeploymentCount(
+	ctx context.Context,
+	request *workflowservice.ListWorkerDeploymentsRequest,
+	expectedCount int,
+) {
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		actualDeploymentSummaries, err := s.listWorkerDeployments(ctx, request)
+		a.NoError(err)
+		a.Len(actualDeploymentSummaries, expectedCount)
+	}, time.Second*5, time.Millisecond*200)
+}
+
 func (s *WorkerDeploymentSuite) buildWorkerDeploymentSummary(
 	deploymentName string, createTime *timestamppb.Timestamp,
 	routingConfig *deploymentpb.RoutingConfig,
@@ -3774,6 +3791,266 @@ func (s *WorkerDeploymentSuite) buildWorkerDeploymentSummary(
 		RampingVersionSummary: rampingVersionSummary,
 		CurrentVersionSummary: currentVersionSummary,
 	}
+}
+
+func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_Success() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	deploymentName := tv.DeploymentSeries()
+	requestID := tv.Any().String()
+	identity := tv.Any().String()
+
+	// Create a new worker deployment
+	resp, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: deploymentName,
+		Identity:       identity,
+		RequestId:      requestID,
+	})
+
+	s.NoError(err)
+	s.NotNil(resp)
+	s.NotEmpty(resp.ConflictToken)
+
+	// Verify the deployment was created
+	descResp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: deploymentName,
+	})
+	s.NoError(err)
+	s.NotNil(descResp)
+	s.NotNil(descResp.WorkerDeploymentInfo)
+	s.Equal(deploymentName, descResp.WorkerDeploymentInfo.Name)
+	s.Equal(identity, descResp.WorkerDeploymentInfo.LastModifierIdentity)
+	s.NotNil(descResp.WorkerDeploymentInfo.CreateTime)
+	s.Empty(descResp.WorkerDeploymentInfo.VersionSummaries) // No versions initially
+}
+
+func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_Idempotent() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	deploymentName := tv.DeploymentSeries()
+	requestID := tv.Any().String()
+
+	// Create a worker deployment
+	resp1, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: deploymentName,
+		RequestId:      requestID,
+	})
+	s.NoError(err)
+	s.NotNil(resp1)
+	token1 := resp1.ConflictToken
+
+	// Create the same deployment again with same request ID - should be idempotent
+	resp2, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: deploymentName,
+		RequestId:      requestID,
+	})
+	s.NoError(err)
+	s.NotNil(resp2)
+	s.Equal(token1, resp2.ConflictToken) // Should get the same conflict token
+}
+
+func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_AlreadyExists_DifferentRequestID() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	deploymentName := tv.DeploymentSeries()
+	requestID1 := tv.Any().String()
+	requestID2 := tv.Any().String()
+
+	// Create a worker deployment
+	_, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: deploymentName,
+		RequestId:      requestID1,
+	})
+	s.NoError(err)
+
+	// Try to create the same deployment with different request ID - should fail
+	_, err = s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: deploymentName,
+		RequestId:      requestID2,
+	})
+	s.Error(err)
+	var alreadyExists *serviceerror.AlreadyExists
+	s.ErrorAs(err, &alreadyExists)
+	s.Contains(alreadyExists.Message, deploymentName)
+}
+
+func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_AutoCreatedByPoller_ConflictWithExplicitCreate() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	// First, create deployment via polling
+	go s.pollFromDeployment(ctx, tv)
+	s.ensureCreateDeployment(tv)
+
+	// Try to explicitly create the same deployment
+	_, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		RequestId:      tv.Any().String(),
+	})
+	s.Error(err)
+	var alreadyExists *serviceerror.AlreadyExists
+	s.ErrorAs(err, &alreadyExists)
+	s.Contains(alreadyExists.Message, "auto-created from worker polls")
+}
+
+func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_InvalidDeploymentName() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	testCases := []struct {
+		name           string
+		deploymentName string
+		expectedError  string
+	}{
+		{
+			name:           "empty name",
+			deploymentName: "",
+			expectedError:  "deployment name cannot be empty",
+		},
+		{
+			name:           "name with dot",
+			deploymentName: "test.deployment",
+			expectedError:  "worker deployment name cannot contain '.'",
+		},
+		{
+			name:           "name starting with __",
+			deploymentName: "__reserved",
+			expectedError:  "WorkerDeploymentName cannot start with '__'",
+		},
+		{
+			name:           "name too long",
+			deploymentName: strings.Repeat("a", 1001),
+			expectedError:  "size of WorkerDeploymentName larger than the maximum allowed",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			_, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+				Namespace:      s.Namespace().String(),
+				DeploymentName: tc.deploymentName,
+				RequestId:      testvars.New(s).Any().String(),
+			})
+			s.Error(err)
+			var invalidArg *serviceerror.InvalidArgument
+			s.ErrorAs(err, &invalidArg)
+			s.Contains(invalidArg.Message, tc.expectedError)
+		})
+	}
+}
+
+func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_MaxDeploymentsLimit() {
+	// TODO (carly): check the error messages that poller receives in each case and make sense they are informative and appropriate (e.g. do not expose internal stuff)
+	// Also in TestNamespaceDeploymentsLimit
+	s.T().Skip() // Need to separate this test so other tests do not create deployment in the same NS
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	// Override the max deployments limit for this test
+	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxDeployments, 2)
+
+	tv := testvars.New(s)
+
+	// Create first deployment
+	_, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries() + "_1",
+		RequestId:      tv.Any().String(),
+	})
+	s.NoError(err)
+
+	// Create second deployment
+	_, err = s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries() + "_2",
+		RequestId:      tv.Any().String(),
+	})
+	s.NoError(err)
+
+	// wait for all existing deployments to show up in visibility
+	s.validateWorkerDeploymentCount(ctx, &workflowservice.ListWorkerDeploymentsRequest{Namespace: s.Namespace().String()}, 2)
+
+	// Try to create third deployment - should fail
+	_, err = s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries() + "_3",
+		RequestId:      tv.Any().String(),
+	})
+	s.Error(err)
+	var resourceExhausted *serviceerror.ResourceExhausted
+	s.ErrorAs(err, &resourceExhausted)
+	s.Contains(resourceExhausted.Message, "reached maximum deployments in namespace")
+	s.Equal(enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, resourceExhausted.Scope)
+	s.Equal(enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS, resourceExhausted.Cause)
+}
+
+func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_AfterDelete_CanRecreate() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	deploymentName := tv.DeploymentSeries()
+	requestID1 := tv.Any().String()
+	requestID2 := tv.Any().String()
+
+	// Create a worker deployment
+	resp1, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: deploymentName,
+		RequestId:      requestID1,
+	})
+	s.NoError(err)
+	s.NotNil(resp1)
+
+	// Delete the deployment
+	_, err = s.FrontendClient().DeleteWorkerDeployment(ctx, &workflowservice.DeleteWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: deploymentName,
+		Identity:       "test",
+	})
+	s.NoError(err)
+
+	// Should be able to create a deployment with the same name again
+	resp2, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: deploymentName,
+		RequestId:      requestID2,
+	})
+	s.NoError(err)
+	s.NotNil(resp2)
+	s.NotEqual(resp1.ConflictToken, resp2.ConflictToken) // Should be a new deployment with different token
+
+	// Verify the deployment was created
+	descResp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: deploymentName,
+	})
+	s.NoError(err)
+	s.NotNil(descResp)
+	s.NotNil(descResp.WorkerDeploymentInfo)
+	s.Equal(deploymentName, descResp.WorkerDeploymentInfo.Name)
+	s.NotNil(descResp.WorkerDeploymentInfo.CreateTime)
+	s.Empty(descResp.WorkerDeploymentInfo.VersionSummaries) // No versions initially
 }
 
 // Name is used by testvars. We use a shortened test name in variables so that physical task queue IDs

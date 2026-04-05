@@ -43,12 +43,16 @@ unless there is a reason not to.
 `make parallelize-tests` can be used to automatically add `t.Parallel()`.
 Use `//parallelize:ignore` to opt your test out of it.
 
-Functional tests in `tests/` using `testcore.NewEnv(t)` will always use `t.Parallel()`;
-unless the `MustRunSequential` option is passed.
-
 ## Test helpers
 
 Test helpers can be found in the [common/testing](../../common/testing) package.
+
+### parallelsuite package
+
+Use `parallelsuite.Suite` to ensure your test suite is fast and safe: it runs all test methods and sub-tests in parallel by default;
+and provides assertion helpers and safety mechanisms.
+
+It replaces all use of `testify`'s `Suite`.
 
 ### testvars package
 
@@ -155,11 +159,10 @@ will ultimately fail the test.
 Use `testcore.NewEnv(t)` to create a test environment with access to a Temporal cluster for end-to-end testing.
 
 ```go
-func TestMyFeatureSuite(t *testing.T) {
-    t.Run("scenario one", func(t *testing.T) {
-        s := testcore.NewEnv(t)
-        // ...
-    })}
+func (s* TestMyFeatureSuite) func TestXYZ(t *testing.T) {
+    s := testcore.NewEnv(t)
+    // ...
+}
 ```
 
 Note that each test has its own namespace (`s.Namespace()`) for isolation.

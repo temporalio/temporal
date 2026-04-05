@@ -17,15 +17,19 @@ import (
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	computeprovider "go.temporal.io/auto-scaled-workers/wci/workflow/compute_provider"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
@@ -63,7 +67,7 @@ var (
 	testRandomMetadataValue = []byte("random metadata value")
 )
 
-func TestDeploymentVersionSuiteV2(t *testing.T) {
+func TestDeploymentVersionSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber, useV32: true})
 }
@@ -145,7 +149,9 @@ func (s *DeploymentVersionSuite) startVersionWorkflow(ctx context.Context, tv *t
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 		resp, err := s.describeVersion(tv)
-		a.NoError(err)
+		if !a.NoError(err) {
+			return
+		}
 		// regardless of s.useV32, we want to read both version formats
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
 		a.Equal(tv.ExternalDeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
@@ -156,7 +162,9 @@ func (s *DeploymentVersionSuite) startVersionWorkflow(ctx context.Context, tv *t
 			Namespace:      s.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 		})
-		a.NoError(err)
+		if !a.NoError(err) {
+			return
+		}
 		var versionSummaryNames []string
 		var versionSummaryVersions []*deploymentpb.WorkerDeploymentVersion
 		for _, versionSummary := range newResp.GetWorkerDeploymentInfo().GetVersionSummaries() {
@@ -945,6 +953,12 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 	s.tryDeleteVersion(ctx, tv1, "", false)
 }
 
+func (s *DeploymentVersionSuite) skipBeforeVersion(version workerdeployment.DeploymentWorkflowVersion) {
+	if s.workflowVersion < version {
+		s.T().Skipf("test supports version %v and newer", version)
+	}
+}
+
 func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
 	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
 
@@ -1078,7 +1092,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetCurrentV
 	pollerCancel1()
 
 	// Start a workflow on task_queue_1 to increase the add rate
-	s.startWorkflow(tv1, tv1.VersioningOverridePinned(s.useV32))
+	s.startWorkflow(tv1, tv1.VersioningOverridePinned())
 
 	// SetCurrent tv2
 	err = s.setCurrent(tv2, false)
@@ -1136,7 +1150,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetRampingV
 	pollerCancel1()
 
 	// Start a workflow on task_queue_1 to increase the add rate
-	s.startWorkflow(tv1, tv1.VersioningOverridePinned(s.useV32))
+	s.startWorkflow(tv1, tv1.VersioningOverridePinned())
 
 	// SetRampingVersion to tv2
 	err = s.setRamping(tv2, 0)
@@ -1203,8 +1217,19 @@ func (s *DeploymentVersionSuite) TestUpdateVersionMetadata() {
 	entries = resp.GetWorkerDeploymentVersionInfo().GetMetadata().GetEntries()
 	s.Empty(entries)
 
-	// update metadata for the second time
-	_, err = s.updateMetadata(tv1, metadata, nil)
+	// update metadata for the second time with an explicit identity
+	metadataIdentity := tv1.Any().String()
+	metadataReq := &workflowservice.UpdateWorkerDeploymentVersionMetadataRequest{
+		Namespace:     s.Namespace().String(),
+		UpsertEntries: metadata,
+		Identity:      metadataIdentity,
+	}
+	if s.useV32 {
+		metadataReq.DeploymentVersion = tv1.ExternalDeploymentVersion()
+	} else {
+		metadataReq.Version = tv1.DeploymentVersionString() //nolint:staticcheck // SA1019: worker versioning v0.31
+	}
+	_, err = s.FrontendClient().UpdateWorkerDeploymentVersionMetadata(ctx, metadataReq)
 	s.NoError(err)
 
 	resp, err = s.describeVersion(tv1)
@@ -1215,6 +1240,357 @@ func (s *DeploymentVersionSuite) TestUpdateVersionMetadata() {
 	s.Len(entries, 2)
 	s.Equal(testRandomMetadataValue, entries["key1"].Data)
 	s.Equal(testRandomMetadataValue, entries["key2"].Data)
+
+	// LastModifierIdentity should match the identity provided in the metadata update
+	s.Equal(metadataIdentity, resp.GetWorkerDeploymentVersionInfo().GetLastModifierIdentity())
+}
+
+func (s *DeploymentVersionSuite) createDeploymentAndVersion(
+	ctx context.Context,
+	tv *testvars.TestVars,
+	identity string,
+	computeConfig *computepb.ComputeConfig,
+) {
+	s.T().Helper()
+	_, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		RequestId:      tv.Any().String(),
+	})
+	s.NoError(err)
+
+	_, err = s.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+		Namespace:         s.Namespace().String(),
+		DeploymentVersion: tv.ExternalDeploymentVersion(),
+		Identity:          identity,
+		RequestId:         tv.Any().String(),
+		ComputeConfig:     computeConfig,
+	})
+	s.NoError(err)
+
+	// Wait for version to be created.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		descResp, err := s.describeVersion(tv)
+		a.NoError(err)
+		a.NotNil(descResp.GetWorkerDeploymentVersionInfo())
+	}, 10*time.Second, 500*time.Millisecond)
+}
+
+func (s *DeploymentVersionSuite) TestUpdateComputeConfig_Success() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+	createIdentity := tv.Any().String()
+	validProvider := computeprovider.TestInvokeComputeProviderValidComputeProvider()
+
+	s.createDeploymentAndVersion(ctx, tv, createIdentity, &computepb.ComputeConfig{
+		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+			"sg1": {Provider: validProvider},
+		},
+	})
+
+	// Update compute config with a different identity and a new scaling group.
+	updateIdentity := tv.Any().String()
+	_, err := s.FrontendClient().UpdateWorkerDeploymentVersionComputeConfig(ctx, &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{
+		Namespace:         s.Namespace().String(),
+		DeploymentVersion: tv.ExternalDeploymentVersion(),
+		ComputeConfigScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
+			"sg2": {
+				ScalingGroup: &computepb.ComputeConfigScalingGroup{
+					TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+					Provider:       validProvider,
+				},
+			},
+		},
+		Identity:  updateIdentity,
+		RequestId: tv.Any().String(),
+	})
+	s.NoError(err)
+
+	// Verify both scaling groups exist and LastModifierIdentity is updated.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		descResp, err := s.describeVersion(tv)
+		a.NoError(err)
+		info := descResp.GetWorkerDeploymentVersionInfo()
+		a.Equal(updateIdentity, info.GetLastModifierIdentity())
+		a.True(proto.Equal(&computepb.ComputeConfig{
+			ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+				"sg1": {Provider: validProvider},
+				"sg2": {
+					TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+					Provider:       validProvider,
+				},
+			},
+		}, info.GetComputeConfig()))
+	}, 10*time.Second, 500*time.Millisecond)
+}
+
+func (s *DeploymentVersionSuite) TestUpdateComputeConfig_UpdateExistingGroup() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+	validProvider := computeprovider.TestInvokeComputeProviderValidComputeProvider()
+
+	s.createDeploymentAndVersion(ctx, tv, tv.Any().String(), &computepb.ComputeConfig{
+		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+			"sg1": {
+				TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+				Provider:       validProvider,
+			},
+		},
+	})
+
+	// Partially update sg1's task queue types via field mask.
+	_, err := s.FrontendClient().UpdateWorkerDeploymentVersionComputeConfig(ctx, &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{
+		Namespace:         s.Namespace().String(),
+		DeploymentVersion: tv.ExternalDeploymentVersion(),
+		ComputeConfigScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
+			"sg1": {
+				ScalingGroup: &computepb.ComputeConfigScalingGroup{
+					TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+				},
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"task_queue_types"}},
+			},
+		},
+		Identity:  tv.Any().String(),
+		RequestId: tv.Any().String(),
+	})
+	s.NoError(err)
+
+	// Verify task queue types changed but provider is preserved.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		descResp, err := s.describeVersion(tv)
+		a.NoError(err)
+		a.True(proto.Equal(&computepb.ComputeConfig{
+			ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+				"sg1": {
+					TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+					Provider:       validProvider,
+				},
+			},
+		}, descResp.GetWorkerDeploymentVersionInfo().GetComputeConfig()))
+	}, 10*time.Second, 500*time.Millisecond)
+}
+
+func (s *DeploymentVersionSuite) TestUpdateComputeConfig_RemoveScalingGroup() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+	validProvider := computeprovider.TestInvokeComputeProviderValidComputeProvider()
+
+	s.createDeploymentAndVersion(ctx, tv, tv.Any().String(), &computepb.ComputeConfig{
+		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+			"sg1": {Provider: validProvider},
+			"sg2": {
+				TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+				Provider:       validProvider,
+			},
+		},
+	})
+
+	// Remove sg1.
+	_, err := s.FrontendClient().UpdateWorkerDeploymentVersionComputeConfig(ctx, &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{
+		Namespace:                        s.Namespace().String(),
+		DeploymentVersion:                tv.ExternalDeploymentVersion(),
+		RemoveComputeConfigScalingGroups: []string{"sg1"},
+		Identity:                         tv.Any().String(),
+		RequestId:                        tv.Any().String(),
+	})
+	s.NoError(err)
+
+	// Verify only sg2 remains.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		descResp, err := s.describeVersion(tv)
+		a.NoError(err)
+		a.True(proto.Equal(&computepb.ComputeConfig{
+			ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+				"sg2": {
+					TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+					Provider:       validProvider,
+				},
+			},
+		}, descResp.GetWorkerDeploymentVersionInfo().GetComputeConfig()))
+	}, 10*time.Second, 500*time.Millisecond)
+}
+
+func (s *DeploymentVersionSuite) TestUpdateComputeConfig_VersionNotFound() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	// Create deployment but no version.
+	_, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		RequestId:      tv.Any().String(),
+	})
+	s.NoError(err)
+
+	_, err = s.FrontendClient().UpdateWorkerDeploymentVersionComputeConfig(ctx, &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{
+		Namespace:         s.Namespace().String(),
+		DeploymentVersion: tv.ExternalDeploymentVersion(),
+		ComputeConfigScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
+			"sg1": {
+				ScalingGroup: &computepb.ComputeConfigScalingGroup{
+					Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider(),
+				},
+			},
+		},
+		Identity:  tv.Any().String(),
+		RequestId: tv.Any().String(),
+	})
+	s.Error(err)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
+}
+
+func (s *DeploymentVersionSuite) TestUpdateComputeConfig_InvalidProvider() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+	s.createDeploymentAndVersion(ctx, tv, tv.Any().String(), &computepb.ComputeConfig{
+		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+			"sg1": {Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider()},
+		},
+	})
+
+	_, err := s.FrontendClient().UpdateWorkerDeploymentVersionComputeConfig(ctx, &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{
+		Namespace:         s.Namespace().String(),
+		DeploymentVersion: tv.ExternalDeploymentVersion(),
+		ComputeConfigScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
+			"sg2": {
+				ScalingGroup: &computepb.ComputeConfigScalingGroup{
+					TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+					Provider:       &computepb.ComputeProvider{Type: "invalid-provider"},
+				},
+			},
+		},
+		Identity:  tv.Any().String(),
+		RequestId: tv.Any().String(),
+	})
+	s.Error(err)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.Contains(invalidArg.Message, "invalid compute provider type")
+}
+
+func (s *DeploymentVersionSuite) TestUpdateComputeConfig_DeletedVersion() {
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+	s.createDeploymentAndVersion(ctx, tv, tv.Any().String(), nil)
+
+	// Delete the version (skip drainage, no pollers since we created via CreateWorkerDeploymentVersion).
+	s.tryDeleteVersion(ctx, tv, "", true)
+
+	// Try to update compute config on the deleted version.
+	_, err := s.FrontendClient().UpdateWorkerDeploymentVersionComputeConfig(ctx, &workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest{
+		Namespace:         s.Namespace().String(),
+		DeploymentVersion: tv.ExternalDeploymentVersion(),
+		ComputeConfigScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
+			"sg1": {
+				ScalingGroup: &computepb.ComputeConfigScalingGroup{
+					Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider(),
+				},
+			},
+		},
+		Identity:  tv.Any().String(),
+		RequestId: tv.Any().String(),
+	})
+	s.Error(err)
+}
+
+func (s *DeploymentVersionSuite) TestValidateComputeConfig_Valid() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+	s.createDeploymentAndVersion(ctx, tv, tv.Any().String(), nil)
+
+	_, err := s.FrontendClient().ValidateWorkerDeploymentVersionComputeConfig(ctx, &workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest{
+		Namespace:         s.Namespace().String(),
+		DeploymentVersion: tv.ExternalDeploymentVersion(),
+		ComputeConfigScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
+			"sg1": {
+				ScalingGroup: &computepb.ComputeConfigScalingGroup{
+					Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider(),
+				},
+			},
+		},
+		Identity: tv.Any().String(),
+	})
+	s.NoError(err)
+
+	// Verify the validation had no side effects — no compute config should exist.
+	descResp, err := s.describeVersion(tv)
+	s.NoError(err)
+	s.Nil(descResp.GetWorkerDeploymentVersionInfo().GetComputeConfig())
+}
+
+func (s *DeploymentVersionSuite) TestValidateComputeConfig_InvalidProvider() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+	s.createDeploymentAndVersion(ctx, tv, tv.Any().String(), nil)
+
+	_, err := s.FrontendClient().ValidateWorkerDeploymentVersionComputeConfig(ctx, &workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest{
+		Namespace:         s.Namespace().String(),
+		DeploymentVersion: tv.ExternalDeploymentVersion(),
+		ComputeConfigScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
+			"sg1": {
+				ScalingGroup: &computepb.ComputeConfigScalingGroup{
+					Provider: &computepb.ComputeProvider{Type: "invalid-provider"},
+				},
+			},
+		},
+		Identity: tv.Any().String(),
+	})
+	s.Error(err)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.Contains(invalidArg.Message, "invalid compute provider type")
+}
+
+func (s *DeploymentVersionSuite) TestValidateComputeConfig_VersionNotFound() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	// No deployment or version created — validate should still work since
+	// the WCI validates independently.
+	_, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		RequestId:      tv.Any().String(),
+	})
+	s.NoError(err)
+
+	_, err = s.FrontendClient().ValidateWorkerDeploymentVersionComputeConfig(ctx, &workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest{
+		Namespace:         s.Namespace().String(),
+		DeploymentVersion: tv.ExternalDeploymentVersion(),
+		ComputeConfigScalingGroups: map[string]*computepb.ComputeConfigScalingGroupUpdate{
+			"sg1": {
+				ScalingGroup: &computepb.ComputeConfigScalingGroup{
+					Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider(),
+				},
+			},
+		},
+		Identity: tv.Any().String(),
+	})
+	s.NoError(err)
 }
 
 func (s *DeploymentVersionSuite) checkVersionDrainageAndVersionStatus(
@@ -3328,4 +3704,598 @@ func (s *DeploymentVersionSuite) TestReactivationSignalCache_Deduplication_Reset
 	resetRun2 := s.SdkClient().GetWorkflow(ctx, wfTV2.WorkflowID(), resetResp2.RunId)
 	var result2 string
 	s.NoError(resetRun2.Get(ctx, &result2))
+}
+
+func (s *DeploymentVersionSuite) TestDeleteVersion_ThenRecreateByPolling() {
+	s.skipBeforeVersion(workerdeployment.VersionDataRevisionNumber)
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	tv := testvars.New(s).WithBuildIDNumber(1)
+
+	s.startVersionWorkflow(ctx, tv)
+
+	vd := s.getTaskQueueVersionData(tv, enumspb.TASK_QUEUE_TYPE_WORKFLOW, tv.ExternalDeploymentVersion())
+	s.Equal(int64(0), vd.GetRevisionNumber())
+	s.False(vd.GetDeleted())
+
+	// Wait for pollers to go away
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     tv.TaskQueue(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		require.NoError(t, err)
+		require.Empty(t, resp.Pollers)
+	}, 5*time.Second, time.Second)
+
+	// Delete the version
+	s.tryDeleteVersion(ctx, tv, "", false)
+	// Verify the version is gone from the task queue
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		vd = s.getTaskQueueVersionData(tv, enumspb.TASK_QUEUE_TYPE_WORKFLOW, tv.ExternalDeploymentVersion())
+		require.New(t).Nil(vd)
+	}, time.Second*5, time.Millisecond*200)
+
+	// Verify the version is gone from the deployment
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+			//nolint:staticcheck // SA1019 deprecated Version will clean up later
+			a.NotEqual(tv.DeploymentVersionString(), vs.Version)
+		}
+	}, time.Second*5, time.Millisecond*200)
+
+	// Poll again to recreate the version
+
+	s.startVersionWorkflow(ctx, tv)
+
+	// Verify the version is back (undeleted) in the deployment
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		found := false
+		for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+			//nolint:staticcheck // SA1019 deprecated Version will clean up later
+			if vs.Version == tv.DeploymentVersionString() {
+				found = true
+			}
+		}
+		a.True(found, "version should be recreated after polling")
+	}, time.Second*5, time.Millisecond*200)
+
+	// Ensure the version data revived properly in the task queue
+	vd = s.getTaskQueueVersionData(tv, enumspb.TASK_QUEUE_TYPE_WORKFLOW, tv.ExternalDeploymentVersion())
+	s.Equal(int64(0), vd.GetRevisionNumber())
+	s.False(vd.GetDeleted())
+}
+
+// getTaskQueueDeploymentData gets the deployment data for a given TQ type. The data is always
+// returned from the WF type root partition, so no need to wait for propagation before calling this
+// function.
+func (s *DeploymentVersionSuite) getTaskQueueDeploymentData(
+	tv *testvars.TestVars,
+	tqType enumspb.TaskQueueType,
+) *persistencespb.DeploymentData {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	resp, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(
+		ctx,
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueue:     tv.TaskQueue().GetName(),
+			TaskQueueType: tqTypeWf,
+		})
+	s.NoError(err)
+	return resp.GetUserData().GetData().GetPerType()[int32(tqType)].GetDeploymentData()
+}
+
+func (s *DeploymentVersionSuite) getTaskQueueVersionData(
+	tv *testvars.TestVars,
+	tqType enumspb.TaskQueueType,
+	version *deploymentpb.WorkerDeploymentVersion,
+) *deploymentspb.WorkerDeploymentVersionData {
+	data := s.getTaskQueueDeploymentData(tv, tqType)
+	return data.GetDeploymentsData()[version.GetDeploymentName()].GetVersions()[version.GetBuildId()]
+}
+
+func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	deploymentName := tv.DeploymentSeries()
+	buildID := tv.BuildID()
+	requestID := tv.Any().String()
+	identity := tv.Any().String()
+
+	// First create the deployment
+	_, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: deploymentName,
+		RequestId:      tv.Any().String(),
+	})
+	s.NoError(err)
+
+	computeConfig := &computepb.ComputeConfig{
+		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+			"sg1": {
+				Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider(),
+			},
+		},
+	}
+
+	// Create a version in the deployment
+	resp, err := s.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        buildID,
+		},
+		Identity:      identity,
+		RequestId:     requestID,
+		ComputeConfig: computeConfig,
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+
+	// Verify the version exists via DescribeWorkerDeploymentVersion
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		descResp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv.DeploymentVersionString(),
+		})
+		a.NoError(err)
+		a.NotNil(descResp.GetWorkerDeploymentVersionInfo())
+		a.Equal(tv.DeploymentVersionStringV32(), worker_versioning.ExternalWorkerDeploymentVersionToString(descResp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion()))
+		a.NotNil(descResp.GetWorkerDeploymentVersionInfo().GetCreateTime())
+		a.True(proto.Equal(computeConfig, descResp.GetWorkerDeploymentVersionInfo().GetComputeConfig()))
+		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED, descResp.GetWorkerDeploymentVersionInfo().GetStatus())
+		a.Equal(identity, descResp.GetWorkerDeploymentVersionInfo().GetLastModifierIdentity())
+	}, 10*time.Second, 500*time.Millisecond)
+
+	// Verify the version shows up in deployment's version summaries with CREATED status
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		descDeployResp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: deploymentName,
+		})
+		a.NoError(err)
+		a.Len(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries(), 1)
+		a.Equal(tv.DeploymentVersionStringV32(), worker_versioning.ExternalWorkerDeploymentVersionToString(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetDeploymentVersion()))
+		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED, descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetStatus())
+	}, 10*time.Second, 500*time.Millisecond)
+}
+
+func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_ThenPoll_TaskQueueInVersionInfo() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	deploymentName := tv.DeploymentSeries()
+	buildID := tv.BuildID()
+
+	// Create the deployment
+	_, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: deploymentName,
+		RequestId:      tv.Any().String(),
+	})
+	s.NoError(err)
+
+	// Create the version explicitly
+	_, err = s.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        buildID,
+		},
+		RequestId: tv.Any().String(),
+	})
+	s.NoError(err)
+
+	// Verify the version starts with CREATED status
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		descResp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv.DeploymentVersionString(),
+		})
+		a.NoError(err)
+		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED, descResp.GetWorkerDeploymentVersionInfo().GetStatus())
+	}, 10*time.Second, 500*time.Millisecond)
+
+	// Poll from the version to register a task queue
+	go s.pollFromDeployment(ctx, tv)
+
+	// Verify the task queue shows up and status transitions to INACTIVE
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		descResp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv.DeploymentVersionString(),
+		})
+		a.NoError(err)
+		tqInfos := descResp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()
+		a.GreaterOrEqual(len(tqInfos), 1)
+
+		found := false
+		for _, tqInfo := range tqInfos {
+			if tqInfo.GetName() == tv.TaskQueue().GetName() {
+				found = true
+				break
+			}
+		}
+		a.True(found, "expected task queue %q in version info, got %v", tv.TaskQueue().GetName(), tqInfos)
+		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, descResp.GetWorkerDeploymentVersionInfo().GetStatus())
+	}, 30*time.Second, 500*time.Millisecond)
+
+	// Verify the version shows up in deployment's version summaries with INACTIVE status
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		descDeployResp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: deploymentName,
+		})
+		a.NoError(err)
+		a.Len(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries(), 1)
+		a.Equal(tv.DeploymentVersionStringV32(), worker_versioning.ExternalWorkerDeploymentVersionToString(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetDeploymentVersion()))
+		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetStatus())
+	}, 10*time.Second, 500*time.Millisecond)
+}
+
+func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Idempotent() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	deploymentName := tv.DeploymentSeries()
+	buildID := tv.BuildID()
+	requestID := tv.Any().String()
+
+	// First create the deployment
+	_, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: deploymentName,
+		RequestId:      tv.Any().String(),
+	})
+	s.NoError(err)
+
+	// Create a version
+	_, err = s.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        buildID,
+		},
+		RequestId: requestID,
+	})
+	s.NoError(err)
+
+	// Create the same version again with same request ID - should be idempotent
+	_, err = s.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        buildID,
+		},
+		RequestId: requestID,
+	})
+	s.NoError(err)
+}
+
+func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_AlreadyExists_DifferentRequestID() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	deploymentName := tv.DeploymentSeries()
+	buildID := tv.BuildID()
+	requestID1 := tv.Any().String()
+	requestID2 := tv.Any().String()
+
+	// First create the deployment
+	_, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: deploymentName,
+		RequestId:      tv.Any().String(),
+	})
+	s.NoError(err)
+
+	// Create a version
+	_, err = s.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        buildID,
+		},
+		RequestId: requestID1,
+	})
+	s.NoError(err)
+
+	// Try to create the same version with different request ID - should fail
+	_, err = s.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        buildID,
+		},
+		RequestId: requestID2,
+	})
+	s.Error(err)
+	var alreadyExists *serviceerror.AlreadyExists
+	s.ErrorAs(err, &alreadyExists)
+}
+
+func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_DeploymentNotFound() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	// Try to create a version for a deployment that doesn't exist
+	_, err := s.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: tv.DeploymentSeries(),
+			BuildId:        tv.BuildID(),
+		},
+		RequestId: tv.Any().String(),
+	})
+	s.Error(err)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
+}
+
+func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_InvalidArgs() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	testCases := []struct {
+		name           string
+		deploymentName string
+		buildID        string
+		expectedError  string
+	}{
+		{
+			name:           "empty deployment name",
+			deploymentName: "",
+			buildID:        "build-1",
+			expectedError:  "deployment name cannot be empty",
+		},
+		{
+			name:           "empty build ID",
+			deploymentName: "my-deployment",
+			buildID:        "",
+			expectedError:  "build ID cannot be empty",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			_, err := s.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+				Namespace: s.Namespace().String(),
+				DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+					DeploymentName: tc.deploymentName,
+					BuildId:        tc.buildID,
+				},
+				RequestId: testvars.New(s).Any().String(),
+			})
+			s.Error(err)
+			var invalidArg *serviceerror.InvalidArgument
+			s.ErrorAs(err, &invalidArg)
+			s.Contains(invalidArg.Message, tc.expectedError)
+		})
+	}
+}
+
+func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_AutoCreatedByPoller_ConflictWithExplicitCreate() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	// Create version via polling (auto-creates deployment and version)
+	s.startVersionWorkflow(ctx, tv)
+
+	// Try to explicitly create the same version with a different request ID
+	_, err := s.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: tv.DeploymentSeries(),
+			BuildId:        tv.BuildID(),
+		},
+		RequestId: tv.Any().String(),
+	})
+	s.Error(err)
+	var alreadyExists *serviceerror.AlreadyExists
+	s.ErrorAs(err, &alreadyExists)
+}
+
+func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_MultipleVersions() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	deploymentName := tv.DeploymentSeries()
+
+	// First create the deployment
+	_, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: deploymentName,
+		RequestId:      tv.Any().String(),
+	})
+	s.NoError(err)
+
+	computeConfig1 := &computepb.ComputeConfig{
+		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+			"sg1": {
+				Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider(),
+			},
+		},
+	}
+	computeConfig2 := &computepb.ComputeConfig{
+		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+			"sg2": {
+				Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider(),
+			},
+		},
+	}
+
+	// Create first version
+	tv1 := tv.WithBuildIDNumber(1)
+	_, err = s.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        tv1.BuildID(),
+		},
+		RequestId:     tv.Any().String(),
+		ComputeConfig: computeConfig1,
+	})
+	s.NoError(err)
+
+	// Create second version
+	tv2 := tv.WithBuildIDNumber(2)
+	_, err = s.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        tv2.BuildID(),
+		},
+		RequestId:     tv.Any().String(),
+		ComputeConfig: computeConfig2,
+	})
+	s.NoError(err)
+
+	// Verify both versions show up in deployment's version summaries
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		descResp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: deploymentName,
+		})
+		a.NoError(err)
+		a.Len(descResp.GetWorkerDeploymentInfo().GetVersionSummaries(), 2)
+	}, 10*time.Second, 500*time.Millisecond)
+
+	// Verify compute configs via DescribeWorkerDeploymentVersion
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		descV1, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv1.DeploymentVersionString(),
+		})
+		a.NoError(err)
+		a.True(proto.Equal(computeConfig1, descV1.GetWorkerDeploymentVersionInfo().GetComputeConfig()))
+	}, 10*time.Second, 500*time.Millisecond)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		descV2, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv2.DeploymentVersionString(),
+		})
+		a.NoError(err)
+		a.True(proto.Equal(computeConfig2, descV2.GetWorkerDeploymentVersionInfo().GetComputeConfig()))
+	}, 10*time.Second, 500*time.Millisecond)
+}
+
+func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_InvalidScalingGroups() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+	deploymentName := tv.DeploymentSeries()
+
+	// Create the deployment first
+	_, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: deploymentName,
+		RequestId:      tv.Any().String(),
+	})
+	s.NoError(err)
+
+	validProvider := computeprovider.TestInvokeComputeProviderValidComputeProvider()
+
+	testCases := []struct {
+		name          string
+		computeConfig *computepb.ComputeConfig
+		expectedError string
+	}{
+		{
+			name: "invalid compute provider type",
+			computeConfig: &computepb.ComputeConfig{
+				ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+					"sg1": {TaskQueueTypes: nil, Provider: &computepb.ComputeProvider{Type: "invalid-provider"}},
+				},
+			},
+			expectedError: "invalid compute provider type",
+		},
+		{
+			name: "invalid compute provider details",
+			computeConfig: &computepb.ComputeConfig{
+				ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+					"sg1": {TaskQueueTypes: nil, Provider: computeprovider.TestInvokeComputeProviderInvalidComputeProvider()},
+				},
+			},
+			expectedError: "illegal_field found in config",
+		},
+		{
+			name: "two catch-all scaling groups",
+			computeConfig: &computepb.ComputeConfig{
+				ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+					"sg1": {TaskQueueTypes: nil, Provider: validProvider},
+					"sg2": {TaskQueueTypes: nil, Provider: validProvider},
+				},
+			},
+			expectedError: "only one scaling group can have no task types defined",
+		},
+		{
+			name: "overlapping workflow task queue type",
+			computeConfig: &computepb.ComputeConfig{
+				ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+					"sg1": {TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW}, Provider: validProvider},
+					"sg2": {TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY}, Provider: validProvider},
+				},
+			},
+			expectedError: "task type Workflow appears in more than one entry",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			_, err := s.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+				Namespace: s.Namespace().String(),
+				DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+					DeploymentName: deploymentName,
+					BuildId:        testvars.New(s).BuildID(),
+				},
+				RequestId:     testvars.New(s).Any().String(),
+				ComputeConfig: tc.computeConfig,
+			})
+			s.Error(err)
+			var invalidArg *serviceerror.InvalidArgument
+			s.ErrorAs(err, &invalidArg)
+			s.Contains(invalidArg.Message, tc.expectedError)
+		})
+	}
 }

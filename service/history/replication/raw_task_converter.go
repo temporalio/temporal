@@ -321,6 +321,23 @@ func convertSyncVersionedTransitionTask(
 	)
 }
 
+func convertDeleteExecutionReplicationTask(
+	taskInfo *tasks.DeleteExecutionReplicationTask,
+) (*replicationspb.ReplicationTask, error) {
+	return &replicationspb.ReplicationTask{
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_DELETE_EXECUTION_TASK,
+		SourceTaskId: taskInfo.TaskID,
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
+				NamespaceId: taskInfo.NamespaceID,
+				WorkflowId:  taskInfo.WorkflowID,
+				RunId:       taskInfo.RunID,
+			},
+		},
+		VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
+	}, nil
+}
+
 func convertHistoryReplicationTask(
 	ctx context.Context,
 	shardContext historyi.ShardContext,

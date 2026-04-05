@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	update2 "go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -44,7 +45,10 @@ const (
 	RegisterWorkerInDeploymentVersion = "register-task-queue-worker"    // for Worker Deployment Version wf
 	SyncVersionState                  = "sync-version-state"            // for Worker Deployment Version wfs
 	UpdateVersionMetadata             = "update-version-metadata"       // for Worker Deployment Version wfs
+	UpdateVersionComputeConfig        = "update-version-compute-config" // for Worker Deployment Version wfs
 	RegisterWorkerInWorkerDeployment  = "register-worker-in-deployment" // for Worker Deployment wfs
+	CreateWorkerDeployment            = "create-deployment"             // for Worker Deployment wfs
+	CreateWorkerDeploymentVersion     = "create-deployment-version"     // for Worker Deployment wfs
 	SetCurrentVersion                 = "set-current-version"           // for Worker Deployment wfs
 	SetRampingVersion                 = "set-ramping-version"           // for Worker Deployment wfs
 	DeleteVersion                     = "delete-version"                // for WorkerDeployment wfs
@@ -64,6 +68,7 @@ const (
 	// Queries
 	QueryDescribeVersion    = "describe-version"    // for Worker Deployment Version wf
 	QueryDescribeDeployment = "describe-deployment" // for Worker Deployment wf
+	QueryCreateRequestID    = "create-request-id"   // for Worker Deployment wf
 
 	// Memos
 	WorkerDeploymentMemoField = "WorkerDeploymentMemo" // for Worker Deployment wf
@@ -75,13 +80,16 @@ const (
 	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
 	errVersionNotFound            = "Version not found in deployment"
-	errDeploymentDeleted          = "worker deployment deleted"         // returned in the race condition that the deployment is deleted but the workflow is not yet closed.
+	errDeploymentDeleted          = "worker deployment deleted"        // returned in the race condition that the deployment is deleted but the workflow is not yet closed.
+	errDeploymentAlreadyExists    = "worker deployment already exists" // returned in the race condition that the deployment exists with a different request ID.
+	errVersionAlreadyExists       = "worker deployment version already exists"
 	errVersionDeleted             = "worker deployment version deleted" // returned in the race condition that the deployment version is deleted but the workflow is not yet closed.
 	errLongHistory                = "errLongHistory"                    // update is not accepted until CaN happens. client should retry
 	errVersionIsDraining          = "errVersionIsDraining"
 	errVersionHasPollers          = "errVersionHasPollersSuffix"
 
-	errFailedPrecondition = "FailedPrecondition"
+	errFailedPrecondition   = "FailedPrecondition"
+	errInvalidComputeConfig = "errInvalidComputeConfig"
 
 	ErrVersionIsDraining         = "version '%s' cannot be deleted since it is draining"
 	ErrVersionHasPollers         = "version '%s' cannot be deleted since it has active pollers"
@@ -93,6 +101,10 @@ const (
 	ErrWorkerDeploymentNotFound               = "no Worker Deployment found with name '%s'; does your Worker Deployment have pollers?"
 	ErrWorkerDeploymentVersionNotFound        = "build ID '%s' not found in Worker Deployment '%s'"
 	ErrTooManyRequests                        = "too many requests issued to Worker Deployment '%s'. Please try again later"
+	ErrWorkerDeploymentAlreadyExists          = "Worker Deployment with name %q already exists"
+	ErrWorkerDeploymentVersionAlreadyExists   = "Worker Deployment Version %q already exists"
+
+	AutoCreateRequestIDPrefix = "_auto_create_"
 )
 
 var (
@@ -425,4 +437,30 @@ func buildSearchAttributes() *commonpb.SearchAttributes {
 	sa := &commonpb.SearchAttributes{}
 	searchattribute.AddSearchAttribute(&sa, sadefs.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentNamespaceDivision))
 	return sa
+}
+
+func makeNewVersionState(
+	deploymentName,
+	buildID string,
+	createTime time.Time,
+	identity string,
+	initialStatus enumspb.WorkerDeploymentVersionStatus,
+	syncBatchSize int32,
+) *deploymentspb.VersionLocalState {
+	return &deploymentspb.VersionLocalState{
+		Version: &deploymentspb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        buildID,
+		},
+		CreateTime:           timestamppb.New(createTime),
+		Status:               initialStatus,
+		RoutingUpdateTime:    nil,
+		CurrentSinceTime:     nil,                                 // not current
+		RampingSinceTime:     nil,                                 // not ramping
+		RampPercentage:       0,                                   // not ramping
+		DrainageInfo:         &deploymentpb.VersionDrainageInfo{}, // not draining or drained
+		Metadata:             nil,
+		SyncBatchSize:        syncBatchSize,
+		LastModifierIdentity: identity,
+	}
 }

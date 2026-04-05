@@ -414,7 +414,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 		ctx = c.AuthInterceptor.EnhanceContext(ctx, authInfo, claims)
 	}
 
-	err = c.AuthInterceptor.Authorize(ctx, claims, &authorization.CallTarget{
+	_, err = c.AuthInterceptor.Authorize(ctx, claims, &authorization.CallTarget{
 		APIName:   apiName,
 		Namespace: c.namespace.Name().String(),
 		Request:   request,

@@ -908,6 +908,8 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 }
 
 func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
+	ctx := testcore.NewContext()
+
 	id := "functional-activity-cancellation-test"
 	wt := "functional-activity-cancellation-test-type"
 	tl := "functional-activity-cancellation-test-taskqueue"
@@ -930,7 +932,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(ctx, request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution: response", tag.WorkflowRunID(we.GetRunId()))
@@ -1045,7 +1047,12 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
 	s.Logger.Info("Waiting for cancel to complete.", tag.WorkflowRunID(we.RunId))
-	<-cancelCh
+	select {
+	case <-cancelCh:
+	case <-ctx.Done():
+		s.Fail("Test timed out for activity cancellation", ctx.Err())
+		return
+	}
 	s.True(activityCanceled, "Activity was not cancelled.")
 	s.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.RunId))
 }

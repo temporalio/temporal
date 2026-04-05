@@ -8,11 +8,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -84,6 +86,7 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 		"",
 		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalPropagation
 	)
 	s.handler = func(ctx context.Context, req any) (any, error) { return true, nil }
 }
@@ -159,6 +162,7 @@ func (s *authorizerInterceptorSuite) TestAuthorizationFailedExposed() {
 		"",
 		dynamicconfig.GetBoolPropertyFn(true),  // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalPropagation
 	)
 
 	authErr := serviceerror.NewInternal("intentional test failure")
@@ -192,6 +196,7 @@ func (s *authorizerInterceptorSuite) TestNoopClaimMapperWithoutTLS() {
 		"",
 		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalPropagation
 	)
 	_, err := interceptor.Intercept(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
 	s.NoError(err)
@@ -209,6 +214,7 @@ func (s *authorizerInterceptorSuite) TestAlternateHeaders() {
 		"custom-extra-header",
 		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalPropagation
 	)
 
 	cases := []struct {
@@ -318,6 +324,7 @@ func (s *authorizerInterceptorSuite) newCrossNamespaceInterceptor(namespaces ...
 		"",
 		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(true),  // enableCrossNamespaceCommands
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalPropagation
 	)
 }
 
@@ -519,6 +526,78 @@ func (s *authorizerInterceptorSuite) TestMultipleCommands_AuthDeduplication() {
 	res, err := interceptor.Intercept(ctx, request, respondWorkflowTaskCompletedInfo, s.handler)
 	s.True(res.(bool))
 	s.NoError(err)
+}
+
+func (s *authorizerInterceptorSuite) TestPrincipalPropagation_Enabled() {
+	principal := &commonpb.Principal{Type: "user", Name: "alice"}
+	s.mockAuthorizer.EXPECT().Authorize(gomock.Any(), nil, describeNamespaceTarget).
+		Return(Result{Decision: DecisionAllow, Principal: principal}, nil)
+
+	interceptor := NewInterceptor(
+		s.mockClaimMapper,
+		s.mockAuthorizer,
+		s.mockMetricsHandler,
+		log.NewNoopLogger(),
+		mockNamespaceChecker(testNamespace),
+		nil,
+		"",
+		"",
+		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
+		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true), // enablePrincipalPropagation
+	)
+
+	inCtx := metadata.NewIncomingContext(ctx, metadata.MD{})
+	var gotPrincipal *commonpb.Principal
+	handler := func(ctx context.Context, req any) (any, error) {
+		gotPrincipal = headers.GetPrincipal(ctx)
+		return true, nil
+	}
+
+	res, err := interceptor.Intercept(inCtx, describeNamespaceRequest, describeNamespaceInfo, handler)
+	s.True(res.(bool))
+	s.NoError(err)
+	s.Equal(principal, gotPrincipal)
+}
+
+func (s *authorizerInterceptorSuite) TestPrincipalPropagation_Disabled() {
+	s.mockAuthorizer.EXPECT().Authorize(gomock.Any(), nil, describeNamespaceTarget).
+		Return(Result{Decision: DecisionAllow, Principal: &commonpb.Principal{Type: "user", Name: "alice"}}, nil)
+
+	inCtx := metadata.NewIncomingContext(ctx, metadata.MD{})
+	var gotPrincipal *commonpb.Principal
+	handler := func(ctx context.Context, req any) (any, error) {
+		gotPrincipal = headers.GetPrincipal(ctx)
+		return true, nil
+	}
+
+	// s.interceptor has enablePrincipalPropagation=false
+	res, err := s.interceptor.Intercept(inCtx, describeNamespaceRequest, describeNamespaceInfo, handler)
+	s.True(res.(bool))
+	s.NoError(err)
+	s.Nil(gotPrincipal)
+}
+
+func (s *authorizerInterceptorSuite) TestPrincipalPropagation_SpoofedHeadersStripped() {
+	s.mockAuthorizer.EXPECT().Authorize(gomock.Any(), nil, describeNamespaceTarget).
+		Return(Result{Decision: DecisionAllow}, nil) // no principal returned
+
+	// Inject spoofed principal headers in the incoming context.
+	inCtx := metadata.NewIncomingContext(ctx, metadata.Pairs(
+		headers.PrincipalTypeHeaderName, "spoofed-type",
+		headers.PrincipalNameHeaderName, "spoofed-name",
+	))
+	var gotPrincipal *commonpb.Principal
+	handler := func(ctx context.Context, req any) (any, error) {
+		gotPrincipal = headers.GetPrincipal(ctx)
+		return true, nil
+	}
+
+	// s.interceptor has enablePrincipalPropagation=false
+	res, err := s.interceptor.Intercept(inCtx, describeNamespaceRequest, describeNamespaceInfo, handler)
+	s.True(res.(bool))
+	s.NoError(err)
+	s.Nil(gotPrincipal, "spoofed principal headers should be stripped")
 }
 
 func (s *authorizerInterceptorSuite) TestMultipleTargetNamespaces() {

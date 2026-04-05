@@ -1,0 +1,21 @@
+# https://d2lang.com
+# Generate SVG by running `make` inside of `docs/`.
+
+vars: {
+  d2-config: {
+    layout-engine: dagre
+  }
+}
+
+*.style.bold: true
+
+start: "⬤" {
+    style.stroke: transparent
+    style.fill: transparent
+    style.bold: false
+    style.font-size: 12
+}
+
+start -> Running
+Running -> Completed
+Running -> Failed

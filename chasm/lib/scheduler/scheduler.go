@@ -744,6 +744,11 @@ func (s *Scheduler) Update(
 	if s.Sentinel {
 		return nil, ErrSentinel
 	}
+	// UpdateComponent does not reject mutations on completed executions,
+	// so we must check explicitly here.
+	if s.Closed {
+		return nil, ErrClosed
+	}
 	if !s.validateConflictToken(req.FrontendRequest.ConflictToken) {
 		return nil, ErrConflictTokenMismatch
 	}
@@ -795,6 +800,11 @@ func (s *Scheduler) Patch(
 ) (*schedulerpb.PatchScheduleResponse, error) {
 	if s.Sentinel {
 		return nil, ErrSentinel
+	}
+	// UpdateComponent does not reject mutations on completed executions,
+	// so we must check explicitly here.
+	if s.Closed {
+		return nil, ErrClosed
 	}
 	// Handle paused status.
 	if req.FrontendRequest.Patch.Pause != "" {
