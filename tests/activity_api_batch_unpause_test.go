@@ -79,7 +79,7 @@ func (w *internalTestWorkflow) ActivityFunc() (string, error) {
 	return "done!", nil
 }
 
-func (s *ActivityApiBatchUnpauseClientTestSuite) createWorkflow(env *testcore.TestEnv, ctx context.Context, workflowFn WorkflowFunction) sdkclient.WorkflowRun {
+func (s *ActivityApiBatchUnpauseClientTestSuite) createWorkflow(ctx context.Context, env *testcore.TestEnv, workflowFn WorkflowFunction) sdkclient.WorkflowRun {
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
 		TaskQueue: env.WorkerTaskQueue(),
@@ -101,8 +101,8 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 	env.SdkWorker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
 	env.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
 
-	workflowRun1 := s.createWorkflow(env, ctx, internalWorkflow.WorkflowFunc)
-	workflowRun2 := s.createWorkflow(env, ctx, internalWorkflow.WorkflowFunc)
+	workflowRun1 := s.createWorkflow(ctx, env, internalWorkflow.WorkflowFunc)
+	workflowRun2 := s.createWorkflow(ctx, env, internalWorkflow.WorkflowFunc)
 
 	// wait for activity to start in both workflows
 	s.EventuallyWithT(func(t *assert.CollectT) {
