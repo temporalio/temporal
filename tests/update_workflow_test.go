@@ -5596,21 +5596,32 @@ func (s *UpdateWithStartSuite) TestWorkflowStartConflict() {
 
 		uwsCh := s.sendUpdateWithStart(env, startReq, updateReq)
 
-		_, err := env.TaskPoller().PollAndHandleWorkflowTask(env.Tv(),
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
-			})
-		s.NoError(err)
+		// Two orderings are possible depending on lock timing:
+		// A) UWS retry acquires the workflow lock before RecordWorkflowTaskStarted: update is admitted
+		//    while WFT #1 is still scheduled, so it attaches to WFT #1 messages when WFT #1 starts.
+		// B) RecordWorkflowTaskStarted wins the lock first: WFT #1 starts with no messages, completes,
+		//    then UWS retry runs with no pending WFT and creates a speculative WFT #2 for the update.
+		updateHandled := false
+		for range 2 {
+			_, err := env.TaskPoller().PollAndHandleWorkflowTask(env.Tv(),
+				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					if len(task.Messages) == 0 {
+						return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+					}
+					updateHandled = true
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{
+						Messages: env.UpdateAcceptCompleteMessages(env.Tv(), task.Messages[0]),
+					}, nil
+				})
+			s.NoError(err)
+			if updateHandled {
+				break
+			}
+		}
+		s.True(updateHandled, "update not processed in either WFT")
 
-		_, err = env.TaskPoller().PollAndHandleWorkflowTask(env.Tv(),
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{
-					Messages: env.UpdateAcceptCompleteMessages(env.Tv(), task.Messages[0]),
-				}, nil
-			})
-		s.NoError(err)
-
-		<-uwsCh
+		uwsRes := <-uwsCh
+		s.NoError(uwsRes.err)
 	})
 }
 

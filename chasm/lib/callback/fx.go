@@ -57,8 +57,8 @@ var Module = fx.Module(
 	"chasm.lib.callback",
 	fx.Provide(configProvider),
 	fx.Provide(httpCallerProviderProvider),
-	fx.Provide(NewInvocationTaskHandler),
-	fx.Provide(NewBackoffTaskHandler),
+	fx.Provide(newInvocationTaskHandler),
+	fx.Provide(newBackoffTaskHandler),
 	fx.Provide(newLibrary),
 	fx.Invoke(register),
 )
