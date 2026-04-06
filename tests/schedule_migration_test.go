@@ -3,6 +3,7 @@ package tests
 import (
 	"encoding/binary"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
@@ -1159,4 +1161,144 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 		},
 	)
 	s.NoError(err)
+}
+
+// TestScheduleMigrationV1ToV2NoDuplicateRecentActions verifies that migrating
+// a V1 schedule with a running workflow to V2 does not produce duplicate entries
+// in RecentActions. In V1, recordAction puts the same workflow in both
+// RunningWorkflows and RecentActions. The migration must deduplicate these.
+func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
+	// Create the env without EnableChasm so that CreateSchedule does not write
+	// a CHASM sentinel (which would block the migration activity).
+	env := testcore.NewEnv(
+		t,
+		testcore.WithSdkWorker(),
+	)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sched-migrate-no-dup")
+	wid := testcore.RandomizeStr("sched-migrate-no-dup-wf")
+	wt := testcore.RandomizeStr("sched-migrate-no-dup-wt")
+
+	nsName := env.Namespace().String()
+
+	// Register a workflow that blocks until signaled, so it stays running
+	// during migration.
+	resumeSignal := "resume"
+	workflowFn := func(ctx workflow.Context) error {
+		ch := workflow.GetSignalChannel(ctx, resumeSignal)
+		ch.Receive(ctx, nil)
+		return nil
+	}
+	env.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	// Create a V1 schedule with an immediate trigger.
+	sched := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	_, err := env.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Schedule:   sched,
+		InitialPatch: &schedulepb.SchedulePatch{
+			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	// Wait for the V1 scheduler to start the workflow and record it as running.
+	var runningWfID string
+	require.Eventually(t, func() bool {
+		descResp, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  nsName,
+			ScheduleId: sid,
+		})
+		if err != nil || len(descResp.GetInfo().GetRecentActions()) == 0 {
+			return false
+		}
+		a := descResp.Info.RecentActions[0]
+		if a.GetStartWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			return false
+		}
+		runningWfID = a.GetStartWorkflowResult().GetWorkflowId()
+		return true
+	}, 15*time.Second, 500*time.Millisecond)
+
+	// Enable CHASM now so the migration activity can create the V2 schedule.
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+
+	// Migrate from V1 to V2 while the workflow is still running.
+	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
+		Identity:   "test",
+		RequestId:  testcore.RandomizeStr("request-id"),
+	})
+	require.NoError(t, err)
+
+	// Wait for the V1 scheduler workflow to complete (migration done).
+	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
+	require.Eventually(t, func() bool {
+		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
+			ctx,
+			&historyservice.DescribeWorkflowExecutionRequest{
+				NamespaceId: env.NamespaceID().String(),
+				Request: &workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: nsName,
+					Execution: &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
+				},
+			},
+		)
+		if err != nil {
+			return false
+		}
+		return desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 10*time.Second, 500*time.Millisecond)
+
+	// Describe the V2 schedule and verify no duplicate RunIds in RecentActions.
+	v2Desc, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
+		ctx,
+		&schedulerpb.DescribeScheduleRequest{
+			NamespaceId:     env.NamespaceID().String(),
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+		},
+	)
+	require.NoError(t, err)
+
+	recentActions := v2Desc.GetFrontendResponse().GetInfo().GetRecentActions()
+	assertRecentActionsNoDuplicateRunIDs(t, recentActions)
+
+	// The running workflow should appear exactly once.
+	var count int
+	for _, action := range recentActions {
+		if strings.HasPrefix(action.GetStartWorkflowResult().GetWorkflowId(), wid) {
+			count++
+		}
+	}
+	require.Equal(t, 1, count, "running workflow should appear exactly once in RecentActions, got %d", count)
+
+	// Clean up: signal the running workflow to complete.
+	_, err = env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         nsName,
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: runningWfID},
+		SignalName:        resumeSignal,
+	})
+	require.NoError(t, err)
 }
