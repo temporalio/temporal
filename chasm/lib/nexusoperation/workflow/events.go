@@ -281,20 +281,9 @@ func (d StartedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflo
 
 	// TODO: Store event.Links on the Operation for standalone mode, where links won't be available via history.
 
-	if err := nexusoperation.TransitionStarted.Apply(op, ctx, nexusoperation.EventStarted{
+	return nexusoperation.TransitionStarted.Apply(op, ctx, nexusoperation.EventStarted{
 		OperationToken: attrs.GetOperationToken(),
-	}); err != nil {
-		return err
-	}
-
-	// If cancellation was already requested, schedule sending the cancellation request now that we have
-	// an operation token.
-	cancellation, ok := op.Cancellation.TryGet(ctx)
-	if ok && cancellation.StateMachineState() == nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED {
-		return nexusoperation.TransitionCancellationScheduled.Apply(cancellation, ctx, nexusoperation.EventCancellationScheduled{})
-	}
-
-	return nil
+	})
 }
 
 func (d StartedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
