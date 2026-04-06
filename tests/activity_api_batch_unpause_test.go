@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"github.com/temporalio/sqlparser"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -22,17 +21,17 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 )
 
 type ActivityApiBatchUnpauseClientTestSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*ActivityApiBatchUnpauseClientTestSuite]
 }
 
 func TestActivityApiBatchUnpauseClientTestSuite(t *testing.T) {
-	s := new(ActivityApiBatchUnpauseClientTestSuite)
-	suite.Run(t, s)
+	parallelsuite.Run(t, &ActivityApiBatchUnpauseClientTestSuite{})
 }
 
 type internalTestWorkflow struct {
@@ -80,12 +79,12 @@ func (w *internalTestWorkflow) ActivityFunc() (string, error) {
 	return "done!", nil
 }
 
-func (s *ActivityApiBatchUnpauseClientTestSuite) createWorkflow(ctx context.Context, workflowFn WorkflowFunction) sdkclient.WorkflowRun {
+func (s *ActivityApiBatchUnpauseClientTestSuite) createWorkflow(env *testcore.TestEnv, workflowFn WorkflowFunction) sdkclient.WorkflowRun {
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
-		TaskQueue: s.TaskQueue(),
+		TaskQueue: env.WorkerTaskQueue(),
 	}
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(env.Context(), workflowOptions, workflowFn)
 	s.NoError(err)
 	s.NotNil(workflowRun)
 
@@ -93,25 +92,26 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) createWorkflow(ctx context.Cont
 }
 
 func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Success() {
+	env := testcore.NewEnv(s.T())
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	internalWorkflow := newInternalWorkflow()
 
-	s.SdkWorker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
-	s.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
+	env.SdkWorker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
+	env.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
 
-	workflowRun1 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
-	workflowRun2 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
+	workflowRun1 := s.createWorkflow(env, internalWorkflow.WorkflowFunc)
+	workflowRun2 := s.createWorkflow(env, internalWorkflow.WorkflowFunc)
 
 	// wait for activity to start in both workflows
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
 		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 
-		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
+		description, err = env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
 		require.Positive(t, internalWorkflow.startedActivityCount.Load())
@@ -119,23 +119,23 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 
 	// pause activities in both workflows
 	pauseRequest := &workflowservice.PauseActivityRequest{
-		Namespace: s.Namespace().String(),
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{},
 		Activity:  &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
 	}
 	pauseRequest.Execution.WorkflowId = workflowRun1.GetID()
-	resp, err := s.FrontendClient().PauseActivity(ctx, pauseRequest)
+	resp, err := env.FrontendClient().PauseActivity(ctx, pauseRequest)
 	s.NoError(err)
 	s.NotNil(resp)
 
 	pauseRequest.Execution.WorkflowId = workflowRun2.GetID()
-	resp, err = s.FrontendClient().PauseActivity(ctx, pauseRequest)
+	resp, err = env.FrontendClient().PauseActivity(ctx, pauseRequest)
 	s.NoError(err)
 	s.NotNil(resp)
 
 	// wait for activities to be paused
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
 		require.True(t, description.PendingActivities[0].Paused)
@@ -151,8 +151,8 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 	query := fmt.Sprintf("(WorkflowType='%s' AND %s)", workflowTypeName, unpauseCause)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		listResp, err = s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.Namespace().String(),
+		listResp, err = env.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: env.Namespace().String(),
 			PageSize:  10,
 			Query:     query,
 		})
@@ -162,8 +162,8 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// unpause the activities in both workflows with batch unpause
-	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+		Namespace: env.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
 			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
 				Activity: &batchpb.BatchOperationUnpauseActivities_Type{Type: activityTypeName},
@@ -177,11 +177,11 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 
 	// make sure activities are unpaused
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
 		require.False(t, description.PendingActivities[0].Paused)
-		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
+		description, err = env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
 		require.False(t, description.PendingActivities[0].Paused)
@@ -199,9 +199,11 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 }
 
 func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Failed() {
+	env := testcore.NewEnv(s.T())
+
 	// neither activity type not "match all" is provided
-	_, err := s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
-		Namespace: s.Namespace().String(),
+	_, err := env.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+		Namespace: env.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
 			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{},
 		},
@@ -214,8 +216,8 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Failed
 	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 
 	// neither activity type not "match all" is provided
-	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+		Namespace: env.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
 			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
 				Activity: &batchpb.BatchOperationUnpauseActivities_Type{Type: ""},
@@ -235,6 +237,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Failed
 // This is an end-to-end complement to the unit-level checkNamespace tests: it
 // exercises the full path from StartBatchOperation through the batcher worker.
 func (s *ActivityApiBatchUnpauseClientTestSuite) TestBatchTerminate_NamespaceIsolation() {
+	env := testcore.NewEnv(s.T())
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -243,7 +246,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestBatchTerminate_NamespaceIso
 	sleepWorkflow := func(ctx workflow.Context) error {
 		return workflow.Sleep(ctx, 24*time.Hour)
 	}
-	s.SdkWorker().RegisterWorkflowWithOptions(sleepWorkflow, workflow.RegisterOptions{Name: wfTypeName})
+	env.SdkWorker().RegisterWorkflowWithOptions(sleepWorkflow, workflow.RegisterOptions{Name: wfTypeName})
 
 	// Start two workflows in the primary namespace (worker is registered and will execute them).
 	startWf := func(client sdkclient.Client, taskQueue string) sdkclient.WorkflowRun {
@@ -254,26 +257,26 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestBatchTerminate_NamespaceIso
 		s.NoError(err)
 		return run
 	}
-	primaryRun1 := startWf(s.SdkClient(), s.TaskQueue())
-	primaryRun2 := startWf(s.SdkClient(), s.TaskQueue())
+	primaryRun1 := startWf(env.SdkClient(), env.WorkerTaskQueue())
+	primaryRun2 := startWf(env.SdkClient(), env.WorkerTaskQueue())
 
 	// Create a client for the external namespace and start two workflows there.
 	// No worker polls this task queue in the external namespace, so these workflows
 	// will remain in RUNNING state without executing.
 	extClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.ExternalNamespace().String(),
+		HostPort:  env.FrontendGRPCAddress(),
+		Namespace: env.ExternalNamespace().String(),
 	})
 	s.NoError(err)
 	defer extClient.Close()
-	extRun1 := startWf(extClient, s.TaskQueue())
-	extRun2 := startWf(extClient, s.TaskQueue())
+	extRun1 := startWf(extClient, env.WorkerTaskQueue())
+	extRun2 := startWf(extClient, env.WorkerTaskQueue())
 
 	// Wait for both primary-namespace workflows to be indexed in visibility before
 	// submitting the batch, which uses a visibility query to find its targets.
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.Namespace().String(),
+		resp, err := env.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: env.Namespace().String(),
 			Query:     fmt.Sprintf("WorkflowType='%s'", wfTypeName),
 			PageSize:  10,
 		})
@@ -282,8 +285,8 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestBatchTerminate_NamespaceIso
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Batch-terminate all workflows of this type in the primary namespace only.
-	_, err = s.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
-		Namespace:       s.Namespace().String(),
+	_, err = env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace:       env.Namespace().String(),
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", wfTypeName),
 		JobId:           uuid.NewString(),
 		Reason:          "namespace-isolation-test",
@@ -296,7 +299,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestBatchTerminate_NamespaceIso
 	// Primary-namespace workflows must reach TERMINATED status.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		for _, run := range []sdkclient.WorkflowRun{primaryRun1, primaryRun2} {
-			desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+			desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 			require.NoError(t, err)
 			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, desc.WorkflowExecutionInfo.Status)
 		}
