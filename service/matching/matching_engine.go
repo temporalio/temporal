@@ -878,6 +878,9 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 		ns,
 		false,
 	)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	hist := resp.GetResponse().GetHistory()
 	if resp.GetResponse().GetRawHistory() != nil {
@@ -892,7 +895,7 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 		hist = &historypb.History{Events: historyEvents}
 	}
 
-	return hist, resp.GetResponse().GetNextPageToken(), err
+	return hist, resp.GetResponse().GetNextPageToken(), nil
 }
 
 func (e *matchingEngineImpl) nonRetryableErrorsDropTask(task *internalTask, taskQueueName string, err error) {
