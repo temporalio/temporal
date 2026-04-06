@@ -349,15 +349,19 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 
 	s.SdkWorker().Stop()
 
-	signalCount := 5
+	activityFn := func(ctx context.Context) error { return nil }
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		_ = workflow.SetQueryHandler(ctx, "test", func() (string, error) {
 			return "query works", nil
 		})
-		signalCh := workflow.GetSignalChannel(ctx, "done")
-		for range signalCount {
-			signalCh.Receive(ctx, nil)
+		// Run activities to generate multiple event batches in history.
+		ao := workflow.ActivityOptions{StartToCloseTimeout: 5 * time.Second}
+		actCtx := workflow.WithActivityOptions(ctx, ao)
+		for range 5 {
+			_ = workflow.ExecuteActivity(actCtx, activityFn).Get(ctx, nil)
 		}
+		// Keep workflow alive for query.
+		workflow.GetSignalChannel(ctx, "done").Receive(ctx, nil)
 		return "done", nil
 	}
 
@@ -367,6 +371,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 
 	queryWorker := worker.New(s.SdkClient(), s.TaskQueue(), worker.Options{})
 	queryWorker.RegisterWorkflow(workflowFn)
+	queryWorker.RegisterActivity(activityFn)
 	s.NoError(queryWorker.Start())
 
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
@@ -377,14 +382,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 	s.NoError(err)
 	s.NotNil(workflowRun)
 
-	// Send signals to build up history events beyond the page size.
-	// Sleep between signals so each gets a separate workflow task batch.
-	for range signalCount {
-		s.NoError(s.SdkClient().SignalWorkflow(ctx, id, "", "done", nil))
-		util.InterruptibleSleep(ctx, 500*time.Millisecond)
-	}
-
-	// Wait for all signals to be processed.
+	// Wait for all activities to complete, generating many event batches.
 	s.Eventually(func() bool {
 		resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace().String(),
