@@ -26,8 +26,8 @@ type (
 	// to identity mapping when the wrapped mapper misses but cluster metadata still
 	// recognizes the name as a legacy custom search attribute.
 	backCompMapper struct {
-		mapper               Mapper
-		fallbackNameTypeMaps []NameTypeMap
+		mapper              Mapper
+		fallbackNameTypeMap NameTypeMap
 	}
 
 	MapperProvider interface {
@@ -38,7 +38,7 @@ type (
 		customMapper             Mapper
 		namespaceRegistry        namespace.Registry
 		searchAttributesProvider Provider
-		fallbackIndexNames       []string
+		fallbackIndexName        string
 	}
 )
 
@@ -71,25 +71,21 @@ func (m *backCompMapper) GetFieldName(alias string, namespaceName string) (strin
 }
 
 func (m *backCompMapper) isLegacyCustomSearchAttribute(name string) bool {
-	for _, nameTypeMap := range m.fallbackNameTypeMaps {
-		if _, err := nameTypeMap.getType(name, customCategory); err == nil {
-			return true
-		}
-	}
-	return false
+	_, err := m.fallbackNameTypeMap.getType(name, customCategory)
+	return err == nil
 }
 
 func NewMapperProvider(
 	customMapper Mapper,
 	namespaceRegistry namespace.Registry,
 	searchAttributesProvider Provider,
-	fallbackIndexNames ...string,
+	fallbackIndexName string,
 ) MapperProvider {
 	return &mapperProviderImpl{
 		customMapper:             customMapper,
 		namespaceRegistry:        namespaceRegistry,
 		searchAttributesProvider: searchAttributesProvider,
-		fallbackIndexNames:       fallbackIndexNames,
+		fallbackIndexName:        fallbackIndexName,
 	}
 }
 
@@ -101,18 +97,17 @@ func (m *mapperProviderImpl) GetMapper(nsName namespace.Name) (Mapper, error) {
 	if err != nil {
 		return nil, err
 	}
-	fallbackIndexNames := append(append([]string(nil), m.fallbackIndexNames...), "")
-	fallbackNameTypeMaps := make([]NameTypeMap, 0, len(fallbackIndexNames))
-	for _, indexName := range fallbackIndexNames {
-		nameTypeMap, err := m.searchAttributesProvider.GetSearchAttributes(indexName, false)
+	fallbackNameTypeMap := NameTypeMap{}
+	if m.fallbackIndexName != "" {
+		nameTypeMap, err := m.searchAttributesProvider.GetSearchAttributes(m.fallbackIndexName, false)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load search attributes for fallback index %q: %w", indexName, err)
+			return nil, fmt.Errorf("failed to load search attributes for fallback index %q: %w", m.fallbackIndexName, err)
 		}
-		fallbackNameTypeMaps = append(fallbackNameTypeMaps, legacyCustomSearchAttributes(nameTypeMap))
+		fallbackNameTypeMap = legacyCustomSearchAttributes(nameTypeMap)
 	}
 	return &backCompMapper{
-		mapper:               &saMapper,
-		fallbackNameTypeMaps: fallbackNameTypeMaps,
+		mapper:              &saMapper,
+		fallbackNameTypeMap: fallbackNameTypeMap,
 	}, nil
 }
 

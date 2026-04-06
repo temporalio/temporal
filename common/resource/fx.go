@@ -157,13 +157,11 @@ func SearchAttributeMapperProviderProvider(
 	persistenceConfig *config.Persistence,
 ) searchattribute.MapperProvider {
 	primaryVisibilityStoreConfig := persistenceConfig.GetVisibilityStoreConfig()
-	secondaryVisibilityStoreConfig := persistenceConfig.GetSecondaryVisibilityStoreConfig()
 	return searchattribute.NewMapperProvider(
 		saMapper,
 		namespaceRegistry,
 		searchAttributeProvider,
 		primaryVisibilityStoreConfig.GetIndexName(),
-		secondaryVisibilityStoreConfig.GetIndexName(),
 	)
 }
 

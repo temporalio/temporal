@@ -159,8 +159,8 @@ func (s staticSearchAttributesProvider) GetSearchAttributes(indexName string, _ 
 
 func Test_BackCompMapperFallsBackToClusterMetadataFields(t *testing.T) {
 	mapper := &backCompMapper{
-		mapper:               &TestMapper{},
-		fallbackNameTypeMaps: []NameTypeMap{TestNameTypeMap()},
+		mapper:              &TestMapper{},
+		fallbackNameTypeMap: TestNameTypeMap(),
 	}
 
 	alias, err := mapper.GetAlias("Keyword02", "error-namespace")
