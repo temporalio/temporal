@@ -124,11 +124,12 @@ func TestActivityExecutionAPI(t *testing.T) {
 
 		s.WaitForChannel(ctx, activityStartedCh)
 
-		_, err = s.FrontendClient().PauseActivity(ctx, &workflowservice.PauseActivityRequest{
+		_, err = s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
 			Namespace: s.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()},
-			Activity:  &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
-			Reason:    "test-pause",
+			WorkflowId: workflowRun.GetID(),
+			ActivityId: "activity-id",
+			Identity:   "test-identity",
+			Reason:     "test-pause",
 		})
 		require.NoError(t, err)
 

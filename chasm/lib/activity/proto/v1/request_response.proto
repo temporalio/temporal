@@ -63,7 +63,6 @@ message DeleteActivityExecutionRequest {
 message DeleteActivityExecutionResponse {
 }
 
-
 message PauseActivityExecutionRequest {
     string namespace_id = 1;
 
@@ -72,7 +71,6 @@ message PauseActivityExecutionRequest {
 
 message PauseActivityExecutionResponse {
 }
-
 
 message UnpauseActivityExecutionRequest {
     string namespace_id = 1;
@@ -83,7 +81,6 @@ message UnpauseActivityExecutionRequest {
 message UnpauseActivityExecutionResponse {
 }
 
-
 message ResetActivityExecutionRequest {
     string namespace_id = 1;
 
@@ -92,7 +89,6 @@ message ResetActivityExecutionRequest {
 
 message ResetActivityExecutionResponse {
 }
-
 
 message UpdateActivityExecutionOptionsRequest {
     string namespace_id = 1;

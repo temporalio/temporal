@@ -360,11 +360,12 @@ func (h *handler) ResetActivityExecution(ctx context.Context, req *activitypb.Re
 					WorkflowId: frontendReq.GetWorkflowId(),
 					RunId:      frontendReq.GetRunId(),
 				},
-				Activity:       &workflowservice.ResetActivityRequest_Id{Id: frontendReq.GetActivityId()},
-				ResetHeartbeat: frontendReq.GetResetHeartbeat(),
-				KeepPaused:     frontendReq.GetKeepPaused(),
-				Jitter:         frontendReq.GetJitter(),
-				Identity:       frontendReq.GetIdentity(),
+				Activity:               &workflowservice.ResetActivityRequest_Id{Id: frontendReq.GetActivityId()},
+				ResetHeartbeat:         frontendReq.GetResetHeartbeat(),
+				RestoreOriginalOptions: frontendReq.GetRestoreOriginalOptions(),
+				KeepPaused:             frontendReq.GetKeepPaused(),
+				Jitter:                 frontendReq.GetJitter(),
+				Identity:               frontendReq.GetIdentity(),
 			},
 		})
 		if err != nil {
