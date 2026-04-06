@@ -88,14 +88,25 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 		return nil
 	}
 
-	// Only process workflow archetype deletion for now.
-	if e.archetypeID() != chasm.WorkflowArchetypeID {
-		return nil
-	}
-
 	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
 
+	switch e.archetypeID() {
+	case chasm.WorkflowArchetypeID, chasm.UnspecifiedArchetypeID:
+		return e.deleteWorkflowExecution(ctx)
+	default:
+		return e.deleteChasmExecution(ctx)
+	}
+}
+
+func (e *ExecutableDeleteExecutionTask) archetypeID() uint32 {
+	if rawInfo := e.ReplicationTask().GetRawTaskInfo(); rawInfo != nil {
+		return rawInfo.ArchetypeId
+	}
+	return chasm.UnspecifiedArchetypeID
+}
+
+func (e *ExecutableDeleteExecutionTask) deleteWorkflowExecution(ctx context.Context) error {
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.NamespaceID),
 		e.WorkflowID,
@@ -118,11 +129,16 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 	return err
 }
 
-func (e *ExecutableDeleteExecutionTask) archetypeID() uint32 {
-	if rawInfo := e.ReplicationTask().GetRawTaskInfo(); rawInfo != nil {
-		return rawInfo.ArchetypeId
-	}
-	return chasm.UnspecifiedArchetypeID
+func (e *ExecutableDeleteExecutionTask) deleteChasmExecution(ctx context.Context) error {
+	ref := chasm.NewComponentRefByArchetypeID(
+		chasm.ExecutionKey{
+			NamespaceID: e.NamespaceID,
+			BusinessID:  e.WorkflowID,
+			RunID:       e.RunID,
+		},
+		e.archetypeID(),
+	)
+	return e.ChasmEngine.DeleteExecution(ctx, ref, chasm.DeleteExecutionRequest{})
 }
 
 func (e *ExecutableDeleteExecutionTask) HandleErr(err error) error {
