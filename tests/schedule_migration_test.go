@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
