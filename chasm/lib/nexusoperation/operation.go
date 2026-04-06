@@ -214,14 +214,12 @@ func (o *Operation) buildDescribeResponse(
 	}
 
 	// Include output, if available and requested
-	// TODO: get failure from last attempt for running operation, if available
 	if req.GetFrontendRequest().GetIncludeOutcome() && o.isClosed() {
-		outcome := o.Outcome.Get(ctx)
-		if successful := outcome.GetSuccessful(); successful != nil {
+		if successful, failure := o.describeOutcome(ctx); successful != nil {
 			resp.Outcome = &workflowservice.DescribeNexusOperationExecutionResponse_Result{
-				Result: successful.GetResult(),
+				Result: successful,
 			}
-		} else if failure := outcome.GetFailed().GetFailure(); failure != nil {
+		} else if failure != nil {
 			resp.Outcome = &workflowservice.DescribeNexusOperationExecutionResponse_Failure{
 				Failure: failure,
 			}
@@ -243,12 +241,11 @@ func (o *Operation) buildPollResponse(
 
 	if o.isClosed() {
 		resp.WaitStage = enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED
-		outcome := o.Outcome.Get(ctx)
-		if successful := outcome.GetSuccessful(); successful != nil {
+		if successful, failure := o.describeOutcome(ctx); successful != nil {
 			resp.Outcome = &workflowservice.PollNexusOperationExecutionResponse_Result{
-				Result: successful.GetResult(),
+				Result: successful,
 			}
-		} else if failure := outcome.GetFailed().GetFailure(); failure != nil {
+		} else if failure != nil {
 			resp.Outcome = &workflowservice.PollNexusOperationExecutionResponse_Failure{
 				Failure: failure,
 			}
@@ -260,6 +257,17 @@ func (o *Operation) buildPollResponse(
 	return &nexusoperationpb.PollNexusOperationResponse{
 		FrontendResponse: resp,
 	}
+}
+
+func (o *Operation) describeOutcome(ctx chasm.Context) (*commonpb.Payload, *failurepb.Failure) {
+	outcome := o.Outcome.Get(ctx)
+	if successful := outcome.GetSuccessful(); successful != nil {
+		return successful.GetResult(), nil
+	}
+	if failure := outcome.GetFailed().GetFailure(); failure != nil {
+		return nil, failure
+	}
+	return nil, o.LastAttemptFailure
 }
 
 // isWaitStageReached checks if the operation has reached the requested wait stage.
@@ -398,6 +406,7 @@ func (o *Operation) OnFailed(ctx chasm.MutableContext, _ *Operation, cause *fail
 	if ok {
 		return store.OnNexusOperationFailed(ctx, o, cause)
 	}
+	o.LastAttemptFailure = cause
 	return transitionFailed.Apply(o, ctx, EventFailed{})
 }
 
@@ -407,6 +416,7 @@ func (o *Operation) OnCancelled(ctx chasm.MutableContext, _ *Operation, cause *f
 	if ok {
 		return store.OnNexusOperationCancelled(ctx, o, cause)
 	}
+	o.LastAttemptFailure = cause
 	return TransitionCanceled.Apply(o, ctx, EventCanceled{})
 }
 
@@ -416,5 +426,6 @@ func (o *Operation) OnTimedOut(ctx chasm.MutableContext, _ *Operation, cause *fa
 	if ok {
 		return store.OnNexusOperationTimedOut(ctx, o, cause)
 	}
+	o.LastAttemptFailure = cause
 	return transitionTimedOut.Apply(o, ctx, EventTimedOut{})
 }
