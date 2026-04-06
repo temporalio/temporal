@@ -16,8 +16,9 @@ var TransitionScheduled = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{nexusoperationpb.OPERATION_STATUS_UNSPECIFIED},
 	nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 	func(o *Operation, ctx chasm.MutableContext, event EventScheduled) error {
-		// Emit an invocation task to start the operation
-		ctx.AddTask(o, chasm.TaskAttributes{}, &nexusoperationpb.InvocationTask{
+		// Emit an invocation task to start the operation.
+		// The destination is the endpoint name, which routes the task to the correct outbound queue.
+		ctx.AddTask(o, chasm.TaskAttributes{Destination: o.GetEndpoint()}, &nexusoperationpb.InvocationTask{
 			Attempt: o.Attempt,
 		})
 
@@ -93,7 +94,7 @@ var transitionRescheduled = chasm.NewTransition(
 		o.NextAttemptScheduleTime = nil
 
 		// Emit a new invocation task for the retry attempt
-		ctx.AddTask(o, chasm.TaskAttributes{}, &nexusoperationpb.InvocationTask{
+		ctx.AddTask(o, chasm.TaskAttributes{Destination: o.GetEndpoint()}, &nexusoperationpb.InvocationTask{
 			Attempt: o.Attempt,
 		})
 
@@ -140,6 +141,13 @@ var TransitionStarted = chasm.NewTransition(
 			}, &nexusoperationpb.StartToCloseTimeoutTask{
 				Attempt: o.Attempt,
 			})
+		}
+
+		// If cancellation was already requested, schedule sending the cancellation request now that we have
+		// an operation token.
+		cancellation, ok := o.Cancellation.TryGet(ctx)
+		if ok && cancellation.StateMachineState() == nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED {
+			return TransitionCancellationScheduled.Apply(cancellation, ctx, EventCancellationScheduled{})
 		}
 
 		return nil
