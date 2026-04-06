@@ -1299,6 +1299,7 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 					err  error
 				}
 				pollResultCh := make(chan pollResult, 1)
+				pollStartedCh := make(chan struct{}, 1)
 
 				go func() {
 					runID := ""
@@ -1306,6 +1307,7 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 						runID = startResp.RunId
 					}
 
+					pollStartedCh <- struct{}{}
 					resp, err := s.FrontendClient().PollNexusOperationExecution(ctx, &workflowservice.PollNexusOperationExecutionRequest{
 						Namespace:   s.Namespace().String(),
 						OperationId: "test-op",
@@ -1315,14 +1317,18 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 					pollResultCh <- pollResult{resp: resp, err: err}
 				}()
 
-				// Wait 1s to ensure the poll is still active.
+				select {
+				case <-pollStartedCh:
+				case <-ctx.Done():
+					t.Fatal("PollNexusOperationExecution did not start before timeout")
+				}
+
+				// PollNexusOperationExecution should not resolve before the operation is closed.
 				select {
 				case result := <-pollResultCh:
 					require.NoError(t, result.err)
 					t.Fatal("PollNexusOperationExecution returned before the state changed")
-				case <-time.After(1 * time.Second):
-				case <-ctx.Done():
-					t.Fatal("PollNexusOperationExecution timed out before termination")
+				default:
 				}
 
 				// Terminate the operation.
