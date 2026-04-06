@@ -190,6 +190,7 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 		})
 		var notFound *serviceerror.NotFound
 		s.ErrorAs(err, &notFound)
+		s.Equal("operation not found for ID: does-not-exist", notFound.Error())
 	})
 
 	t.Run("WrongRunID", func(t *testing.T) {
@@ -209,6 +210,7 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 		})
 		var notFound *serviceerror.NotFound
 		s.ErrorAs(err, &notFound)
+		s.Equal("operation not found for ID: test-op", notFound.Error())
 	})
 
 	t.Run("LongPollStateChange", func(t *testing.T) {
