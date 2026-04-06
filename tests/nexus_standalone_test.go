@@ -297,21 +297,37 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 		s.NoError(err)
 		s.NotEmpty(firstResp.GetLongPollToken())
 
-		// Lower the long poll timeout and buffer to ensure the first response is returned quickly.
-		s.OverrideDynamicConfig(nexusoperation.LongPollBuffer, time.Second)
-		s.OverrideDynamicConfig(nexusoperation.LongPollTimeout, 10*time.Millisecond)
+		t.Run("CallerDeadlineNotExceeded", func(t *testing.T) {
+			s.OverrideDynamicConfig(nexusoperation.LongPollBuffer, time.Second)
+			s.OverrideDynamicConfig(nexusoperation.LongPollTimeout, 10*time.Millisecond)
 
-		ctx, cancel := context.WithTimeout(s.Context(), 5*time.Second)
-		defer cancel()
+			ctx, cancel := context.WithTimeout(s.Context(), 5*time.Second)
+			defer cancel()
 
-		longPollResp, err := s.FrontendClient().DescribeNexusOperationExecution(ctx, &workflowservice.DescribeNexusOperationExecutionRequest{
-			Namespace:     s.Namespace().String(),
-			OperationId:   "test-op",
-			RunId:         startResp.RunId,
-			LongPollToken: firstResp.GetLongPollToken(),
+			longPollResp, err := s.FrontendClient().DescribeNexusOperationExecution(ctx, &workflowservice.DescribeNexusOperationExecutionRequest{
+				Namespace:     s.Namespace().String(),
+				OperationId:   "test-op",
+				RunId:         startResp.RunId,
+				LongPollToken: firstResp.GetLongPollToken(),
+			})
+			s.NoError(err)
+			protorequire.ProtoEqual(t, &workflowservice.DescribeNexusOperationExecutionResponse{}, longPollResp)
 		})
-		s.NoError(err)
-		protorequire.ProtoEqual(t, &workflowservice.DescribeNexusOperationExecutionResponse{}, longPollResp)
+
+		t.Run("NoCallerDeadline", func(t *testing.T) {
+			// Frontend still imposes its own deadline upstream, so the buffer must fit within that.
+			s.OverrideDynamicConfig(nexusoperation.LongPollBuffer, 29*time.Second)
+			s.OverrideDynamicConfig(nexusoperation.LongPollTimeout, 10*time.Millisecond)
+
+			longPollResp, err := s.FrontendClient().DescribeNexusOperationExecution(context.Background(), &workflowservice.DescribeNexusOperationExecutionRequest{
+				Namespace:     s.Namespace().String(),
+				OperationId:   "test-op",
+				RunId:         startResp.RunId,
+				LongPollToken: firstResp.GetLongPollToken(),
+			})
+			s.NoError(err)
+			protorequire.ProtoEqual(t, &workflowservice.DescribeNexusOperationExecutionResponse{}, longPollResp)
+		})
 	})
 
 	t.Run("IncludeOutcome_Failure", func(t *testing.T) {
