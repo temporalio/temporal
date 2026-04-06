@@ -62,7 +62,8 @@ const (
 	SyncDrainageSignalName      = "sync-drainage-status"
 	TerminateDrainageSignal     = "terminate-drainage"
 	SyncVersionSummarySignal    = "sync-version-summary"
-	PropagationCompleteSignal   = "propagation-complete"
+	PropagationCompleteSignal               = "propagation-complete"
+	TqRegistrationPropagationCompleteSignal = "tq-registration-propagation-complete"
 	ReactivateVersionSignalName = "reactivate-version" // for Worker Deployment Version wfs
 
 	// Queries
@@ -135,6 +136,16 @@ var (
 		},
 	}
 )
+
+// isVersionCurrentOrRamping checks if a version (identified by buildId and deploymentName)
+// is the current or ramping version in the given routing config.
+func isVersionCurrentOrRamping(rg *deploymentpb.RoutingConfig, buildId, deploymentName string) bool {
+	isCurrent := rg.GetCurrentDeploymentVersion().GetBuildId() == buildId &&
+		rg.GetCurrentDeploymentVersion().GetDeploymentName() == deploymentName
+	isRamping := rg.GetRampingDeploymentVersion().GetBuildId() == buildId &&
+		rg.GetRampingDeploymentVersion().GetDeploymentName() == deploymentName
+	return isCurrent || isRamping
+}
 
 // validateVersionWfParams is a helper that verifies if the fields used for generating
 // Worker Deployment Version related workflowID's are valid

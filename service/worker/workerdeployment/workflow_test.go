@@ -33,7 +33,7 @@ type WorkerDeploymentSuite struct {
 
 func TestWorkerDeploymentSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: VersionDataRevisionNumber})
+	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: TqRegistrationPropagationTracking})
 }
 
 func (s *WorkerDeploymentSuite) SetupTest() {
@@ -1855,4 +1855,319 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeploymentVersion_SyncSummaryPr
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_RegisterWorker_IncrementsTqRegistrationCounter tests that registering a worker
+// in a current version increments the PendingTqRegistrationPropagations counter.
+func (s *WorkerDeploymentSuite) Test_RegisterWorker_IncrementsTqRegistrationCounter() {
+	s.skipBeforeVersion(TqRegistrationPropagationTracking)
+
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	var a *Activities
+	s.env.RegisterActivity(a.RegisterWorkerInVersion)
+	s.env.OnActivity(a.RegisterWorkerInVersion, mock.Anything, mock.Anything).Return(nil)
+
+	version1 := tv.DeploymentVersionString()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(RegisterWorkerInWorkerDeployment, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("RegisterWorker update should not have been rejected", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(result any, err error) {
+				s.Require().NoError(err)
+
+				queryResult, err := s.env.QueryWorkflow(QueryDescribeDeployment)
+				s.Require().NoError(err)
+				var state deploymentspb.QueryDescribeWorkerDeploymentResponse
+				s.Require().NoError(queryResult.Get(&state))
+
+				s.Equal(int32(1), state.State.PendingTqRegistrationPropagations,
+					"counter should be 1 after registering TQ in current version")
+			},
+		}, &deploymentspb.RegisterWorkerInWorkerDeploymentArgs{
+			TaskQueueName: "test-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+		})
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+				version1: {
+					Version: version1,
+				},
+			},
+			RoutingConfig: &deploymentpb.RoutingConfig{
+				RevisionNumber: 5,
+				//nolint:staticcheck // SA1019: worker versioning v0.31
+				CurrentVersion: version1,
+				CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+					DeploymentName: tv.DeploymentSeries(),
+					BuildId:        tv.BuildID(),
+				},
+			},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_RegisterWorker_DoesNotIncrementForNonCurrentVersion tests that registering a worker
+// in a non-current/non-ramping version does NOT increment the counter.
+func (s *WorkerDeploymentSuite) Test_RegisterWorker_DoesNotIncrementForNonCurrentVersion() {
+	s.skipBeforeVersion(TqRegistrationPropagationTracking)
+
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	var a *Activities
+	s.env.RegisterActivity(a.RegisterWorkerInVersion)
+	s.env.OnActivity(a.RegisterWorkerInVersion, mock.Anything, mock.Anything).Return(nil)
+
+	version1 := tv.DeploymentVersionString()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(RegisterWorkerInWorkerDeployment, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("RegisterWorker update should not have been rejected", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(result any, err error) {
+				s.Require().NoError(err)
+
+				queryResult, err := s.env.QueryWorkflow(QueryDescribeDeployment)
+				s.Require().NoError(err)
+				var state deploymentspb.QueryDescribeWorkerDeploymentResponse
+				s.Require().NoError(queryResult.Get(&state))
+
+				s.Equal(int32(0), state.State.PendingTqRegistrationPropagations,
+					"counter should remain 0 for non-current/non-ramping version")
+			},
+		}, &deploymentspb.RegisterWorkerInWorkerDeploymentArgs{
+			TaskQueueName: "test-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+		})
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+				version1: {
+					Version: version1,
+				},
+			},
+			RoutingConfig: &deploymentpb.RoutingConfig{
+				RevisionNumber: 5,
+				// No current or ramping version set
+			},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_TqRegistrationPropagationComplete_DecrementsCounter tests that receiving the
+// TQ registration propagation complete signal decrements the counter.
+func (s *WorkerDeploymentSuite) Test_TqRegistrationPropagationComplete_DecrementsCounter() {
+	s.skipBeforeVersion(TqRegistrationPropagationTracking)
+
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(TqRegistrationPropagationCompleteSignal, nil)
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			PendingTqRegistrationPropagations: 2,
+			RoutingConfig: &deploymentpb.RoutingConfig{
+				RevisionNumber: 10,
+			},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+
+	queryResult, err := s.env.QueryWorkflow(QueryDescribeDeployment)
+	s.Require().NoError(err)
+	var state deploymentspb.QueryDescribeWorkerDeploymentResponse
+	s.Require().NoError(queryResult.Get(&state))
+
+	s.Equal(int32(1), state.State.PendingTqRegistrationPropagations,
+		"counter should be decremented from 2 to 1")
+}
+
+// Test_TqRegistrationPropagationComplete_FloorsAtZero tests that the counter doesn't
+// go below zero on stale signals.
+func (s *WorkerDeploymentSuite) Test_TqRegistrationPropagationComplete_FloorsAtZero() {
+	s.skipBeforeVersion(TqRegistrationPropagationTracking)
+
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(TqRegistrationPropagationCompleteSignal, nil)
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			PendingTqRegistrationPropagations: 0,
+			RoutingConfig: &deploymentpb.RoutingConfig{
+				RevisionNumber: 10,
+			},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+
+	queryResult, err := s.env.QueryWorkflow(QueryDescribeDeployment)
+	s.Require().NoError(err)
+	var state deploymentspb.QueryDescribeWorkerDeploymentResponse
+	s.Require().NoError(queryResult.Get(&state))
+
+	s.Equal(int32(0), state.State.PendingTqRegistrationPropagations,
+		"counter should remain at 0, not go negative")
+}
+
+// Test_SetCurrent_ResetsTqRegistrationCounter tests that changing the current version
+// resets the PendingTqRegistrationPropagations counter since in-flight propagations
+// are for the old routing config.
+func (s *WorkerDeploymentSuite) Test_SetCurrent_ResetsTqRegistrationCounter() {
+	s.skipBeforeVersion(TqRegistrationPropagationTracking)
+
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	var a *Activities
+	s.env.RegisterActivity(a.SyncWorkerDeploymentVersion)
+	s.env.OnActivity(a.SyncWorkerDeploymentVersion, mock.Anything, mock.Anything).Return(
+		func(ctx context.Context, args *deploymentspb.SyncVersionStateActivityArgs) (*deploymentspb.SyncVersionStateActivityResult, error) {
+			return &deploymentspb.SyncVersionStateActivityResult{
+				Summary: &deploymentspb.WorkerDeploymentVersionSummary{
+					Version: args.Version,
+				},
+			}, nil
+		},
+	)
+
+	version1 := tv.DeploymentVersionString()
+	version2 := tv.WithBuildIDNumber(2).DeploymentVersionString()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(SetCurrentVersion, version2, &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("SetCurrentVersion update should not have failed", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(result any, err error) {
+				s.Require().NoError(err)
+
+				queryResult, err := s.env.QueryWorkflow(QueryDescribeDeployment)
+				s.Require().NoError(err)
+				var state deploymentspb.QueryDescribeWorkerDeploymentResponse
+				s.Require().NoError(queryResult.Get(&state))
+
+				s.Equal(int32(0), state.State.PendingTqRegistrationPropagations,
+					"counter should be reset to 0 after SetCurrent")
+			},
+		}, &deploymentspb.SetCurrentVersionArgs{
+			Identity:                tv.ClientIdentity(),
+			Version:                 version2,
+			IgnoreMissingTaskQueues: true,
+		})
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+				version1: {Version: version1},
+				version2: {Version: version2},
+			},
+			RoutingConfig: &deploymentpb.RoutingConfig{
+				RevisionNumber: 5,
+				//nolint:staticcheck // SA1019: worker versioning v0.31
+				CurrentVersion: version1,
+				CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+					DeploymentName: tv.DeploymentSeries(),
+					BuildId:        tv.BuildID(),
+				},
+			},
+			PendingTqRegistrationPropagations: 3,
+			PropagatingRevisions:              make(map[string]*deploymentspb.PropagatingRevisions),
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_RoutingConfigUpdateState_IncludesTqRegistrationCounter tests that
+// deploymentStateToDeploymentInfo correctly derives RoutingConfigUpdateState
+// from both PropagatingRevisions and PendingTqRegistrationPropagations.
+func (s *WorkerDeploymentSuite) Test_RoutingConfigUpdateState_IncludesTqRegistrationCounter() {
+	// Test with only TQ registration propagations pending
+	info, err := s.workerDeploymentClient.deploymentStateToDeploymentInfo("test-deployment",
+		&deploymentspb.WorkerDeploymentLocalState{
+			PendingTqRegistrationPropagations: 1,
+		})
+	s.Require().NoError(err)
+	s.Equal(enumspb.ROUTING_CONFIG_UPDATE_STATE_IN_PROGRESS, info.RoutingConfigUpdateState,
+		"should be IN_PROGRESS when TQ registration propagations are pending")
+
+	// Test with both empty
+	info, err = s.workerDeploymentClient.deploymentStateToDeploymentInfo("test-deployment",
+		&deploymentspb.WorkerDeploymentLocalState{})
+	s.Require().NoError(err)
+	s.Equal(enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED, info.RoutingConfigUpdateState,
+		"should be COMPLETED when both counters are zero")
+
+	// Test with only PropagatingRevisions
+	info, err = s.workerDeploymentClient.deploymentStateToDeploymentInfo("test-deployment",
+		&deploymentspb.WorkerDeploymentLocalState{
+			PropagatingRevisions: map[string]*deploymentspb.PropagatingRevisions{
+				"build-1": {RevisionNumbers: []int64{1}},
+			},
+		})
+	s.Require().NoError(err)
+	s.Equal(enumspb.ROUTING_CONFIG_UPDATE_STATE_IN_PROGRESS, info.RoutingConfigUpdateState,
+		"should be IN_PROGRESS when PropagatingRevisions are pending")
+
+	// Test with both
+	info, err = s.workerDeploymentClient.deploymentStateToDeploymentInfo("test-deployment",
+		&deploymentspb.WorkerDeploymentLocalState{
+			PendingTqRegistrationPropagations: 2,
+			PropagatingRevisions: map[string]*deploymentspb.PropagatingRevisions{
+				"build-1": {RevisionNumbers: []int64{1}},
+			},
+		})
+	s.Require().NoError(err)
+	s.Equal(enumspb.ROUTING_CONFIG_UPDATE_STATE_IN_PROGRESS, info.RoutingConfigUpdateState,
+		"should be IN_PROGRESS when both are pending")
 }
