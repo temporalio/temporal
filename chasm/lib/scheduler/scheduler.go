@@ -754,9 +754,6 @@ func (s *Scheduler) Update(
 	}
 
 	// Update custom search attributes.
-	//
-	// TODO - we could also easily support allowing the customer to update their
-	// memo here.
 	if req.FrontendRequest.GetSearchAttributes() != nil {
 		// To preserve compatibility with V1 scheduler, we do a full replacement
 		// of search attributes, dropping any that aren't a part of the update's
@@ -776,6 +773,12 @@ func (s *Scheduler) Update(
 	// not silently lost during the migration window.
 	if s.WorkflowMigration != nil {
 		return nil, ErrMigrationPending
+	}
+
+	// Update custom memo.
+	if req.FrontendRequest.GetMemo() != nil {
+		visibility := s.Visibility.Get(ctx)
+		visibility.ReplaceCustomMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
 	}
 
 	s.Schedule = req.FrontendRequest.Schedule
