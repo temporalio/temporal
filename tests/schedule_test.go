@@ -351,6 +351,7 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	s.Equal(wt, visibilityResponse.Info.WorkflowType.Name)
 	s.False(visibilityResponse.Info.Paused)
 	assertSameRecentActions(s.T(), describeResp, visibilityResponse)
+	assertRecentActionsNoDuplicateRunIDs(s.T(), describeResp.Info.RecentActions)
 
 	// list workflows
 
@@ -818,6 +819,10 @@ func testListSchedulesReturnsWorkflowStatus(t *testing.T, newContext contextFact
 	})
 	s.NoError(err)
 	assertSameRecentActions(s.T(), descResp, listResp)
+
+	// Verify no duplicate RunIds in recent actions (regression for migration dedup bug).
+	assertRecentActionsNoDuplicateRunIDs(s.T(), descResp.Info.RecentActions)
+	assertRecentActionsNoDuplicateRunIDs(s.T(), listResp.Info.RecentActions)
 }
 
 func testUpdateIntervalTakesEffect(t *testing.T, newContext contextFactory) {
@@ -2319,5 +2324,27 @@ func assertSameRecentActions(
 				actual.Info.RecentActions[i],
 			)
 		}
+	}
+}
+
+// assertRecentActionsNoDuplicateRunIDs verifies that no two entries in
+// RecentActions refer to the same workflow run. Duplicates can occur if the
+// migration between V1 and V2 schedulers doesn't properly deduplicate entries
+// that appear in both RunningWorkflows and RecentActions.
+func assertRecentActionsNoDuplicateRunIDs(t *testing.T, actions []*schedulepb.ScheduleActionResult) {
+	t.Helper()
+	seen := make(map[string]int) // runId -> index of first occurrence
+	for i, action := range actions {
+		runID := action.GetStartWorkflowResult().GetRunId()
+		if runID == "" {
+			continue
+		}
+		if firstIdx, ok := seen[runID]; ok {
+			t.Errorf(
+				"duplicate RunId %q in RecentActions at indices %d and %d (workflowId=%q)",
+				runID, firstIdx, i, action.GetStartWorkflowResult().GetWorkflowId(),
+			)
+		}
+		seen[runID] = i
 	}
 }

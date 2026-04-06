@@ -3,7 +3,6 @@ package callback
 import (
 	"context"
 	"errors"
-	"net/http"
 	"net/http/httptrace"
 	"time"
 
@@ -20,29 +19,26 @@ import (
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 )
 
-var retryable4xxErrorTypes = []int{
-	http.StatusRequestTimeout,
-	http.StatusTooManyRequests,
-}
-
-type nexusInvocation struct {
-	nexus             *callbackspb.Callback_Nexus
+// invocableOutbound is an invocable that delivers the Nexus operation completion data to an external destination for
+// cross-namespace or cross-cell callbacks.
+type invocableOutbound struct {
+	callback          *callbackspb.Callback_Nexus
 	completion        nexusrpc.CompleteOperationOptions
 	workflowID, runID string
 	attempt           int32
 }
 
-func (n nexusInvocation) WrapError(result invocationResult, err error) error {
+func (n invocableOutbound) WrapError(result invocationResult, err error) error {
 	if retry, ok := result.(invocationResultRetry); ok {
 		return queueserrors.NewDestinationDownError(retry.err.Error(), err)
 	}
 	return err
 }
 
-func (n nexusInvocation) Invoke(
+func (n invocableOutbound) Invoke(
 	ctx context.Context,
 	ns *namespace.Namespace,
-	h InvocationTaskHandler,
+	h *invocationTaskHandler,
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
@@ -71,8 +67,8 @@ func (n nexusInvocation) Invoke(
 	// Make the call and record metrics.
 	startTime := time.Now()
 
-	n.completion.Header = n.nexus.Header
-	err := client.CompleteOperation(ctx, n.nexus.Url, n.completion)
+	n.completion.Header = n.callback.Header
+	err := client.CompleteOperation(ctx, n.callback.Url, n.completion)
 
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(taskAttr.Destination)
