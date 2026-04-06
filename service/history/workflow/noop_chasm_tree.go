@@ -68,11 +68,11 @@ func (*noopChasmTree) EachPureTask(
 	return nil
 }
 
-func (*noopChasmTree) IsStale(chasm.ComponentRef) error {
+func (*noopChasmTree) IsStale(chasm.ComponentRef, chasm.ConsistencyLevel) error {
 	return nil
 }
 
-func (*noopChasmTree) Component(chasm.Context, chasm.ComponentRef) (chasm.Component, error) {
+func (*noopChasmTree) Component(chasm.Context, chasm.ComponentRef, chasm.ConsistencyLevel) (chasm.Component, error) {
 	return nil, serviceerror.NewInternal("Component() method invoked on noop CHASM tree")
 }
 

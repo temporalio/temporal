@@ -202,7 +202,7 @@ func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 	node := s.testComponentTree()
 
 	mutableContext := NewMutableContext(context.Background(), node)
-	component, err := node.Component(mutableContext, ComponentRef{})
+	component, err := node.Component(mutableContext, ComponentRef{}, ConsistencyLevelExecution)
 	s.NoError(err)
 	testComponent := component.(*TestComponent)
 
@@ -490,7 +490,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 		s.NoError(err)
 
 		mutableContext := NewMutableContext(context.Background(), rootNode)
-		component, err := rootNode.Component(mutableContext, ComponentRef{})
+		component, err := rootNode.Component(mutableContext, ComponentRef{}, ConsistencyLevelExecution)
 		s.NoError(err)
 		testComponent := component.(*TestComponent)
 
@@ -514,7 +514,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 		s.NoError(err)
 
 		mutableContext := NewMutableContext(context.Background(), rootNode)
-		component, err := rootNode.Component(mutableContext, ComponentRef{})
+		component, err := rootNode.Component(mutableContext, ComponentRef{}, ConsistencyLevelExecution)
 		s.NoError(err)
 		testComponent := component.(*TestComponent)
 
@@ -535,7 +535,7 @@ func (s *nodeSuite) TestParentPointer_InMemory() {
 	// Additionally also test parentPtr for components inside a map.
 
 	mutableContext := NewMutableContext(context.Background(), node)
-	component, err := node.Component(mutableContext, ComponentRef{})
+	component, err := node.Component(mutableContext, ComponentRef{}, ConsistencyLevelExecution)
 	s.NoError(err)
 	testComponent := component.(*TestComponent)
 
@@ -569,7 +569,7 @@ func (s *nodeSuite) TestParentPointer_FromDB() {
 
 func (s *nodeSuite) assertParentPointer(testComponentNode *Node) {
 	chasmContext := NewContext(context.Background(), testComponentNode)
-	component, err := testComponentNode.Component(chasmContext, ComponentRef{})
+	component, err := testComponentNode.Component(chasmContext, ComponentRef{}, ConsistencyLevelExecution)
 	s.NoError(err)
 	testComponent := component.(*TestComponent)
 
@@ -611,7 +611,7 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteMiddleNode() {
 	node := s.testComponentTree()
 
 	mutableContext := NewMutableContext(context.Background(), node)
-	component, err := node.Component(mutableContext, ComponentRef{})
+	component, err := node.Component(mutableContext, ComponentRef{}, ConsistencyLevelExecution)
 	s.NoError(err)
 	testComponent := component.(*TestComponent)
 
@@ -1638,7 +1638,7 @@ func (s *nodeSuite) TestGetComponent_DetachedNodeBypassesParentValidation() {
 	ref := ComponentRef{
 		componentPath: targetPath,
 	}
-	component, err := root.Component(ctx, ref)
+	component, err := root.Component(ctx, ref, ConsistencyLevelExecution)
 	s.NoError(err)
 	s.NotNil(component)
 }
@@ -1670,7 +1670,7 @@ func (s *nodeSuite) TestGetComponent_ClosedTargetSucceeds() {
 	ref := ComponentRef{
 		componentPath: targetPath,
 	}
-	component, err := root.Component(ctx, ref)
+	component, err := root.Component(ctx, ref, ConsistencyLevelExecution)
 	s.NoError(err)
 	s.NotNil(component)
 }
@@ -1776,7 +1776,7 @@ func (s *nodeSuite) TestGetComponent() {
 			root, err := s.newTestTree(testComponentSerializedNodes())
 			s.NoError(err)
 
-			component, err := root.Component(tc.chasmContextFn(root), tc.ref)
+			component, err := root.Component(tc.chasmContextFn(root), tc.ref, ConsistencyLevelExecution)
 			s.Equal(tc.expectedErr, err)
 
 			node, ok := root.findNode(tc.ref.componentPath)
@@ -1824,7 +1824,7 @@ func (s *nodeSuite) TestRef() {
 	s.NoError(err)
 
 	chasmContext := NewContext(context.Background(), root)
-	rootComponent, err := root.Component(chasmContext, NewComponentRef[*TestComponent](executionKey))
+	rootComponent, err := root.Component(chasmContext, NewComponentRef[*TestComponent](executionKey), ConsistencyLevelExecution)
 	s.NoError(err)
 	testComponent, ok := rootComponent.(*TestComponent)
 	s.True(ok)
@@ -1979,7 +1979,7 @@ func (s *nodeSuite) TestSerializeDeserializeTask() {
 func (s *nodeSuite) TestCloseTransaction_Success() {
 	node := s.testComponentTree()
 	chasmCtx := NewMutableContext(context.Background(), node)
-	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
+	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath}, ConsistencyLevelExecution)
 	s.NoError(err)
 	tc.(*TestComponent).SubData1 = NewEmptyField[*protoMessageType]()
 	tc.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: primitives.NewUUID().String()}
@@ -2021,7 +2021,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	node := s.testComponentTree()
 
 	chasmCtx := NewMutableContext(context.Background(), node)
-	_, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
+	_, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath}, ConsistencyLevelExecution)
 	s.NoError(err)
 	_, err = node.CloseTransaction()
 	s.NoError(err)
@@ -2029,7 +2029,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, s.nodeBackend.LastUpdateWorkflowStatus())
 
 	// Test force terminate case
-	_, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
+	_, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath}, ConsistencyLevelExecution)
 	s.NoError(err)
 	node.terminated = true
 	_, err = node.CloseTransaction()
@@ -2038,7 +2038,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, s.nodeBackend.LastUpdateWorkflowStatus())
 
 	node.terminated = false
-	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
+	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath}, ConsistencyLevelExecution)
 	s.NoError(err)
 	tc.(*TestComponent).Complete(chasmCtx)
 	_, err = node.CloseTransaction()
@@ -2046,7 +2046,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, s.nodeBackend.LastUpdateWorkflowStatus())
 
-	tc, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
+	tc, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath}, ConsistencyLevelExecution)
 	s.NoError(err)
 	tc.(*TestComponent).Fail(chasmCtx)
 	_, err = node.CloseTransaction()
@@ -2059,7 +2059,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootLifecycleChan
 	node := s.testComponentTree()
 
 	chasmCtx := NewMutableContext(context.Background(), node)
-	testComponent, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
+	testComponent, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath}, ConsistencyLevelExecution)
 	s.NoError(err)
 
 	nextTransitionCount := int64(1)
@@ -2082,7 +2082,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootLifecycleChan
 	// Change ComponentData which is used as Memo. Even though lifecycle didn't change,
 	// visibility should be updated because memo changed.
 	nextTransitionCount = 2
-	testComponent, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
+	testComponent, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath}, ConsistencyLevelExecution)
 	s.NoError(err)
 	testComponent.(*TestComponent).ComponentData = &protoMessageType{
 		CreateRequestId: "some-updated-component-data",
@@ -2099,7 +2099,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootLifecycleChan
 	// Close the run, visibility should be force updated
 	// even if not explicitly updated.
 	nextTransitionCount = 3
-	testComponent, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
+	testComponent, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath}, ConsistencyLevelExecution)
 	s.NoError(err)
 	testComponent.(*TestComponent).Complete(chasmCtx)
 	s.nodeBackend.HandleUpdateWorkflowStateStatus = func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error) {
@@ -2115,7 +2115,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootLifecycleChan
 func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootSAMemoChanged() {
 	node := s.testComponentTree()
 	chasmCtx := NewMutableContext(context.Background(), node)
-	testComponent, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
+	testComponent, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath}, ConsistencyLevelExecution)
 	s.NoError(err)
 
 	nextTransitionCount := int64(1)
@@ -2137,7 +2137,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootSAMemoChanged
 	// Update root component state, which results in a change to the search attributes and memo.
 	// CHASM framework should automatically detect the change and generate a visibility task.
 	nextTransitionCount = 2
-	testComponent, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
+	testComponent, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath}, ConsistencyLevelExecution)
 	s.NoError(err)
 	testComponent.(*TestComponent).ComponentData = &protoMessageType{
 		StartTime: timestamppb.Now(),
@@ -2237,7 +2237,7 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 
 	// The idea is to mark the node as dirty by accessing it with a mutable context.
 	mutableContext := NewMutableContext(context.Background(), root)
-	_, err = root.Component(mutableContext, ComponentRef{})
+	_, err = root.Component(mutableContext, ComponentRef{}, ConsistencyLevelExecution)
 	s.NoError(err)
 
 	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
@@ -2313,7 +2313,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	s.NoError(err)
 
 	mutableContext := NewMutableContext(context.Background(), root)
-	c, err := root.Component(mutableContext, ComponentRef{})
+	c, err := root.Component(mutableContext, ComponentRef{}, ConsistencyLevelExecution)
 	s.NoError(err)
 
 	// Add a valid side effect task.
@@ -2649,7 +2649,7 @@ func (s *nodeSuite) TestTerminate() {
 	s.NoError(err)
 
 	mutableContext := NewMutableContext(context.Background(), node)
-	_, err = node.Component(mutableContext, ComponentRef{})
+	_, err = node.Component(mutableContext, ComponentRef{}, ConsistencyLevelExecution)
 	s.NoError(err)
 
 	mutations, err = node.CloseTransaction()
@@ -2739,7 +2739,7 @@ func (s *nodeSuite) testComponentTree() *Node {
 	s.IsType(&TestComponent{}, node.value)
 	s.Equal(valueStateSynced, node.valueState)
 
-	tc, err := node.Component(NewMutableContext(context.Background(), node), ComponentRef{componentPath: rootPath})
+	tc, err := node.Component(NewMutableContext(context.Background(), node), ComponentRef{componentPath: rootPath}, ConsistencyLevelExecution)
 	s.NoError(err)
 	s.Equal(valueStateNeedSyncStructure, node.valueState)
 	// Create subcomponents by assigning fields to TestComponent instance.
@@ -2763,7 +2763,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 	// Start a clean transaction.
 
 	mutableContext := NewMutableContext(context.Background(), root)
-	component, err := root.Component(mutableContext, ComponentRef{})
+	component, err := root.Component(mutableContext, ComponentRef{}, ConsistencyLevelExecution)
 	s.NoError(err)
 	testComponent := component.(*TestComponent)
 
@@ -2957,7 +2957,7 @@ func (s *nodeSuite) TestEachPureTask() {
 			[]byte("some-random-data-root"),
 		) {
 			mutableContext := NewMutableContext(context.Background(), root)
-			rootComponent, err := root.Component(mutableContext, ComponentRef{})
+			rootComponent, err := root.Component(mutableContext, ComponentRef{}, ConsistencyLevelExecution)
 			s.NoError(err)
 
 			rootComponent.(*TestComponent).SubComponent2 = NewEmptyField[*TestSubComponent2]()
@@ -2969,7 +2969,7 @@ func (s *nodeSuite) TestEachPureTask() {
 			[]byte("some-random-data-sc11-2"),
 		) {
 			mutableContext := NewMutableContext(context.Background(), root)
-			rootComponent, err := root.Component(mutableContext, ComponentRef{})
+			rootComponent, err := root.Component(mutableContext, ComponentRef{}, ConsistencyLevelExecution)
 			s.NoError(err)
 
 			rootComponent.(*TestComponent).SubComponent1 = NewEmptyField[*TestSubComponent1]()
@@ -3203,7 +3203,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 				s.NotNil(ref.validationFn)
 
 				// Accessing the Component should trigger the validationFn.
-				_, err := root.Component(chasmContext, ref)
+				_, err := root.Component(chasmContext, ref, ConsistencyLevelExecution)
 				if err != nil {
 					return err
 				}
@@ -3321,7 +3321,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
 			s.NotNil(ref.validationFn)
-			_, err := root.Component(chasmContext, ref)
+			_, err := root.Component(chasmContext, ref, ConsistencyLevelExecution)
 			return err
 		}).Times(1)
 
@@ -3342,7 +3342,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 		).DoAndReturn(func(
 			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
-			_, err := root.Component(chasmContext, ref)
+			_, err := root.Component(chasmContext, ref, ConsistencyLevelExecution)
 			return err
 		}).Times(1)
 
@@ -3362,7 +3362,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 		).DoAndReturn(func(
 			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
-			_, err := root.Component(chasmContext, ref)
+			_, err := root.Component(chasmContext, ref, ConsistencyLevelExecution)
 			return err
 		}).Times(1)
 
@@ -3390,7 +3390,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
 			s.NotNil(ref.validationFn)
-			if _, err := root.Component(chasmContext, ref); err != nil {
+			if _, err := root.Component(chasmContext, ref, ConsistencyLevelExecution); err != nil {
 				return err
 			}
 			return discardErr
@@ -3537,6 +3537,131 @@ func (s *nodeSuite) TestAndAllChildren_PathIndependence() {
 	// because append reused the backing array at depth 3→4.
 	s.Equal([]string{"A", "B", "C", "S1"}, collected["S1"])
 	s.Equal([]string{"A", "B", "C", "S2"}, collected["S2"])
+}
+
+func (s *nodeSuite) TestIsStale_ConsistencyLevels() {
+	// Transition history: failover version 1 with transitions 1-5,
+	// then failover version 2 with transitions 6-8.
+	transitionHistory := []*persistencespb.VersionedTransition{
+		{NamespaceFailoverVersion: 1, TransitionCount: 5},
+		{NamespaceFailoverVersion: 2, TransitionCount: 8},
+	}
+	s.nodeBackend = &MockNodeBackend{
+		HandleGetExecutionInfo: func() *persistencespb.WorkflowExecutionInfo {
+			return &persistencespb.WorkflowExecutionInfo{
+				TransitionHistory: transitionHistory,
+			}
+		},
+	}
+
+	root, err := s.newTestTree(testComponentSerializedNodes())
+	s.NoError(err)
+
+	validExecVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 7}
+	staleExecVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 3, TransitionCount: 1}
+	validComponentVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 3}
+	staleComponentVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 3, TransitionCount: 1}
+
+	testCases := []struct {
+		name             string
+		consistencyLevel ConsistencyLevel
+		ref              ComponentRef
+		expectErr        bool
+	}{
+		{
+			name:             "Execution - valid exec VT",
+			consistencyLevel: ConsistencyLevelExecution,
+			ref:              ComponentRef{executionLastUpdateVT: validExecVT, componentInitialVT: validComponentVT},
+		},
+		{
+			name:             "Execution - stale exec VT",
+			consistencyLevel: ConsistencyLevelExecution,
+			ref:              ComponentRef{executionLastUpdateVT: staleExecVT, componentInitialVT: validComponentVT},
+			expectErr:        true,
+		},
+		{
+			name:             "Execution - nil exec VT",
+			consistencyLevel: ConsistencyLevelExecution,
+			ref:              ComponentRef{},
+		},
+		{
+			name:             "Component - stale exec VT but valid component VT",
+			consistencyLevel: ConsistencyLevelComponent,
+			ref:              ComponentRef{executionLastUpdateVT: staleExecVT, componentInitialVT: validComponentVT},
+		},
+		{
+			name:             "Component - stale component VT",
+			consistencyLevel: ConsistencyLevelComponent,
+			ref:              ComponentRef{executionLastUpdateVT: staleExecVT, componentInitialVT: staleComponentVT},
+			expectErr:        true,
+		},
+		{
+			name:             "Component - nil component VT",
+			consistencyLevel: ConsistencyLevelComponent,
+			ref:              ComponentRef{},
+		},
+		{
+			name:             "BusinessID - both VTs stale",
+			consistencyLevel: ConsistencyLevelBusinessID,
+			ref:              ComponentRef{executionLastUpdateVT: staleExecVT, componentInitialVT: staleComponentVT},
+		},
+		{
+			name:             "BusinessID - nil VTs",
+			consistencyLevel: ConsistencyLevelBusinessID,
+			ref:              ComponentRef{},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			err := root.IsStale(tc.ref, tc.consistencyLevel)
+			if tc.expectErr {
+				s.Error(err)
+			} else {
+				s.NoError(err)
+			}
+		})
+	}
+}
+
+func (s *nodeSuite) TestGetComponent_ConsistencyLevelBusinessID() {
+	root, err := s.newTestTree(testComponentSerializedNodes())
+	s.NoError(err)
+
+	chasmContext := NewMutableContext(
+		newContextWithOperationIntent(context.Background(), OperationIntentProgress),
+		root,
+	)
+
+	s.Run("matches component by path only, ignoring mismatched initial VT", func() {
+		ref := ComponentRef{
+			componentPath: []string{"SubComponent1"},
+			// Intentionally wrong VT — would fail at ConsistencyLevelExecution/Component.
+			componentInitialVT: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 99,
+				TransitionCount:          99,
+			},
+		}
+
+		// With ConsistencyLevelExecution, this should fail due to VT mismatch.
+		_, err := root.Component(chasmContext, ref, ConsistencyLevelExecution)
+		s.Equal(errComponentNotFound, err)
+
+		// With ConsistencyLevelBusinessID, the VT mismatch is ignored.
+		component, err := root.Component(chasmContext, ref, ConsistencyLevelBusinessID)
+		s.NoError(err)
+		s.NotNil(component)
+		_, ok := component.(*TestSubComponent1)
+		s.True(ok)
+	})
+
+	s.Run("still fails when path does not exist", func() {
+		ref := ComponentRef{
+			componentPath: []string{"nonexistent"},
+		}
+		_, err := root.Component(chasmContext, ref, ConsistencyLevelBusinessID)
+		s.Equal(errComponentNotFound, err)
+	})
 }
 
 func (s *nodeSuite) newTestTree(

@@ -131,18 +131,18 @@ func (mr *MockChasmTreeMockRecorder) CloseTransaction() *gomock.Call {
 }
 
 // Component mocks base method.
-func (m *MockChasmTree) Component(arg0 chasm.Context, arg1 chasm.ComponentRef) (chasm.Component, error) {
+func (m *MockChasmTree) Component(arg0 chasm.Context, arg1 chasm.ComponentRef, arg2 chasm.ConsistencyLevel) (chasm.Component, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Component", arg0, arg1)
+	ret := m.ctrl.Call(m, "Component", arg0, arg1, arg2)
 	ret0, _ := ret[0].(chasm.Component)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Component indicates an expected call of Component.
-func (mr *MockChasmTreeMockRecorder) Component(arg0, arg1 any) *gomock.Call {
+func (mr *MockChasmTreeMockRecorder) Component(arg0, arg1, arg2 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Component", reflect.TypeOf((*MockChasmTree)(nil).Component), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Component", reflect.TypeOf((*MockChasmTree)(nil).Component), arg0, arg1, arg2)
 }
 
 // ComponentByPath mocks base method.
@@ -217,17 +217,17 @@ func (mr *MockChasmTreeMockRecorder) IsDirty() *gomock.Call {
 }
 
 // IsStale mocks base method.
-func (m *MockChasmTree) IsStale(arg0 chasm.ComponentRef) error {
+func (m *MockChasmTree) IsStale(arg0 chasm.ComponentRef, arg1 chasm.ConsistencyLevel) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsStale", arg0)
+	ret := m.ctrl.Call(m, "IsStale", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // IsStale indicates an expected call of IsStale.
-func (mr *MockChasmTreeMockRecorder) IsStale(arg0 any) *gomock.Call {
+func (mr *MockChasmTreeMockRecorder) IsStale(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStale", reflect.TypeOf((*MockChasmTree)(nil).IsStale), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStale", reflect.TypeOf((*MockChasmTree)(nil).IsStale), arg0, arg1)
 }
 
 // IsStateDirty mocks base method.
