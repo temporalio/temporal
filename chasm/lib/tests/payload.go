@@ -121,6 +121,12 @@ func (s *PayloadStore) Cancel(
 	return CancelPayloadStoreResponse{}, nil
 }
 
+func (s *PayloadStore) ContextMetadata(_ chasm.Context) map[string]string {
+	return map[string]string{
+		string(componentCtxKey): componentCtxVal,
+	}
+}
+
 func (s *PayloadStore) AddPayload(
 	mutableContext chasm.MutableContext,
 	request AddPayloadRequest,
