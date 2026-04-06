@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/softassert"
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
@@ -92,7 +93,14 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 	defer cancel()
 
 	switch e.archetypeID() {
-	case chasm.WorkflowArchetypeID, chasm.UnspecifiedArchetypeID:
+	case chasm.WorkflowArchetypeID:
+		return e.deleteWorkflowExecution(ctx)
+	case chasm.UnspecifiedArchetypeID:
+		softassert.That(e.Logger, false, "delete execution replication task has unspecified archetype ID",
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
+		)
 		return e.deleteWorkflowExecution(ctx)
 	default:
 		return e.deleteChasmExecution(ctx)
