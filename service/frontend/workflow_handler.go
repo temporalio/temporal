@@ -683,7 +683,26 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
+	if err := wh.validateTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
+		return nil, err
+	}
 	return request, nil
+}
+
+func (wh *WorkflowHandler) validateTimeSkippingConfig(
+	timeSkippingConfig *workflowpb.TimeSkippingConfig,
+	namespaceName namespace.Name,
+) error {
+	if timeSkippingConfig == nil {
+		return nil
+	}
+	if !wh.config.TimeSkippingEnabled(namespaceName.String()) {
+		return serviceerror.NewInvalidArgumentf(
+			"Time skipping is not enabled for namespace %s",
+			namespaceName,
+		)
+	}
+	return nil
 }
 
 func (wh *WorkflowHandler) unaliasedSearchAttributesFrom(
@@ -2354,6 +2373,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	if err := wh.validateLinks(namespaceName, request.GetLinks()); err != nil {
+		return nil, err
+	}
+
+	if err := wh.validateTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
 		return nil, err
 	}
 
