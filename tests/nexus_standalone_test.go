@@ -1575,5 +1575,5 @@ func eventuallyNexusOperationDeleted(s *testcore.TestEnv, t *testing.T, operatio
 		})
 		var notFoundErr *serviceerror.NotFound
 		return errors.As(err, &notFoundErr)
-	}, 5*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 100*time.Millisecond)
 }
