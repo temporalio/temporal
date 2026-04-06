@@ -53,7 +53,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkf
 
 	var wes []*commonpb.WorkflowExecution
 	// Start numExecutions workflow executions.
-	for i := 0; i < numExecutions; i++ {
+	for i := range numExecutions {
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.NewString(),
 			Namespace:    s.Namespace().String(),
@@ -197,7 +197,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_RunningWorkfl
 
 	var wes []*commonpb.WorkflowExecution
 	// Start numExecutions workflow executions.
-	for i := 0; i < numExecutions; i++ {
+	for i := range numExecutions {
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.NewString(),
 			Namespace:    s.Namespace().String(),
@@ -312,7 +312,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_JustTerminate
 
 	var wes []*commonpb.WorkflowExecution
 	// Start numExecutions workflow executions.
-	for i := 0; i < numExecutions; i++ {
+	for i := range numExecutions {
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.NewString(),
 			Namespace:    s.Namespace().String(),

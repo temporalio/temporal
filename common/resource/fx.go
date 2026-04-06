@@ -225,6 +225,7 @@ func NamespaceRegistryProvider(
 	return nsregistry.NewRegistry(
 		metadataManager,
 		clusterMetadata.IsGlobalNamespaceEnabled(),
+		clusterMetadata.GetCurrentClusterName(),
 		dynamicconfig.NamespaceCacheRefreshInterval.Get(dynamicCollection),
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection),
 		metricsHandler,
@@ -344,6 +345,8 @@ func ArchivalMetadataProvider(dc *dynamicconfig.Collection, cfg *config.Config) 
 
 func ArchiverProviderProvider(
 	cfg *config.Config,
+	customHistoryArchiverFactory provider.CustomHistoryArchiverFactory,
+	customVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory,
 	persistenceExecutionManager persistence.ExecutionManager,
 	logger log.SnTaggedLogger,
 	metricsHandler metrics.Handler,
@@ -351,6 +354,8 @@ func ArchiverProviderProvider(
 	return provider.NewArchiverProvider(
 		cfg.Archival.History.Provider,
 		cfg.Archival.Visibility.Provider,
+		customHistoryArchiverFactory,
+		customVisibilityArchiverFactory,
 		persistenceExecutionManager,
 		logger,
 		metricsHandler,

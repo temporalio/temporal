@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -76,11 +77,12 @@ type (
 		chasmVisibilityMgr        chasm.VisibilityManager
 
 		// These are routing/load balancing clients but do not do retries:
-		adminClient    adminservice.AdminServiceClient
-		frontendClient workflowservice.WorkflowServiceClient
-		operatorClient operatorservice.OperatorServiceClient
-		historyClient  historyservice.HistoryServiceClient
-		matchingClient matchingservice.MatchingServiceClient
+		adminClient     adminservice.AdminServiceClient
+		frontendClient  workflowservice.WorkflowServiceClient
+		operatorClient  operatorservice.OperatorServiceClient
+		historyClient   historyservice.HistoryServiceClient
+		matchingClient  matchingservice.MatchingServiceClient
+		schedulerClient schedulerpb.SchedulerServiceClient
 
 		dcClient                         *dynamicconfig.MemoryClient
 		testHooks                        testhooks.TestHooks
@@ -167,7 +169,7 @@ type (
 		ESClient                         esclient.Client
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor nsreplication.TaskExecutor
-		DynamicConfigOverrides           map[dynamicconfig.Key]interface{}
+		DynamicConfigOverrides           map[dynamicconfig.Key]any
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
 		CaptureMetricsHandler            *metricstest.CaptureHandler
 		// ServiceFxOptions is populated by WithFxOptionsForService.
@@ -313,6 +315,10 @@ func (c *TemporalImpl) MatchingClient() matchingservice.MatchingServiceClient {
 	return c.matchingClient
 }
 
+func (c *TemporalImpl) SchedulerClient() schedulerpb.SchedulerServiceClient {
+	return c.schedulerClient
+}
+
 func (c *TemporalImpl) DcClient() *dynamicconfig.MemoryClient {
 	return c.dcClient
 }
@@ -351,6 +357,7 @@ func (c *TemporalImpl) startFrontend() {
 	var rpcFactory common.RPCFactory
 	var historyRawClient resource.HistoryRawClient
 	var matchingRawClient resource.MatchingRawClient
+	var schedulerClient schedulerpb.SchedulerServiceClient
 	var grpcResolver *membership.GRPCResolver
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
@@ -413,7 +420,7 @@ func (c *TemporalImpl) startFrontend() {
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			frontend.Module,
-			fx.Populate(&namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient, &grpcResolver),
+			fx.Populate(&namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient, &schedulerClient, &grpcResolver),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
 			chasmFxOptions,
@@ -437,9 +444,10 @@ func (c *TemporalImpl) startFrontend() {
 	c.adminClient = adminservice.NewAdminServiceClient(connection)
 	c.operatorClient = operatorservice.NewOperatorServiceClient(connection)
 
-	// We also set the history and matching clients here, stealing them from one of the frontends.
+	// We also set the history, matching, and scheduler clients here, stealing them from one of the frontends.
 	c.historyClient = historyRawClient
 	c.matchingClient = matchingRawClient
+	c.schedulerClient = schedulerClient
 
 	// Address for SDKs
 	c.frontendMembershipAddress = grpcResolver.MakeURL(serviceName)
@@ -957,13 +965,13 @@ func sdkClientFactoryProvider(
 }
 
 func (c *TemporalImpl) overrideDynamicConfig(t *testing.T, name dynamicconfig.Key, value any) func() {
-	cleanup := c.dcClient.OverrideValue(name, value)
+	cleanup := c.dcClient.PartialOverrideValue(name, value)
 	t.Cleanup(cleanup)
 	return cleanup
 }
 
-func (c *TemporalImpl) injectHook(t *testing.T, key testhooks.Key, value any) func() {
-	cleanup := testhooks.Set(c.testHooks, key, value)
+func (c *TemporalImpl) injectHook(t *testing.T, hook testhooks.Hook, scope any) func() {
+	cleanup := hook.Apply(c.testHooks, scope)
 	t.Cleanup(cleanup)
 	return cleanup
 }

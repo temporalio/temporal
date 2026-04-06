@@ -78,6 +78,7 @@ func (t *visibilityQueueTaskExecutor) Execute(
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
+		executable.GetWorkflowID(),
 	)
 	metricsTags := []metrics.Tag{
 		namespaceTag,
@@ -367,7 +368,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	}
 
 	valid, err := validateChasmSideEffectTask(ctx, mutableState, task)
-	if err != nil || valid == nil {
+	if err != nil || !valid {
 		return err
 	}
 

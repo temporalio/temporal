@@ -34,7 +34,7 @@ func BenchmarkGolangMutex(b *testing.B) {
 
 func BenchmarkIDMutex_String(b *testing.B) {
 	identifier := "random string"
-	idLock := NewIDMutex(32, func(key interface{}) uint32 {
+	idLock := NewIDMutex(32, func(key any) uint32 {
 		id, ok := key.(string)
 		if !ok {
 			return 0
@@ -54,7 +54,7 @@ func BenchmarkIDMutex_Struct(b *testing.B) {
 		B: "some random B",
 		C: "some random C",
 	}
-	idLock := NewIDMutex(32, func(key interface{}) uint32 {
+	idLock := NewIDMutex(32, func(key any) uint32 {
 		id, ok := key.(testIdentifier)
 		if !ok {
 			return 0
@@ -70,7 +70,7 @@ func BenchmarkIDMutex_Struct(b *testing.B) {
 
 func BenchmarkIDMutex_StringConcurrent(b *testing.B) {
 	identifier := "random string"
-	idLock := NewIDMutex(32, func(key interface{}) uint32 {
+	idLock := NewIDMutex(32, func(key any) uint32 {
 		id, ok := key.(string)
 		if !ok {
 			return 0
@@ -98,7 +98,7 @@ func BenchmarkIDMutex_StringConcurrent(b *testing.B) {
 			waitGroupEnd.Done()
 		}
 
-		for i := 0; i < iteration; i++ {
+		for range iteration {
 			go fn()
 		}
 		waitGroupBegin.Done()
@@ -120,7 +120,7 @@ func (s *idMutexSuite) TearDownSuite() {
 
 func (s *idMutexSuite) SetupTest() {
 	s.numShard = 32
-	s.idMutex = NewIDMutex(s.numShard, func(key interface{}) uint32 {
+	s.idMutex = NewIDMutex(s.numShard, func(key any) uint32 {
 		id, ok := key.(string)
 		if !ok {
 			return 0
@@ -193,7 +193,7 @@ func (s *idMutexSuite) TestConcurrentAccess() {
 		waitGroupEnd.Done()
 	}
 
-	for i := 0; i < iteration; i++ {
+	for range iteration {
 		go fn()
 	}
 	waitGroupBegin.Done()

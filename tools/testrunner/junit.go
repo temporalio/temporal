@@ -183,6 +183,9 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 		var suffix string
 		if i > 0 {
 			suffix = fmt.Sprintf(" (retry %d)", i)
+			if i == len(reports)-1 {
+				suffix += " (final)"
+			}
 			prevFailures := reports[i-1].collectTestCaseFailures()
 			currCases := report.collectTestCases()
 

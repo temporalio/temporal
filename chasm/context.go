@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 )
 
 type Context interface {
@@ -19,26 +20,45 @@ type Context interface {
 	Now(Component) time.Time
 	// ExecutionKey returns the execution key for the execution the context is operating on.
 	ExecutionKey() ExecutionKey
-	// StateTransitionCount returns the number of create/update transactions in the history of this execution.
-	StateTransitionCount() int64
-	// ExecutionCloseTime returns the time when the execution was closed. An execution is closed when its root component reaches a terminal
-	// state in its lifecycle. If the component is still running (not yet closed), it returns a zero time.Time value.
-	ExecutionCloseTime() time.Time
+	// ExecutionInfo returns metadata information about the execution.
+	ExecutionInfo() ExecutionInfo
 	// Logger returns a logger tagged with execution key and other chasm framework internal information.
 	Logger() log.Logger
+	// MetricsHandler returns a metrics handler with namespace tag.
+	MetricsHandler() metrics.Handler
+	// Value returns the value associated with this context for key. The behavior is the same as context.Context.Value().
+	// Use WithContextValues RegistrableComponentOption to set key values pair for a component upon registration.
+	// Registered key-value pairs will automatically be added to the Context whenever framework accesses the component.
+	// Alternatively, use ContextWithValue() to manually set values on Context which will take precedence over registered ones.
+	Value(key any) any
 
 	// Intent() OperationIntent
 	// ComponentOptions(Component) []ComponentOption
 
+	// withValue should only be used by ContextWithValue() function, do NOT call it directly.
+	// For structs implementing this method, although the returned value has type Context,
+	// the concrete type MUST be the same concrete type as the receiver.
+	withValue(key any, value any) Context
 	structuredRef(Component) (ComponentRef, error)
-	getContext() context.Context
+	goContext() context.Context
+}
+
+type ExecutionInfo struct {
+	// StateTransitionCount is the number of create/update transactions in the history of this execution.
+	StateTransitionCount int64
+	// ApproximateStateSize is the approximate size in bytes of the persisted execution state of this execution.
+	ApproximateStateSize int
+	// CloseTime is the time when the execution was closed.
+	// An execution is closed when its root component reaches a terminal state in its lifecycle.
+	// If the component is still running (not yet closed), it returns a zero time.Time value.
+	CloseTime time.Time
 }
 
 type MutableContext interface {
 	Context
 
 	// AddTask adds a task to be emitted as part of the current transaction.
-	// The task is associated with the given component and will be invoked via the registered executor for the given task
+	// The task is associated with the given component and will be invoked via the registered handler for the given task
 	// referencing the component.
 	AddTask(Component, TaskAttributes, any)
 
@@ -112,27 +132,51 @@ func (c *immutableCtx) ExecutionKey() ExecutionKey {
 	return c.executionKey
 }
 
-func (c *immutableCtx) StateTransitionCount() int64 {
-	return c.root.backend.GetExecutionInfo().GetStateTransitionCount()
-}
+func (c *immutableCtx) ExecutionInfo() ExecutionInfo {
+	executionInfo := c.root.backend.GetExecutionInfo()
 
-func (c *immutableCtx) ExecutionCloseTime() time.Time {
-	closeTime := c.root.backend.GetExecutionInfo().GetCloseTime()
-	if closeTime == nil {
-		return time.Time{}
+	var closeTime time.Time
+	closeTimestamp := executionInfo.GetCloseTime()
+	if closeTimestamp != nil {
+		closeTime = closeTimestamp.AsTime()
 	}
-	return closeTime.AsTime()
+
+	return ExecutionInfo{
+		StateTransitionCount: executionInfo.GetStateTransitionCount(),
+		ApproximateStateSize: c.root.backend.GetApproximatePersistedSize(),
+		CloseTime:            closeTime,
+	}
 }
 
 func (c *immutableCtx) Logger() log.Logger {
 	return c.root.logger
 }
 
+func (c *immutableCtx) MetricsHandler() metrics.Handler {
+	return c.root.metricsHandler
+}
+
+func (c *immutableCtx) Value(key any) any {
+	if v := c.goContext().Value(key); v != nil {
+		return v
+	}
+
+	return c.root.registry.componentContextValue(key)
+}
+
+func (c *immutableCtx) withValue(key any, value any) Context {
+	return &immutableCtx{
+		ctx:          context.WithValue(c.goContext(), key, value),
+		root:         c.root,
+		executionKey: c.executionKey,
+	}
+}
+
 func (c *immutableCtx) structuredRef(component Component) (ComponentRef, error) {
 	return c.root.structuredRef(component)
 }
 
-func (c *immutableCtx) getContext() context.Context {
+func (c *immutableCtx) goContext() context.Context {
 	return c.ctx
 }
 
@@ -142,10 +186,10 @@ func (c *immutableCtx) getContext() context.Context {
 // [UpdateWithStartExecution], or [StartExecution] APIs.
 func NewMutableContext(
 	ctx context.Context,
-	root *Node,
+	node *Node,
 ) MutableContext {
 	return &mutableCtx{
-		immutableCtx: newContext(ctx, root),
+		immutableCtx: newContext(ctx, node),
 	}
 }
 
@@ -155,4 +199,18 @@ func (c *mutableCtx) AddTask(
 	payload any,
 ) {
 	c.root.AddTask(component, attributes, payload)
+}
+
+func (c *mutableCtx) withValue(key any, value any) Context {
+	return &mutableCtx{
+		immutableCtx: ContextWithValue(c.immutableCtx, key, value),
+	}
+}
+
+// ContextWithValue returns a new Context with the given key-value pair added.
+// Added key-value pairs will be accessible via the Value() method on the returned Context,
+// and the behavior of the key-value pair is the same as context.Context.WithValue().
+func ContextWithValue[C Context](c C, key any, value any) C {
+	//nolint:revive // unchecked-type-assertion
+	return any(c.withValue(key, value)).(C)
 }

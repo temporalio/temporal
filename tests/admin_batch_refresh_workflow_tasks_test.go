@@ -45,7 +45,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) simpleWorkflow(ctx workflow.Co
 	return "done", nil
 }
 
-func (s *AdminBatchRefreshWorkflowTasksTestSuite) createWorkflow(ctx context.Context, workflowFn interface{}) sdkclient.WorkflowRun {
+func (s *AdminBatchRefreshWorkflowTasksTestSuite) createWorkflow(ctx context.Context, workflowFn any) sdkclient.WorkflowRun {
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
 		TaskQueue: s.TaskQueue(),
@@ -60,7 +60,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	s.Worker().RegisterWorkflow(s.simpleWorkflow)
+	s.SdkWorker().RegisterWorkflow(s.simpleWorkflow)
 
 	// Create two workflows
 	workflowRun1 := s.createWorkflow(ctx, s.simpleWorkflow)
@@ -95,7 +95,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	s.Worker().RegisterWorkflow(s.simpleWorkflow)
+	s.SdkWorker().RegisterWorkflow(s.simpleWorkflow)
 
 	// Create workflows
 	workflowRun1 := s.createWorkflow(ctx, s.simpleWorkflow)
@@ -212,7 +212,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_0
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	s.Worker().RegisterWorkflow(s.simpleWorkflow)
+	s.SdkWorker().RegisterWorkflow(s.simpleWorkflow)
 
 	s.OverrideDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1)
 	s.OverrideDynamicConfig(dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace, 1)

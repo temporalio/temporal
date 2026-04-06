@@ -76,6 +76,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		nsReg := nsregistry.NewRegistry(
 			mockMeta,
 			true,
+			"active",
 			func() time.Duration { return 1 * time.Hour },
 			dynamicconfig.GetBoolPropertyFn(false),
 			metricsHandler,

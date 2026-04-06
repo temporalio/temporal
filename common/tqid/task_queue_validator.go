@@ -67,7 +67,7 @@ func NormalizeAndValidate(
 // Parameters:
 //   - taskQueue: The TaskQueue to validate and normalize. If nil, returns an error.
 //   - defaultName: Default name to use if taskQueue name is empty.
-//   - parentTaskQueue: The TaskQueue of the parent component, if any. Can be nil.
+//   - parentTaskQueue: The TaskQueue of the parent component, if any. Can be empty.
 //   - maxIDLengthLimit: Maximum allowed length for the TaskQueue name.
 //
 // Returns an error if validation fails, nil otherwise.
@@ -77,10 +77,10 @@ func NormalizeAndValidateUserDefined(
 	parentTaskQueue string,
 	maxIDLengthLimit int,
 ) error {
-	if err := normalizeAndValidate(taskQueue, defaultName, maxIDLengthLimit, false); err != nil {
+	if err := normalizeAndValidate(taskQueue, defaultName, maxIDLengthLimit, true); err != nil {
 		return err
 	}
-	// reminder: if this check goes first, taskQueue.GetName() is not ready to use directly
+	// reminder: if this check goes first, taskQueue.GetName() may not be normalized yet.
 	return primitives.CheckInternalPerNsTaskQueueAllowed(taskQueue.GetName(), parentTaskQueue)
 }
 

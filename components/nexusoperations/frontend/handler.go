@@ -47,7 +47,6 @@ const (
 )
 
 type Config struct {
-	Enabled                       dynamicconfig.BoolPropertyFn
 	MaxOperationTokenLength       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PayloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	ForwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -85,10 +84,6 @@ type completionHandler struct {
 // nolint:revive // (cyclomatic complexity) This function is long but the complexity is justified.
 func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest) (retErr error) {
 	startTime := time.Now()
-	if !h.Config.Enabled() {
-		h.preProcessErrorsCounter.Record(1)
-		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "Nexus APIs are disabled")
-	}
 	token, err := commonnexus.DecodeCallbackToken(r.HTTPRequest.Header.Get(commonnexus.CallbackTokenHeader))
 	if err != nil {
 		h.Logger.Error("failed to decode callback token", tag.Error(err))
@@ -419,7 +414,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 		ctx = c.AuthInterceptor.EnhanceContext(ctx, authInfo, claims)
 	}
 
-	err = c.AuthInterceptor.Authorize(ctx, claims, &authorization.CallTarget{
+	_, err = c.AuthInterceptor.Authorize(ctx, claims, &authorization.CallTarget{
 		APIName:   apiName,
 		Namespace: c.namespace.Name().String(),
 		Request:   request,
@@ -438,7 +433,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
-	if err := c.NamespaceValidationInterceptor.ValidateState(c.namespace, apiName); err != nil {
+	if err := c.NamespaceValidationInterceptor.ValidateState(c.namespace, apiName, c.workflowID); err != nil {
 		c.outcomeTag = metrics.OutcomeTag("invalid_namespace_state")
 		return commonnexus.ConvertGRPCError(err, false)
 	}

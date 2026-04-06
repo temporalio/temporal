@@ -490,7 +490,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	s.True(seenChildStarted)
 
 	// Run through three executions of the child workflow
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err = pollerChild.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err), tag.Counter(i))
 		s.NoError(err)
@@ -514,7 +514,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 			WorkflowId: childID,
 		},
 	})
-	s.Nil(terminateErr)
+	s.NoError(terminateErr)
 
 	// Process ChildExecution terminated event and complete parent execution
 	_, err = pollerParent.PollAndProcessWorkflowTask()
@@ -529,7 +529,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	startFilter.EarliestTime = timestamppb.New(startParentWorkflowTS)
 	startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 	var closedExecutions []*workflowpb.WorkflowExecutionInfo
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		resp, err := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 100,
@@ -944,7 +944,7 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 	// Child failure should be present in completion event
 	s.NotNil(completedEvent)
 	attrs := completedEvent.GetChildWorkflowExecutionFailedEventAttributes()
-	s.Equal(attrs.Failure.Message, "Failed attempt 3")
+	s.Equal("Failed attempt 3", attrs.Failure.Message)
 }
 
 func (s *ChildWorkflowSuite) TestStartChildWorkflowWithInternalTaskQueue_Blocked() {
@@ -1028,7 +1028,7 @@ func (s *ChildWorkflowSuite) TestStartChildWorkflowWithInternalTaskQueue_Blocked
 			foundTaskFailed = true
 			attrs := event.GetWorkflowTaskFailedEventAttributes()
 			s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, attrs.GetCause())
-			s.Contains(attrs.GetFailure().GetMessage(), "internal per namespace task queue")
+			s.Contains(attrs.GetFailure().GetMessage(), "internal per-namespace task queue")
 			break
 		}
 	}

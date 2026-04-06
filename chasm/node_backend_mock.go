@@ -18,15 +18,16 @@ import (
 // fields (thread-safe).
 type MockNodeBackend struct {
 	// Optional function overrides. If nil, methods return zero-values.
-	HandleGetExecutionState          func() *persistencespb.WorkflowExecutionState
-	HandleGetExecutionInfo           func() *persistencespb.WorkflowExecutionInfo
-	HandleGetCurrentVersion          func() int64
-	HandleNextTransitionCount        func() int64
-	HandleCurrentVersionedTransition func() *persistencespb.VersionedTransition
-	HandleGetWorkflowKey             func() definition.WorkflowKey
-	HandleUpdateWorkflowStateStatus  func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error)
-	HandleIsWorkflow                 func() bool
-	HandleGetNexusCompletion         func(ctx context.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
+	HandleGetExecutionState           func() *persistencespb.WorkflowExecutionState
+	HandleGetExecutionInfo            func() *persistencespb.WorkflowExecutionInfo
+	HandleGetApproximatePersistedSize func() int
+	HandleGetCurrentVersion           func() int64
+	HandleNextTransitionCount         func() int64
+	HandleCurrentVersionedTransition  func() *persistencespb.VersionedTransition
+	HandleGetWorkflowKey              func() definition.WorkflowKey
+	HandleUpdateWorkflowStateStatus   func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error)
+	HandleIsWorkflow                  func() bool
+	HandleGetNexusCompletion          func(ctx context.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
 
 	// Recorded calls (protected by mu).
 	mu                  sync.Mutex
@@ -50,6 +51,13 @@ func (m *MockNodeBackend) GetExecutionInfo() *persistencespb.WorkflowExecutionIn
 		return m.HandleGetExecutionInfo()
 	}
 	return &persistencespb.WorkflowExecutionInfo{}
+}
+
+func (m *MockNodeBackend) GetApproximatePersistedSize() int {
+	if m.HandleGetApproximatePersistedSize != nil {
+		return m.HandleGetApproximatePersistedSize()
+	}
+	return 0
 }
 
 func (m *MockNodeBackend) GetCurrentVersion() int64 {

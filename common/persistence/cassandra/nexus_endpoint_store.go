@@ -100,15 +100,15 @@ func (s *NexusEndpointStore) CreateOrUpdateNexusEndpoint(
 			request.LastKnownTableVersion)
 	}
 
-	previousPartitionStatus := make(map[string]interface{})
-	applied, iter, err := s.session.MapExecuteBatchCAS(batch, previousPartitionStatus)
+	row1 := make(map[string]any)
+	applied, iter, err := s.session.MapExecuteBatchCAS(batch, row1)
 
 	if err != nil {
 		return gocql.ConvertError("CreateOrUpdateNexusEndpoint", err)
 	}
 
-	previousEndpoint := make(map[string]interface{})
-	iter.MapScan(previousEndpoint)
+	row2 := make(map[string]any)
+	iter.MapScan(row2)
 
 	err = iter.Close()
 	if err != nil {
@@ -116,6 +116,23 @@ func (s *NexusEndpointStore) CreateOrUpdateNexusEndpoint(
 	}
 
 	if !applied {
+		// Classify the two CAS result rows by their "type" column. This is needed because
+		// Cassandra returns rows in clustering key order while ScyllaDB returns them in
+		// statement order.
+		var previousPartitionStatus, previousEndpoint map[string]any
+		rowType, err := getTypedFieldFromRow[int]("type", row1)
+		if err != nil {
+			return fmt.Errorf("CreateOrUpdateNexusEndpoint: error reading type from CAS result row: %w", err)
+		}
+		switch rowType {
+		case rowTypePartitionStatus:
+			previousPartitionStatus, previousEndpoint = row1, row2
+		case rowTypeNexusEndpoint:
+			previousPartitionStatus, previousEndpoint = row2, row1
+		default:
+			return fmt.Errorf("CreateOrUpdateNexusEndpoint: unexpected row type %d in CAS result", rowType)
+		}
+
 		currentTableVersion, err := getTypedFieldFromRow[int64]("version", previousPartitionStatus)
 		if err != nil {
 			return fmt.Errorf("error retrieving current table version: %w", err)
@@ -195,7 +212,7 @@ func (s *NexusEndpointStore) ListNexusEndpoints(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailablef("ListNexusEndpoints operation failed: %v", err)
+		return nil, gocql.ConvertError("ListNexusEndpoints", err)
 	}
 
 	currentTableVersion, err := s.getTableVersion(ctx)
@@ -225,17 +242,20 @@ func (s *NexusEndpointStore) DeleteNexusEndpoint(
 ) error {
 	batch := s.session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 
-	batch.Query(templateDeleteEndpointQuery,
-		rowTypeNexusEndpoint,
-		request.ID)
-
+	// Table version update must be the first statement so it is returned as the first CAS result
+	// row. CAS result row ordering differs between Cassandra (clustering key order) and ScyllaDB
+	// (statement order), but placing the type=0 partition status first satisfies both.
 	batch.Query(templateUpdateTableVersion,
 		request.LastKnownTableVersion+1,
 		rowTypePartitionStatus,
 		tableVersionEndpointID,
 		request.LastKnownTableVersion)
 
-	previousPartitionStatus := make(map[string]interface{})
+	batch.Query(templateDeleteEndpointQuery,
+		rowTypeNexusEndpoint,
+		request.ID)
+
+	previousPartitionStatus := make(map[string]any)
 	applied, iter, err := s.session.MapExecuteBatchCAS(batch, previousPartitionStatus)
 
 	if err != nil {
@@ -274,7 +294,7 @@ func (s *NexusEndpointStore) listFirstPageWithVersion(
 	query := s.session.Query(templateListEndpointsFirstPageQuery).WithContext(ctx)
 	iter := query.PageSize(request.PageSize + 1).PageState(nil).Iter() // Use PageSize+1 to account for partitionStatus row
 
-	partitionStateRow := make(map[string]interface{})
+	partitionStateRow := make(map[string]any)
 	found := iter.MapScan(partitionStateRow)
 	if !found {
 		cassErr := iter.Close()
@@ -323,9 +343,9 @@ func (s *NexusEndpointStore) getTableVersion(ctx context.Context) (int64, error)
 func (s *NexusEndpointStore) getEndpointList(iter gocql.Iter) ([]p.InternalNexusEndpoint, error) {
 	var endpoints []p.InternalNexusEndpoint
 
-	row := make(map[string]interface{})
+	row := make(map[string]any)
 	for iter.MapScan(row) {
-		id, err := getTypedFieldFromRow[interface{}]("id", row)
+		id, err := getTypedFieldFromRow[any]("id", row)
 		if err != nil {
 			return nil, err
 		}
@@ -348,7 +368,7 @@ func (s *NexusEndpointStore) getEndpointList(iter gocql.Iter) ([]p.InternalNexus
 			Data:    p.NewDataBlob(data, dataEncoding),
 		})
 
-		row = make(map[string]interface{})
+		row = make(map[string]any)
 	}
 
 	return endpoints, nil

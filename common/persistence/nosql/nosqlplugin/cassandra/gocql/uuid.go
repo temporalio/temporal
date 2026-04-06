@@ -8,13 +8,13 @@ import (
 )
 
 func UUIDToString(
-	item interface{},
+	item any,
 ) string {
 	return item.(gocql.UUID).String()
 }
 
 func UUIDsToStringSlice(
-	item interface{},
+	item any,
 ) []string {
 	uuids := item.([]gocql.UUID)
 	results := make([]string, len(uuids))

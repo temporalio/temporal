@@ -10,7 +10,7 @@ import (
 // mapCounter is not safe for concurrent use.
 type mapCounter struct {
 	m     map[string]int
-	heap  topKHeap
+	heap  []TopKEntry
 	limit int
 }
 
@@ -35,7 +35,7 @@ func (m *mapCounter) getPassWithOverflow(key string, base, inc int64) (int64, bo
 		count := max(base, prev+inc)
 		// inline simple case of updateHeap
 		m.heap[idx].Count = count
-		heap.Fix(&m.heap, idx)
+		heap.Fix(m, idx)
 		return count, false
 	}
 	// not present, fall back to full updateHeap
@@ -56,44 +56,47 @@ func (m *mapCounter) updateHeap(key string, count int64) bool {
 	if idx, ok := m.m[key]; ok {
 		// already in heap - update count and fix
 		m.heap[idx].Count = count
-		heap.Fix(&m.heap, idx)
+		heap.Fix(m, idx)
 		return false
 	}
 
 	if len(m.heap) < m.limit {
 		// heap not full - add
 		m.m[key] = len(m.heap)
-		heap.Push(&m.heap, TopKEntry{Key: key, Count: count})
+		heap.Push(m, TopKEntry{Key: key, Count: count})
 		return false
 	}
 
 	// heap is full - only add if count > min
 	if count > m.heap[0].Count {
 		// evict min
-		evicted := heap.Pop(&m.heap).(TopKEntry) // nolint:revive // unchecked-type-assertion
+		evicted := heap.Pop(m).(TopKEntry) // nolint:revive // unchecked-type-assertion
 		delete(m.m, evicted.Key)
 		// add new
 		m.m[key] = len(m.heap)
-		heap.Push(&m.heap, TopKEntry{Key: key, Count: count})
+		heap.Push(m, TopKEntry{Key: key, Count: count})
 	}
 	return true
 }
 
-// topKHeap implements heap.Interface as a min-heap (smallest count at root)
-type topKHeap []TopKEntry
-
-func (h topKHeap) Len() int           { return len(h) }
-func (h topKHeap) Less(i, j int) bool { return h[i].Count < h[j].Count }
-func (h topKHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
-
-func (h *topKHeap) Push(x any) {
-	*h = append(*h, x.(TopKEntry))
+// implements heap.Interface using m.heap
+func (m *mapCounter) Len() int           { return len(m.heap) }
+func (m *mapCounter) Less(i, j int) bool { return m.heap[i].Count < m.heap[j].Count }
+func (m *mapCounter) Swap(i, j int) {
+	m.heap[i], m.heap[j] = m.heap[j], m.heap[i]
+	// don't forget to fix the map:
+	m.m[m.heap[i].Key] = i
+	m.m[m.heap[j].Key] = j
 }
 
-func (h *topKHeap) Pop() any {
-	n := len(*h)
-	entry := (*h)[n-1]
-	(*h)[n-1] = TopKEntry{}
-	*h = (*h)[0 : n-1]
+func (m *mapCounter) Push(x any) {
+	m.heap = append(m.heap, x.(TopKEntry))
+}
+
+func (m *mapCounter) Pop() any {
+	n := len(m.heap)
+	entry := m.heap[n-1]
+	m.heap[n-1] = TopKEntry{}
+	m.heap = m.heap[0 : n-1]
 	return entry
 }

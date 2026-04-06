@@ -5,6 +5,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -44,9 +45,17 @@ func NewVisibilityQueueFactory(
 					ActiveNamespaceWeights:         params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
 					StandbyNamespaceWeights:        params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
 					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
+					ExecutionAwareSchedulerOptions: ctasks.ExecutionAwareSchedulerOptions{
+						Enabled:          params.Config.TaskSchedulerEnableExecutionQueueScheduler,
+						MaxQueues:        params.Config.TaskSchedulerExecutionQueueSchedulerMaxQueues,
+						QueueTTL:         params.Config.TaskSchedulerExecutionQueueSchedulerQueueTTL,
+						QueueConcurrency: params.Config.TaskSchedulerExecutionQueueSchedulerQueueConcurrency,
+					},
 				},
 				params.NamespaceRegistry,
 				params.Logger,
+				params.MetricsHandler,
+				params.TimeSource,
 			),
 			HostPriorityAssigner: queues.NewPriorityAssigner(
 				params.NamespaceRegistry,

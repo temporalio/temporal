@@ -321,9 +321,11 @@ func SetupNewWorkflowForRetryOrCron(
 		Attempt:                  attempt,
 		SourceVersionStamp:       sourceVersionStamp,
 		RootExecutionInfo:        rootInfo,
-		InheritedBuildId:         startAttr.InheritedBuildId,
+		InheritedBuildId:         startAttr.InheritedBuildId, //nolint:staticcheck
 		InheritedPinnedVersion:   inheritedPinnedVersion,
 		InheritedAutoUpgradeInfo: inheritedAutoUpgradeInfo,
+		// For retries, pass through the declined value from the started event directly.
+		DeclinedTargetVersionUpgrade: startAttr.GetDeclinedTargetVersionUpgrade(),
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {

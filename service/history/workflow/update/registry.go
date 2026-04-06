@@ -136,6 +136,13 @@ func WithTotalLimitSuggestCAN(f func() float64) Option {
 	}
 }
 
+// WithNamespace sets the namespace name to be used in Registry metrics and logs.
+func WithNamespace(ns string) Option {
+	return func(r *registry) {
+		r.instrumentation.namespace = ns
+	}
+}
+
 // WithLogger sets the log.Logger to be used by Registry and its Updates.
 func WithLogger(l log.Logger) Option {
 	return func(r *registry) {

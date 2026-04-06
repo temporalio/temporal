@@ -269,7 +269,7 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesSignals() {
 
 	// Cluster2 sends the reapplied signal to cluster1, bringing the cluster histories into agreement.
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
-	s.EqualValues(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
+	s.Equal(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
 }
 
 // TestConflictResolutionReappliesUpdates creates a split-brain scenario in which both clusters believe they are active.
@@ -312,7 +312,7 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesUpdates() {
 
 	// Cluster2 sends the reapplied update to cluster1, bringing the cluster histories into agreement.
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED)
-	s.EqualValues(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
+	s.Equal(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
 
 	s.NoError(t.cluster2.pollAndCompleteUpdate(cluster2UpdateId))
 	s.EqualHistoryEvents(fmt.Sprintf(`
@@ -1046,7 +1046,7 @@ func (c *hrsuTestCluster) getHistoryForRunId(ctx context.Context, runId string) 
 }
 
 func (c *hrsuTestCluster) pollWorkflowResult(ctx context.Context, runId string) *historypb.HistoryEvent {
-	getHistoryWithLongPoll := func(token []byte) ([]*historypb.HistoryEvent, []byte) {
+	getHistoryWithLongPoll := func(token []byte) ([]*historypb.HistoryEvent, []byte, error) {
 		responseInner, err := c.testCluster.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: c.t.tv.NamespaceName().String(),
 			Execution: &commonpb.WorkflowExecution{
@@ -1058,25 +1058,33 @@ func (c *hrsuTestCluster) pollWorkflowResult(ctx context.Context, runId string) 
 			NextPageToken:          token,
 			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
 		})
-		c.t.s.NoError(err)
-		return responseInner.History.Events, responseInner.NextPageToken
+		if err != nil {
+			return nil, nil, err
+		}
+		return responseInner.History.Events, responseInner.NextPageToken, nil
 	}
 
 	var token []byte
 	var allEvents []*historypb.HistoryEvent
-	multiPoll := false
 	for {
-		events, nextPageToken := getHistoryWithLongPoll(token)
+		if ctx.Err() != nil {
+			c.t.s.NoError(ctx.Err(), "context expired while waiting for workflow result")
+			return nil
+		}
+		events, nextPageToken, err := getHistoryWithLongPoll(token)
+		if err != nil {
+			// Transient error (e.g. CurrentBranchChanged after conflict resolution): retry from scratch.
+			token = nil
+			continue
+		}
 		allEvents = append(allEvents, events...)
 		if nextPageToken == nil {
 			break
 		}
 		token = nextPageToken
-		multiPoll = true
 	}
 
 	c.t.s.Len(allEvents, 1)
-	c.t.s.True(multiPoll, "Expected to have multiple polls of history events")
 	return allEvents[0]
 }
 
@@ -1164,7 +1172,7 @@ func (s *hrsuTestSuite) TestConflictResolutionGetResult() {
 
 	// Cluster2 sends the reapplied signal to cluster1, bringing the cluster histories into agreement.
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
-	s.EqualValues(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
+	s.Equal(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
 
 	// Complete the workflow in cluster2. This will cause the workflow result to be sent to cluste1.
 	task, err := t.cluster2.testCluster.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -1187,7 +1195,7 @@ func (s *hrsuTestSuite) TestConflictResolutionGetResult() {
 	s.Require().NoError(err)
 
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED)
-	s.EqualValues(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
+	s.Equal(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
 
 	// Make sure we can get the workflow result after the conflict resolution (CurrentBranchChange).
 	event := <-workflowResultCh

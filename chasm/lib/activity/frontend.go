@@ -175,13 +175,7 @@ func (h *frontendHandler) ListActivityExecutions(
 		pageSize = maxPageSize
 	}
 
-	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
 	resp, err := chasm.ListExecutions[*Activity, *emptypb.Empty](ctx, &chasm.ListExecutionsRequest{
-		NamespaceID:   namespaceID.String(),
 		NamespaceName: req.GetNamespace(),
 		PageSize:      int(pageSize),
 		NextPageToken: req.GetNextPageToken(),
@@ -233,13 +227,7 @@ func (h *frontendHandler) CountActivityExecutions(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
 	resp, err := chasm.CountExecutions[*Activity](ctx, &chasm.CountExecutionsRequest{
-		NamespaceID:   namespaceID.String(),
 		NamespaceName: req.GetNamespace(),
 		Query:         req.GetQuery(),
 	})
@@ -261,6 +249,35 @@ func (h *frontendHandler) CountActivityExecutions(
 	}, nil
 }
 
+// DeleteActivityExecution terminates and schedules a standalone activity execution for deletion.
+func (h *frontendHandler) DeleteActivityExecution(
+	ctx context.Context,
+	req *workflowservice.DeleteActivityExecutionRequest,
+) (*workflowservice.DeleteActivityExecutionResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityDisabled
+	}
+
+	if err := validateDeleteActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.DeleteActivityExecution(ctx, &activitypb.DeleteActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DeleteActivityExecutionResponse{}, nil
+}
+
 // TerminateActivityExecution terminates a standalone activity execution
 func (h *frontendHandler) TerminateActivityExecution(
 	ctx context.Context,
@@ -277,8 +294,6 @@ func (h *frontendHandler) TerminateActivityExecution(
 	}
 
 	if req.GetRequestId() == "" {
-		// Since this mutates the request, we clone it first so that any retries use the original request.
-		req = common.CloneProto(req)
 		req.RequestId = uuid.NewString()
 	}
 
@@ -316,8 +331,6 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 	}
 
 	if req.GetRequestId() == "" {
-		// Since this mutates the request, we clone it first so that any retries use the original request.
-		req = common.CloneProto(req)
 		req.RequestId = uuid.NewString()
 	}
 
@@ -345,6 +358,9 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	req *workflowservice.StartActivityExecutionRequest,
 	namespaceID namespace.ID,
 ) (*workflowservice.StartActivityExecutionRequest, error) {
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	}
 	// Since validation includes mutation of the request, we clone it first so that any retries use the original request.
 	req = common.CloneProto(req)
 	activityType := req.ActivityType.GetName()
@@ -354,7 +370,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 
 	opts := activityOptionsFromStartRequest(req)
-	err := ValidateAndNormalizeActivityAttributes(
+	err := ValidateAndNormalizeStandaloneActivity(
 		req.ActivityId,
 		activityType,
 		h.config.DefaultActivityRetryPolicy,
@@ -383,10 +399,6 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 func (h *frontendHandler) validateAndNormalizeStartActivityExecutionRequest(
 	req *workflowservice.StartActivityExecutionRequest,
 ) error {
-	if req.GetRequestId() == "" {
-		req.RequestId = uuid.NewString()
-	}
-
 	maxIDLengthLimit := h.config.MaxIDLengthLimit()
 
 	if len(req.GetRequestId()) > maxIDLengthLimit {

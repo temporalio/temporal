@@ -294,7 +294,7 @@ func (s *taskFetcherSuite) TestConcurrentFetchAndProcess_Success() {
 
 	waitGroup := sync.WaitGroup{}
 	waitGroup.Add(numShards)
-	for i := 0; i < numShards; i++ {
+	for i := range numShards {
 		shardID := int32(i)
 		go func() {
 			defer waitGroup.Done()
@@ -338,7 +338,7 @@ func (s *taskFetcherSuite) TestConcurrentFetchAndProcess_Error() {
 
 	waitGroup := sync.WaitGroup{}
 	waitGroup.Add(numShards)
-	for i := 0; i < numShards; i++ {
+	for i := range numShards {
 		shardID := int32(i)
 		go func() {
 			defer waitGroup.Done()
@@ -372,7 +372,7 @@ func newGetReplicationMessagesRequestMatcher(
 	}
 }
 
-func (m *getReplicationMessagesRequestMatcher) Matches(x interface{}) bool {
+func (m *getReplicationMessagesRequestMatcher) Matches(x any) bool {
 	req, ok := x.(*adminservice.GetReplicationMessagesRequest)
 	if !ok {
 		return false

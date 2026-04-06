@@ -7,36 +7,36 @@ import (
 	"go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
 )
 
-type (
-	PayloadTTLPureTaskExecutor  struct{}
-	PayloadTTLPureTaskValidator struct{}
-)
+type PayloadTTLPureTaskHandler struct{ chasm.PureTaskHandlerBase }
 
-func (e *PayloadTTLPureTaskExecutor) Execute(
+func (h *PayloadTTLPureTaskHandler) Execute(
 	mutableContext chasm.MutableContext,
 	store *PayloadStore,
 	_ chasm.TaskAttributes,
 	task *testspb.TestPayloadTTLPureTask,
 ) error {
+	if err := assertContextValue(mutableContext); err != nil {
+		return err
+	}
+
 	_, err := store.RemovePayload(mutableContext, task.PayloadKey)
 	return err
 }
 
-func (v *PayloadTTLPureTaskValidator) Validate(
-	_ chasm.Context,
+func (h *PayloadTTLPureTaskHandler) Validate(
+	chasmContext chasm.Context,
 	store *PayloadStore,
 	attributes chasm.TaskAttributes,
 	task *testspb.TestPayloadTTLPureTask,
 ) (bool, error) {
-	return validateTask(store, attributes, task.PayloadKey)
+	return validateTask(chasmContext, store, attributes, task.PayloadKey)
 }
 
-type (
-	PayloadTTLSideEffectTaskExecutor  struct{}
-	PayloadTTLSideEffectTaskValidator struct{}
-)
+type PayloadTTLSideEffectTaskHandler struct {
+	chasm.SideEffectTaskHandlerBase[*testspb.TestPayloadTTLSideEffectTask]
+}
 
-func (e *PayloadTTLSideEffectTaskExecutor) Execute(
+func (h *PayloadTTLSideEffectTaskHandler) Execute(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	_ chasm.TaskAttributes,
@@ -51,20 +51,25 @@ func (e *PayloadTTLSideEffectTaskExecutor) Execute(
 	return err
 }
 
-func (v *PayloadTTLSideEffectTaskValidator) Validate(
-	_ chasm.Context,
+func (h *PayloadTTLSideEffectTaskHandler) Validate(
+	chasmContext chasm.Context,
 	store *PayloadStore,
 	attributes chasm.TaskAttributes,
 	task *testspb.TestPayloadTTLSideEffectTask,
 ) (bool, error) {
-	return validateTask(store, attributes, task.PayloadKey)
+	return validateTask(chasmContext, store, attributes, task.PayloadKey)
 }
 
 func validateTask(
+	chasmContext chasm.Context,
 	store *PayloadStore,
 	attributes chasm.TaskAttributes,
 	payloadKey string,
 ) (bool, error) {
+	if err := assertContextValue(chasmContext); err != nil {
+		return false, err
+	}
+
 	expirationTime, ok := store.State.ExpirationTimes[payloadKey]
 	if !ok {
 		return false, nil

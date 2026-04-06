@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -55,7 +56,6 @@ import (
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
@@ -380,9 +380,7 @@ func NewMutableState(
 		ExecutionStats:         &persistencespb.ExecutionStats{HistorySize: 0},
 		SubStateMachinesByType: make(map[string]*persistencespb.StateMachineMap),
 	}
-	if s.config.EnableNexus() {
-		s.executionInfo.TaskGenerationShardClockTimestamp = shard.CurrentVectorClock().GetClock()
-	}
+	s.executionInfo.TaskGenerationShardClockTimestamp = shard.CurrentVectorClock().GetClock()
 	s.approximateSize += s.executionInfo.Size()
 
 	s.executionState = &persistencespb.WorkflowExecutionState{
@@ -415,6 +413,7 @@ func NewMutableState(
 			s,
 			chasm.DefaultPathEncoder,
 			logger,
+			shard.GetMetricsHandler().WithTags(metrics.NamespaceTag(namespaceName)),
 		)
 	}
 
@@ -562,6 +561,7 @@ func NewMutableStateFromDB(
 			mutableState,
 			chasm.DefaultPathEncoder,
 			mutableState.logger, // this logger is tagged with execution key.
+			shard.GetMetricsHandler().WithTags(metrics.NamespaceTag(namespaceEntry.Name().String())),
 		)
 		if err != nil {
 			return nil, err
@@ -2597,12 +2597,13 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		ContinuedFailure:       command.GetFailure(),
 		ContinueAsNewInitiator: command.Initiator,
 		// enforce minimal interval between runs to prevent tight loop continue as new spin.
-		FirstWorkflowTaskBackoff: previousExecutionState.ContinueAsNewMinBackoff(command.BackoffStartInterval),
-		SourceVersionStamp:       sourceVersionStamp,
-		RootExecutionInfo:        rootExecutionInfo,
-		InheritedBuildId:         inheritedBuildId,
-		InheritedPinnedVersion:   inheritedPinnedVersion,
-		VersioningOverride:       pinnedOverride,
+		FirstWorkflowTaskBackoff:     previousExecutionState.ContinueAsNewMinBackoff(command.BackoffStartInterval),
+		SourceVersionStamp:           sourceVersionStamp,
+		RootExecutionInfo:            rootExecutionInfo,
+		InheritedBuildId:             inheritedBuildId,
+		InheritedPinnedVersion:       inheritedPinnedVersion,
+		VersioningOverride:           pinnedOverride,
+		DeclinedTargetVersionUpgrade: computeDeclinedTargetVersionUpgrade(previousExecutionInfo),
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -2648,6 +2649,20 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		),
 	).Record(1)
 	return event, nil
+}
+
+// computeDeclinedTargetVersionUpgrade determines what declined-upgrade value to
+// pass to the next run at continue-as-new time:
+//   - If the current run was signaled about a target change (last_notified is set),
+//     that becomes the declined value (the SDK saw it and chose not to upgrade).
+//   - Otherwise, preserve the existing declined value from a prior CaN chain.
+func computeDeclinedTargetVersionUpgrade(info *persistencespb.WorkflowExecutionInfo) *historypb.DeclinedTargetVersionUpgrade {
+	if lastNotified := info.GetLastNotifiedTargetVersion(); lastNotified != nil {
+		return &historypb.DeclinedTargetVersionUpgrade{
+			DeploymentVersion: lastNotified.GetDeploymentVersion(),
+		}
+	}
+	return info.GetDeclinedTargetVersionUpgrade()
 }
 
 func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration {
@@ -2927,6 +2942,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		}
 		ms.executionInfo.VersioningInfo.DeploymentVersion = event.GetInheritedPinnedVersion()
 		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
+	}
+
+	// If the workflow inherited a pinned version from CaN/retry, set the declined
+	// target version upgrade from the started event. This is the same public API
+	// type, so no conversion needed.
+	if event.GetContinuedExecutionRunId() != "" && event.GetInheritedPinnedVersion() != nil {
+		ms.executionInfo.DeclinedTargetVersionUpgrade = event.GetDeclinedTargetVersionUpgrade()
 	}
 
 	// Populate the versioningInfo if the inheritedAutoUpgradeInfo is present.
@@ -3298,7 +3320,7 @@ func (ms *MutableStateImpl) updateBinaryChecksumSearchAttribute() error {
 			recentBinaryChecksums = append(recentBinaryChecksums, rp.BinaryChecksum)
 		}
 	}
-	checksumsPayload, err := searchattribute.EncodeValue(recentBinaryChecksums, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	checksumsPayload, err := sadefs.EncodeValue(recentBinaryChecksums, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 	if err != nil {
 		return err
 	}
@@ -3494,7 +3516,7 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 	if !found {
 		return []string{}, nil
 	}
-	decoded, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	decoded, err := sadefs.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
 	if err != nil {
 		return nil, err
 	}
@@ -3517,7 +3539,7 @@ func (ms *MutableStateImpl) loadSearchAttributeString(saName string) (string, er
 	if !found {
 		return "", nil
 	}
-	decoded, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD, false)
+	decoded, err := sadefs.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD, false)
 	if err != nil {
 		return "", err
 	}
@@ -3540,7 +3562,7 @@ func (ms *MutableStateImpl) loadUsedDeploymentVersions() ([]string, error) {
 	if !found {
 		return []string{}, nil
 	}
-	decoded, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	decoded, err := sadefs.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
 	if err != nil {
 		return nil, err
 	}
@@ -3643,7 +3665,7 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 		hasUnversionedOrAssigned = worker_versioning.IsUnversionedOrAssignedBuildIdSearchAttribute(buildIds[0])
 	}
 	for {
-		saPayload, err := searchattribute.EncodeValue(buildIds, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+		saPayload, err := sadefs.EncodeValue(buildIds, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 		if err != nil {
 			return err
 		}
@@ -3671,7 +3693,7 @@ func (ms *MutableStateImpl) saveUsedDeploymentVersions(usedDeploymentVersions []
 	}
 
 	for {
-		saPayload, err := searchattribute.EncodeValue(usedDeploymentVersions, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+		saPayload, err := sadefs.EncodeValue(usedDeploymentVersions, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 		if err != nil {
 			return err
 		}
@@ -3699,7 +3721,7 @@ func (ms *MutableStateImpl) saveDeploymentSearchAttributes(deployment, version, 
 	if deployment == "" {
 		saPayloads[sadefs.TemporalWorkerDeployment] = nil
 	} else {
-		deploymentPayload, err := searchattribute.EncodeValue(deployment, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+		deploymentPayload, err := sadefs.EncodeValue(deployment, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 		if err != nil {
 			return err
 		}
@@ -3711,7 +3733,7 @@ func (ms *MutableStateImpl) saveDeploymentSearchAttributes(deployment, version, 
 		saPayloads[sadefs.TemporalWorkerDeploymentVersion] = nil
 	} else {
 		saPayloads[sadefs.TemporalWorkerDeploymentVersion] = nil
-		versionPayload, err := searchattribute.EncodeValue(version, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+		versionPayload, err := sadefs.EncodeValue(version, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 		if err != nil {
 			return err
 		}
@@ -3722,7 +3744,7 @@ func (ms *MutableStateImpl) saveDeploymentSearchAttributes(deployment, version, 
 	if behavior == "" {
 		saPayloads[sadefs.TemporalWorkflowVersioningBehavior] = nil
 	} else {
-		behaviorPayload, err := searchattribute.EncodeValue(behavior, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+		behaviorPayload, err := sadefs.EncodeValue(behavior, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 		if err != nil {
 			return err
 		}
@@ -4426,7 +4448,7 @@ func (ms *MutableStateImpl) AddActivityTaskCanceledEvent(
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowScheduledEventID(scheduledEventID),
-			tag.WorkflowActivityID(ai.ActivityId),
+			tag.ActivityID(ai.ActivityId),
 			tag.WorkflowStartedEventID(ai.StartedEventId))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -6430,7 +6452,7 @@ func (ms *MutableStateImpl) buildTemporalPauseInfoEntries() []string {
 func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 	allEntries := ms.buildTemporalPauseInfoEntries()
 
-	pauseInfoPayload, err := searchattribute.EncodeValue(allEntries, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	pauseInfoPayload, err := sadefs.EncodeValue(allEntries, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 	if err != nil {
 		return err
 	}
@@ -6463,7 +6485,7 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 		}
 	}
 
-	reportedProblemsPayload, err := searchattribute.EncodeValue(reportedProblems, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	reportedProblemsPayload, err := sadefs.EncodeValue(reportedProblems, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 	if err != nil {
 		return err
 	}
@@ -6473,7 +6495,7 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
 
-	decodedA, err := searchattribute.DecodeValue(exeInfo.SearchAttributes[sadefs.TemporalReportedProblems], enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
+	decodedA, err := sadefs.DecodeValue(exeInfo.SearchAttributes[sadefs.TemporalReportedProblems], enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 	if err != nil {
 		return err
 	}
@@ -6539,7 +6561,7 @@ func (ms *MutableStateImpl) decodeReportedProblems(p *commonpb.Payload) []string
 		return nil
 	}
 
-	decoded, err := searchattribute.DecodeValue(p, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
+	decoded, err := sadefs.DecodeValue(p, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 	if err != nil {
 		ms.logger.Error("Failed to decode TemporalReportedProblems payload for logging",
 			tag.Error(err))
@@ -6680,6 +6702,12 @@ func (ms *MutableStateImpl) AddTasks(
 ) {
 	now := ms.timeSource.Now()
 	for _, task := range newTasks {
+		if chasmTask, ok := task.(*tasks.ChasmTask); ok &&
+			chasmTask.GetCategory() == tasks.CategoryVisibility &&
+			ms.stateInDB == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+			softassert.Fail(ms.logger, "CHASM visibility task added on already-closed execution")
+		}
+
 		category := task.GetCategory()
 		if category.Type() == tasks.CategoryTypeScheduled &&
 			task.GetVisibilityTime().Sub(now) > maxScheduledTaskDuration {
@@ -7067,6 +7095,27 @@ func (ms *MutableStateImpl) closeTransaction(
 	workflowEventsSeq, eventBatches, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
 	if err != nil {
 		return closeTransactionResult{}, err
+	}
+
+	// Stamp events with the caller's principal. Only do this on the active
+	// cluster — standby (passive) replays events that were already stamped by
+	// the active side, and we must not overwrite those principals.
+	if transactionPolicy == historyi.TransactionPolicyActive {
+		principal := headers.GetPrincipal(ctx)
+		for _, we := range workflowEventsSeq {
+			for _, event := range we.Events {
+				// Skip events that already have a principal. Those are previously
+				// buffered events (e.g., signals) that were stamped when originally
+				// created and are now being flushed into history by a different caller
+				// (e.g., the worker completing a workflow task).
+				if event.Principal == nil {
+					event.Principal = principal
+				}
+			}
+		}
+		for _, event := range bufferEvents {
+			event.Principal = principal
+		}
 	}
 
 	// CloseTransaction() on chasmTree may update execution state & status,
@@ -7869,7 +7918,7 @@ func (ms *MutableStateImpl) dirtyHSMToReplicationTask(
 			return emptyTasks
 		}
 
-		// HSM() contains children also implies Nexus is enabled
+		// Skip if there are no HSM children (no outbound tasks to generate)
 		if len(ms.HSM().InternalRepr().Children) == 0 {
 			return emptyTasks
 		}
@@ -8740,12 +8789,12 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 		}
 	}
 
-	doNotSync := func(v any) []interface{} {
+	doNotSync := func(v any) []any {
 		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
 		if !ok || info == nil {
 			return nil
 		}
-		ignoreFields := []interface{}{
+		ignoreFields := []any{
 			&info.WorkflowTaskVersion,
 			&info.WorkflowTaskScheduledEventId,
 			&info.WorkflowTaskStartedEventId,

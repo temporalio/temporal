@@ -131,7 +131,7 @@ func TestShardAgnosticConnectionStrategy(t *testing.T) {
 				rpcFactory,
 				time.Second,
 			)
-			for i := 0; i < 3; i++ {
+			for range 3 {
 				err := tc.fn(client)
 				require.NoError(t, err)
 			}

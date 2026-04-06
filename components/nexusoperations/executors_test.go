@@ -239,6 +239,7 @@ func TestProcessInvocationTask(t *testing.T) {
 								Message: "cause",
 								FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
 									ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+										Type: "NexusFailure",
 										Details: &commonpb.Payloads{
 											Payloads: []*commonpb.Payload{
 												mustToPayload(t, nexus.Failure{
@@ -296,6 +297,7 @@ func TestProcessInvocationTask(t *testing.T) {
 								Message: "cause",
 								FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
 									ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+										Type: "NexusFailure",
 										Details: &commonpb.Payloads{
 											Payloads: []*commonpb.Payload{
 												mustToPayload(t, nexus.Failure{
@@ -579,7 +581,6 @@ func TestProcessInvocationTask(t *testing.T) {
 			}
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 				Config: &nexusoperations.Config{
-					Enabled:                 dynamicconfig.GetBoolPropertyFn(true),
 					RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 					MaxOperationTokenLength: dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
 					MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
@@ -1015,7 +1016,6 @@ func TestProcessCancelationTask(t *testing.T) {
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 				Config: &nexusoperations.Config{
-					Enabled:                             dynamicconfig.GetBoolPropertyFn(true),
 					RequestTimeout:                      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 					MinRequestTimeout:                   dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 					RecordCancelRequestCompletionEvents: dynamicconfig.GetBoolPropertyFn(true),
@@ -1094,7 +1094,6 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 		Config: &nexusoperations.Config{
-			Enabled:                 dynamicconfig.GetBoolPropertyFn(true),
 			RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
 			UseNewFailureWireFormat: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 			RetryPolicy: func() backoff.RetryPolicy {
@@ -1303,7 +1302,6 @@ func TestProcessCancelationTask_SystemEndpoint(t *testing.T) {
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 				Config: &nexusoperations.Config{
-					Enabled:                             dynamicconfig.GetBoolPropertyFn(true),
 					RequestTimeout:                      dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
 					MinRequestTimeout:                   dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 					RecordCancelRequestCompletionEvents: dynamicconfig.GetBoolPropertyFn(true),
@@ -1688,7 +1686,6 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 				Config: &nexusoperations.Config{
-					Enabled:                 dynamicconfig.GetBoolPropertyFn(true),
 					RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
 					MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 					PayloadSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),

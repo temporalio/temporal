@@ -32,6 +32,7 @@ jobs:
           single-arch: amd64
 
       - name: Build Docker images
+        id: build-docker
         uses: ./.github/actions/build-docker-images
         with:
           push: false
@@ -39,24 +40,13 @@ jobs:
           platform: linux/amd64
           load: true
 
-      - name: Get Docker image tag
-        id: image-tag
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const ref = context.ref.replace('refs/heads/', '').replace('refs/tags/', '');
-            const branchName = `branch-${ref}`;
-            let safeTag = branchName.replace(/[^a-zA-Z0-9._-]/g, '-');
-            safeTag = safeTag.toLowerCase();
-            safeTag = safeTag.replace(/^[^a-z0-9]+/, '');
-            safeTag = safeTag.substring(0, 128);
-            core.setOutput('tag', safeTag);
-
       - name: Save Docker image as artifact
+        env:
+          BRANCH_TAG: ${{ steps.build-docker.outputs.branch-tag }}
         run: |
-          docker save temporaliotest/server:${{ steps.image-tag.outputs.tag }} -o /tmp/temporal-server.tar
-          docker save temporaliotest/admin-tools:${{ steps.image-tag.outputs.tag }} -o /tmp/temporal-admin-tools.tar
-          echo ${{ steps.image-tag.outputs.tag }} > /tmp/image_tag
+          docker save "temporaliotest/server:${BRANCH_TAG}" -o /tmp/temporal-server.tar
+          docker save "temporaliotest/admin-tools:${BRANCH_TAG}" -o /tmp/temporal-admin-tools.tar
+          echo "${BRANCH_TAG}" > /tmp/image_tag
 
       - name: Prepare artifact
         working-directory: ${{ github.workspace }}
@@ -66,7 +56,7 @@ jobs:
           cp ./develop/docker-compose/docker-compose.yml /tmp/docker-compose.yml
 
       - name: Upload Docker artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: temporal-server-docker
           path: |
@@ -134,6 +124,14 @@ jobs:
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
 
+  feature-tests-ruby:
+    needs: build-docker-image
+    uses: temporalio/features/.github/workflows/ruby.yaml@main
+    with:
+      version: __latest_features_docker_image__
+      version-is-repo-ref: false
+      docker-image-artifact-name: temporal-server-docker
+
   feature-tests-status:
     name: Tests Status
     needs:
@@ -143,6 +141,7 @@ jobs:
       - feature-tests-python
       - feature-tests-java
       - feature-tests-dotnet
+      - feature-tests-ruby
     runs-on: ubuntu-latest
     if: always()
     env:

@@ -506,6 +506,9 @@ func (tm *priTaskMatcher) AddTask(task *internalTask) error {
 }
 
 func (tm *priTaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
+	if tm.config.EmitTaskDispatchLatencyAtPoll() {
+		return // metric will be emitted at poll response
+	}
 	if task.event.Data.CreateTime == nil {
 		return // should not happen but for safety
 	}
