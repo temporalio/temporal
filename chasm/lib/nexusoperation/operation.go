@@ -1,11 +1,15 @@
 package nexusoperation
 
 import (
+	"fmt"
+
+	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
@@ -18,6 +22,16 @@ var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancel
 // ErrOperationAlreadyCompleted is returned when trying to cancel an operation that has already completed.
 var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation already completed")
 
+// InvocationData contains data needed to invoke a Nexus operation.
+type InvocationData struct {
+	// Input is the operation input payload.
+	Input *commonpb.Payload
+	// Header contains the Nexus headers for the operation.
+	Header map[string]string
+	// NexusLink is the link to the caller that scheduled this operation.
+	NexusLink nexus.Link
+}
+
 // OperationStore defines the interface that must be implemented by any parent component that wants to manage Nexus operations.
 // It's the responsibility of the parrent component to apply the appropriate state transitions to the operation.
 type OperationStore interface {
@@ -26,6 +40,8 @@ type OperationStore interface {
 	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation, result *commonpb.Payload, links []*commonpb.Link) error
+	// NexusOperationInvocationData loads invocation data (Input, Header, NexusLink) from the scheduled history event.
+	NexusOperationInvocationData(ctx chasm.Context, operation *Operation) (InvocationData, error)
 }
 
 // Operation is a CHASM component that represents a Nexus operation.
@@ -98,7 +114,7 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) erro
 }
 
 // OnStarted applies the started transition or delegates to the store if one is present.
-func (o *Operation) OnStarted(ctx chasm.MutableContext, _ *Operation, operationToken string, links []*commonpb.Link) error {
+func (o *Operation) OnStarted(ctx chasm.MutableContext, operationToken string, links []*commonpb.Link) error {
 	store, ok := o.Store.TryGet(ctx)
 	if ok {
 		return store.OnNexusOperationStarted(ctx, o, operationToken, links)
@@ -109,7 +125,7 @@ func (o *Operation) OnStarted(ctx chasm.MutableContext, _ *Operation, operationT
 }
 
 // OnCompleted applies the succeeded transition or delegates to the store if one is present.
-func (o *Operation) OnCompleted(ctx chasm.MutableContext, _ *Operation, result *commonpb.Payload, links []*commonpb.Link) error {
+func (o *Operation) OnCompleted(ctx chasm.MutableContext, result *commonpb.Payload, links []*commonpb.Link) error {
 	store, ok := o.Store.TryGet(ctx)
 	if ok {
 		return store.OnNexusOperationCompleted(ctx, o, result, links)
@@ -118,7 +134,7 @@ func (o *Operation) OnCompleted(ctx chasm.MutableContext, _ *Operation, result *
 }
 
 // OnFailed applies the failed transition or delegates to the store if one is present.
-func (o *Operation) OnFailed(ctx chasm.MutableContext, _ *Operation, cause *failurepb.Failure) error {
+func (o *Operation) OnFailed(ctx chasm.MutableContext, cause *failurepb.Failure) error {
 	store, ok := o.Store.TryGet(ctx)
 	if ok {
 		return store.OnNexusOperationFailed(ctx, o, cause)
@@ -127,7 +143,7 @@ func (o *Operation) OnFailed(ctx chasm.MutableContext, _ *Operation, cause *fail
 }
 
 // OnCancelled applies the canceled transition or delegates to the store if one is present.
-func (o *Operation) OnCancelled(ctx chasm.MutableContext, _ *Operation, cause *failurepb.Failure) error {
+func (o *Operation) OnCancelled(ctx chasm.MutableContext, cause *failurepb.Failure) error {
 	store, ok := o.Store.TryGet(ctx)
 	if ok {
 		return store.OnNexusOperationCancelled(ctx, o, cause)
@@ -136,10 +152,84 @@ func (o *Operation) OnCancelled(ctx chasm.MutableContext, _ *Operation, cause *f
 }
 
 // OnTimedOut applies the timed out transition or delegates to the store if one is present.
-func (o *Operation) OnTimedOut(ctx chasm.MutableContext, _ *Operation, cause *failurepb.Failure) error {
+func (o *Operation) OnTimedOut(ctx chasm.MutableContext, cause *failurepb.Failure) error {
 	store, ok := o.Store.TryGet(ctx)
 	if ok {
 		return store.OnNexusOperationTimedOut(ctx, o, cause)
 	}
 	return TransitionTimedOut.Apply(o, ctx, EventTimedOut{})
+}
+
+// loadStartArgs is a ReadComponent callback that loads the start arguments from the operation.
+func (o *Operation) loadStartArgs(
+	ctx chasm.Context,
+	_ chasm.NoValue,
+) (startArgs, error) {
+	store, ok := o.Store.TryGet(ctx)
+	if !ok {
+		// TODO: For standalone operations, load invocation data from the operation state.
+		return startArgs{}, serviceerror.NewInternal("no store available to load invocation data")
+	}
+	invocationData, err := store.NexusOperationInvocationData(ctx, o)
+	if err != nil {
+		return startArgs{}, err
+	}
+
+	serializedRef, err := ctx.Ref(o)
+	if err != nil {
+		return startArgs{}, err
+	}
+
+	return startArgs{
+		endpointName:           o.GetEndpoint(),
+		endpointID:             o.GetEndpointId(),
+		service:                o.GetService(),
+		operation:              o.GetOperation(),
+		requestID:              o.GetRequestId(),
+		currentTime:            ctx.Now(o),
+		scheduledTime:          o.GetScheduledTime().AsTime(),
+		scheduleToCloseTimeout: o.GetScheduleToCloseTimeout().AsDuration(),
+		scheduleToStartTimeout: o.GetScheduleToStartTimeout().AsDuration(),
+		startToCloseTimeout:    o.GetStartToCloseTimeout().AsDuration(),
+		payload:                invocationData.Input,
+		header:                 invocationData.Header,
+		nexusLink:              invocationData.NexusLink,
+		serializedRef:          serializedRef,
+	}, nil
+}
+
+// saveResult is an UpdateComponent callback that saves the invocation outcome.
+func (o *Operation) saveResult(
+	ctx chasm.MutableContext,
+	input saveResultInput,
+) (chasm.NoValue, error) {
+	switch r := input.result.(type) {
+	case invocationResultOK:
+		if r.response.Pending != nil {
+			return nil, o.OnStarted(ctx, r.response.Pending.Token, r.links)
+		}
+		return nil, o.OnCompleted(ctx, r.response.Successful, r.links)
+	case invocationResultFail:
+		return nil, o.OnFailed(ctx, r.failure)
+	case invocationResultCanceled:
+		return nil, o.OnCancelled(ctx, r.failure)
+	case invocationResultRetry:
+		return nil, transitionAttemptFailed.Apply(o, ctx, EventAttemptFailed{
+			Failure:     r.failure,
+			RetryPolicy: input.retryPolicy(),
+		})
+	case invocationResultTimeout:
+		return nil, o.OnTimedOut(ctx, &failurepb.Failure{
+			Message: "operation timed out",
+			FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: r.timeoutType,
+				},
+			},
+		})
+	default:
+		return nil, queueserrors.NewUnprocessableTaskError(
+			fmt.Sprintf("unrecognized invocation result %T", input.result),
+		)
+	}
 }

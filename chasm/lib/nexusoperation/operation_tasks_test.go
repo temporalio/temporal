@@ -5,9 +5,93 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 )
+
+func TestInvocationTaskHandler_Validate(t *testing.T) {
+	testCases := []struct {
+		name        string
+		status      nexusoperationpb.OperationStatus
+		opAttempt   int32
+		taskAttempt int32
+		expected    bool
+		expectErr   bool
+	}{
+		{
+			name:        "valid when scheduled and attempt matches",
+			status:      nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+			opAttempt:   1,
+			taskAttempt: 1,
+			expected:    true,
+		},
+		{
+			name:        "invalid when scheduled but attempt mismatches",
+			status:      nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+			opAttempt:   2,
+			taskAttempt: 1,
+			expectErr:   true,
+		},
+		{
+			name:        "invalid when started",
+			status:      nexusoperationpb.OPERATION_STATUS_STARTED,
+			opAttempt:   1,
+			taskAttempt: 1,
+			expectErr:   true,
+		},
+		{
+			name:        "invalid when succeeded",
+			status:      nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
+			opAttempt:   1,
+			taskAttempt: 1,
+			expectErr:   true,
+		},
+		{
+			name:        "invalid when failed",
+			status:      nexusoperationpb.OPERATION_STATUS_FAILED,
+			opAttempt:   1,
+			taskAttempt: 1,
+			expectErr:   true,
+		},
+		{
+			name:        "invalid when backing off",
+			status:      nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+			opAttempt:   1,
+			taskAttempt: 1,
+			expectErr:   true,
+		},
+		{
+			name:        "invalid when timed out",
+			status:      nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
+			opAttempt:   1,
+			taskAttempt: 1,
+			expectErr:   true,
+		},
+	}
+
+	handler := &OperationInvocationTaskHandler{}
+	ctx := &chasm.MockContext{}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			op := newTestOperation()
+			op.Status = tc.status
+			op.Attempt = tc.opAttempt
+
+			valid, err := handler.Validate(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.InvocationTask{Attempt: tc.taskAttempt})
+			if tc.expectErr {
+				require.Error(t, err)
+				var fpErr *serviceerror.FailedPrecondition
+				require.ErrorAs(t, err, &fpErr)
+				require.False(t, valid)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.expected, valid)
+			}
+		})
+	}
+}
 
 func TestBackoffTaskHandler_Validate(t *testing.T) {
 	testCases := []struct {
