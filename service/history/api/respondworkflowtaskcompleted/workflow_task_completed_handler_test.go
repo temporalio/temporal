@@ -110,6 +110,8 @@ func TestCommandProtocolMessage(t *testing.T) {
 			nil, // TODO: test usage of commandHandlerRegistry?
 			nil,
 			nil,
+			nil, // workspaceHandler
+			nil, // chasmEngine
 		)
 	}
 

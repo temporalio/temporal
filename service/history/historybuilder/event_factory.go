@@ -13,6 +13,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	workspacepb "go.temporal.io/api/workspace/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -225,6 +226,7 @@ func (b *EventFactory) CreateWorkflowTaskFailedEvent(
 func (b *EventFactory) CreateActivityTaskScheduledEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.ScheduleActivityTaskCommandAttributes,
+	workspaceInfo *workspacepb.WorkspaceInfo,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
@@ -242,6 +244,8 @@ func (b *EventFactory) CreateActivityTaskScheduledEvent(
 			RetryPolicy:                  command.RetryPolicy,
 			UseWorkflowBuildId:           command.UseWorkflowBuildId,
 			Priority:                     command.Priority,
+			WorkspaceInfo:                workspaceInfo,
+			SandboxOptions:               command.SandboxOptions,
 		},
 	}
 	return event
@@ -276,6 +280,7 @@ func (b *EventFactory) CreateActivityTaskCompletedEvent(
 	startedEventID int64,
 	identity string,
 	result *commonpb.Payloads,
+	workspaceCommit *workspacepb.WorkspaceCommit,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
@@ -284,6 +289,7 @@ func (b *EventFactory) CreateActivityTaskCompletedEvent(
 			StartedEventId:   startedEventID,
 			Result:           result,
 			Identity:         identity,
+			WorkspaceCommit:  workspaceCommit,
 		},
 	}
 	return event

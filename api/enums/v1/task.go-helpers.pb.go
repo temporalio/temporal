@@ -57,6 +57,9 @@ var (
 		"ReplicationSyncVersionedTransition": 31,
 		"ChasmPure":                          32,
 		"Chasm":                              33,
+		"TransferWorkspaceCreateAndAcquire":  34,
+		"TransferWorkspaceSyncAndRelease":    35,
+		"TransferWorkspaceFork":              36,
 	}
 )
 

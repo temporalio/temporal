@@ -634,21 +634,7 @@ func (s *FunctionalTestBase) GetNamespaceID(namespace string) string {
 	return namespaceResp.NamespaceInfo.GetId()
 }
 
-func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
-	for _, behavior := range AllMatchingBehaviors() {
-		s.Run(behavior.Name(), func() {
-			if behavior.ForceTaskForward || behavior.ForcePollForward {
-				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
-				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
-			} else {
-				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-			}
-			behavior.InjectHooks(s)
-			subtest()
-		})
-	}
-}
+// RunTestWithMatchingBehavior is defined in matching_behavior.go (requires test_dep build tag).
 
 func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{}) {
 	s.T().Helper()

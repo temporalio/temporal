@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkspace "go.temporal.io/server/chasm/lib/workspace"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
@@ -63,6 +64,8 @@ type (
 		commandHandlerRegistry         *workflow.CommandHandlerRegistry
 		matchingClient                 matchingservice.MatchingServiceClient
 		versionMembershipCache         worker_versioning.VersionMembershipCache
+		workspaceHandler               *chasmworkspace.Handler
+		chasmEngine                    chasm.Engine
 	}
 )
 
@@ -76,6 +79,8 @@ func NewWorkflowTaskCompletedHandler(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
 	versionMembershipCache worker_versioning.VersionMembershipCache,
+	workspaceHandler *chasmworkspace.Handler,
+	chasmEngine chasm.Engine,
 ) *WorkflowTaskCompletedHandler {
 	return &WorkflowTaskCompletedHandler{
 		config:                     shardContext.GetConfig(),
@@ -99,6 +104,8 @@ func NewWorkflowTaskCompletedHandler(
 		commandHandlerRegistry:         commandHandlerRegistry,
 		matchingClient:                 matchingClient,
 		versionMembershipCache:         versionMembershipCache,
+		workspaceHandler:               workspaceHandler,
+		chasmEngine:                    chasmEngine,
 	}
 }
 
@@ -405,6 +412,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			handler.commandHandlerRegistry,
 			handler.matchingClient,
 			handler.versionMembershipCache,
+			handler.workspaceHandler,
+			handler.chasmEngine,
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(

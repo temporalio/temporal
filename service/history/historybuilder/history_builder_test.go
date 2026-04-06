@@ -814,6 +814,7 @@ func (s *historyBuilderSuite) TestActivityTaskScheduled() {
 	event := s.historyBuilder.AddActivityTaskScheduledEvent(
 		workflowTaskCompletionEventID,
 		attributes,
+		nil,
 		defaultNamespace,
 	)
 	s.Equal(event, s.flush())
@@ -905,6 +906,7 @@ func (s *historyBuilderSuite) TestActivityTaskCompleted() {
 		startedEventID,
 		testIdentity,
 		testPayloads,
+		nil,
 		defaultNamespace,
 	)
 	s.Equal(event, s.flush())

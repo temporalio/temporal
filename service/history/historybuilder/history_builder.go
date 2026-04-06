@@ -13,6 +13,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	workspacepb "go.temporal.io/api/workspace/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/clock"
@@ -307,9 +308,10 @@ func (b *HistoryBuilder) AddWorkflowExecutionUnpausedEvent(
 func (b *HistoryBuilder) AddActivityTaskScheduledEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.ScheduleActivityTaskCommandAttributes,
+	workspaceInfo *workspacepb.WorkspaceInfo,
 	ns namespace.Name,
 ) *historypb.HistoryEvent {
-	event := b.EventFactory.CreateActivityTaskScheduledEvent(workflowTaskCompletedEventID, command)
+	event := b.EventFactory.CreateActivityTaskScheduledEvent(workflowTaskCompletedEventID, command, workspaceInfo)
 	event, _ = b.EventStore.add(event)
 
 	if payloadSize := command.Input.Size(); payloadSize > 0 {
@@ -341,9 +343,10 @@ func (b *HistoryBuilder) AddActivityTaskCompletedEvent(
 	startedEventID int64,
 	identity string,
 	result *commonpb.Payloads,
+	workspaceCommit *workspacepb.WorkspaceCommit,
 	ns namespace.Name,
 ) *historypb.HistoryEvent {
-	event := b.EventFactory.CreateActivityTaskCompletedEvent(scheduledEventID, startedEventID, identity, result)
+	event := b.EventFactory.CreateActivityTaskCompletedEvent(scheduledEventID, startedEventID, identity, result, workspaceCommit)
 	event, _ = b.EventStore.add(event)
 
 	if payloadSize := result.Size(); payloadSize > 0 {

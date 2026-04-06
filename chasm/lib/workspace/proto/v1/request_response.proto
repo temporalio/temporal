@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.workspace.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/workspace/gen/workspacepb;workspacepb";
+
+import "temporal/api/workspace/v1/message.proto";
+
+// CreateWorkspaceRequest creates a new standalone workspace.
+message CreateWorkspaceRequest {
+    string namespace_id = 1;
+    string workspace_id = 2;
+}
+
+// CreateWorkspaceResponse is the response to CreateWorkspaceRequest.
+message CreateWorkspaceResponse {}
+
+// AcquireWriterRequest acquires the writer lock on a workspace.
+message AcquireWriterRequest {
+    string workflow_id = 1;
+    string run_id = 2;
+}
+
+// AcquireWriterResponse returns the current workspace state for checkout.
+message AcquireWriterResponse {
+    temporal.api.workspace.v1.WorkspaceInfo workspace_info = 1;
+}
+
+// CommitVersionRequest advances the workspace version.
+// Can be a batch commit (multiple versions at once for checkin).
+message CommitVersionRequest {
+    // The workflow committing.
+    string workflow_id = 1;
+    string run_id = 2;
+    // New committed version (must be current + N where N = len(diff_records)).
+    int64 new_version = 3;
+    // Diffs to append. For batch checkin, this may contain multiple diffs.
+    repeated temporal.api.workspace.v1.DiffRecord diff_records = 4;
+}
+
+// CommitVersionResponse is the response to CommitVersionRequest.
+message CommitVersionResponse {}
+
+// ReleaseWriterRequest releases the writer lock.
+message ReleaseWriterRequest {
+    string workflow_id = 1;
+    string run_id = 2;
+}
+
+// ReleaseWriterResponse is the response to ReleaseWriterRequest.
+message ReleaseWriterResponse {}
+
+// GetWorkspaceInfoRequest reads workspace state without modifying it.
+message GetWorkspaceInfoRequest {
+    string namespace_id = 1;
+    string workspace_id = 2;
+}
+
+// GetWorkspaceInfoResponse returns workspace info for read-only access.
+message GetWorkspaceInfoResponse {
+    temporal.api.workspace.v1.WorkspaceInfo workspace_info = 1;
+}
+
+// ForkWorkspaceRequest creates a new workspace from an existing one.
+message ForkWorkspaceRequest {
+    string namespace_id = 1;
+    string source_workspace_id = 2;
+    string target_workspace_id = 3;
+}
+
+// ForkWorkspaceResponse is the response to ForkWorkspaceRequest.
+message ForkWorkspaceResponse {}
+
+// CloseWorkspaceRequest closes a workspace (terminal).
+message CloseWorkspaceRequest {}
+
+// CloseWorkspaceResponse is the response to CloseWorkspaceRequest.
+message CloseWorkspaceResponse {}

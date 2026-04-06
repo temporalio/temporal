@@ -3,6 +3,7 @@ package history
 import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/chasm"
+	workspacepkg "go.temporal.io/server/chasm/lib/workspace"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -54,6 +55,7 @@ type (
 		ReactivationSignalCache         worker_versioning.ReactivationSignalCache
 		WorkerDeploymentClient          workerdeployment.Client
 		RoutingInfoCache                worker_versioning.RoutingInfoCache
+		WorkspaceHandler                *workspacepkg.Handler
 	}
 
 	historyEngineFactory struct {
@@ -93,5 +95,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.PersistenceRateLimiter,
 		f.TestHooks,
 		f.ChasmEngine,
+		f.WorkspaceHandler,
 	)
 }

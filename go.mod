@@ -33,7 +33,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/maruel/panicparse/v2 v2.4.0
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/nexus-rpc/sdk-go v0.5.2-0.20260211051645-26b0b4c584e5
+	github.com/nexus-rpc/sdk-go v0.6.0
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/prometheus/client_golang v1.21.0
@@ -80,6 +80,7 @@ require (
 
 require (
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2 // indirect
+	github.com/hanwen/go-fuse/v2 v2.9.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 )
 
@@ -115,7 +116,7 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang/mock v1.6.0 // indirect
+	github.com/golang/mock v1.6.0
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.5 // indirect
@@ -174,3 +175,7 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace go.temporal.io/api => /Users/yimin/code/api-go
+
+replace go.temporal.io/sdk => /Users/yimin/code/sdk-go

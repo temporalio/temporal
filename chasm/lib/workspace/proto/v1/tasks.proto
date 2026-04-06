@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.workspace.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/workspace/gen/workspacepb;workspacepb";
+
+import "google/protobuf/duration.proto";
+
+// WorkspaceCleanupTask triggers auto-close of a workspace after a retention period.
+message WorkspaceCleanupTask {
+    // Retention duration after which the workspace should be closed.
+    google.protobuf.Duration retention = 1;
+}
+
+// WorkspaceCompactTask triggers compaction of diffs into a base snapshot.
+message WorkspaceCompactTask {}
+
+// WorkspaceDeleteStorageTask triggers deletion of chunks from external storage.
+message WorkspaceDeleteStorageTask {}

@@ -14,6 +14,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	workspacepkg "go.temporal.io/server/chasm/lib/workspace"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -147,6 +148,7 @@ type (
 		syncStateRetriever         replication.SyncStateRetriever
 		outboundQueueCBPool        *circuitbreakerpool.OutboundQueueCircuitBreakerPool
 		testHooks                  testhooks.TestHooks
+		workspaceHandler           *workspacepkg.Handler
 	}
 )
 
@@ -180,6 +182,7 @@ func NewEngineWithShardContext(
 	persistenceRateLimiter quotas.RequestRateLimiter,
 	testHooks testhooks.TestHooks,
 	chasmEngine chasm.Engine,
+	workspaceHandler *workspacepkg.Handler,
 ) historyi.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -235,6 +238,7 @@ func NewEngineWithShardContext(
 		reactivationSignalCache:    reactivationSignalCache,
 		workerDeploymentClient:     workerDeploymentClient,
 		routingInfoCache:           routingInfoCache,
+		workspaceHandler:           workspaceHandler,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -585,6 +589,8 @@ func (e *historyEngineImpl) RespondWorkflowTaskCompleted(
 		e.workflowConsistencyChecker,
 		e.matchingClient,
 		e.versionMembershipCache,
+		e.workspaceHandler,
+		e.chasmEngine,
 	)
 	return h.Invoke(ctx, req)
 }

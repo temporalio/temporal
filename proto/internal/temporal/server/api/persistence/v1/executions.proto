@@ -10,6 +10,7 @@ import "temporal/api/enums/v1/common.proto";
 import "temporal/api/enums/v1/event_type.proto";
 import "temporal/api/enums/v1/failed_cause.proto";
 import "temporal/api/enums/v1/workflow.proto";
+import "temporal/api/enums/v1/workspace.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
@@ -24,6 +25,8 @@ import "temporal/server/api/persistence/v1/chasm.proto";
 import "temporal/server/api/persistence/v1/hsm.proto";
 import "temporal/server/api/persistence/v1/queues.proto";
 import "temporal/server/api/persistence/v1/update.proto";
+import "temporal/api/sandbox/v1/message.proto";
+import "temporal/api/workspace/v1/message.proto";
 import "temporal/server/api/workflow/v1/message.proto";
 
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
@@ -314,6 +317,10 @@ message WorkflowExecutionInfo {
   //
   // Wrapper distinguishes "never declined" (nil) from "declined unversioned" (non-nil, nil version).
   temporal.api.history.v1.DeclinedTargetVersionUpgrade declined_target_version_upgrade = 114;
+
+  // Durable workspace state. Maps workspace_id to workspace info.
+  // POC: stored directly in execution info for simplicity.
+  map<string, temporal.api.workspace.v1.WorkspaceInfo> workspace_infos = 115;
 }
 
 // Internal wrapper message to distinguish "never notified" (nil wrapper) from
@@ -655,6 +662,13 @@ message ActivityInfo {
   bool reset_heartbeats = 48;
 
   int64 start_version = 50;
+
+  // If set, this activity uses the specified durable workspace.
+  string workspace_id = 51;
+  // The access mode for the workspace (READ_WRITE or READ_ONLY).
+  temporal.api.enums.v1.WorkspaceAccessMode workspace_access_mode = 52;
+  // Sandbox configuration for this activity, passed through to the worker.
+  temporal.api.sandbox.v1.SandboxOptions sandbox_options = 53;
 }
 
 // timer_map column

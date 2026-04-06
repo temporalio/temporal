@@ -17,6 +17,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
+	workspacepb "go.temporal.io/api/workspace/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -36,6 +37,9 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/chasm"
+	chasmworkspace "go.temporal.io/server/chasm/lib/workspace"
+	workspaceworkflow "go.temporal.io/server/components/workspace/workflow"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -80,6 +84,8 @@ type (
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
 		matchingClient         matchingservice.MatchingServiceClient
 		versionMembershipCache worker_versioning.VersionMembershipCache
+		workspaceHandler       *chasmworkspace.Handler
+		chasmEngine            chasm.Engine
 	}
 
 	workflowTaskFailedCause struct {
@@ -120,6 +126,8 @@ func newWorkflowTaskCompletedHandler(
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	matchingClient matchingservice.MatchingServiceClient,
 	versionMembershipCache worker_versioning.VersionMembershipCache,
+	workspaceHandler *chasmworkspace.Handler,
+	chasmEngine chasm.Engine,
 ) *workflowTaskCompletedHandler {
 	return &workflowTaskCompletedHandler{
 		identity:                identity,
@@ -153,6 +161,8 @@ func newWorkflowTaskCompletedHandler(
 		commandHandlerRegistry: commandHandlerRegistry,
 		matchingClient:         matchingClient,
 		versionMembershipCache: versionMembershipCache,
+		workspaceHandler:       workspaceHandler,
+		chasmEngine:            chasmEngine,
 	}
 }
 
@@ -424,7 +434,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandProtocolMessage(
 }
 
 func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
-	_ context.Context,
+	ctx context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) (*historypb.HistoryEvent, *handleCommandResponse, error) {
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -479,6 +489,42 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 		return nil, nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_ACTIVITIES_LIMIT_EXCEEDED, err)
 	}
 
+	// Ensure workspace exists if workspace_options is specified (lazy creation),
+	// then validate that the requested access mode is compatible with the
+	// current lock state.
+	var wsInfo *workspacepb.WorkspaceInfo
+	var wsAccessMode enumspb.WorkspaceAccessMode
+	if wsOpt := attr.GetWorkspaceOptions(); wsOpt != nil {
+		workspaceID := wsOpt.GetWorkspaceId()
+		wsAccessMode = wsOpt.GetAccessMode()
+		// Auto-assign workspace ID if empty: "{runID}/default".
+		if workspaceID == "" {
+			runID := handler.mutableState.GetExecutionState().GetRunId()
+			workspaceID = runID + "/default"
+		}
+		var err error
+		var wsHandlerOpts []workspaceworkflow.WorkspaceOption
+		if handler.workspaceHandler != nil && handler.chasmEngine != nil {
+			nsID := handler.mutableState.GetExecutionInfo().GetNamespaceId()
+			wsHandlerOpts = append(wsHandlerOpts, workspaceworkflow.WithWorkspaceHandler(ctx, handler.workspaceHandler, handler.chasmEngine, nsID))
+		}
+		wsInfo, err = workspaceworkflow.EnsureWorkspaceForActivity(handler.mutableState, workspaceID, wsAccessMode, wsHandlerOpts...)
+		if err != nil {
+			var failWFTErr workflow.FailWorkflowTaskError
+			if errors.As(err, &failWFTErr) {
+				return nil, nil, handler.failWorkflowTask(failWFTErr.Cause, failWFTErr)
+			}
+			return nil, nil, err
+		}
+		if err := workspaceworkflow.ValidateWorkspaceAccess(wsInfo, wsAccessMode); err != nil {
+			var failWFTErr workflow.FailWorkflowTaskError
+			if errors.As(err, &failWFTErr) {
+				return nil, nil, handler.failWorkflowTask(failWFTErr.Cause, failWFTErr)
+			}
+			return nil, nil, err
+		}
+	}
+
 	enums.SetDefaultTaskQueueKind(&attr.GetTaskQueue().Kind)
 
 	namespace := handler.mutableState.GetNamespaceEntry().Name().String()
@@ -514,6 +560,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	)
 	if err != nil {
 		return nil, nil, handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_SCHEDULE_ACTIVITY_DUPLICATE_ID, err)
+	}
+
+	// Acquire workspace lock now that we have the scheduled event ID.
+	if wsInfo != nil {
+		workspaceworkflow.AcquireWorkspaceAccess(wsInfo, wsAccessMode, event.GetEventId())
 	}
 
 	if !eagerStartActivity {
@@ -623,7 +674,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 }
 
 func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
-	_ context.Context,
+	ctx context.Context,
 	attr *commandpb.RequestCancelActivityTaskCommandAttributes,
 ) (*historypb.HistoryEvent, error) {
 	if err := handler.validateCommandAttr(
@@ -660,6 +711,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 			if err != nil {
 				return nil, err
 			}
+			workspaceworkflow.ReleaseWorkspaceAccess(handler.mutableState, ai.WorkspaceId, ai.ScheduledEventId)
 			handler.activityNotStartedCancelled = true
 		}
 	}
@@ -1140,6 +1192,22 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 	}
 
 	enums.SetDefaultWorkflowIdReusePolicy(&attr.WorkflowIdReusePolicy)
+
+	// Process workspace transfers: set sentinels on parent's workspace based on transfer mode.
+	for _, wt := range attr.GetWorkspaceTransfers() {
+		wsID := wt.GetSourceWorkspaceId()
+		if wsID == "" {
+			continue
+		}
+		switch wt.GetTransferMode() {
+		case enumspb.WORKSPACE_TRANSFER_MODE_HANDOFF:
+			workspaceworkflow.RevokeWriteAccess(handler.mutableState, wsID)
+		case enumspb.WORKSPACE_TRANSFER_MODE_FORK:
+			// Parent keeps writing. Store fork target so the transfer task
+			// can create the forked standalone workspace.
+			workspaceworkflow.SetForkTarget(handler.mutableState, wsID, wt.GetTargetWorkspaceId())
+		}
+	}
 
 	event, _, err := handler.mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
 		handler.workflowTaskCompletedID, attr, targetNamespaceID,

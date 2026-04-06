@@ -128,7 +128,9 @@ func (s *WorkflowTaskCompletedHandlerSuite) SetupSubTest() {
 		nil,
 		api.NewWorkflowConsistencyChecker(s.mockShard, s.workflowCache),
 		nil,
-		nil)
+		nil, // workspaceHandler
+		nil, // chasmEngine
+	)
 }
 
 func (s *WorkflowTaskCompletedHandlerSuite) TearDownTest() {

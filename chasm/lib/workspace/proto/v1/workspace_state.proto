@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.workspace.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/workspace/gen/workspacepb;workspacepb";
+
+import "google/protobuf/timestamp.proto";
+import "temporal/api/workspace/v1/message.proto";
+
+// WorkspaceExecutionStatus tracks the lifecycle of a standalone workspace.
+enum WorkspaceExecutionStatus {
+    WORKSPACE_EXECUTION_STATUS_UNSPECIFIED = 0;
+    // Workspace is active and available. No writer currently holds the lock.
+    WORKSPACE_EXECUTION_STATUS_ACTIVE = 1;
+    // A workflow has acquired the writer lock and may be committing versions.
+    WORKSPACE_EXECUTION_STATUS_WRITER_LOCKED = 2;
+    // Workspace is closed. Terminal state.
+    WORKSPACE_EXECUTION_STATUS_CLOSED = 3;
+}
+
+// WorkspaceState is the primary state of the standalone workspace CHASM component.
+message WorkspaceState {
+    // Current committed version.
+    int64 committed_version = 1;
+    // Ordered chain of diffs from base to current version.
+    repeated temporal.api.workspace.v1.DiffRecord diffs = 2;
+    // Base snapshot, if diffs have been compacted.
+    temporal.api.workspace.v1.DiffRecord base_snapshot = 3;
+    // Lifecycle status.
+    WorkspaceExecutionStatus status = 4;
+}
+
+// WorkspaceWriterLock tracks which workflow currently holds write access.
+message WorkspaceWriterLock {
+    // The workflow that holds the writer lock.
+    string workflow_id = 1;
+    // The specific run of the workflow.
+    string run_id = 2;
+    // When the lock was acquired.
+    google.protobuf.Timestamp acquired_at = 3;
+}
+
+// WorkspaceForkInfo records the lineage of a forked workspace.
+message WorkspaceForkInfo {
+    // The workspace this was forked from.
+    string source_workspace_id = 1;
+    // The version at which the fork occurred.
+    int64 forked_at_version = 2;
+}

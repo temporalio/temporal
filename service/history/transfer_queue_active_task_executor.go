@@ -19,6 +19,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/workspace"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -55,6 +56,7 @@ type (
 		workflowResetter        ndc.WorkflowResetter
 		parentClosePolicyClient parentclosepolicy.Client
 		versionMembershipCache  worker_versioning.VersionMembershipCache
+		workspaceHandler        *workspace.Handler
 	}
 )
 
@@ -70,6 +72,7 @@ func newTransferQueueActiveTaskExecutor(
 	visibilityManager manager.VisibilityManager,
 	chasmEngine chasm.Engine,
 	versionMembershipCache worker_versioning.VersionMembershipCache,
+	workspaceHandler *workspace.Handler,
 ) queues.Executor {
 	return &transferQueueActiveTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
@@ -94,6 +97,7 @@ func newTransferQueueActiveTaskExecutor(
 			config.NumParentClosePolicySystemWorkflows(),
 		),
 		versionMembershipCache: versionMembershipCache,
+		workspaceHandler:       workspaceHandler,
 	}
 }
 
@@ -145,6 +149,12 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 		err = t.processDeleteExecutionTask(ctx, task)
 	case *tasks.ChasmTask:
 		err = t.executeChasmSideEffectTransferTask(ctx, task)
+	case *tasks.WorkspaceCreateAndAcquireTask:
+		err = t.processWorkspaceCreateAndAcquire(ctx, task)
+	case *tasks.WorkspaceSyncAndReleaseTask:
+		err = t.processWorkspaceSyncAndRelease(ctx, task)
+	case *tasks.WorkspaceForkTask:
+		err = t.processWorkspaceFork(ctx, task)
 	default:
 		err = errUnknownTransferTask
 	}
@@ -412,6 +422,11 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	firstRunID, err := mutableState.GetFirstRunID(ctx)
 	if err != nil {
 		return err
+	}
+
+	// Sync workspace state to standalone CHASM on workflow close.
+	if wsHandler := t.getWorkspaceHandler(); wsHandler != nil {
+		t.syncWorkspacesToStandalone(ctx, mutableState, wsHandler, false)
 	}
 
 	// NOTE: do not access anything related mutable state after this lock release.
@@ -1025,6 +1040,12 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			WorkflowId: executionInfo.RootWorkflowId,
 			RunId:      executionInfo.RootRunId,
 		},
+	}
+
+	// Sync parent's workspace to standalone CHASM BEFORE starting child.
+	// Revoke local write access so parent must re-acquire after child completes.
+	if wsHandler := t.getWorkspaceHandler(); wsHandler != nil {
+		t.syncWorkspacesToStandalone(ctx, mutableState, wsHandler, true)
 	}
 
 	childRunID, childClock, err := t.startWorkflow(

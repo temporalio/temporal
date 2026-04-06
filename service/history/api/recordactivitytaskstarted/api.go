@@ -276,6 +276,22 @@ func recordActivityTaskStarted(
 		NonRetryableErrorTypes: ai.RetryNonRetryableErrorTypes,
 	}
 
+	// Populate workspace info if the activity uses a workspace.
+	// Set the access mode so the worker knows whether to commit or discard.
+	if wsID := ai.GetWorkspaceId(); wsID != "" {
+		if wsInfos := mutableState.GetExecutionInfo().GetWorkspaceInfos(); wsInfos != nil {
+			if ws, ok := wsInfos[wsID]; ok {
+				response.WorkspaceInfo = ws
+				response.WorkspaceInfo.AccessMode = ai.GetWorkspaceAccessMode()
+			}
+		}
+	}
+
+	// Pass through sandbox options from ActivityInfo to the worker.
+	if ai.GetSandboxOptions() != nil {
+		response.SandboxOptions = ai.GetSandboxOptions()
+	}
+
 	return response, rejectCodeAccepted, nil
 }
 

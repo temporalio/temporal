@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	workspacechasm "go.temporal.io/server/chasm/lib/workspace"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -118,6 +119,7 @@ var Module = fx.Options(
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	nexusfrontend.Module,
 	activity.FrontendModule,
+	workspacechasm.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 )

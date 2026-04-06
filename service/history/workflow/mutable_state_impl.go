@@ -25,6 +25,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	workspacepb "go.temporal.io/api/workspace/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -619,6 +620,18 @@ func NewMutableStateInChain(
 	// carry over necessary fields from current mutable state
 	newMutableState.executionInfo.WorkflowExecutionTimerTaskStatus = currentMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus
 	newMutableState.executionInfo.ChildrenInitializedPostResetPoint = currentMutableState.GetExecutionInfo().ChildrenInitializedPostResetPoint
+
+	// Carry over workspace state so that the new run can continue using the same
+	// workspaces. Lock state is cleared because no activity is running yet.
+	if wsInfos := currentMutableState.GetExecutionInfo().GetWorkspaceInfos(); len(wsInfos) > 0 {
+		newMutableState.executionInfo.WorkspaceInfos = make(map[string]*workspacepb.WorkspaceInfo, len(wsInfos))
+		for wsID, wsInfo := range wsInfos {
+			copied := *wsInfo
+			copied.ActiveWriterScheduledId = 0
+			copied.ActiveReaderScheduledIds = nil
+			newMutableState.executionInfo.WorkspaceInfos[wsID] = &copied
+		}
+	}
 
 	// TODO: Today other information like autoResetPoints, previousRunID, firstRunID, etc.
 	// are carried over in AddWorkflowExecutionStartedEventWithOptions. Ideally all information
@@ -3938,8 +3951,26 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 		return nil, nil, ms.createCallerError(opTag, "ActivityID: "+command.GetActivityId())
 	}
 
-	event := ms.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command, ms.namespaceEntry.Name())
+	// Look up workspace info from the workflow's CHASM tree (when CHASM is
+	// enabled) or fall back to ExecutionInfo.WorkspaceInfos.
+	var wsInfo *workspacepb.WorkspaceInfo
+	// Look up workspace info if the activity uses a workspace.
+	if wsOpt := command.GetWorkspaceOptions(); wsOpt != nil {
+		wsID := wsOpt.GetWorkspaceId()
+		if wsInfos := ms.GetExecutionInfo().GetWorkspaceInfos(); wsInfos != nil {
+			wsInfo = wsInfos[wsID]
+		}
+	}
+
+	event := ms.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command, wsInfo, ms.namespaceEntry.Name())
 	ai, err := ms.ApplyActivityTaskScheduledEvent(workflowTaskCompletedEventID, event)
+	if err == nil && command.GetWorkspaceOptions() != nil {
+		ai.WorkspaceId = command.GetWorkspaceOptions().GetWorkspaceId()
+		ai.WorkspaceAccessMode = command.GetWorkspaceOptions().GetAccessMode()
+	}
+	if command.GetSandboxOptions() != nil {
+		ai.SandboxOptions = command.GetSandboxOptions()
+	}
 	// TODO merge active & passive task generation
 	if !bypassTaskGeneration {
 		if err := ms.taskGenerator.GenerateActivityTasks(
@@ -4223,6 +4254,7 @@ func (ms *MutableStateImpl) AddActivityTaskCompletedEvent(
 		startedEventID,
 		request.Identity,
 		request.Result,
+		request.GetWorkspaceCommit(),
 		ms.namespaceEntry.Name(),
 	)
 	if err := ms.ApplyActivityTaskCompletedEvent(event); err != nil {

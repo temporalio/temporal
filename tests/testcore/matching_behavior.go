@@ -1,9 +1,28 @@
+//go:build test_dep
+
 package testcore
 
 import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testhooks"
 )
+
+// RunTestWithMatchingBehavior runs a subtest for each matching behavior combination.
+func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
+	for _, behavior := range AllMatchingBehaviors() {
+		s.Run(behavior.Name(), func() {
+			if behavior.ForceTaskForward || behavior.ForcePollForward {
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
+			} else {
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+			}
+			behavior.InjectHooks(s)
+			subtest()
+		})
+	}
+}
 
 // MatchingBehavior describes a test scenario for matching service behavior.
 type MatchingBehavior struct {

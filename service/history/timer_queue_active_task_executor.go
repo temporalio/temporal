@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/resource"
+	workspaceworkflow "go.temporal.io/server/components/workspace/workflow"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -354,6 +355,7 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 	); err != nil {
 		return result, err
 	}
+	workspaceworkflow.ReleaseWorkspaceAccess(mutableState, ai.WorkspaceId, ai.ScheduledEventId)
 
 	result.shouldUpdateMutableState = true
 	result.shouldScheduleWorkflowTask = true

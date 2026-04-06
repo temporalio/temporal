@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tasktoken"
+	workspaceworkflow "go.temporal.io/server/components/workspace/workflow"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -96,6 +97,7 @@ func Invoke(
 				// Unable to add ActivityTaskCanceled event to history
 				return nil, err
 			}
+			workspaceworkflow.ReleaseWorkspaceAccess(mutableState, ai.WorkspaceId, scheduledEventID)
 
 			attemptStartedTime = timestamp.TimeValue(ai.StartedTime)
 			firstScheduledTime = timestamp.TimeValue(ai.FirstScheduledTime)

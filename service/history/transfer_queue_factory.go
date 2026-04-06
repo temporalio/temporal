@@ -11,6 +11,7 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/chasm/lib/workspace"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
@@ -33,6 +34,7 @@ type (
 		MatchingRawClient      resource.MatchingRawClient
 		VisibilityManager      manager.VisibilityManager
 		VersionMembershipCache worker_versioning.VersionMembershipCache
+		WorkspaceHandler       *workspace.Handler
 	}
 
 	transferQueueFactory struct {
@@ -126,6 +128,7 @@ func (f *transferQueueFactory) CreateQueue(
 		f.VisibilityManager,
 		f.ChasmEngine,
 		f.VersionMembershipCache,
+		f.WorkspaceHandler,
 	)
 
 	standbyExecutor := newTransferQueueStandbyTaskExecutor(
