@@ -36,6 +36,7 @@ const (
 	testGetDurationPropertyFilteredByTaskQueueInfoKey = "testGetDurationPropertyFilteredByTaskQueueInfoKey"
 	testGetDurationPropertyFilteredByTaskTypeKey      = "testGetDurationPropertyFilteredByTaskTypeKey"
 	testGetDurationPropertyStructuredDefaults         = "testGetDurationPropertyStructuredDefaults"
+	testGetBoolPropertyFilteredByNamespaceKey         = "testGetBoolPropertyFilteredByNamespaceKey"
 	testGetBoolPropertyFilteredByNamespaceIDKey       = "testGetBoolPropertyFilteredByNamespaceIDKey"
 	testGetBoolPropertyFilteredByTaskQueueInfoKey     = "testGetBoolPropertyFilteredByTaskQueueInfoKey"
 	testGetStringPropertyFilteredByNamespaceKey       = "testGetStringPropertyFilteredByNamespaceKey"
@@ -143,6 +144,28 @@ func (s *collectionSuite) TestGetBoolPropertyFilteredByNamespaceID() {
 	s.Equal(true, value(namespaceID))
 	s.client.SetValue(testGetBoolPropertyFilteredByNamespaceIDKey, false)
 	s.Equal(false, value(namespaceID))
+}
+
+func (s *collectionSuite) TestGetBoolPropertyFilteredByNamespace() {
+	setting := dynamicconfig.NewNamespaceBoolSetting(testGetBoolPropertyFilteredByNamespaceKey, false, "")
+	value := setting.Get(s.cln)
+
+	// default is false
+	s.Equal(false, value("ns-a"))
+	s.Equal(false, value("ns-b"))
+
+	// global override: true for all namespaces
+	s.client.SetValue(testGetBoolPropertyFilteredByNamespaceKey, true)
+	s.Equal(true, value("ns-a"))
+	s.Equal(true, value("ns-b"))
+
+	// namespace-specific override: true only for ns-a
+	s.client.Set(testGetBoolPropertyFilteredByNamespaceKey, []dynamicconfig.ConstrainedValue{
+		{Constraints: dynamicconfig.Constraints{Namespace: "ns-a"}, Value: true},
+		{Constraints: dynamicconfig.Constraints{}, Value: false},
+	})
+	s.Equal(true, value("ns-a"))
+	s.Equal(false, value("ns-b"))
 }
 
 func (s *collectionSuite) TestGetBoolPropertyFilteredByTaskQueueInfo() {

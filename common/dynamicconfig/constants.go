@@ -3189,4 +3189,10 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`WorkflowPauseEnabled is a "feature enable" flag. When enabled it allows clients to pause workflows.`,
 	)
+
+	TimeSkippingEnabled = NewNamespaceBoolSetting(
+		"frontend.TimeSkippingEnabled",
+		false,
+		`TimeSkippingEnabled is a "feature enable" flag. When enabled it allows clients to skip time for workflows.`,
+	)
 )
