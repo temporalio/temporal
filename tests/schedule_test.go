@@ -111,6 +111,8 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestSchedule_InternalTaskQueue", func(t *testing.T) { testScheduleInternalTaskQueue(t, newContext) })
 	t.Run("TestDeletedScheduleOperations", func(t *testing.T) { testDeletedScheduleOperations(t, newContext) })
 	t.Run("TestUnpauseResumesProcessing", func(t *testing.T) { testCHASMUnpauseResumesProcessing(t, newContext) })
+	t.Run("TestUpdateScheduleRequestIDTooLong", func(t *testing.T) { testUpdateScheduleRequestIDTooLong(t, newContext) })
+	t.Run("TestUpdateScheduleBlobSizeLimit", func(t *testing.T) { testUpdateScheduleBlobSizeLimit(t, newContext) })
 }
 
 func testDeletedScheduleOperations(t *testing.T, newContext contextFactory) {
@@ -2733,4 +2735,118 @@ func testCHASMUnpauseResumesProcessing(t *testing.T, newContext contextFactory) 
 		500*time.Millisecond,
 		"schedule should resume processing after unpause",
 	)
+}
+func testUpdateScheduleRequestIDTooLong(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+
+	sid := "sched-test-update-reqid-too-long"
+	wid := "sched-test-update-reqid-too-long-wf"
+	wt := "sched-test-update-reqid-too-long-wt"
+
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error { return nil },
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	// Create schedule.
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	// Update with an oversized request ID.
+	_, err = s.FrontendClient().UpdateSchedule(newContext(s.Context()), &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  strings.Repeat("x", 1001),
+	})
+	var invalidArgReqID *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgReqID)
+}
+
+func testUpdateScheduleBlobSizeLimit(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t,
+		append(scheduleCommonOpts(),
+			testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitError, 1000),
+			testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitWarn, 500),
+		)...,
+	)
+
+	sid := "sched-test-update-blob-limit"
+	wid := "sched-test-update-blob-limit-wf"
+	wt := "sched-test-update-blob-limit-wt"
+
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error { return nil },
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	// Create schedule.
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	// Update with an oversized memo that exceeds the blob size limit.
+	largeMemo := &commonpb.Memo{
+		Fields: map[string]*commonpb.Payload{
+			"key": {Data: make([]byte, 1001)},
+		},
+	}
+	_, err = s.FrontendClient().UpdateSchedule(newContext(s.Context()), &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+		Memo:       largeMemo,
+	})
+	var invalidArgBlob *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgBlob)
 }
