@@ -10,6 +10,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
@@ -260,6 +261,21 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 		MaxIDLengthLimit: func() int { return 20 },
 	}
 
+	validRunID := "11111111-2222-3333-4444-555555555555"
+	validToken, err := (&persistencespb.ChasmComponentRef{
+		NamespaceId: "test-namespace-id",
+		BusinessId:  "operation-id",
+		RunId:       validRunID,
+	}).Marshal()
+	require.NoError(t, err)
+
+	wrongNamespaceToken, err := (&persistencespb.ChasmComponentRef{
+		NamespaceId: "other-namespace-id",
+		BusinessId:  "operation-id",
+		RunId:       validRunID,
+	}).Marshal()
+	require.NoError(t, err)
+
 	for _, tc := range []struct {
 		name   string
 		mutate func(*workflowservice.DescribeNexusOperationExecutionRequest)
@@ -289,6 +305,29 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 			},
 			errMsg: "run_id is not a valid UUID",
 		},
+		{
+			name: "long_poll_token - requires run_id",
+			mutate: func(r *workflowservice.DescribeNexusOperationExecutionRequest) {
+				r.LongPollToken = validToken
+			},
+			errMsg: "run_id is required when long_poll_token is provided",
+		},
+		{
+			name: "long_poll_token - rejects malformed token",
+			mutate: func(r *workflowservice.DescribeNexusOperationExecutionRequest) {
+				r.RunId = validRunID
+				r.LongPollToken = []byte("not-a-token")
+			},
+			errMsg: "invalid long poll token",
+		},
+		{
+			name: "long_poll_token - rejects wrong namespace",
+			mutate: func(r *workflowservice.DescribeNexusOperationExecutionRequest) {
+				r.RunId = validRunID
+				r.LongPollToken = wrongNamespaceToken
+			},
+			errMsg: "long poll token does not match execution",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			validReq := &workflowservice.DescribeNexusOperationExecutionRequest{
@@ -298,7 +337,7 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizeDescribeRequest(validReq, config)
+			err := validateAndNormalizeDescribeRequest(validReq, "test-namespace-id", config)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)

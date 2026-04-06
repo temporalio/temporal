@@ -12,6 +12,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -170,7 +171,11 @@ func validateAndNormalizeDeleteRequest(req *workflowservice.DeleteNexusOperation
 	return nil
 }
 
-func validateAndNormalizeDescribeRequest(req *workflowservice.DescribeNexusOperationExecutionRequest, config *Config) error {
+func validateAndNormalizeDescribeRequest(
+	req *workflowservice.DescribeNexusOperationExecutionRequest,
+	namespaceID string,
+	config *Config,
+) error {
 	if req.GetOperationId() == "" {
 		return serviceerror.NewInvalidArgument("operation_id is required")
 	}
@@ -184,6 +189,15 @@ func validateAndNormalizeDescribeRequest(req *workflowservice.DescribeNexusOpera
 	if req.GetRunId() != "" {
 		if err := uuid.Validate(req.GetRunId()); err != nil {
 			return serviceerror.NewInvalidArgument("run_id is not a valid UUID")
+		}
+	}
+	if len(req.GetLongPollToken()) > 0 {
+		ref, err := chasm.DeserializeComponentRef(req.GetLongPollToken())
+		if err != nil {
+			return serviceerror.NewInvalidArgument("invalid long poll token")
+		}
+		if ref.NamespaceID != namespaceID {
+			return serviceerror.NewInvalidArgument("long poll token does not match execution")
 		}
 	}
 	return nil

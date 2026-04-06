@@ -110,7 +110,7 @@ func (h *frontendHandler) DescribeNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := validateAndNormalizeDescribeRequest(req, h.config); err != nil {
+	if err := validateAndNormalizeDescribeRequest(req, namespaceID.String(), h.config); err != nil {
 		return nil, err
 	}
 
