@@ -50,7 +50,6 @@ type Context interface {
 	goContext() context.Context
 }
 
-<<<<<<< HEAD
 type ExecutionInfo struct {
 	// StateTransitionCount is the number of create/update transactions in the history of this execution.
 	StateTransitionCount int64
@@ -60,10 +59,10 @@ type ExecutionInfo struct {
 	// An execution is closed when its root component reaches a terminal state in its lifecycle.
 	// If the component is still running (not yet closed), it returns a zero time.Time value.
 	CloseTime time.Time
-=======
+}
+
 type EndpointRegistry interface {
 	GetByName(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistencespb.NexusEndpointEntry, error)
->>>>>>> d1b6be7d00 (Nexus ScheduleCommand in CHASM (#9278))
 }
 
 type MutableContext interface {
