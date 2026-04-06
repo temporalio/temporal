@@ -110,6 +110,8 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestCountSchedules", func(t *testing.T) { testCountSchedules(t, newContext) })
 	t.Run("TestSchedule_InternalTaskQueue", func(t *testing.T) { testScheduleInternalTaskQueue(t, newContext) })
 	t.Run("TestDeletedScheduleOperations", func(t *testing.T) { testDeletedScheduleOperations(t, newContext) })
+	t.Run("TestCronUpdateDoesNotAccumulateSpec", func(t *testing.T) { testCronUpdateDoesNotAccumulateSpec(t, newContext) })
+	t.Run("TestCronUpdateSafePattern", func(t *testing.T) { testCronUpdateSafePattern(t, newContext) })
 }
 
 func testDeletedScheduleOperations(t *testing.T, newContext contextFactory) {
@@ -2387,6 +2389,7 @@ func assertRecentActionsNoDuplicateRunIDs(t *testing.T, actions []*schedulepb.Sc
 		seen[runID] = i
 	}
 }
+
 func testUpdateScheduleMemo(t *testing.T, newContext contextFactory) {
 	s := testcore.NewEnv(t, scheduleCommonOpts()...)
 
@@ -2642,4 +2645,154 @@ func testUpdateScheduleMemoOnly(t *testing.T, newContext contextFactory) {
 	require.NotNil(t, describeResp.Schedule.Spec, "schedule spec should not be nil")
 	require.NotEmpty(t, describeResp.Schedule.Spec.Interval, "schedule spec intervals should be preserved")
 	require.NotNil(t, describeResp.Schedule.Action, "schedule action should be preserved")
+}
+
+// testCronUpdateDoesNotAccumulateSpec reproduces a bug where updating a schedule
+// that was created with a cron string, while also supplying the cron string in
+// the update request, causes StructuredCalendar to grow by one entry per update.
+//
+// A real user hits this when their update logic always sets CronString from their
+// own config, while the describe response already has the parsed StructuredCalendar.
+// The frontend's canonicalizeSpec appends the parsed cron to the existing
+// StructuredCalendar rather than replacing it, so each update accumulates a duplicate.
+func testCronUpdateDoesNotAccumulateSpec(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+
+	sid := "sched-test-cron-update-no-accumulate"
+	wid := "sched-test-cron-update-no-accumulate-wf"
+	wt := "sched-test-cron-update-no-accumulate-wt"
+	cron := "0 * * * *"
+
+	ctx := newContext(s.Context())
+
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				CronString: []string{cron},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   wid,
+						WorkflowType: &commonpb.WorkflowType{Name: wt},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// After creation, CronString must be compiled away: exactly one StructuredCalendar entry.
+	descResp, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+	s.Len(descResp.Schedule.Spec.CronString, 0, "cron string should be compiled away after create")
+	s.Len(descResp.Schedule.Spec.StructuredCalendar, 1, "should have exactly one StructuredCalendar entry after create")
+
+	// Simulate a user whose update callback always re-applies their cron config on top
+	// of the described schedule. The SDK's Update does describe-then-update internally;
+	// the DoUpdate callback receives Calendars (converted from StructuredCalendar) but
+	// no CronExpressions. Adding CronExpressions here sends both to the server → bug.
+	handle := s.SdkClient().ScheduleClient().GetHandle(ctx, sid)
+	for i := range 20 {
+		err = handle.Update(ctx, sdkclient.ScheduleUpdateOptions{
+			DoUpdate: func(input sdkclient.ScheduleUpdateInput) (*sdkclient.ScheduleUpdate, error) {
+				sched := input.Description.Schedule
+				sched.Spec.CronExpressions = []string{cron}
+				return &sdkclient.ScheduleUpdate{Schedule: &sched}, nil
+			},
+		})
+		s.NoError(err, "update %d failed", i+1)
+	}
+
+	// After 20 round-trip updates, StructuredCalendar must still have exactly one entry.
+	// Without the fix, each update appends a duplicate: the describe returns
+	// StructuredCalendar already compiled from the previous run, and re-adding
+	// CronExpressions causes the server to parse and append it again. After 20
+	// updates there would be 21 identical entries.
+	final, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+	s.Len(final.Schedule.Spec.CronString, 0, "cron string should be compiled away after updates")
+	entries := final.Schedule.Spec.StructuredCalendar
+	s.Len(entries, 1,
+		"StructuredCalendar grew to %d entries after 20 updates — each entry is identical: %v",
+		len(entries), entries)
+}
+
+// testCronUpdateSafePattern shows the correct way to update a schedule's cron
+// expression: replace the Spec entirely from the caller's config rather than
+// blending CronExpressions on top of the Calendars returned by describe.
+// This pattern works correctly regardless of how many times it runs.
+func testCronUpdateSafePattern(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+
+	sid := "sched-test-cron-update-safe"
+	wid := "sched-test-cron-update-safe-wf"
+	wt := "sched-test-cron-update-safe-wt"
+	initialCron := "0 * * * *"  // every hour
+	updatedCron := "0 0 * * *"  // every day at midnight
+
+	ctx := newContext(s.Context())
+
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				CronString: []string{initialCron},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   wid,
+						WorkflowType: &commonpb.WorkflowType{Name: wt},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Safe pattern: replace Spec entirely from caller's config. The described
+	// Calendars are discarded; only CronExpressions from the new config is sent.
+	handle := s.SdkClient().ScheduleClient().GetHandle(ctx, sid)
+	for i := range 20 {
+		err = handle.Update(ctx, sdkclient.ScheduleUpdateOptions{
+			DoUpdate: func(input sdkclient.ScheduleUpdateInput) (*sdkclient.ScheduleUpdate, error) {
+				sched := input.Description.Schedule
+				sched.Spec = &sdkclient.ScheduleSpec{
+					CronExpressions: []string{updatedCron},
+				}
+				return &sdkclient.ScheduleUpdate{Schedule: &sched}, nil
+			},
+		})
+		s.NoError(err, "update %d failed", i+1)
+	}
+
+	final, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+	entries := final.Schedule.Spec.StructuredCalendar
+	s.Len(entries, 1, "StructuredCalendar should have exactly one entry after 20 updates, got %d: %v", len(entries), entries)
+	// The single entry should reflect updatedCron ("0 0 * * *"), not initialCron.
+	// "0 0 * * *" has hour=0 only; "0 * * * *" has all hours. Check that hour is
+	// restricted to a single value (start=0, end=0) rather than the full range.
+	s.Len(entries[0].Hour, 1, "hour field should have one range for '0 0 * * *'")
+	s.Equal(int32(0), entries[0].Hour[0].Start)
+	s.Equal(int32(0), entries[0].Hour[0].End)
 }
