@@ -197,6 +197,7 @@ type (
 		// TODO: Add methods needed from MutateState here.
 		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
+		GetApproximatePersistedSize() int
 		GetCurrentVersion() int64
 		NextTransitionCount() int64
 		CurrentVersionedTransition() *persistencespb.VersionedTransition
@@ -2104,7 +2105,10 @@ func (n *Node) andAllChildren() iter.Seq2[[]string, *Node] {
 				return false
 			}
 			for _, child := range node.children {
-				if !walk(append(path, child.nodeName), child) {
+				childPath := make([]string, len(path)+1)
+				copy(childPath, path)
+				childPath[len(path)] = child.nodeName
+				if !walk(childPath, child) {
 					return false
 				}
 			}
@@ -2630,7 +2634,7 @@ func isComponentTaskExpired(
 // close).
 func (n *Node) EachPureTask(
 	referenceTime time.Time,
-	callback func(executor NodePureTask, taskAttributes TaskAttributes, taskInstance any) (bool, error),
+	callback func(handler NodePureTask, taskAttributes TaskAttributes, taskInstance any) (bool, error),
 ) error {
 	chasmContext := NewContext(context.Background(), n)
 
@@ -2990,7 +2994,14 @@ func (n *Node) ExecutePureTask(
 
 	defer log.CapturePanic(n.logger, &retErr)
 
-	return true, registrableTask.pureTaskExecuteFn(
+	archetypeTag := metrics.ArchetypeTag("")
+	if name, ok := n.registry.ArchetypeDisplayName(n.ArchetypeID()); ok {
+		archetypeTag = metrics.ArchetypeTag(name)
+	}
+	chasmTaskTypeTag := metrics.ChasmTaskTypeTag(registrableTask.fqType())
+	metricsHandler := n.metricsHandler.WithTags(archetypeTag)
+
+	execErr := registrableTask.pureTaskExecuteFn(
 		executionContext,
 		component,
 		taskAttributes,
@@ -2998,16 +3009,25 @@ func (n *Node) ExecutePureTask(
 		n.registry,
 	)
 
+	metrics.ChasmPureTaskRequests.With(metricsHandler).Record(1, chasmTaskTypeTag)
+
+	if execErr != nil {
+		metrics.ChasmPureTaskErrors.With(metricsHandler).Record(1, chasmTaskTypeTag)
+		return true, execErr
+	}
+
 	// TODO - a task validator must succeed validation after a task executes
 	// successfully (without error), otherwise it will generate an infinite loop.
 	// Check for this case by marking the in-memory task as having executed, which the
 	// CloseTransaction method will check against.
 	//
 	// See: https://github.com/temporalio/temporal/pull/7701#discussion_r2072026993
+
+	return true, nil
 }
 
 // ValidatePureTask runs a pure task's associated validator, returning true
-// if the task is valid. Intended for use by standby executors as part of
+// if the task is valid. Intended for use by standby handlers as part of
 // EachPureTask's callback.
 // This method assumes the node's value has already been prepared (hydrated).
 func (n *Node) ValidatePureTask(
@@ -3024,7 +3044,7 @@ func (n *Node) ValidatePureTask(
 
 // ValidateSideEffectTask runs a side effect task's associated validator,
 // returning the deserialized task instance if the task is valid. Intended for
-// use by standby executors.
+// use by standby handlers.
 //
 // If validation succeeds but the task is invalid, nil is returned to signify the
 // task can be skipped/deleted.
@@ -3134,12 +3154,6 @@ func (n *Node) ExecuteSideEffectDiscardTask(
 	if err != nil {
 		return err
 	}
-	if !rt.HasDiscardHandler() {
-		return softassert.UnexpectedInternalErr(
-			n.logger,
-			"ExecuteSideEffectDiscardTask called on executor without SideEffectTaskDiscarder",
-			fmt.Errorf("%s", rt.fqType()))
-	}
 	return n.invokeSideEffectTaskFn(ctx, rt, executionKey, chasmTask, validate, rt.sideEffectTaskDiscardFn)
 }
 
@@ -3212,7 +3226,7 @@ func (n *Node) invokeSideEffectTaskFn(
 		componentPath:         taskInfo.Path,
 		componentInitialVT:    taskInfo.ComponentInitialVersionedTransition,
 
-		// Validate the Ref only once it is accessed by the task's executor.
+		// Validate the Ref only once it is accessed by the task's handler.
 		validationFn: makeValidationFn(registrableTask, validate, taskAttributes, taskValue),
 	}
 
@@ -3264,7 +3278,7 @@ func makeValidationFn(
 			return err
 		}
 
-		// Side effect's task validator is invoked inside the task executor,
+		// Side effect's task validator is invoked inside the task handler,
 		// so the panic wrapper ExecuteSideEffectTask() will cover this case.
 
 		// Call the TaskValidator.

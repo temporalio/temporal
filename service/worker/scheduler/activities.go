@@ -375,12 +375,24 @@ func (r responseBuilder) makeResponse(result *commonpb.Payloads, failure *failur
 }
 
 func (a *activities) MigrateScheduleToChasm(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) error {
+	if req.GetNamespaceId() != a.namespaceID.String() {
+		return temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("MigrateScheduleToChasm: request namespace ID %q does not match activity namespace ID %q", req.GetNamespaceId(), a.namespaceID),
+			"namespace_mismatch",
+			nil,
+		)
+	}
 	_, err := a.SchedulerClient.CreateFromMigrationState(ctx, req)
 	if err != nil {
-		// Treat "already exists" as success (idempotency)
+		// Treat "already exists" as success (idempotency).
 		var alreadyExists *serviceerror.AlreadyExists
 		if errors.As(err, &alreadyExists) {
 			return nil
+		}
+		// Sentinel blocking migration is transient; will retry on next workflow wake-up.
+		var unavailableErr *serviceerror.Unavailable
+		if errors.As(err, &unavailableErr) {
+			return translateError(err, "MigrateScheduleToChasm: blocked by sentinel, will retry")
 		}
 		return translateError(err, "MigrateScheduleToChasm")
 	}

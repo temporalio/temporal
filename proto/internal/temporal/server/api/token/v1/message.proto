@@ -2,91 +2,91 @@ syntax = "proto3";
 
 package temporal.server.api.token.v1;
 
-option go_package = "go.temporal.io/server/api/token/v1;token";
-
 import "google/protobuf/timestamp.proto";
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/hsm.proto";
 
+option go_package = "go.temporal.io/server/api/token/v1;token";
+
 message HistoryContinuation {
-    string run_id = 1;
-    int64 first_event_id = 2;
-    int64 next_event_id = 3;
-    bool is_workflow_running = 5;
-    bytes persistence_token = 6;
-    reserved 7; // Was: transient_workflow_task - no longer passed through continuation token
-    bytes branch_token = 8;
-    reserved 9;
-    temporal.server.api.history.v1.VersionHistoryItem version_history_item = 10;
-    temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 11;
+  string run_id = 1;
+  int64 first_event_id = 2;
+  int64 next_event_id = 3;
+  bool is_workflow_running = 5;
+  bytes persistence_token = 6;
+  reserved 7; // Was: transient_workflow_task - no longer passed through continuation token
+  bytes branch_token = 8;
+  reserved 9;
+  temporal.server.api.history.v1.VersionHistoryItem version_history_item = 10;
+  temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 11;
 }
 
-message RawHistoryContinuation{
-    reserved 1;
-    string namespace_id = 10;
-    string workflow_id = 2;
-    string run_id = 3;
-    int64 start_event_id = 4;
-    int64 start_event_version = 5;
-    int64 end_event_id = 6;
-    int64 end_event_version = 7;
-    bytes persistence_token = 8;
-    temporal.server.api.history.v1.VersionHistories version_histories = 9;
+message RawHistoryContinuation {
+  reserved 1;
+  string namespace_id = 10;
+  string workflow_id = 2;
+  string run_id = 3;
+  int64 start_event_id = 4;
+  int64 start_event_version = 5;
+  int64 end_event_id = 6;
+  int64 end_event_version = 7;
+  bytes persistence_token = 8;
+  temporal.server.api.history.v1.VersionHistories version_histories = 9;
 }
 
 message Task {
-    string namespace_id = 1;
-    string workflow_id  = 2;
-    string run_id = 3;
-    int64 scheduled_event_id = 4;
-    int32 attempt = 5;
-    string activity_id = 6;
-    string workflow_type = 7;
-    string activity_type = 8;
-    temporal.server.api.clock.v1.VectorClock clock = 9;
-    int64 started_event_id = 10;
-    int64 version = 11;
-    google.protobuf.Timestamp started_time = 12;
-    int64 start_version = 13;
-    // Reference to the associated Chasm component, if provided.
-    bytes component_ref = 14;
+  string namespace_id = 1;
+  string workflow_id = 2;
+  string run_id = 3;
+  int64 scheduled_event_id = 4;
+  int32 attempt = 5;
+  string activity_id = 6;
+  string workflow_type = 7;
+  string activity_type = 8;
+  temporal.server.api.clock.v1.VectorClock clock = 9;
+  int64 started_event_id = 10;
+  int64 version = 11;
+  google.protobuf.Timestamp started_time = 12;
+  int64 start_version = 13;
+  // Reference to the associated Chasm component, if provided.
+  bytes component_ref = 14;
 }
 
 message QueryTask {
-    string namespace_id = 1;
-    string task_queue = 2;
-    string task_id = 3;
+  string namespace_id = 1;
+  string task_queue = 2;
+  string task_id = 3;
 }
 
 message NexusTask {
-    string namespace_id = 1;
-    string task_queue = 2;
-    string task_id = 3;
+  string namespace_id = 1;
+  string task_queue = 2;
+  string task_id = 3;
 }
 
 // A reference for loading a history event.
 message HistoryEventRef {
-    // Event ID.
-    int64 event_id = 1;
-    // Event batch ID - the first event ID in the batch the event was stored in.
-    int64 event_batch_id = 2;
+  // Event ID.
+  int64 event_id = 1;
+  // Event batch ID - the first event ID in the batch the event was stored in.
+  int64 event_batch_id = 2;
 }
 
 // A completion token for a Nexus operation started from a workflow.
 message NexusOperationCompletion {
-    // Namespace UUID. (Deprecated)
-    string namespace_id = 1;
-    // Workflow ID. (Deprecated)
-    string workflow_id = 2;
-    // Run ID at the time this token was generated. (Deprecated)
-    string run_id = 3;
-    // Reference including the path to the backing Operation state machine and a version + transition count for
-    // staleness checks. (Deprecated)
-    temporal.server.api.persistence.v1.StateMachineRef ref = 4;
-    // Request ID embedded in the NexusOperationScheduledEvent.
-    // Allows completing a started operation after a workflow has been reset.
-    string request_id = 5;
-    // Reference to the CHASM component to be informed of the completion.
-    bytes component_ref = 6;
+  // Namespace UUID. (Deprecated)
+  string namespace_id = 1;
+  // Workflow ID. (Deprecated)
+  string workflow_id = 2;
+  // Run ID at the time this token was generated. (Deprecated)
+  string run_id = 3;
+  // Reference including the path to the backing Operation state machine and a version + transition count for
+  // staleness checks. (Deprecated)
+  temporal.server.api.persistence.v1.StateMachineRef ref = 4;
+  // Request ID embedded in the NexusOperationScheduledEvent.
+  // Allows completing a started operation after a workflow has been reset.
+  string request_id = 5;
+  // Reference to the CHASM component to be informed of the completion.
+  bytes component_ref = 6;
 }

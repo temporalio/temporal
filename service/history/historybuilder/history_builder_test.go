@@ -17,6 +17,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -2220,14 +2221,14 @@ func (s *historyBuilderSuite) TestHasBufferEvent() {
 func (s *historyBuilderSuite) TestBufferEvent() {
 	// workflow status events will be assign event ID immediately
 	workflowEvents := map[enumspb.EventType]bool{
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:          true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:        true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:           true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:        true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:       true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW: true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:         true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPED:     true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:                    true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:                  true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:                     true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:                  true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:                 true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:           true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:                   true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED: true,
 	}
 
 	// workflow task events will be assign event ID immediately
@@ -2425,6 +2426,159 @@ func (s *historyBuilderSuite) TestLastEventVersion() {
 	_, ok = s.historyBuilder.LastEventVersion()
 	s.False(ok)
 
+}
+
+func (s *historyBuilderSuite) TestWorkflowExecutionStarted_NilSearchAttributesFiltered() {
+	// Create a payload that represents nil
+	nilPayload, err := s.payloadEncode(nil)
+	s.NoError(err)
+
+	validPayload, err := s.payloadEncode("valid-value")
+	s.NoError(err)
+
+	// SearchAttributes with a mix of valid and nil values
+	searchAttributesWithNil := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"validKey": validPayload,
+			"nilKey":   nilPayload,
+		},
+	}
+
+	request := &historyservice.StartWorkflowExecutionRequest{
+		NamespaceId: testNamespaceID.String(),
+		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:        testNamespaceName.String(),
+			WorkflowId:       testWorkflowID,
+			WorkflowType:     testWorkflowType,
+			TaskQueue:        testTaskQueue,
+			SearchAttributes: searchAttributesWithNil,
+		},
+	}
+
+	event := s.historyBuilder.AddWorkflowExecutionStartedEvent(
+		s.now,
+		request,
+		nil,
+		"",
+		"",
+		"",
+	)
+
+	// Verify that nil search attributes are filtered out
+	attrs := event.GetWorkflowExecutionStartedEventAttributes()
+	s.NotNil(attrs.SearchAttributes)
+	s.Len(attrs.SearchAttributes.IndexedFields, 1)
+	s.NotNil(attrs.SearchAttributes.IndexedFields["validKey"])
+	s.Nil(attrs.SearchAttributes.IndexedFields["nilKey"])
+}
+
+func (s *historyBuilderSuite) TestWorkflowExecutionStarted_AllNilSearchAttributesFiltered() {
+	// Create a payload that represents nil
+	nilPayload, err := s.payloadEncode(nil)
+	s.NoError(err)
+
+	// SearchAttributes with only nil values
+	searchAttributesAllNil := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"nilKey1": nilPayload,
+			"nilKey2": nilPayload,
+		},
+	}
+
+	request := &historyservice.StartWorkflowExecutionRequest{
+		NamespaceId: testNamespaceID.String(),
+		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:        testNamespaceName.String(),
+			WorkflowId:       testWorkflowID,
+			WorkflowType:     testWorkflowType,
+			TaskQueue:        testTaskQueue,
+			SearchAttributes: searchAttributesAllNil,
+		},
+	}
+
+	event := s.historyBuilder.AddWorkflowExecutionStartedEvent(
+		s.now,
+		request,
+		nil,
+		"",
+		"",
+		"",
+	)
+
+	// Verify that when all search attributes are nil, the entire SearchAttributes is nil
+	attrs := event.GetWorkflowExecutionStartedEventAttributes()
+	s.Nil(attrs.SearchAttributes)
+}
+
+func (s *historyBuilderSuite) TestContinuedAsNew_NilSearchAttributesFiltered() {
+	nilPayload, err := s.payloadEncode(nil)
+	s.NoError(err)
+
+	validPayload, err := s.payloadEncode("valid-value")
+	s.NoError(err)
+
+	command := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+		WorkflowType: testWorkflowType,
+		TaskQueue:    testTaskQueue,
+		SearchAttributes: &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				"validKey": validPayload,
+				"nilKey":   nilPayload,
+			},
+		},
+	}
+
+	event := s.historyBuilder.AddContinuedAsNewEvent(
+		rand.Int63(),
+		testRunID,
+		command,
+	)
+
+	// Verify that nil search attributes are filtered out
+	attrs := event.GetWorkflowExecutionContinuedAsNewEventAttributes()
+	s.NotNil(attrs.SearchAttributes)
+	s.Len(attrs.SearchAttributes.IndexedFields, 1)
+	s.NotNil(attrs.SearchAttributes.IndexedFields["validKey"])
+	s.Nil(attrs.SearchAttributes.IndexedFields["nilKey"])
+}
+
+func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated_NilSearchAttributesFiltered() {
+	nilPayload, err := s.payloadEncode(nil)
+	s.NoError(err)
+
+	validPayload, err := s.payloadEncode("valid-value")
+	s.NoError(err)
+
+	command := &commandpb.StartChildWorkflowExecutionCommandAttributes{
+		Namespace:    testNamespaceName.String(),
+		WorkflowId:   "child-workflow-id",
+		WorkflowType: testWorkflowType,
+		TaskQueue:    testTaskQueue,
+		SearchAttributes: &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				"validKey": validPayload,
+				"nilKey":   nilPayload,
+			},
+		},
+	}
+
+	event := s.historyBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
+		rand.Int63(),
+		command,
+		testNamespaceID,
+	)
+
+	// Verify that nil search attributes are filtered out
+	attrs := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+	s.NotNil(attrs.SearchAttributes)
+	s.Len(attrs.SearchAttributes.IndexedFields, 1)
+	s.NotNil(attrs.SearchAttributes.IndexedFields["validKey"])
+	s.Nil(attrs.SearchAttributes.IndexedFields["nilKey"])
+}
+
+func (s *historyBuilderSuite) payloadEncode(value any) (*commonpb.Payload, error) {
+	dataConverter := converter.GetDefaultDataConverter()
+	return dataConverter.ToPayload(value)
 }
 
 func (s *historyBuilderSuite) assertEventIDTaskID(

@@ -638,12 +638,13 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 	attempt := a.LastAttempt.Get(ctx)
 	heartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	key := ctx.ExecutionKey()
+	executionInfo := ctx.ExecutionInfo()
 
 	var closeTime *timestamppb.Timestamp
 	var executionDuration *durationpb.Duration
 	if a.LifecycleState(ctx) != chasm.LifecycleStateRunning {
-		executionDuration = durationpb.New(ctx.ExecutionCloseTime().Sub(a.GetScheduleTime().AsTime()))
-		closeTime = timestamppb.New(ctx.ExecutionCloseTime())
+		executionDuration = durationpb.New(executionInfo.CloseTime.Sub(a.GetScheduleTime().AsTime()))
+		closeTime = timestamppb.New(executionInfo.CloseTime)
 	}
 
 	var expirationTime *timestamppb.Timestamp
@@ -681,7 +682,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		ScheduleToCloseTimeout:  a.GetScheduleToCloseTimeout(),
 		ScheduleToStartTimeout:  a.GetScheduleToStartTimeout(),
 		StartToCloseTimeout:     a.GetStartToCloseTimeout(),
-		StateTransitionCount:    ctx.StateTransitionCount(),
+		StateTransitionCount:    executionInfo.StateTransitionCount,
 		// TODO(saa-preview): StateSizeBytes?
 		SearchAttributes: sa,
 		Status:           status,

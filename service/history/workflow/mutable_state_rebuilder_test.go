@@ -2159,7 +2159,7 @@ func (s *stateBuilderSuite) TestApplyEvents_HSMRegistry() {
 	s.Equal(enumsspb.NEXUS_OPERATION_STATE_SCHEDULED, sm.State())
 }
 
-func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimeSkipped() {
+func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimeSkippingTransitioned() {
 	version := int64(1)
 	requestID := uuid.NewString()
 	execution := &commonpb.WorkflowExecution{
@@ -2173,15 +2173,15 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimeSkippe
 		Version:   version,
 		EventId:   130,
 		EventTime: timestamppb.New(now),
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionTimeSkippedEventAttributes{
-			WorkflowExecutionTimeSkippedEventAttributes: &historypb.WorkflowExecutionTimeSkippedEventAttributes{
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionTimeSkippingTransitionedEventAttributes{
+			WorkflowExecutionTimeSkippingTransitionedEventAttributes: &historypb.WorkflowExecutionTimeSkippingTransitionedEventAttributes{
 				TargetTime: timestamppb.New(now.Add(time.Hour)),
 			},
 		},
 	}
 
-	s.mockMutableState.EXPECT().ApplyWorkflowExecutionTimeSkippedEvent(gomock.Any(), protomock.Eq(event)).Return(nil)
+	s.mockMutableState.EXPECT().ApplyWorkflowExecutionTimeSkippingTransitionedEvent(gomock.Any(), protomock.Eq(event)).Return(nil)
 	s.mockUpdateVersion(event)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 

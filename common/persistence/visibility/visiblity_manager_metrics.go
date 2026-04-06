@@ -4,9 +4,8 @@ import (
 	"context"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -142,8 +141,8 @@ func (m *visibilityManagerMetrics) ListWorkflowExecutions(
 
 func (m *visibilityManagerMetrics) ListChasmExecutions(
 	ctx context.Context,
-	request *manager.ListChasmExecutionsRequest,
-) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
+	request *visibilityservice.ListChasmExecutionsRequest,
+) (*visibilityservice.ListChasmExecutionsResponse, error) {
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceListChasmExecutionsScope)
 	response, err := m.delegate.ListChasmExecutions(ctx, request)
 	elapsed := time.Since(startTime)
@@ -151,7 +150,7 @@ func (m *visibilityManagerMetrics) ListChasmExecutions(
 		m.logger.Warn("List query exceeded threshold",
 			tag.Duration("duration", elapsed),
 			tag.String("visibility-query", request.Query),
-			tag.Stringer("namespace", request.Namespace),
+			tag.String("namespace", request.Namespace),
 		)
 	}
 	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
@@ -173,8 +172,8 @@ func (m *visibilityManagerMetrics) CountWorkflowExecutions(
 
 func (m *visibilityManagerMetrics) CountChasmExecutions(
 	ctx context.Context,
-	request *manager.CountChasmExecutionsRequest,
-) (*chasm.CountExecutionsResponse, error) {
+	request *visibilityservice.CountChasmExecutionsRequest,
+) (*visibilityservice.CountChasmExecutionsResponse, error) {
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceCountChasmExecutionsScope)
 	response, err := m.delegate.CountChasmExecutions(ctx, request)
 	elapsed := time.Since(startTime)

@@ -90,7 +90,7 @@ type (
 		AddTimerCanceledEvent(int64, *commandpb.CancelTimerCommandAttributes, string) (*historypb.HistoryEvent, error)
 		AddTimerFiredEvent(string) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionTimeSkippedEvent(ctx context.Context, advanceToTimePoint time.Time) (*historypb.HistoryEvent, error)
-		ApplyWorkflowExecutionTimeSkippedEvent(ctx context.Context, event *historypb.HistoryEvent) error
+		ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error
 		IsAutoTimeSkippable() bool
 		VirtualTimeNow() time.Time
 		AddTimerStartedEvent(int64, *commandpb.StartTimerCommandAttributes) (*historypb.HistoryEvent, *persistencespb.TimerInfo, error)

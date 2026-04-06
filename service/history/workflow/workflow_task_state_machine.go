@@ -774,6 +774,14 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		)
 
 		workflowTask.ScheduledEventID = scheduledEvent.GetEventId()
+		//nolint:staticcheck // SA1019
+		versioningStamp := request.GetWorkerVersionStamp()
+		if versioningStamp.GetUseVersioning() && m.ms.GetAssignedBuildId() == "" {
+			// WV2 is not used. making sure the versioning stamp does not go through otherwise the
+			// workflow will start using WV2 which can cause issues.
+			// TODO: remove this block after deleting old wv [cleanup-old-wv]
+			versioningStamp = nil
+		}
 		startedEvent := m.ms.hBuilder.AddWorkflowTaskStartedEvent(
 			workflowTask.ScheduledEventID,
 			workflowTask.RequestID,
@@ -781,7 +789,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 			workflowTask.StartedTime,
 			workflowTask.SuggestContinueAsNew,
 			workflowTask.HistorySizeBytes,
-			request.WorkerVersionStamp,
+			versioningStamp,
 			workflowTask.BuildIdRedirectCounter,
 			workflowTask.SuggestContinueAsNewReasons,
 			workflowTask.TargetWorkerDeploymentVersionChanged,

@@ -1513,18 +1513,18 @@ func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionTerminatedEvent(ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowExecutionTerminatedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowExecutionTerminatedEvent), arg0, arg1)
 }
 
-// ApplyWorkflowExecutionTimeSkippedEvent mocks base method.
-func (m *MockMutableState) ApplyWorkflowExecutionTimeSkippedEvent(ctx context.Context, event *history.HistoryEvent) error {
+// ApplyWorkflowExecutionTimeSkippingTransitionedEvent mocks base method.
+func (m *MockMutableState) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *history.HistoryEvent) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ApplyWorkflowExecutionTimeSkippedEvent", ctx, event)
+	ret := m.ctrl.Call(m, "ApplyWorkflowExecutionTimeSkippingTransitionedEvent", ctx, event)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// ApplyWorkflowExecutionTimeSkippedEvent indicates an expected call of ApplyWorkflowExecutionTimeSkippedEvent.
-func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionTimeSkippedEvent(ctx, event any) *gomock.Call {
+// ApplyWorkflowExecutionTimeSkippingTransitionedEvent indicates an expected call of ApplyWorkflowExecutionTimeSkippingTransitionedEvent.
+func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx, event any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowExecutionTimeSkippedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowExecutionTimeSkippedEvent), ctx, event)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowExecutionTimeSkippingTransitionedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowExecutionTimeSkippingTransitionedEvent), ctx, event)
 }
 
 // ApplyWorkflowExecutionTimedoutEvent mocks base method.

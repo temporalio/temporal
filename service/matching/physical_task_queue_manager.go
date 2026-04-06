@@ -85,12 +85,11 @@ type (
 		clusterMeta         cluster.Metadata
 		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
-		pollerHistory               *pollerHistory
-		currentPolls                atomic.Int64
-		taskValidator               taskValidator
-		deploymentRegistrationCh    chan struct{}
-		deploymentVersionRegistered bool
-		pollerScalingRateLimiter    quotas.RateLimiter
+		pollerHistory            *pollerHistory
+		currentPolls             atomic.Int64
+		taskValidator            taskValidator
+		deploymentRegistrationCh chan struct{}
+		pollerScalingRateLimiter quotas.RateLimiter
 
 		taskTrackerLock sync.RWMutex
 		tasksAdded      map[priorityKey]*taskTracker
@@ -134,7 +133,10 @@ func newPhysicalTaskQueueManager(
 	buildIDTag := tag.WorkerVersion(versionTagValue)
 	taggedMetricsHandler := partitionMgr.metricsHandler.WithTags(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
-		metrics.WorkerVersionTag(versionTagValue, config.BreakdownMetricsByBuildID()))
+		metrics.WorkerVersionTag(versionTagValue, config.BreakdownMetricsByBuildID()),
+		metrics.WorkerDeploymentNameTag(queue.Version().Deployment().GetSeriesName(), config.BreakdownMetricsByBuildID()),
+		metrics.WorkerDeploymentBuildIDTag(queue.Version().Deployment().GetBuildId(), config.BreakdownMetricsByBuildID()),
+	)
 
 	tqCtx, tqCancel := context.WithCancel(partitionMgr.callerInfoContext(context.Background()))
 
@@ -500,7 +502,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		task.backlogCountHint = c.backlogCountHint
 
 		if pollMetadata.forwardedFrom == "" { // track the task on the child, not where a poll was forwarded to
-			c.getOrCreateTaskTracker(c.tasksDispatched, priorityKey(task.getPriority().GetPriorityKey())).incrementTaskCount()
+			c.getOrCreateTaskTracker(c.tasksDispatched, priorityKey(task.getPriority().GetPriorityKey())).inc(1)
 		}
 		return task, nil
 	}
@@ -576,7 +578,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchQueryTask(
 	task *internalTask,
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	if !task.isForwarded() {
-		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey())).incrementTaskCount()
+		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey())).inc(1)
 	}
 	return c.matcher.OfferQuery(ctx, task)
 }
@@ -586,7 +588,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 	task *internalTask,
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
 	if !task.isForwarded() {
-		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(0)).incrementTaskCount() // Nexus has no priorities
+		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(0)).inc(1) // Nexus has no priorities
 	}
 	return c.matcher.OfferNexusTask(ctx, task)
 }
@@ -681,7 +683,7 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	if !task.isForwarded() {
 		// request sent by history service
 		c.liveness.markAlive()
-		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey())).incrementTaskCount()
+		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey())).inc(1)
 		if disable, _ := testhooks.Get(c.partitionMgr.engine.testHooks, testhooks.MatchingDisableSyncMatch, c.partitionMgr.ns.ID()); disable {
 			return false, nil
 		}
@@ -713,6 +715,19 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		return errMissingDeploymentVersion
 	}
 
+	userData, _, err := c.partitionMgr.getPerTypeUserData()
+	if err != nil {
+		return err
+	}
+
+	deploymentData := userData.GetDeploymentData()
+	if worker_versioning.HasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
+		// already registered in user data, we can assume the workflow is running.
+		// TODO: consider replication scenarios where user data is replicated before
+		// the deployment workflow.
+		return nil
+	}
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -730,17 +745,13 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		}
 	}()
 
-	if c.deploymentVersionRegistered {
-		// deployment version already registered
-		return nil
-	}
-
-	userData, _, err := c.partitionMgr.GetUserDataManager().GetUserData()
+	// Recheck user data in case it was updated in the meantime while we were waiting for the lock.
+	userData, _, err = c.partitionMgr.getPerTypeUserData()
 	if err != nil {
 		return err
 	}
 
-	deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
+	deploymentData = userData.GetDeploymentData()
 	if worker_versioning.HasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
 		// already registered in user data, we can assume the workflow is running.
 		// TODO: consider replication scenarios where user data is replicated before
@@ -790,11 +801,11 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	// the deployment workflow will register itself in this task queue's user data.
 	// wait for it to propagate here.
 	for {
-		userData, userDataChanged, err := c.partitionMgr.GetUserDataManager().GetUserData()
+		userData, userDataChanged, err := c.partitionMgr.getPerTypeUserData()
 		if err != nil {
 			return err
 		}
-		deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
+		deploymentData := userData.GetDeploymentData()
 		if worker_versioning.HasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
 			break
 		}
@@ -806,7 +817,6 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		}
 	}
 
-	c.deploymentVersionRegistered = true
 	return nil
 }
 
@@ -920,8 +930,8 @@ func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(
 	}
 
 	// Initalize all task trackers together; or the timeframes won't line up.
-	c.tasksAdded[priorityKey] = newTaskTracker(c.partitionMgr.engine.timeSource)
-	c.tasksDispatched[priorityKey] = newTaskTracker(c.partitionMgr.engine.timeSource)
+	c.tasksAdded[priorityKey] = c.partitionMgr.engine.newTaskTracker()
+	c.tasksDispatched[priorityKey] = c.partitionMgr.engine.newTaskTracker()
 
 	return intervals[priorityKey]
 }

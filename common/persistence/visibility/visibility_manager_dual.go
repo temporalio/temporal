@@ -5,8 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -163,13 +162,13 @@ func (v *VisibilityManagerDual) ListWorkflowExecutions(
 
 func (v *VisibilityManagerDual) ListChasmExecutions(
 	ctx context.Context,
-	request *manager.ListChasmExecutionsRequest,
-) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
+	request *visibilityservice.ListChasmExecutionsRequest,
+) (*visibilityservice.ListChasmExecutionsResponse, error) {
 	return dualReadWrapper(
 		ctx,
 		v,
 		request,
-		request.Namespace,
+		namespace.Name(request.Namespace),
 		manager.VisibilityManager.ListChasmExecutions,
 	)
 }
@@ -189,13 +188,13 @@ func (v *VisibilityManagerDual) CountWorkflowExecutions(
 
 func (v *VisibilityManagerDual) CountChasmExecutions(
 	ctx context.Context,
-	request *manager.CountChasmExecutionsRequest,
-) (*chasm.CountExecutionsResponse, error) {
+	request *visibilityservice.CountChasmExecutionsRequest,
+) (*visibilityservice.CountChasmExecutionsResponse, error) {
 	return dualReadWrapper(
 		ctx,
 		v,
 		request,
-		request.Namespace,
+		namespace.Name(request.Namespace),
 		manager.VisibilityManager.CountChasmExecutions,
 	)
 }

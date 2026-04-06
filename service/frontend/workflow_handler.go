@@ -151,6 +151,148 @@ type (
 	}
 )
 
+func (wh *WorkflowHandler) CreateWorkerDeploymentVersion(
+	ctx context.Context,
+	request *workflowservice.CreateWorkerDeploymentVersionRequest,
+) (_ *workflowservice.CreateWorkerDeploymentVersionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if request.GetDeploymentVersion().GetDeploymentName() == "" {
+		return nil, serviceerror.NewInvalidArgument("deployment name cannot be empty")
+	}
+
+	if request.GetDeploymentVersion().GetBuildId() == "" {
+		return nil, serviceerror.NewInvalidArgument("build ID cannot be empty")
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentVersionsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	requestID := request.RequestId
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
+
+	err = wh.workerDeploymentClient.CreateWorkerDeploymentVersion(
+		ctx,
+		namespaceEntry,
+		request.GetDeploymentVersion().GetDeploymentName(),
+		request.GetDeploymentVersion().GetBuildId(),
+		request.Identity,
+		requestID,
+		request.GetComputeConfig(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.CreateWorkerDeploymentVersionResponse{}, nil
+}
+
+func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionComputeConfig(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest,
+) (_ *workflowservice.UpdateWorkerDeploymentVersionComputeConfigResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if request.GetDeploymentVersion().GetDeploymentName() == "" {
+		return nil, serviceerror.NewInvalidArgument("deployment name cannot be empty")
+	}
+
+	if request.GetDeploymentVersion().GetBuildId() == "" {
+		return nil, serviceerror.NewInvalidArgument("build ID cannot be empty")
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentVersionsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	requestID := request.RequestId
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
+
+	err = wh.workerDeploymentClient.UpdateVersionComputeConfig(
+		ctx,
+		namespaceEntry,
+		request.GetDeploymentVersion(),
+		request.GetComputeConfigScalingGroups(),
+		request.GetRemoveComputeConfigScalingGroups(),
+		request.Identity,
+		requestID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateWorkerDeploymentVersionComputeConfigResponse{}, nil
+}
+
+func (wh *WorkflowHandler) ValidateWorkerDeploymentVersionComputeConfig(
+	ctx context.Context,
+	request *workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest,
+) (_ *workflowservice.ValidateWorkerDeploymentVersionComputeConfigResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentVersionsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	err = wh.workerDeploymentClient.ValidateComputeConfig(
+		ctx,
+		namespaceEntry,
+		request.GetDeploymentVersion(),
+		request.GetComputeConfigScalingGroups(),
+		request.GetRemoveComputeConfigScalingGroups(),
+		request.Identity,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.ValidateWorkerDeploymentVersionComputeConfigResponse{}, nil
+}
+
 // NewWorkflowHandler creates a gRPC handler for workflowservice
 func NewWorkflowHandler(
 	config *Config,
@@ -3281,6 +3423,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			BuildIdBasedVersioning:          true,
 			CountGroupByExecutionStatus:     true,
 			Nexus:                           wh.httpEnabled,
+			ServerScaledDeployments:         true,
 		},
 	}, nil
 }
@@ -3418,9 +3561,14 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 	// fleet, so it is stable for usage here.
 	if wh.config.EnableChasm(namespaceName.String()) {
 		if err := wh.writeSchedulerCHASMSentinel(ctx, namespaceID.String(), namespaceName.String(), request.ScheduleId); err != nil {
-			// CreateSentinel succeeds idempotently if a sentinel already exists.
-			// An AlreadyExists error means a real CHASM scheduler owns this ID.
-			return nil, err
+			// Ignore unimplemented to avoid issues with mixed brain testing.
+			//
+			// We wouldn't hit this condition in prod, as we wouldn't migrate with the fleet
+			// halfway deployed to the target version.
+			var unimplErr *serviceerror.Unimplemented
+			if !errors.As(err, &unimplErr) {
+				return nil, err
+			}
 		}
 	}
 
@@ -3662,19 +3810,22 @@ func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceN
 
 // isSchedulerErrorLegacyRoutable returns true if the error from the CHASM scheduler
 // indicates that the request should be routed to the legacy (V1) scheduler stack.
-// This accounts for two situations:
+// This accounts for three situations:
 //   - NotFound: the CHASM stack doesn't have a schedule for that ID
 //   - NotFound (sentinel): the key at that ID is a sentinel value (reserving the ID
 //     for the V1 stack)
-//
-// TODO: should ErrClosed (FailedPrecondition) from a CHASM schedule that was
-// migrated to V1 also be routable? Currently closed schedules return
-// FailedPrecondition which does not fall back to V1. This means callers with
-// routing enabled must handle the closed schedule case themselves or wait for
-// the CHASM entity to be cleaned up.
+//   - ErrClosed: the CHASM schedule was migrated to V1 and marked closed; the
+//     request should be retried against the workflow-backed stack.
 func isSchedulerErrorLegacyRoutable(err error) bool {
 	var notFoundErr *serviceerror.NotFound
-	return errors.As(err, &notFoundErr)
+	if errors.As(err, &notFoundErr) {
+		return true
+	}
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	if errors.As(err, &failedPreconditionErr) {
+		return failedPreconditionErr.Message == chasmscheduler.ErrClosed.(*serviceerror.FailedPrecondition).Message
+	}
+	return false
 }
 
 // Validates inner start workflow request. Note that this can mutate search attributes if present.
@@ -4010,6 +4161,52 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 	}, nil
 }
 
+func (wh *WorkflowHandler) CreateWorkerDeployment(ctx context.Context, request *workflowservice.CreateWorkerDeploymentRequest) (_ *workflowservice.CreateWorkerDeploymentResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if request.DeploymentName == "" {
+		return nil, serviceerror.NewInvalidArgument("deployment name cannot be empty")
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentVersionsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate request ID if not provided (for idempotency)
+	requestID := request.RequestId
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
+
+	conflictToken, err := wh.workerDeploymentClient.CreateWorkerDeployment(
+		ctx,
+		namespaceEntry,
+		request.DeploymentName,
+		request.Identity,
+		requestID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.CreateWorkerDeploymentResponse{
+		ConflictToken: conflictToken,
+	}, nil
+}
+
 func (wh *WorkflowHandler) SetWorkerDeploymentManager(ctx context.Context, request *workflowservice.SetWorkerDeploymentManagerRequest) (_ *workflowservice.SetWorkerDeploymentManagerResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
@@ -4097,8 +4294,7 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Con
 		version = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(request.GetVersion())
 	}
 
-	identity := uuid.NewString()
-	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, version, request.UpsertEntries, request.RemoveEntries, identity)
+	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, version, request.UpsertEntries, request.RemoveEntries, request.Identity)
 	if err != nil {
 		return nil, err
 	}
@@ -4171,6 +4367,10 @@ func (wh *WorkflowHandler) describeScheduleWorkflow(ctx context.Context, request
 	executionInfo := describeResponse.GetWorkflowExecutionInfo()
 	if executionInfo.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		// only treat running schedules as existing
+		return nil, serviceerror.NewNotFound("schedule not found")
+	}
+	if executionInfo.GetType().GetName() == dummy.DummyWFTypeName {
+		// This is a sentinel workflow, not a real scheduler.
 		return nil, serviceerror.NewNotFound("schedule not found")
 	}
 
@@ -5373,6 +5573,15 @@ func (wh *WorkflowHandler) StartBatchOperation(
 
 	if err := batcher.ValidateBatchOperation(request); err != nil {
 		return nil, err
+	}
+
+	// Validate visibility query syntax before starting the batch workflow.
+	// Malformed queries (e.g. "()") would otherwise cause the batch activity
+	// to retry indefinitely since the error is not marked non-retryable.
+	if q := request.GetVisibilityQuery(); len(q) > 0 {
+		if _, err := sqlparser.Parse("select * from dummy where " + q); err != nil {
+			return nil, serviceerror.NewInvalidArgumentf("invalid visibility query: %v", err)
+		}
 	}
 
 	// Validate concurrent batch operation

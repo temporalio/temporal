@@ -58,6 +58,7 @@ var (
 		"ChasmPure":                          32,
 		"Chasm":                              33,
 		"TimeSkipping":                       34,
+		"ReplicationDeleteExecution":         35,
 	}
 )
 
