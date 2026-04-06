@@ -87,9 +87,9 @@ func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	engine.partitions[prtn.Key()] = prtnMgr
 
 	if s.fairness {
-		prtnMgr.config.EnableFairness = true
+		prtnMgr.config.EnableFairness.Store(true)
 	} else if !s.newMatcher {
-		prtnMgr.config.NewMatcher = false
+		prtnMgr.config.NewMatcher.Store(false)
 	}
 
 	s.tqMgr, err = newPhysicalTaskQueueManager(prtnMgr, s.physicalTaskQueueKey)
@@ -538,8 +538,8 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 	require.NoError(t, err)
 	engine.partitions[prtn.Key()] = prtnMgr
 
-	prtnMgr.config.NewMatcher = true
-	prtnMgr.config.EnableFairness = true
+	prtnMgr.config.NewMatcher.Store(true)
+	prtnMgr.config.EnableFairness.Store(true)
 
 	tqMgr, err := newPhysicalTaskQueueManager(prtnMgr, physicalTaskQueueKey)
 	require.NoError(t, err)
@@ -583,8 +583,8 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 	require.NoError(t, err)
 	engine.partitions[prtn.Key()] = prtnMgr2
 
-	prtnMgr2.config.NewMatcher = true
-	prtnMgr2.config.EnableFairness = true
+	prtnMgr2.config.NewMatcher.Store(true)
+	prtnMgr2.config.EnableFairness.Store(true)
 
 	tqMgr2, err := newPhysicalTaskQueueManager(prtnMgr2, physicalTaskQueueKey)
 	require.NoError(t, err)
