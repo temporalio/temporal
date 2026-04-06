@@ -26,7 +26,6 @@ type MockContext struct {
 	HandleExecutionCloseTime   func() time.Time
 	HandleStateTransitionCount func() int64
 	HandleExecutionInfo        func() ExecutionInfo
-	HandleMetricsHandler       func() metrics.Handler
 	HandleLibrary              func(name string) (Library, bool)
 	HandleNamespaceEntry       func() *namespace.Namespace
 	HandleEndpointByName       func(string) (*persistencespb.NexusEndpointEntry, error)
