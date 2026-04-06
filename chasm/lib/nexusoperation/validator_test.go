@@ -613,6 +613,13 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED, r.WaitStage)
 			},
 		},
+		{
+			name: "wait_stage - rejects unsupported value",
+			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
+				r.WaitStage = enumspb.NexusOperationWaitStage(99)
+			},
+			errMsg: "unsupported wait_stage",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			validReq := &workflowservice.PollNexusOperationExecutionRequest{

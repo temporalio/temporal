@@ -193,6 +193,13 @@ func validateAndNormalizePollRequest(req *workflowservice.PollNexusOperationExec
 	// Normalize wait stage: UNSPECIFIED defaults to CLOSED.
 	if req.GetWaitStage() == enumspb.NEXUS_OPERATION_WAIT_STAGE_UNSPECIFIED {
 		req.WaitStage = enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED
+	} else {
+		switch req.GetWaitStage() {
+		case enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
+			enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED:
+		default:
+			return serviceerror.NewInvalidArgumentf("unsupported wait_stage: %s", req.GetWaitStage())
+		}
 	}
 	if req.GetOperationId() == "" {
 		return serviceerror.NewInvalidArgument("operation_id is required")
