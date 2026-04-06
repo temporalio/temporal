@@ -20,7 +20,7 @@ type workflowServiceNexusHandler struct {
 	historyHandler    historyservice.HistoryServiceServer
 }
 
-// SignalWithStartWorkflowExecution implements workflowservicenexus.WorkflowServiceNexusHandler.
+// SignalWithStartWorkflowExecution implements the SignalWithStartWorkflowExecution Nexus operation.
 func (h *workflowServiceNexusHandler) SignalWithStartWorkflowExecution(name string) nexus.Operation[*workflowservice.SignalWithStartWorkflowExecutionRequest, *workflowservice.SignalWithStartWorkflowExecutionResponse] {
 	return nexus.NewSyncOperation(name, func(ctx context.Context, req *workflowservice.SignalWithStartWorkflowExecutionRequest, options nexus.StartOperationOptions) (*workflowservice.SignalWithStartWorkflowExecutionResponse, error) {
 		nsID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
@@ -56,10 +56,8 @@ func (h *workflowServiceNexusHandler) SignalWithStartWorkflowExecution(name stri
 func mustNewWorkflowServiceNexusHandler(
 	handler *workflowServiceNexusHandler,
 ) *nexus.Service {
-	svc, err := workflowservicenexus.NewWorkflowServiceNexusService(handler)
-	if err != nil {
-		panic(err)
-	}
+	svc := nexus.NewService(workflowservicenexus.WorkflowService.ServiceName)
+	svc.MustRegister(handler.SignalWithStartWorkflowExecution(workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name()))
 	return svc
 }
 
@@ -119,8 +117,8 @@ func NewWorkflowServiceNexusServiceProcessor(
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 ) *chasm.NexusServiceProcessor {
-	sp := chasm.NewNexusServiceProcessor(workflowservicenexus.WorkflowServiceServiceName)
-	sp.MustRegisterOperation(workflowservicenexus.WorkflowServiceSignalWithStartWorkflowExecutionOperationName, chasm.NewRegisterableNexusOperationProcessor(SignalWithStartOperationProcessor{
+	sp := chasm.NewNexusServiceProcessor(workflowservicenexus.WorkflowService.ServiceName)
+	sp.MustRegisterOperation(workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name(), chasm.NewRegisterableNexusOperationProcessor(SignalWithStartOperationProcessor{
 		validator: NewValidator(config, saMapperProvider, saValidator),
 	}))
 	return sp

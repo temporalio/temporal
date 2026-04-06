@@ -70,8 +70,8 @@ func (s *SignalWithStartFromWorkflowTestSuite) scheduleAndGetSWSResult(
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
-						Service:   workflowservicenexus.WorkflowServiceServiceName,
-						Operation: workflowservicenexus.WorkflowServiceSignalWithStartWorkflowExecutionOperationName,
+						Service:   workflowservicenexus.WorkflowService.ServiceName,
+						Operation: workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name(),
 						Input:     payloads.MustEncodeSingle(swsReq),
 					},
 				},
@@ -170,8 +170,8 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestHappyPath() {
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
-						Service:   "temporal.api.workflowservice.v1.WorkflowService",
-						Operation: "SignalWithStartWorkflowExecution",
+						Service:   workflowservicenexus.WorkflowService.ServiceName,
+						Operation: workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name(),
 						Input: payloads.MustEncodeSingle(&workflowservice.SignalWithStartWorkflowExecutionRequest{
 							WorkflowId: workflowID,
 							SignalName: "test-signal",
