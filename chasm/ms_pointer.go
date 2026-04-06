@@ -38,6 +38,11 @@ func (m MSPointer) HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool
 	return m.backend.HasAnyBufferedEvent(filter)
 }
 
+// LoadHistoryEvent loads a history event from the underlying mutable state using the given token.
+func (m MSPointer) LoadHistoryEvent(ctx Context, token []byte) (*historypb.HistoryEvent, error) {
+	return m.backend.LoadHistoryEvent(ctx.goContext(), token)
+}
+
 // GetNexusCompletion retrieves the Nexus operation completion data for the given request ID from the underlying mutable state.
 func (m MSPointer) GetNexusCompletion(ctx Context, requestID string) (nexusrpc.CompleteOperationOptions, error) {
 	return m.backend.GetNexusCompletion(ctx.goContext(), requestID)
