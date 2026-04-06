@@ -225,6 +225,7 @@ func NamespaceRegistryProvider(
 	return nsregistry.NewRegistry(
 		metadataManager,
 		clusterMetadata.IsGlobalNamespaceEnabled(),
+		clusterMetadata.GetCurrentClusterName(),
 		dynamicconfig.NamespaceCacheRefreshInterval.Get(dynamicCollection),
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection),
 		metricsHandler,
