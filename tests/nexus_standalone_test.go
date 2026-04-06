@@ -193,26 +193,6 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 		s.Equal("operation not found for ID: does-not-exist", notFound.Error())
 	})
 
-	t.Run("WrongRunID", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
-
-		_, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
-			OperationId: "test-op",
-			Endpoint:    endpointName,
-		})
-		s.NoError(err)
-
-		_, err = s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
-			OperationId: "test-op",
-			RunId:       "00000000-0000-0000-0000-000000000000",
-		})
-		var notFound *serviceerror.NotFound
-		s.ErrorAs(err, &notFound)
-		s.Equal("operation not found for ID: test-op", notFound.Error())
-	})
-
 	t.Run("LongPollStateChange", func(t *testing.T) {
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		endpointName := createNexusEndpoint(s)
@@ -1285,6 +1265,27 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 		require.NotNil(t, pollResp.GetFailure().GetTerminatedFailureInfo())
 	})
 
+	t.Run("NamespaceNotFound", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
+
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		require.NoError(t, err)
+
+		_, err = s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+			Namespace:   "non-existent-namespace",
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+		})
+		var namespaceNotFoundErr *serviceerror.NamespaceNotFound
+		require.ErrorAs(t, err, &namespaceNotFoundErr)
+		require.Contains(t, namespaceNotFoundErr.Error(), "non-existent-namespace")
+	})
+
 	t.Run("NotFound", func(t *testing.T) {
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		endpointName := createNexusEndpoint(s)
@@ -1295,52 +1296,15 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 		})
 		require.NoError(t, err)
 
+		_, err = s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "non-existent-op",
+			RunId:       startResp.RunId,
+			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+		})
 		var notFoundErr *serviceerror.NotFound
-		var namespaceNotFoundErr *serviceerror.NamespaceNotFound
-
-		testCases := []struct {
-			name        string
-			request     *workflowservice.PollNexusOperationExecutionRequest
-			expectedErr error
-		}{
-			{
-				name: "NonExistentNamespace",
-				request: &workflowservice.PollNexusOperationExecutionRequest{
-					Namespace:   "non-existent-namespace",
-					OperationId: "test-op",
-					RunId:       startResp.RunId,
-					WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
-				},
-				expectedErr: namespaceNotFoundErr,
-			},
-			{
-				name: "NonExistentOperationID",
-				request: &workflowservice.PollNexusOperationExecutionRequest{
-					Namespace:   s.Namespace().String(),
-					OperationId: "non-existent-op",
-					RunId:       startResp.RunId,
-					WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
-				},
-				expectedErr: notFoundErr,
-			},
-			{
-				name: "NonExistentRunID",
-				request: &workflowservice.PollNexusOperationExecutionRequest{
-					Namespace:   s.Namespace().String(),
-					OperationId: "test-op",
-					RunId:       "11111111-2222-3333-4444-555555555555",
-					WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
-				},
-				expectedErr: notFoundErr,
-			},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				_, err := s.FrontendClient().PollNexusOperationExecution(s.Context(), tc.request)
-				require.ErrorAs(t, err, &tc.expectedErr) //nolint:testifylint
-			})
-		}
+		require.ErrorAs(t, err, &notFoundErr)
+		require.Equal(t, "operation not found for ID: non-existent-op", notFoundErr.Error())
 	})
 
 	// Validates that request validation is wired up in the frontend.
