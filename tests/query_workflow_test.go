@@ -25,6 +25,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
@@ -336,6 +337,124 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted(
 	_, err = s.SdkClient().QueryWorkflow(ctx, id, "", testname)
 	s.Error(err)
 	s.ErrorContains(err, consts.ErrWorkflowClosedBeforeWorkflowTaskStarted.Error())
+}
+
+// TestQueryWorkflow_NonStickyMultiPageHistory verifies that query tasks work correctly
+// when the workflow history spans multiple pages. It sets MatchingHistoryMaxPageSize to a
+// small value to force pagination, creates a workflow with enough events, then polls for
+// a query task directly via PollWorkflowTaskQueue. The test verifies that the NextPageToken
+// returned with the first page can be successfully used with GetWorkflowExecutionHistory
+// to fetch subsequent pages. If matching service used GetWorkflowExecutionRawHistory for
+// query tasks, the token would be a RawHistoryContinuation which is incompatible with
+// GetWorkflowExecutionHistory's expected HistoryContinuation format, causing
+// "Invalid NextPageToken" errors.
+func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
+	// Set a very small page size to force history pagination in matching service.
+	s.OverrideDynamicConfig(dynamicconfig.MatchingHistoryMaxPageSize, 2)
+
+	// Stop the default worker so we can control sticky behavior.
+	s.SdkWorker().Stop()
+
+	signalCount := 5
+	workflowFn := func(ctx workflow.Context) (string, error) {
+		_ = workflow.SetQueryHandler(ctx, "test", func() (string, error) {
+			return "query works", nil
+		})
+
+		signalCh := workflow.GetSignalChannel(ctx, "done")
+		for i := 0; i < signalCount; i++ {
+			signalCh.Receive(ctx, nil)
+		}
+		return "done", nil
+	}
+
+	id := "test-query-non-sticky-multi-page"
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:                 id,
+		TaskQueue:          s.TaskQueue(),
+		WorkflowRunTimeout: 20 * time.Second,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Start worker and workflow.
+	queryWorker := worker.New(s.SdkClient(), s.TaskQueue(), worker.Options{})
+	queryWorker.RegisterWorkflow(workflowFn)
+	err := queryWorker.Start()
+	s.NoError(err)
+
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	s.NoError(err)
+	s.NotNil(workflowRun)
+
+	// Send signals to generate history events. Each signal adds WorkflowExecutionSignaled
+	// event plus WorkflowTaskScheduled/Started/Completed events. With 5 signals we get
+	// well over 2 events (our page size), forcing pagination.
+	for i := 0; i < signalCount; i++ {
+		err = s.SdkClient().SignalWorkflow(ctx, id, "", "done", nil)
+		s.NoError(err)
+		// Small delay between signals so the worker can process each one individually,
+		// generating separate workflow task event batches.
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	// Wait for the workflow to process all signals by checking history length.
+	s.Eventually(func() bool {
+		resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+		})
+		if err != nil {
+			return false
+		}
+		return resp.GetWorkflowExecutionInfo().GetHistoryLength() > 10
+	}, 10*time.Second, 200*time.Millisecond)
+
+	// Stop worker to clear sticky cache.
+	queryWorker.Stop()
+
+	// Now issue a query. We don't start a new SDK worker — instead, we manually poll
+	// for the query task so we can inspect the NextPageToken directly.
+	go func() {
+		// QueryWorkflow blocks until someone answers the query. We'll answer it by
+		// polling the task queue ourselves below.
+		_, _ = s.SdkClient().QueryWorkflow(ctx, id, "", "test")
+	}()
+
+	// Poll for the query task (non-sticky path). Since there's no worker running,
+	// the query task goes to the normal (non-sticky) task queue.
+	var pollResp *workflowservice.PollWorkflowTaskQueueResponse
+	s.Eventually(func() bool {
+		pollCtx, pollCancel := context.WithTimeout(ctx, 3*time.Second)
+		defer pollCancel()
+		pollResp, err = s.FrontendClient().PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: s.TaskQueue(),
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
+			Identity: "test-worker",
+		})
+		return err == nil && len(pollResp.GetTaskToken()) > 0
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// The response should have history events with a NextPageToken (multi-page).
+	s.NotNil(pollResp.GetHistory(), "poll response should contain history")
+	s.NotEmpty(pollResp.GetNextPageToken(), "poll response should have NextPageToken for multi-page history")
+
+	// This is the critical check: the NextPageToken from the query task poll response
+	// must be usable with GetWorkflowExecutionHistory. If matching service had used
+	// GetWorkflowExecutionRawHistory, this token would be a RawHistoryContinuation
+	// and the following call would fail with "Invalid NextPageToken."
+	histResp, err := s.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+		},
+		NextPageToken: pollResp.GetNextPageToken(),
+	})
+	s.NoError(err, "GetWorkflowExecutionHistory with NextPageToken from query task poll should succeed")
+	s.NotNil(histResp)
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
