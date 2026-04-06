@@ -2,9 +2,11 @@ package nexusoperation
 
 import (
 	"strings"
+	"text/template"
 	"time"
 
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -107,9 +109,19 @@ var MaxOperationScheduleToCloseTimeout = dynamicconfig.NewNamespaceDurationSetti
 or a longer timeout than permitted will have their schedule-to-close timeout capped to this value. 0 implies no limit.`,
 )
 
-var CallbackURLTemplate = dynamicconfig.NewGlobalStringSetting(
+var CallbackURLTemplate = dynamicconfig.NewGlobalTypedSettingWithConverter(
 	"nexusoperation.callback.endpoint.template",
-	"unset",
+	func(in any) (*template.Template, error) {
+		s, err := dynamicconfig.ConvertStructure[string]("")(in)
+		if err != nil {
+			return nil, err
+		}
+		if s == "unset" {
+			return nil, nil
+		}
+		return template.New("NexusCallbackURL").Parse(s)
+	},
+	nil,
 	`Controls the template for generating callback URLs included in Nexus operation requests, which are used to deliver
 asynchronous completion for external endpoint targets. The template can be used to interpolate the {{.NamepaceName}}
 and {{.NamespaceID}} parameters to construct a publicly accessible URL.
@@ -141,6 +153,13 @@ Adding high-cardinality tags (like unique operation names) can significantly inc
 query complexity. Consider the cardinality impact when enabling these tags.`,
 )
 
+var UseSystemCallbackURL = dynamicconfig.NewGlobalBoolSetting(
+	"nexusoperation.useSystemCallbackURL",
+	true,
+	`Controls how the executor generates callback URLs for worker targets in Nexus Operations.
+When true, uses the fixed system callback URL for all worker targets.`,
+)
+
 var UseNewFailureWireFormat = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.useNewFailureWireFormat",
 	true,
@@ -151,6 +170,7 @@ Added for safety. Defaults to true. Likely to be removed in future server versio
 type Config struct {
 	ChasmEnabled                        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmNexusEnabled                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	NumHistoryShards                    int32
 	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MinRequestTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentOperations             dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -161,16 +181,18 @@ type Config struct {
 	DisallowedOperationHeaders          dynamicconfig.TypedPropertyFn[[]string]
 	MaxOperationScheduleToCloseTimeout  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	CallbackURLTemplate                 dynamicconfig.StringPropertyFn
+	CallbackURLTemplate                 dynamicconfig.TypedPropertyFn[*template.Template]
+	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
 	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
 	RetryPolicy                         func() backoff.RetryPolicy
 }
 
-func configProvider(dc *dynamicconfig.Collection) *Config {
+func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Config {
 	return &Config{
 		ChasmEnabled:                       dynamicconfig.EnableChasm.Get(dc),
 		ChasmNexusEnabled:                  ChasmNexusEnabled.Get(dc),
+		NumHistoryShards:                   cfg.NumHistoryShards,
 		RequestTimeout:                     RequestTimeout.Get(dc),
 		MinRequestTimeout:                  MinRequestTimeout.Get(dc),
 		MaxConcurrentOperations:            MaxConcurrentOperations.Get(dc),
@@ -181,8 +203,9 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 		DisallowedOperationHeaders:         DisallowedOperationHeaders.Get(dc),
 		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
-		UseNewFailureWireFormat:            UseNewFailureWireFormat.Get(dc),
 		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
+		UseSystemCallbackURL:               UseSystemCallbackURL.Get(dc),
+		UseNewFailureWireFormat:            UseNewFailureWireFormat.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),
