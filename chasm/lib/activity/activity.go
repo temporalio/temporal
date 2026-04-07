@@ -874,6 +874,7 @@ func (a *Activity) unpause(
 		&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()})
 	a.emitOnUnpausedMetrics(event.metricsHandler)
 }
+
 func (a *Activity) pause(
 	ctx chasm.MutableContext,
 	event pauseEvent,
@@ -885,6 +886,65 @@ func (a *Activity) pause(
 		RequestId: event.req.GetRequestId(),
 	}
 	a.emitOnPausedMetrics(event.metricsHandler)
+}
+
+// handleReset resets the activity execution.
+// For SCHEDULED activities: immediately re-dispatches at attempt 1.
+// For STARTED/CANCEL_REQUESTED activities: defers the reset to the next retry via the ActivityReset flag.
+func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetActivityExecutionRequest) (*activitypb.ResetActivityExecutionResponse, error) {
+	frontendReq := req.GetFrontendRequest()
+	resetHeartbeats := frontendReq.GetResetHeartbeat()
+
+	switch a.Status {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
+		// Activity is running. Defer reset to the next retry so we don't break
+		// the running worker's task token (which encodes the current attempt count).
+		a.ActivityReset = true
+		if resetHeartbeats {
+			a.ResetHeartbeats = true
+		}
+		return &activitypb.ResetActivityExecutionResponse{}, nil
+
+	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
+		// Activity is SCHEDULED (possibly in retry backoff). Reset immediately.
+		attempt := a.LastAttempt.Get(ctx)
+		attempt.Count = 1
+		attempt.Stamp++
+
+		if resetHeartbeats {
+			if hb, ok := a.LastHeartbeat.TryGet(ctx); ok {
+				hb.Details = nil
+				hb.RecordedTime = nil
+			}
+		}
+
+		scheduleTime := ctx.Now(a)
+		if jitter := frontendReq.GetJitter().AsDuration(); jitter > 0 {
+			randomOffset := time.Duration(rand.Int63n(int64(jitter))) //nolint:gosec
+			scheduleTime = scheduleTime.Add(randomOffset)
+		}
+
+		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+			ctx.AddTask(a, chasm.TaskAttributes{
+				ScheduledTime: scheduleTime.Add(timeout),
+			}, &activitypb.ScheduleToStartTimeoutTask{
+				Stamp: attempt.GetStamp(),
+			})
+		}
+
+		ctx.AddTask(a, chasm.TaskAttributes{
+			ScheduledTime: scheduleTime,
+		}, &activitypb.ActivityDispatchTask{
+			Stamp: attempt.GetStamp(),
+		})
+
+		return &activitypb.ResetActivityExecutionResponse{}, nil
+
+	default:
+		// Terminal or unspecified state.
+		return nil, serviceerror.NewNotFound("activity execution is not running")
+	}
 }
 
 // recordScheduleToStartOrCloseTimeoutFailure records schedule-to-start or schedule-to-close timeouts. Such timeouts are not retried so we

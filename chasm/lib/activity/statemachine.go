@@ -93,6 +93,20 @@ var TransitionRescheduled = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, event rescheduleEvent) error {
 		attempt := a.LastAttempt.Get(ctx)
 		currentTime := ctx.Now(a)
+
+		// Apply deferred reset: set Count to 0 so the increment below produces 1.
+		if a.ActivityReset {
+			attempt.Count = 0
+			a.ActivityReset = false
+			if a.ResetHeartbeats {
+				a.ResetHeartbeats = false
+				if hb, ok := a.LastHeartbeat.TryGet(ctx); ok {
+					hb.Details = nil
+					hb.RecordedTime = nil
+				}
+			}
+		}
+
 		attempt.Count++
 		attempt.Stamp++
 
