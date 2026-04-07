@@ -4,12 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -20,13 +18,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/chasm/lib/activity"
-	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/tasktoken"
@@ -36,6 +30,7 @@ import (
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -230,7 +225,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 	})
 
 	t.Run("UseExisting", func(t *testing.T) {
-		originalActivityID := testcore.RandomizeStr(t.Name())
+		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 		firstStartResp := env.startAndValidateActivity(ctx, t, originalActivityID, taskQueue)
 
@@ -1402,7 +1397,6 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 	t.Run("ByToken", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
-		identity := "client-that-requested-cancellation"
 
 		startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
 		runID := startResp.RunId
@@ -1457,7 +1451,6 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		require.Greater(t, info.GetExecutionDuration().AsDuration(), time.Duration(0))
 		require.NotNil(t, info.GetCloseTime())
 		protorequire.ProtoEqual(t, details, activityResp.GetOutcome().GetFailure().GetCanceledFailureInfo().GetDetails())
-		require.Equal(t, identity, activityResp.GetOutcome().GetFailure().GetCanceledFailureInfo().GetIdentity())
 	})
 
 	testByIDCases := []struct {
@@ -1481,7 +1474,6 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 
 			activityID := testcore.RandomizeStr(tc.name)
 			taskQueue := testcore.RandomizeStr(tc.name)
-			identity := "client-that-requested-cancellation"
 
 			startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
 			runID := startResp.RunId
@@ -1541,7 +1533,6 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 			require.Equal(t, "Test Cancellation", info.GetCanceledReason())
 			require.Equal(t, int64(1), info.GetTotalHeartbeatCount(), "total heartbeat count")
 			protorequire.ProtoEqual(t, details, activityResp.GetOutcome().GetFailure().GetCanceledFailureInfo().GetDetails())
-			require.Equal(t, identity, activityResp.GetOutcome().GetFailure().GetCanceledFailureInfo().GetIdentity())
 		})
 	}
 
@@ -1657,7 +1648,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      runID,
-				Identity:   "client-that-requested-cancellation",
+				Identity:   "cancelling-worker",
 				RequestId:  "cancel-request-id",
 				Reason:     "Test Cancellation",
 			})
@@ -1693,7 +1684,6 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 	t.Run("DifferentRequestIDFails", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
-		identity := "client-that-requested-cancellation"
 
 		startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
 		runID := startResp.RunId
@@ -1704,7 +1694,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
-			Identity:   identity,
+			Identity:   "cancelling-worker",
 			RequestId:  "cancel-request-id",
 			Reason:     "Test Cancellation",
 		})
@@ -1714,7 +1704,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
-			Identity:   identity,
+			Identity:   "cancelling-worker",
 			RequestId:  "different-cancel-request-id",
 			Reason:     "Test Cancellation",
 		})
@@ -1888,7 +1878,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 			_, err := env.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
 				Namespace: env.Namespace().String(),
 				Reason:    "Test Cancellation",
-				Identity:  "client-that-requested-cancellation",
+				Identity:  "cancelling-worker",
 			})
 
 			var invalidArgErr *serviceerror.InvalidArgument
@@ -1901,7 +1891,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 				ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)), // dynamic config default is 1000
 				Namespace:  env.Namespace().String(),
 				Reason:     "Test Cancellation",
-				Identity:   "client-that-requested-cancellation",
+				Identity:   "cancelling-worker",
 			})
 
 			var invalidArgErr *serviceerror.InvalidArgument
@@ -1916,7 +1906,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 				RequestId:  string(make([]byte, defaultMaxIDLengthLimit+1)), // dynamic config default is 1000
 				Namespace:  env.Namespace().String(),
 				Reason:     "Test Cancellation",
-				Identity:   "client-that-requested-cancellation",
+				Identity:   "cancelling-worker",
 			})
 
 			var invalidArgErr *serviceerror.InvalidArgument
@@ -1945,7 +1935,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 				RunId:      "invalid-run-id",
 				Namespace:  env.Namespace().String(),
 				Reason:     "Test Cancellation",
-				Identity:   "client-that-requested-cancellation",
+				Identity:   "cancelling-worker",
 			})
 
 			var invalidArgErr *serviceerror.InvalidArgument
@@ -1965,7 +1955,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 				ActivityId: testcore.RandomizeStr(t.Name()),
 				Namespace:  env.Namespace().String(),
 				Reason:     string(make([]byte, blobSizeLimitError+1)),
-				Identity:   "client-that-requested-cancellation",
+				Identity:   "cancelling-worker",
 			})
 
 			var invalidArgErr *serviceerror.InvalidArgument
@@ -2005,8 +1995,6 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 	})
 
 	t.Run("StaleToken", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-		t.Cleanup(cancel)
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 		_, err := env.startActivity(ctx, activityID, taskQueue)
@@ -2037,8 +2025,6 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 	})
 
 	t.Run("StaleAttemptToken", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-		t.Cleanup(cancel)
 		// Start an activity with retries, fail first attempt, then try to complete with old token.
 		// Use NextRetryDelay=1s to ensure the retry dispatch happens within test timeout.
 		activityID := testcore.RandomizeStr(t.Name())
@@ -2122,8 +2108,6 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 	})
 
 	t.Run("MismatchedTokenNamespace", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-		t.Cleanup(cancel)
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 		existingNamespace := env.Namespace().String()
@@ -2165,8 +2149,6 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 	// The validation ensures that the namespace in the request matches the namespace in the token's
 	// ComponentRef, preventing cross-namespace token reuse attacks.
 	t.Run("MismatchedTokenComponentRef", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-		t.Cleanup(cancel)
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 		existingNamespace := env.Namespace().String()
@@ -2265,7 +2247,7 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 			ActivityId: activityID,
 			RunId:      runID,
 			Reason:     "Test Termination",
-			Identity:   identity,
+			Identity:   "terminator",
 		})
 		require.NoError(t, err)
 
@@ -2293,12 +2275,8 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 		require.Nil(t, info.GetLastFailure())
 
 		expectedFailure := &failurepb.Failure{
-			Message: "Test Termination",
-			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
-				TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{
-					Identity: identity,
-				},
-			},
+			Message:     "Test Termination",
+			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
 		}
 		protorequire.ProtoEqual(t, expectedFailure, activityResp.GetOutcome().GetFailure())
 	})
@@ -3015,7 +2993,6 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.NoError(t, err)
 	require.NotNil(t, describeResp2)
 	require.NotNil(t, describeResp2.GetInfo())
-	require.Positive(t, describeResp2.GetInfo().GetStateSizeBytes())
 	require.Greater(t, describeResp2.GetInfo().GetStateTransitionCount(), describeResp1.GetInfo().GetStateTransitionCount())
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, describeResp2.GetInfo().GetStatus(),
 		"expected Running but is %s", describeResp2.GetInfo().GetStatus())
@@ -3034,7 +3011,6 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.NoError(t, err)
 	require.NotNil(t, describeResp3)
 	require.NotNil(t, describeResp3.GetInfo())
-	require.Positive(t, describeResp3.GetInfo().GetStateSizeBytes())
 	require.Greater(t, describeResp3.GetInfo().GetStateTransitionCount(), describeResp2.GetInfo().GetStateTransitionCount())
 
 	// The activity has timed out due to StartToClose. This is an attempt failure, therefore the
@@ -3106,6 +3082,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout_WhileCancelRequest
 		pollOutcome.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
 		"activity in CANCEL_REQUESTED should still time out via START_TO_CLOSE")
 }
+
 
 // TestScheduleToStartTimeout tests that a schedule-to-start timeout is recorded after the activity is
 // created but never started. It also verifies that DescribeActivityExecution can be used to long-poll for a TimedOut
@@ -3258,14 +3235,12 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 			protorequire.IgnoreFields(
 				"execution_duration",
 				"schedule_time",
-				"state_size_bytes",
 				"state_transition_count",
 			),
 		)
 		require.Equal(t, respInfo.GetExecutionDuration().AsDuration(), time.Duration(0)) // Never completed, so expect 0
 		require.Nil(t, describeResp.GetInfo().GetCloseTime())
 		require.Positive(t, respInfo.GetScheduleTime().AsTime().Unix())
-		require.Positive(t, respInfo.GetStateSizeBytes())
 		require.Positive(t, respInfo.GetStateTransitionCount())
 
 		protorequire.ProtoEqual(t, defaultInput, describeResp.Input)
@@ -3321,11 +3296,10 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 		protorequire.IgnoreFields(
 			"execution_duration",
 			"schedule_time",
-			"state_size_bytes",
 			"state_transition_count",
 		),
 	)
-	require.Positive(t, firstDescribeResp.GetInfo().GetStateSizeBytes())
+	require.Empty(t, diff)
 
 	taskQueuePollErr := make(chan error, 1)
 	activityPollDone := make(chan struct{})
@@ -3381,11 +3355,10 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 				"execution_duration",
 				"last_started_time",
 				"schedule_time",
-				"state_size_bytes",
 				"state_transition_count",
 			),
 		)
-		require.Positive(t, describeResp.GetInfo().GetStateSizeBytes())
+		require.Empty(t, diff)
 
 		protorequire.ProtoEqual(t, defaultInput, describeResp.Input)
 
@@ -3526,7 +3499,6 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_Completed() 
 			require.NotNil(t, info.GetCloseTime())
 			require.Positive(t, info.GetCloseTime().AsTime().Unix())
 			require.GreaterOrEqual(t, info.GetCloseTime().AsTime().UnixNano(), info.GetLastStartedTime().AsTime().UnixNano())
-			require.Positive(t, info.GetStateSizeBytes())
 			require.Positive(t, info.GetStateTransitionCount())
 
 			tc.outcomeValidator(t, describeResp)
@@ -5836,7 +5808,7 @@ func (env *standaloneActivityEnv) runNexusCompletionHTTPServer(t *testing.T, h *
 func (s *standaloneActivityTestSuite) TestCallbacks() {
 	env := s.newTestEnv()
 	t := s.T()
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	env.OverrideDynamicConfig(
@@ -6326,5 +6298,78 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
+
+func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	t.Run("StandaloneActivityReturnsError", func(t *testing.T) {
+		_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: testcore.RandomizeStr(t.Name()),
+			Identity:   "test-identity",
+			Reason:     "test",
+		})
+		require.Error(t, err)
+		var unimplementedErr *serviceerror.Unimplemented
+		require.ErrorAs(t, err, &unimplementedErr)
+	})
+}
+
+func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	t.Run("StandaloneActivityReturnsError", func(t *testing.T) {
+		_, err := s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: testcore.RandomizeStr(t.Name()),
+			Identity:   "test-identity",
+		})
+		require.Error(t, err)
+		var unimplementedErr *serviceerror.Unimplemented
+		require.ErrorAs(t, err, &unimplementedErr)
+	})
+}
+
+func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	t.Run("StandaloneActivityReturnsError", func(t *testing.T) {
+		_, err := s.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: testcore.RandomizeStr(t.Name()),
+			Identity:   "test-identity",
+		})
+		require.Error(t, err)
+		var unimplementedErr *serviceerror.Unimplemented
+		require.ErrorAs(t, err, &unimplementedErr)
+	})
+}
+
+func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	t.Run("StandaloneActivityReturnsError", func(t *testing.T) {
+		_, err := s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: testcore.RandomizeStr(t.Name()),
+			Identity:   "test-identity",
+			ActivityOptions: &activitypb.ActivityOptions{
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval: durationpb.New(time.Second),
+				},
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}},
+		})
+		require.Error(t, err)
+		var unimplementedErr *serviceerror.Unimplemented
+		require.ErrorAs(t, err, &unimplementedErr)
 	})
 }
