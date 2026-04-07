@@ -206,7 +206,7 @@ func (a *activities) WaitReplication(ctx context.Context, waitRequest waitReplic
 // Check if remote cluster has caught up on all shards on replication tasks
 func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitReplicationRequest) (bool, error) {
 	resp, err := a.historyClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
-		RemoteClusters: []string{waitRequest.RemoteCluster},
+		RemoteClusters: []string{waitRequest.RemoteCluster}, // filter to only this cluster
 	})
 	if err != nil {
 		return false, err
@@ -330,7 +330,7 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 // Check if remote cluster has caught up on all shards on replication tasks
 func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHandoverRequest) (bool, error) {
 	resp, err := a.historyClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
-		RemoteClusters: []string{waitRequest.RemoteCluster},
+		RemoteClusters: []string{waitRequest.RemoteCluster}, // filter to only this cluster
 	})
 	if err != nil {
 		return false, err
@@ -1046,7 +1046,7 @@ func (a *activities) getTargetClusterReplicationStatus(ctx context.Context, wait
 	targetAckIDOnShard := make(map[int32]int64)
 
 	resp, err := a.historyClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
-		RemoteClusters: []string{waitRequest.TargetCluster},
+		RemoteClusters: []string{waitRequest.TargetCluster}, // filter to only this cluster
 	})
 	if err != nil {
 		return targetAckIDOnShard, err
@@ -1066,7 +1066,7 @@ func (a *activities) getTargetClusterReplicationStatus(ctx context.Context, wait
 // Check if remote cluster has caught up on all shards on replication tasks from target replica.
 func (a *activities) checkReplicationOnRemoteCluster(ctx context.Context, waitRequest waitCatchupRequest, requiredMinTaskIDPerShard map[int32]int64) (bool, error) {
 	resp, err := a.historyClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
-		RemoteClusters: []string{waitRequest.CatchupCluster},
+		RemoteClusters: []string{waitRequest.CatchupCluster}, // filter to only this cluster
 	})
 	if err != nil {
 		return false, err
