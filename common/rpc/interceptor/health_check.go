@@ -146,19 +146,19 @@ func (h *HealthCheckInterceptor) UnaryIntercept(
 // each special request type. (for example, historyservice GetWorkflowExecutionHistory vs. workflowservice)
 func specialCaseAPIIsPolling(req any) bool {
 	switch request := req.(type) {
-	//history
+	// history
 	case *historyservice.GetWorkflowExecutionHistoryRequest:
-		if inner := request.GetRequest(); inner != nil && inner.GetWaitNewEvent() {
-			return true
-		}
+		inner := request.GetRequest()
+		return inner != nil && inner.GetWaitNewEvent()
 
 	// frontend
 	case *workflowservice.GetWorkflowExecutionHistoryRequest:
 		return request.GetWaitNewEvent()
 	case *workflowservice.DescribeActivityExecutionRequest:
 		return len(request.GetLongPollToken()) > 0
+	default:
+		return false
 	}
-	return false
 }
 
 // NewHealthSignalAggregator creates a new instance of HealthSignalAggregatorImpl
