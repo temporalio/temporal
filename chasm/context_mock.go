@@ -17,12 +17,11 @@ var _ MutableContext = (*MockMutableContext)(nil)
 
 // MockContext is a mock implementation of [Context].
 type MockContext struct {
-	HandleExecutionKey         func() ExecutionKey
-	HandleNow                  func(component Component) time.Time
-	HandleRef                  func(component Component) ([]byte, error)
-	HandleExecutionCloseTime   func() time.Time
-	HandleStateTransitionCount func() int64
-	HandleMetricsHandler       func() metrics.Handler
+	HandleExecutionKey   func() ExecutionKey
+	HandleNow            func(component Component) time.Time
+	HandleRef            func(component Component) ([]byte, error)
+	HandleExecutionInfo  func() ExecutionInfo
+	HandleMetricsHandler func() metrics.Handler
 
 	// GoCtx is the underlying context.Context used for context value lookups.
 	// Any values set on it will be available via the CHASM mock context's Value method,
@@ -80,18 +79,11 @@ func (c *MockContext) ExecutionKey() ExecutionKey {
 	return ExecutionKey{}
 }
 
-func (c *MockContext) ExecutionCloseTime() time.Time {
-	if c.HandleExecutionCloseTime != nil {
-		return c.HandleExecutionCloseTime()
+func (c *MockContext) ExecutionInfo() ExecutionInfo {
+	if c.HandleExecutionInfo != nil {
+		return c.HandleExecutionInfo()
 	}
-	return time.Time{}
-}
-
-func (c *MockContext) StateTransitionCount() int64 {
-	if c.HandleStateTransitionCount != nil {
-		return c.HandleStateTransitionCount()
-	}
-	return 0
+	return ExecutionInfo{}
 }
 
 func (c *MockContext) Logger() log.Logger {
@@ -116,13 +108,12 @@ func (c *MockContext) Value(key any) any {
 
 func (c *MockContext) withValue(key any, value any) Context {
 	return &MockContext{
-		HandleExecutionKey:         c.HandleExecutionKey,
-		HandleNow:                  c.HandleNow,
-		HandleRef:                  c.HandleRef,
-		HandleExecutionCloseTime:   c.HandleExecutionCloseTime,
-		HandleStateTransitionCount: c.HandleStateTransitionCount,
-		HandleMetricsHandler:       c.HandleMetricsHandler,
-		GoCtx:                      context.WithValue(c.goContext(), key, value),
+		HandleExecutionKey:   c.HandleExecutionKey,
+		HandleNow:            c.HandleNow,
+		HandleRef:            c.HandleRef,
+		HandleExecutionInfo:  c.HandleExecutionInfo,
+		HandleMetricsHandler: c.HandleMetricsHandler,
+		GoCtx:                context.WithValue(c.goContext(), key, value),
 	}
 }
 

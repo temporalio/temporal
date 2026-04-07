@@ -174,6 +174,12 @@ config as the other services.`,
 		`RingpopApproximateMaxPropagationTime is used for timing certain startup and shutdown processes.
 (It is not and doesn't have to be a guarantee.)`,
 	)
+	RingpopReplicaPoints = NewGlobalIntSetting(
+		"system.ringpopReplicaPoints",
+		100,
+		`RingpopReplicaPoints is the number of virtual nodes (replica points) per physical host
+in the consistent hash ring used by ringpop. Changing it may cause service disruption during deployment.`,
+	)
 	EnableParentClosePolicyWorker = NewGlobalBoolSetting(
 		"system.enableParentClosePolicyWorker",
 		true,
@@ -838,6 +844,12 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		false,
 		`ExposeAuthorizerErrors controls whether the frontend authorization interceptor will pass through errors returned by
 the Authorizer component. If false, a generic PermissionDenied error without details will be returned. Default false.`,
+	)
+	EnablePrincipalPropagation = NewNamespaceBoolSetting(
+		"frontend.enablePrincipalPropagation",
+		false,
+		`EnablePrincipalPropagation controls whether the authorization interceptor propagates the authenticated
+principal identity as gRPC headers.`,
 	)
 	KeepAliveMinTime = NewGlobalDurationSetting(
 		"frontend.keepAliveMinTime",
@@ -1529,6 +1541,13 @@ Don't change this on a live cluster without using the gradual change mechanism.
 		true,
 		`EnableHistoryReplicationDLQV2 switches to the DLQ v2 implementation for history replication. See details in
 [go.temporal.io/server/common/persistence.QueueV2]`,
+	)
+
+	EnableDeleteWorkflowExecutionReplication = NewGlobalBoolSetting(
+		"history.enableDeleteWorkflowExecutionReplication",
+		false,
+		`EnableDeleteWorkflowExecutionReplication controls whether a replication task is generated when a workflow
+execution is deleted. When enabled, workflow deletions on the active cluster will be replicated to passive clusters.`,
 	)
 
 	HistoryRPS = NewGlobalIntSetting(

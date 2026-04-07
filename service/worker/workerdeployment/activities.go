@@ -3,11 +3,14 @@ package workerdeployment
 import (
 	"cmp"
 	"context"
+	"errors"
 	"sync"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/namespace"
@@ -271,6 +274,22 @@ func (a *Activities) StartWorkerDeploymentVersionWorkflow(
 ) error {
 	logger := activity.GetLogger(ctx)
 	logger.Info("starting worker deployment version workflow", "deploymentName", input.DeploymentName, "buildID", input.BuildId)
-	identity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	return a.WorkerDeploymentClient.StartWorkerDeploymentVersion(ctx, a.namespace, input.DeploymentName, input.BuildId, identity, input.RequestId)
+	startIdentity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+	return a.WorkerDeploymentClient.StartWorkerDeploymentVersion(ctx, a.namespace, input.DeploymentName, input.BuildId, startIdentity, input.RequestId, input.GetIdentity())
+}
+
+func (a *Activities) UpdateWorkerControllerInstanceFromDeployment(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) error {
+	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
+	if err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups()); err != nil {
+		var invalidArgs *serviceerror.InvalidArgument
+		if errors.As(err, &invalidArgs) {
+			return temporal.NewApplicationError(err.Error(), errInvalidComputeConfig)
+		}
+		return err
+	}
+	return nil
+}
+
+func (a *Activities) DeleteWorkerControllerInstanceFromDeployment(ctx context.Context, input *deploymentspb.DeleteWorkerControllerInstanceInput) error {
+	return a.WorkerControllerInstanceClient.DeleteWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), input.GetIdentity())
 }

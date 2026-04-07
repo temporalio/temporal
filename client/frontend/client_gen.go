@@ -49,6 +49,26 @@ func (c *clientImpl) CreateSchedule(
 	return c.client.CreateSchedule(ctx, request, opts...)
 }
 
+func (c *clientImpl) CreateWorkerDeployment(
+	ctx context.Context,
+	request *workflowservice.CreateWorkerDeploymentRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CreateWorkerDeploymentResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.CreateWorkerDeployment(ctx, request, opts...)
+}
+
+func (c *clientImpl) CreateWorkerDeploymentVersion(
+	ctx context.Context,
+	request *workflowservice.CreateWorkerDeploymentVersionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CreateWorkerDeploymentVersionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.CreateWorkerDeploymentVersion(ctx, request, opts...)
+}
+
 func (c *clientImpl) CreateWorkflowRule(
 	ctx context.Context,
 	request *workflowservice.CreateWorkflowRuleRequest,
@@ -1019,6 +1039,16 @@ func (c *clientImpl) UpdateWorkerConfig(
 	return c.client.UpdateWorkerConfig(ctx, request, opts...)
 }
 
+func (c *clientImpl) UpdateWorkerDeploymentVersionComputeConfig(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerDeploymentVersionComputeConfigResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateWorkerDeploymentVersionComputeConfig(ctx, request, opts...)
+}
+
 func (c *clientImpl) UpdateWorkerDeploymentVersionMetadata(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest,
@@ -1057,4 +1087,14 @@ func (c *clientImpl) UpdateWorkflowExecutionOptions(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.UpdateWorkflowExecutionOptions(ctx, request, opts...)
+}
+
+func (c *clientImpl) ValidateWorkerDeploymentVersionComputeConfig(
+	ctx context.Context,
+	request *workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ValidateWorkerDeploymentVersionComputeConfigResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ValidateWorkerDeploymentVersionComputeConfig(ctx, request, opts...)
 }

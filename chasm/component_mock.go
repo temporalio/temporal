@@ -154,6 +154,20 @@ func (m *MockRootComponent) EXPECT() *MockRootComponentMockRecorder {
 	return m.recorder
 }
 
+// ContextMetadata mocks base method.
+func (m *MockRootComponent) ContextMetadata(arg0 Context) map[string]string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ContextMetadata", arg0)
+	ret0, _ := ret[0].(map[string]string)
+	return ret0
+}
+
+// ContextMetadata indicates an expected call of ContextMetadata.
+func (mr *MockRootComponentMockRecorder) ContextMetadata(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContextMetadata", reflect.TypeOf((*MockRootComponent)(nil).ContextMetadata), arg0)
+}
+
 // LifecycleState mocks base method.
 func (m *MockRootComponent) LifecycleState(arg0 Context) LifecycleState {
 	m.ctrl.T.Helper()
