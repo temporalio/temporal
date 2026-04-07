@@ -3195,7 +3195,7 @@ func (ms *MutableStateImpl) addCompletionCallbacksChasm(
 		return err
 	}
 
-	maxCallbacksPerWorkflow := ms.config.MaxCHASMCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
+	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerExecution(ms.GetNamespaceEntry().Name().String())
 	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks, maxCallbacksPerWorkflow)
 }
 

@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/components/callbacks"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -424,6 +425,19 @@ func (h *frontendHandler) validateAndNormalizeStartActivityExecutionRequest(
 		h.logger,
 		req.GetNamespace()); err != nil {
 		return serviceerror.NewInvalidArgument("input exceeds length limit")
+	}
+
+	if cbs := req.GetCompletionCallbacks(); len(cbs) > 0 {
+		if err := callbacks.ValidateCallbacks(
+			cbs,
+			h.config.MaxCallbacksPerExecution(req.GetNamespace()),
+			h.config.CallbackURLMaxLength(req.GetNamespace()),
+			h.config.CallbackHeaderMaxSize(req.GetNamespace()),
+			h.config.CallbackEndpointConfigs(req.GetNamespace()),
+			"an activity",
+		); err != nil {
+			return serviceerror.NewInvalidArgument(err.Error())
+		}
 	}
 
 	if req.GetSearchAttributes() != nil {

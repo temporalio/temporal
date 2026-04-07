@@ -5,6 +5,7 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/components/callbacks"
 )
 
 var (
@@ -33,10 +34,14 @@ type Config struct {
 	BlobSizeLimitError          dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BlobSizeLimitWarn           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BreakdownMetricsByTaskQueue dynamicconfig.TypedPropertyFnWithTaskQueueFilter[bool]
+	CallbackEndpointConfigs     dynamicconfig.TypedPropertyFnWithNamespaceFilter[callbacks.AddressMatchRules]
+	CallbackHeaderMaxSize       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	CallbackURLMaxLength        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	Enabled                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	LongPollBuffer              dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	LongPollTimeout             dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit            dynamicconfig.IntPropertyFn
+	MaxCallbacksPerExecution    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DefaultActivityRetryPolicy  dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 	VisibilityMaxPageSize       dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
@@ -46,11 +51,15 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		BlobSizeLimitError:          dynamicconfig.BlobSizeLimitError.Get(dc),
 		BlobSizeLimitWarn:           dynamicconfig.BlobSizeLimitWarn.Get(dc),
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
+		CallbackEndpointConfigs:     callbacks.AllowedAddresses.Get(dc),
+		CallbackHeaderMaxSize:       dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		CallbackURLMaxLength:        dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
 		DefaultActivityRetryPolicy:  dynamicconfig.DefaultActivityRetryPolicy.Get(dc),
 		Enabled:                     Enabled.Get(dc),
 		LongPollBuffer:              LongPollBuffer.Get(dc),
 		LongPollTimeout:             LongPollTimeout.Get(dc),
 		MaxIDLengthLimit:            dynamicconfig.MaxIDLengthLimit.Get(dc),
+		MaxCallbacksPerExecution:    dynamicconfig.MaxCallbacksPerExecution.Get(dc),
 		VisibilityMaxPageSize:       dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 	}
 }

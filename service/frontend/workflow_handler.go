@@ -76,15 +76,14 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/service/worker/workerdeployment"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -664,8 +663,17 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	if err := wh.validateWorkflowCompletionCallbacks(namespaceName, request.GetCompletionCallbacks()); err != nil {
-		return nil, err
+	if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
+		if err := callbacks.ValidateCallbacks(
+			cbs,
+			wh.config.MaxCallbacksPerWorkflow(namespaceName.String()),
+			wh.config.CallbackURLMaxLength(namespaceName.String()),
+			wh.config.CallbackHeaderMaxSize(namespaceName.String()),
+			wh.config.CallbackEndpointConfigs(namespaceName.String()),
+			"a workflow",
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCompletionCallbacks())
@@ -6267,61 +6275,6 @@ func (wh *WorkflowHandler) validateLinks(
 		}
 	}
 	return nil
-}
-
-func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
-	ns namespace.Name,
-	callbacks []*commonpb.Callback,
-) error {
-	if len(callbacks) > wh.config.MaxCallbacksPerWorkflow(ns.String()) {
-		return status.Error(
-			codes.InvalidArgument,
-			fmt.Sprintf(
-				"cannot attach more than %d callbacks to a workflow",
-				wh.config.MaxCallbacksPerWorkflow(ns.String()),
-			),
-		)
-	}
-
-	for _, callback := range callbacks {
-		switch cb := callback.GetVariant().(type) {
-		case *commonpb.Callback_Nexus_:
-			if err := wh.validateCallbackURL(ns, cb.Nexus.GetUrl()); err != nil {
-				return err
-			}
-
-			headerSize := 0
-			lowerCaseHeaders := make(map[string]string, len(cb.Nexus.GetHeader()))
-			for k, v := range cb.Nexus.GetHeader() {
-				headerSize += len(k) + len(v)
-				lowerCaseHeaders[strings.ToLower(k)] = v
-			}
-			if headerSize > wh.config.CallbackHeaderMaxSize(ns.String()) {
-				return status.Error(
-					codes.InvalidArgument,
-					fmt.Sprintf(
-						"invalid header: header size longer than max allowed size of %d",
-						wh.config.CallbackHeaderMaxSize(ns.String()),
-					),
-				)
-			}
-			cb.Nexus.Header = lowerCaseHeaders
-		case *commonpb.Callback_Internal_:
-			// TODO(Tianyu): For now, there is nothing to validate given that this is an internal field.
-			continue
-		default:
-			return status.Error(codes.Unimplemented, fmt.Sprintf("unknown callback variant: %T", cb))
-		}
-	}
-	return nil
-}
-
-func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string) error {
-	if len(rawURL) > wh.config.CallbackURLMaxLength(ns.String()) {
-		return status.Errorf(codes.InvalidArgument, "invalid url: url length longer than max length allowed of %d", wh.config.CallbackURLMaxLength(ns.String()))
-	}
-	rules := wh.config.CallbackEndpointConfigs(ns.String())
-	return rules.Validate(rawURL)
 }
 
 type buildIdAndFlag interface {
