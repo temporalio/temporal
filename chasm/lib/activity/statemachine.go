@@ -258,8 +258,12 @@ var TransitionTerminated = chasm.NewTransition(
 			outcome := a.Outcome.Get(ctx)
 			failure := &failurepb.Failure{
 				// TODO(saa-preview): if the reason isn't provided, perhaps set a default reason. Also see if we should prefix with "Activity terminated: "
-				Message:     event.request.Reason,
-				FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
+				Message: event.request.Reason,
+				FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+					TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{
+						Identity: event.request.Identity,
+					},
+				},
 			}
 			outcome.Variant = &activitypb.ActivityOutcome_Failed_{
 				Failed: &activitypb.ActivityOutcome_Failed{
@@ -313,7 +317,8 @@ var TransitionCanceled = chasm.NewTransition(
 				Message: "Activity canceled",
 				FailureInfo: &failurepb.Failure_CanceledFailureInfo{
 					CanceledFailureInfo: &failurepb.CanceledFailureInfo{
-						Details: event.details,
+						Details:  event.details,
+						Identity: a.GetCancelState().GetIdentity(),
 					},
 				},
 			}
