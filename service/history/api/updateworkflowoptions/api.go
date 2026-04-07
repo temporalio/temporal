@@ -151,7 +151,7 @@ func MergeAndApply(
 	if mergedOpts.GetVersioningOverride() == nil {
 		unsetOverride = true
 	}
-	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority())
+	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority(), mergedOpts.GetTimeSkippingConfig())
 	if err != nil {
 		return nil, hasChanges, err
 	}
@@ -171,6 +171,9 @@ func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowEx
 		if cloned, ok := proto.Clone(priority).(*commonpb.Priority); ok {
 			opts.Priority = cloned
 		}
+	}
+	if timeSkippingInfo := ms.GetExecutionInfo().GetTimeSkippingInfo(); timeSkippingInfo != nil {
+		opts.TimeSkippingConfig = timeSkippingInfo.GetConfig()
 	}
 	return opts
 }
@@ -228,6 +231,14 @@ func mergeWorkflowExecutionOptions(
 			mergeInto.Priority = &commonpb.Priority{}
 		}
 		mergeInto.Priority.FairnessWeight = mergeFrom.Priority.GetFairnessWeight()
+	}
+
+	// ==== Time Skipping Config
+	// nil means "no change" — only update if the caller provided an explicit value.
+	if _, ok := updateFields["timeSkippingConfig"]; ok {
+		if mergeFrom.GetTimeSkippingConfig() != nil {
+			mergeInto.TimeSkippingConfig = mergeFrom.GetTimeSkippingConfig()
+		}
 	}
 
 	return mergeInto, nil

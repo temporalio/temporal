@@ -693,7 +693,6 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 	timeSkippingConfig *workflowpb.TimeSkippingConfig,
 	namespaceName namespace.Name,
 ) error {
-
 	if timeSkippingConfig == nil {
 		return nil
 	}
@@ -722,7 +721,7 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 					namespace.MinTimeSkippingDuration,
 				)
 			}
-		// todo: will need to check current virtual time in updateOptions scenario
+		// todo: need to adapt the timeSource after time-skipping timeSource is implemented
 		case *workflowpb.TimeSkippingConfig_MaxTargetTime:
 			if bound.MaxTargetTime.AsTime().Before(wh.namespaceHandler.timeSource.Now().Add(namespace.MinTimeSkippingDuration)) {
 				return serviceerror.NewUnimplementedf(
@@ -6874,6 +6873,9 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 		return nil, serviceerror.NewInvalidArgumentf("error parsing UpdateMask: %s", err.Error())
 	}
 	if err := priorities.Validate(opts.GetPriority()); err != nil {
+		return nil, err
+	}
+	if err := wh.validateTimeSkippingConfig(opts.GetTimeSkippingConfig(), namespace.Name(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 

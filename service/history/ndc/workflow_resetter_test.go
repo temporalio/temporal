@@ -1203,6 +1203,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 						event.Links,
 						attr.GetIdentity(),
 						attr.GetPriority(),
+						attr.GetTimeSkippingConfig(),
 					).Return(&historypb.HistoryEvent{}, nil)
 				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 					attr := event.GetWorkflowExecutionSignaledEventAttributes()
