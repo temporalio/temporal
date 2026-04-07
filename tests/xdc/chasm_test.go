@@ -382,8 +382,7 @@ func (s *ChasmSuite) TestActivityDispatchTaskStandbySpillover() {
 // (PayloadStore) on the active cluster replicates the deletion to the standby cluster.
 func (s *ChasmSuite) TestDeleteExecution_ReplicatedToStandby() {
 	for _, cluster := range s.clusters {
-		cleanup := cluster.OverrideDynamicConfig(s.T(), dynamicconfig.EnableDeleteWorkflowExecutionReplication, true)
-		defer cleanup()
+		cluster.OverrideDynamicConfig(s.T(), dynamicconfig.EnableDeleteWorkflowExecutionReplication, true)
 	}
 
 	nsName := s.createGlobalNamespace()
