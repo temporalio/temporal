@@ -2,7 +2,6 @@ package matching
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -173,7 +172,7 @@ func (h *Handler) recordNexusTaskRequest(ctx context.Context, namespaceID string
 		metrics.NamespaceTag(nsName.String()),
 		metrics.OperationTag(operation),
 		metrics.ClientNameTag(clientName),
-		metrics.StringTag("is_internal", strconv.FormatBool(isInternal)),
+		metrics.IsInternalTag(isInternal),
 	)
 }
 

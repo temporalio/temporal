@@ -61,6 +61,7 @@ const (
 	queryTypeTag                                   = "query_type"
 	namespaceAllValue                              = "all"
 	clientName                                     = "client_name"
+	isInternal                                     = "is_internal"
 	activityTargetingMethod                        = "activity_targeting_method"
 	unknownValue                                   = "_unknown_"
 	totalMetricSuffix                              = "_total"
@@ -557,6 +558,11 @@ func ClientNameTag(value string) Tag {
 		value = unknownValue
 	}
 	return Tag{Key: clientName, Value: value}
+}
+
+// IsInternalTag returns a tag indicating whether the request targets a server-internal task queue.
+func IsInternalTag(internal bool) Tag {
+	return Tag{Key: isInternal, Value: strconv.FormatBool(internal)}
 }
 
 func PersistenceDBKindTag(kind string) Tag {
