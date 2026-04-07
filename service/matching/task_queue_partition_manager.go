@@ -1800,6 +1800,16 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	wfBehavior := directive.GetBehavior()
 	deployment := worker_versioning.DirectiveDeployment(directive)
 
+	// For Pinned workflows, we compute Target Version to decide if Target Version Changed.
+	// Just because a workflow started with a Ramp Policy = UseRampingVersion does not mean
+	// that the workflow will inherit that Ramp Policy on the next ContinueAsNew, which is
+	// when the Pinned workflow's Target Version will be invoked.
+	// Ramp Policy of a workflow is only used for the first ContinueAsNew.
+	var rampPolicy *deploymentpb.RampPolicy
+	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+		rampPolicy = directive.GetRampPolicy()
+	}
+
 	perTypeUserData, userDataChanged, err := pm.getPerTypeUserData()
 	if err != nil {
 		return nil, nil, nil, 0, nil, err
@@ -1813,7 +1823,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	}
 
 	current, currentRevisionNumber, _, ramping, _, rampingPercentage, rampingRevisionNumber, _ := worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
-	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber, workflowId, directive.RampPolicy)
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber, workflowId, rampPolicy)
 	targetDeployment := worker_versioning.DeploymentFromDeploymentVersion(targetDeploymentVersion)
 
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
