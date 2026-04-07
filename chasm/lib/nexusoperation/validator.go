@@ -12,6 +12,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -170,7 +171,50 @@ func validateAndNormalizeDeleteRequest(req *workflowservice.DeleteNexusOperation
 	return nil
 }
 
-func validateAndNormalizeDescribeRequest(req *workflowservice.DescribeNexusOperationExecutionRequest, config *Config) error {
+func validateAndNormalizeDescribeRequest(
+	req *workflowservice.DescribeNexusOperationExecutionRequest,
+	namespaceID string,
+	config *Config,
+) error {
+	if req.GetOperationId() == "" {
+		return serviceerror.NewInvalidArgument("operation_id is required")
+	}
+	if len(req.GetOperationId()) > config.MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgumentf("operation_id exceeds length limit. Length=%d Limit=%d",
+			len(req.GetOperationId()), config.MaxIDLengthLimit())
+	}
+	if len(req.GetLongPollToken()) > 0 && req.GetRunId() == "" {
+		return serviceerror.NewInvalidArgument("run_id is required when long_poll_token is provided")
+	}
+	if req.GetRunId() != "" {
+		if err := uuid.Validate(req.GetRunId()); err != nil {
+			return serviceerror.NewInvalidArgument("run_id is not a valid UUID")
+		}
+	}
+	if len(req.GetLongPollToken()) > 0 {
+		ref, err := chasm.DeserializeComponentRef(req.GetLongPollToken())
+		if err != nil {
+			return serviceerror.NewInvalidArgument("invalid long poll token")
+		}
+		if ref.NamespaceID != namespaceID {
+			return serviceerror.NewInvalidArgument("long poll token does not match execution")
+		}
+	}
+	return nil
+}
+
+func validateAndNormalizePollRequest(req *workflowservice.PollNexusOperationExecutionRequest, config *Config) error {
+	// Normalize wait stage: UNSPECIFIED defaults to CLOSED.
+	if req.GetWaitStage() == enumspb.NEXUS_OPERATION_WAIT_STAGE_UNSPECIFIED {
+		req.WaitStage = enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED
+	} else {
+		switch req.GetWaitStage() {
+		case enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
+			enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED:
+		default:
+			return serviceerror.NewInvalidArgumentf("unsupported wait_stage: %s", req.GetWaitStage())
+		}
+	}
 	if req.GetOperationId() == "" {
 		return serviceerror.NewInvalidArgument("operation_id is required")
 	}
@@ -183,7 +227,6 @@ func validateAndNormalizeDescribeRequest(req *workflowservice.DescribeNexusOpera
 			return serviceerror.NewInvalidArgument("run_id is not a valid UUID")
 		}
 	}
-	// TODO: Add long-poll validation (run_id required when long_poll_token is set).
 	return nil
 }
 

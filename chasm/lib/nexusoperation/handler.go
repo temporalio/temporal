@@ -2,11 +2,14 @@ package nexusoperation
 
 import (
 	"context"
+	"errors"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
 )
 
@@ -59,7 +62,14 @@ func (h *handler) StartNexusOperation(
 	}, nil
 }
 
-// TODO: Add long-poll support.
+// DescribeNexusOperation queries current operation state, optionally as a long-poll that waits
+// for any state change.
+//
+// When used to long-poll, it returns an empty non-error response on context
+// deadline expiry, to indicate that the state being waited for was not reached. Callers should
+// interpret this as an invitation to resubmit their long-poll request. This response is sent before
+// the caller's deadline (see nexusoperation.longPollBuffer) so that it is likely that the caller
+// does indeed receive the non-error response.
 func (h *handler) DescribeNexusOperation(
 	ctx context.Context,
 	req *nexusoperationpb.DescribeNexusOperationRequest,
@@ -72,7 +82,102 @@ func (h *handler) DescribeNexusOperation(
 		RunID:       req.GetFrontendRequest().GetRunId(),
 	})
 
-	return chasm.ReadComponent(ctx, ref, (*Operation).buildDescribeResponse, req, nil)
+	token := req.GetFrontendRequest().GetLongPollToken()
+	if len(token) == 0 {
+		// No long poll.
+		return chasm.ReadComponent(ctx, ref, (*Operation).buildDescribeResponse, req)
+	}
+
+	// Determine the long poll timeout and buffer.
+	ns := req.GetFrontendRequest().GetNamespace()
+	ctx, cancel := contextutil.WithDeadlineBuffer(
+		ctx,
+		h.config.LongPollTimeout(ns),
+		h.config.LongPollBuffer(ns),
+	)
+	defer cancel()
+
+	// Poll for the operation state to change.
+	response, _, err = chasm.PollComponent(ctx, ref, func(
+		o *Operation,
+		ctx chasm.Context,
+		req *nexusoperationpb.DescribeNexusOperationRequest,
+	) (*nexusoperationpb.DescribeNexusOperationResponse, bool, error) {
+		changed, err := chasm.ExecutionStateChanged(o, ctx, token)
+		if err != nil {
+			if errors.Is(err, chasm.ErrMalformedComponentRef) {
+				return nil, false, serviceerror.NewInvalidArgument("invalid long poll token")
+			}
+			if errors.Is(err, chasm.ErrInvalidComponentRef) {
+				return nil, false, serviceerror.NewInvalidArgument("long poll token does not match execution")
+			}
+			return nil, false, err
+		}
+		if changed {
+			response, err := o.buildDescribeResponse(ctx, req)
+			return response, true, err
+		}
+		return nil, false, nil
+	}, req)
+
+	if err != nil && ctx.Err() != nil {
+		// Send empty non-error response on deadline expiry: caller should continue long-polling.
+		return &nexusoperationpb.DescribeNexusOperationResponse{
+			FrontendResponse: &workflowservice.DescribeNexusOperationExecutionResponse{},
+		}, nil
+	}
+	return response, err
+}
+
+// PollNexusOperation long-polls for a Nexus operation to reach a specific stage.
+//
+// It returns an empty non-error response on context deadline expiry, to indicate that the state
+// being waited for was not reached. Callers should interpret this as an invitation to resubmit
+// their long-poll request. This response is sent before the caller's
+// deadline (see nexusoperation.longPollBuffer) so that it is likely that the caller
+// does indeed receive the non-error response.
+func (h *handler) PollNexusOperation(
+	ctx context.Context,
+	req *nexusoperationpb.PollNexusOperationRequest,
+) (response *nexusoperationpb.PollNexusOperationResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	ref := chasm.NewComponentRef[*Operation](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  req.GetFrontendRequest().GetOperationId(),
+		RunID:       req.GetFrontendRequest().GetRunId(),
+	})
+
+	// Determine the long poll timeout and buffer.
+	ns := req.GetFrontendRequest().GetNamespace()
+	ctx, cancel := contextutil.WithDeadlineBuffer(
+		ctx,
+		h.config.LongPollTimeout(ns),
+		h.config.LongPollBuffer(ns),
+	)
+	defer cancel()
+
+	// Poll for the wait stage to be reached.
+	waitStage := req.GetFrontendRequest().GetWaitStage()
+	response, _, err = chasm.PollComponent(ctx, ref, func(
+		o *Operation,
+		ctx chasm.Context,
+		req *nexusoperationpb.PollNexusOperationRequest,
+	) (*nexusoperationpb.PollNexusOperationResponse, bool, error) {
+		if o.isWaitStageReached(ctx, waitStage) {
+			response := o.buildPollResponse(ctx)
+			return response, true, nil
+		}
+		return nil, false, nil
+	}, req)
+
+	if err != nil && ctx.Err() != nil {
+		// Send an empty non-error response as an invitation to resubmit the long-poll.
+		return &nexusoperationpb.PollNexusOperationResponse{
+			FrontendResponse: &workflowservice.PollNexusOperationExecutionResponse{},
+		}, nil
+	}
+	return response, err
 }
 
 // RequestCancelNexusOperation requests cancellation of a standalone Nexus operation via CHASM.
