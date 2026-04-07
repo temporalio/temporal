@@ -110,7 +110,7 @@ func (h *frontendHandler) DescribeNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := validateAndNormalizeDescribeRequest(req, h.config); err != nil {
+	if err := validateAndNormalizeDescribeRequest(req, namespaceID.String(), h.config); err != nil {
 		return nil, err
 	}
 
@@ -121,11 +121,29 @@ func (h *frontendHandler) DescribeNexusOperationExecution(
 	return resp.GetFrontendResponse(), err
 }
 
-func (h *frontendHandler) PollNexusOperationExecution(_ context.Context, req *workflowservice.PollNexusOperationExecutionRequest) (*workflowservice.PollNexusOperationExecutionResponse, error) {
+// PollNexusOperationExecution long-polls for a Nexus operation to reach a specific stage.
+func (h *frontendHandler) PollNexusOperationExecution(
+	ctx context.Context,
+	req *workflowservice.PollNexusOperationExecutionRequest,
+) (*workflowservice.PollNexusOperationExecutionResponse, error) {
 	if !h.isStandaloneNexusOperationEnabled(req.GetNamespace()) {
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
-	return nil, serviceerror.NewUnimplemented("PollNexusOperationExecution not implemented")
+
+	if err := validateAndNormalizePollRequest(req, h.config); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := h.client.PollNexusOperation(ctx, &nexusoperationpb.PollNexusOperationRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	return resp.GetFrontendResponse(), err
 }
 
 func (h *frontendHandler) ListNexusOperationExecutions(
