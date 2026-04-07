@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"strconv"
+	"strings"
 
 	"go.temporal.io/server/common/tqid"
 )
@@ -12,8 +13,10 @@ const (
 	sticky      = "__sticky__"
 	temporalSys = "__temporal_sys__"
 
-	// NormalPartitionTagValue is the partition tag value for normal (non-sticky) partitions.
-	NormalPartitionTagValue = normal
+	// InternalTaskQueuePrefix identifies server-internal task queues
+	// (e.g. /temporal-sys/worker-commands/{namespace}/{worker_grouping_key}).
+	InternalTaskQueuePrefix = "/temporal-sys/"
+
 )
 
 // GetPerTaskQueueFamilyScope returns "namespace" and "taskqueue" tags. "taskqueue" will be "__omitted__" if
@@ -25,9 +28,13 @@ func GetPerTaskQueueFamilyScope(
 	taskQueueBreakdown bool,
 	tags ...Tag,
 ) Handler {
-	metricTaskQueueName := omitted
-	if taskQueueBreakdown {
+	var metricTaskQueueName string
+	if strings.HasPrefix(taskQueueFamily.Name(), InternalTaskQueuePrefix) {
+		metricTaskQueueName = temporalSys
+	} else if taskQueueBreakdown {
 		metricTaskQueueName = taskQueueFamily.Name()
+	} else {
+		metricTaskQueueName = omitted
 	}
 
 	tags = append(tags, NamespaceTag(namespaceName), UnsafeTaskQueueTag(metricTaskQueueName))
@@ -93,10 +100,4 @@ func GetPerTaskQueuePartitionTypeScope(
 
 	return GetPerTaskQueueScope(handler, namespaceName, partition.TaskQueue(), taskQueueBreakdown,
 		append(tags, PartitionTag(value))...)
-}
-
-// TemporalSysTaskQueueTag returns a taskqueue tag that aggregates server-internal
-// task queues under a single synthetic label.
-func TemporalSysTaskQueueTag() Tag {
-	return UnsafeTaskQueueTag(temporalSys)
 }

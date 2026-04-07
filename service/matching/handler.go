@@ -156,18 +156,12 @@ func (h *Handler) opMetricsHandler(
 	)
 }
 
-// internalTaskQueuePrefix identifies server-internal task queues
-// (e.g. /temporal-sys/worker-commands/{namespace}/{worker_grouping_key}).
-// Note: BreakdownMetricsByTaskQueue should NOT be enabled for these queues as
-// they are per-worker and will cause cardinality explosion.
-const internalTaskQueuePrefix = "/temporal-sys/"
-
 // recordNexusTaskRequest emits the nexus_task_requests metric with namespace,
 // operation, client_name, and is_internal tags.
 func (h *Handler) recordNexusTaskRequest(ctx context.Context, namespaceID string, taskQueueName string, operation string) {
 	nsName := h.namespaceName(namespace.ID(namespaceID))
 	clientName, _ := headers.GetClientNameAndVersion(ctx)
-	isInternal := strings.HasPrefix(taskQueueName, internalTaskQueuePrefix)
+	isInternal := strings.HasPrefix(taskQueueName, metrics.InternalTaskQueuePrefix)
 	metrics.NexusTaskRequests.With(h.metricsHandler).Record(1,
 		metrics.NamespaceTag(nsName.String()),
 		metrics.OperationTag(operation),

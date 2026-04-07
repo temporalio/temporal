@@ -545,28 +545,14 @@ func (e *matchingEngineImpl) loggerAndMetricsForPartition(
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
 		tag.WorkflowNamespace(nsName))
-	var metricsHandler metrics.Handler
-	if strings.HasPrefix(partition.TaskQueue().Name(), internalTaskQueuePrefix) {
-		// Aggregate all internal task queues under a single synthetic taskqueue tag
-		// to avoid cardinality explosion from per-worker queue names.
-		metricsHandler = e.metricsHandler.WithTags(
-			metrics.NamespaceTag(nsName),
-			metrics.TemporalSysTaskQueueTag(),
-			metrics.TaskQueueTypeTag(partition.TaskType()),
-			metrics.PartitionTag(metrics.NormalPartitionTagValue),
-			metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope),
-			metrics.NamespaceStateTag(nsState),
-		)
-	} else {
-		metricsHandler = metrics.GetPerTaskQueuePartitionIDScope(
-			e.metricsHandler,
-			nsName,
-			partition,
-			tqConfig.BreakdownMetricsByTaskQueue(),
-			tqConfig.BreakdownMetricsByPartition(),
-			metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope),
-		).WithTags(metrics.NamespaceStateTag(nsState))
-	}
+	metricsHandler := metrics.GetPerTaskQueuePartitionIDScope(
+		e.metricsHandler,
+		nsName,
+		partition,
+		tqConfig.BreakdownMetricsByTaskQueue(),
+		tqConfig.BreakdownMetricsByPartition(),
+		metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope),
+	).WithTags(metrics.NamespaceStateTag(nsState))
 	return logger, throttledLogger, metricsHandler
 }
 
