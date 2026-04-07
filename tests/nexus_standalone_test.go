@@ -197,6 +197,285 @@ func TestStandaloneNexusOperation(t *testing.T) {
 	})
 }
 
+func TestRequestCancelNexusOperationExecution(t *testing.T) {
+	t.Parallel()
+
+	t.Run("RequestCancel", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
+
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		s.NoError(err)
+		s.True(startResp.GetStarted())
+
+		_, err = s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		s.NoError(err)
+
+		// Verify state after cancel — operation is still running
+		descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		s.NoError(err)
+		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING, descResp.GetInfo().GetStatus())
+	})
+
+	// TODO: Enable once cancel is fully implemented.
+	t.Run("AlreadyCanceled", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
+
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		s.NoError(err)
+
+		// Cancel the operation.
+		_, err = s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			RequestId:   "cancel-request-id",
+		})
+		s.NoError(err)
+
+		// Cancel again with same request ID — should be idempotent.
+		_, err = s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			RequestId:   "cancel-request-id",
+		})
+		s.NoError(err)
+
+		// Cancel with a different request ID — should error.
+		_, err = s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			RequestId:   "different-request-id",
+		})
+		s.Error(err)
+		s.Contains(err.Error(), "cancellation already requested")
+	})
+
+	// TODO: Enable once cancel is fully implemented for standalone Nexus operations.
+	t.Run("AlreadyTerminated", func(t *testing.T) {
+		t.Skip("Cancel not yet fully implemented for standalone Nexus operations")
+
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
+
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		s.NoError(err)
+
+		// Terminate the operation first.
+		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			RequestId:   "terminate-request-id",
+			Reason:      "test termination",
+		})
+		s.NoError(err)
+
+		// Cancel a terminated operation — should error.
+		_, err = s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		s.Error(err)
+		s.Contains(err.Error(), "operation already completed")
+	})
+
+	// TODO: Enable once cancel is fully implemented for standalone Nexus operations.
+	t.Run("NotFound", func(t *testing.T) {
+		t.Skip("Cancel not yet fully implemented for standalone Nexus operations")
+
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+
+		_, err := s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "does-not-exist",
+		})
+		var notFound *serviceerror.NotFound
+		s.ErrorAs(err, &notFound)
+	})
+
+	// Validates that request validation is wired up in the frontend.
+	// Exhaustive validation cases are covered in unit tests.
+	t.Run("Validation", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+
+		_, err := s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "", // required field
+		})
+		s.Error(err)
+		s.Contains(err.Error(), "operation_id is required")
+	})
+}
+
+func TestTerminateNexusOperationExecution(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Terminate", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
+
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		s.NoError(err)
+		s.True(startResp.GetStarted())
+
+		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			RequestId:   "terminate-request-id",
+			Reason:      "test termination",
+		})
+		s.NoError(err)
+
+		// Verify state after terminate.
+		descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			OperationId:    "test-op",
+			RunId:          startResp.RunId,
+			IncludeOutcome: true,
+		})
+		s.NoError(err)
+		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TERMINATED, descResp.GetInfo().GetStatus())
+		failure := descResp.GetFailure()
+		s.NotNil(failure)
+		s.Equal("test termination", failure.GetMessage())
+		s.NotNil(failure.GetTerminatedFailureInfo())
+	})
+
+	t.Run("AlreadyTerminated", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
+
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		s.NoError(err)
+
+		// Terminate the operation.
+		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			RequestId:   "terminate-request-id",
+			Reason:      "test termination",
+		})
+		s.NoError(err)
+
+		// Terminate again with same request ID — should be idempotent.
+		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			RequestId:   "terminate-request-id",
+			Reason:      "test termination again",
+		})
+		s.NoError(err)
+
+		// Terminate with a different request ID — should error.
+		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			RequestId:   "different-request-id",
+			Reason:      "test termination different",
+		})
+		s.Error(err)
+		s.Contains(err.Error(), "already terminated")
+	})
+
+	// TODO: Enable once terminate is fully implemented for standalone Nexus operations.
+	t.Run("AlreadyCanceled", func(t *testing.T) {
+		t.Skip("Terminate not yet fully implemented for standalone Nexus operations")
+
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
+
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		s.NoError(err)
+
+		// Cancel the operation first.
+		_, err = s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		s.NoError(err)
+
+		// Terminate a canceled operation — should succeed.
+		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			RequestId:   "terminate-request-id",
+			Reason:      "test termination",
+		})
+		s.NoError(err)
+
+		// Verify state changed to terminated (terminate overrides cancel request).
+		descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		s.NoError(err)
+		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TERMINATED, descResp.GetInfo().GetStatus())
+	})
+
+	t.Run("NotFound", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+
+		_, err := s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "does-not-exist",
+			Reason:      "test termination",
+		})
+		var notFound *serviceerror.NotFound
+		s.ErrorAs(err, &notFound)
+	})
+
+	// Validates that request validation is wired up in the frontend.
+	// Exhaustive validation cases are covered in unit tests.
+	t.Run("Validation", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+
+		_, err := s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "", // required field
+		})
+		s.Error(err)
+		s.Contains(err.Error(), "operation_id is required")
+	})
+}
+
 func createNexusEndpoint(s *testcore.TestEnv) string {
 	name := testcore.RandomizedNexusEndpoint(s.T().Name())
 	_, err := s.OperatorClient().CreateNexusEndpoint(s.Context(), &operatorservice.CreateNexusEndpointRequest{
