@@ -37,7 +37,8 @@ func (h *activityDispatchTaskHandler) Validate(
 ) (bool, error) {
 	// TODO(saa-preview): make sure we handle resets when we support them, as they will reset the attempt count
 	return (TransitionStarted.Possible(activity) &&
-		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp()), nil
+		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp() &&
+		activity.PauseState == nil), nil
 }
 
 func (h *activityDispatchTaskHandler) Execute(

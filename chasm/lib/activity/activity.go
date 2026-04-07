@@ -883,10 +883,9 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 	status := InternalStatusToAPIStatus(a.GetStatus())
 	runState := internalStatusToRunState(a.GetStatus())
 	if a.PauseState != nil {
-		switch runState {
-		case enumspb.PENDING_ACTIVITY_STATE_SCHEDULED:
+		if runState == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
 			runState = enumspb.PENDING_ACTIVITY_STATE_PAUSED
-		case enumspb.PENDING_ACTIVITY_STATE_STARTED:
+		} else if runState == enumspb.PENDING_ACTIVITY_STATE_STARTED {
 			runState = enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED
 		}
 	}
