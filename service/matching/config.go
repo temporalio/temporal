@@ -155,25 +155,25 @@ type (
 		QueryPollerUnavailableWindow  func() time.Duration
 		EmitTaskDispatchLatencyAtPoll func() bool
 		// Time to hold a poll request before returning an empty response if there are no tasks
-		LongPollExpirationInterval func() time.Duration
-		BacklogTaskForwardTimeout  func() time.Duration
-		RangeSize                  int64
-		NewMatcher                 bool
-		NewMatcherSub              func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
-		EnableFairness             bool
-		EnableFairnessSub          func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
-		EnableMigration            func() bool
-		AutoEnableV2               func() bool
-		GetTasksBatchSize          func() int
-		GetTasksReloadAt           func() int
-		UpdateAckInterval                func() time.Duration
-		MetadataUpdateOnAppendInterval   func() time.Duration
-		MaxTaskQueueIdleTime             func() time.Duration
-		MinTaskThrottlingBurstSize func() int
-		MaxTaskDeleteBatchSize     func() int
-		TaskDeleteInterval         func() time.Duration
-		PriorityLevels             priorityKey
-		DefaultPriorityKey         priorityKey
+		LongPollExpirationInterval     func() time.Duration
+		BacklogTaskForwardTimeout      func() time.Duration
+		RangeSize                      int64
+		NewMatcher                     bool
+		NewMatcherSub                  func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
+		EnableFairness                 bool
+		EnableFairnessSub              func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
+		EnableMigration                func() bool
+		AutoEnableV2                   func() bool
+		GetTasksBatchSize              func() int
+		GetTasksReloadAt               func() int
+		UpdateAckInterval              func() time.Duration
+		MetadataUpdateOnAppendInterval func() time.Duration
+		MaxTaskQueueIdleTime           func() time.Duration
+		MinTaskThrottlingBurstSize     func() int
+		MaxTaskDeleteBatchSize         func() int
+		TaskDeleteInterval             func() time.Duration
+		PriorityLevels                 priorityKey
+		DefaultPriorityKey             priorityKey
 
 		GetUserDataLongPollTimeout dynamicconfig.DurationPropertyFn
 		GetUserDataMinWaitTime     time.Duration
