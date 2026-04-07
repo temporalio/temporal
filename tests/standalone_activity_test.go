@@ -1623,6 +1623,8 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 	})
 
 	t.Run("StaleToken", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		t.Cleanup(cancel)
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 		_, err := s.startActivity(ctx, activityID, taskQueue)
@@ -1653,6 +1655,8 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 	})
 
 	t.Run("StaleAttemptToken", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		t.Cleanup(cancel)
 		// Start an activity with retries, fail first attempt, then try to complete with old token.
 		// Use NextRetryDelay=1s to ensure the retry dispatch happens within test timeout.
 		activityID := testcore.RandomizeStr(t.Name())
@@ -1736,6 +1740,8 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 	})
 
 	t.Run("MismatchedTokenNamespace", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		t.Cleanup(cancel)
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 		existingNamespace := s.Namespace().String()
@@ -1777,6 +1783,8 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 	// The validation ensures that the namespace in the request matches the namespace in the token's
 	// ComponentRef, preventing cross-namespace token reuse attacks.
 	t.Run("MismatchedTokenComponentRef", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		t.Cleanup(cancel)
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 		existingNamespace := s.Namespace().String()
