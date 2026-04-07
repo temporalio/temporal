@@ -79,10 +79,10 @@ func testChildWorkflow(ctx workflow.Context, totalCount, runCount int) (string, 
 	return "", workflow.NewContinueAsNewError(ctx, testChildWorkflow, totalCount, runCount)
 }
 
-func clientDataConverterStartWorker(s *testcore.TestEnv, tl string, dataConverter converter.DataConverter) (sdkclient.Client, worker.Worker) {
+func (s *ClientDataConverterSuite) clientDataConverterStartWorker(env *testcore.TestEnv, tl string, dataConverter converter.DataConverter) (sdkclient.Client, worker.Worker) {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:      s.FrontendGRPCAddress(),
-		Namespace:     s.Namespace().String(),
+		HostPort:      env.FrontendGRPCAddress(),
+		Namespace:     env.Namespace().String(),
 		DataConverter: dataConverter,
 	})
 	s.NoError(err)
@@ -139,7 +139,7 @@ func (s *ClientDataConverterSuite) TestClientDataConverter() {
 	env.T().SkipNow() // need to figure out what is going on
 	tl := "client-func-data-converter-activity-taskqueue"
 	dc := testcore.NewTestDataConverter()
-	sdkClient, testWorker := clientDataConverterStartWorker(env, tl, dc)
+	sdkClient, testWorker := s.clientDataConverterStartWorker(env, tl, dc)
 	defer func() {
 		testWorker.Stop()
 		sdkClient.Close()
@@ -175,7 +175,7 @@ func (s *ClientDataConverterSuite) TestClientDataConverterFailed() {
 	env := testcore.NewEnv(s.T())
 	env.T().SkipNow()
 	tl := "client-func-data-converter-activity-failed-taskqueue"
-	sdkClient, newWorker := clientDataConverterStartWorker(env, tl, nil) // mismatch of data converter
+	sdkClient, newWorker := s.clientDataConverterStartWorker(env, tl, nil) // mismatch of data converter
 	defer func() {
 		newWorker.Stop()
 		sdkClient.Close()
@@ -225,7 +225,7 @@ func (s *ClientDataConverterSuite) TestClientDataConverterWithChild() {
 	env := testcore.NewEnv(s.T())
 	env.T().SkipNow()
 	dc := testcore.NewTestDataConverter()
-	sdkClient, testWorker := clientDataConverterStartWorker(env, childTaskQueue, dc)
+	sdkClient, testWorker := s.clientDataConverterStartWorker(env, childTaskQueue, dc)
 	defer func() {
 		testWorker.Stop()
 		sdkClient.Close()
