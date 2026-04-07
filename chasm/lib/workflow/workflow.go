@@ -55,8 +55,7 @@ func (w *Workflow) Terminate(
 	_ chasm.MutableContext,
 	_ chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
-	// TODO: Implement workflow CHASM root termination behavior.
-	return chasm.TerminateComponentResponse{}, nil
+	panic(serviceerror.NewInternal("workflow root Terminate should not be called"))
 }
 
 // ProcessCloseCallbacks triggers "WorkflowClosed" callbacks using the CHASM implementation.
