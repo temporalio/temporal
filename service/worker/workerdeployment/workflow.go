@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
+	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -148,8 +149,10 @@ func (d *WorkflowRunner) syncVersionSummaryFromVersionWorkflow(ctx workflow.Cont
 	// Preserve create_request_id since the version workflow doesn't know about it.
 	summary.CreateRequestId = existing.GetCreateRequestId()
 	d.State.Versions[summary.GetVersion()] = summary
-	if err := d.updateMemo(ctx); err != nil {
-		d.logger.Error("failed to update memo", "error", err)
+	if workflow.GetVersion(ctx, "update-memo-with summary", workflow.DefaultVersion, 0) != workflow.DefaultVersion {
+		if err := d.updateMemo(ctx); err != nil {
+			d.logger.Error("failed to update memo", "error", err)
+		}
 	}
 }
 
@@ -558,14 +561,14 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 
 	// Create or update the Worker Controller Instance for this version.
 	computeConfig := args.GetComputeConfig()
-	computeConfigSummary := computeConfigToSummary(computeConfig)
+	var computeConfigSummary *computepb.ComputeConfigSummary
 	if computeConfig != nil {
 		updateCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 		err = workflow.ExecuteActivity(updateCtx, d.a.UpdateWorkerControllerInstanceFromDeployment, &deploymentspb.UpdateWorkerControllerInstanceInput{
 			Version:             worker_versioning.ExternalWorkerDeploymentVersionFromVersion(versionObj),
 			Identity:            args.GetIdentity(),
 			UpsertScalingGroups: scalingGroupsToUpsertUpdates(computeConfig.GetScalingGroups()),
-		}).Get(ctx, nil)
+		}).Get(ctx, &computeConfigSummary)
 		if err != nil {
 			var appErr *temporal.ApplicationError
 			if errors.As(err, &appErr) && appErr.Type() == errInvalidComputeConfig {
