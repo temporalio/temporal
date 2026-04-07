@@ -75,6 +75,66 @@ func (h *handler) DescribeNexusOperation(
 	return chasm.ReadComponent(ctx, ref, (*Operation).buildDescribeResponse, req, nil)
 }
 
+// RequestCancelNexusOperation requests cancellation of a standalone Nexus operation via CHASM.
+func (h *handler) RequestCancelNexusOperation(
+	ctx context.Context,
+	req *nexusoperationpb.RequestCancelNexusOperationRequest,
+) (response *nexusoperationpb.RequestCancelNexusOperationResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	ref := chasm.NewComponentRef[*Operation](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  req.GetFrontendRequest().GetOperationId(),
+		RunID:       req.GetFrontendRequest().GetRunId(),
+	})
+
+	resp, _, err := chasm.UpdateComponent(
+		ctx,
+		ref,
+		func(o *Operation, ctx chasm.MutableContext, req *nexusoperationpb.RequestCancelNexusOperationRequest) (*nexusoperationpb.RequestCancelNexusOperationResponse, error) {
+			if err := o.RequestCancel(ctx, &nexusoperationpb.CancellationState{
+				RequestId: req.GetFrontendRequest().GetRequestId(),
+				Identity:  req.GetFrontendRequest().GetIdentity(),
+				Reason:    req.GetFrontendRequest().GetReason(),
+			}); err != nil {
+				return nil, err
+			}
+			return &nexusoperationpb.RequestCancelNexusOperationResponse{}, nil
+		}, req)
+
+	return resp, err
+}
+
+// TerminateNexusOperation terminates a standalone Nexus operation via CHASM.
+func (h *handler) TerminateNexusOperation(
+	ctx context.Context,
+	req *nexusoperationpb.TerminateNexusOperationRequest,
+) (response *nexusoperationpb.TerminateNexusOperationResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	ref := chasm.NewComponentRef[*Operation](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  req.GetFrontendRequest().GetOperationId(),
+		RunID:       req.GetFrontendRequest().GetRunId(),
+	})
+
+	resp, _, err := chasm.UpdateComponent(
+		ctx,
+		ref,
+		func(o *Operation, ctx chasm.MutableContext, req *nexusoperationpb.TerminateNexusOperationRequest) (*nexusoperationpb.TerminateNexusOperationResponse, error) {
+			if _, err := o.Terminate(ctx, chasm.TerminateComponentRequest{
+				RequestID: req.GetFrontendRequest().GetRequestId(),
+				Identity:  req.GetFrontendRequest().GetIdentity(),
+				Reason:    req.GetFrontendRequest().GetReason(),
+			}); err != nil {
+				return nil, err
+			}
+			return &nexusoperationpb.TerminateNexusOperationResponse{}, nil
+		}, req)
+
+	return resp, err
+}
+
 func idReusePolicyFromProto(p enumspb.NexusOperationIdReusePolicy) chasm.BusinessIDReusePolicy {
 	switch p {
 	case enumspb.NEXUS_OPERATION_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY:

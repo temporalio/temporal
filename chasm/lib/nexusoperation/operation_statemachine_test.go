@@ -22,7 +22,8 @@ var (
 )
 
 func newTestOperation() *Operation {
-	return &Operation{
+	ctx := &chasm.MockMutableContext{}
+	op := &Operation{
 		OperationState: &nexusoperationpb.OperationState{
 			Status:                 nexusoperationpb.OPERATION_STATUS_UNSPECIFIED,
 			EndpointId:             "endpoint-id",
@@ -35,6 +36,8 @@ func newTestOperation() *Operation {
 			Attempt:                0,
 		},
 	}
+	op.Outcome = chasm.NewDataField(ctx, &nexusoperationpb.OperationOutcome{})
+	return op
 }
 
 func TestTransitionScheduled(t *testing.T) {
@@ -504,5 +507,45 @@ func TestTransitionTimedOut(t *testing.T) {
 
 	require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, operation.Status)
 	require.Equal(t, defaultTime, operation.ClosedTime.AsTime())
+	require.Empty(t, ctx.Tasks)
+}
+
+func TestTransitionTerminated(t *testing.T) {
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return defaultTime },
+		},
+	}
+
+	operation := newTestOperation()
+	operation.Status = nexusoperationpb.OPERATION_STATUS_SCHEDULED
+
+	err := TransitionTerminated.Apply(operation, ctx, EventTerminated{
+		TerminateComponentRequest: chasm.TerminateComponentRequest{
+			RequestID: "terminate-request-id",
+			Reason:    "test reason",
+			Identity:  "test-identity",
+		},
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, nexusoperationpb.OPERATION_STATUS_TERMINATED, operation.Status)
+	require.Equal(t, defaultTime, operation.ClosedTime.AsTime())
+	protorequire.ProtoEqual(t, &nexusoperationpb.NexusOperationTerminateState{
+		RequestId: "terminate-request-id",
+		Identity:  "test-identity",
+	}, operation.TerminateState)
+	protorequire.ProtoEqual(t, &nexusoperationpb.OperationOutcome{
+		Variant: &nexusoperationpb.OperationOutcome_Failed_{
+			Failed: &nexusoperationpb.OperationOutcome_Failed{
+				Failure: &failurepb.Failure{
+					Message: "test reason",
+					FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+						TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
+					},
+				},
+			},
+		},
+	}, operation.Outcome.Get(ctx))
 	require.Empty(t, ctx.Tasks)
 }
