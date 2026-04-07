@@ -247,6 +247,13 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 			require.NoError(t, err)
 			require.Equal(t, firstStartResp.RunId, resp.RunId)
 			require.False(t, resp.GetStarted())
+
+			// Link should point to the existing activity run.
+			link := resp.GetLink().GetActivity()
+			require.NotNil(t, link)
+			require.Equal(t, s.Namespace().String(), link.Namespace)
+			require.Equal(t, activityID, link.ActivityId)
+			require.Equal(t, firstStartResp.RunId, link.RunId)
 		})
 		t.Run("SecondStartWithSameRequestIdReturnsExistingRun", func(t *testing.T) {
 			resp, err := startWithUseExisting(s.tv.RequestID())
@@ -5099,6 +5106,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		case completion := <-ch.requestCh:
 			require.Equal(t, nexus.OperationStateSucceeded, completion.State)
 			body, readErr := io.ReadAll(completion.HTTPRequest.Body)
+			_ = completion.HTTPRequest.Body.Close()
 			require.NoError(t, readErr)
 			require.JSONEq(t, string(defaultResult.Payloads[0].Data), string(body))
 			// Unblock CompleteOperation so it returns 200 OK to the callback library

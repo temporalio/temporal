@@ -1003,7 +1003,7 @@ so forwarding by endpoint ID will not work out of the box.`,
 	MaxCallbacksPerExecution = NewNamespaceIntSetting(
 		"system.maxCallbacksPerExecution",
 		2000,
-		`MaxCallbacksPerExecution is the maximum number of callbacks that can be attached to a CHASM execution.`,
+		`MaxCallbacksPerExecution is the maximum number of callbacks that can be attached to an execution (workflow or standalone activity).`,
 	)
 	FrontendLinkMaxSize = NewNamespaceIntSetting(
 		"frontend.linkMaxSize",

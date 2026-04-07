@@ -17,6 +17,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/components/callbacks"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -436,6 +438,9 @@ func (h *frontendHandler) validateAndNormalizeStartActivityExecutionRequest(
 			h.config.CallbackEndpointConfigs(req.GetNamespace()),
 			"an activity",
 		); err != nil {
+			if status.Code(err) == codes.Unimplemented {
+				return serviceerror.NewUnimplemented(err.Error())
+			}
 			return serviceerror.NewInvalidArgument(err.Error())
 		}
 	}

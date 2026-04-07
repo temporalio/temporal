@@ -910,7 +910,8 @@ func (a *Activity) buildCallbackInfos(ctx chasm.Context) ([]*workflowpb.Callback
 		}
 
 		cbInfos = append(cbInfos, &workflowpb.CallbackInfo{
-			Callback:                cbSpec,
+			Callback: cbSpec,
+			// WorkflowClosed is the only trigger variant in the proto.
 			Trigger:                 &workflowpb.CallbackInfo_Trigger{Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{}},
 			RegistrationTime:        cb.RegistrationTime,
 			State:                   state,
