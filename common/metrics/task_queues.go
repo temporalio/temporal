@@ -13,8 +13,7 @@ const (
 	sticky      = "__sticky__"
 	temporalSys = "__temporal_sys__"
 
-	// InternalTaskQueuePrefix identifies server-internal task queues
-	// (e.g. /temporal-sys/worker-commands/{namespace}/{worker_grouping_key}).
+	// InternalTaskQueuePrefix identifies server-internal task queues.
 	InternalTaskQueuePrefix = "/temporal-sys/"
 
 )
