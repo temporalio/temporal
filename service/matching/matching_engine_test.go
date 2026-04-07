@@ -5223,6 +5223,9 @@ func (*testTaskManager) CountTaskQueuesByBuildId(context.Context, *persistence.C
 	return 0, nil
 }
 
+// TestLoggerAndMetricsForPartition_InternalTaskQueue verifies that /temporal-sys/ queues get
+// the __temporal_sys__ taskqueue tag while normal and sticky queues use their actual names
+// (with the default BreakdownMetricsByTaskQueue=true).
 func TestLoggerAndMetricsForPartition_InternalTaskQueue(t *testing.T) {
 	t.Parallel()
 
@@ -5236,6 +5239,7 @@ func TestLoggerAndMetricsForPartition_InternalTaskQueue(t *testing.T) {
 	tests := []struct {
 		name          string
 		tqName        string
+		sticky        bool
 		expectTQValue string
 	}{
 		{
@@ -5248,15 +5252,93 @@ func TestLoggerAndMetricsForPartition_InternalTaskQueue(t *testing.T) {
 			tqName:        "/temporal-sys/worker-commands/ns/key",
 			expectTQValue: "__temporal_sys__",
 		},
+		{
+			name:          "sticky task queue uses base queue name",
+			tqName:        "my-task-queue",
+			sticky:        true,
+			expectTQValue: "my-task-queue",
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			capture := captureHandler.StartCapture()
-			prtn := newRootPartition(ns.ID().String(), tc.tqName, enumspb.TASK_QUEUE_TYPE_NEXUS)
+			var prtn tqid.Partition
+			if tc.sticky {
+				prtn = newTestTaskQueue(ns.ID().String(), tc.tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(uuid.NewString())
+			} else {
+				prtn = newRootPartition(ns.ID().String(), tc.tqName, enumspb.TASK_QUEUE_TYPE_NEXUS)
+			}
 			tqConfig := newTaskQueueConfig(prtn.TaskQueue(), config, matchingTestNamespace)
 			_, _, handler := e.loggerAndMetricsForPartition(ns, prtn, tqConfig)
 			// Emit a test metric through the handler and verify the taskqueue tag value.
+			metrics.PollSuccessPerTaskQueueCounter.With(handler).Record(1)
+			snap := capture.Snapshot()
+			captureHandler.StopCapture(capture)
+			recordings := snap["poll_success"]
+			require.NotEmpty(t, recordings, "expected poll_success metric to be recorded")
+			found := false
+			for _, rec := range recordings {
+				if rec.Tags["taskqueue"] == tc.expectTQValue {
+					found = true
+				}
+			}
+			assert.True(t, found, "expected taskqueue tag value %q", tc.expectTQValue)
+		})
+	}
+}
+
+// TestLoggerAndMetricsForPartition_BreakdownDisabled verifies behavior with BreakdownMetricsByTaskQueue=false:
+// normal and sticky queues get __omitted__, but /temporal-sys/ queues still get __temporal_sys__.
+func TestLoggerAndMetricsForPartition_BreakdownDisabled(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	ns, mockNamespaceCache := createMockNamespaceCache(controller, matchingTestNamespace)
+	dc := dynamicconfig.StaticClient{
+		dynamicconfig.MetricsBreakdownByTaskQueue.Key(): false,
+	}
+	config := NewConfig(dynamicconfig.NewCollection(dc, log.NewNoopLogger()))
+	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
+	e := createTestMatchingEngine(log.NewTestLogger(), controller, config, nil, mockNamespaceCache)
+	captureHandler := metricstest.NewCaptureHandler()
+	e.metricsHandler = captureHandler
+
+	tests := []struct {
+		name          string
+		tqName        string
+		sticky        bool
+		expectTQValue string
+	}{
+		{
+			name:          "normal task queue is omitted when breakdown disabled",
+			tqName:        "my-task-queue",
+			expectTQValue: "__omitted__",
+		},
+		{
+			name:          "internal task queue still gets __temporal_sys__ when breakdown disabled",
+			tqName:        "/temporal-sys/worker-commands/ns/key",
+			expectTQValue: "__temporal_sys__",
+		},
+		{
+			name:          "sticky task queue is omitted when breakdown disabled",
+			tqName:        "my-task-queue",
+			sticky:        true,
+			expectTQValue: "__omitted__",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			capture := captureHandler.StartCapture()
+			var prtn tqid.Partition
+			if tc.sticky {
+				prtn = newTestTaskQueue(ns.ID().String(), tc.tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(uuid.NewString())
+			} else {
+				prtn = newRootPartition(ns.ID().String(), tc.tqName, enumspb.TASK_QUEUE_TYPE_NEXUS)
+			}
+			tqConfig := newTaskQueueConfig(prtn.TaskQueue(), config, matchingTestNamespace)
+			_, _, handler := e.loggerAndMetricsForPartition(ns, prtn, tqConfig)
 			metrics.PollSuccessPerTaskQueueCounter.With(handler).Record(1)
 			snap := capture.Snapshot()
 			captureHandler.StopCapture(capture)
