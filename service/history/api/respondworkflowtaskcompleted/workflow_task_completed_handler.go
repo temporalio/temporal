@@ -563,7 +563,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		stamp,
 		nil,
 		nil,
-		handler.workerControlTaskQueue,
+		handler.workerControlTaskQueue, // Eager: activity runs on the same worker that completed the WFT.
 	); err != nil {
 		return nil, err
 	}
