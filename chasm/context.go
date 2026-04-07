@@ -20,11 +20,8 @@ type Context interface {
 	Now(Component) time.Time
 	// ExecutionKey returns the execution key for the execution the context is operating on.
 	ExecutionKey() ExecutionKey
-	// StateTransitionCount returns the number of create/update transactions in the history of this execution.
-	StateTransitionCount() int64
-	// ExecutionCloseTime returns the time when the execution was closed. An execution is closed when its root component reaches a terminal
-	// state in its lifecycle. If the component is still running (not yet closed), it returns a zero time.Time value.
-	ExecutionCloseTime() time.Time
+	// ExecutionInfo returns metadata information about the execution.
+	ExecutionInfo() ExecutionInfo
 	// Logger returns a logger tagged with execution key and other chasm framework internal information.
 	Logger() log.Logger
 	// MetricsHandler returns a metrics handler with namespace tag.
@@ -44,6 +41,17 @@ type Context interface {
 	withValue(key any, value any) Context
 	structuredRef(Component) (ComponentRef, error)
 	goContext() context.Context
+}
+
+type ExecutionInfo struct {
+	// StateTransitionCount is the number of create/update transactions in the history of this execution.
+	StateTransitionCount int64
+	// ApproximateStateSize is the approximate size in bytes of the persisted execution state of this execution.
+	ApproximateStateSize int
+	// CloseTime is the time when the execution was closed.
+	// An execution is closed when its root component reaches a terminal state in its lifecycle.
+	// If the component is still running (not yet closed), it returns a zero time.Time value.
+	CloseTime time.Time
 }
 
 type MutableContext interface {
@@ -124,16 +132,20 @@ func (c *immutableCtx) ExecutionKey() ExecutionKey {
 	return c.executionKey
 }
 
-func (c *immutableCtx) StateTransitionCount() int64 {
-	return c.root.backend.GetExecutionInfo().GetStateTransitionCount()
-}
+func (c *immutableCtx) ExecutionInfo() ExecutionInfo {
+	executionInfo := c.root.backend.GetExecutionInfo()
 
-func (c *immutableCtx) ExecutionCloseTime() time.Time {
-	closeTime := c.root.backend.GetExecutionInfo().GetCloseTime()
-	if closeTime == nil {
-		return time.Time{}
+	var closeTime time.Time
+	closeTimestamp := executionInfo.GetCloseTime()
+	if closeTimestamp != nil {
+		closeTime = closeTimestamp.AsTime()
 	}
-	return closeTime.AsTime()
+
+	return ExecutionInfo{
+		StateTransitionCount: executionInfo.GetStateTransitionCount(),
+		ApproximateStateSize: c.root.backend.GetApproximatePersistedSize(),
+		CloseTime:            closeTime,
+	}
 }
 
 func (c *immutableCtx) Logger() log.Logger {

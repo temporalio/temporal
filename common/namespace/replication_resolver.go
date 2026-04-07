@@ -9,7 +9,7 @@ type ReplicationResolver interface {
 	ActiveClusterName(businessID string) string
 	ActiveInCluster(clusterName string) bool
 	ClusterNames(businessID string) []string
-	ReplicationState() enumspb.ReplicationState
+	ReplicationState(businessID string) enumspb.ReplicationState
 	IsGlobalNamespace() bool
 	FailoverVersion(businessID string) int64
 	FailoverNotificationVersion() int64
@@ -71,7 +71,7 @@ func (r *defaultReplicationResolver) ClusterNames(businessID string) []string {
 	return out
 }
 
-func (r *defaultReplicationResolver) ReplicationState() enumspb.ReplicationState {
+func (r *defaultReplicationResolver) ReplicationState(_ string) enumspb.ReplicationState {
 	if r.replicationConfig == nil {
 		return enumspb.REPLICATION_STATE_UNSPECIFIED
 	}

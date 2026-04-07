@@ -44,6 +44,9 @@ type TerminateComponentResponse struct{}
 // TODO: (not yet true) Visibility record will no longer be updated after RootComponent is closed.
 type RootComponent interface {
 	TerminableComponent
+
+	// ContextMetadata returns execution metadata to propagate to the request context.
+	ContextMetadata(Context) map[string]string
 }
 
 // Embed UnimplementedComponent to get forward compatibility

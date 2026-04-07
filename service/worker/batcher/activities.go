@@ -133,6 +133,10 @@ func fetchPage(
 		Query:         config.adjustedQuery,
 	})
 	if err != nil {
+		var invalidArgErr *serviceerror.InvalidArgument
+		if errors.As(err, &invalidArgErr) {
+			return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
+		}
 		return nil, err
 	}
 
@@ -334,6 +338,10 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to get estimate workflow count", tag.Error(err))
+				var invalidArgErr *serviceerror.InvalidArgument
+				if errors.As(err, &invalidArgErr) {
+					return HeartBeatDetails{}, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
+				}
 				return HeartBeatDetails{}, err
 			}
 			estimateCount = resp.GetCount()
