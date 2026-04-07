@@ -7,9 +7,13 @@ import (
 )
 
 const (
-	omitted = "__omitted__"
-	normal  = "__normal__"
-	sticky  = "__sticky__"
+	omitted     = "__omitted__"
+	normal      = "__normal__"
+	sticky      = "__sticky__"
+	temporalSys = "__temporal_sys__"
+
+	// NormalPartitionTagValue is the partition tag value for normal (non-sticky) partitions.
+	NormalPartitionTagValue = normal
 )
 
 // GetPerTaskQueueFamilyScope returns "namespace" and "taskqueue" tags. "taskqueue" will be "__omitted__" if
@@ -89,4 +93,10 @@ func GetPerTaskQueuePartitionTypeScope(
 
 	return GetPerTaskQueueScope(handler, namespaceName, partition.TaskQueue(), taskQueueBreakdown,
 		append(tags, PartitionTag(value))...)
+}
+
+// TemporalSysTaskQueueTag returns a taskqueue tag with the "__temporal_sys__" synthetic value,
+// used to aggregate server-internal task queues under a single label.
+func TemporalSysTaskQueueTag() Tag {
+	return UnsafeTaskQueueTag(temporalSys)
 }

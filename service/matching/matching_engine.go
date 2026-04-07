@@ -547,7 +547,16 @@ func (e *matchingEngineImpl) loggerAndMetricsForPartition(
 		tag.WorkflowNamespace(nsName))
 	var metricsHandler metrics.Handler
 	if strings.HasPrefix(partition.TaskQueue().Name(), internalTaskQueuePrefix) {
-		metricsHandler = metrics.NoopMetricsHandler
+		// Aggregate all internal task queues under "__temporal_sys__" to avoid
+		// cardinality explosion from per-worker queue names.
+		metricsHandler = e.metricsHandler.WithTags(
+			metrics.NamespaceTag(nsName),
+			metrics.TemporalSysTaskQueueTag(),
+			metrics.TaskQueueTypeTag(partition.TaskType()),
+			metrics.PartitionTag(metrics.NormalPartitionTagValue),
+			metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope),
+			metrics.NamespaceStateTag(nsState),
+		)
 	} else {
 		metricsHandler = metrics.GetPerTaskQueuePartitionIDScope(
 			e.metricsHandler,

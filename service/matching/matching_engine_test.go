@@ -5230,35 +5230,45 @@ func TestLoggerAndMetricsForPartition_InternalTaskQueue(t *testing.T) {
 	ns, mockNamespaceCache := createMockNamespaceCache(controller, matchingTestNamespace)
 	config := defaultTestConfig()
 	e := createTestMatchingEngine(log.NewTestLogger(), controller, config, nil, mockNamespaceCache)
-	e.metricsHandler = metricstest.NewCaptureHandler()
+	captureHandler := metricstest.NewCaptureHandler()
+	e.metricsHandler = captureHandler
 
 	tests := []struct {
-		name       string
-		tqName     string
-		expectNoop bool
+		name          string
+		tqName        string
+		expectTQValue string
 	}{
 		{
-			name:       "normal task queue gets real metrics handler",
-			tqName:     "my-task-queue",
-			expectNoop: false,
+			name:          "normal task queue uses actual queue name",
+			tqName:        "my-task-queue",
+			expectTQValue: "my-task-queue",
 		},
 		{
-			name:       "internal nexus task queue gets noop metrics handler",
-			tqName:     "/temporal-sys/worker-commands/ns/key",
-			expectNoop: true,
+			name:          "internal task queue gets __temporal_sys__ taskqueue tag",
+			tqName:        "/temporal-sys/worker-commands/ns/key",
+			expectTQValue: "__temporal_sys__",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			capture := captureHandler.StartCapture()
 			prtn := newRootPartition(ns.ID().String(), tc.tqName, enumspb.TASK_QUEUE_TYPE_NEXUS)
 			tqConfig := newTaskQueueConfig(prtn.TaskQueue(), config, matchingTestNamespace)
 			_, _, handler := e.loggerAndMetricsForPartition(ns, prtn, tqConfig)
-			if tc.expectNoop {
-				assert.Equal(t, metrics.NoopMetricsHandler, handler)
-			} else {
-				assert.NotEqual(t, metrics.NoopMetricsHandler, handler)
+			// Emit a test metric through the handler and verify the taskqueue tag value.
+			metrics.PollSuccessPerTaskQueueCounter.With(handler).Record(1)
+			snap := capture.Snapshot()
+			captureHandler.StopCapture(capture)
+			recordings := snap["poll_success"]
+			require.NotEmpty(t, recordings, "expected poll_success metric to be recorded")
+			found := false
+			for _, rec := range recordings {
+				if rec.Tags["taskqueue"] == tc.expectTQValue {
+					found = true
+				}
 			}
+			assert.True(t, found, "expected taskqueue tag value %q", tc.expectTQValue)
 		})
 	}
 }
