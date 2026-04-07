@@ -24,22 +24,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type chasmInvocation struct {
-	nexus      *callbackspb.Callback_Nexus
-	attempt    int32
-	completion nexusrpc.CompleteOperationOptions
-	requestID  string
-}
-
-func (c chasmInvocation) WrapError(result invocationResult, err error) error {
-	// Return the invocation result error if present
-	if resultErr := result.error(); resultErr != nil {
-		return resultErr
-	}
-
-	return err
-}
-
 // logInternalError emits a log statement for internalMsg, tagged with both
 // internalErr and a reference-id. An opaque error containing the reference-id is
 // returned. Intended to be used to hide internal errors from end users.
@@ -49,14 +33,32 @@ func logInternalError(logger log.Logger, internalMsg string, internalErr error) 
 	return fmt.Errorf("internal error, reference-id: %v", referenceID)
 }
 
-func (c chasmInvocation) Invoke(
+// invocableInternal is an invocable that delivers the Nexus operation completion data to History for cross-shard
+// callbacks.
+type invocableInternal struct {
+	callback   *callbackspb.Callback_Nexus
+	attempt    int32
+	completion nexusrpc.CompleteOperationOptions
+	requestID  string
+}
+
+func (c invocableInternal) WrapError(result invocationResult, err error) error {
+	// Return the invocation result error if present
+	if resultErr := result.error(); resultErr != nil {
+		return resultErr
+	}
+
+	return err
+}
+
+func (c invocableInternal) Invoke(
 	ctx context.Context,
 	ns *namespace.Namespace,
-	h InvocationTaskHandler,
+	h *invocationTaskHandler,
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
-	header := nexus.Header(c.nexus.GetHeader())
+	header := nexus.Header(c.callback.GetHeader())
 	if header == nil {
 		header = nexus.Header{}
 	}
@@ -124,7 +126,7 @@ func isRetryableRPCResponse(err error) bool {
 	}
 }
 
-func (c chasmInvocation) getHistoryRequest(
+func (c invocableInternal) getHistoryRequest(
 	refBytes []byte,
 ) (*historyservice.CompleteNexusOperationChasmRequest, error) {
 	var req *historyservice.CompleteNexusOperationChasmRequest

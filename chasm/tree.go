@@ -197,6 +197,7 @@ type (
 		// TODO: Add methods needed from MutateState here.
 		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
+		GetApproximatePersistedSize() int
 		GetCurrentVersion() int64
 		NextTransitionCount() int64
 		CurrentVersionedTransition() *persistencespb.VersionedTransition
