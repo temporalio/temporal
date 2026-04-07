@@ -186,6 +186,13 @@ var UseSystemCallbackURL = dynamicconfig.NewGlobalBoolSetting(
 When true, uses the fixed system callback URL for all worker targets.`,
 )
 
+var MaxReasonLength = dynamicconfig.NewNamespaceIntSetting(
+	"nexusoperation.limit.reasonLength",
+	1000,
+	`Limits the maximum allowed length for a reason string in Nexus operation requests.
+Uses Go's len() function to determine the length.`,
+)
+
 var UseNewFailureWireFormat = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.useNewFailureWireFormat",
 	true,
@@ -210,10 +217,12 @@ type Config struct {
 	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                 dynamicconfig.TypedPropertyFn[*template.Template]
 	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
+	PayloadSizeLimitWarn                dynamicconfig.IntPropertyFnWithNamespaceFilter
 	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
 	VisibilityMaxPageSize               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit                    dynamicconfig.IntPropertyFn
+	MaxReasonLength                     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RetryPolicy                         func() backoff.RetryPolicy
 }
 
@@ -233,11 +242,13 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		DisallowedOperationHeaders:         DisallowedOperationHeaders.Get(dc),
 		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
+		PayloadSizeLimitWarn:               dynamicconfig.BlobSizeLimitWarn.Get(dc),
 		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
 		UseSystemCallbackURL:               UseSystemCallbackURL.Get(dc),
 		UseNewFailureWireFormat:            UseNewFailureWireFormat.Get(dc),
 		VisibilityMaxPageSize:              dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 		MaxIDLengthLimit:                   dynamicconfig.MaxIDLengthLimit.Get(dc),
+		MaxReasonLength:                    MaxReasonLength.Get(dc),
 		RetryPolicy:                        RetryPolicy.Get(dc),
 	}
 }

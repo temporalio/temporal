@@ -92,7 +92,9 @@ func (d CancelRequestedEventDefinition) Apply(ctx chasm.MutableContext, wf *chas
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("failed to marshal cancellation parent data: %v", err))
 	}
 
-	return op.Cancel(ctx, cancelParentData)
+	return op.RequestCancel(ctx, &nexusoperationpb.CancellationState{
+		ParentData: cancelParentData,
+	})
 }
 
 func (d CancelRequestedEventDefinition) CherryPick(_ chasm.MutableContext, _ *chasmworkflow.Workflow, _ *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
