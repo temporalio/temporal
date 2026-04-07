@@ -693,8 +693,6 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 	timeSkippingConfig *workflowpb.TimeSkippingConfig,
 	namespaceName namespace.Name,
 ) error {
-<<<<<<< HEAD
-
 	if timeSkippingConfig == nil {
 		return nil
 	}
@@ -735,17 +733,6 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 			return serviceerror.NewInvalidArgumentf("unsupported time skipping bound type: %T", bound)
 		}
 	}
-=======
-	if timeSkippingConfig == nil {
-		return nil
-	}
-	if !wh.config.TimeSkippingEnabled(namespaceName.String()) {
-		return serviceerror.NewInvalidArgumentf(
-			"Time skipping is not enabled for namespace %s",
-			namespaceName,
-		)
-	}
->>>>>>> 5572a3893 (timeskipping: add configuration when workflows start)
 	return nil
 }
 
@@ -6886,6 +6873,9 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 		return nil, serviceerror.NewInvalidArgumentf("error parsing UpdateMask: %s", err.Error())
 	}
 	if err := priorities.Validate(opts.GetPriority()); err != nil {
+		return nil, err
+	}
+	if err := wh.validateTimeSkippingConfig(opts.GetTimeSkippingConfig(), namespace.Name(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 
