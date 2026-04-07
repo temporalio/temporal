@@ -109,11 +109,36 @@ func (h *frontendHandler) DescribeNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := validateAndNormalizeDescribeRequest(req, h.config); err != nil {
+	if err := validateAndNormalizeDescribeRequest(req, namespaceID.String(), h.config); err != nil {
 		return nil, err
 	}
 
 	resp, err := h.client.DescribeNexusOperation(ctx, &nexusoperationpb.DescribeNexusOperationRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	return resp.GetFrontendResponse(), err
+}
+
+// PollNexusOperationExecution long-polls for a Nexus operation to reach a specific stage.
+func (h *frontendHandler) PollNexusOperationExecution(
+	ctx context.Context,
+	req *workflowservice.PollNexusOperationExecutionRequest,
+) (*workflowservice.PollNexusOperationExecutionResponse, error) {
+	if !h.isStandaloneNexusOperationEnabled(req.GetNamespace()) {
+		return nil, ErrStandaloneNexusOperationDisabled
+	}
+
+	if err := validateAndNormalizePollRequest(req, h.config); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := h.client.PollNexusOperation(ctx, &nexusoperationpb.PollNexusOperationRequest{
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
 	})

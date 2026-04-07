@@ -10,6 +10,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
@@ -260,6 +261,21 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 		MaxIDLengthLimit: func() int { return 20 },
 	}
 
+	validRunID := "11111111-2222-3333-4444-555555555555"
+	validToken, err := (&persistencespb.ChasmComponentRef{
+		NamespaceId: "test-namespace-id",
+		BusinessId:  "operation-id",
+		RunId:       validRunID,
+	}).Marshal()
+	require.NoError(t, err)
+
+	wrongNamespaceToken, err := (&persistencespb.ChasmComponentRef{
+		NamespaceId: "other-namespace-id",
+		BusinessId:  "operation-id",
+		RunId:       validRunID,
+	}).Marshal()
+	require.NoError(t, err)
+
 	for _, tc := range []struct {
 		name   string
 		mutate func(*workflowservice.DescribeNexusOperationExecutionRequest)
@@ -289,6 +305,29 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 			},
 			errMsg: "run_id is not a valid UUID",
 		},
+		{
+			name: "long_poll_token - requires run_id",
+			mutate: func(r *workflowservice.DescribeNexusOperationExecutionRequest) {
+				r.LongPollToken = validToken
+			},
+			errMsg: "run_id is required when long_poll_token is provided",
+		},
+		{
+			name: "long_poll_token - rejects malformed token",
+			mutate: func(r *workflowservice.DescribeNexusOperationExecutionRequest) {
+				r.RunId = validRunID
+				r.LongPollToken = []byte("not-a-token")
+			},
+			errMsg: "invalid long poll token",
+		},
+		{
+			name: "long_poll_token - rejects wrong namespace",
+			mutate: func(r *workflowservice.DescribeNexusOperationExecutionRequest) {
+				r.RunId = validRunID
+				r.LongPollToken = wrongNamespaceToken
+			},
+			errMsg: "long poll token does not match execution",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			validReq := &workflowservice.DescribeNexusOperationExecutionRequest{
@@ -298,7 +337,7 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizeDescribeRequest(validReq, config)
+			err := validateAndNormalizeDescribeRequest(validReq, "test-namespace-id", config)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -537,6 +576,99 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 				tc.mutate(validReq)
 			}
 			err := validateAndNormalizeTerminateRequest(validReq, config)
+			if tc.errMsg != "" {
+				var invalidArgErr *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgErr)
+				require.Contains(t, err.Error(), tc.errMsg)
+			} else {
+				require.NoError(t, err)
+			}
+			if tc.check != nil {
+				tc.check(t, validReq)
+			}
+		})
+	}
+}
+
+func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
+	config := &Config{
+		MaxIDLengthLimit: func() int { return 20 },
+	}
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(*workflowservice.PollNexusOperationExecutionRequest)
+		errMsg string
+		check  func(*testing.T, *workflowservice.PollNexusOperationExecutionRequest)
+	}{
+		{
+			name: "valid request",
+		},
+		{
+			name: "operation_id - required",
+			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
+				r.OperationId = ""
+			},
+			errMsg: "operation_id is required",
+		},
+		{
+			name: "operation_id - exceeds length limit",
+			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
+				r.OperationId = "this-operation-id-is-too-long"
+			},
+			errMsg: "operation_id exceeds length limit",
+		},
+		{
+			name: "run_id - not a valid UUID",
+			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
+				r.RunId = "not-a-uuid"
+			},
+			errMsg: "run_id is not a valid UUID",
+		},
+		{
+			name: "wait_stage - normalizes UNSPECIFIED to CLOSED",
+			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
+				r.WaitStage = enumspb.NEXUS_OPERATION_WAIT_STAGE_UNSPECIFIED
+			},
+			check: func(t *testing.T, r *workflowservice.PollNexusOperationExecutionRequest) {
+				require.Equal(t, enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED, r.WaitStage)
+			},
+		},
+		{
+			name: "wait_stage - preserves STARTED",
+			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
+				r.WaitStage = enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED
+			},
+			check: func(t *testing.T, r *workflowservice.PollNexusOperationExecutionRequest) {
+				require.Equal(t, enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED, r.WaitStage)
+			},
+		},
+		{
+			name: "wait_stage - preserves CLOSED",
+			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
+				r.WaitStage = enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED
+			},
+			check: func(t *testing.T, r *workflowservice.PollNexusOperationExecutionRequest) {
+				require.Equal(t, enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED, r.WaitStage)
+			},
+		},
+		{
+			name: "wait_stage - rejects unsupported value",
+			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
+				r.WaitStage = enumspb.NexusOperationWaitStage(99)
+			},
+			errMsg: "unsupported wait_stage",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			validReq := &workflowservice.PollNexusOperationExecutionRequest{
+				Namespace:   "default",
+				OperationId: "operation-id",
+			}
+			if tc.mutate != nil {
+				tc.mutate(validReq)
+			}
+			err := validateAndNormalizePollRequest(validReq, config)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
