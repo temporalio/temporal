@@ -61,6 +61,7 @@ type monitor struct {
 	propagationTime           time.Duration
 	joinTime                  time.Time
 	rings                     map[primitives.ServiceName]*serviceResolver
+	replicaPoints             int
 	logger                    log.Logger
 	metadataManager           persistence.ClusterMetadataManager
 	broadcastHostPortResolver func() (string, error)
@@ -81,6 +82,7 @@ func newMonitor(
 	maxJoinDuration time.Duration,
 	propagationTime time.Duration,
 	joinTime time.Time,
+	replicaPoints int,
 ) *monitor {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	lifecycleCtx = headers.SetCallerInfo(
@@ -100,6 +102,7 @@ func newMonitor(
 		services:                  services,
 		rp:                        rp,
 		rings:                     make(map[primitives.ServiceName]*serviceResolver),
+		replicaPoints:             replicaPoints,
 		logger:                    logger,
 		metadataManager:           metadataManager,
 		broadcastHostPortResolver: broadcastHostPortResolver,
@@ -110,7 +113,7 @@ func newMonitor(
 		joinTime:                  joinTime,
 	}
 	for service, port := range services {
-		rpo.rings[service] = newServiceResolver(service, port, rp, logger)
+		rpo.rings[service] = newServiceResolver(service, port, rp, replicaPoints, logger)
 	}
 	return rpo
 }
