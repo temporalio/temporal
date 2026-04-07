@@ -100,6 +100,9 @@ message ActivityState {
     // and on each options update that re-schedules the task). Unlike attempt.stamp, this counter
     // is NOT incremented on retries, because schedule-to-close spans the full activity lifetime.
     int32 stamp = 14;
+
+    // Set if the activity was paused.
+    ActivityPauseState pause_state = 15;
 }
 
 message ActivityCancelState {
@@ -111,6 +114,12 @@ message ActivityCancelState {
 
 message ActivityTerminateState {
   string request_id = 1;
+}
+
+message ActivityPauseState {
+    google.protobuf.Timestamp pause_time = 1;
+    string identity = 2;
+    string reason = 3;
 }
 
 message ActivityAttemptState {

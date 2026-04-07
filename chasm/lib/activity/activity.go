@@ -3,6 +3,7 @@ package activity
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"slices"
 	"time"
 
@@ -621,6 +622,68 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 	return &activitypb.RequestCancelActivityExecutionResponse{}, nil
 }
 
+func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activitypb.PauseActivityExecutionRequest) (
+	*activitypb.PauseActivityExecutionResponse, error,
+) {
+	frontendReq := req.GetFrontendRequest()
+
+	// Idempotent: already paused → no-op.
+	if a.PauseState != nil {
+		return &activitypb.PauseActivityExecutionResponse{}, nil
+	}
+
+	a.PauseState = &activitypb.ActivityPauseState{
+		PauseTime: timestamppb.New(ctx.Now(a)),
+		Identity:  frontendReq.GetIdentity(),
+		Reason:    frontendReq.GetReason(),
+	}
+
+	// If SCHEDULED, bump stamp to invalidate the existing dispatch task so the activity is not
+	// dispatched to a worker while paused. For STARTED activities the worker keeps its valid token
+	// and sees ActivityPaused=true on the next heartbeat.
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
+		attempt := a.LastAttempt.Get(ctx)
+		attempt.Stamp++
+	}
+
+	return &activitypb.PauseActivityExecutionResponse{}, nil
+}
+
+func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activitypb.UnpauseActivityExecutionRequest) (
+	*activitypb.UnpauseActivityExecutionResponse, error,
+) {
+	frontendReq := req.GetFrontendRequest()
+
+	// Not paused → no-op.
+	if a.PauseState == nil {
+		return &activitypb.UnpauseActivityExecutionResponse{}, nil
+	}
+
+	a.PauseState = nil
+
+	attempt := a.LastAttempt.Get(ctx)
+	if frontendReq.GetResetAttempts() {
+		attempt.Count = 1
+	}
+	if frontendReq.GetResetHeartbeat() {
+		a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{})
+	}
+
+	// If SCHEDULED, bump stamp and re-dispatch with optional jitter.
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
+		attempt.Stamp++
+		scheduleTime := ctx.Now(a)
+		if jitter := frontendReq.GetJitter().AsDuration(); jitter > 0 {
+			scheduleTime = scheduleTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
+		}
+		ctx.AddTask(a, chasm.TaskAttributes{ScheduledTime: scheduleTime}, &activitypb.ActivityDispatchTask{
+			Stamp: attempt.GetStamp(),
+		})
+	}
+
+	return &activitypb.UnpauseActivityExecutionResponse{}, nil
+}
+
 // recordScheduleToStartOrCloseTimeoutFailure records schedule-to-start or schedule-to-close timeouts. Such timeouts are not retried so we
 // set the outcome failure directly and leave the attempt failure as is.
 func (a *Activity) recordScheduleToStartOrCloseTimeoutFailure(ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
@@ -767,7 +830,8 @@ func (a *Activity) RecordHeartbeat(
 	}
 	return &historyservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-		// TODO(saa-preview): ActivityPaused, ActivityReset
+		ActivityPaused:  a.PauseState != nil,
+		// TODO(saa-preview): ActivityReset
 	}, nil
 }
 
@@ -816,9 +880,16 @@ func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb
 }
 
 func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.ActivityExecutionInfo {
-	// TODO(saa-preview): support pause states
 	status := InternalStatusToAPIStatus(a.GetStatus())
 	runState := internalStatusToRunState(a.GetStatus())
+	if a.PauseState != nil {
+		switch runState {
+		case enumspb.PENDING_ACTIVITY_STATE_SCHEDULED:
+			runState = enumspb.PENDING_ACTIVITY_STATE_PAUSED
+		case enumspb.PENDING_ACTIVITY_STATE_STARTED:
+			runState = enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED
+		}
+	}
 
 	requestData := a.RequestData.Get(ctx)
 	attempt := a.LastAttempt.Get(ctx)

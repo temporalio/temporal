@@ -320,7 +320,18 @@ func (h *handler) PauseActivityExecution(ctx context.Context, req *activitypb.Pa
 		}
 		return &activitypb.PauseActivityExecutionResponse{}, nil
 	}
-	return nil, serviceerror.NewUnimplemented("PauseActivityExecution for standalone activities is not yet implemented")
+
+	ref := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  frontendReq.GetActivityId(),
+		RunID:       frontendReq.GetRunId(),
+	})
+
+	_, _, err := chasm.UpdateComponent(ctx, ref, (*Activity).handlePauseRequested, req)
+	if err != nil {
+		return nil, err
+	}
+	return &activitypb.PauseActivityExecutionResponse{}, nil
 }
 
 func (h *handler) UnpauseActivityExecution(ctx context.Context, req *activitypb.UnpauseActivityExecutionRequest) (*activitypb.UnpauseActivityExecutionResponse, error) {
@@ -346,7 +357,18 @@ func (h *handler) UnpauseActivityExecution(ctx context.Context, req *activitypb.
 		}
 		return &activitypb.UnpauseActivityExecutionResponse{}, nil
 	}
-	return nil, serviceerror.NewUnimplemented("UnpauseActivityExecution for standalone activities is not yet implemented")
+
+	ref := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  frontendReq.GetActivityId(),
+		RunID:       frontendReq.GetRunId(),
+	})
+
+	_, _, err := chasm.UpdateComponent(ctx, ref, (*Activity).handleUnpauseRequested, req)
+	if err != nil {
+		return nil, err
+	}
+	return &activitypb.UnpauseActivityExecutionResponse{}, nil
 }
 
 func (h *handler) ResetActivityExecution(ctx context.Context, req *activitypb.ResetActivityExecutionRequest) (*activitypb.ResetActivityExecutionResponse, error) {
