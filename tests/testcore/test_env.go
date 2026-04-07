@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/components/nexusoperations"
 	"google.golang.org/grpc"
 )
 
@@ -156,7 +157,8 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
-	ns := namespace.Name(RandomizeStr(t.Name()))
+	baseName := strings.ReplaceAll(t.Name(), "/", "-")
+	ns := namespace.Name(RandomizeStr(baseName))
 	nsID, err := base.RegisterNamespace(
 		ns,
 		1, // 1 day retention
@@ -181,6 +183,12 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		ctx:                setupTestTimeoutWithContext(t, options.timeout),
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 	}
+
+	// Set Nexus callback URL now that we have the cluster's HTTP address. Note that we set
+	// a default for the global config here so callers that rely on this can still use a shared cluster.
+	env.FunctionalTestBase.OverrideDynamicConfig(
+		nexusoperations.CallbackURLTemplate,
+		"http://"+env.HttpAPIAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
 	// For shared clusters, apply all dynamic config settings as overrides.
 	if !options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
