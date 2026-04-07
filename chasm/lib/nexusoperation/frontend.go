@@ -268,11 +268,30 @@ func (h *frontendHandler) TerminateNexusOperationExecution(
 	return &workflowservice.TerminateNexusOperationExecutionResponse{}, nil
 }
 
-func (h *frontendHandler) DeleteNexusOperationExecution(_ context.Context, req *workflowservice.DeleteNexusOperationExecutionRequest) (*workflowservice.DeleteNexusOperationExecutionResponse, error) {
-	return nil, ErrStandaloneNexusOperationDisabled
-}
+func (h *frontendHandler) DeleteNexusOperationExecution(
+	ctx context.Context,
+	req *workflowservice.DeleteNexusOperationExecutionRequest,
+) (*workflowservice.DeleteNexusOperationExecutionResponse, error) {
+	if !h.isStandaloneNexusOperationEnabled(req.GetNamespace()) {
+		return nil, ErrStandaloneNexusOperationDisabled
+	}
 
-// isStandaloneNexusOperationEnabled checks if standalone Nexus operations are enabled for the given namespace.
-func (h *frontendHandler) isStandaloneNexusOperationEnabled(namespaceName string) bool {
-	return h.config.EnableChasm(namespaceName) && h.config.Enabled(namespaceName)
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := validateAndNormalizeDeleteRequest(req, h.config); err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.DeleteNexusOperation(ctx, &nexusoperationpb.DeleteNexusOperationRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DeleteNexusOperationExecutionResponse{}, nil
 }
