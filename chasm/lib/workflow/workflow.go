@@ -46,6 +46,11 @@ func (w *Workflow) LifecycleState(
 	return chasm.LifecycleStateRunning
 }
 
+func (w *Workflow) ContextMetadata(_ chasm.Context) map[string]string {
+	// TODO: Export workflow metadata from the CHASM workflow root instead of CloseTransaction().
+	return nil
+}
+
 // ProcessCloseCallbacks triggers "WorkflowClosed" callbacks using the CHASM implementation.
 // It iterates through all callbacks and schedules WorkflowClosed ones that are in STANDBY state.
 func (w *Workflow) ProcessCloseCallbacks(ctx chasm.MutableContext) error {

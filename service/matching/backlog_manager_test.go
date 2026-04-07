@@ -7,6 +7,7 @@ import (
 	"maps"
 	"math"
 	"math/rand"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	testutil "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -353,6 +355,119 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_NotIncrementedBySp
 
 	s.Equal(int64(0), totalApproximateBacklogCount(s.blm),
 		"backlog count should not be incremented")
+}
+
+func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_AllExpiredThenValid() {
+	s.testSkipExpiredTasks(10, 0, 33, 3)
+}
+
+func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_ValidExpiredValid() {
+	s.testSkipExpiredTasks(10, 3, 33, 3)
+}
+
+// testSkipExpiredTasks verifies that the task reader correctly skips over expired tasks
+// in the DB and advances the ack level past them.
+// expiredPattern is: # valid, # expired, # valid, # expired, ...
+func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, numValidExpired ...int) {
+	if !s.newMatcher {
+		s.T().Skip("not compatible with classic backlog manager")
+	}
+
+	s.cfgcli.OverrideValue(dynamicconfig.MatchingGetTasksBatchSize.Key(), batchSize)
+
+	// expand 1, 3, 2 -> {false, true, true, true, false, false}
+	var expiredPattern []bool
+	var isExpired bool
+	for _, num := range numValidExpired {
+		expiredPattern = append(expiredPattern, slices.Repeat([]bool{isExpired}, num)...)
+		isExpired = !isExpired
+	}
+
+	// Pre-populate the DB with tasks before starting the backlog manager.
+	// This simulates tasks that were written and then expired before reading.
+	ctx := context.Background()
+	queueInfo := &persistencespb.TaskQueueInfo{
+		Name:           "test-queue",
+		TaskType:       enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		Kind:           enumspb.TASK_QUEUE_KIND_NORMAL,
+		LastUpdateTime: timestamp.TimeNowPtrUtc(),
+		// start with ack level at zero
+	}
+	_, err := s.taskMgr.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
+		RangeID:       1,
+		TaskQueueInfo: queueInfo,
+	})
+	s.Require().NoError(err)
+
+	var dbTasks []*persistencespb.AllocatedTaskInfo
+	numValid := 0
+	for i, expired := range expiredPattern {
+		id := int64(i + 1)
+		task := &persistencespb.AllocatedTaskInfo{
+			TaskId: id,
+			Data: &persistencespb.TaskInfo{
+				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-3600),
+			},
+		}
+		if expired {
+			task.Data.ExpiryTime = timestamp.TimeNowPtrUtcAddSeconds(-60)
+		} else {
+			task.Data.ExpiryTime = timestamp.TimeNowPtrUtcAddSeconds(3600)
+			numValid++
+		}
+		if s.fairness {
+			task.TaskPass = id * 1000 // spread out pass numbers
+		}
+		dbTasks = append(dbTasks, task)
+	}
+	_, err = s.taskMgr.CreateTasks(ctx, &persistence.CreateTasksRequest{
+		TaskQueueInfo: &persistence.PersistedTaskQueueInfo{Data: queueInfo, RangeID: 1},
+		Tasks:         dbTasks,
+	})
+	s.Require().NoError(err)
+
+	// Capture tasks delivered to the matcher.
+	var mu sync.Mutex
+	var delivered []*internalTask
+	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).DoAndReturn(func(t *internalTask) error {
+		mu.Lock()
+		defer mu.Unlock()
+		delivered = append(delivered, t)
+		return nil
+	}).AnyTimes()
+
+	// Start backlog manager.
+	s.blm.Start()
+	defer s.blm.Stop()
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
+
+	// Wait for all valid tasks to be delivered.
+	s.Require().Eventually(func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(delivered) >= numValid
+	}, 2*time.Second, 10*time.Millisecond, "timed out waiting for valid tasks to be delivered")
+
+	// Complete the delivered tasks.
+	mu.Lock()
+	tasks := slices.Clone(delivered)
+	mu.Unlock()
+	for _, t := range tasks {
+		t.finish(nil, true)
+	}
+
+	// Verify the ack level advances past all tasks (expired + valid).
+	lastID := int64(len(expiredPattern))
+	s.Eventually(func() bool {
+		db := s.blm.getDB()
+		db.Lock()
+		defer db.Unlock()
+		if s.fairness {
+			ackLevel := fairLevelFromProto(db.subqueues[subqueueZero].FairAckLevel)
+			return !ackLevel.less(fairLevel{pass: lastID * 1000, id: lastID})
+		}
+		return db.subqueues[subqueueZero].AckLevel >= lastID
+	}, 2*time.Second, 10*time.Millisecond, "ack level did not advance past all tasks")
 }
 
 func totalApproximateBacklogCount(c backlogManager) (total int64) {
