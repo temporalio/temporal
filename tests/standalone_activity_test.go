@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -4871,5 +4872,80 @@ func (s *standaloneActivityTestSuite) startActivityWithType(ctx context.Context,
 		},
 		StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 		RequestId:           s.tv.RequestID(),
+	})
+}
+
+func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	t.Run("StandaloneActivityReturnsError", func(t *testing.T) {
+		_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: testcore.RandomizeStr(t.Name()),
+			Identity:   "test-identity",
+			Reason:     "test",
+		})
+		require.Error(t, err)
+		var unimplementedErr *serviceerror.Unimplemented
+		require.ErrorAs(t, err, &unimplementedErr)
+	})
+}
+
+func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	t.Run("StandaloneActivityReturnsError", func(t *testing.T) {
+		_, err := s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: testcore.RandomizeStr(t.Name()),
+			Identity:   "test-identity",
+		})
+		require.Error(t, err)
+		var unimplementedErr *serviceerror.Unimplemented
+		require.ErrorAs(t, err, &unimplementedErr)
+	})
+}
+
+func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	t.Run("StandaloneActivityReturnsError", func(t *testing.T) {
+		_, err := s.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: testcore.RandomizeStr(t.Name()),
+			Identity:   "test-identity",
+		})
+		require.Error(t, err)
+		var unimplementedErr *serviceerror.Unimplemented
+		require.ErrorAs(t, err, &unimplementedErr)
+	})
+}
+
+func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	t.Run("StandaloneActivityReturnsError", func(t *testing.T) {
+		_, err := s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: testcore.RandomizeStr(t.Name()),
+			Identity:   "test-identity",
+			ActivityOptions: &activitypb.ActivityOptions{
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval: durationpb.New(time.Second),
+				},
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}},
+		})
+		require.Error(t, err)
+		var unimplementedErr *serviceerror.Unimplemented
+		require.ErrorAs(t, err, &unimplementedErr)
 	})
 }

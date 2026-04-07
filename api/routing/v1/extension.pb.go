@@ -29,8 +29,9 @@ type RoutingOptions struct {
 	Random bool `protobuf:"varint,1,opt,name=random,proto3" json:"random,omitempty"`
 	// Requests may specify how to obtain the namespace ID. Defaults to the "namespace_id" field.
 	NamespaceId string `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// Request will be routed by resolving the namespace ID and business ID to a given shard.
-	BusinessId    string `protobuf:"bytes,3,opt,name=business_id,json=businessId,proto3" json:"business_id,omitempty"`
+	// Requests will be routed by resolving the namespace ID and business ID to a given shard.
+	// If multiple fields are specified, the first non-empty value is used.
+	BusinessId    []string `protobuf:"bytes,3,rep,name=business_id,json=businessId,proto3" json:"business_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -79,11 +80,11 @@ func (x *RoutingOptions) GetNamespaceId() string {
 	return ""
 }
 
-func (x *RoutingOptions) GetBusinessId() string {
+func (x *RoutingOptions) GetBusinessId() []string {
 	if x != nil {
 		return x.BusinessId
 	}
-	return ""
+	return nil
 }
 
 var file_temporal_server_api_routing_v1_extension_proto_extTypes = []protoimpl.ExtensionInfo{
@@ -111,7 +112,7 @@ const file_temporal_server_api_routing_v1_extension_proto_rawDesc = "" +
 	"\x0eRoutingOptions\x12\x16\n" +
 	"\x06random\x18\x01 \x01(\bR\x06random\x12!\n" +
 	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12\x1f\n" +
-	"\vbusiness_id\x18\x03 \x01(\tR\n" +
+	"\vbusiness_id\x18\x03 \x03(\tR\n" +
 	"businessId:l\n" +
 	"\arouting\x12\x1e.google.protobuf.MethodOptions\x18\xc28 \x01(\v2..temporal.server.api.routing.v1.RoutingOptionsR\arouting\x88\x01\x01B.Z,go.temporal.io/server/api/routing/v1;routingb\x06proto3"
 

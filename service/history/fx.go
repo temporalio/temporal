@@ -83,6 +83,7 @@ var Module = fx.Options(
 	fx.Provide(EventNotifierProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
+	fx.Provide(HistoryServiceServerProvider),
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(ReplicationProgressCacheProvider),
@@ -108,13 +109,7 @@ func ServiceResolverProvider(
 	return membershipMonitor.GetResolver(primitives.HistoryService)
 }
 
-func HandlerProvider(args NewHandlerArgs) (*Handler, error) {
-	// Build and store the Nexus handler
-	nexusHandler, err := buildNexusHandler(args.ChasmRegistry)
-	if err != nil {
-		return nil, err
-	}
-
+func HandlerProvider(args NewHandlerArgs, lc fx.Lifecycle) (*Handler, error) {
 	handler := &Handler{
 		status:                       common.DaemonStatusInitialized,
 		config:                       args.Config,
@@ -149,10 +144,37 @@ func HandlerProvider(args NewHandlerArgs) (*Handler, error) {
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
 		streamReceiverMonitor:            args.StreamReceiverMonitor,
 		replicationServerRateLimiter:     args.ReplicationServerRateLimiter,
-		nexusHandler:                     nexusHandler,
 	}
 
+	// Build the Nexus handler in OnStart rather than here so that it runs after all
+	// fx.Invoke functions have completed. If we built it eagerly, the dependency chain
+	//
+	//   activity.HistoryModule (fx.Invoke)
+	//     → *library → *handler → historyservice.HistoryServiceServer
+	//       → HistoryServiceServerProvider → HandlerProvider (this function)
+	//
+	// would force HandlerProvider to run before modules like chasmtests.Module have had
+	// a chance to register their nexus services via their own fx.Invoke calls. As a
+	// result, buildNexusHandler would snapshot an empty registry and h.nexusHandler
+	// would remain nil, causing all StartNexusOperation calls to the system endpoint to
+	// return "no nexus services registered". OnStart hooks run after ALL invokes are
+	// done, so the registry is fully populated by the time we call buildNexusHandler.
+	lc.Append(fx.Hook{
+		OnStart: func(_ context.Context) error {
+			h, err := buildNexusHandler(args.ChasmRegistry)
+			if err != nil {
+				return err
+			}
+			handler.nexusHandler = h
+			return nil
+		},
+	})
+
 	return handler, nil
+}
+
+func HistoryServiceServerProvider(handler *Handler) historyservice.HistoryServiceServer {
+	return handler
 }
 
 func buildNexusHandler(chasmRegistry *chasm.Registry) (nexus.Handler, error) {

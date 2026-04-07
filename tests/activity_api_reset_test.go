@@ -53,13 +53,26 @@ type ActivityApiResetClientTestSuite struct {
 	initialRetryInterval   time.Duration
 	scheduleToCloseTimeout time.Duration
 	startToCloseTimeout    time.Duration
+	activityRetryPolicy    *temporal.RetryPolicy
 
-	activityRetryPolicy *temporal.RetryPolicy
+	// apiName selects which reset API variant to exercise ("legacy-api" or "execution-api").
+	// Set before suite.Run; used by SetupTest to initialise resetFn.
+	apiName string
+	// resetFn is the adapter for the API under test, initialised in SetupTest.
+	resetFn func(ctx context.Context, wfID, actID string, resetHeartbeat, keepPaused bool) error
 }
 
+// TestActivityApiResetClientTestSuite runs the suite twice: once with the legacy
+// ResetActivity API and once with the newer ResetActivityExecution API.
 func TestActivityApiResetClientTestSuite(t *testing.T) {
-	s := new(ActivityApiResetClientTestSuite)
-	suite.Run(t, s)
+	for _, apiName := range []string{"legacy-api", "execution-api"} {
+		apiName := apiName
+		t.Run(apiName, func(t *testing.T) {
+			s := new(ActivityApiResetClientTestSuite)
+			s.apiName = apiName
+			suite.Run(t, s)
+		})
+	}
 }
 
 func (s *ActivityApiResetClientTestSuite) SetupTest() {
@@ -74,6 +87,30 @@ func (s *ActivityApiResetClientTestSuite) SetupTest() {
 	s.activityRetryPolicy = &temporal.RetryPolicy{
 		InitialInterval:    s.initialRetryInterval,
 		BackoffCoefficient: 1,
+	}
+
+	if s.apiName == "execution-api" {
+		s.resetFn = func(ctx context.Context, wfID, actID string, resetHeartbeat, keepPaused bool) error {
+			_, err := s.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+				Namespace:      s.Namespace().String(),
+				WorkflowId:     wfID,
+				ActivityId:     actID,
+				ResetHeartbeat: resetHeartbeat,
+				KeepPaused:     keepPaused,
+			})
+			return err
+		}
+	} else {
+		s.resetFn = func(ctx context.Context, wfID, actID string, resetHeartbeat, keepPaused bool) error {
+			_, err := s.FrontendClient().ResetActivity(ctx, &workflowservice.ResetActivityRequest{
+				Namespace:      s.Namespace().String(),
+				Execution:      &commonpb.WorkflowExecution{WorkflowId: wfID},
+				Activity:       &workflowservice.ResetActivityRequest_Id{Id: actID},
+				ResetHeartbeat: resetHeartbeat,
+				KeepPaused:     keepPaused,
+			})
+			return err
+		}
 	}
 }
 
@@ -135,16 +172,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 		require.Greater(t, startedActivityCount.Load(), int32(1))
 	}, 5*time.Second, 200*time.Millisecond)
 
-	resetRequest := &workflowservice.ResetActivityRequest{
-		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.ResetActivityRequest_Id{Id: "activity-id"},
-	}
-	resp, err := s.FrontendClient().ResetActivity(ctx, resetRequest)
-	s.NoError(err)
-	s.NotNil(resp)
+	s.NoError(s.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false))
 
 	activityWasReset.Store(true)
 
@@ -202,16 +230,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhileRunning() {
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
 	}, 5*time.Second, 200*time.Millisecond)
 
-	resetRequest := &workflowservice.ResetActivityRequest{
-		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.ResetActivityRequest_Id{Id: "activity-id"},
-	}
-	resp, err := s.FrontendClient().ResetActivity(ctx, resetRequest)
-	s.NoError(err)
-	s.NotNil(resp)
+	s.NoError(s.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false))
 
 	// wait a bit
 	util.InterruptibleSleep(ctx, 1*time.Second)
@@ -287,16 +306,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 		require.Equal(t, int32(1), startedActivityCount.Load())
 	}, 5*time.Second, 200*time.Millisecond)
 
-	resetRequest := &workflowservice.ResetActivityRequest{
-		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.ResetActivityRequest_Id{Id: "activity-id"},
-	}
-	resp, err := s.FrontendClient().ResetActivity(ctx, resetRequest)
-	s.NoError(err)
-	s.NotNil(resp)
+	s.NoError(s.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false))
 
 	// wait for activity to start. Wait time is shorter than original retry interval
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -393,17 +403,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// reset the activity, while keeping it paused
-	resetRequest := &workflowservice.ResetActivityRequest{
-		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowRun.GetID(),
-		},
-		Activity:   &workflowservice.ResetActivityRequest_Id{Id: "activity-id"},
-		KeepPaused: true,
-	}
-	resp, err := s.FrontendClient().ResetActivity(ctx, resetRequest)
-	s.NoError(err)
-	s.NotNil(resp)
+	s.NoError(s.resetFn(ctx, workflowRun.GetID(), "activity-id", false, true))
 
 	// verify that activity is still paused, and reset
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -521,18 +521,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// reset the activity, with heartbeats
-	resetRequest := &workflowservice.ResetActivityRequest{
-		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowRun.GetID(),
-		},
-		Activity:       &workflowservice.ResetActivityRequest_Id{Id: activityId},
-		ResetHeartbeat: true,
-	}
-
-	resp, err := s.FrontendClient().ResetActivity(ctx, resetRequest)
-	s.NoError(err)
-	s.NotNil(resp)
+	s.NoError(s.resetFn(ctx, workflowRun.GetID(), activityId, true, false))
 
 	activityIteration.Store(1)
 	activityShouldBreak.Store(true)
