@@ -193,7 +193,6 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	autoEnable, pm.cancelAutoEnableSub = pm.config.AutoEnableV2Sub(pm.autoEnableChanged)
 
 	unloadOnBaseConfigChange := func(bool) {
-		<-pm.initCtx.Done()
 		if pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED || !pm.config.AutoEnableV2() {
 			pm.unloadFromEngine(unloadCauseConfigChange)
 		}
@@ -308,7 +307,10 @@ func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Contex
 // It determines the effective config based on the new autoEnable value and fairnessState,
 // and unloads if the effective config differs from the current config.
 func (pm *taskQueuePartitionManagerImpl) autoEnableChanged(en bool) {
-	<-pm.initCtx.Done()
+	_, err := pm.defaultQueueFuture.Get(context.Background())
+	if err != nil {
+		return
+	}
 
 	// When fairnessState is UNSPECIFIED, autoEnable changes don't affect the effective config
 	if pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED {
