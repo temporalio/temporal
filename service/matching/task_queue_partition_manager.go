@@ -153,22 +153,25 @@ func newTaskQueuePartitionManager(
 // based on fairnessState, autoEnable, and the base dynamic config values.
 func (pm *taskQueuePartitionManagerImpl) computeEffectiveConfig(autoEnable, fairness, newMatcher bool) (effectiveNewMatcher, effectiveEnableFairness bool) {
 	isSticky := pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
+	effectiveEnableFairness = fairness && !isSticky
+	effectiveNewMatcher = newMatcher || fairness
+	if !autoEnable {
+		return effectiveNewMatcher, effectiveEnableFairness
+	}
 
-	switch {
-	case !autoEnable || pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED:
-		// Use base dynamic config values
-		// Fairness is disabled for sticky queues
-		effectiveEnableFairness = fairness && !isSticky
-		effectiveNewMatcher = newMatcher || fairness
-	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V0:
+	switch pm.fairnessState {
+	case enumsspb.FAIRNESS_STATE_UNSPECIFIED:
+	case enumsspb.FAIRNESS_STATE_V0:
 		effectiveNewMatcher = false
 		effectiveEnableFairness = false
-	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V1:
+	case enumsspb.FAIRNESS_STATE_V1:
 		effectiveNewMatcher = true
 		effectiveEnableFairness = false
-	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V2:
+	case enumsspb.FAIRNESS_STATE_V2:
 		effectiveNewMatcher = true
 		effectiveEnableFairness = !isSticky
+	default:
+		softassert.Fail(pm.logger, "unknown fairnessState in user data")
 	}
 	return effectiveNewMatcher, effectiveEnableFairness
 }

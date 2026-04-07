@@ -5905,18 +5905,16 @@ func TestAutoEnableV2ConfigChange(t *testing.T) {
 	err = pm.WaitUntilInitialized(ctx)
 	require.NoError(t, err)
 
-	time.Sleep(10 * time.Millisecond)
-
-	require.True(t, pm.config.AutoEnableV2())
-	require.True(t, pm.config.NewMatcher)
-	require.True(t, pm.config.EnableFairness)
+	require.Eventually(t, func() bool {
+		return pm.config.AutoEnableV2() && pm.config.NewMatcher && pm.config.EnableFairness
+	}, 2*time.Second, 10*time.Millisecond, "config should be initialized")
 
 	pq, err := pm.defaultQueueFuture.Get(ctx)
 	require.NoError(t, err)
 
 	// Turn autoEnable OFF -> effective config changes to NewMatcher=false, EnableFairness=false
 	cleanupAutoEnable()
-	cleanupAutoEnable = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, false)
+	_ = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, false)
 
 	require.Eventually(t, func() bool {
 		return !pm.config.AutoEnableV2()
@@ -6015,28 +6013,27 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 	err = pm.WaitUntilInitialized(ctx)
 	require.NoError(t, err)
 
-	time.Sleep(10 * time.Millisecond)
-
-	require.False(t, pm.config.AutoEnableV2())
-	require.True(t, pm.config.NewMatcher)
-	require.True(t, pm.config.EnableFairness)
+	require.Eventually(t, func() bool {
+		return !pm.config.AutoEnableV2() && pm.config.NewMatcher && pm.config.EnableFairness
+	}, 2*time.Second, 10*time.Millisecond, "config should be initialized")
 
 	pq, err := pm.defaultQueueFuture.Get(ctx)
 	require.NoError(t, err)
 
 	// Turn autoEnable ON -> effective config stays NewMatcher=true, EnableFairness=true (same as before)
 	cleanupAutoEnable()
-	cleanupAutoEnable = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, true)
+	_ = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, true)
 
 	require.Eventually(t, func() bool {
 		return pm.config.AutoEnableV2()
 	}, 2*time.Second, 10*time.Millisecond, "autoEnable should be updated")
 
-	time.Sleep(100 * time.Millisecond)
-
-	select {
-	case <-pq.(*physicalTaskQueueManagerImpl).tqCtx.Done():
-		t.Fatal("physical queue should NOT be stopped when effective config does not change")
-	default:
-	}
+	require.Never(t, func() bool {
+		select {
+		case <-pq.(*physicalTaskQueueManagerImpl).tqCtx.Done():
+			return true
+		default:
+			return false
+		}
+	}, 100*time.Millisecond, 10*time.Millisecond, "physical queue should NOT be stopped when effective config does not change")
 }
