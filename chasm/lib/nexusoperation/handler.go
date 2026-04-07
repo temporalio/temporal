@@ -135,6 +135,31 @@ func (h *handler) TerminateNexusOperation(
 	return resp, err
 }
 
+// DeleteNexusOperation terminates the nexus operation if running, then schedules it for deletion.
+func (h *handler) DeleteNexusOperation(
+	ctx context.Context,
+	req *nexusoperationpb.DeleteNexusOperationRequest,
+) (response *nexusoperationpb.DeleteNexusOperationResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	frontendReq := req.GetFrontendRequest()
+
+	key := chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  frontendReq.GetOperationId(),
+		RunID:       frontendReq.GetRunId(),
+	}
+
+	if err := chasm.DeleteExecution[*Operation](ctx, key, chasm.DeleteExecutionRequest{
+		TerminateComponentRequest: chasm.TerminateComponentRequest{
+			Reason: "Delete nexus operation execution",
+		},
+	}); err != nil {
+		return nil, err
+	}
+
+	return &nexusoperationpb.DeleteNexusOperationResponse{}, nil
+}
 func idReusePolicyFromProto(p enumspb.NexusOperationIdReusePolicy) chasm.BusinessIDReusePolicy {
 	switch p {
 	case enumspb.NEXUS_OPERATION_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY:

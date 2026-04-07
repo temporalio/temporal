@@ -242,6 +242,7 @@ var TransitionTerminated = chasm.NewTransition(
 		nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 		nexusoperationpb.OPERATION_STATUS_STARTED,
 		nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+		nexusoperationpb.OPERATION_STATUS_CANCELED,
 	},
 	nexusoperationpb.OPERATION_STATUS_TERMINATED,
 	func(o *Operation, ctx chasm.MutableContext, event EventTerminated) error {
