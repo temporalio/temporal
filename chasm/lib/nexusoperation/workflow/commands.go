@@ -25,34 +25,15 @@ type commandHandler struct {
 	nexusProcessor *chasm.NexusEndpointProcessor
 }
 
-func registerCommandHandlers(
-	registry *chasmworkflow.Registry,
-	config *nexusoperation.Config,
-	nexusProcessor *chasm.NexusEndpointProcessor,
-) error {
-	h := &commandHandler{config: config, nexusProcessor: nexusProcessor}
-
-	if err := registry.RegisterCommandHandler(
-		enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
-		h.handleScheduleCommand,
-	); err != nil {
-		return err
-	}
-	return registry.RegisterCommandHandler(
-		enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION,
-		h.handleCancelCommand,
-	)
-}
-
 //nolint:revive // cognitive-complexity: this is a direct port of the HSM command handler
 func (ch *commandHandler) handleScheduleCommand(
-	chasmCtx chasm.MutableContext,
+	ctx chasm.MutableContext,
 	wf *chasmworkflow.Workflow,
 	validator chasmworkflow.Validator,
 	cmd *commandpb.Command,
 	opts chasmworkflow.CommandHandlerOptions,
 ) error {
-	ns := chasmCtx.NamespaceEntry()
+	ns := ctx.NamespaceEntry()
 	nsName := ns.Name().String()
 
 	if !ch.config.ChasmNexusEnabled(nsName) {
@@ -98,7 +79,7 @@ func (ch *commandHandler) handleScheduleCommand(
 			return err
 		}
 	} else {
-		endpoint, err := chasmCtx.EndpointByName(attrs.Endpoint)
+		endpoint, err := ctx.EndpointByName(attrs.Endpoint)
 		if err != nil {
 			if errors.As(err, new(*serviceerror.NotFound)) {
 				return chasmworkflow.FailWorkflowTaskError{
@@ -225,7 +206,7 @@ func (ch *commandHandler) handleScheduleCommand(
 		}
 	}
 
-	_, err := wf.AddAndApplyHistoryEvent(chasmCtx, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, func(he *historypb.HistoryEvent) {
+	_, err := chasmworkflow.AddAndApplyHistoryEvent[ScheduledEventDefinition](wf, ctx, func(he *historypb.HistoryEvent) {
 		he.Attributes = &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
 			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
 				Endpoint:                     attrs.Endpoint,
@@ -247,13 +228,13 @@ func (ch *commandHandler) handleScheduleCommand(
 }
 
 func (ch *commandHandler) handleCancelCommand(
-	chasmCtx chasm.MutableContext,
+	ctx chasm.MutableContext,
 	wf *chasmworkflow.Workflow,
 	validator chasmworkflow.Validator,
 	cmd *commandpb.Command,
 	opts chasmworkflow.CommandHandlerOptions,
 ) error {
-	nsName := chasmCtx.NamespaceEntry().Name().String()
+	nsName := ctx.NamespaceEntry().Name().String()
 	if !ch.config.ChasmNexusEnabled(nsName) {
 		return chasmworkflow.ErrCommandNotSupported
 	}
@@ -281,7 +262,7 @@ func (ch *commandHandler) handleCancelCommand(
 	// Always create the event even if there's a buffered completion to avoid breaking replay in the SDK.
 	// The event will be applied before the completion since buffered events are reordered and put at the end of the
 	// batch, after command events from the workflow task.
-	_, err := wf.AddAndApplyHistoryEvent(chasmCtx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED, func(he *historypb.HistoryEvent) {
+	_, err := chasmworkflow.AddAndApplyHistoryEvent[CancelRequestedEventDefinition](wf, ctx, func(he *historypb.HistoryEvent) {
 		he.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
 			NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
 				ScheduledEventId:             attrs.ScheduledEventId,

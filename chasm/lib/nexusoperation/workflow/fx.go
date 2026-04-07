@@ -15,13 +15,6 @@ var Module = fx.Module(
 		config *nexusoperation.Config,
 		chasmRegistry *chasm.Registry,
 	) error {
-		return registerCommandHandlers(registry, config, chasmRegistry.NexusEndpointProcessor)
-	}),
-	fx.Invoke(func(
-		registry *chasmworkflow.Registry,
-		config *nexusoperation.Config,
-		chasmRegistry *chasm.Registry,
-	) error {
-		return registerEvents(registry, config, chasmRegistry.NexusEndpointProcessor)
+		return registry.Register(newLibrary(config, chasmRegistry.NexusEndpointProcessor))
 	}),
 )

@@ -4,19 +4,24 @@ import (
 	"go.temporal.io/server/chasm"
 )
 
-type Library struct {
+type library struct {
 	chasm.UnimplementedLibrary
 
 	registry *Registry
 }
 
-func NewLibrary(registry *Registry) *Library {
-	return &Library{
+func newLibrary(registry *Registry) *library {
+	return &library{
 		registry: registry,
 	}
 }
 
-func (l *Library) Name() string {
+// NewLibrary creates a new CHASM library for the workflow package.
+func NewLibrary(registry *Registry) chasm.Library {
+	return newLibrary(registry)
+}
+
+func (l *library) Name() string {
 	return chasm.WorkflowLibraryName
 }
 
@@ -36,7 +41,7 @@ func workflowContextFromChasm(ctx chasm.Context) *workflowContext {
 	return wc
 }
 
-func (l *Library) Components() []*chasm.RegistrableComponent {
+func (l *library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*Workflow](chasm.WorkflowComponentName, chasm.WithContextValues(map[any]any{
 			ctxKeyWorkflowContext: &workflowContext{registry: l.registry},

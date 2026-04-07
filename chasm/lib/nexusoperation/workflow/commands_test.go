@@ -76,8 +76,7 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 	}
 	chReg := chasmworkflow.NewRegistry()
 	nexusProcessor := chasm.NewNexusEndpointProcessor()
-	require.NoError(t, registerCommandHandlers(chReg, cfg, nexusProcessor))
-	require.NoError(t, registerEvents(chReg, cfg, nexusProcessor))
+	require.NoError(t, chReg.Register(newLibrary(cfg, nexusProcessor)))
 
 	execInfo := &persistencespb.WorkflowExecutionInfo{}
 	backend := &chasm.MockNodeBackend{

@@ -41,15 +41,15 @@ func TestCherryPick(t *testing.T) {
 		event, _ := scheduleOperation(t, tcx)
 
 		nexusEventDefs := []chasmworkflow.EventDefinition{
-			newScheduledEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor()),
-			newStartedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor()),
-			newCompletedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor()),
-			newCancelRequestedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor()),
-			newCancelRequestCompletedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor()),
-			newCancelRequestFailedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor()),
-			newCanceledEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor()),
-			newFailedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor()),
-			newTimedOutEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor()),
+			ScheduledEventDefinition{},
+			StartedEventDefinition{},
+			CompletedEventDefinition{},
+			CancelRequestedEventDefinition{},
+			CancelRequestCompletedEventDefinition{},
+			CancelRequestFailedEventDefinition{},
+			CanceledEventDefinition{},
+			FailedEventDefinition{},
+			TimedOutEventDefinition{},
 		}
 
 		excludeNexus := map[enumspb.ResetReapplyExcludeType]struct{}{
@@ -66,7 +66,7 @@ func TestCherryPick(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		event, _ := scheduleOperation(t, tcx)
 
-		def := newScheduledEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
+		def := ScheduledEventDefinition{}
 		err := def.CherryPick(tcx.chasmCtx, tcx.wf, event, nil)
 		require.ErrorIs(t, err, chasmworkflow.ErrEventNotCherryPickable)
 	})
@@ -75,7 +75,7 @@ func TestCherryPick(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		event, _ := scheduleOperation(t, tcx)
 
-		def := newCancelRequestedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
+		def := CancelRequestedEventDefinition{}
 		err := def.CherryPick(tcx.chasmCtx, tcx.wf, event, nil)
 		require.ErrorIs(t, err, chasmworkflow.ErrEventNotCherryPickable)
 	})
@@ -84,7 +84,7 @@ func TestCherryPick(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		event, _ := scheduleOperation(t, tcx)
 
-		def := newStartedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
+		def := StartedEventDefinition{}
 		err := def.CherryPick(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
 			EventTime: timestamppb.Now(),
 			Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
@@ -100,7 +100,7 @@ func TestCherryPick(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		event, _ := scheduleOperation(t, tcx)
 
-		def := newStartedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
+		def := StartedEventDefinition{}
 		startedEvent := &historypb.HistoryEvent{
 			EventTime: timestamppb.Now(),
 			Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
@@ -186,8 +186,8 @@ func TestTerminalStatesDeletion(t *testing.T) {
 
 			// Look up the event definition from the registry.
 			chReg := chasmworkflow.NewRegistry()
-			require.NoError(t, registerEvents(chReg, defaultConfig, chasm.NewNexusEndpointProcessor()))
-			def, ok := chReg.EventDefinition(tc.eventType)
+			require.NoError(t, chReg.Register(newLibrary(defaultConfig, chasm.NewNexusEndpointProcessor())))
+			def, ok := chReg.EventDefinitionByEventType(tc.eventType)
 			require.True(t, ok)
 
 			err := def.Apply(tcx.chasmCtx, tcx.wf, event)
@@ -203,7 +203,7 @@ func TestTerminalStatesDeletion(t *testing.T) {
 func TestScheduledEventDefinitionApply(t *testing.T) {
 	tcx := newTestContext(t, defaultConfig)
 
-	def := newScheduledEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
+	def := ScheduledEventDefinition{}
 	event := &historypb.HistoryEvent{
 		EventId:   int64(10),
 		EventTime: timestamppb.Now(),
@@ -238,7 +238,7 @@ func TestStartedEventDefinitionApply(t *testing.T) {
 	tcx := newTestContext(t, defaultConfig)
 	event, key := scheduleOperation(t, tcx)
 
-	def := newStartedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
+	def := StartedEventDefinition{}
 	err := def.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
 		EventTime: timestamppb.Now(),
 		Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
@@ -262,7 +262,7 @@ func TestCancelRequestedEventDefinitionApply(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		event, key := scheduleOperation(t, tcx)
 
-		def := newCancelRequestedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
+		def := CancelRequestedEventDefinition{}
 		err := def.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
 			EventId:   int64(20),
 			EventTime: timestamppb.Now(),
@@ -284,7 +284,7 @@ func TestCancelRequestedEventDefinitionApply(t *testing.T) {
 	t.Run("tolerates missing operation", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 
-		def := newCancelRequestedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
+		def := CancelRequestedEventDefinition{}
 		err := def.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
 			EventId:   int64(20),
 			EventTime: timestamppb.Now(),
@@ -303,7 +303,7 @@ func TestCancelRequestCompletedEventDefinitionApply(t *testing.T) {
 	event, key := scheduleOperation(t, tcx)
 
 	// First, request cancellation.
-	cancelDef := newCancelRequestedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
+	cancelDef := CancelRequestedEventDefinition{}
 	err := cancelDef.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
 		EventId:   int64(20),
 		EventTime: timestamppb.Now(),
@@ -316,7 +316,7 @@ func TestCancelRequestCompletedEventDefinitionApply(t *testing.T) {
 	require.NoError(t, err)
 
 	// Transition the operation to STARTED so the cancellation gets scheduled.
-	startDef := newStartedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
+	startDef := StartedEventDefinition{}
 	err = startDef.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
 		EventTime: timestamppb.Now(),
 		Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
@@ -329,7 +329,7 @@ func TestCancelRequestCompletedEventDefinitionApply(t *testing.T) {
 	require.NoError(t, err)
 
 	// Now complete the cancel request.
-	completedDef := newCancelRequestCompletedEventDefinition(defaultConfig, chasm.NewNexusEndpointProcessor())
+	completedDef := CancelRequestCompletedEventDefinition{}
 	err = completedDef.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
 		EventTime: timestamppb.Now(),
 		Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestCompletedEventAttributes{

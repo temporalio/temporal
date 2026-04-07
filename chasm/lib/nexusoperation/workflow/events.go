@@ -14,57 +14,8 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-// registerEvents registers all event definitions (handlers) for nexus operations.
-func registerEvents(
-	registry *chasmworkflow.Registry,
-	config *nexusoperation.Config,
-	nexusProcessor *chasm.NexusEndpointProcessor,
-) error {
-	if err := registry.RegisterEventDefinition(newScheduledEventDefinition(config, nexusProcessor)); err != nil {
-		return err
-	}
-	if err := registry.RegisterEventDefinition(newCancelRequestedEventDefinition(config, nexusProcessor)); err != nil {
-		return err
-	}
-	if err := registry.RegisterEventDefinition(newCancelRequestCompletedEventDefinition(config, nexusProcessor)); err != nil {
-		return err
-	}
-	if err := registry.RegisterEventDefinition(newCancelRequestFailedEventDefinition(config, nexusProcessor)); err != nil {
-		return err
-	}
-	if err := registry.RegisterEventDefinition(newStartedEventDefinition(config, nexusProcessor)); err != nil {
-		return err
-	}
-	if err := registry.RegisterEventDefinition(newCompletedEventDefinition(config, nexusProcessor)); err != nil {
-		return err
-	}
-	if err := registry.RegisterEventDefinition(newFailedEventDefinition(config, nexusProcessor)); err != nil {
-		return err
-	}
-	if err := registry.RegisterEventDefinition(newCanceledEventDefinition(config, nexusProcessor)); err != nil {
-		return err
-	}
-	return registry.RegisterEventDefinition(newTimedOutEventDefinition(config, nexusProcessor))
-}
-
-type baseNexusEventDefinition struct {
-	config         *nexusoperation.Config
-	nexusProcessor *chasm.NexusEndpointProcessor
-}
-
 // ScheduledEventDefinition handles the NexusOperationScheduled history event.
-type ScheduledEventDefinition struct {
-	baseNexusEventDefinition
-}
-
-func newScheduledEventDefinition(config *nexusoperation.Config, nexusProcessor *chasm.NexusEndpointProcessor) *ScheduledEventDefinition {
-	return &ScheduledEventDefinition{
-		baseNexusEventDefinition{
-			config:         config,
-			nexusProcessor: nexusProcessor,
-		},
-	}
-}
+type ScheduledEventDefinition struct{}
 
 func (d ScheduledEventDefinition) IsWorkflowTaskTrigger() bool {
 	return false
@@ -96,7 +47,7 @@ func (d ScheduledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkf
 		ScheduleToCloseTimeout: attrs.GetScheduleToCloseTimeout(),
 		RequestId:              attrs.GetRequestId(),
 		ParentData:             parentData,
-		Attempt:                1,
+		Attempt:                0,
 	})
 
 	if err := nexusoperation.TransitionScheduled.Apply(op, ctx, nexusoperation.EventScheduled{}); err != nil {
@@ -115,16 +66,6 @@ func (d ScheduledEventDefinition) CherryPick(_ chasm.MutableContext, _ *chasmwor
 
 // CancelRequestedEventDefinition handles the NexusOperationCancelRequested history event.
 type CancelRequestedEventDefinition struct {
-	baseNexusEventDefinition
-}
-
-func newCancelRequestedEventDefinition(config *nexusoperation.Config, nexusProcessor *chasm.NexusEndpointProcessor) *CancelRequestedEventDefinition {
-	return &CancelRequestedEventDefinition{
-		baseNexusEventDefinition{
-			config:         config,
-			nexusProcessor: nexusProcessor,
-		},
-	}
 }
 
 func (d CancelRequestedEventDefinition) IsWorkflowTaskTrigger() bool {
@@ -161,16 +102,6 @@ func (d CancelRequestedEventDefinition) CherryPick(_ chasm.MutableContext, _ *ch
 
 // CancelRequestCompletedEventDefinition handles the NexusOperationCancelRequestCompleted history event.
 type CancelRequestCompletedEventDefinition struct {
-	baseNexusEventDefinition
-}
-
-func newCancelRequestCompletedEventDefinition(config *nexusoperation.Config, nexusProcessor *chasm.NexusEndpointProcessor) *CancelRequestCompletedEventDefinition {
-	return &CancelRequestCompletedEventDefinition{
-		baseNexusEventDefinition{
-			config:         config,
-			nexusProcessor: nexusProcessor,
-		},
-	}
 }
 
 func (d CancelRequestCompletedEventDefinition) IsWorkflowTaskTrigger() bool {
@@ -206,16 +137,6 @@ func (d CancelRequestCompletedEventDefinition) CherryPick(ctx chasm.MutableConte
 
 // CancelRequestFailedEventDefinition handles the NexusOperationCancelRequestFailed history event.
 type CancelRequestFailedEventDefinition struct {
-	baseNexusEventDefinition
-}
-
-func newCancelRequestFailedEventDefinition(config *nexusoperation.Config, nexusProcessor *chasm.NexusEndpointProcessor) *CancelRequestFailedEventDefinition {
-	return &CancelRequestFailedEventDefinition{
-		baseNexusEventDefinition{
-			config:         config,
-			nexusProcessor: nexusProcessor,
-		},
-	}
 }
 
 func (d CancelRequestFailedEventDefinition) IsWorkflowTaskTrigger() bool {
@@ -251,16 +172,6 @@ func (d CancelRequestFailedEventDefinition) CherryPick(ctx chasm.MutableContext,
 
 // StartedEventDefinition handles the NexusOperationStarted history event.
 type StartedEventDefinition struct {
-	baseNexusEventDefinition
-}
-
-func newStartedEventDefinition(config *nexusoperation.Config, nexusProcessor *chasm.NexusEndpointProcessor) *StartedEventDefinition {
-	return &StartedEventDefinition{
-		baseNexusEventDefinition{
-			config:         config,
-			nexusProcessor: nexusProcessor,
-		},
-	}
 }
 
 func (d StartedEventDefinition) IsWorkflowTaskTrigger() bool {
@@ -295,16 +206,6 @@ func (d StartedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmwo
 
 // CompletedEventDefinition handles the NexusOperationCompleted history event.
 type CompletedEventDefinition struct {
-	baseNexusEventDefinition
-}
-
-func newCompletedEventDefinition(config *nexusoperation.Config, nexusProcessor *chasm.NexusEndpointProcessor) *CompletedEventDefinition {
-	return &CompletedEventDefinition{
-		baseNexusEventDefinition{
-			config:         config,
-			nexusProcessor: nexusProcessor,
-		},
-	}
 }
 
 func (d CompletedEventDefinition) IsWorkflowTaskTrigger() bool {
@@ -339,16 +240,6 @@ func (d CompletedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasm
 
 // FailedEventDefinition handles the NexusOperationFailed history event.
 type FailedEventDefinition struct {
-	baseNexusEventDefinition
-}
-
-func newFailedEventDefinition(config *nexusoperation.Config, nexusProcessor *chasm.NexusEndpointProcessor) *FailedEventDefinition {
-	return &FailedEventDefinition{
-		baseNexusEventDefinition{
-			config:         config,
-			nexusProcessor: nexusProcessor,
-		},
-	}
 }
 
 func (d FailedEventDefinition) IsWorkflowTaskTrigger() bool {
@@ -383,16 +274,6 @@ func (d FailedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmwor
 
 // CanceledEventDefinition handles the NexusOperationCanceled history event.
 type CanceledEventDefinition struct {
-	baseNexusEventDefinition
-}
-
-func newCanceledEventDefinition(config *nexusoperation.Config, nexusProcessor *chasm.NexusEndpointProcessor) *CanceledEventDefinition {
-	return &CanceledEventDefinition{
-		baseNexusEventDefinition{
-			config:         config,
-			nexusProcessor: nexusProcessor,
-		},
-	}
 }
 
 func (d CanceledEventDefinition) IsWorkflowTaskTrigger() bool {
@@ -427,16 +308,6 @@ func (d CanceledEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmw
 
 // TimedOutEventDefinition handles the NexusOperationTimedOut history event.
 type TimedOutEventDefinition struct {
-	baseNexusEventDefinition
-}
-
-func newTimedOutEventDefinition(config *nexusoperation.Config, nexusProcessor *chasm.NexusEndpointProcessor) *TimedOutEventDefinition {
-	return &TimedOutEventDefinition{
-		baseNexusEventDefinition{
-			config:         config,
-			nexusProcessor: nexusProcessor,
-		},
-	}
 }
 
 func (d TimedOutEventDefinition) IsWorkflowTaskTrigger() bool {
