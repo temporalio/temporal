@@ -656,7 +656,8 @@ message ActivityInfo {
 
   int64 start_version = 50;
 
-  // The task queue on which the server will send control tasks to the worker running this activity.
+  // A dedicated per-worker Nexus task queue on which the server sends control
+  // tasks (e.g. activity cancellation) to this specific worker instance.
   string worker_control_task_queue = 51;
 }
 
