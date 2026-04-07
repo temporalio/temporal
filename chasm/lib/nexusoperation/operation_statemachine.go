@@ -232,6 +232,40 @@ var TransitionCanceled = chasm.NewTransition(
 	},
 )
 
+// EventTerminated is triggered when the operation is terminated by user request.
+type EventTerminated struct {
+	chasm.TerminateComponentRequest
+}
+
+var TransitionTerminated = chasm.NewTransition(
+	[]nexusoperationpb.OperationStatus{
+		nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+		nexusoperationpb.OPERATION_STATUS_STARTED,
+		nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+	},
+	nexusoperationpb.OPERATION_STATUS_TERMINATED,
+	func(o *Operation, ctx chasm.MutableContext, event EventTerminated) error {
+		o.TerminateState = &nexusoperationpb.NexusOperationTerminateState{
+			RequestId: event.RequestID,
+			Identity:  event.Identity,
+		}
+		o.ClosedTime = timestamppb.New(ctx.Now(o))
+		o.NextAttemptScheduleTime = nil
+		outcome := o.Outcome.Get(ctx)
+		outcome.Variant = &nexusoperationpb.OperationOutcome_Failed_{
+			Failed: &nexusoperationpb.OperationOutcome_Failed{
+				Failure: &failurepb.Failure{
+					Message: event.Reason,
+					FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+						TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
+					},
+				},
+			},
+		}
+		return nil
+	},
+)
+
 // EventTimedOut is triggered when the schedule-to-close timeout is triggered for an operation.
 type EventTimedOut struct {
 }

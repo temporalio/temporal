@@ -1,6 +1,7 @@
 package nexusoperation
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,7 +15,7 @@ import (
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
-	"google.golang.org/protobuf/types/known/anypb"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -31,20 +32,15 @@ var _ chasm.RootComponent = (*Operation)(nil)
 var _ chasm.StateMachine[nexusoperationpb.OperationStatus] = (*Operation)(nil)
 var _ chasm.VisibilitySearchAttributesProvider = (*Operation)(nil)
 
-// ErrCancellationAlreadyRequested is returned when a cancellation has already been requested for an operation.
 var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancellation already requested")
-
-// ErrOperationAlreadyCompleted is returned when trying to cancel an operation that has already completed.
 var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation already completed")
 
-// InvocationData contains data needed to invoke a Nexus operation.
 type InvocationData struct {
 	Input     *commonpb.Payload
 	Header    map[string]string
 	NexusLink nexus.Link
 }
 
-// OperationStore defines the interface that must be implemented by any parent component that wants to manage Nexus operations.
 type OperationStore interface {
 	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation, operationToken string, links []*commonpb.Link) error
 	OnNexusOperationCanceled(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
@@ -57,16 +53,15 @@ type OperationStore interface {
 	NexusOperationInvocationData(ctx chasm.Context, operation *Operation) (InvocationData, error)
 }
 
-// Operation is a CHASM component that represents a Nexus operation.
 type Operation struct {
 	chasm.UnimplementedComponent
 	*nexusoperationpb.OperationState
 
 	Store chasm.ParentPtr[OperationStore]
 
-	// Only used for standalone Nexus operations. Workflow operations keep request data in history.
 	RequestData  chasm.Field[*nexusoperationpb.OperationRequestData]
 	Cancellation chasm.Field[*Cancellation]
+	Outcome      chasm.Field[*nexusoperationpb.OperationOutcome]
 	Visibility   chasm.Field[*chasm.Visibility]
 }
 
@@ -93,6 +88,7 @@ func newStandaloneOperation(
 		UserMetadata: frontendReq.GetUserMetadata(),
 		Identity:     frontendReq.GetIdentity(),
 	})
+	op.Outcome = chasm.NewDataField(ctx, &nexusoperationpb.OperationOutcome{})
 	op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibilityWithData(
 		ctx,
 		frontendReq.GetSearchAttributes().GetIndexedFields(),
@@ -110,7 +106,8 @@ func (o *Operation) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 		return chasm.LifecycleStateCompleted
 	case nexusoperationpb.OPERATION_STATUS_FAILED,
 		nexusoperationpb.OPERATION_STATUS_CANCELED,
-		nexusoperationpb.OPERATION_STATUS_TIMED_OUT:
+		nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
+		nexusoperationpb.OPERATION_STATUS_TERMINATED:
 		return chasm.LifecycleStateFailed
 	default:
 		return chasm.LifecycleStateRunning
@@ -129,22 +126,27 @@ func (o *Operation) SetStateMachineState(status nexusoperationpb.OperationStatus
 	o.Status = status
 }
 
-func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) error {
+func (o *Operation) RequestCancel(
+	ctx chasm.MutableContext,
+	req *nexusoperationpb.CancellationState,
+) error {
 	if !TransitionCanceled.Possible(o) {
 		return ErrOperationAlreadyCompleted
 	}
-	if _, ok := o.Cancellation.TryGet(ctx); ok {
-		return ErrCancellationAlreadyRequested
+
+	if existingCancellation, ok := o.Cancellation.TryGet(ctx); ok {
+		existingReqID := existingCancellation.GetRequestId()
+		newReqID := req.GetRequestId()
+		if existingReqID != newReqID {
+			return fmt.Errorf("%w with request ID %s", ErrCancellationAlreadyRequested, existingReqID)
+		}
+		return nil
 	}
 
-	cancellation := newCancellation(&nexusoperationpb.CancellationState{
-		RequestedTime: timestamppb.New(ctx.Now(o)),
-		ParentData:    parentData,
-	})
-	o.Cancellation = chasm.NewComponentField(ctx, cancellation)
-
+	cancel := newCancellation(req)
+	o.Cancellation = chasm.NewComponentField(ctx, cancel)
 	if o.Status == nexusoperationpb.OPERATION_STATUS_STARTED {
-		return TransitionCancellationScheduled.Apply(cancellation, ctx, EventCancellationScheduled{
+		return TransitionCancellationScheduled.Apply(cancel, ctx, EventCancellationScheduled{
 			Destination: o.GetEndpoint(),
 		})
 	}
@@ -152,43 +154,56 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) erro
 }
 
 func (o *Operation) onStarted(ctx chasm.MutableContext, operationToken string, links []*commonpb.Link) error {
-	store, ok := o.Store.TryGet(ctx)
-	if ok {
+	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationStarted(ctx, o, operationToken, links)
 	}
 	return TransitionStarted.Apply(o, ctx, EventStarted{OperationToken: operationToken})
 }
 
 func (o *Operation) onCompleted(ctx chasm.MutableContext, result *commonpb.Payload, links []*commonpb.Link) error {
-	store, ok := o.Store.TryGet(ctx)
-	if ok {
+	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationCompleted(ctx, o, result, links)
+	}
+	outcome := o.outcome(ctx)
+	outcome.Variant = &nexusoperationpb.OperationOutcome_Successful_{
+		Successful: &nexusoperationpb.OperationOutcome_Successful{Result: result},
 	}
 	return TransitionSucceeded.Apply(o, ctx, EventSucceeded{})
 }
 
 func (o *Operation) onFailed(ctx chasm.MutableContext, cause *failurepb.Failure) error {
-	store, ok := o.Store.TryGet(ctx)
-	if ok {
+	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationFailed(ctx, o, cause)
+	}
+	if cause != nil {
+		o.outcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
+			Failed: &nexusoperationpb.OperationOutcome_Failed{Failure: cause},
+		}
 	}
 	return TransitionFailed.Apply(o, ctx, EventFailed{Failure: cause})
 }
 
 func (o *Operation) onCanceled(ctx chasm.MutableContext, cause *failurepb.Failure) error {
-	store, ok := o.Store.TryGet(ctx)
-	if ok {
+	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationCanceled(ctx, o, cause)
+	}
+	if cause != nil {
+		o.outcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
+			Failed: &nexusoperationpb.OperationOutcome_Failed{Failure: cause},
+		}
 	}
 	return TransitionCanceled.Apply(o, ctx, EventCanceled{Failure: cause})
 }
 
 func (o *Operation) onTimedOut(ctx chasm.MutableContext, cause *failurepb.Failure) error {
-	store, ok := o.Store.TryGet(ctx)
-	if ok {
+	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationTimedOut(ctx, o, cause)
 	}
-	_ = cause
+	if cause != nil {
+		o.outcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
+			Failed: &nexusoperationpb.OperationOutcome_Failed{Failure: cause},
+		}
+	}
 	return TransitionTimedOut.Apply(o, ctx, EventTimedOut{})
 }
 
@@ -264,7 +279,7 @@ func (o *Operation) saveInvocationResult(
 			RetryPolicy: input.retryPolicy,
 		})
 	default:
-		return nil, serviceerror.NewInternalf("cannot save invocation result of type %T", r)
+		return nil, queueserrors.NewUnprocessableTaskError(fmt.Sprintf("unrecognized invocation result %T", r))
 	}
 }
 
@@ -275,11 +290,35 @@ func (o *Operation) resolveUnsuccessfully(ctx chasm.MutableContext, failure *fai
 	}
 	o.ClosedTime = timestamppb.New(closeTime)
 	o.NextAttemptScheduleTime = nil
+	if failure != nil {
+		o.outcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
+			Failed: &nexusoperationpb.OperationOutcome_Failed{Failure: failure},
+		}
+	}
 	return nil
 }
 
-func (o *Operation) Terminate(_ chasm.MutableContext, _ chasm.TerminateComponentRequest) (chasm.TerminateComponentResponse, error) {
-	return chasm.TerminateComponentResponse{}, serviceerror.NewUnimplemented("not implemented")
+func (o *Operation) outcome(ctx chasm.MutableContext) *nexusoperationpb.OperationOutcome {
+	if outcome, ok := o.Outcome.TryGet(ctx); ok {
+		return outcome
+	}
+	outcome := &nexusoperationpb.OperationOutcome{}
+	o.Outcome = chasm.NewDataField(ctx, outcome)
+	return outcome
+}
+
+func (o *Operation) Terminate(
+	ctx chasm.MutableContext,
+	req chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	if o.GetTerminateState() != nil {
+		if existingReqID := o.TerminateState.GetRequestId(); existingReqID != req.RequestID {
+			return chasm.TerminateComponentResponse{},
+				serviceerror.NewFailedPreconditionf("already terminated with request ID %s", existingReqID)
+		}
+		return chasm.TerminateComponentResponse{}, nil
+	}
+	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(o, ctx, EventTerminated{TerminateComponentRequest: req})
 }
 
 func (o *Operation) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {
@@ -295,18 +334,30 @@ func (o *Operation) buildDescribeResponse(
 	ctx chasm.Context,
 	req *nexusoperationpb.DescribeNexusOperationRequest,
 ) (*nexusoperationpb.DescribeNexusOperationResponse, error) {
-	var input *commonpb.Payload
-	if req.GetFrontendRequest().GetIncludeInput() {
-		input = o.RequestData.Get(ctx).GetInput()
+	resp := &workflowservice.DescribeNexusOperationExecutionResponse{
+		RunId: ctx.ExecutionKey().RunID,
+		Info:  o.buildExecutionInfo(ctx),
 	}
-
-	return &nexusoperationpb.DescribeNexusOperationResponse{
-		FrontendResponse: &workflowservice.DescribeNexusOperationExecutionResponse{
-			RunId: ctx.ExecutionKey().RunID,
-			Info:  o.buildExecutionInfo(ctx),
-			Input: input,
-		},
-	}, nil
+	if req.GetFrontendRequest().GetIncludeInput() {
+		resp.Input = o.RequestData.Get(ctx).GetInput()
+	}
+	if req.GetFrontendRequest().GetIncludeOutcome() && o.LifecycleState(ctx).IsClosed() {
+		outcome := o.Outcome.Get(ctx)
+		if successful := outcome.GetSuccessful(); successful != nil {
+			resp.Outcome = &workflowservice.DescribeNexusOperationExecutionResponse_Result{
+				Result: successful.GetResult(),
+			}
+		} else if failure := outcome.GetFailed().GetFailure(); failure != nil {
+			resp.Outcome = &workflowservice.DescribeNexusOperationExecutionResponse_Failure{
+				Failure: failure,
+			}
+		} else if o.LastAttemptFailure != nil {
+			resp.Outcome = &workflowservice.DescribeNexusOperationExecutionResponse_Failure{
+				Failure: o.LastAttemptFailure,
+			}
+		}
+	}
+	return &nexusoperationpb.DescribeNexusOperationResponse{FrontendResponse: resp}, nil
 }
 
 func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperationExecutionInfo {
@@ -343,7 +394,6 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 		if o.ScheduleToCloseTimeout != nil {
 			info.ExpirationTime = timestamppb.New(o.ScheduledTime.AsTime().Add(o.ScheduleToCloseTimeout.AsDuration()))
 		}
-
 		if closeTime := o.closeTime(ctx); closeTime != nil {
 			info.CloseTime = closeTime
 			info.ExecutionDuration = durationpb.New(closeTime.AsTime().Sub(o.ScheduledTime.AsTime()))
@@ -359,7 +409,7 @@ func (o *Operation) closeTime(ctx chasm.Context) *timestamppb.Timestamp {
 	if !o.LifecycleState(ctx).IsClosed() {
 		return nil
 	}
-	return o.LastAttemptCompleteTime
+	return o.ClosedTime
 }
 
 func operationExecutionStatus(status nexusoperationpb.OperationStatus) enumspb.NexusOperationExecutionStatus {
@@ -376,6 +426,8 @@ func operationExecutionStatus(status nexusoperationpb.OperationStatus) enumspb.N
 		return enumspb.NEXUS_OPERATION_EXECUTION_STATUS_CANCELED
 	case nexusoperationpb.OPERATION_STATUS_TIMED_OUT:
 		return enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TIMED_OUT
+	case nexusoperationpb.OPERATION_STATUS_TERMINATED:
+		return enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TERMINATED
 	default:
 		return enumspb.NEXUS_OPERATION_EXECUTION_STATUS_UNSPECIFIED
 	}
