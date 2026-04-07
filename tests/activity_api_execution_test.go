@@ -125,7 +125,7 @@ func TestActivityExecutionAPI(t *testing.T) {
 		s.WaitForChannel(ctx, activityStartedCh)
 
 		_, err = s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
-			Namespace: s.Namespace().String(),
+			Namespace:  s.Namespace().String(),
 			WorkflowId: workflowRun.GetID(),
 			ActivityId: "activity-id",
 			Identity:   "test-identity",
