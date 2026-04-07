@@ -547,8 +547,8 @@ func (e *matchingEngineImpl) loggerAndMetricsForPartition(
 		tag.WorkflowNamespace(nsName))
 	var metricsHandler metrics.Handler
 	if strings.HasPrefix(partition.TaskQueue().Name(), internalTaskQueuePrefix) {
-		// Aggregate all internal task queues under "__temporal_sys__" to avoid
-		// cardinality explosion from per-worker queue names.
+		// Aggregate all internal task queues under a single synthetic taskqueue tag
+		// to avoid cardinality explosion from per-worker queue names.
 		metricsHandler = e.metricsHandler.WithTags(
 			metrics.NamespaceTag(nsName),
 			metrics.TemporalSysTaskQueueTag(),

@@ -14,6 +14,8 @@ const (
 
 	// NormalPartitionTagValue is the partition tag value for normal (non-sticky) partitions.
 	NormalPartitionTagValue = normal
+	// TemporalSysTaskQueueValue is the task queue tag value for server-internal task queues.
+	TemporalSysTaskQueueValue = temporalSys
 )
 
 // GetPerTaskQueueFamilyScope returns "namespace" and "taskqueue" tags. "taskqueue" will be "__omitted__" if
@@ -95,8 +97,8 @@ func GetPerTaskQueuePartitionTypeScope(
 		append(tags, PartitionTag(value))...)
 }
 
-// TemporalSysTaskQueueTag returns a taskqueue tag with the "__temporal_sys__" synthetic value,
-// used to aggregate server-internal task queues under a single label.
+// TemporalSysTaskQueueTag returns a taskqueue tag that aggregates server-internal
+// task queues under a single synthetic label.
 func TemporalSysTaskQueueTag() Tag {
 	return UnsafeTaskQueueTag(temporalSys)
 }
