@@ -22,71 +22,71 @@ func newTestShardForRateLimiter(t *testing.T) *ContextTest {
 	)
 }
 
-func TestWorkflowIDReuseRateLimiter_Disabled(t *testing.T) {
+func TestBusinessIDReuseRateLimiter_Disabled(t *testing.T) {
 	shard := newTestShardForRateLimiter(t)
-	shard.config.WorkflowIDReuseRate = func(_ string) int { return 0 }
+	shard.config.BusinessIDReuseRate = func(_ string) int { return 0 }
 	nsID := namespace.ID("test-ns-id")
-	require.Nil(t, shard.WorkflowIDReuseRateLimiter(nsID, "wf-id", chasm.WorkflowArchetypeID))
+	require.Nil(t, shard.BusinessIDReuseRateLimiter(nsID, "wf-id", chasm.WorkflowArchetypeID))
 }
 
-func TestWorkflowIDReuseRateLimiter_AllowsUnderLimit(t *testing.T) {
+func TestBusinessIDReuseRateLimiter_AllowsUnderLimit(t *testing.T) {
 	shard := newTestShardForRateLimiter(t)
-	shard.config.WorkflowIDReuseRate = func(_ string) int { return 10 }
+	shard.config.BusinessIDReuseRate = func(_ string) int { return 10 }
 	nsID := namespace.ID("test-ns-id")
-	rl := shard.WorkflowIDReuseRateLimiter(nsID, "wf-id", chasm.WorkflowArchetypeID)
+	rl := shard.BusinessIDReuseRateLimiter(nsID, "wf-id", chasm.WorkflowArchetypeID)
 	require.NotNil(t, rl)
 	for range 10 {
 		require.True(t, rl.Allow())
 	}
 }
 
-func TestWorkflowIDReuseRateLimiter_BlocksOverLimit(t *testing.T) {
+func TestBusinessIDReuseRateLimiter_BlocksOverLimit(t *testing.T) {
 	shard := newTestShardForRateLimiter(t)
-	shard.config.WorkflowIDReuseRate = func(_ string) int { return 1 }
+	shard.config.BusinessIDReuseRate = func(_ string) int { return 1 }
 	nsID := namespace.ID("test-ns-id")
-	rl := shard.WorkflowIDReuseRateLimiter(nsID, "wf-id", chasm.WorkflowArchetypeID)
+	rl := shard.BusinessIDReuseRateLimiter(nsID, "wf-id", chasm.WorkflowArchetypeID)
 	require.NotNil(t, rl)
 	require.True(t, rl.Allow())
 	require.False(t, rl.Allow())
 }
 
-func TestWorkflowIDReuseRateLimiter_IndependentWorkflowIDs(t *testing.T) {
+func TestBusinessIDReuseRateLimiter_IndependentBusinessIDs(t *testing.T) {
 	shard := newTestShardForRateLimiter(t)
-	shard.config.WorkflowIDReuseRate = func(_ string) int { return 1 }
+	shard.config.BusinessIDReuseRate = func(_ string) int { return 1 }
 	nsID := namespace.ID("test-ns-id")
-	rl1 := shard.WorkflowIDReuseRateLimiter(nsID, "wf-id-1", chasm.WorkflowArchetypeID)
-	rl2 := shard.WorkflowIDReuseRateLimiter(nsID, "wf-id-2", chasm.WorkflowArchetypeID)
+	rl1 := shard.BusinessIDReuseRateLimiter(nsID, "wf-id-1", chasm.WorkflowArchetypeID)
+	rl2 := shard.BusinessIDReuseRateLimiter(nsID, "wf-id-2", chasm.WorkflowArchetypeID)
 	require.True(t, rl1.Allow())
 	require.True(t, rl2.Allow())
 }
 
-func TestWorkflowIDReuseRateLimiter_IndependentNamespaces(t *testing.T) {
+func TestBusinessIDReuseRateLimiter_IndependentNamespaces(t *testing.T) {
 	shard := newTestShardForRateLimiter(t)
-	shard.config.WorkflowIDReuseRate = func(_ string) int { return 1 }
+	shard.config.BusinessIDReuseRate = func(_ string) int { return 1 }
 	ns1 := namespace.ID("ns-1")
 	ns2 := namespace.ID("ns-2")
-	rl1 := shard.WorkflowIDReuseRateLimiter(ns1, "wf-id", chasm.WorkflowArchetypeID)
-	rl2 := shard.WorkflowIDReuseRateLimiter(ns2, "wf-id", chasm.WorkflowArchetypeID)
+	rl1 := shard.BusinessIDReuseRateLimiter(ns1, "wf-id", chasm.WorkflowArchetypeID)
+	rl2 := shard.BusinessIDReuseRateLimiter(ns2, "wf-id", chasm.WorkflowArchetypeID)
 	require.True(t, rl1.Allow())
 	require.True(t, rl2.Allow())
 }
 
-func TestWorkflowIDReuseRateLimiter_IndependentArchetypes(t *testing.T) {
+func TestBusinessIDReuseRateLimiter_IndependentArchetypes(t *testing.T) {
 	shard := newTestShardForRateLimiter(t)
-	shard.config.WorkflowIDReuseRate = func(_ string) int { return 1 }
+	shard.config.BusinessIDReuseRate = func(_ string) int { return 1 }
 	nsID := namespace.ID("test-ns-id")
-	rl1 := shard.WorkflowIDReuseRateLimiter(nsID, "wf-id", chasm.WorkflowArchetypeID)
-	rl2 := shard.WorkflowIDReuseRateLimiter(nsID, "wf-id", chasm.ArchetypeID(99999))
+	rl1 := shard.BusinessIDReuseRateLimiter(nsID, "wf-id", chasm.WorkflowArchetypeID)
+	rl2 := shard.BusinessIDReuseRateLimiter(nsID, "wf-id", chasm.ArchetypeID(99999))
 	require.True(t, rl1.Allow())
 	require.True(t, rl2.Allow())
 }
 
-func TestWorkflowIDReuseRateLimiter_BurstRatio(t *testing.T) {
+func TestBusinessIDReuseRateLimiter_BurstRatio(t *testing.T) {
 	shard := newTestShardForRateLimiter(t)
-	shard.config.WorkflowIDReuseRate = func(_ string) int { return 2 }
-	shard.config.WorkflowIDReuseBurstRatio = func(_ string) float64 { return 3.0 }
+	shard.config.BusinessIDReuseRate = func(_ string) int { return 2 }
+	shard.config.BusinessIDReuseBurstRatio = func(_ string) float64 { return 3.0 }
 	nsID := namespace.ID("test-ns-id")
-	rl := shard.WorkflowIDReuseRateLimiter(nsID, "wf-id", chasm.WorkflowArchetypeID)
+	rl := shard.BusinessIDReuseRateLimiter(nsID, "wf-id", chasm.WorkflowArchetypeID)
 	require.NotNil(t, rl)
 	for i := range 6 {
 		require.True(t, rl.Allow(), "expected Allow() on call %d", i+1)
@@ -94,14 +94,14 @@ func TestWorkflowIDReuseRateLimiter_BurstRatio(t *testing.T) {
 	require.False(t, rl.Allow(), "expected Allow() to be false after burst exhausted")
 }
 
-func TestWorkflowIDReuseRateLimiter_BurstUpdatesOnConfigChange(t *testing.T) {
+func TestBusinessIDReuseRateLimiter_BurstUpdatesOnConfigChange(t *testing.T) {
 	shard := newTestShardForRateLimiter(t)
-	shard.config.WorkflowIDReuseRate = func(_ string) int { return 2 }
-	shard.config.WorkflowIDReuseBurstRatio = func(_ string) float64 { return 1.0 }
+	shard.config.BusinessIDReuseRate = func(_ string) int { return 2 }
+	shard.config.BusinessIDReuseBurstRatio = func(_ string) float64 { return 1.0 }
 	nsID := namespace.ID("test-ns-id")
-	shard.WorkflowIDReuseRateLimiter(nsID, "wf-id", chasm.WorkflowArchetypeID)
+	shard.BusinessIDReuseRateLimiter(nsID, "wf-id", chasm.WorkflowArchetypeID)
 
-	shard.config.WorkflowIDReuseBurstRatio = func(_ string) float64 { return 3.0 }
-	rl := shard.WorkflowIDReuseRateLimiter(nsID, "wf-id", chasm.WorkflowArchetypeID)
+	shard.config.BusinessIDReuseBurstRatio = func(_ string) float64 { return 3.0 }
+	rl := shard.BusinessIDReuseRateLimiter(nsID, "wf-id", chasm.WorkflowArchetypeID)
 	require.Equal(t, 6, rl.Burst())
 }

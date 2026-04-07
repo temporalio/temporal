@@ -2792,28 +2792,28 @@ that task will be sent to DLQ.`,
 		false,
 		`If true, validate the start time of the old workflow is older than WorkflowIdReuseMinimalInterval when reusing workflow ID.`,
 	)
-	WorkflowIDReuseRate = NewNamespaceIntSetting(
-		"history.workflowIDReuseRate",
+	BusinessIDReuseRate = NewNamespaceIntSetting(
+		"history.businessIDReuseRate",
 		0,
-		`WorkflowIDReuseRate limits the rate of new workflow execution creation per
-(namespace, workflowID) pair on a single history host. 0 = disabled (default).`,
+		`BusinessIDReuseRate limits the rate of new execution creation per
+(namespace, businessID, archetype) tuple on a single history host. 0 = disabled (default).`,
 	)
-	WorkflowIDReuseBurstRatio = NewNamespaceFloatSetting(
-		"history.workflowIDReuseBurstRatio",
+	BusinessIDReuseBurstRatio = NewNamespaceFloatSetting(
+		"history.businessIDReuseBurstRatio",
 		1.0,
-		`WorkflowIDReuseBurstRatio is the burst-to-rate ratio for the per-(namespace, workflowID)
+		`BusinessIDReuseBurstRatio is the burst-to-rate ratio for the per-(namespace, businessID, archetype)
 start rate limiter. Burst = max(1, int(rps * ratio)). Default 1.0 (no burst above rate).`,
 	)
-	WorkflowIDReuseLimiterCacheSize = NewGlobalIntSetting(
-		"history.workflowIDReuseLimiterCacheSize",
+	BusinessIDReuseLimiterCacheSize = NewGlobalIntSetting(
+		"history.businessIDReuseLimiterCacheSize",
 		10000,
-		`WorkflowIDReuseLimiterCacheSize is the max number of per-(namespace, workflowID) rate limiters
+		`BusinessIDReuseLimiterCacheSize is the max number of per-(namespace, businessID, archetype) rate limiters
 cached on a single history shard. Requires service restart to take effect.`,
 	)
-	WorkflowIDReuseLimiterCacheTTL = NewGlobalDurationSetting(
-		"history.workflowIDReuseLimiterCacheTTL",
+	BusinessIDReuseLimiterCacheTTL = NewGlobalDurationSetting(
+		"history.businessIDReuseLimiterCacheTTL",
 		60*time.Second,
-		`WorkflowIDReuseLimiterCacheTTL is the TTL for per-(namespace, workflowID) rate limiter cache entries.
+		`BusinessIDReuseLimiterCacheTTL is the TTL for per-(namespace, businessID, archetype) rate limiter cache entries.
 Requires service restart to take effect.`,
 	)
 	HealthPersistenceLatencyFailure = NewGlobalFloatSetting(

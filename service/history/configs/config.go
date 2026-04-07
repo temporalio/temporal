@@ -396,10 +396,10 @@ type Config struct {
 
 	WorkflowIdReuseMinimalInterval           dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	EnableWorkflowIdReuseStartTimeValidation dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	WorkflowIDReuseRate                      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	WorkflowIDReuseBurstRatio                dynamicconfig.FloatPropertyFnWithNamespaceFilter
-	WorkflowIDReuseLimiterCacheSize          dynamicconfig.IntPropertyFn
-	WorkflowIDReuseLimiterCacheTTL           dynamicconfig.DurationPropertyFn
+	BusinessIDReuseRate                      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	BusinessIDReuseBurstRatio                dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	BusinessIDReuseLimiterCacheSize          dynamicconfig.IntPropertyFn
+	BusinessIDReuseLimiterCacheTTL           dynamicconfig.DurationPropertyFn
 
 	HealthPersistenceLatencyFailure dynamicconfig.FloatPropertyFn
 	HealthPersistenceErrorRatio     dynamicconfig.FloatPropertyFn
@@ -777,10 +777,10 @@ func NewConfig(
 		SendRawWorkflowHistory:                   dynamicconfig.SendRawWorkflowHistory.Get(dc),
 		WorkflowIdReuseMinimalInterval:           dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
 		EnableWorkflowIdReuseStartTimeValidation: dynamicconfig.EnableWorkflowIdReuseStartTimeValidation.Get(dc),
-		WorkflowIDReuseRate:                      dynamicconfig.WorkflowIDReuseRate.Get(dc),
-		WorkflowIDReuseBurstRatio:                dynamicconfig.WorkflowIDReuseBurstRatio.Get(dc),
-		WorkflowIDReuseLimiterCacheSize:          dynamicconfig.WorkflowIDReuseLimiterCacheSize.Get(dc),
-		WorkflowIDReuseLimiterCacheTTL:           dynamicconfig.WorkflowIDReuseLimiterCacheTTL.Get(dc),
+		BusinessIDReuseRate:                      dynamicconfig.BusinessIDReuseRate.Get(dc),
+		BusinessIDReuseBurstRatio:                dynamicconfig.BusinessIDReuseBurstRatio.Get(dc),
+		BusinessIDReuseLimiterCacheSize:          dynamicconfig.BusinessIDReuseLimiterCacheSize.Get(dc),
+		BusinessIDReuseLimiterCacheTTL:           dynamicconfig.BusinessIDReuseLimiterCacheTTL.Get(dc),
 
 		HealthPersistenceLatencyFailure: dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
 		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),

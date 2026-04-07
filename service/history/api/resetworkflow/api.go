@@ -43,13 +43,15 @@ func Invoke(
 	request := resetRequest.ResetRequest
 	workflowID := request.WorkflowExecution.GetWorkflowId()
 
-	if rl := shardContext.WorkflowIDReuseRateLimiter(namespaceID, workflowID, chasm.WorkflowArchetypeID); rl != nil && !rl.Allow() {
-		metrics.WorkflowIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
+	if rl := shardContext.BusinessIDReuseRateLimiter(namespaceID, workflowID, chasm.WorkflowArchetypeID); rl != nil && !rl.Allow() {
+		archetypeName, _ := shardContext.ChasmRegistry().ArchetypeDisplayName(chasm.WorkflowArchetypeID)
+		metrics.BusinessIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
 			1,
-			metrics.ResourceExhaustedCauseTag(consts.ErrWorkflowIDRateLimitExceeded.Cause),
-			metrics.ResourceExhaustedScopeTag(consts.ErrWorkflowIDRateLimitExceeded.Scope),
+			metrics.ResourceExhaustedCauseTag(consts.ErrBusinessIDRateLimitExceeded.Cause),
+			metrics.ResourceExhaustedScopeTag(consts.ErrBusinessIDRateLimitExceeded.Scope),
+			metrics.StringTag("archetype", archetypeName),
 		)
-		return nil, consts.ErrWorkflowIDRateLimitExceeded
+		return nil, consts.ErrBusinessIDRateLimitExceeded
 	}
 	baseRunID := request.WorkflowExecution.GetRunId()
 
