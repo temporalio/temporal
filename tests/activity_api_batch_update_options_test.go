@@ -32,12 +32,12 @@ func TestActivityApiBatchUpdateOptionsClientTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &ActivityAPIBatchUpdateOptionsSuite{})
 }
 
-func createBatchUpdateOptionsWorkflow(s *testcore.TestEnv, workflowFn WorkflowFunction) sdkclient.WorkflowRun {
+func (s *ActivityAPIBatchUpdateOptionsSuite) createBatchUpdateOptionsWorkflow(env *testcore.TestEnv, workflowFn WorkflowFunction) sdkclient.WorkflowRun {
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
-		TaskQueue: s.WorkerTaskQueue(),
+		TaskQueue: env.WorkerTaskQueue(),
 	}
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(env.Context(), workflowOptions, workflowFn)
 	s.NoError(err)
 	s.NotNil(workflowRun)
 
@@ -54,8 +54,8 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsSucce
 	env.SdkWorker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
 	env.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
 
-	workflowRun1 := createBatchUpdateOptionsWorkflow(env, internalWorkflow.WorkflowFunc)
-	workflowRun2 := createBatchUpdateOptionsWorkflow(env, internalWorkflow.WorkflowFunc)
+	workflowRun1 := s.createBatchUpdateOptionsWorkflow(env, internalWorkflow.WorkflowFunc)
+	workflowRun2 := s.createBatchUpdateOptionsWorkflow(env, internalWorkflow.WorkflowFunc)
 
 	// wait for activity to start in both workflows
 	env.EventuallyWithT(func(t *assert.CollectT) {
