@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -105,6 +106,15 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		FrontendResponse: &workflowservice.StartActivityExecutionResponse{
 			RunId:   result.ExecutionKey.RunID,
 			Started: result.Created,
+			Link: &commonpb.Link{
+				Variant: &commonpb.Link_Activity_{
+					Activity: &commonpb.Link_Activity{
+						Namespace:  frontendReq.GetNamespace(),
+						ActivityId: frontendReq.GetActivityId(),
+						RunId:      result.ExecutionKey.RunID,
+					},
+				},
+			},
 			// EagerTask: TODO when supported, need to call the same code that would handle the HandleStarted API
 		},
 	}, nil

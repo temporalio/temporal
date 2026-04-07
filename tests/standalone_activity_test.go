@@ -526,6 +526,35 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			require.ErrorAs(t, err, &invalidArgErr)
 		})
 	})
+
+	t.Run("ResponseFields", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		resp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Identity:     s.tv.WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           s.tv.Any().String(),
+		})
+		require.NoError(t, err)
+
+		require.True(t, resp.Started)
+		require.NotEmpty(t, resp.RunId)
+
+		// Verify link points to the started activity.
+		link := resp.GetLink().GetActivity()
+		require.NotNil(t, link)
+		require.Equal(t, s.Namespace().String(), link.Namespace)
+		require.Equal(t, activityID, link.ActivityId)
+		require.Equal(t, resp.RunId, link.RunId)
+	})
 }
 
 func (s *standaloneActivityTestSuite) TestComplete() {
