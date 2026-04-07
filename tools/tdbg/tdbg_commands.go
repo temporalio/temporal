@@ -682,6 +682,30 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 				return AdminForceUnloadTaskQueuePartition(c, clientFactory)
 			},
 		},
+		{
+			Name:  "get-user-data",
+			Usage: "Get per-type user data stored for a task queue",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagTaskQueue,
+					Usage:    "Task Queue name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:  FlagTaskQueueType,
+					Value: "TASK_QUEUE_TYPE_WORKFLOW",
+					Usage: "Task Queue type: TASK_QUEUE_TYPE_WORKFLOW, TASK_QUEUE_TYPE_ACTIVITY, TASK_QUEUE_TYPE_NEXUS",
+				},
+				&cli.Int64Flag{
+					Name:  FlagPartitionID,
+					Usage: "Partition ID to fetch user data from (default 0 = root partition)",
+					Value: 0,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminGetTaskQueueUserData(c, clientFactory)
+			},
+		},
 	}
 }
 

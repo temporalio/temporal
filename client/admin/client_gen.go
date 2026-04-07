@@ -339,6 +339,16 @@ func (c *clientImpl) MergeDLQTasks(
 	return c.client.MergeDLQTasks(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetTaskQueueUserData(
+	ctx context.Context,
+	request *adminservice.GetTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetTaskQueueUserDataResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetTaskQueueUserData(ctx, request, opts...)
+}
+
 func (c *clientImpl) MigrateSchedule(
 	ctx context.Context,
 	request *adminservice.MigrateScheduleRequest,
