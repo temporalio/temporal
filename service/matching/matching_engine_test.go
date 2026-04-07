@@ -5246,7 +5246,7 @@ func TestLoggerAndMetricsForPartition_InternalTaskQueue(t *testing.T) {
 		{
 			name:          "internal task queue gets __temporal_sys__ taskqueue tag",
 			tqName:        "/temporal-sys/worker-commands/ns/key",
-			expectTQValue: metrics.TemporalSysTaskQueueValue,
+			expectTQValue: "__temporal_sys__",
 		},
 	}
 

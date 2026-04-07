@@ -14,8 +14,6 @@ const (
 
 	// NormalPartitionTagValue is the partition tag value for normal (non-sticky) partitions.
 	NormalPartitionTagValue = normal
-	// TemporalSysTaskQueueValue is the task queue tag value for server-internal task queues.
-	TemporalSysTaskQueueValue = temporalSys
 )
 
 // GetPerTaskQueueFamilyScope returns "namespace" and "taskqueue" tags. "taskqueue" will be "__omitted__" if
