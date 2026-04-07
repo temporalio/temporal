@@ -261,12 +261,14 @@ func SetupNewWorkflowForRetryOrCron(
 		} else if GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
 			sourceDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousMutableState.GetEffectiveDeployment())
 			sourceDeploymentRevisionNumber := previousMutableState.GetVersioningRevisionNumber()
+			sourceRampPolicy := previousMutableState.GetExecutionInfo().GetVersioningInfo().GetRampPolicy()
 
 			// Only set inherited auto upgrade info if source deployment version and revision number are not nil.
 			if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
 				inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
 					SourceDeploymentVersion:        sourceDeploymentVersion,
 					SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
+					RampPolicy:                     sourceRampPolicy,
 				}
 			}
 		}

@@ -206,6 +206,7 @@ func MakeDirectiveForWorkflowTask(ms historyi.MutableState) *taskqueuespb.TaskVe
 		ms.GetEffectiveVersioningBehavior(),
 		ms.GetEffectiveDeployment(),
 		ms.GetVersioningRevisionNumber(),
+		ms.GetExecutionInfo().GetVersioningInfo().GetRampPolicy(),
 	)
 }
 

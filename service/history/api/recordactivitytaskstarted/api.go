@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -206,6 +207,7 @@ func recordActivityTaskStarted(
 			matchingClient,
 			routingInfoCache,
 			mutableState.GetWorkflowKey().WorkflowID,
+			mutableState.GetExecutionInfo().GetVersioningInfo().GetRampPolicy(),
 		)
 		if err != nil {
 			// Let matching retry
@@ -288,6 +290,7 @@ func getDeploymentVersionAndRevisionNumberForWorkflowID(
 	matchingClient matchingservice.MatchingServiceClient,
 	routingInfoCache worker_versioning.RoutingInfoCache,
 	workflowId string,
+	rampPolicy *deploymentpb.RampPolicy,
 ) (*deploymentspb.WorkerDeploymentVersion, int64, error) {
 	// Check cache first for task queue routing info (independent of workflow ID)
 	routingInfo, ok := routingInfoCache.Get(namespaceID, taskQueueName, taskQueueType)
@@ -315,7 +318,7 @@ func getDeploymentVersionAndRevisionNumberForWorkflowID(
 	}
 
 	// Apply workflow-specific routing logic
-	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(routingInfo.Current, routingInfo.CurrentRevisionNumber, routingInfo.Ramping, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber, workflowId)
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(routingInfo.Current, routingInfo.CurrentRevisionNumber, routingInfo.Ramping, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber, workflowId, rampPolicy)
 
 	return targetDeploymentVersion, targetDeploymentRevisionNumber, nil
 }

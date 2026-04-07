@@ -41,6 +41,9 @@ message TaskVersionDirective {
   // Counter copied from the workflow execution's WorkflowExecutionVersioningInfo
   // during enqueue time.
   int64 revision_number = 6;
+  // Defines how to determine whether a workflow should use the Ramping Version or the Current Version of its Task Queue.
+  // Default Ramp Policy is simply f(workflow_id, ramp_percentage).
+  temporal.api.deployment.v1.RampPolicy ramp_policy = 7;
 }
 
 message FairLevel {
