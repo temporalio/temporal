@@ -296,13 +296,7 @@ func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	return db.updateTaskQueueLocked(ctx, false)
 }
 
-func (db *taskQueueDB) updateAckLevelAndBacklogStats(
-	subqueue subqueueIndex,
-	newAckLevel int64,
-	countDelta int64,
-	oldestTime time.Time,
-	isDrained bool,
-) {
+func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue subqueueIndex, newAckLevel int64, countDelta int64, oldestTime time.Time) {
 	db.Lock()
 	defer db.Unlock()
 
@@ -319,10 +313,8 @@ func (db *taskQueueDB) updateAckLevelAndBacklogStats(
 		dbQueue.AckLevel = newAckLevel
 	}
 
-	if newAckLevel == db.getMaxReadLevelLocked(subqueue) || isDrained {
-		// Reset approximateBacklogCount to fix the count divergence issue.
-		// The ack level may not reach maxReadLevel due to gaps in task IDs,
-		// so we also reset when the caller knows the queue is drained.
+	if newAckLevel == db.getMaxReadLevelLocked(subqueue) {
+		// Reset approximateBacklogCount to fix the count divergence issue
 		if dbQueue.ApproximateBacklogCount != 0 || !dbQueue.oldestTime.Equal(oldestTime) {
 			db.lastChange = time.Now()
 			dbQueue.ApproximateBacklogCount = 0

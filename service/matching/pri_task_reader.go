@@ -149,8 +149,7 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 		tr.SignalTaskLoading()
 	}
 
-	tr.backlogMgr.db.updateAckLevelAndBacklogStats(
-		tr.subqueue, tr.ackLevel, -numAcked, tr.backlogAge.oldestTime(), tr.isDrainedLocked())
+	tr.backlogMgr.db.updateAckLevelAndBacklogStats(tr.subqueue, tr.ackLevel, -numAcked, tr.backlogAge.oldestTime())
 }
 
 // nolint:revive // can simplify later
@@ -431,8 +430,7 @@ func (tr *priTaskReader) isDrained() bool {
 }
 
 func (tr *priTaskReader) isDrainedLocked() bool {
-	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel(tr.subqueue)
-	return tr.readLevel >= maxReadLevel && tr.outstandingTasks.Empty()
+	return tr.outstandingTasks.Empty() && tr.readLevel >= tr.backlogMgr.db.GetMaxReadLevel(tr.subqueue)
 }
 
 func (tr *priTaskReader) ackTaskLocked(taskId int64) int64 {
@@ -458,6 +456,12 @@ func (tr *priTaskReader) ackTaskLocked(taskId int64) int64 {
 		tr.outstandingTasks.Remove(minId)
 		numAcked += 1
 	}
+
+	// Also if we're completely drained, we can move the ack level up to the read level.
+	if tr.isDrainedLocked() {
+		tr.ackLevel = tr.readLevel
+	}
+
 	return numAcked
 }
 

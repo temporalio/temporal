@@ -419,9 +419,8 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	// - outstandingTasks is empty
 	// - readLevel >= maxReadLevel (pump already scanned)
 	// - isDrainedLocked() returns true
-	// - ackLevel < maxReadLevel (gap between last task ID and maxReadLevel)
-	// Without the isDrained fix, count would be 5 - 3 = 2. With the fix,
-	// it resets to 0.
+	// - ackLevel gets set to maxReadLevel
+	// - backlog counts reset to 0
 	lock.Lock()
 	for _, t := range tasks {
 		t.finish(nil, true)
@@ -429,7 +428,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	lock.Unlock()
 
 	_, ackLevel := blm.subqueues[subqueueZero].getLevels()
-	s.Less(ackLevel, maxRL)
+	s.Equal(ackLevel, maxRL)
 
 	s.Zero(totalApproximateBacklogCount(s.blm))
 }

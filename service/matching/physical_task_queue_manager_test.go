@@ -392,7 +392,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnersh
 	ptm.Unlock()
 
 	// change something to ensure it does the periodic write
-	s.tqMgr.backlogMgr.getDB().updateAckLevelAndBacklogStats(0, 123456, 10, time.Time{}, false)
+	s.tqMgr.backlogMgr.getDB().updateAckLevelAndBacklogStats(0, 123456, 10, time.Time{})
 
 	// on the next periodic write, it'll fail due to conflict and unload the task queue
 	s.Eventually(func() bool {
