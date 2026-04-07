@@ -110,6 +110,7 @@ func (factory *factory) getMonitor() *monitor {
 		// Empirically, ringpop updates usually propagate in under a second even in relatively large clusters.
 		// 3 seconds is an over-estimate to be safer.
 		maxPropagationTime := dynamicconfig.RingpopApproximateMaxPropagationTime.Get(factory.DC)()
+		replicaPoints := dynamicconfig.RingpopReplicaPoints.Get(factory.DC)()
 
 		factory.monitor = newMonitor(
 			factory.ServiceName,
@@ -121,6 +122,7 @@ func (factory *factory) getMonitor() *monitor {
 			factory.Config.MaxJoinDuration,
 			maxPropagationTime,
 			factory.getJoinTime(maxPropagationTime),
+			replicaPoints,
 		)
 	})
 
