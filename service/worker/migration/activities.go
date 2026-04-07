@@ -222,8 +222,8 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 		return resp.Shards[i].ShardId < resp.Shards[j].ShardId
 	})
 
-	// shard id -> task id
-	shardSnapshots := waitRequest.WaitForTaskIds
+	// this is the minimum task ID each shard must reach before catchup is considered complete
+	requiredMinTaskIDPerShard := waitRequest.WaitForTaskIds
 
 	for _, localShard := range resp.Shards {
 		remoteShardProgress, hasRemoteShardProgress := localShard.RemoteClusters[waitRequest.RemoteCluster]
@@ -240,7 +240,7 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 			continue
 		}
 
-		if remoteShardProgress.AckedTaskId < shardSnapshots[localShard.ShardId] {
+		if remoteShardProgress.AckedTaskId < requiredMinTaskIDPerShard[localShard.ShardId] {
 			continue
 		}
 
