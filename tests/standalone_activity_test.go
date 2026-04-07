@@ -4952,6 +4952,8 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 		require.NoError(t, err)
 		require.NotNil(t, updateResp)
 		require.Equal(t, int64(newScheduleToClose.Seconds()), updateResp.GetActivityOptions().GetScheduleToCloseTimeout().GetSeconds())
+		// Verify that the unmodified start_to_close_timeout is preserved in the response.
+		require.Equal(t, int64((30*time.Minute).Seconds()), updateResp.GetActivityOptions().GetStartToCloseTimeout().GetSeconds())
 
 		// Attempt 2 should be available immediately.
 		pollResp2, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
@@ -5021,6 +5023,20 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, originalMaxAttempts, describeResp.GetInfo().GetRetryPolicy().GetMaximumAttempts())
+
+		// Verify the activity still executes after reset — poll attempt 1 and complete it.
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Result:    payloads.EncodeString("done"),
+		})
+		require.NoError(t, err)
 	})
 }
 

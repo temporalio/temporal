@@ -482,6 +482,11 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	}, nil
 }
 
+// mergeActivityOptions applies the field mask from the request to the activity state.
+// The structure mirrors the field-mask logic in service/history/api/updateactivityoptions/api.go
+// for workflow-embedded activities; complexity is inherent to the per-field update pattern.
+//
+//nolint:revive // cyclomatic: field-mask application mirrors existing updateactivityoptions logic
 func (a *Activity) mergeActivityOptions(
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
 ) error {

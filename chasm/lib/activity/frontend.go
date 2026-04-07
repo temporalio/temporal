@@ -552,7 +552,6 @@ func (h *frontendHandler) UpdateActivityExecutionOptions(
 		return nil, err
 	}
 
-
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err
