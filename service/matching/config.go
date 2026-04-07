@@ -4,7 +4,6 @@
 package matching
 
 import (
-	"sync/atomic"
 	"time"
 
 	"go.temporal.io/server/common/backoff"
@@ -158,11 +157,10 @@ type (
 		LongPollExpirationInterval func() time.Duration
 		BacklogTaskForwardTimeout  func() time.Duration
 		RangeSize                  int64
-		NewMatcher                 *atomic.Bool
+		NewMatcher                 bool
 		NewMatcherSub              func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
-		EnableFairness             *atomic.Bool
+		EnableFairness             bool
 		EnableFairnessSub          func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
-		AutoEnable                 *atomic.Bool
 		EnableMigration            func() bool
 		AutoEnableV2Sub            func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
 		GetTasksBatchSize          func() int
@@ -522,9 +520,6 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 			return config.FairnessCounter(ns.String(), taskQueueName, taskType)
 		},
 		MaxVersionsInTaskQueue: func() int { return config.MaxVersionsInTaskQueue(ns.String()) },
-		NewMatcher:             &atomic.Bool{},
-		EnableFairness:         &atomic.Bool{},
-		AutoEnable:             &atomic.Bool{},
 	}
 }
 

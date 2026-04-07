@@ -87,11 +87,11 @@ type (
 		initCtx               context.Context
 		initCancel            func()
 
-		// Tracks base NewMatcher value since EnableFairness=true forces NewMatcher=true
-	baseNewMatcher      *atomic.Bool
-	cancelNewMatcherSub func()
+		cancelNewMatcherSub func()
 		cancelFairnessSub   func()
 		cancelAutoEnableSub func()
+
+		autoEnable *atomic.Bool
 
 		// rateLimitManager is used to manage the rate limit for task queues.
 		rateLimitManager *rateLimitManager
@@ -140,7 +140,7 @@ func newTaskQueuePartitionManager(
 		rateLimitManager:      rateLimitManager,
 		defaultQueueFuture:    future.NewFuture[physicalTaskQueueManager](),
 		autoEnableRateLimiter: quotas.NewRateLimiter(1.0/60, 1),
-		baseNewMatcher:        &atomic.Bool{},
+		autoEnable:            &atomic.Bool{},
 	}
 	pm.initCtx, pm.initCancel = context.WithCancel(context.Background())
 
@@ -151,6 +151,34 @@ func newTaskQueuePartitionManager(
 	}
 
 	return pm, nil
+}
+
+// computeEffectiveConfig determines the effective NewMatcher and EnableFairness config values
+// based on fairnessState, autoEnable, and the base dynamic config values.
+func (pm *taskQueuePartitionManagerImpl) computeEffectiveConfig(autoEnable, fairness, newMatcher bool) (effectiveNewMatcher, effectiveEnableFairness bool) {
+	isSticky := pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
+
+	switch {
+	case !autoEnable || pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED:
+		// Use base dynamic config values
+		// Fairness is disabled for sticky queues
+		effectiveEnableFairness = fairness && !isSticky
+		if fairness {
+			effectiveNewMatcher = true
+		} else {
+			effectiveNewMatcher = newMatcher
+		}
+	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V0:
+		effectiveNewMatcher = false
+		effectiveEnableFairness = false
+	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V1:
+		effectiveNewMatcher = true
+		effectiveEnableFairness = false
+	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V2:
+		effectiveNewMatcher = true
+		effectiveEnableFairness = !isSticky
+	}
+	return effectiveNewMatcher, effectiveEnableFairness
 }
 
 func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
@@ -169,45 +197,27 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	pm.fairnessState = data.GetFairnessState()
 	changeKey := pm.partition.GradualChangeKey()
 
+	// Set up subscriptions
 	var autoEnable, fairness, newMatcher bool
 	autoEnable, pm.cancelAutoEnableSub = dynamicconfig.SubscribeGradualChange(
 		pm.config.AutoEnableV2Sub, changeKey, pm.autoEnableChanged, pm.engine.timeSource)
-	pm.config.AutoEnable.Store(autoEnable)
+	pm.autoEnable.Store(autoEnable)
+
+	// Callback for fairness/newMatcher changes - unload if base config is in use
+	unloadOnBaseConfigChange := func(bool) {
+		<-pm.initCtx.Done()
+		if pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED || !pm.autoEnable.Load() {
+			pm.unloadFromEngine(unloadCauseConfigChange)
+		}
+	}
 
 	newMatcher, pm.cancelNewMatcherSub = dynamicconfig.SubscribeGradualChange(
-		pm.config.NewMatcherSub, changeKey, pm.newMatcherChanged, pm.engine.timeSource)
-	pm.baseNewMatcher.Store(newMatcher)
-
+		pm.config.NewMatcherSub, changeKey, unloadOnBaseConfigChange, pm.engine.timeSource)
 	fairness, pm.cancelFairnessSub = dynamicconfig.SubscribeGradualChange(
-		pm.config.EnableFairnessSub, changeKey, pm.enableFairnessChanged, pm.engine.timeSource)
+		pm.config.EnableFairnessSub, changeKey, unloadOnBaseConfigChange, pm.engine.timeSource)
 
-	// Determine initial config values based on fairnessState and autoEnable
-	switch {
-	case !autoEnable || pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED:
-		// Use the base dynamic config values
-		// Fairness is disabled for sticky queues for now so that we can still use TTLs.
-		pm.config.EnableFairness.Store(fairness && pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY)
-		if fairness {
-			pm.config.NewMatcher.Store(true)
-		} else {
-			pm.config.NewMatcher.Store(newMatcher)
-		}
-	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V0:
-		pm.config.NewMatcher.Store(false)
-		pm.config.EnableFairness.Store(false)
-	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V1:
-		pm.config.NewMatcher.Store(true)
-		pm.config.EnableFairness.Store(false)
-	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V2:
-		pm.config.NewMatcher.Store(true)
-		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-			pm.config.EnableFairness.Store(false)
-		} else {
-			pm.config.EnableFairness.Store(true)
-		}
-	default:
-		return serviceerror.NewInternal("Unknown FairnessState in UserData")
-	}
+	// Determine initial config values
+	pm.config.NewMatcher, pm.config.EnableFairness = pm.computeEffectiveConfig(autoEnable, fairness, newMatcher)
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(pm.partition))
 	if err != nil {
@@ -310,90 +320,28 @@ func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Contex
 // It determines the effective config based on the new autoEnable value and fairnessState,
 // and unloads if the effective config differs from the current config.
 func (pm *taskQueuePartitionManagerImpl) autoEnableChanged(en bool) {
-	// Wait for initialization to complete
 	<-pm.initCtx.Done()
 
-	pm.config.AutoEnable.Store(en)
+	pm.autoEnable.Store(en)
 
-	// When fairnessState is UNSPECIFIED, the base dynamic config values are always used,
-	// so autoEnable changes don't affect the effective config
+	// When fairnessState is UNSPECIFIED, autoEnable changes don't affect the effective config
 	if pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED {
 		return
 	}
 
-	// Determine what the effective config should be based on the new autoEnable value
-	var effectiveNewMatcher, effectiveEnableFairness bool
-	isSticky := pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY
+	changeKey := pm.partition.GradualChangeKey()
+	now := pm.engine.timeSource.Now()
 
-	if en {
-		// AutoEnable is ON: use fairnessState-based config
-		switch pm.fairnessState {
-		case enumsspb.FAIRNESS_STATE_V0:
-			effectiveNewMatcher = false
-			effectiveEnableFairness = false
-		case enumsspb.FAIRNESS_STATE_V1:
-			effectiveNewMatcher = true
-			effectiveEnableFairness = false
-		case enumsspb.FAIRNESS_STATE_V2:
-			effectiveNewMatcher = true
-			effectiveEnableFairness = !isSticky
-		default:
-			softassert.Fail(pm.logger, "unknown fairnessstate in autoEnableChanged")
-			return
-		}
-	} else {
-		// AutoEnable is OFF: use base dynamic config values stored in pm.config
-		effectiveNewMatcher = pm.config.NewMatcher.Load()
-		effectiveEnableFairness = pm.config.EnableFairness.Load()
-	}
+	fairnessGC, _ := pm.config.EnableFairnessSub(nil)
+	fairness := fairnessGC.Value(changeKey, now)
 
-	// If the effective config differs from current config, unload
-	if effectiveNewMatcher != pm.config.NewMatcher.Load() || effectiveEnableFairness != pm.config.EnableFairness.Load() {
+	newMatcherGC, _ := pm.config.NewMatcherSub(nil)
+	newMatcher := newMatcherGC.Value(changeKey, now)
+
+	effectiveNewMatcher, effectiveEnableFairness := pm.computeEffectiveConfig(en, fairness, newMatcher)
+
+	if effectiveNewMatcher != pm.config.NewMatcher || effectiveEnableFairness != pm.config.EnableFairness {
 		pm.unloadFromEngine(unloadCauseConfigChange)
-	}
-}
-
-// enableFairnessChanged is called when the EnableFairness dynamic config value changes.
-// It stores the new value and unloads only if the base config values are being used
-// (autoEnable is OFF or fairnessState is UNSPECIFIED).
-func (pm *taskQueuePartitionManagerImpl) enableFairnessChanged(fairness bool) {
-	// Wait for initialization to complete
-	<-pm.initCtx.Done()
-
-	isSticky := pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY
-
-	// Fairness is disabled for sticky queues
-	pm.config.EnableFairness.Store(fairness && !isSticky)
-	// When fairness is enabled, NewMatcher is always true
-	if fairness {
-		pm.config.NewMatcher.Store(true)
-	} else {
-		pm.config.NewMatcher.Store(pm.baseNewMatcher.Load())
-	}
-
-	// Only unload if base config values are being used
-	if pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED || !pm.config.AutoEnable.Load() {
-		pm.unloadFromEngine(unloadCauseConfigChange)
-	}
-}
-
-// newMatcherChanged is called when the NewMatcher dynamic config value changes.
-// It stores the new value and unloads only if the base config values are being used
-// (autoEnable is OFF or fairnessState is UNSPECIFIED).
-func (pm *taskQueuePartitionManagerImpl) newMatcherChanged(newMatcher bool) {
-	// Wait for initialization to complete
-	<-pm.initCtx.Done()
-
-	pm.baseNewMatcher.Store(newMatcher)
-
-	// Only update config if fairness is disabled (fairness forces NewMatcher=true)
-	if !pm.config.EnableFairness.Load() {
-		pm.config.NewMatcher.Store(newMatcher)
-
-		// Only unload if base config values are being used
-		if pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED || !pm.config.AutoEnable.Load() {
-			pm.unloadFromEngine(unloadCauseConfigChange)
-		}
 	}
 }
 
@@ -406,11 +354,11 @@ func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context,
 			return
 		}
 		// Do not auto enable if we only see priority and we're using new matcher already
-		if pm.config.NewMatcher.Load() {
+		if pm.config.NewMatcher {
 			return
 		}
 	}
-	if !pm.Partition().IsRoot() || pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY || !pm.config.AutoEnable.Load() {
+	if !pm.Partition().IsRoot() || pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY || !pm.autoEnable.Load() {
 		return
 	}
 	if !pm.autoEnableRateLimiter.Allow() {
@@ -1239,7 +1187,7 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralData(ctx context.Context
 	// for now, this only applies to normal workflow task queues, only with new matcher
 	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_NORMAL ||
 		pm.partition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW ||
-		!pm.config.NewMatcher.Load() {
+		!pm.config.NewMatcher {
 		return nil
 	}
 

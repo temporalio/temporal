@@ -179,7 +179,7 @@ func newPhysicalTaskQueueManager(
 	)
 
 	switch {
-	case config.EnableFairness.Load():
+	case config.EnableFairness:
 		pqMgr.logger = log.With(partitionMgr.logger, buildIDTag, backlogTagFairness)
 		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIDTag, backlogTagFairness)
 
@@ -219,7 +219,7 @@ func newPhysicalTaskQueueManager(
 		pqMgr.matcher = pqMgr.priMatcher
 		return pqMgr, nil
 
-	case config.NewMatcher.Load():
+	case config.NewMatcher:
 		pqMgr.logger = log.With(partitionMgr.logger, buildIDTag, backlogTagPriority)
 		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIDTag, backlogTagPriority)
 

@@ -5816,3 +5816,223 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.Equal(t, 0, engine.shutdownWorkers.Size())
 	})
 }
+
+// TestAutoEnableV2ConfigChange tests that switching autoEnable triggers unload when effective config changes
+func TestAutoEnableV2ConfigChange(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+
+	dcClient := dynamicconfig.NewMemoryClient()
+	dcCollection := dynamicconfig.NewCollection(dcClient, logger)
+	dcCollection.Start()
+	defer dcCollection.Stop()
+
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+	matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
+
+	_, registry := createMockNamespaceCache(controller, namespace.Name(namespaceName))
+
+	config := NewConfig(dcCollection)
+	config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
+	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
+	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
+
+	engine := createTestMatchingEngine(logger, controller, config, matchingClient, registry)
+	engine.Start()
+	defer engine.Stop()
+
+	// autoEnable ON, base configs OFF -> with V2 fairnessState, effective config is NewMatcher=true, EnableFairness=true
+	cleanupAutoEnable := dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, true)
+	cleanupFairness := dcClient.OverrideSetting(dynamicconfig.MatchingEnableFairness, false)
+	cleanupNewMatcher := dcClient.OverrideSetting(dynamicconfig.MatchingUseNewMatcher, false)
+	defer cleanupAutoEnable()
+	defer cleanupFairness()
+	defer cleanupNewMatcher()
+
+	testNamespaceID := uuid.NewString()
+	testTaskQueueName := "test-tq-" + uuid.NewString()
+
+	ns := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace", Id: testNamespaceID},
+		nil,
+		"",
+	)
+
+	f, err := tqid.NewTaskQueueFamily(testNamespaceID, testTaskQueueName)
+	require.NoError(t, err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
+
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
+
+	userData := &mockUserDataManager{
+		data: &persistencespb.VersionedTaskQueueUserData{
+			Data: &persistencespb.TaskQueueUserData{
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+						FairnessState: enumsspb.FAIRNESS_STATE_V2,
+					},
+				},
+			},
+		},
+	}
+
+	pm, err := newTaskQueuePartitionManager(
+		engine,
+		ns,
+		partition,
+		tqConfig,
+		logger,
+		logger,
+		metrics.NoopMetricsHandler,
+		userData,
+	)
+	require.NoError(t, err)
+
+	engine.partitions[partition.Key()] = pm
+
+	pm.Start()
+	defer pm.Stop(unloadCauseIdle)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	err = pm.WaitUntilInitialized(ctx)
+	require.NoError(t, err)
+
+	time.Sleep(10 * time.Millisecond)
+
+	require.True(t, pm.autoEnable.Load())
+	require.True(t, pm.config.NewMatcher)
+	require.True(t, pm.config.EnableFairness)
+
+	pq, err := pm.defaultQueueFuture.Get(ctx)
+	require.NoError(t, err)
+
+	// Turn autoEnable OFF -> effective config changes to NewMatcher=false, EnableFairness=false
+	cleanupAutoEnable()
+	cleanupAutoEnable = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, false)
+
+	require.Eventually(t, func() bool {
+		return !pm.autoEnable.Load()
+	}, 2*time.Second, 10*time.Millisecond, "autoEnable should be updated")
+
+	require.Eventually(t, func() bool {
+		select {
+		case <-pq.(*physicalTaskQueueManagerImpl).tqCtx.Done():
+			return true
+		default:
+			return false
+		}
+	}, 2*time.Second, 10*time.Millisecond, "physical queue should be stopped when effective config changes")
+}
+
+func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+
+	dcClient := dynamicconfig.NewMemoryClient()
+	dcCollection := dynamicconfig.NewCollection(dcClient, logger)
+	dcCollection.Start()
+	defer dcCollection.Stop()
+
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+	matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
+
+	_, registry := createMockNamespaceCache(controller, namespace.Name(namespaceName))
+
+	config := NewConfig(dcCollection)
+	config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
+	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
+	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
+
+	engine := createTestMatchingEngine(logger, controller, config, matchingClient, registry)
+	engine.Start()
+	defer engine.Stop()
+
+	// autoEnable OFF, base configs ON -> with V2 fairnessState, effective config is NewMatcher=true, EnableFairness=true
+	cleanupAutoEnable := dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, false)
+	cleanupFairness := dcClient.OverrideSetting(dynamicconfig.MatchingEnableFairness, true)
+	cleanupNewMatcher := dcClient.OverrideSetting(dynamicconfig.MatchingUseNewMatcher, true)
+	defer cleanupAutoEnable()
+	defer cleanupFairness()
+	defer cleanupNewMatcher()
+
+	testNamespaceID := uuid.NewString()
+	testTaskQueueName := "test-tq-" + uuid.NewString()
+
+	ns := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace", Id: testNamespaceID},
+		nil,
+		"",
+	)
+
+	f, err := tqid.NewTaskQueueFamily(testNamespaceID, testTaskQueueName)
+	require.NoError(t, err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
+
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
+
+	userData := &mockUserDataManager{
+		data: &persistencespb.VersionedTaskQueueUserData{
+			Data: &persistencespb.TaskQueueUserData{
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+						FairnessState: enumsspb.FAIRNESS_STATE_V2,
+					},
+				},
+			},
+		},
+	}
+
+	pm, err := newTaskQueuePartitionManager(
+		engine,
+		ns,
+		partition,
+		tqConfig,
+		logger,
+		logger,
+		metrics.NoopMetricsHandler,
+		userData,
+	)
+	require.NoError(t, err)
+
+	engine.partitions[partition.Key()] = pm
+
+	pm.Start()
+	defer pm.Stop(unloadCauseIdle)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	err = pm.WaitUntilInitialized(ctx)
+	require.NoError(t, err)
+
+	time.Sleep(10 * time.Millisecond)
+
+	require.False(t, pm.autoEnable.Load())
+	require.True(t, pm.config.NewMatcher)
+	require.True(t, pm.config.EnableFairness)
+
+	pq, err := pm.defaultQueueFuture.Get(ctx)
+	require.NoError(t, err)
+
+	// Turn autoEnable ON -> effective config stays NewMatcher=true, EnableFairness=true (same as before)
+	cleanupAutoEnable()
+	cleanupAutoEnable = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, true)
+
+	require.Eventually(t, func() bool {
+		return pm.autoEnable.Load()
+	}, 2*time.Second, 10*time.Millisecond, "autoEnable should be updated")
+
+	time.Sleep(100 * time.Millisecond)
+
+	select {
+	case <-pq.(*physicalTaskQueueManagerImpl).tqCtx.Done():
+		t.Fatal("physical queue should NOT be stopped when effective config does not change")
+	default:
+	}
+}
