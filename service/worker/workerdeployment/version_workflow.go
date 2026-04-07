@@ -401,8 +401,14 @@ func (d *VersionWorkflowRunner) handleUpdateVersionComputeConfig(ctx workflow.Co
 		return nil, serviceerror.NewInternalf("update worker controller instance: %v", err)
 	}
 
+	d.VersionState.ComputeConfig = applyComputeConfigUpdatesToSummary(
+		d.VersionState.ComputeConfig,
+		args.GetUpsertScalingGroups(),
+		args.GetRemoveScalingGroups(),
+	)
 	d.VersionState.LastModifierIdentity = args.GetIdentity()
 	d.setStateChanged()
+	d.syncSummary(ctx)
 
 	return &deploymentspb.UpdateComputeConfigResponse{}, nil
 }
@@ -727,8 +733,13 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 
 func (d *VersionWorkflowRunner) reviveDeleted(ctx workflow.Context) {
 	// Resetting state to get rid of the info from the past life.
-	state := makeNewVersionState(d.VersionState.Version.DeploymentName, d.VersionState.Version.BuildId, workflow.Now(ctx), "",
-		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, d.VersionState.SyncBatchSize)
+	state := makeNewVersionState(d.VersionState.Version.DeploymentName,
+		d.VersionState.Version.BuildId,
+		workflow.Now(ctx),
+		"",
+		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+		nil,
+		d.VersionState.SyncBatchSize)
 	d.VersionState = state
 	d.deleteVersion = false
 }
@@ -1002,6 +1013,7 @@ func versionStateToSummary(s *deploymentspb.VersionLocalState) *deploymentspb.Wo
 		LastCurrentTime:      s.LastCurrentTime,
 		LastDeactivationTime: s.LastDeactivationTime,
 		Status:               s.Status,
+		ComputeConfig:        s.ComputeConfig,
 	}
 }
 

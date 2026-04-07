@@ -76,6 +76,51 @@ func wciSpecToComputeConfig(spec *wciiface.WorkerControllerInstanceSpec) *comput
 	return &computepb.ComputeConfig{ScalingGroups: groups}
 }
 
+func computeConfigToSummary(config *computepb.ComputeConfig) *computepb.ComputeConfigSummary {
+	sgs := config.GetScalingGroups()
+	if config == nil || len(sgs) == 0 {
+		return nil
+	}
+	groups := make(map[string]*computepb.ComputeConfigScalingGroupSummary, len(sgs))
+	names := workflow.DeterministicKeys(sgs)
+	for _, name := range names {
+		sg := sgs[name]
+		groups[name] = &computepb.ComputeConfigScalingGroupSummary{
+			TaskQueueTypes: sg.GetTaskQueueTypes(),
+			ProviderType:   sg.GetProvider().GetType(),
+		}
+	}
+	return &computepb.ComputeConfigSummary{ScalingGroups: groups}
+}
+
+func applyComputeConfigUpdatesToSummary(
+	current *computepb.ComputeConfigSummary,
+	upserts map[string]*computepb.ComputeConfigScalingGroupUpdate,
+	removes []string,
+) *computepb.ComputeConfigSummary {
+	groups := make(map[string]*computepb.ComputeConfigScalingGroupSummary)
+	if current != nil {
+		for k, v := range current.GetScalingGroups() {
+			groups[k] = v
+		}
+	}
+	names := workflow.DeterministicKeys(upserts)
+	for _, name := range names {
+		sg := upserts[name].GetScalingGroup()
+		groups[name] = &computepb.ComputeConfigScalingGroupSummary{
+			TaskQueueTypes: sg.GetTaskQueueTypes(),
+			ProviderType:   sg.GetProvider().GetType(),
+		}
+	}
+	for _, name := range removes {
+		delete(groups, name)
+	}
+	if len(groups) == 0 {
+		return nil
+	}
+	return &computepb.ComputeConfigSummary{ScalingGroups: groups}
+}
+
 func scalingGroupsToUpsertUpdates(scalingGroups map[string]*computepb.ComputeConfigScalingGroup) map[string]*computepb.ComputeConfigScalingGroupUpdate {
 	updates := make(map[string]*computepb.ComputeConfigScalingGroupUpdate, len(scalingGroups))
 	names := workflow.DeterministicKeys(scalingGroups)
