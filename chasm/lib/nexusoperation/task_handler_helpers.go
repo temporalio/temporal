@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http/httptrace"
 	"strings"
 	"sync/atomic"
 	"text/template"
@@ -19,13 +20,14 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/resource"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 )
 
@@ -94,24 +96,113 @@ type invocationResultRetry struct {
 
 func (invocationResultRetry) mustImplementInvocationResult() {}
 
-// invocationResultCanceled indicates the operation was canceled.
-type invocationResultCanceled struct {
+// invocationResultCancel indicates the operation completed as canceled.
+type invocationResultCancel struct {
 	failure *failurepb.Failure
 }
 
-func (invocationResultCanceled) mustImplementInvocationResult() {}
+func (invocationResultCancel) mustImplementInvocationResult() {}
 
-// invocationResultTimeout indicates the operation should be timed out.
+// invocationResultTimeout indicates the operation timed out while attempting to invoke.
 type invocationResultTimeout struct {
-	timeoutType enumspb.TimeoutType
+	failure *failurepb.Failure
 }
 
 func (invocationResultTimeout) mustImplementInvocationResult() {}
 
-// saveResultInput is the input to the Operation.saveResult method used in UpdateComponent.
-type saveResultInput struct {
-	result      invocationResult
-	retryPolicy func() backoff.RetryPolicy
+func newInvocationResult(
+	response *nexusrpc.ClientStartOperationResponse[*commonpb.Payload],
+	callErr error,
+) (invocationResult, error) {
+	if callErr == nil {
+		return invocationResultOK{response: response}, nil
+	}
+	if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
+		retryable := common.IsRetryableRPCError(callErr)
+		failure := &failurepb.Failure{
+			Message: fmt.Sprintf("%s: %s", strings.Replace(fmt.Sprintf("%T", serviceErr), "*serviceerror.", "", 1), serviceErr.Error()),
+			FailureInfo: &failurepb.Failure_ServerFailureInfo{
+				ServerFailureInfo: &failurepb.ServerFailureInfo{
+					NonRetryable: !retryable,
+				},
+			},
+		}
+		if retryable {
+			return invocationResultRetry{failure: failure}, nil
+		}
+		return invocationResultFail{failure: failure}, nil
+	}
+
+	if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok {
+		var nf nexus.Failure
+		if handlerErr.OriginalFailure != nil {
+			nf = *handlerErr.OriginalFailure
+		} else {
+			var err error
+			nf, err = nexusrpc.DefaultFailureConverter().ErrorToFailure(handlerErr)
+			if err != nil {
+				return nil, err
+			}
+		}
+		failure, err := commonnexus.NexusFailureToTemporalFailure(nf)
+		if err != nil {
+			return nil, err
+		}
+		if handlerErr.Retryable() {
+			return invocationResultRetry{failure: failure}, nil
+		}
+		return invocationResultFail{failure: failure}, nil
+	}
+
+	if opErr, ok := errors.AsType[*nexus.OperationError](callErr); ok {
+		failure, err := operationErrorToFailure(opErr)
+		if err != nil {
+			return nil, err
+		}
+		if opErr.State == nexus.OperationStateCanceled {
+			return invocationResultCancel{failure: failure}, nil
+		}
+		return invocationResultFail{failure: failure}, nil
+	}
+	if opTimeoutBelowMinErr, ok := errors.AsType[*operationTimeoutBelowMinError](callErr); ok {
+		failure := &failurepb.Failure{
+			Message: "operation timed out",
+			FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: opTimeoutBelowMinErr.timeoutType,
+				},
+			},
+		}
+		return invocationResultTimeout{failure: failure}, nil
+	}
+
+	if errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled) {
+		// If timed out, don't leak internal info to the user
+		callErr = errRequestTimedOut
+	}
+
+	// Fallback to retryable server failure.
+	failure := &failurepb.Failure{
+		Message: callErr.Error(),
+		FailureInfo: &failurepb.Failure_ServerFailureInfo{
+			ServerFailureInfo: &failurepb.ServerFailureInfo{},
+		},
+	}
+	return invocationResultRetry{failure: failure}, nil
+}
+
+// classifyOperationError converts a Nexus OperationError to the appropriate invocation result.
+func operationErrorToFailure(opErr *nexus.OperationError) (*failurepb.Failure, error) {
+	// Special marker for Temporal->Temporal calls to indicate that the original failure should be unwrapped.
+	// Temporal uses a wrapper operation error with no additional information to transmit the OperationError over the network.
+	// The meaningful information is in the operation error's cause.
+	unwrapError := opErr.OriginalFailure.Metadata["unwrap-error"] == "true"
+
+	if unwrapError && opErr.OriginalFailure.Cause != nil {
+		return commonnexus.NexusFailureToTemporalFailure(*opErr.OriginalFailure.Cause)
+	}
+	// Transform the OperationError to either ApplicationFailure or CanceledFailure based on the operation error state.
+	return commonnexus.NexusFailureToTemporalFailure(*opErr.OriginalFailure)
 }
 
 func buildCallbackURL(
@@ -167,116 +258,6 @@ func lookupEndpoint(ctx context.Context, registry commonnexus.EndpointRegistry, 
 		return nil, err
 	}
 	return entry, nil
-}
-
-func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error) {
-	if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
-		return &failurepb.Failure{
-			Message: fmt.Sprintf("%s: %s", strings.Replace(fmt.Sprintf("%T", serviceErr), "*serviceerror.", "", 1), serviceErr.Error()),
-			FailureInfo: &failurepb.Failure_ServerFailureInfo{
-				ServerFailureInfo: &failurepb.ServerFailureInfo{
-					NonRetryable: !retryable,
-				},
-			},
-		}, nil
-	}
-	if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok {
-		var nf nexus.Failure
-		if handlerErr.OriginalFailure != nil {
-			nf = *handlerErr.OriginalFailure
-		} else {
-			var err error
-			nf, err = nexusrpc.DefaultFailureConverter().ErrorToFailure(handlerErr)
-			if err != nil {
-				return nil, err
-			}
-		}
-		f, err := commonnexus.NexusFailureToTemporalFailure(nf)
-		if err != nil {
-			return nil, err
-		}
-		return f, nil
-	}
-
-	return &failurepb.Failure{
-		Message: callErr.Error(),
-		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-			ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-				Type:         "CallError",
-				NonRetryable: !retryable,
-			},
-		},
-	}, nil
-}
-
-// classifyStartOperationError classifies the call error and returns an invocation result.
-func classifyStartOperationError(callErr error) invocationResult {
-	if _, ok := errors.AsType[serviceerror.ServiceError](callErr); ok && !common.IsRetryableRPCError(callErr) {
-		return nonRetryableFailResult(callErr)
-	}
-	if opErr, ok := errors.AsType[*nexus.OperationError](callErr); ok {
-		return classifyOperationError(opErr)
-	}
-	if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok && !handlerErr.Retryable() {
-		return nonRetryableFailResult(callErr)
-	}
-	if errors.Is(callErr, ErrResponseBodyTooLarge) || errors.Is(callErr, ErrInvalidOperationToken) {
-		return nonRetryableFailResult(callErr)
-	}
-	if opTimeoutBelowMinErr, ok := errors.AsType[*operationTimeoutBelowMinError](callErr); ok {
-		return invocationResultTimeout{timeoutType: opTimeoutBelowMinErr.timeoutType}
-	}
-	if errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled) {
-		callErr = errRequestTimedOut
-	}
-
-	// Retryable error
-	failure, err := callErrToFailure(callErr, true)
-	if err != nil {
-		failure = &failurepb.Failure{Message: callErr.Error()}
-	}
-	return invocationResultRetry{failure: failure}
-}
-
-func nonRetryableFailResult(callErr error) invocationResultFail {
-	failure, err := callErrToFailure(callErr, false)
-	if err != nil {
-		failure = &failurepb.Failure{Message: callErr.Error()}
-	}
-	return invocationResultFail{failure: failure}
-}
-
-// classifyOperationError converts a Nexus OperationError to the appropriate invocation result.
-func classifyOperationError(opErr *nexus.OperationError) invocationResult {
-	// Special marker for Temporal->Temporal calls to indicate that the original failure should be unwrapped.
-	// Temporal uses a wrapper operation error with no additional information to transmit the OperationError over the network.
-	// The meaningful information is in the operation error's cause.
-	unwrapError := opErr.OriginalFailure.Metadata["unwrap-error"] == "true"
-
-	var originalCause *failurepb.Failure
-	var err error
-	if unwrapError && opErr.OriginalFailure.Cause != nil {
-		originalCause, err = commonnexus.NexusFailureToTemporalFailure(*opErr.OriginalFailure.Cause)
-	} else {
-		// Transform the OperationError to either ApplicationFailure or CanceledFailure based on the operation error state.
-		originalCause, err = commonnexus.NexusFailureToTemporalFailure(*opErr.OriginalFailure)
-	}
-	if err != nil {
-		originalCause = &failurepb.Failure{
-			Message: fmt.Sprintf("Malformed failure: %v", err),
-		}
-	}
-
-	switch opErr.State { //nolint:exhaustive
-	case nexus.OperationStateFailed:
-		return invocationResultFail{failure: originalCause}
-	case nexus.OperationStateCanceled:
-		return invocationResultCanceled{failure: originalCause}
-	default:
-		return invocationResultFail{failure: &failurepb.Failure{
-			Message: fmt.Sprintf("unexpected operation error state: %s", opErr.State),
-		}}
-	}
 }
 
 func convertResponseLinks(links []nexus.Link, logger log.Logger) []*commonpb.Link {
@@ -378,13 +359,86 @@ func startCallOutcomeTag(callCtx context.Context, result *nexusrpc.ClientStartOp
 	return "successful"
 }
 
-func (h *OperationInvocationTaskHandler) startViaHTTP(
+// generateCallbackToken creates a callback token for the given operation reference.
+func (h *operationInvocationTaskHandler) generateCallbackToken(
+	serializedRef []byte,
+	requestID string,
+) (string, error) {
+	token, err := h.callbackTokenGenerator.Tokenize(&tokenspb.NexusOperationCompletion{
+		ComponentRef: serializedRef,
+		RequestId:    requestID,
+	})
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", queueserrors.NewUnprocessableTaskError("failed to generate a callback token"), err)
+	}
+	return token, nil
+}
+
+type invocation interface {
+	Start(
+		ctx context.Context,
+		args startArgs,
+		options nexus.StartOperationOptions,
+	) (*nexusrpc.ClientStartOperationResponse[*commonpb.Payload], error)
+}
+
+type invocationTimeout struct {
+	timeoutType enumspb.TimeoutType
+}
+
+func (i *invocationTimeout) Start(
+	_ context.Context,
+	_ startArgs,
+	_ nexus.StartOperationOptions,
+) (*nexusrpc.ClientStartOperationResponse[*commonpb.Payload], error) {
+	return nil, &operationTimeoutBelowMinError{timeoutType: i.timeoutType}
+}
+
+type invocationHTTP struct {
+	client      *nexusrpc.HTTPClient
+	clientTrace *httptrace.ClientTrace
+}
+
+func newInvocationHTTP(
 	ctx context.Context,
-	client *nexusrpc.HTTPClient,
+	h *operationInvocationTaskHandler,
+	ns *namespace.Namespace,
+	endpoint *persistencespb.NexusEndpointEntry,
+	opRef chasm.ComponentRef,
+	task *nexusoperationpb.InvocationTask,
+	args startArgs,
+) (*invocationHTTP, error) {
+	client, err := h.clientProvider(ctx, ns.ID().String(), endpoint, args.service)
+	if err != nil {
+		return nil, serviceerror.NewUnavailablef("failed to get a client: %v", err)
+	}
+	var clientTrace *httptrace.ClientTrace
+	if h.httpTraceProvider != nil {
+		traceLogger := log.With(h.logger,
+			tag.Operation("StartOperation"),
+			tag.WorkflowNamespace(ns.Name().String()),
+			tag.RequestID(args.requestID),
+			tag.NexusOperation(args.operation),
+			tag.Endpoint(args.endpointName),
+			tag.WorkflowID(opRef.BusinessID),
+			tag.WorkflowRunID(opRef.RunID),
+			tag.AttemptStart(args.currentTime.UTC()),
+			tag.Attempt(task.GetAttempt()),
+		)
+		clientTrace = h.httpTraceProvider.NewTrace(task.GetAttempt(), traceLogger)
+	}
+	return &invocationHTTP{client: client, clientTrace: clientTrace}, nil
+}
+
+func (i *invocationHTTP) Start(
+	ctx context.Context,
 	args startArgs,
 	options nexus.StartOperationOptions,
 ) (*nexusrpc.ClientStartOperationResponse[*commonpb.Payload], error) {
-	rawResult, callErr := client.StartOperation(ctx, args.operation, args.payload, options)
+	if i.clientTrace != nil {
+		ctx = httptrace.WithClientTrace(ctx, i.clientTrace)
+	}
+	rawResult, callErr := i.client.StartOperation(ctx, args.operation, args.payload, options)
 
 	var result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload]
 	if callErr == nil {
@@ -412,15 +466,35 @@ func (h *OperationInvocationTaskHandler) startViaHTTP(
 	return result, callErr
 }
 
-func (h *OperationInvocationTaskHandler) startOnHistoryService(
-	ctx context.Context,
+type invocationSystem struct {
+	ns            *namespace.Namespace
+	chasmRegistry *chasm.Registry
+	historyClient resource.HistoryClient
+	config        *Config
+	logger        log.Logger
+}
+
+func newInvocationSystem(
+	h *operationInvocationTaskHandler,
 	ns *namespace.Namespace,
+) *invocationSystem {
+	return &invocationSystem{
+		ns:            ns,
+		chasmRegistry: h.chasmRegistry,
+		historyClient: h.historyClient,
+		config:        h.config,
+		logger:        h.logger,
+	}
+}
+
+func (i *invocationSystem) Start(
+	ctx context.Context,
 	args startArgs,
 	options nexus.StartOperationOptions,
 ) (*nexusrpc.ClientStartOperationResponse[*commonpb.Payload], error) {
 	protoLinks := commonnexus.ConvertLinksToProto(options.Links)
-	res, err := h.chasmRegistry.NexusEndpointProcessor.ProcessInput(chasm.NexusOperationProcessorContext{
-		Namespace:               ns,
+	res, err := i.chasmRegistry.NexusEndpointProcessor.ProcessInput(chasm.NexusOperationProcessorContext{
+		Namespace:               i.ns,
 		RequestID:               args.requestID,
 		Links:                   []nexus.Link{args.nexusLink},
 		ReserializeInputPayload: true,
@@ -428,9 +502,9 @@ func (h *OperationInvocationTaskHandler) startOnHistoryService(
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errOpProcessorFailed, err)
 	}
-	resp, err := h.historyClient.StartNexusOperation(ctx, &historyservice.StartNexusOperationRequest{
-		NamespaceId: ns.ID().String(),
-		ShardId:     res.RoutingKey.ShardID(h.config.NumHistoryShards),
+	resp, err := i.historyClient.StartNexusOperation(ctx, &historyservice.StartNexusOperationRequest{
+		NamespaceId: i.ns.ID().String(),
+		ShardId:     res.RoutingKey.ShardID(i.config.NumHistoryShards),
 		Request: &nexuspb.StartOperationRequest{
 			Service:        args.service,
 			Operation:      args.operation,
@@ -463,7 +537,7 @@ func (h *OperationInvocationTaskHandler) startOnHistoryService(
 		}
 		nexusFailure, convErr := commonnexus.TemporalFailureToNexusFailure(v.Failure)
 		if convErr != nil {
-			h.logger.Error("failed to convert temporal failure to nexus failure", tag.Error(convErr), tag.RequestID(args.requestID))
+			i.logger.Error("failed to convert temporal failure to nexus failure", tag.Error(convErr), tag.RequestID(args.requestID))
 			he := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error (request ID: %s)", args.requestID)
 			he.RetryBehavior = nexus.HandlerErrorRetryBehaviorRetryable
 			return nil, he
@@ -474,26 +548,11 @@ func (h *OperationInvocationTaskHandler) startOnHistoryService(
 			OriginalFailure: &nexusFailure,
 		}
 	default:
-		h.logger.Error(fmt.Sprintf("unexpected response variant type: %T", v), tag.RequestID(args.requestID))
+		i.logger.Error(fmt.Sprintf("unexpected response variant type: %T", v), tag.RequestID(args.requestID))
 		he := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error (request ID: %s)", args.requestID)
 		he.RetryBehavior = nexus.HandlerErrorRetryBehaviorRetryable
 		return nil, he
 	}
 
 	return result, nil
-}
-
-// generateCallbackToken creates a callback token for the given operation reference.
-func (h *OperationInvocationTaskHandler) generateCallbackToken(
-	serializedRef []byte,
-	requestID string,
-) (string, error) {
-	token, err := h.callbackTokenGenerator.Tokenize(&tokenspb.NexusOperationCompletion{
-		ComponentRef: serializedRef,
-		RequestId:    requestID,
-	})
-	if err != nil {
-		return "", fmt.Errorf("%w: %w", queueserrors.NewUnprocessableTaskError("failed to generate a callback token"), err)
-	}
-	return token, nil
 }

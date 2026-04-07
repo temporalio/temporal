@@ -17,8 +17,6 @@ var TransitionCancellationScheduled = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED},
 	nexusoperationpb.CANCELLATION_STATUS_SCHEDULED,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationScheduled) error {
-		c.RequestedTime = timestamppb.New(ctx.Now(c))
-
 		ctx.AddTask(c, chasm.TaskAttributes{}, &nexusoperationpb.CancellationTask{
 			Attempt: c.Attempt,
 		})

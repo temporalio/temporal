@@ -6,15 +6,15 @@ import (
 )
 
 var Module = fx.Module(
-	"chasm.lib.nexusoperations",
+	"chasm.lib.nexusoperation",
 	fx.Provide(configProvider),
-	fx.Provide(NewCancellationBackoffTaskHandler),
-	fx.Provide(NewCancellationTaskHandler),
-	fx.Provide(NewOperationBackoffTaskHandler),
-	fx.Provide(NewOperationInvocationTaskHandler),
-	fx.Provide(NewOperationScheduleToCloseTimeoutTaskHandler),
-	fx.Provide(NewOperationScheduleToStartTimeoutTaskHandler),
-	fx.Provide(NewOperationStartToCloseTimeoutTaskHandler),
+	fx.Provide(newCancellationBackoffTaskHandler),
+	fx.Provide(newCancellationTaskHandler),
+	fx.Provide(newOperationBackoffTaskHandler),
+	fx.Provide(newOperationInvocationTaskHandler),
+	fx.Provide(newOperationScheduleToCloseTimeoutTaskHandler),
+	fx.Provide(newOperationScheduleToStartTimeoutTaskHandler),
+	fx.Provide(newOperationStartToCloseTimeoutTaskHandler),
 	fx.Provide(newLibrary),
 	fx.Invoke(register),
 )

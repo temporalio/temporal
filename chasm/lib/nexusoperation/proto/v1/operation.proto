@@ -28,37 +28,47 @@ message OperationState {
   // The time when the operation was scheduled.
   google.protobuf.Timestamp scheduled_time = 6;
 
+  // The time when the operation was started. Only set for asynchronous operations after a successful StartOperation
+  // call. Taken from the component time or the time reported in an async completion request, whichever happens first.
+  google.protobuf.Timestamp started_time = 7;
+
+  // The time when the operation reached a terminal state. Taken from the component time or the time reported in an
+  // async completion request, whichever happens first.
+  google.protobuf.Timestamp closed_time = 8;
+
   // Schedule-to-start timeout for this operation.
-  google.protobuf.Duration schedule_to_start_timeout = 7;
+  google.protobuf.Duration schedule_to_start_timeout = 9;
 
   // Start-to-close timeout for this operation.
-  google.protobuf.Duration start_to_close_timeout = 8;
+  google.protobuf.Duration start_to_close_timeout = 10;
 
   // Schedule-to-close timeout for this operation.
-  google.protobuf.Duration schedule_to_close_timeout = 9;
+  google.protobuf.Duration schedule_to_close_timeout = 11;
 
   // Unique request ID allocated for all retry attempts of the StartOperation request.
-  string request_id = 10;
+  string request_id = 12;
 
   // Opaque data injected by the parent (e.g. workflow) for its own bookkeeping.
   // The operation component itself does not interpret this field.
-  google.protobuf.Any parent_data = 11;
+  google.protobuf.Any parent_data = 13;
 
   // The number of attempts made to deliver the start operation request.
-  // This number represents a minimum bound since the attempt is incremented after the request completes.
-  int32 attempt = 12;
+  // This number is approximate, it is incremeted when a task is added to the history queue.
+  // In practice, there could be more attempts if a task is executed but fails to commit, or less attempts if a task was
+  // never executed.
+  int32 attempt = 14;
 
   // The time when the last attempt completed.
-  google.protobuf.Timestamp last_attempt_complete_time = 13;
+  google.protobuf.Timestamp last_attempt_complete_time = 15;
 
   // The last attempt's failure, if any.
-  temporal.api.failure.v1.Failure last_attempt_failure = 14;
+  temporal.api.failure.v1.Failure last_attempt_failure = 16;
 
   // The time when the next attempt is scheduled (only set when in BACKING_OFF state).
-  google.protobuf.Timestamp next_attempt_schedule_time = 15;
+  google.protobuf.Timestamp next_attempt_schedule_time = 17;
 
   // Operation token - only set for asynchronous operations after a successful StartOperation call.
-  string operation_token = 16;
+  string operation_token = 18;
 }
 
 enum OperationStatus {
