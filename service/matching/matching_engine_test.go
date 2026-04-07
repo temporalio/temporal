@@ -5639,7 +5639,7 @@ func defaultTestConfig() *Config {
 	config := NewConfig(dynamicconfig.NewNoopCollection())
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
-	config.AutoEnableV2Sub = staticTrueChange
+	config.AutoEnableV2Sub = staticTrue
 	return config
 }
 
@@ -5679,6 +5679,10 @@ func useFairness(config *Config) {
 
 func staticTrueChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
 	return dynamicconfig.StaticGradualChange(true), func() {}
+}
+
+func staticTrue(_, _ string, _ enumspb.TaskQueueType, _ func(bool)) (bool, func()) {
+	return true, func() {}
 }
 
 func staticFalseChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
@@ -5903,7 +5907,7 @@ func TestAutoEnableV2ConfigChange(t *testing.T) {
 
 	time.Sleep(10 * time.Millisecond)
 
-	require.True(t, pm.autoEnable.Load())
+	require.True(t, pm.config.AutoEnableV2())
 	require.True(t, pm.config.NewMatcher)
 	require.True(t, pm.config.EnableFairness)
 
@@ -5915,7 +5919,7 @@ func TestAutoEnableV2ConfigChange(t *testing.T) {
 	cleanupAutoEnable = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, false)
 
 	require.Eventually(t, func() bool {
-		return !pm.autoEnable.Load()
+		return !pm.config.AutoEnableV2()
 	}, 2*time.Second, 10*time.Millisecond, "autoEnable should be updated")
 
 	require.Eventually(t, func() bool {
@@ -6013,7 +6017,7 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 
 	time.Sleep(10 * time.Millisecond)
 
-	require.False(t, pm.autoEnable.Load())
+	require.False(t, pm.config.AutoEnableV2())
 	require.True(t, pm.config.NewMatcher)
 	require.True(t, pm.config.EnableFairness)
 
@@ -6025,7 +6029,7 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 	cleanupAutoEnable = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, true)
 
 	require.Eventually(t, func() bool {
-		return pm.autoEnable.Load()
+		return pm.config.AutoEnableV2()
 	}, 2*time.Second, 10*time.Millisecond, "autoEnable should be updated")
 
 	time.Sleep(100 * time.Millisecond)

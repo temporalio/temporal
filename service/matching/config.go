@@ -44,7 +44,7 @@ type (
 		NewMatcherSub                            dynamicconfig.TypedSubscribableWithTaskQueueFilter[dynamicconfig.GradualChange[bool]]
 		EnableFairnessSub                        dynamicconfig.TypedSubscribableWithTaskQueueFilter[dynamicconfig.GradualChange[bool]]
 		EnableMigration                          dynamicconfig.BoolPropertyFnWithTaskQueueFilter
-		AutoEnableV2Sub                          dynamicconfig.TypedSubscribableWithTaskQueueFilter[dynamicconfig.GradualChange[bool]]
+		AutoEnableV2Sub                          dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -162,7 +162,8 @@ type (
 		EnableFairness             bool
 		EnableFairnessSub          func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
 		EnableMigration            func() bool
-		AutoEnableV2Sub            func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
+		AutoEnableV2               func() bool
+		AutoEnableV2Sub            func(func(bool)) (bool, func())
 		GetTasksBatchSize          func() int
 		GetTasksReloadAt           func() int
 		UpdateAckInterval          func() time.Duration
@@ -384,7 +385,11 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		EnableMigration: func() bool {
 			return config.EnableMigration(ns.String(), taskQueueName, taskType)
 		},
-		AutoEnableV2Sub: func(cb func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
+		AutoEnableV2: func() bool {
+			v, _ := config.AutoEnableV2Sub(ns.String(), taskQueueName, taskType, nil)
+			return v
+		},
+		AutoEnableV2Sub: func(cb func(bool)) (bool, func()) {
 			return config.AutoEnableV2Sub(ns.String(), taskQueueName, taskType, cb)
 		},
 		GetTasksBatchSize: func() int {

@@ -9,7 +9,6 @@ import (
 	"math/bits"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -91,8 +90,6 @@ type (
 		cancelFairnessSub   func()
 		cancelAutoEnableSub func()
 
-		autoEnable *atomic.Bool
-
 		// rateLimitManager is used to manage the rate limit for task queues.
 		rateLimitManager *rateLimitManager
 
@@ -140,7 +137,6 @@ func newTaskQueuePartitionManager(
 		rateLimitManager:      rateLimitManager,
 		defaultQueueFuture:    future.NewFuture[physicalTaskQueueManager](),
 		autoEnableRateLimiter: quotas.NewRateLimiter(1.0/60, 1),
-		autoEnable:            &atomic.Bool{},
 	}
 	pm.initCtx, pm.initCancel = context.WithCancel(context.Background())
 
@@ -163,11 +159,7 @@ func (pm *taskQueuePartitionManagerImpl) computeEffectiveConfig(autoEnable, fair
 		// Use base dynamic config values
 		// Fairness is disabled for sticky queues
 		effectiveEnableFairness = fairness && !isSticky
-		if fairness {
-			effectiveNewMatcher = true
-		} else {
-			effectiveNewMatcher = newMatcher
-		}
+		effectiveNewMatcher = newMatcher || fairness
 	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V0:
 		effectiveNewMatcher = false
 		effectiveEnableFairness = false
@@ -197,16 +189,12 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	pm.fairnessState = data.GetFairnessState()
 	changeKey := pm.partition.GradualChangeKey()
 
-	// Set up subscriptions
 	var autoEnable, fairness, newMatcher bool
-	autoEnable, pm.cancelAutoEnableSub = dynamicconfig.SubscribeGradualChange(
-		pm.config.AutoEnableV2Sub, changeKey, pm.autoEnableChanged, pm.engine.timeSource)
-	pm.autoEnable.Store(autoEnable)
+	autoEnable, pm.cancelAutoEnableSub = pm.config.AutoEnableV2Sub(pm.autoEnableChanged)
 
-	// Callback for fairness/newMatcher changes - unload if base config is in use
 	unloadOnBaseConfigChange := func(bool) {
 		<-pm.initCtx.Done()
-		if pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED || !pm.autoEnable.Load() {
+		if pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED || !pm.config.AutoEnableV2() {
 			pm.unloadFromEngine(unloadCauseConfigChange)
 		}
 	}
@@ -322,8 +310,6 @@ func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Contex
 func (pm *taskQueuePartitionManagerImpl) autoEnableChanged(en bool) {
 	<-pm.initCtx.Done()
 
-	pm.autoEnable.Store(en)
-
 	// When fairnessState is UNSPECIFIED, autoEnable changes don't affect the effective config
 	if pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED {
 		return
@@ -358,7 +344,7 @@ func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context,
 			return
 		}
 	}
-	if !pm.Partition().IsRoot() || pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY || !pm.autoEnable.Load() {
+	if !pm.Partition().IsRoot() || pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY || !pm.config.AutoEnableV2() {
 		return
 	}
 	if !pm.autoEnableRateLimiter.Allow() {
