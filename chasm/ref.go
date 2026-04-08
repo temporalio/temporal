@@ -68,6 +68,8 @@ func NewComponentRef[C Component](
 }
 
 // NewComponentRefByArchetypeID creates a new ComponentRef with a known archetype ID.
+// This should only be used by CHASM framework internals.
+// CHASM library developers should use [NewComponentRef] instead.
 func NewComponentRefByArchetypeID(
 	executionKey ExecutionKey,
 	archetypeID ArchetypeID,
