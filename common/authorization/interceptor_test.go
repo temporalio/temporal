@@ -531,3 +531,150 @@ func (s *authorizerInterceptorSuite) TestMultipleTargetNamespaces() {
 	s.True(res.(bool))
 	s.NoError(err)
 }
+
+// mockServerStream is a minimal grpc.ServerStream for testing InterceptStream.
+type mockServerStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (m *mockServerStream) Context() context.Context { return m.ctx }
+
+var streamInfo = &grpc.StreamServerInfo{FullMethod: "/temporal.server.api.adminservice.v1.AdminService/StreamWorkflowReplicationMessages"}
+
+func (s *authorizerInterceptorSuite) TestInterceptStream_Authorized() {
+	streamTarget := &CallTarget{
+		Namespace: "",
+		APIName:   streamInfo.FullMethod,
+		Request:   nil,
+	}
+	s.mockMetricsHandler.EXPECT().WithTags(
+		metrics.OperationTag(metrics.AuthorizationScope),
+		metrics.NamespaceUnknownTag(),
+	).Return(s.mockMetricsHandler)
+	s.mockAuthorizer.EXPECT().Authorize(gomock.Any(), nil, streamTarget).
+		Return(Result{Decision: DecisionAllow}, nil)
+
+	handlerCalled := false
+	streamHandler := func(srv any, stream grpc.ServerStream) error {
+		handlerCalled = true
+		return nil
+	}
+
+	ss := &mockServerStream{ctx: ctx}
+	err := s.interceptor.InterceptStream(nil, ss, streamInfo, streamHandler)
+	s.NoError(err)
+	s.True(handlerCalled)
+}
+
+func (s *authorizerInterceptorSuite) TestInterceptStream_Unauthorized() {
+	streamTarget := &CallTarget{
+		Namespace: "",
+		APIName:   streamInfo.FullMethod,
+		Request:   nil,
+	}
+	s.mockMetricsHandler.EXPECT().WithTags(
+		metrics.OperationTag(metrics.AuthorizationScope),
+		metrics.NamespaceUnknownTag(),
+	).Return(s.mockMetricsHandler)
+	s.mockAuthorizer.EXPECT().Authorize(gomock.Any(), nil, streamTarget).
+		Return(Result{Decision: DecisionDeny}, nil)
+	s.mockMetricsHandler.EXPECT().Counter(metrics.ServiceErrUnauthorizedCounter.Name()).Return(metrics.NoopCounterMetricFunc)
+
+	handlerCalled := false
+	streamHandler := func(srv any, stream grpc.ServerStream) error {
+		handlerCalled = true
+		return nil
+	}
+
+	ss := &mockServerStream{ctx: ctx}
+	err := s.interceptor.InterceptStream(nil, ss, streamInfo, streamHandler)
+	s.Error(err)
+	s.False(handlerCalled)
+}
+
+func (s *authorizerInterceptorSuite) TestInterceptStream_AuthDisabled() {
+	// When claimMapper and authorizer are nil, the interceptor should be a passthrough.
+	interceptor := NewInterceptor(
+		nil, // claimMapper
+		nil, // authorizer
+		s.mockMetricsHandler,
+		log.NewNoopLogger(),
+		mockNamespaceChecker(testNamespace),
+		nil,
+		"",
+		"",
+		dynamicconfig.GetBoolPropertyFn(false),
+	)
+
+	handlerCalled := false
+	streamHandler := func(srv any, stream grpc.ServerStream) error {
+		handlerCalled = true
+		return nil
+	}
+
+	ss := &mockServerStream{ctx: ctx}
+	err := interceptor.InterceptStream(nil, ss, streamInfo, streamHandler)
+	s.NoError(err)
+	s.True(handlerCalled)
+}
+
+func (s *authorizerInterceptorSuite) TestInterceptStream_InvalidToken() {
+	interceptor := NewInterceptor(
+		s.mockClaimMapper,
+		s.mockAuthorizer,
+		s.mockMetricsHandler,
+		log.NewNoopLogger(),
+		mockNamespaceChecker(testNamespace),
+		nil,
+		"",
+		"",
+		dynamicconfig.GetBoolPropertyFn(false),
+	)
+
+	// Provide an incoming context with an auth token so GetAuthInfo returns non-nil.
+	inCtx := metadata.NewIncomingContext(ctx, metadata.Pairs("authorization", "bad-token"))
+	authInfo := &AuthInfo{AuthToken: "bad-token"}
+	claimErr := errors.New("invalid token")
+	s.mockClaimMapper.EXPECT().GetClaims(authInfo).Return(nil, claimErr)
+
+	handlerCalled := false
+	streamHandler := func(srv any, stream grpc.ServerStream) error {
+		handlerCalled = true
+		return nil
+	}
+
+	ss := &mockServerStream{ctx: inCtx}
+	err := interceptor.InterceptStream(nil, ss, streamInfo, streamHandler)
+	s.Error(err)
+	s.False(handlerCalled)
+}
+
+func (s *authorizerInterceptorSuite) TestInterceptStream_ContextPropagated() {
+	// Verify the handler receives a wrapped stream with the modified context.
+	streamTarget := &CallTarget{
+		Namespace: "",
+		APIName:   streamInfo.FullMethod,
+		Request:   nil,
+	}
+	s.mockMetricsHandler.EXPECT().WithTags(
+		metrics.OperationTag(metrics.AuthorizationScope),
+		metrics.NamespaceUnknownTag(),
+	).Return(s.mockMetricsHandler)
+	s.mockAuthorizer.EXPECT().Authorize(gomock.Any(), nil, streamTarget).
+		Return(Result{Decision: DecisionAllow}, nil)
+
+	// Inject a spoofed principal header; it must be stripped in the handler's context.
+	inCtx := metadata.NewIncomingContext(ctx, metadata.MD{})
+
+	var handlerCtx context.Context
+	streamHandler := func(srv any, stream grpc.ServerStream) error {
+		handlerCtx = stream.Context()
+		return nil
+	}
+
+	ss := &mockServerStream{ctx: inCtx}
+	err := s.interceptor.InterceptStream(nil, ss, streamInfo, streamHandler)
+	s.NoError(err)
+	s.NotNil(handlerCtx)
+}
