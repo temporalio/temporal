@@ -3473,7 +3473,7 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 			return nil, checkErr
 		}
 		if isReal {
-			return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", request.ScheduleId)
+			return nil, scheduleAlreadyExistsErr(serviceerror.NewAlreadyExistsf("schedule %q is already registered", request.ScheduleId))
 		}
 	}
 
@@ -3489,9 +3489,9 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 		if isSchedulerErrorLegacyRoutable(err) {
 			wh.logger.Warn("CreateSchedule race detected: sentinel found at CHASM key",
 				tag.ScheduleID(request.ScheduleId))
-			return nil, serviceerror.NewAlreadyExistsf("schedule %q: concurrent creation detected", request.ScheduleId)
+			return nil, scheduleAlreadyExistsErr(serviceerror.NewAlreadyExistsf("schedule %q: concurrent creation detected", request.ScheduleId))
 		}
-		return nil, err
+		return nil, scheduleAlreadyExistsErr(err)
 	}
 	return res.GetFrontendResponse(), nil
 }
@@ -3602,9 +3602,9 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 				// A dummy workflow exists — a CHASM-path node raced us.
 				wh.logger.Warn("CreateSchedule race detected: sentinel found at V1 key",
 					tag.ScheduleID(request.ScheduleId))
-				return nil, serviceerror.NewAlreadyExistsf("schedule %q: concurrent creation detected", request.ScheduleId)
+				return nil, scheduleAlreadyExistsErr(serviceerror.NewAlreadyExistsf("schedule %q: concurrent creation detected", request.ScheduleId))
 			}
-			return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", request.ScheduleId)
+			return nil, scheduleAlreadyExistsErr(serviceerror.NewAlreadyExistsf("schedule %q is already registered", request.ScheduleId))
 		}
 		return nil, err
 	}
@@ -3762,6 +3762,17 @@ func (wh *WorkflowHandler) chasmSchedulerCreationEnabled(ctx context.Context, na
 func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceName string) bool {
 	return wh.chasmSchedulerCreationEnabled(ctx, namespaceName) ||
 		wh.config.EnableCHASMSchedulerRouting(namespaceName)
+}
+
+// scheduleAlreadyExistsErr translates serviceerror.AlreadyExists to
+// serviceerror.WorkflowExecutionAlreadyStarted, maintaining the API contract
+// that SDK clients rely on to map this error to ErrScheduleAlreadyRunning.
+func scheduleAlreadyExistsErr(err error) error {
+	var ae *serviceerror.AlreadyExists
+	if errors.As(err, &ae) {
+		return serviceerror.NewWorkflowExecutionAlreadyStarted(ae.Message, "", "")
+	}
+	return err
 }
 
 // isSchedulerErrorLegacyRoutable returns true if the error from the CHASM scheduler

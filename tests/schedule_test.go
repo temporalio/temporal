@@ -1698,7 +1698,7 @@ func testCreateScheduleAlreadyExists(t *testing.T, newContext contextFactory) {
 	_, err = s.FrontendClient().CreateSchedule(ctx, req)
 	s.Error(err)
 
-	var alreadyExists *serviceerror.AlreadyExists
+	var alreadyExists *serviceerror.WorkflowExecutionAlreadyStarted
 	s.ErrorAs(err, &alreadyExists)
 	s.Contains(err.Error(), sid)
 }

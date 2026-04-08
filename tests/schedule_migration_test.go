@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
@@ -15,6 +16,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -25,6 +28,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -1160,6 +1164,258 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
 		},
 	)
+	s.NoError(err)
+}
+
+// TestSDKCreateScheduleSentinelExists validates the full schedule lifecycle when a
+// dummy workflow sentinel already occupies the V1 key (simulating a CHASM-path node
+// that raced ahead of a V1-path node):
+//
+//  1. Create → must return ErrScheduleAlreadyRunning
+//  2. Update → must return NotFound (sentinel is not a real schedule;
+//     DescribeSchedule explicitly rejects DummyWFTypeName workflows)
+//  3. Delete → must succeed (terminates the dummy workflow, freeing the V1 key)
+//  4. Recreate → must succeed (V1 key is no longer occupied)
+func (s *ScheduleMigrationTestSuite) TestSDKCreateScheduleSentinelExists() {
+	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true))
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sid")
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	// Directly start a dummy workflow at the V1 scheduler key via the history
+	// client, replicating the sentinel a CHASM-path node writes before creating
+	// the real CHASM entity.
+	sentinelReq := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:                nsName,
+		WorkflowId:               scheduler.WorkflowIDPrefix + sid,
+		WorkflowType:             &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		RequestId:                uuid.NewString(),
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+	}
+	_, err := env.GetTestCluster().HistoryClient().StartWorkflowExecution(
+		ctx, common.CreateHistoryStartWorkflowRequest(nsID, sentinelReq, nil, nil, time.Now().UTC()),
+	)
+	s.NoError(err)
+
+	schedOpts := sdkclient.ScheduleOptions{
+		ID: sid,
+		Spec: sdkclient.ScheduleSpec{
+			Intervals: []sdkclient.ScheduleIntervalSpec{{Every: time.Hour}},
+		},
+		Action: &sdkclient.ScheduleWorkflowAction{
+			ID:        uuid.NewString(),
+			Workflow:  "some-workflow-type",
+			TaskQueue: env.WorkerTaskQueue(),
+		},
+	}
+
+	// 1. Create: must surface ErrScheduleAlreadyRunning.
+	_, err = env.SdkClient().ScheduleClient().Create(ctx, schedOpts)
+	s.ErrorIs(err, temporal.ErrScheduleAlreadyRunning)
+
+	handle := env.SdkClient().ScheduleClient().GetHandle(ctx, sid)
+
+	// 2. Update: must return NotFound — the sentinel is not a real schedule.
+	// DescribeSchedule explicitly rejects DummyWFTypeName at the V1 key.
+	err = handle.Update(ctx, sdkclient.ScheduleUpdateOptions{
+		DoUpdate: func(input sdkclient.ScheduleUpdateInput) (*sdkclient.ScheduleUpdate, error) {
+			return &sdkclient.ScheduleUpdate{Schedule: &input.Description.Schedule}, nil
+		},
+	})
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
+
+	// 3. Delete: must succeed — terminates the dummy workflow, freeing the V1 key.
+	s.NoError(handle.Delete(ctx))
+
+	// 4. Recreate: must succeed now that the V1 key is no longer occupied.
+	_, err = env.SdkClient().ScheduleClient().Create(ctx, schedOpts)
+	s.NoError(err)
+}
+
+// TestSDKCreateScheduleV1Exists validates the full schedule lifecycle when a V1
+// (workflow-based) schedule already exists for the same ID:
+//
+//  1. Create → must return ErrScheduleAlreadyRunning
+//  2. Update → must succeed (V1 scheduler workflow is running and queryable)
+//  3. Delete → must succeed
+//  4. Recreate → must succeed
+func (s *ScheduleMigrationTestSuite) TestSDKCreateScheduleV1Exists() {
+	env := testcore.NewEnv(s.T())
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sid")
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	sched := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   uuid.NewString(),
+					WorkflowType: &commonpb.WorkflowType{Name: "some-workflow-type"},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	schedOpts := sdkclient.ScheduleOptions{
+		ID: sid,
+		Spec: sdkclient.ScheduleSpec{
+			Intervals: []sdkclient.ScheduleIntervalSpec{{Every: time.Hour}},
+		},
+		Action: &sdkclient.ScheduleWorkflowAction{
+			ID:        uuid.NewString(),
+			Workflow:  "some-workflow-type",
+			TaskQueue: env.WorkerTaskQueue(),
+		},
+	}
+
+	// Directly start a V1 scheduler workflow via the history client.
+	startArgs := &schedulespb.StartScheduleArgs{
+		Schedule: sched,
+		State: &schedulespb.InternalState{
+			Namespace:     nsName,
+			NamespaceId:   nsID,
+			ScheduleId:    sid,
+			ConflictToken: scheduler.InitialConflictToken,
+		},
+	}
+	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(startArgs)
+	s.NoError(err)
+	v1Req := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:                nsName,
+		WorkflowId:               scheduler.WorkflowIDPrefix + sid,
+		WorkflowType:             &commonpb.WorkflowType{Name: scheduler.WorkflowType},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Input:                    inputPayloads,
+		RequestId:                uuid.NewString(),
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+	}
+	_, err = env.GetTestCluster().HistoryClient().StartWorkflowExecution(
+		ctx, common.CreateHistoryStartWorkflowRequest(nsID, v1Req, nil, nil, time.Now().UTC()),
+	)
+	s.NoError(err)
+
+	// 1. Create: must surface ErrScheduleAlreadyRunning.
+	_, err = env.SdkClient().ScheduleClient().Create(ctx, schedOpts)
+	s.ErrorIs(err, temporal.ErrScheduleAlreadyRunning)
+
+	handle := env.SdkClient().ScheduleClient().GetHandle(ctx, sid)
+
+	// 2. Update: must succeed. V1 Describe sends a query to the scheduler workflow;
+	// wait until the workflow is queryable before attempting.
+	s.Eventually(func() bool {
+		err = handle.Update(ctx, sdkclient.ScheduleUpdateOptions{
+			DoUpdate: func(input sdkclient.ScheduleUpdateInput) (*sdkclient.ScheduleUpdate, error) {
+				return &sdkclient.ScheduleUpdate{Schedule: &input.Description.Schedule}, nil
+			},
+		})
+		return err == nil
+	}, 15*time.Second, 500*time.Millisecond, "V1 schedule should become queryable")
+
+	// 3. Delete: must succeed.
+	s.NoError(handle.Delete(ctx))
+
+	// 4. Recreate: must succeed now that the V1 scheduler workflow is terminated.
+	_, err = env.SdkClient().ScheduleClient().Create(ctx, schedOpts)
+	s.NoError(err)
+}
+
+// TestSDKCreateScheduleV2Exists validates the full schedule lifecycle when a V2
+// (CHASM-based) schedule already exists for the same ID:
+//
+//  1. Create → must return ErrScheduleAlreadyRunning
+//  2. Update → must succeed
+//  3. Delete → must succeed
+//  4. Recreate → must succeed
+func (s *ScheduleMigrationTestSuite) TestSDKCreateScheduleV2Exists() {
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true),
+	)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sid")
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	sched := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   uuid.NewString(),
+					WorkflowType: &commonpb.WorkflowType{Name: "some-workflow-type"},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	schedOpts := sdkclient.ScheduleOptions{
+		ID: sid,
+		Spec: sdkclient.ScheduleSpec{
+			Intervals: []sdkclient.ScheduleIntervalSpec{{Every: time.Hour}},
+		},
+		Action: &sdkclient.ScheduleWorkflowAction{
+			ID:        uuid.NewString(),
+			Workflow:  "some-workflow-type",
+			TaskQueue: env.WorkerTaskQueue(),
+		},
+	}
+
+	// Directly create a V2 (CHASM) schedule via the internal scheduler client,
+	// bypassing the frontend sentinel logic so only the CHASM key is occupied.
+	_, err := env.GetTestCluster().SchedulerClient().CreateSchedule(ctx, &schedulerpb.CreateScheduleRequest{
+		NamespaceId: nsID,
+		FrontendRequest: &workflowservice.CreateScheduleRequest{
+			Namespace:  nsName,
+			ScheduleId: sid,
+			Schedule:   sched,
+			Identity:   "test",
+			RequestId:  uuid.NewString(),
+		},
+	})
+	s.NoError(err)
+
+	// 1. Create: must surface ErrScheduleAlreadyRunning.
+	_, err = env.SdkClient().ScheduleClient().Create(ctx, schedOpts)
+	s.ErrorIs(err, temporal.ErrScheduleAlreadyRunning)
+
+	handle := env.SdkClient().ScheduleClient().GetHandle(ctx, sid)
+
+	// 2. Update: must succeed.
+	s.NoError(handle.Update(ctx, sdkclient.ScheduleUpdateOptions{
+		DoUpdate: func(input sdkclient.ScheduleUpdateInput) (*sdkclient.ScheduleUpdate, error) {
+			return &sdkclient.ScheduleUpdate{Schedule: &input.Description.Schedule}, nil
+		},
+	}))
+
+	// 3. Delete: must succeed.
+	s.NoError(handle.Delete(ctx))
+
+	// 4. Recreate: must succeed now that the CHASM entity has been deleted.
+	// The V1 dummy sentinel written during the failed Create attempt (step 1) is
+	// still running, but createScheduleCHASM treats it as a non-real sentinel and
+	// proceeds to Phase 2.
+	_, err = env.SdkClient().ScheduleClient().Create(ctx, schedOpts)
 	s.NoError(err)
 }
 
