@@ -58,6 +58,7 @@ func mustToPayload(t *testing.T, input any) *commonpb.Payload {
 
 // mockStoreComponent is a mock parent component that implements OperationStore.
 // It allows the Operation to load its start args and apply transitions.
+// TODO(stephan): Remove this layer from tests once loading invocation data from the operation component is implemented.
 type mockStoreComponent struct {
 	chasm.UnimplementedComponent
 
