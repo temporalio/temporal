@@ -22,7 +22,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
-	chasmnexusworkflow "go.temporal.io/server/chasm/lib/nexusoperation/workflow"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
@@ -159,7 +158,6 @@ var (
 		chasmworkflow.Module,
 		chasmscheduler.Module,
 		chasmcallback.Module,
-		chasmnexusworkflow.Module,
 	)
 )
 
