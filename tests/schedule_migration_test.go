@@ -1167,9 +1167,9 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 	s.NoError(err)
 }
 
-// TestSDKCreateScheduleSentinelExists validates the full schedule lifecycle when a
-// dummy workflow sentinel already occupies the V1 key (simulating a CHASM-path node
-// that raced ahead of a V1-path node):
+// TestSDKCreateScheduleSentinelExists verifies SDK behavior when a dummy workflow
+// sentinel already occupies the V1 key (simulating a CHASM-path node that raced
+// ahead of a V1-path node):
 //
 //  1. Create → must return ErrScheduleAlreadyRunning
 //  2. Update → must return NotFound (sentinel is not a real schedule;
@@ -1237,8 +1237,8 @@ func (s *ScheduleMigrationTestSuite) TestSDKCreateScheduleSentinelExists() {
 	s.NoError(err)
 }
 
-// TestSDKCreateScheduleV1Exists validates the full schedule lifecycle when a V1
-// (workflow-based) schedule already exists for the same ID:
+// TestSDKCreateScheduleV1Exists verifies SDK behavior when a V1 (workflow-based)
+// schedule already exists for the same ID:
 //
 //  1. Create → must return ErrScheduleAlreadyRunning
 //  2. Update → must succeed (V1 scheduler workflow is running and queryable)
@@ -1333,8 +1333,8 @@ func (s *ScheduleMigrationTestSuite) TestSDKCreateScheduleV1Exists() {
 	s.NoError(err)
 }
 
-// TestSDKCreateScheduleV2Exists validates the full schedule lifecycle when a V2
-// (CHASM-based) schedule already exists for the same ID:
+// TestSDKCreateScheduleV2Exists verifies SDK behavior when a V2 (CHASM-based)
+// schedule already exists for the same ID:
 //
 //  1. Create → must return ErrScheduleAlreadyRunning
 //  2. Update → must succeed
