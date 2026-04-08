@@ -3483,13 +3483,15 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 	})
 	if err != nil {
 		// The CHASM handler returns NotFound when the key is occupied by a
-		// sentinel (written by a V1-path node that raced us). Translate to
-		// AlreadyExists so the caller gets a sensible error.
+		// sentinel (written by a V1-path node that raced us).
 		if isSchedulerErrorLegacyRoutable(err) {
 			wh.logger.Warn("CreateSchedule race detected: sentinel found at CHASM key",
 				tag.ScheduleID(request.ScheduleId))
 			return nil, serviceerror.NewWorkflowExecutionAlreadyStartedf("", "", "schedule %q is already registered", request.ScheduleId)
 		}
+		// Translate AlreadyExists (schedule already exists in CHASM) to
+		// WorkflowExecutionAlreadyStarted to maintain the API contract that SDK
+		// clients rely on to surface ErrScheduleAlreadyRunning.
 		return nil, scheduleAlreadyExistsErr(err)
 	}
 	return res.GetFrontendResponse(), nil
@@ -3600,7 +3602,6 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 				// A dummy workflow exists — a CHASM-path node raced us.
 				wh.logger.Warn("CreateSchedule race detected: sentinel found at V1 key",
 					tag.ScheduleID(request.ScheduleId))
-				return nil, serviceerror.NewWorkflowExecutionAlreadyStartedf("", "", "schedule %q is already registered", request.ScheduleId)
 			}
 			return nil, err
 		}
