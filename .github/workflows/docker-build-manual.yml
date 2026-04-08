@@ -63,14 +63,13 @@ jobs:
           SHA_TAG: ${{ steps.build-docker.outputs.sha-tag || steps.push-docker.outputs.sha-tag }}
           SHA_FULL_TAG: ${{ steps.build-docker.outputs.sha-full-tag || steps.push-docker.outputs.sha-full-tag }}
           BRANCH_TAG: ${{ steps.build-docker.outputs.branch-tag || steps.push-docker.outputs.branch-tag }}
-          REF_NAME: ${{ github.ref_name }}
           PUSHED: ${{ inputs.push }}
           TAG_LATEST: ${{ inputs.tag-latest }}
         run: |
           {
             echo "### Docker Images Built"
             echo ""
-            echo "**Branch:** ${REF_NAME}"
+            echo "**Branch:** ${GITHUB_REF_NAME}"
             echo "**Short SHA Tag:** ${SHA_TAG}"
             echo "**Full SHA Tag:** ${SHA_FULL_TAG}"
             echo "**Branch Tag:** ${BRANCH_TAG}"
