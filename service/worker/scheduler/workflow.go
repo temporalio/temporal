@@ -503,7 +503,6 @@ func (s *scheduler) processPatch(patch *schedulepb.SchedulePatch) {
 		s.Schedule.State.Paused = false
 		s.Schedule.State.Notes = patch.Unpause
 		if s.hasMinVersion(ResetRetentionOnUnpause) {
-			// reset the retention timer so the schedule doesn't close if paused longer than the retention period
 			s.Info.UpdateTime = timestamppb.New(s.now())
 		}
 		s.incSeqNo()
