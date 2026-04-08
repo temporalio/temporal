@@ -63,6 +63,13 @@ func (w *Workflow) ContextMetadata(_ chasm.Context) map[string]string {
 	return nil
 }
 
+func (w *Workflow) Terminate(
+	_ chasm.MutableContext,
+	_ chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	return chasm.TerminateComponentResponse{}, nil
+}
+
 // ProcessCloseCallbacks triggers "WorkflowClosed" callbacks using the CHASM implementation.
 // It iterates through all callbacks and schedules WorkflowClosed ones that are in STANDBY state.
 func (w *Workflow) ProcessCloseCallbacks(ctx chasm.MutableContext) error {
