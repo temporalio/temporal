@@ -2818,10 +2818,10 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationScheduleToCloseTimeout(chasmE
 	})
 	s.NoError(err)
 
-	// TODO: Assert this for CHASM once DescribeWorkflowExecution.PendingNexusOperations is implemented there.
+	descResp, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+	s.NoError(err)
 	if !chasmEnabled {
-		descResp, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-		s.NoError(err)
+		// TODO: Assert this for CHASM once DescribeWorkflowExecution.PendingNexusOperations is implemented there.
 		s.Len(descResp.PendingNexusOperations, 1)
 		s.Equal(2*time.Second, descResp.PendingNexusOperations[0].ScheduleToCloseTimeout.AsDuration())
 	}
@@ -2919,10 +2919,10 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationScheduleToStartTimeout(chasmE
 	})
 	s.NoError(err)
 
-	// TODO: Assert this for CHASM once DescribeWorkflowExecution.PendingNexusOperations is implemented there.
+	descResp, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+	s.NoError(err)
 	if !chasmEnabled {
-		descResp, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-		s.NoError(err)
+		// TODO: Assert this for CHASM once DescribeWorkflowExecution.PendingNexusOperations is implemented there.
 		s.Len(descResp.PendingNexusOperations, 1)
 		s.Equal(2*time.Second, descResp.PendingNexusOperations[0].ScheduleToStartTimeout.AsDuration())
 	}
@@ -3029,10 +3029,10 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationStartToCloseTimeout(chasmEnab
 	})
 	s.NoError(err)
 
-	// TODO: Assert this for CHASM once DescribeWorkflowExecution.PendingNexusOperations is implemented there.
+	descResp, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+	s.NoError(err)
 	if !chasmEnabled {
-		descResp, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-		s.NoError(err)
+		// TODO: Assert this for CHASM once DescribeWorkflowExecution.PendingNexusOperations is implemented there.
 		s.Len(descResp.PendingNexusOperations, 1)
 		s.Equal(2*time.Second, descResp.PendingNexusOperations[0].StartToCloseTimeout.AsDuration())
 	}
