@@ -27,7 +27,7 @@ var File_temporal_server_chasm_lib_activity_proto_v1_service_proto protoreflect.
 
 const file_temporal_server_chasm_lib_activity_proto_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"9temporal/server/chasm/lib/activity/proto/v1/service.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1aBtemporal/server/chasm/lib/activity/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto\x1a0temporal/server/api/common/v1/api_category.proto2\xf2\n" +
+	"9temporal/server/chasm/lib/activity/proto/v1/service.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1aBtemporal/server/chasm/lib/activity/proto/v1/request_response.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xf2\n" +
 	"\n" +
 	"\x0fActivityService\x12\xdb\x01\n" +
 	"\x16StartActivityExecution\x12J.temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionRequest\x1aK.temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionResponse\"(\x92\xc4\x03\x1e\x1a\x1cfrontend_request.activity_id\x8a\xb5\x18\x02\b\x01\x12\xe4\x01\n" +

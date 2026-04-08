@@ -85,12 +85,6 @@ var (
 	dependencyTaskNotCompletedReschedulePolicy = common.CreateDependencyTaskNotCompletedReschedulePolicy()
 )
 
-var defaultExecutableMetricsTags = []metrics.Tag{
-	metrics.NamespaceUnknownTag(),
-	metrics.TaskTypeTag("__unknown__"),
-	metrics.OperationTag("__unknown__"),
-}
-
 const (
 	// resubmitMaxAttempts is the max number of attempts we may skip rescheduler when a task is Nacked.
 	// check the comment in shouldResubmitOnNack() for more details
@@ -112,19 +106,21 @@ type (
 		sync.Mutex
 		state ctasks.State
 
-		executor            Executor
-		scheduler           Scheduler
-		rescheduler         Rescheduler
-		priorityAssigner    PriorityAssigner
-		timeSource          clock.TimeSource
-		namespaceRegistry   namespace.Registry
-		clusterMetadata     cluster.Metadata
-		chasmRegistry       *chasm.Registry
-		taskTypeTagProvider TaskTypeTagProvider
-		logger              log.Logger
-		metricsHandler      metrics.Handler
-		tracer              trace.Tracer
-		dlqWriter           *DLQWriter
+		executor              Executor
+		scheduler             Scheduler
+		rescheduler           Rescheduler
+		priorityAssigner      PriorityAssigner
+		timeSource            clock.TimeSource
+		namespaceRegistry     namespace.Registry
+		clusterMetadata       cluster.Metadata
+		chasmRegistry         *chasm.Registry
+		taskTypeTagProvider   TaskTypeTagProvider
+		logger                log.Logger
+		baseMetricsHandler    metrics.Handler
+		defaultMetricsHandler metrics.Handler
+		chasmMetricsHandler   metrics.Handler // contains archetype tag
+		tracer                trace.Tracer
+		dlqWriter             *DLQWriter
 
 		readerID                   int64
 		attempt                    int
@@ -211,13 +207,7 @@ func NewExecutable(
 				return tasks.Tags(task)
 			},
 		),
-		metricsHandler: metricsHandler.WithTags(estimateTaskMetricTags(
-			task,
-			namespaceRegistry,
-			clusterMetadata.GetCurrentClusterName(),
-			chasmRegistry,
-			taskTypeTagProvider,
-		)...),
+		baseMetricsHandler:         metricsHandler,
 		tracer:                     tracer,
 		dlqWriter:                  params.DLQWriter,
 		dlqEnabled:                 params.DLQEnabled,
@@ -225,10 +215,11 @@ func NewExecutable(
 		dlqInternalErrors:          params.DLQInternalErrors,
 		dlqErrorPattern:            params.DLQErrorPattern,
 	}
+	e.refreshMetricsHandlers(nil)
 	e.priority = priorityAssigner.Assign(e)
 
 	loadTime := util.MaxTime(timeSource.Now(), task.GetKey().FireTime)
-	metrics.TaskLoadLatency.With(e.metricsHandler).Record(
+	metrics.TaskLoadLatency.With(e.chasmMetricsHandler).Record(
 		loadTime.Sub(task.GetVisibilityTime()),
 		metrics.QueueReaderIDTag(readerID),
 	)
@@ -304,14 +295,7 @@ func (e *executableImpl) Execute() (retErr error) {
 
 			// we need to guess the metrics tags here as we don't know which execution logic
 			// is actually used which is upto the executor implementation
-			e.metricsHandler = e.metricsHandler.WithTags(
-				estimateTaskMetricTags(
-					e.GetTask(),
-					e.namespaceRegistry,
-					e.clusterMetadata.GetCurrentClusterName(),
-					e.chasmRegistry,
-					e.taskTypeTagProvider,
-				)...)
+			e.refreshMetricsHandlers(nil)
 		}
 
 		attemptUserLatency := time.Duration(0)
@@ -322,17 +306,17 @@ func (e *executableImpl) Execute() (retErr error) {
 		attemptLatency := e.timeSource.Now().Sub(startTime)
 		e.attemptNoUserLatency = attemptLatency - attemptUserLatency
 		// emit total attempt latency so that we know how much time a task will occpy a worker goroutine
-		metrics.TaskProcessingLatency.With(e.metricsHandler).Record(attemptLatency)
+		metrics.TaskProcessingLatency.With(e.chasmMetricsHandler).Record(attemptLatency)
 
 		if persistenceDuration, ok := metrics.ContextCounterGet(ctx, metrics.TaskPersistenceLatency.Name()); ok {
 			attemptNoPersistence := attemptLatency - time.Duration(persistenceDuration)
-			metrics.TaskProcessingNoPersistenceLatency.With(e.metricsHandler).Record(attemptNoPersistence)
+			metrics.TaskProcessingNoPersistenceLatency.With(e.chasmMetricsHandler).Record(attemptNoPersistence)
 		}
 
-		priorityTaggedProvider := e.metricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
+		priorityTaggedProvider := e.chasmMetricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 		metrics.TaskRequests.With(priorityTaggedProvider).Record(1)
 		metrics.TaskScheduleLatency.With(priorityTaggedProvider).Record(e.scheduleLatency)
-		metrics.OperationCounter.With(e.metricsHandler).Record(1)
+		metrics.OperationCounter.With(e.defaultMetricsHandler).Record(1)
 
 		if retErr == nil {
 			e.inMemoryNoUserLatency += e.scheduleLatency + e.attemptNoUserLatency
@@ -359,7 +343,7 @@ func (e *executableImpl) Execute() (retErr error) {
 	}
 
 	resp := e.executor.Execute(ctx, e)
-	e.metricsHandler = e.metricsHandler.WithTags(resp.ExecutionMetricTags...)
+	e.refreshMetricsHandlers(resp.ExecutionMetricTags)
 
 	if resp.ExecutedAsActive != e.lastActiveness {
 		// namespace did a failover,
@@ -388,10 +372,10 @@ func (e *executableImpl) writeToDLQ(ctx context.Context) error {
 		e.lastActiveness,
 	)
 	if err != nil {
-		metrics.TaskDLQFailures.With(e.metricsHandler).Record(1)
+		metrics.TaskDLQFailures.With(e.chasmMetricsHandler).Record(1)
 		e.logger.Error("Failed to write task to DLQ", tag.Error(err))
 	}
-	metrics.TaskDLQSendLatency.With(e.metricsHandler).Record(e.timeSource.Now().Sub(start))
+	metrics.TaskDLQSendLatency.With(e.chasmMetricsHandler).Record(e.timeSource.Now().Sub(start))
 	return err
 }
 
@@ -409,7 +393,7 @@ func (e *executableImpl) isInvalidTaskError(err error) bool {
 		// The task is stale and is safe to be dropped.
 		// Even though ErrStaleReference is castable to serviceerror.NotFound, we give this error special treatment
 		// because we're interested in the metric.
-		metrics.TaskSkipped.With(e.metricsHandler).Record(1)
+		metrics.TaskSkipped.With(e.chasmMetricsHandler).Record(1)
 		e.logger.Info("Skipped task due to stale reference", tag.Error(err))
 		return true
 	}
@@ -424,7 +408,7 @@ func (e *executableImpl) isInvalidTaskError(err error) bool {
 	}
 
 	if err == consts.ErrTaskVersionMismatch {
-		metrics.TaskVersionMisMatch.With(e.metricsHandler).Record(1)
+		metrics.TaskVersionMisMatch.With(e.chasmMetricsHandler).Record(1)
 		return true
 	}
 
@@ -433,7 +417,7 @@ func (e *executableImpl) isInvalidTaskError(err error) bool {
 
 func (e *executableImpl) isSafeToDropError(err error) bool {
 	if err == consts.ErrTaskDiscarded {
-		metrics.TaskDiscarded.With(e.metricsHandler).Record(1)
+		metrics.TaskDiscarded.With(e.chasmMetricsHandler).Record(1)
 		return true
 	}
 
@@ -462,7 +446,7 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 			e.resourceExhaustedCount++
 		}
 
-		metrics.TaskThrottledCounter.With(e.metricsHandler).Record(
+		metrics.TaskThrottledCounter.With(e.chasmMetricsHandler).Record(
 			1, metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause))
 		return true, err
 	}
@@ -471,22 +455,22 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
 		// error is expected when there's namespace failover,
 		// so don't count it into task failures.
-		metrics.TaskNotActiveCounter.With(e.metricsHandler).Record(1)
+		metrics.TaskNotActiveCounter.With(e.chasmMetricsHandler).Record(1)
 		return true, err
 	}
 
 	if err == consts.ErrDependencyTaskNotCompleted {
-		metrics.TasksDependencyTaskNotCompleted.With(e.metricsHandler).Record(1)
+		metrics.TasksDependencyTaskNotCompleted.With(e.chasmMetricsHandler).Record(1)
 		return true, err
 	}
 
 	if err == consts.ErrTaskRetry {
-		metrics.TaskStandbyRetryCounter.With(e.metricsHandler).Record(1)
+		metrics.TaskStandbyRetryCounter.With(e.chasmMetricsHandler).Record(1)
 		return true, err
 	}
 
 	if err.Error() == consts.ErrNamespaceHandover.Error() {
-		metrics.TaskNamespaceHandoverCounter.With(e.metricsHandler).Record(1)
+		metrics.TaskNamespaceHandoverCounter.With(e.chasmMetricsHandler).Record(1)
 		return true, consts.ErrNamespaceHandover
 	}
 
@@ -505,7 +489,7 @@ func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
 
 	isInternalError := common.IsInternalError(err)
 	if isInternalError {
-		metrics.TaskInternalErrorCounter.With(e.metricsHandler).Record(1)
+		metrics.TaskInternalErrorCounter.With(e.chasmMetricsHandler).Record(1)
 		// Only DQL/drop when configured to
 		shouldDLQ := e.dlqInternalErrors()
 		return shouldDLQ
@@ -553,7 +537,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 
 	// Unexpected errors handled below
 	e.unexpectedErrorAttempts++
-	metrics.TaskFailures.With(e.metricsHandler).Record(1)
+	metrics.TaskFailures.With(e.chasmMetricsHandler).Record(1)
 	logger := log.With(e.logger,
 		tag.Error(err),
 		tag.ErrorType(err),
@@ -572,12 +556,12 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		// Terminal errors are likely due to data corruption.
 		// Drop the task by returning nil so that task will be marked as completed,
 		// or send it to the DLQ if that is enabled.
-		metrics.TaskCorruptionCounter.With(e.metricsHandler).Record(1)
+		metrics.TaskCorruptionCounter.With(e.chasmMetricsHandler).Record(1)
 		if e.dlqEnabled() {
 			// Keep this message in sync with the log line mentioned in Investigation section of docs/admin/dlq.md
 			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err), tag.ErrorType(err))
 			e.terminalFailureCause = err // <- Execute() examines this attribute on the next attempt.
-			metrics.TaskTerminalFailures.With(e.metricsHandler).Record(1)
+			metrics.TaskTerminalFailures.With(e.chasmMetricsHandler).Record(1)
 			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 		}
 		e.logger.Error("Dropping task due to terminal error", tag.Error(err), tag.ErrorType(err))
@@ -590,7 +574,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		e.logger.Error("Marking task as terminally failed, will send to DLQ. Maximum number of attempts with unexpected errors",
 			tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.Error(err))
 		e.terminalFailureCause = err // <- Execute() examines this attribute on the next attempt.
-		metrics.TaskTerminalFailures.With(e.metricsHandler).Record(1)
+		metrics.TaskTerminalFailures.With(e.chasmMetricsHandler).Record(1)
 		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)
 	}
 
@@ -616,7 +600,7 @@ func (e *executableImpl) matchDLQErrorPattern(err error) error {
 		tag.Error(err),
 		tag.ErrorType(err))
 	e.terminalFailureCause = err
-	metrics.TaskTerminalFailures.With(e.metricsHandler).Record(1)
+	metrics.TaskTerminalFailures.With(e.chasmMetricsHandler).Record(1)
 	return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 }
 
@@ -669,9 +653,9 @@ func (e *executableImpl) Ack() {
 		return
 	}
 
-	metrics.TaskAttempt.With(e.metricsHandler).Record(int64(e.attempt))
+	metrics.TaskAttempt.With(e.chasmMetricsHandler).Record(int64(e.attempt))
 
-	priorityTaggedProvider := e.metricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
+	priorityTaggedProvider := e.chasmMetricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 	metrics.TaskLatency.With(priorityTaggedProvider).Record(e.inMemoryNoUserLatency)
 	metrics.TaskQueueLatency.With(priorityTaggedProvider.WithTags(metrics.QueueReaderIDTag(e.readerID))).
 		Record(time.Since(e.GetVisibilityTime()))
@@ -824,11 +808,37 @@ func (e *executableImpl) incAttempt() {
 	e.attempt++
 
 	if e.attempt > taskCriticalLogMetricAttempts {
-		metrics.TaskAttempt.With(e.metricsHandler).Record(int64(e.attempt))
+		metrics.TaskAttempt.With(e.chasmMetricsHandler).Record(int64(e.attempt))
 	}
 }
 
-func estimateTaskMetricTags(
+func (e *executableImpl) refreshMetricsHandlers(executionMetricTags []metrics.Tag) {
+	sharedTags := taskBaseMetricTagsWithoutArchetype(
+		e.GetTask(),
+		e.namespaceRegistry,
+		e.clusterMetadata.GetCurrentClusterName(),
+		e.chasmRegistry,
+		e.taskTypeTagProvider,
+	)
+	if len(executionMetricTags) > 0 {
+		sharedTags = append(sharedTags, executionMetricTags...)
+	}
+	e.defaultMetricsHandler = e.baseMetricsHandler.WithTags(sharedTags...)
+	e.chasmMetricsHandler = e.defaultMetricsHandler.WithTags(getArchetypeTag(e.GetTask(), e.chasmRegistry))
+}
+
+func taskBaseMetricTags(
+	task tasks.Task,
+	namespaceRegistry namespace.Registry,
+	currentClusterName string,
+	chasmRegistry *chasm.Registry,
+	taskTypeTagProvider TaskTypeTagProvider,
+) []metrics.Tag {
+	tags := taskBaseMetricTagsWithoutArchetype(task, namespaceRegistry, currentClusterName, chasmRegistry, taskTypeTagProvider)
+	return append(tags, getArchetypeTag(task, chasmRegistry))
+}
+
+func taskBaseMetricTagsWithoutArchetype(
 	task tasks.Task,
 	namespaceRegistry namespace.Registry,
 	currentClusterName string,
@@ -851,6 +861,15 @@ func estimateTaskMetricTags(
 		metrics.OperationTag(taskType), // for backward compatibility
 		// TODO: add task priority tag here as well
 	}
+}
+
+func getArchetypeTag(task tasks.Task, chasmRegistry *chasm.Registry) metrics.Tag {
+	if t, ok := task.(tasks.HasArchetypeID); ok {
+		if name, ok := chasmRegistry.ArchetypeDisplayName(t.GetArchetypeID()); ok {
+			return metrics.ArchetypeTag(name)
+		}
+	}
+	return metrics.ArchetypeTag(chasm.WorkflowComponentName)
 }
 
 // CircuitBreakerExecutable wraps Executable with a circuit breaker.
