@@ -9,7 +9,6 @@ import (
 
 var Module = fx.Module(
 	"chasm.lib.nexusoperation.workflow",
-	nexusoperation.Module,
 	fx.Invoke(func(
 		registry *chasmworkflow.Registry,
 		config *nexusoperation.Config,
