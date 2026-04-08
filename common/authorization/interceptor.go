@@ -90,6 +90,7 @@ type Interceptor struct {
 	authExtraHeaderName          string
 	exposeAuthorizerErrors       dynamicconfig.BoolPropertyFn
 	enableCrossNamespaceCommands dynamicconfig.BoolPropertyFn
+	disableStreamingAuthorizer   dynamicconfig.BoolPropertyFn
 }
 
 // NewInterceptor creates an authorization interceptor.
@@ -104,6 +105,7 @@ func NewInterceptor(
 	authExtraHeaderName string,
 	exposeAuthorizerErrors dynamicconfig.BoolPropertyFn,
 	enableCrossNamespaceCommands dynamicconfig.BoolPropertyFn,
+	disableStreamingAuthorizer dynamicconfig.BoolPropertyFn,
 ) *Interceptor {
 	return &Interceptor{
 		claimMapper:                  claimMapper,
@@ -116,6 +118,7 @@ func NewInterceptor(
 		audienceGetter:               audienceGetter,
 		exposeAuthorizerErrors:       exposeAuthorizerErrors,
 		enableCrossNamespaceCommands: enableCrossNamespaceCommands,
+		disableStreamingAuthorizer:   disableStreamingAuthorizer,
 	}
 }
 
@@ -177,34 +180,37 @@ func (a *Interceptor) InterceptStream(
 	handler grpc.StreamHandler,
 ) error {
 	ctx := ss.Context()
-	tlsConnection := TLSInfoFromContext(ctx)
+	bypassAuth := a.disableStreamingAuthorizer()
+	if !bypassAuth {
+		tlsConnection := TLSInfoFromContext(ctx)
 
-	authInfo := a.GetAuthInfo(tlsConnection, headers.NewGRPCHeaderGetter(ctx), func() string {
-		// JWTAudienceMapper only supports UnaryServerInfo; no request is available at stream init.
-		return ""
-	})
+		authInfo := a.GetAuthInfo(tlsConnection, headers.NewGRPCHeaderGetter(ctx), func() string {
+			// JWTAudienceMapper only supports UnaryServerInfo; no request is available at stream init.
+			return ""
+		})
 
-	var claims *Claims
-	if authInfo != nil {
-		var err error
-		claims, err = a.GetClaims(authInfo)
-		if err != nil {
-			a.logger.Error("Authorization error", tag.Error(err))
-			return errUnauthorized
+		var claims *Claims
+		if authInfo != nil {
+			var err error
+			claims, err = a.GetClaims(authInfo)
+			if err != nil {
+				a.logger.Error("Authorization error", tag.Error(err))
+				return errUnauthorized
+			}
+			ctx = a.EnhanceContext(ctx, authInfo, claims)
 		}
-		ctx = a.EnhanceContext(ctx, authInfo, claims)
-	}
 
-	if a.authorizer != nil {
-		// Namespace is not available in the stream handshake (no initial request body).
-		ct := &CallTarget{
-			Namespace: "",
-			APIName:   info.FullMethod,
-			Request:   nil,
-		}
-		if err := a.Authorize(ctx, claims, ct); err != nil {
-			a.logger.Error("Authorization error", tag.Error(err))
-			return err
+		if a.authorizer != nil {
+			// Namespace is not available in the stream handshake (no initial request body).
+			ct := &CallTarget{
+				Namespace: "",
+				APIName:   info.FullMethod,
+				Request:   nil,
+			}
+			if err := a.Authorize(ctx, claims, ct); err != nil {
+				a.logger.Error("Authorization error", tag.Error(err))
+				return err
+			}
 		}
 	}
 
