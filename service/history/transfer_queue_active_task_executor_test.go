@@ -2995,6 +2995,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			}
 			executable := queues.NewMockExecutable(ctrl)
 			executable.EXPECT().GetTask().Return(task)
+			executable.EXPECT().GetWorkflowID().Return(workflowKey.WorkflowID).AnyTimes()
 			resp := executor.Execute(context.Background(), executable)
 			if c.ShouldDelete {
 				s.NoError(resp.ExecutionErr)

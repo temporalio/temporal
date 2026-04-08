@@ -197,6 +197,7 @@ type (
 		// TODO: Add methods needed from MutateState here.
 		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
+		GetApproximatePersistedSize() int
 		GetCurrentVersion() int64
 		NextTransitionCount() int64
 		CurrentVersionedTransition() *persistencespb.VersionedTransition
@@ -357,7 +358,7 @@ func searchAttributeKeyValuesToMap(saSlice []SearchAttributeKeyValue) map[string
 }
 
 func (n *Node) SetRootComponent(
-	rootComponent Component,
+	rootComponent RootComponent,
 ) error {
 	root := n.root()
 	root.setValue(rootComponent)

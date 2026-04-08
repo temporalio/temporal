@@ -4826,11 +4826,12 @@ type testQueueData struct {
 }
 
 type testQueuePersistenceStats struct {
-	createTaskCount  int
-	getTasksCount    int
-	getUserDataCount int
-	createCount      int
-	updateCount      int
+	createTaskCount      int
+	createTaskBatchCount int
+	getTasksCount        int
+	getUserDataCount     int
+	createCount          int
+	updateCount          int
 }
 
 func newTestQueueData() *testQueueData {
@@ -5070,6 +5071,7 @@ func (m *testTaskManager) CreateTasks(
 		tlm.tasks.Put(fairLevelFromAllocatedTask(task), common.CloneProto(task))
 		tlm.createTaskCount++
 	}
+	tlm.createTaskBatchCount++
 
 	resp := &persistence.CreateTasksResponse{}
 	if m.updateMetadataOnCreateTasks {
@@ -5132,12 +5134,20 @@ func (m *testTaskManager) getTaskCount(q *PhysicalTaskQueueKey) int {
 	return tlm.tasks.Size()
 }
 
-// getCreateTaskCount returns how many times CreateTask was called
+// getCreateTaskCount returns how many tasks were added
 func (m *testTaskManager) getCreateTaskCount(q *PhysicalTaskQueueKey) int {
 	tlm := m.getQueueDataByKey(q)
 	tlm.Lock()
 	defer tlm.Unlock()
 	return tlm.createTaskCount
+}
+
+// getCreateTaskBatchCount returns how many times CreateTask was called
+func (m *testTaskManager) getCreateTaskBatchCount(q *PhysicalTaskQueueKey) int {
+	tlm := m.getQueueDataByKey(q)
+	tlm.Lock()
+	defer tlm.Unlock()
+	return tlm.createTaskBatchCount
 }
 
 // getGetTasksCount returns how many times GetTasks was called

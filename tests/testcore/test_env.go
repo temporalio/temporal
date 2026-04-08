@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/components/nexusoperations"
 	"google.golang.org/grpc"
 )
 
@@ -40,6 +41,7 @@ var (
 )
 
 type Env interface {
+	// T returns the *testing.T. Deprecated: use the suite's T() method instead.
 	T() *testing.T
 	Namespace() namespace.Name
 	NamespaceID() namespace.ID
@@ -155,7 +157,8 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
-	ns := namespace.Name(RandomizeStr(t.Name()))
+	baseName := strings.ReplaceAll(t.Name(), "/", "-")
+	ns := namespace.Name(RandomizeStr(baseName))
 	nsID, err := base.RegisterNamespace(
 		ns,
 		1, // 1 day retention
@@ -180,6 +183,12 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		ctx:                setupTestTimeoutWithContext(t, options.timeout),
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 	}
+
+	// Set Nexus callback URL now that we have the cluster's HTTP address. Note that we set
+	// a default for the global config here so callers that rely on this can still use a shared cluster.
+	env.FunctionalTestBase.OverrideDynamicConfig(
+		nexusoperations.CallbackURLTemplate,
+		"http://"+env.HttpAPIAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
 	// For shared clusters, apply all dynamic config settings as overrides.
 	if !options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
@@ -225,6 +234,28 @@ func (e *TestEnv) TaskPoller() *taskpoller.TaskPoller {
 	return e.taskPoller
 }
 
+// NoError asserts that err is nil.
+// Deprecated: use require.NoError with the parent test or suite instead.
+// TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
+func (e *TestEnv) NoError(err error, msgAndArgs ...any) {
+	e.Assertions.NoError(err, msgAndArgs...)
+}
+
+// Error asserts that err is not nil.
+// Deprecated: use require.Error with the parent test or suite instead.
+// TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
+func (e *TestEnv) Error(err error, msgAndArgs ...any) {
+	e.Assertions.Error(err, msgAndArgs...)
+}
+
+// Run executes a subtest.
+// Deprecated: use the suite's Run method instead.
+// TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
+func (e *TestEnv) Run(name string, subtest func()) bool {
+	return e.FunctionalTestBase.Run(name, subtest)
+}
+
+// T returns the *testing.T. Deprecated: use the suite's T() method instead.
 func (e *TestEnv) T() *testing.T {
 	return e.t
 }

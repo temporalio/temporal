@@ -9,6 +9,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
@@ -130,6 +131,113 @@ func TestCreateSchedulerFromMigration(t *testing.T) {
 	require.NoError(t, node.SetRootComponent(sched))
 	_, err = node.CloseTransaction()
 	require.NoError(t, err)
+}
+
+func TestUpdate_WithMemo(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+	memoValue := &commonpb.Payload{Data: []byte("test-value")}
+
+	_, err := sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.UpdateScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+			Schedule:   defaultSchedule(),
+			Memo: &commonpb.Memo{
+				Fields: map[string]*commonpb.Payload{"key1": memoValue},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	visibility := sched.Visibility.Get(ctx)
+	memo := visibility.CustomMemo(ctx)
+	protorequire.ProtoEqual(t, memoValue, memo["key1"])
+}
+
+func TestUpdate_WithNilMemo(t *testing.T) {
+	sched, ctx, node := setupSchedulerForTest(t)
+
+	// Set initial memo.
+	visibility := sched.Visibility.Get(ctx)
+	visibility.MergeCustomMemo(ctx, map[string]*commonpb.Payload{
+		"existing": {Data: []byte("value")},
+	})
+	_, err := node.CloseTransaction()
+	require.NoError(t, err)
+
+	// Update without memo (nil) should preserve existing memo.
+	ctx = chasm.NewMutableContext(context.Background(), node)
+	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.UpdateScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+			Schedule:   defaultSchedule(),
+		},
+	})
+	require.NoError(t, err)
+
+	visibility = sched.Visibility.Get(ctx)
+	memo := visibility.CustomMemo(ctx)
+	protorequire.ProtoEqual(t, &commonpb.Payload{Data: []byte("value")}, memo["existing"])
+}
+
+func TestUpdate_MemoReplaceSemantics(t *testing.T) {
+	sched, ctx, node := setupSchedulerForTest(t)
+
+	// Set initial memo with keys A and B.
+	visibility := sched.Visibility.Get(ctx)
+	visibility.MergeCustomMemo(ctx, map[string]*commonpb.Payload{
+		"A": {Data: []byte("1")},
+		"B": {Data: []byte("2")},
+	})
+	_, err := node.CloseTransaction()
+	require.NoError(t, err)
+
+	// Update with only C: should fully replace memo (A and B are gone).
+	ctx = chasm.NewMutableContext(context.Background(), node)
+	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.UpdateScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+			Schedule:   defaultSchedule(),
+			Memo: &commonpb.Memo{
+				Fields: map[string]*commonpb.Payload{
+					"C": {Data: []byte("3")},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	visibility = sched.Visibility.Get(ctx)
+	memo := visibility.CustomMemo(ctx)
+	require.Nil(t, memo["A"], "A should be gone after replace")
+	require.Nil(t, memo["B"], "B should be gone after replace")
+	protorequire.ProtoEqual(t, &commonpb.Payload{Data: []byte("3")}, memo["C"])
+
+	// Update with empty memo: should clear all memo fields.
+	_, err = node.CloseTransaction()
+	require.NoError(t, err)
+	ctx = chasm.NewMutableContext(context.Background(), node)
+	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.UpdateScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+			Schedule:   defaultSchedule(),
+			Memo: &commonpb.Memo{
+				Fields: map[string]*commonpb.Payload{},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	visibility = sched.Visibility.Get(ctx)
+	memo = visibility.CustomMemo(ctx)
+	require.Empty(t, memo, "memo should be empty after replace with empty map")
 }
 
 func TestCreateSchedulerFromMigration_EmptyState(t *testing.T) {

@@ -11,6 +11,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -108,6 +109,69 @@ func (e *ChasmEngine) NotifyExecution(key chasm.ExecutionKey) {
 	e.notifier.Notify(key)
 }
 
+func (e *ChasmEngine) setContextMetadata(
+	ctx context.Context,
+	chasmTree *chasm.Node,
+) chasm.Context {
+	chasmContext := chasm.NewContext(ctx, chasmTree)
+
+	rootComponent, err := chasmTree.Component(chasmContext, chasm.ComponentRef{})
+	if err != nil {
+		executionKey := chasmContext.ExecutionKey()
+		e.logger.Error(
+			"Failed to resolve CHASM root component for context metadata",
+			tag.WorkflowNamespaceID(executionKey.NamespaceID),
+			tag.WorkflowID(executionKey.BusinessID),
+			tag.WorkflowRunID(executionKey.RunID),
+			tag.Error(err),
+		)
+		return chasmContext
+	}
+
+	root, ok := rootComponent.(chasm.RootComponent)
+	if !ok {
+		softassert.Fail(
+			e.logger,
+			"root node must implement RootComponent interface",
+			tag.NewStringTag("component_type", fmt.Sprintf("%T", rootComponent)),
+		)
+		return chasmContext
+	}
+
+	for key, value := range root.ContextMetadata(chasmContext) {
+		contextutil.ContextMetadataSet(ctx, key, value)
+	}
+
+	return chasmContext
+}
+
+func chasmTreeFromMutableState(
+	logger log.Logger,
+	mutableState historyi.MutableState,
+) (*chasm.Node, error) {
+	chasmTree, ok := mutableState.ChasmTree().(*chasm.Node)
+	if !ok {
+		return nil, softassert.UnexpectedInternalErr(
+			logger,
+			"CHASM tree implementation not properly wired up",
+			fmt.Errorf("encountered type: %T, expected type: %T", mutableState.ChasmTree(), &chasm.Node{}),
+		)
+	}
+	return chasmTree, nil
+}
+
+func (e *ChasmEngine) setContextMetadataFromMutableState(
+	ctx context.Context,
+	mutableState historyi.MutableState,
+) {
+	chasmTree, err := chasmTreeFromMutableState(e.logger, mutableState)
+	if err != nil {
+		e.logger.Error("Failed to resolve CHASM tree for context metadata", tag.Error(err))
+		return
+	}
+	e.setContextMetadata(ctx, chasmTree)
+}
+
 func (e *ChasmEngine) StartExecution(
 	ctx context.Context,
 	executionRef chasm.ComponentRef,
@@ -177,6 +241,7 @@ func (e *ChasmEngine) startExecution(
 		return chasm.StartExecutionResult{}, err
 	}
 	if !hasCurrentRun {
+		e.setContextMetadataFromMutableState(ctx, newExecutionParams.mutableState)
 		serializedRef, err := newExecutionParams.executionRef.Serialize(e.registry)
 		if err != nil {
 			// Created is true here because persistAsBrandNew succeeded, but we failed to serialize the ref.
@@ -354,13 +419,9 @@ func (e *ChasmEngine) applyUpdateWithLease(
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 ) ([]byte, error) {
 	mutableState := executionLease.GetMutableState()
-	chasmTree, ok := mutableState.ChasmTree().(*chasm.Node)
-	if !ok {
-		return nil, serviceerror.NewInternalf(
-			"CHASM tree implementation not properly wired up, encountered type: %T, expected type: %T",
-			mutableState.ChasmTree(),
-			&chasm.Node{},
-		)
+	chasmTree, err := chasmTreeFromMutableState(shardContext.GetLogger(), mutableState)
+	if err != nil {
+		return nil, err
 	}
 
 	mutableContext := chasm.NewMutableContext(ctx, chasmTree)
@@ -374,6 +435,8 @@ func (e *ChasmEngine) applyUpdateWithLease(
 	}
 
 	// TODO: Support WithSpeculative() TransitionOption.
+
+	e.setContextMetadata(ctx, chasmTree)
 
 	if err := executionLease.GetContext().UpdateWorkflowExecutionAsActive(
 		ctx,
@@ -438,6 +501,8 @@ func (e *ChasmEngine) startAndUpdateExecution(
 		return chasm.ExecutionKey{}, nil, false, currentRunInfo.CurrentWorkflowConditionFailedError
 	}
 
+	e.setContextMetadataFromMutableState(ctx, newExecutionParams.mutableState)
+
 	serializedRef, err := newExecutionParams.executionRef.Serialize(e.registry)
 
 	return newExecutionParams.executionRef.ExecutionKey, serializedRef, true, err
@@ -501,6 +566,8 @@ func (e *ChasmEngine) deleteExecution(
 
 	mutableState := executionLease.GetMutableState()
 	we := mutableState.GetWorkflowKey()
+
+	e.setContextMetadataFromMutableState(ctx, mutableState)
 
 	log.With(shardContext.GetLogger(),
 		tag.WorkflowNamespaceID(ref.NamespaceID),
@@ -580,16 +647,12 @@ func (e *ChasmEngine) readComponent(
 		executionLease.GetReleaseFn()(nil)
 	}()
 
-	chasmTree, ok := executionLease.GetMutableState().ChasmTree().(*chasm.Node)
-	if !ok {
-		return serviceerror.NewInternalf(
-			"CHASM tree implementation not properly wired up, encountered type: %T, expected type: %T",
-			executionLease.GetMutableState().ChasmTree(),
-			&chasm.Node{},
-		)
+	chasmTree, err := chasmTreeFromMutableState(e.logger, executionLease.GetMutableState())
+	if err != nil {
+		return err
 	}
 
-	chasmContext := chasm.NewContext(ctx, chasmTree)
+	chasmContext := e.setContextMetadata(ctx, chasmTree)
 	component, err := chasmTree.Component(chasmContext, ref)
 	if err != nil {
 		return err
@@ -686,16 +749,13 @@ func (e *ChasmEngine) predicateSatisfied(
 	ref chasm.ComponentRef,
 	executionLease api.WorkflowLease,
 ) ([]byte, error) {
-	chasmTree, ok := executionLease.GetMutableState().ChasmTree().(*chasm.Node)
-	if !ok {
-		return nil, serviceerror.NewInternalf(
-			"CHASM tree implementation not properly wired up, encountered type: %T, expected type: %T",
-			executionLease.GetMutableState().ChasmTree(),
-			&chasm.Node{},
-		)
+	chasmTree, err := chasmTreeFromMutableState(e.logger, executionLease.GetMutableState())
+	if err != nil {
+		return nil, err
 	}
 
-	chasmContext := chasm.NewContext(ctx, chasmTree)
+	chasmContext := e.setContextMetadata(ctx, chasmTree)
+
 	component, err := chasmTree.Component(chasmContext, ref)
 	if err != nil {
 		return nil, err
@@ -1051,6 +1111,8 @@ func (e *ChasmEngine) handleReusePolicy(
 	if err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
+
+	e.setContextMetadataFromMutableState(ctx, newExecutionParams.mutableState)
 
 	serializedRef, err := newExecutionParams.executionRef.Serialize(e.registry)
 	if err != nil {
