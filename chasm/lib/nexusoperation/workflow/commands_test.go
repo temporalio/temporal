@@ -57,7 +57,7 @@ var defaultConfig = &nexusoperation.Config{
 	ChasmNexusEnabled:                  dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	MaxServiceNameLength:               dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("service")),
 	MaxOperationNameLength:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("op")),
-	MaxConcurrentOperations:            dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
+	MaxConcurrentOperationsPerWorkflow: dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
 	MaxOperationHeaderSize:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(20),
 	DisallowedOperationHeaders:         dynamicconfig.GetTypedPropertyFn([]string{"request-timeout"}),
 	MaxOperationScheduleToCloseTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Hour * 24),
@@ -76,8 +76,7 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 	}
 	chReg := chasmworkflow.NewRegistry()
 	nexusProcessor := chasm.NewNexusEndpointProcessor()
-	require.NoError(t, registerCommandHandlers(chReg, cfg, nexusProcessor))
-	require.NoError(t, registerEvents(chReg, cfg, nexusProcessor))
+	require.NoError(t, chReg.Register(newLibrary(cfg, nexusProcessor)))
 
 	execInfo := &persistencespb.WorkflowExecutionInfo{}
 	backend := &chasm.MockNodeBackend{

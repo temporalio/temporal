@@ -5,43 +5,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Marshal an object of type InvocationTask to the protobuf v3 wire format
-func (val *InvocationTask) Marshal() ([]byte, error) {
-	return proto.Marshal(val)
-}
-
-// Unmarshal an object of type InvocationTask from the protobuf v3 wire format
-func (val *InvocationTask) Unmarshal(buf []byte) error {
-	return proto.Unmarshal(buf, val)
-}
-
-// Size returns the size of the object, in bytes, once serialized
-func (val *InvocationTask) Size() int {
-	return proto.Size(val)
-}
-
-// Equal returns whether two InvocationTask values are equivalent by recursively
-// comparing the message's fields.
-// For more information see the documentation for
-// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *InvocationTask) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	var that1 *InvocationTask
-	switch t := that.(type) {
-	case *InvocationTask:
-		that1 = t
-	case InvocationTask:
-		that1 = &t
-	default:
-		return false
-	}
-
-	return proto.Equal(this, that1)
-}
-
 // Marshal an object of type ScheduleToStartTimeoutTask to the protobuf v3 wire format
 func (val *ScheduleToStartTimeoutTask) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -145,6 +108,43 @@ func (this *ScheduleToCloseTimeoutTask) Equal(that interface{}) bool {
 	case *ScheduleToCloseTimeoutTask:
 		that1 = t
 	case ScheduleToCloseTimeoutTask:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type InvocationTask to the protobuf v3 wire format
+func (val *InvocationTask) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type InvocationTask from the protobuf v3 wire format
+func (val *InvocationTask) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *InvocationTask) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two InvocationTask values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *InvocationTask) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *InvocationTask
+	switch t := that.(type) {
+	case *InvocationTask:
+		that1 = t
+	case InvocationTask:
 		that1 = &t
 	default:
 		return false
