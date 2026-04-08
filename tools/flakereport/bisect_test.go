@@ -487,7 +487,7 @@ func TestRunBisectForTestDirectionFilter(t *testing.T) {
 
 	var allRuns []TestRun
 	// sha0-sha4: 8 failures + 2 passes each (80% failure rate)
-	for shaIdx := 0; shaIdx < 5; shaIdx++ {
+	for shaIdx := range 5 {
 		runID := int64(shaIdx)
 		for range 8 {
 			allRuns = append(allRuns, TestRun{Name: "TestFoo", Failed: true, RunID: runID})
@@ -523,7 +523,7 @@ func TestRunBisectForTestDirectionFilterKeepsIntroduction(t *testing.T) {
 
 	var allRuns []TestRun
 	// sha0-sha2: clean (0% failure rate)
-	for shaIdx := 0; shaIdx < 3; shaIdx++ {
+	for shaIdx := range 3 {
 		runID := int64(shaIdx)
 		for range 10 {
 			allRuns = append(allRuns, TestRun{Name: "TestFoo", Failed: false, RunID: runID})
