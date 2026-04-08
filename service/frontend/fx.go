@@ -271,6 +271,7 @@ func GrpcServerOptionsProvider(
 	unaryInterceptors = append(unaryInterceptors, retryableInterceptor.Intercept)
 
 	streamInterceptor := []grpc.StreamServerInterceptor{
+		authInterceptor.InterceptStream,
 		telemetryInterceptor.StreamIntercept,
 	}
 
