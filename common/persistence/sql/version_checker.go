@@ -1,6 +1,11 @@
 package sql
 
 import (
+	"errors"
+	"time"
+
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -55,11 +60,22 @@ func checkCompatibleVersion(
 	dbKind sqlplugin.DbKind,
 	logger log.Logger,
 ) error {
-	db, err := NewSQLAdminDB(dbKind, cfg, r, logger, metrics.NoopMetricsHandler)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = db.Close() }()
-
-	return db.VerifyVersion()
+	policy := backoff.NewExponentialRetryPolicy(1 * time.Second).
+		WithMaximumInterval(10 * time.Second).
+		WithExpirationInterval(backoff.NoInterval)
+	return backoff.ThrottleRetry(
+		func() error {
+			db, err := NewSQLAdminDB(dbKind, cfg, r, logger, metrics.NoopMetricsHandler)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = db.Close() }()
+			return db.VerifyVersion()
+		},
+		policy,
+		func(err error) bool {
+			var unavailableErr *serviceerror.Unavailable
+			return errors.As(err, &unavailableErr)
+		},
+	)
 }
