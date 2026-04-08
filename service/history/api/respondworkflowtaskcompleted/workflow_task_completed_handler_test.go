@@ -401,12 +401,13 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 		// Register a test handler that returns a sentinel error
 		sentinelErr := errors.New("sentinel: CHASM handler invoked")
-		err := tc.chasmWorkflowRegistry.RegisterCommandHandler(
-			enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
-			func(chasm.MutableContext, *chasmworkflow.Workflow, chasmworkflow.Validator, *commandpb.Command, chasmworkflow.CommandHandlerOptions) error {
-				return sentinelErr
+		err := tc.chasmWorkflowRegistry.Register(testWorkflowLibrary{
+			commandHandlers: map[enumspb.CommandType]chasmworkflow.CommandHandler{
+				enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION: func(chasm.MutableContext, *chasmworkflow.Workflow, chasmworkflow.Validator, *commandpb.Command, chasmworkflow.CommandHandlerOptions) error {
+					return sentinelErr
+				},
 			},
-		)
+		})
 		require.NoError(t, err)
 
 		command := &commandpb.Command{
@@ -434,4 +435,16 @@ func mustMarshalAny(t *testing.T, pb proto.Message) *anypb.Any {
 	var a anypb.Any
 	require.NoError(t, a.MarshalFrom(pb))
 	return &a
+}
+
+type testWorkflowLibrary struct {
+	commandHandlers map[enumspb.CommandType]chasmworkflow.CommandHandler
+}
+
+func (l testWorkflowLibrary) CommandHandlers() map[enumspb.CommandType]chasmworkflow.CommandHandler {
+	return l.commandHandlers
+}
+
+func (l testWorkflowLibrary) EventDefinitions() []chasmworkflow.EventDefinition {
+	return nil
 }

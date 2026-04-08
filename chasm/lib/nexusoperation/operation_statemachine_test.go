@@ -9,6 +9,8 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/testing/protorequire"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -16,6 +18,7 @@ import (
 var (
 	defaultTime                   = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	defaultScheduleToCloseTimeout = 10 * time.Minute
+	defaultScheduleToStartTimeout = 5 * time.Minute
 )
 
 func newTestOperation() *Operation {
@@ -38,21 +41,63 @@ func TestTransitionScheduled(t *testing.T) {
 	testCases := []struct {
 		name                   string
 		scheduleToCloseTimeout time.Duration
+		scheduleToStartTimeout time.Duration
 		expectedTasks          []chasm.MockTask
 	}{
 		{
-			name:                   "schedules invocation and timeout tasks",
+			name:                   "schedules invocation and schedule-to-close timeout tasks",
 			scheduleToCloseTimeout: defaultScheduleToCloseTimeout,
 			expectedTasks: []chasm.MockTask{
-				{Payload: &nexusoperationpb.InvocationTask{}},
-				{Payload: &nexusoperationpb.ScheduleToCloseTimeoutTask{}},
+				{
+					Attributes: chasm.TaskAttributes{Destination: "test-endpoint"},
+					Payload:    &nexusoperationpb.InvocationTask{Attempt: 1},
+				},
+				{
+					Attributes: chasm.TaskAttributes{ScheduledTime: defaultTime.Add(defaultScheduleToCloseTimeout)},
+					Payload:    &nexusoperationpb.ScheduleToCloseTimeoutTask{},
+				},
 			},
 		},
 		{
-			name:                   "schedules only invocation task when timeout not set",
-			scheduleToCloseTimeout: 0,
+			name:                   "schedules invocation and schedule-to-start timeout tasks",
+			scheduleToStartTimeout: defaultScheduleToStartTimeout,
 			expectedTasks: []chasm.MockTask{
-				{Payload: &nexusoperationpb.InvocationTask{}},
+				{
+					Attributes: chasm.TaskAttributes{Destination: "test-endpoint"},
+					Payload:    &nexusoperationpb.InvocationTask{Attempt: 1},
+				},
+				{
+					Attributes: chasm.TaskAttributes{ScheduledTime: defaultTime.Add(defaultScheduleToStartTimeout)},
+					Payload:    &nexusoperationpb.ScheduleToStartTimeoutTask{},
+				},
+			},
+		},
+		{
+			name:                   "schedules invocation and both timeout tasks",
+			scheduleToCloseTimeout: defaultScheduleToCloseTimeout,
+			scheduleToStartTimeout: defaultScheduleToStartTimeout,
+			expectedTasks: []chasm.MockTask{
+				{
+					Attributes: chasm.TaskAttributes{Destination: "test-endpoint"},
+					Payload:    &nexusoperationpb.InvocationTask{Attempt: 1},
+				},
+				{
+					Attributes: chasm.TaskAttributes{ScheduledTime: defaultTime.Add(defaultScheduleToStartTimeout)},
+					Payload:    &nexusoperationpb.ScheduleToStartTimeoutTask{},
+				},
+				{
+					Attributes: chasm.TaskAttributes{ScheduledTime: defaultTime.Add(defaultScheduleToCloseTimeout)},
+					Payload:    &nexusoperationpb.ScheduleToCloseTimeoutTask{},
+				},
+			},
+		},
+		{
+			name: "schedules only invocation task when no timeouts set",
+			expectedTasks: []chasm.MockTask{
+				{
+					Attributes: chasm.TaskAttributes{Destination: "test-endpoint"},
+					Payload:    &nexusoperationpb.InvocationTask{Attempt: 1},
+				},
 			},
 		},
 	}
@@ -67,34 +112,17 @@ func TestTransitionScheduled(t *testing.T) {
 
 			operation := newTestOperation()
 			operation.ScheduleToCloseTimeout = durationpb.New(tc.scheduleToCloseTimeout)
-			event := EventScheduled{}
+			operation.ScheduleToStartTimeout = durationpb.New(tc.scheduleToStartTimeout)
 
-			err := TransitionScheduled.Apply(operation, ctx, event)
+			err := TransitionScheduled.Apply(operation, ctx, EventScheduled{})
 			require.NoError(t, err)
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, operation.Status)
 
-			// Verify added tasks
 			require.Len(t, ctx.Tasks, len(tc.expectedTasks))
 			for i, expectedTask := range tc.expectedTasks {
 				actualTask := ctx.Tasks[i]
-
-				require.IsType(t, expectedTask.Payload, actualTask.Payload, "expected %T at index %d, got %T",
-					expectedTask.Payload, i, actualTask.Payload)
-
-				switch expectedTask.Payload.(type) {
-				case *nexusoperationpb.InvocationTask:
-					invTask, ok := actualTask.Payload.(*nexusoperationpb.InvocationTask)
-					require.True(t, ok, "expected InvocationTask at index %d", i)
-					require.Equal(t, int32(0), invTask.Attempt)
-					require.Empty(t, actualTask.Attributes.ScheduledTime)
-				case *nexusoperationpb.ScheduleToCloseTimeoutTask:
-					timeoutTask, ok := actualTask.Payload.(*nexusoperationpb.ScheduleToCloseTimeoutTask)
-					require.True(t, ok, "expected ScheduleToCloseTimeoutTask at index %d", i)
-					require.Equal(t, int32(0), timeoutTask.Attempt)
-					require.Equal(t, defaultTime.Add(tc.scheduleToCloseTimeout), actualTask.Attributes.ScheduledTime)
-				default:
-					t.Fatalf("unexpected task payload type at index %d: %T", i, actualTask.Payload)
-				}
+				require.Equal(t, expectedTask.Attributes, actualTask.Attributes)
+				protorequire.ProtoEqual(t, expectedTask.Payload.(proto.Message), actualTask.Payload.(proto.Message))
 			}
 		})
 	}
@@ -111,7 +139,7 @@ func TestTransitionAttemptFailed(t *testing.T) {
 	}{
 		{
 			name:                 "first retry",
-			startingAttemptCount: 0,
+			startingAttemptCount: 1,
 			expectedAttempt:      1,
 			minRetryInterval:     500 * time.Millisecond,  // With jitter, minimum is ~50% of base
 			maxRetryInterval:     1500 * time.Millisecond, // With jitter, maximum is ~150% of base
@@ -119,7 +147,7 @@ func TestTransitionAttemptFailed(t *testing.T) {
 		},
 		{
 			name:                 "second retry",
-			startingAttemptCount: 1,
+			startingAttemptCount: 2,
 			expectedAttempt:      2,
 			minRetryInterval:     1 * time.Second,
 			maxRetryInterval:     3 * time.Second,
@@ -127,7 +155,7 @@ func TestTransitionAttemptFailed(t *testing.T) {
 		},
 		{
 			name:                 "third retry",
-			startingAttemptCount: 2,
+			startingAttemptCount: 3,
 			expectedAttempt:      3,
 			minRetryInterval:     2 * time.Second,
 			maxRetryInterval:     6 * time.Second,
@@ -199,7 +227,7 @@ func TestTransitionRescheduled(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, operation.Status)
-	require.Equal(t, int32(2), operation.Attempt)
+	require.Equal(t, int32(3), operation.Attempt)
 
 	// Verify NextAttemptScheduleTime was cleared
 	require.Nil(t, operation.NextAttemptScheduleTime)
@@ -208,30 +236,52 @@ func TestTransitionRescheduled(t *testing.T) {
 	require.Len(t, ctx.Tasks, 1)
 	invTask, ok := ctx.Tasks[0].Payload.(*nexusoperationpb.InvocationTask)
 	require.True(t, ok, "expected InvocationTask")
-	require.Equal(t, int32(2), invTask.Attempt)
+	require.Equal(t, int32(3), invTask.Attempt)
 }
 
 func TestTransitionStarted(t *testing.T) {
+	defaultStartToCloseTimeout := 5 * time.Minute
+	customStartTime := defaultTime.Add(time.Minute)
+
 	testCases := []struct {
-		name            string
-		startStatus     nexusoperationpb.OperationStatus
-		startingAttempt int32
-		expectedAttempt int32
-		operationToken  string
+		name                string
+		startToCloseTimeout time.Duration
+		startTime           *time.Time
+		pendingCancellation bool
+		expectedTasks       []chasm.MockTask
 	}{
 		{
-			name:            "started from scheduled",
-			startStatus:     nexusoperationpb.OPERATION_STATUS_SCHEDULED,
-			startingAttempt: 0,
-			expectedAttempt: 1,
-			operationToken:  "test-token-1",
+			name:                "emits start-to-close timeout task",
+			startToCloseTimeout: defaultStartToCloseTimeout,
+			expectedTasks: []chasm.MockTask{
+				{
+					Attributes: chasm.TaskAttributes{ScheduledTime: defaultTime.Add(defaultStartToCloseTimeout)},
+					Payload:    &nexusoperationpb.StartToCloseTimeoutTask{},
+				},
+			},
 		},
 		{
-			name:            "started from backing off",
-			startStatus:     nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
-			startingAttempt: 3,
-			expectedAttempt: 3, // Attempt should not increment when coming from BACKING_OFF
-			operationToken:  "test-token-retry",
+			name:                "start-to-close timeout uses event StartTime",
+			startToCloseTimeout: defaultStartToCloseTimeout,
+			startTime:           &customStartTime,
+			expectedTasks: []chasm.MockTask{
+				{
+					Attributes: chasm.TaskAttributes{ScheduledTime: customStartTime.Add(defaultStartToCloseTimeout)},
+					Payload:    &nexusoperationpb.StartToCloseTimeoutTask{},
+				},
+			},
+		},
+		{
+			name:                "schedules pending cancellation",
+			pendingCancellation: true,
+			expectedTasks: []chasm.MockTask{
+				{
+					Payload: &nexusoperationpb.CancellationTask{},
+				},
+			},
+		},
+		{
+			name: "no tasks when timeout not set",
 		},
 	}
 
@@ -244,52 +294,51 @@ func TestTransitionStarted(t *testing.T) {
 			}
 
 			operation := newTestOperation()
-			operation.Status = tc.startStatus
-			operation.Attempt = tc.startingAttempt
-
-			// Set NextAttemptScheduleTime if starting from BACKING_OFF to verify it gets cleared
-			if tc.startStatus == nexusoperationpb.OPERATION_STATUS_BACKING_OFF {
-				operation.NextAttemptScheduleTime = timestamppb.New(defaultTime.Add(time.Minute))
+			operation.Status = nexusoperationpb.OPERATION_STATUS_SCHEDULED
+			operation.Attempt = 1
+			operation.StartToCloseTimeout = durationpb.New(tc.startToCloseTimeout)
+			if tc.pendingCancellation {
+				operation.Cancellation = chasm.NewComponentField[*Cancellation](nil, newCancellation(
+					&nexusoperationpb.CancellationState{
+						Status:        nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED,
+						RequestedTime: timestamppb.New(defaultTime),
+					},
+				))
 			}
 
-			event := EventStarted{
-				OperationToken: tc.operationToken,
-			}
-
-			err := TransitionStarted.Apply(operation, ctx, event)
+			err := TransitionStarted.Apply(operation, ctx, EventStarted{
+				OperationToken: "test-token",
+				StartTime:      tc.startTime,
+			})
 			require.NoError(t, err)
-
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_STARTED, operation.Status)
-			require.Equal(t, tc.expectedAttempt, operation.Attempt)
-			require.Equal(t, tc.operationToken, operation.OperationToken)
-			require.Equal(t, defaultTime, operation.LastAttemptCompleteTime.AsTime())
-			require.Nil(t, operation.LastAttemptFailure)
 
-			// Verify NextAttemptScheduleTime is cleared when leaving BACKING_OFF
-			require.Nil(t, operation.NextAttemptScheduleTime)
-
-			// No tasks should be emitted
-			require.Empty(t, ctx.Tasks)
+			require.Len(t, ctx.Tasks, len(tc.expectedTasks))
+			for i, expectedTask := range tc.expectedTasks {
+				actualTask := ctx.Tasks[i]
+				require.Equal(t, expectedTask.Attributes, actualTask.Attributes)
+				protorequire.ProtoEqual(t, expectedTask.Payload.(proto.Message), actualTask.Payload.(proto.Message))
+			}
 		})
 	}
 }
 
 func TestTransitionSucceeded(t *testing.T) {
+	customCompleteTime := defaultTime.Add(time.Minute)
+
 	testCases := []struct {
-		name        string
-		startStatus nexusoperationpb.OperationStatus
+		name               string
+		completeTime       *time.Time
+		expectedClosedTime time.Time
 	}{
 		{
-			name:        "succeeded from scheduled",
-			startStatus: nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+			name:               "uses default time",
+			expectedClosedTime: defaultTime,
 		},
 		{
-			name:        "succeeded from started",
-			startStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
-		},
-		{
-			name:        "succeeded from backing off",
-			startStatus: nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+			name:               "uses event CompleteTime",
+			completeTime:       &customCompleteTime,
+			expectedClosedTime: customCompleteTime,
 		},
 	}
 
@@ -302,37 +351,49 @@ func TestTransitionSucceeded(t *testing.T) {
 			}
 
 			operation := newTestOperation()
-			operation.Status = tc.startStatus
+			operation.Status = nexusoperationpb.OPERATION_STATUS_STARTED
 
-			event := EventSucceeded{}
-
-			err := TransitionSucceeded.Apply(operation, ctx, event)
+			err := TransitionSucceeded.Apply(operation, ctx, EventSucceeded{
+				CompleteTime: tc.completeTime,
+			})
 			require.NoError(t, err)
 
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, operation.Status)
-
-			// Terminal state - no tasks should be emitted
+			require.Equal(t, tc.expectedClosedTime, operation.ClosedTime.AsTime())
 			require.Empty(t, ctx.Tasks)
 		})
 	}
 }
 
 func TestTransitionFailed(t *testing.T) {
+	customCompleteTime := defaultTime.Add(time.Minute)
+	failure := &failurepb.Failure{Message: "test failure"}
+
 	testCases := []struct {
-		name        string
-		startStatus nexusoperationpb.OperationStatus
+		name                          string
+		startStatus                   nexusoperationpb.OperationStatus
+		completeTime                  *time.Time
+		expectedClosedTime            time.Time
+		expectedLastAttemptFailure    *failurepb.Failure
+		expectLastAttemptCompleteTime bool
 	}{
 		{
-			name:        "failed from scheduled",
-			startStatus: nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+			name:                          "from scheduled records last attempt failure",
+			startStatus:                   nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+			expectedClosedTime:            defaultTime,
+			expectedLastAttemptFailure:    failure,
+			expectLastAttemptCompleteTime: true,
 		},
 		{
-			name:        "failed from started",
-			startStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
+			name:               "from started does not record last attempt failure",
+			startStatus:        nexusoperationpb.OPERATION_STATUS_STARTED,
+			expectedClosedTime: defaultTime,
 		},
 		{
-			name:        "failed from backing off",
-			startStatus: nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+			name:               "uses event CompleteTime",
+			startStatus:        nexusoperationpb.OPERATION_STATUS_STARTED,
+			completeTime:       &customCompleteTime,
+			expectedClosedTime: customCompleteTime,
 		},
 	}
 
@@ -347,35 +408,54 @@ func TestTransitionFailed(t *testing.T) {
 			operation := newTestOperation()
 			operation.Status = tc.startStatus
 
-			event := EventFailed{}
-
-			err := TransitionFailed.Apply(operation, ctx, event)
+			err := TransitionFailed.Apply(operation, ctx, EventFailed{
+				Failure:      failure,
+				CompleteTime: tc.completeTime,
+			})
 			require.NoError(t, err)
 
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_FAILED, operation.Status)
-
-			// Terminal state - no tasks should be emitted
+			require.Equal(t, tc.expectedClosedTime, operation.ClosedTime.AsTime())
+			require.Nil(t, operation.NextAttemptScheduleTime)
 			require.Empty(t, ctx.Tasks)
+
+			if tc.expectLastAttemptCompleteTime {
+				require.Equal(t, defaultTime, operation.LastAttemptCompleteTime.AsTime())
+			}
+			protorequire.ProtoEqual(t, tc.expectedLastAttemptFailure, operation.LastAttemptFailure)
 		})
 	}
 }
 
 func TestTransitionCanceled(t *testing.T) {
+	customCompleteTime := defaultTime.Add(time.Minute)
+	failure := &failurepb.Failure{Message: "canceled"}
+
 	testCases := []struct {
-		name        string
-		startStatus nexusoperationpb.OperationStatus
+		name                          string
+		startStatus                   nexusoperationpb.OperationStatus
+		completeTime                  *time.Time
+		expectedClosedTime            time.Time
+		expectedLastAttemptFailure    *failurepb.Failure
+		expectLastAttemptCompleteTime bool
 	}{
 		{
-			name:        "canceled from scheduled",
-			startStatus: nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+			name:                          "from scheduled records last attempt failure",
+			startStatus:                   nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+			expectedClosedTime:            defaultTime,
+			expectedLastAttemptFailure:    failure,
+			expectLastAttemptCompleteTime: true,
 		},
 		{
-			name:        "canceled from started",
-			startStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
+			name:               "from started does not record last attempt failure",
+			startStatus:        nexusoperationpb.OPERATION_STATUS_STARTED,
+			expectedClosedTime: defaultTime,
 		},
 		{
-			name:        "canceled from backing off",
-			startStatus: nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+			name:               "uses event CompleteTime",
+			startStatus:        nexusoperationpb.OPERATION_STATUS_STARTED,
+			completeTime:       &customCompleteTime,
+			expectedClosedTime: customCompleteTime,
 		},
 	}
 
@@ -390,58 +470,39 @@ func TestTransitionCanceled(t *testing.T) {
 			operation := newTestOperation()
 			operation.Status = tc.startStatus
 
-			event := EventCanceled{}
-
-			err := TransitionCanceled.Apply(operation, ctx, event)
+			err := TransitionCanceled.Apply(operation, ctx, EventCanceled{
+				Failure:      failure,
+				CompleteTime: tc.completeTime,
+			})
 			require.NoError(t, err)
 
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_CANCELED, operation.Status)
-
-			// Terminal state - no tasks should be emitted
+			require.Equal(t, tc.expectedClosedTime, operation.ClosedTime.AsTime())
+			require.Nil(t, operation.NextAttemptScheduleTime)
 			require.Empty(t, ctx.Tasks)
+
+			if tc.expectLastAttemptCompleteTime {
+				require.Equal(t, defaultTime, operation.LastAttemptCompleteTime.AsTime())
+			}
+			protorequire.ProtoEqual(t, tc.expectedLastAttemptFailure, operation.LastAttemptFailure)
 		})
 	}
 }
 
 func TestTransitionTimedOut(t *testing.T) {
-	testCases := []struct {
-		name        string
-		startStatus nexusoperationpb.OperationStatus
-	}{
-		{
-			name:        "timed out from scheduled",
-			startStatus: nexusoperationpb.OPERATION_STATUS_SCHEDULED,
-		},
-		{
-			name:        "timed out from started",
-			startStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
-		},
-		{
-			name:        "timed out from backing off",
-			startStatus: nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return defaultTime },
 		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := &chasm.MockMutableContext{
-				MockContext: chasm.MockContext{
-					HandleNow: func(chasm.Component) time.Time { return defaultTime },
-				},
-			}
+	operation := newTestOperation()
+	operation.Status = nexusoperationpb.OPERATION_STATUS_STARTED
 
-			operation := newTestOperation()
-			operation.Status = tc.startStatus
+	err := TransitionTimedOut.Apply(operation, ctx, EventTimedOut{})
+	require.NoError(t, err)
 
-			event := EventTimedOut{}
-
-			err := TransitionTimedOut.Apply(operation, ctx, event)
-			require.NoError(t, err)
-
-			require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, operation.Status)
-
-			// Terminal state - no tasks should be emitted
-			require.Empty(t, ctx.Tasks)
-		})
-	}
+	require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, operation.Status)
+	require.Equal(t, defaultTime, operation.ClosedTime.AsTime())
+	require.Empty(t, ctx.Tasks)
 }

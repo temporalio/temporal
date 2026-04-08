@@ -8,8 +8,8 @@ import (
 var Module = fx.Module(
 	"chasm.lib.workflow",
 	fx.Provide(NewRegistry),
-	fx.Provide(NewLibrary),
-	fx.Invoke(func(registry *chasm.Registry, library *Library) error {
+	fx.Provide(newLibrary),
+	fx.Invoke(func(registry *chasm.Registry, library *library) error {
 		return registry.Register(library)
 	}),
 )

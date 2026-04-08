@@ -22,60 +22,15 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type InvocationTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Attempt       int32                  `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *InvocationTask) Reset() {
-	*x = InvocationTask{}
-	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *InvocationTask) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*InvocationTask) ProtoMessage() {}
-
-func (x *InvocationTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use InvocationTask.ProtoReflect.Descriptor instead.
-func (*InvocationTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *InvocationTask) GetAttempt() int32 {
-	if x != nil {
-		return x.Attempt
-	}
-	return 0
-}
-
 type ScheduleToStartTimeoutTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Attempt       int32                  `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ScheduleToStartTimeoutTask) Reset() {
 	*x = ScheduleToStartTimeoutTask{}
-	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_msgTypes[1]
+	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -87,7 +42,7 @@ func (x *ScheduleToStartTimeoutTask) String() string {
 func (*ScheduleToStartTimeoutTask) ProtoMessage() {}
 
 func (x *ScheduleToStartTimeoutTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_msgTypes[1]
+	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -100,26 +55,18 @@ func (x *ScheduleToStartTimeoutTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScheduleToStartTimeoutTask.ProtoReflect.Descriptor instead.
 func (*ScheduleToStartTimeoutTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *ScheduleToStartTimeoutTask) GetAttempt() int32 {
-	if x != nil {
-		return x.Attempt
-	}
-	return 0
+	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescGZIP(), []int{0}
 }
 
 type StartToCloseTimeoutTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Attempt       int32                  `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartToCloseTimeoutTask) Reset() {
 	*x = StartToCloseTimeoutTask{}
-	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_msgTypes[2]
+	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -131,7 +78,7 @@ func (x *StartToCloseTimeoutTask) String() string {
 func (*StartToCloseTimeoutTask) ProtoMessage() {}
 
 func (x *StartToCloseTimeoutTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_msgTypes[2]
+	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -144,26 +91,18 @@ func (x *StartToCloseTimeoutTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartToCloseTimeoutTask.ProtoReflect.Descriptor instead.
 func (*StartToCloseTimeoutTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *StartToCloseTimeoutTask) GetAttempt() int32 {
-	if x != nil {
-		return x.Attempt
-	}
-	return 0
+	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescGZIP(), []int{1}
 }
 
 type ScheduleToCloseTimeoutTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Attempt       int32                  `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ScheduleToCloseTimeoutTask) Reset() {
 	*x = ScheduleToCloseTimeoutTask{}
-	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_msgTypes[3]
+	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -175,7 +114,7 @@ func (x *ScheduleToCloseTimeoutTask) String() string {
 func (*ScheduleToCloseTimeoutTask) ProtoMessage() {}
 
 func (x *ScheduleToCloseTimeoutTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_msgTypes[3]
+	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -188,10 +127,47 @@ func (x *ScheduleToCloseTimeoutTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScheduleToCloseTimeoutTask.ProtoReflect.Descriptor instead.
 func (*ScheduleToCloseTimeoutTask) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescGZIP(), []int{2}
+}
+
+type InvocationTask struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Attempt       int32                  `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InvocationTask) Reset() {
+	*x = InvocationTask{}
+	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InvocationTask) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InvocationTask) ProtoMessage() {}
+
+func (x *InvocationTask) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InvocationTask.ProtoReflect.Descriptor instead.
+func (*InvocationTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *ScheduleToCloseTimeoutTask) GetAttempt() int32 {
+func (x *InvocationTask) GetAttempt() int32 {
 	if x != nil {
 		return x.Attempt
 	}
@@ -334,14 +310,11 @@ var File_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto protorefl
 
 const file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDesc = "" +
 	"\n" +
-	"=temporal/server/chasm/lib/nexusoperation/proto/v1/tasks.proto\x121temporal.server.chasm.lib.nexusoperation.proto.v1\"*\n" +
+	"=temporal/server/chasm/lib/nexusoperation/proto/v1/tasks.proto\x121temporal.server.chasm.lib.nexusoperation.proto.v1\"\x1c\n" +
+	"\x1aScheduleToStartTimeoutTask\"\x19\n" +
+	"\x17StartToCloseTimeoutTask\"\x1c\n" +
+	"\x1aScheduleToCloseTimeoutTask\"*\n" +
 	"\x0eInvocationTask\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattempt\"6\n" +
-	"\x1aScheduleToStartTimeoutTask\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattempt\"3\n" +
-	"\x17StartToCloseTimeoutTask\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattempt\"6\n" +
-	"\x1aScheduleToCloseTimeoutTask\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\"1\n" +
 	"\x15InvocationBackoffTask\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\",\n" +
@@ -364,10 +337,10 @@ func file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescG
 
 var file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_goTypes = []any{
-	(*InvocationTask)(nil),             // 0: temporal.server.chasm.lib.nexusoperation.proto.v1.InvocationTask
-	(*ScheduleToStartTimeoutTask)(nil), // 1: temporal.server.chasm.lib.nexusoperation.proto.v1.ScheduleToStartTimeoutTask
-	(*StartToCloseTimeoutTask)(nil),    // 2: temporal.server.chasm.lib.nexusoperation.proto.v1.StartToCloseTimeoutTask
-	(*ScheduleToCloseTimeoutTask)(nil), // 3: temporal.server.chasm.lib.nexusoperation.proto.v1.ScheduleToCloseTimeoutTask
+	(*ScheduleToStartTimeoutTask)(nil), // 0: temporal.server.chasm.lib.nexusoperation.proto.v1.ScheduleToStartTimeoutTask
+	(*StartToCloseTimeoutTask)(nil),    // 1: temporal.server.chasm.lib.nexusoperation.proto.v1.StartToCloseTimeoutTask
+	(*ScheduleToCloseTimeoutTask)(nil), // 2: temporal.server.chasm.lib.nexusoperation.proto.v1.ScheduleToCloseTimeoutTask
+	(*InvocationTask)(nil),             // 3: temporal.server.chasm.lib.nexusoperation.proto.v1.InvocationTask
 	(*InvocationBackoffTask)(nil),      // 4: temporal.server.chasm.lib.nexusoperation.proto.v1.InvocationBackoffTask
 	(*CancellationTask)(nil),           // 5: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationTask
 	(*CancellationBackoffTask)(nil),    // 6: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationBackoffTask

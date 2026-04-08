@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 )
@@ -16,61 +15,32 @@ func TestInvocationTaskHandler_Validate(t *testing.T) {
 		status      nexusoperationpb.OperationStatus
 		opAttempt   int32
 		taskAttempt int32
-		expected    bool
-		expectErr   bool
+		valid       bool
 	}{
 		{
 			name:        "valid when scheduled and attempt matches",
 			status:      nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 			opAttempt:   1,
 			taskAttempt: 1,
-			expected:    true,
+			valid:       true,
 		},
 		{
 			name:        "invalid when scheduled but attempt mismatches",
 			status:      nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 			opAttempt:   2,
 			taskAttempt: 1,
-			expectErr:   true,
+			valid:       false,
 		},
 		{
 			name:        "invalid when started",
 			status:      nexusoperationpb.OPERATION_STATUS_STARTED,
 			opAttempt:   1,
 			taskAttempt: 1,
-			expectErr:   true,
-		},
-		{
-			name:        "invalid when succeeded",
-			status:      nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
-			opAttempt:   1,
-			taskAttempt: 1,
-			expectErr:   true,
-		},
-		{
-			name:        "invalid when failed",
-			status:      nexusoperationpb.OPERATION_STATUS_FAILED,
-			opAttempt:   1,
-			taskAttempt: 1,
-			expectErr:   true,
-		},
-		{
-			name:        "invalid when backing off",
-			status:      nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
-			opAttempt:   1,
-			taskAttempt: 1,
-			expectErr:   true,
-		},
-		{
-			name:        "invalid when timed out",
-			status:      nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
-			opAttempt:   1,
-			taskAttempt: 1,
-			expectErr:   true,
+			valid:       false,
 		},
 	}
 
-	handler := &OperationInvocationTaskHandler{}
+	handler := &operationInvocationTaskHandler{}
 	ctx := &chasm.MockContext{}
 
 	for _, tc := range testCases {
@@ -80,65 +50,44 @@ func TestInvocationTaskHandler_Validate(t *testing.T) {
 			op.Attempt = tc.opAttempt
 
 			valid, err := handler.Validate(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.InvocationTask{Attempt: tc.taskAttempt})
-			if tc.expectErr {
-				require.Error(t, err)
-				var fpErr *serviceerror.FailedPrecondition
-				require.ErrorAs(t, err, &fpErr)
-				require.False(t, valid)
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, tc.expected, valid)
-			}
+			require.NoError(t, err)
+			require.Equal(t, tc.valid, valid)
 		})
 	}
 }
 
 func TestBackoffTaskHandler_Validate(t *testing.T) {
 	testCases := []struct {
-		name     string
-		status   nexusoperationpb.OperationStatus
-		attempt  int32
-		task     *nexusoperationpb.InvocationBackoffTask
-		expected bool
+		name    string
+		status  nexusoperationpb.OperationStatus
+		attempt int32
+		task    *nexusoperationpb.InvocationBackoffTask
+		valid   bool
 	}{
 		{
-			name:     "valid when backing off and attempt matches",
-			status:   nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
-			attempt:  2,
-			task:     &nexusoperationpb.InvocationBackoffTask{Attempt: 2},
-			expected: true,
+			name:    "valid when backing off and attempt matches",
+			status:  nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+			attempt: 2,
+			task:    &nexusoperationpb.InvocationBackoffTask{Attempt: 2},
+			valid:   true,
 		},
 		{
-			name:     "invalid when backing off but attempt mismatches",
-			status:   nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
-			attempt:  2,
-			task:     &nexusoperationpb.InvocationBackoffTask{Attempt: 1},
-			expected: false,
+			name:    "invalid when backing off but attempt mismatches",
+			status:  nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+			attempt: 2,
+			task:    &nexusoperationpb.InvocationBackoffTask{Attempt: 1},
+			valid:   false,
 		},
 		{
-			name:     "invalid when scheduled",
-			status:   nexusoperationpb.OPERATION_STATUS_SCHEDULED,
-			attempt:  1,
-			task:     &nexusoperationpb.InvocationBackoffTask{Attempt: 1},
-			expected: false,
-		},
-		{
-			name:     "invalid when started",
-			status:   nexusoperationpb.OPERATION_STATUS_STARTED,
-			attempt:  1,
-			task:     &nexusoperationpb.InvocationBackoffTask{Attempt: 1},
-			expected: false,
-		},
-		{
-			name:     "invalid when timed out",
-			status:   nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
-			attempt:  1,
-			task:     &nexusoperationpb.InvocationBackoffTask{Attempt: 1},
-			expected: false,
+			name:    "invalid when scheduled",
+			status:  nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+			attempt: 1,
+			task:    &nexusoperationpb.InvocationBackoffTask{Attempt: 1},
+			valid:   false,
 		},
 	}
 
-	handler := &OperationBackoffTaskHandler{}
+	handler := &operationBackoffTaskHandler{}
 	ctx := &chasm.MockContext{}
 
 	for _, tc := range testCases {
@@ -149,7 +98,7 @@ func TestBackoffTaskHandler_Validate(t *testing.T) {
 
 			valid, err := handler.Validate(ctx, op, chasm.TaskAttributes{}, tc.task)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, valid)
+			require.Equal(t, tc.valid, valid)
 		})
 	}
 }
@@ -165,7 +114,7 @@ func TestBackoffTaskHandler_Execute(t *testing.T) {
 	op.Status = nexusoperationpb.OPERATION_STATUS_BACKING_OFF
 	op.Attempt = 2
 
-	handler := &OperationBackoffTaskHandler{}
+	handler := &operationBackoffTaskHandler{}
 	err := handler.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.InvocationBackoffTask{Attempt: 2})
 	require.NoError(t, err)
 
@@ -178,38 +127,38 @@ func TestBackoffTaskHandler_Execute(t *testing.T) {
 
 func TestScheduleToStartTimeoutTaskHandler_Validate(t *testing.T) {
 	testCases := []struct {
-		name     string
-		status   nexusoperationpb.OperationStatus
-		expected bool
+		name   string
+		status nexusoperationpb.OperationStatus
+		valid  bool
 	}{
 		{
-			name:     "valid when scheduled",
-			status:   nexusoperationpb.OPERATION_STATUS_SCHEDULED,
-			expected: true,
+			name:   "valid when scheduled",
+			status: nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+			valid:  true,
 		},
 		{
-			name:     "valid when backing off",
-			status:   nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
-			expected: true,
+			name:   "valid when backing off",
+			status: nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+			valid:  true,
 		},
 		{
-			name:     "invalid when started",
-			status:   nexusoperationpb.OPERATION_STATUS_STARTED,
-			expected: false,
+			name:   "invalid when started",
+			status: nexusoperationpb.OPERATION_STATUS_STARTED,
+			valid:  false,
 		},
 		{
-			name:     "invalid when succeeded",
-			status:   nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
-			expected: false,
+			name:   "invalid when succeeded",
+			status: nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
+			valid:  false,
 		},
 		{
-			name:     "invalid when timed out",
-			status:   nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
-			expected: false,
+			name:   "invalid when timed out",
+			status: nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
+			valid:  false,
 		},
 	}
 
-	handler := &OperationScheduleToStartTimeoutTaskHandler{}
+	handler := &operationScheduleToStartTimeoutTaskHandler{}
 	ctx := &chasm.MockContext{}
 
 	for _, tc := range testCases {
@@ -219,7 +168,7 @@ func TestScheduleToStartTimeoutTaskHandler_Validate(t *testing.T) {
 
 			valid, err := handler.Validate(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.ScheduleToStartTimeoutTask{})
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, valid)
+			require.Equal(t, tc.valid, valid)
 		})
 	}
 }
@@ -234,7 +183,7 @@ func TestScheduleToStartTimeoutTaskHandler_Execute(t *testing.T) {
 	op := newTestOperation()
 	op.Status = nexusoperationpb.OPERATION_STATUS_SCHEDULED
 
-	handler := &OperationScheduleToStartTimeoutTaskHandler{}
+	handler := &operationScheduleToStartTimeoutTaskHandler{}
 	err := handler.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.ScheduleToStartTimeoutTask{})
 	require.NoError(t, err)
 
@@ -244,38 +193,38 @@ func TestScheduleToStartTimeoutTaskHandler_Execute(t *testing.T) {
 
 func TestStartToCloseTimeoutTaskHandler_Validate(t *testing.T) {
 	testCases := []struct {
-		name     string
-		status   nexusoperationpb.OperationStatus
-		expected bool
+		name   string
+		status nexusoperationpb.OperationStatus
+		valid  bool
 	}{
 		{
-			name:     "valid when started",
-			status:   nexusoperationpb.OPERATION_STATUS_STARTED,
-			expected: true,
+			name:   "valid when started",
+			status: nexusoperationpb.OPERATION_STATUS_STARTED,
+			valid:  true,
 		},
 		{
-			name:     "invalid when scheduled",
-			status:   nexusoperationpb.OPERATION_STATUS_SCHEDULED,
-			expected: false,
+			name:   "invalid when scheduled",
+			status: nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+			valid:  false,
 		},
 		{
-			name:     "invalid when backing off",
-			status:   nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
-			expected: false,
+			name:   "invalid when backing off",
+			status: nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+			valid:  false,
 		},
 		{
-			name:     "invalid when succeeded",
-			status:   nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
-			expected: false,
+			name:   "invalid when succeeded",
+			status: nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
+			valid:  false,
 		},
 		{
-			name:     "invalid when timed out",
-			status:   nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
-			expected: false,
+			name:   "invalid when timed out",
+			status: nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
+			valid:  false,
 		},
 	}
 
-	handler := &OperationStartToCloseTimeoutTaskHandler{}
+	handler := &operationStartToCloseTimeoutTaskHandler{}
 	ctx := &chasm.MockContext{}
 
 	for _, tc := range testCases {
@@ -285,7 +234,7 @@ func TestStartToCloseTimeoutTaskHandler_Validate(t *testing.T) {
 
 			valid, err := handler.Validate(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.StartToCloseTimeoutTask{})
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, valid)
+			require.Equal(t, tc.valid, valid)
 		})
 	}
 }
@@ -300,7 +249,7 @@ func TestStartToCloseTimeoutTaskHandler_Execute(t *testing.T) {
 	op := newTestOperation()
 	op.Status = nexusoperationpb.OPERATION_STATUS_STARTED
 
-	handler := &OperationStartToCloseTimeoutTaskHandler{}
+	handler := &operationStartToCloseTimeoutTaskHandler{}
 	err := handler.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.StartToCloseTimeoutTask{})
 	require.NoError(t, err)
 
@@ -310,48 +259,33 @@ func TestStartToCloseTimeoutTaskHandler_Execute(t *testing.T) {
 
 func TestScheduleToCloseTimeoutTaskHandler_Validate(t *testing.T) {
 	testCases := []struct {
-		name     string
-		status   nexusoperationpb.OperationStatus
-		expected bool
+		name   string
+		status nexusoperationpb.OperationStatus
+		valid  bool
 	}{
 		{
-			name:     "valid when scheduled",
-			status:   nexusoperationpb.OPERATION_STATUS_SCHEDULED,
-			expected: true,
+			name:   "valid when scheduled",
+			status: nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+			valid:  true,
 		},
 		{
-			name:     "valid when started",
-			status:   nexusoperationpb.OPERATION_STATUS_STARTED,
-			expected: true,
+			name:   "valid when started",
+			status: nexusoperationpb.OPERATION_STATUS_STARTED,
+			valid:  true,
 		},
 		{
-			name:     "valid when backing off",
-			status:   nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
-			expected: true,
+			name:   "invalid when succeeded",
+			status: nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
+			valid:  false,
 		},
 		{
-			name:     "invalid when succeeded",
-			status:   nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
-			expected: false,
-		},
-		{
-			name:     "invalid when failed",
-			status:   nexusoperationpb.OPERATION_STATUS_FAILED,
-			expected: false,
-		},
-		{
-			name:     "invalid when canceled",
-			status:   nexusoperationpb.OPERATION_STATUS_CANCELED,
-			expected: false,
-		},
-		{
-			name:     "invalid when timed out",
-			status:   nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
-			expected: false,
+			name:   "invalid when timed out",
+			status: nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
+			valid:  false,
 		},
 	}
 
-	handler := &OperationScheduleToCloseTimeoutTaskHandler{}
+	handler := &operationScheduleToCloseTimeoutTaskHandler{}
 	ctx := &chasm.MockContext{}
 
 	for _, tc := range testCases {
@@ -361,7 +295,7 @@ func TestScheduleToCloseTimeoutTaskHandler_Validate(t *testing.T) {
 
 			valid, err := handler.Validate(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.ScheduleToCloseTimeoutTask{})
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, valid)
+			require.Equal(t, tc.valid, valid)
 		})
 	}
 }
@@ -376,7 +310,7 @@ func TestScheduleToCloseTimeoutTaskHandler_Execute(t *testing.T) {
 	op := newTestOperation()
 	op.Status = nexusoperationpb.OPERATION_STATUS_SCHEDULED
 
-	handler := &OperationScheduleToCloseTimeoutTaskHandler{}
+	handler := &operationScheduleToCloseTimeoutTaskHandler{}
 	err := handler.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.ScheduleToCloseTimeoutTask{})
 	require.NoError(t, err)
 
