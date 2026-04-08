@@ -3463,8 +3463,7 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 	// Phase 1: Write sentinel to V1 key space (dummy workflow) to prevent a
 	// concurrent V1 CreateSchedule from succeeding for the same schedule ID.
 	if err := wh.writeSchedulerWorkflowSentinel(ctx, namespaceID.String(), request); err != nil {
-		var alreadyStartedErr *serviceerror.WorkflowExecutionAlreadyStarted
-		if !errors.As(err, &alreadyStartedErr) {
+		if _, ok := errors.AsType[*serviceerror.WorkflowExecutionAlreadyStarted](err); !ok {
 			return nil, err
 		}
 		// V1 key is occupied. Check if it's a sentinel (proceed) or real scheduler (fail).
@@ -3473,7 +3472,7 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 			return nil, checkErr
 		}
 		if isReal {
-			return nil, serviceerror.NewWorkflowExecutionAlreadyStartedf("", "", "schedule %q is already registered", request.ScheduleId)
+			return nil, err
 		}
 	}
 
@@ -3591,8 +3590,7 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 	)
 
 	if err != nil {
-		var alreadyStartedErr *serviceerror.WorkflowExecutionAlreadyStarted
-		if errors.As(err, &alreadyStartedErr) {
+		if _, ok := errors.AsType[*serviceerror.WorkflowExecutionAlreadyStarted](err); ok {
 			// V1 key is occupied. Check if it's a sentinel (race) or real scheduler.
 			isReal, checkErr := wh.isRealSchedulerInV1KeySpace(ctx, namespaceID.String(), request.Namespace, request.ScheduleId)
 			if checkErr != nil {
@@ -3604,7 +3602,7 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 					tag.ScheduleID(request.ScheduleId))
 				return nil, serviceerror.NewWorkflowExecutionAlreadyStartedf("", "", "schedule %q is already registered", request.ScheduleId)
 			}
-			return nil, serviceerror.NewWorkflowExecutionAlreadyStartedf("", "", "schedule %q is already registered", request.ScheduleId)
+			return nil, err
 		}
 		return nil, err
 	}
