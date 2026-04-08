@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	activitypb "go.temporal.io/api/activity/v1"
@@ -5769,17 +5770,17 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 				dr.GetInfo().GetAttempt() == 2
 		}, 10*time.Second, 200*time.Millisecond)
 
-		// Sleep to confirm the activity is not dispatched while paused.
-		time.Sleep(2 * time.Second)
-
-		descResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  s.Namespace().String(),
-			ActivityId: activityID,
-		})
-		require.NoError(t, err)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, descResp.GetInfo().GetRunState())
-		require.EqualValues(t, 2, descResp.GetInfo().GetAttempt())
-		require.NotNil(t, descResp.GetInfo().GetLastFailure())
+		// Verify activity is PAUSED at attempt=2 with a recorded failure.
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			dr, dErr := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+			})
+			assert.NoError(c, dErr)
+			assert.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, dr.GetInfo().GetRunState())
+			assert.EqualValues(c, 2, dr.GetInfo().GetAttempt())
+			assert.NotNil(c, dr.GetInfo().GetLastFailure())
+		}, 10*time.Second, 200*time.Millisecond)
 
 		// Unpause – activity should be dispatched.
 		_, err = s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
@@ -5966,16 +5967,16 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Sleep to verify the activity is not dispatched while paused.
-		time.Sleep(2 * time.Second)
-
-		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  s.Namespace().String(),
-			ActivityId: activityID,
-		})
-		require.NoError(t, err)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, descResp.GetInfo().GetRunState())
-		require.EqualValues(t, 2, descResp.GetInfo().GetAttempt())
+		// Verify activity is PAUSED at attempt=2 (not dispatched while paused).
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			dr, dErr := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+			})
+			assert.NoError(c, dErr)
+			assert.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, dr.GetInfo().GetRunState())
+			assert.EqualValues(c, 2, dr.GetInfo().GetAttempt())
+		}, 10*time.Second, 200*time.Millisecond)
 
 		// Unpause – activity should be dispatched.
 		_, err = s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
