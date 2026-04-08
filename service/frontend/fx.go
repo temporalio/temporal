@@ -184,6 +184,7 @@ func AuthorizationInterceptorProvider(
 		serviceConfig.ExposeAuthorizerErrors,
 		dynamicconfig.EnableCrossNamespaceCommands.Get(dc),
 		dynamicconfig.EnablePrincipalPropagation.Get(dc),
+		dynamicconfig.DisableStreamingAuthorizer.Get(dc),
 	)
 }
 

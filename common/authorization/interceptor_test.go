@@ -87,6 +87,7 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalPropagation
+		dynamicconfig.GetBoolPropertyFn(false),                    // disableStreamingAuthorizer
 	)
 	s.handler = func(ctx context.Context, req any) (any, error) { return true, nil }
 }
@@ -163,6 +164,7 @@ func (s *authorizerInterceptorSuite) TestAuthorizationFailedExposed() {
 		dynamicconfig.GetBoolPropertyFn(true),  // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalPropagation
+		dynamicconfig.GetBoolPropertyFn(false),                    // disableStreamingAuthorizer
 	)
 
 	authErr := serviceerror.NewInternal("intentional test failure")
@@ -197,6 +199,7 @@ func (s *authorizerInterceptorSuite) TestNoopClaimMapperWithoutTLS() {
 		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalPropagation
+		dynamicconfig.GetBoolPropertyFn(false),                    // disableStreamingAuthorizer
 	)
 	_, err := interceptor.Intercept(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
 	s.NoError(err)
@@ -215,6 +218,7 @@ func (s *authorizerInterceptorSuite) TestAlternateHeaders() {
 		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalPropagation
+		dynamicconfig.GetBoolPropertyFn(false),                    // disableStreamingAuthorizer
 	)
 
 	cases := []struct {
@@ -325,6 +329,7 @@ func (s *authorizerInterceptorSuite) newCrossNamespaceInterceptor(namespaces ...
 		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(true),  // enableCrossNamespaceCommands
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalPropagation
+		dynamicconfig.GetBoolPropertyFn(false),                    // disableStreamingAuthorizer
 	)
 }
 
@@ -545,6 +550,7 @@ func (s *authorizerInterceptorSuite) TestPrincipalPropagation_Enabled() {
 		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true), // enablePrincipalPropagation
+		dynamicconfig.GetBoolPropertyFn(false),                   // disableStreamingAuthorizer
 	)
 
 	inCtx := metadata.NewIncomingContext(ctx, metadata.MD{})
@@ -713,6 +719,9 @@ func (s *authorizerInterceptorSuite) TestInterceptStream_AuthDisabled() {
 		"",
 		"",
 		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFn(false),
 	)
 
 	handlerCalled := false
@@ -737,6 +746,9 @@ func (s *authorizerInterceptorSuite) TestInterceptStream_InvalidToken() {
 		nil,
 		"",
 		"",
+		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 		dynamicconfig.GetBoolPropertyFn(false),
 	)
 
