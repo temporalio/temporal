@@ -46,6 +46,7 @@ jobs:
           push: false
           tag-latest: ${{ inputs.tag-latest }}
           alpine-tag: ${{ inputs.alpine-tag }}
+          cli-version: ${{ inputs.cli-version }}
 
       - name: Build and push Docker images
         id: push-docker
@@ -55,6 +56,7 @@ jobs:
           push: true
           tag-latest: ${{ inputs.tag-latest }}
           alpine-tag: ${{ inputs.alpine-tag }}
+          cli-version: ${{ inputs.cli-version }}
           dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
 
