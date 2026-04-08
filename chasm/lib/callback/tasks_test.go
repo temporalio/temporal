@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/chasmtest"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -66,6 +67,26 @@ func (l *mockNexusCompletionGetterLibrary) Components() []*chasm.RegistrableComp
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*mockNexusCompletionGetterComponent]("nexusCompletionGetter"),
 	}
+}
+
+func readCallbackFromEngine(
+	t *testing.T,
+	testEngine *chasmtest.Engine[*mockNexusCompletionGetterComponent],
+) *Callback {
+	t.Helper()
+
+	var callback *Callback
+	_, err := chasm.ReadComponent[*mockNexusCompletionGetterComponent, chasm.ComponentRef, any, chasm.NoValue](
+		testEngine.EngineContext(),
+		testEngine.Ref(testEngine.Root()),
+		func(root *mockNexusCompletionGetterComponent, ctx chasm.Context, _ any) (chasm.NoValue, error) {
+			callback = root.Callback.Get(ctx)
+			return nil, nil
+		},
+		nil,
+	)
+	require.NoError(t, err)
+	return callback
 }
 
 // Test the full executeInvocationTask flow with direct handler calls
@@ -157,17 +178,13 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				metrics.DestinationTag("http://localhost"),
 				metrics.OutcomeTag(tc.expectedMetricOutcome))
 
-			// Setup logger and time source
+			// Setup logger
 			logger := log.NewTestLogger()
-			timeSource := clock.NewEventTimeSource()
-			timeSource.Update(time.Now())
 
 			// Create task handler with mock namespace registry
 			nsRegistry := namespace.NewMockRegistry(ctrl)
 			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
 
-			// Create mock engine
-			mockEngine := chasm.NewMockEngine(ctrl)
 			handler := &invocationTaskHandler{
 				config: &Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
@@ -191,13 +208,10 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			err = chasmRegistry.Register(&mockNexusCompletionGetterLibrary{})
 			require.NoError(t, err)
 
-			nodeBackend := &chasm.MockNodeBackend{}
-			root := chasm.NewEmptyTree(chasmRegistry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger, metricsHandler)
-
 			callback := &Callback{
 				CallbackState: &callbackspb.CallbackState{
 					RequestId:        "request-id",
-					RegistrationTime: timestamppb.New(timeSource.Now()),
+					RegistrationTime: timestamppb.New(time.Now()),
 					Callback: &callbackspb.Callback{
 						Variant: &callbackspb.Callback_Nexus_{
 							Nexus: &callbackspb.Callback_Nexus{
@@ -213,72 +227,31 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			// Create completion
 			completion := nexusrpc.CompleteOperationOptions{}
 
-			// Set up the CompletionSource field to return our mock completion
-			require.NoError(t, root.SetRootComponent(&mockNexusCompletionGetterComponent{
-				completion: completion,
-				// Create callback in SCHEDULED state
-				Callback: chasm.NewComponentField(
-					chasm.NewMutableContext(context.Background(), root),
-					callback,
-				),
-			}))
-			_, err = root.CloseTransaction()
-			require.NoError(t, err)
+			testEngine := chasmtest.NewEngine(
+				t,
+				chasmRegistry,
+				chasmtest.WithExecutionKey[*mockNexusCompletionGetterComponent](chasm.ExecutionKey{
+					NamespaceID: "namespace-id",
+					BusinessID:  "workflow-id",
+					RunID:       "run-id",
+				}),
+				chasmtest.WithRoot(func(ctx chasm.MutableContext) *mockNexusCompletionGetterComponent {
+					return &mockNexusCompletionGetterComponent{
+						completion: completion,
+						Callback:   chasm.NewComponentField(ctx, callback),
+					}
+				}),
+			)
 
-			// Setup engine expectations to directly call handler logic with MockMutableContext
-			mockEngine.EXPECT().ReadComponent(
-				gomock.Any(),
-				gomock.Any(),
-				gomock.Any(),
-			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, readFn func(chasm.Context, chasm.Component) error, opts ...chasm.TransitionOption) error {
-				mockCtx := &chasm.MockContext{
-					HandleNow: func(component chasm.Component) time.Time {
-						return timeSource.Now()
-					},
-					HandleRef: func(component chasm.Component) ([]byte, error) {
-						return []byte{}, nil
-					},
-				}
-				return readFn(mockCtx, callback)
-			})
-
-			mockEngine.EXPECT().UpdateComponent(
-				gomock.Any(),
-				gomock.Any(),
-				gomock.Any(),
-			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, opts ...chasm.TransitionOption) ([]any, error) {
-				mockCtx := &chasm.MockMutableContext{
-					MockContext: chasm.MockContext{
-						HandleNow: func(component chasm.Component) time.Time {
-							return timeSource.Now()
-						},
-						HandleRef: func(component chasm.Component) ([]byte, error) {
-							return []byte{}, nil
-						},
-					},
-				}
-				err := updateFn(mockCtx, callback)
-				return nil, err
-			})
-
-			// Create ComponentRef
-			ref := chasm.NewComponentRef[*Callback](chasm.ExecutionKey{
-				NamespaceID: "namespace-id",
-				BusinessID:  "workflow-id",
-				RunID:       "run-id",
-			})
-
-			// Execute with engine context
-			engineCtx := chasm.NewEngineContext(context.Background(), mockEngine)
 			err = handler.Execute(
-				engineCtx,
-				ref,
+				testEngine.EngineContext(),
+				testEngine.Ref(callback),
 				chasm.TaskAttributes{Destination: "http://localhost"},
 				&callbackspb.InvocationTask{Attempt: 0},
 			)
 
 			// Verify the outcome and tasks
-			tc.assertOutcome(t, callback, err)
+			tc.assertOutcome(t, readCallbackFromEngine(t, testEngine), err)
 		})
 	}
 }

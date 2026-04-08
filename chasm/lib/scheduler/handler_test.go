@@ -7,8 +7,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/log"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -108,19 +110,26 @@ func TestSentinelHandler_MigrateToWorkflow(t *testing.T) {
 }
 
 func TestHandler_CreateFromMigrationState_Sentinel(t *testing.T) {
-	env := newTestEnv(t, withMockEngine())
-	sentinel, ctx, _ := setupSentinelForTest(t)
+	ctrl := gomock.NewController(t)
+	logger := log.NewTestLogger()
+	registry := chasm.NewRegistry(logger)
+	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
+	require.NoError(t, registry.Register(newTestLibrary(logger, newRealSpecProcessor(ctrl, logger))))
 
-	h := scheduler.NewTestHandler(env.Logger)
+	h := scheduler.NewTestHandler(logger)
+	testEngine := chasmtest.NewEngine(
+		t,
+		registry,
+		chasmtest.WithExecutionKey[*scheduler.Scheduler](chasm.ExecutionKey{
+			NamespaceID: namespaceID,
+			BusinessID:  scheduleID,
+		}),
+		chasmtest.WithRoot(func(ctx chasm.MutableContext) *scheduler.Scheduler {
+			return scheduler.NewSentinel(ctx, namespace, namespaceID, scheduleID)
+		}),
+	)
 
-	// StartExecution returns already-started because the sentinel occupies the key.
-	env.MockEngine.EXPECT().StartExecution(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(chasm.StartExecutionResult{}, chasm.NewExecutionAlreadyStartedErr("already exists", "", ""))
-
-	// ReadComponent invokes the read function with the sentinel.
-	env.ExpectReadComponent(ctx, sentinel)
-
-	engineCtx := env.EngineContext()
+	engineCtx := testEngine.EngineContext()
 	_, err := h.TestCreateFromMigrationState(engineCtx, &schedulerpb.CreateFromMigrationStateRequest{
 		NamespaceId: namespaceID,
 		State: &schedulerpb.SchedulerMigrationState{
@@ -137,15 +146,26 @@ func TestHandler_CreateFromMigrationState_Sentinel(t *testing.T) {
 }
 
 func TestHandler_MigrateToWorkflow_Sentinel(t *testing.T) {
-	env := newTestEnv(t, withMockEngine())
-	sentinel, ctx, _ := setupSentinelForTest(t)
+	ctrl := gomock.NewController(t)
+	logger := log.NewTestLogger()
+	registry := chasm.NewRegistry(logger)
+	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
+	require.NoError(t, registry.Register(newTestLibrary(logger, newRealSpecProcessor(ctrl, logger))))
 
-	h := scheduler.NewTestHandler(env.Logger)
+	h := scheduler.NewTestHandler(logger)
+	testEngine := chasmtest.NewEngine(
+		t,
+		registry,
+		chasmtest.WithExecutionKey[*scheduler.Scheduler](chasm.ExecutionKey{
+			NamespaceID: namespaceID,
+			BusinessID:  scheduleID,
+		}),
+		chasmtest.WithRoot(func(ctx chasm.MutableContext) *scheduler.Scheduler {
+			return scheduler.NewSentinel(ctx, namespace, namespaceID, scheduleID)
+		}),
+	)
 
-	// UpdateComponent invokes the update function with the sentinel.
-	env.ExpectUpdateComponent(ctx, sentinel)
-
-	engineCtx := env.EngineContext()
+	engineCtx := testEngine.EngineContext()
 	_, err := h.TestMigrateToWorkflow(engineCtx, &schedulerpb.MigrateToWorkflowRequest{
 		NamespaceId: namespaceID,
 		ScheduleId:  scheduleID,
