@@ -1101,6 +1101,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 	t.Run("ByToken", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
+		identity := "client-that-requested-cancellation"
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
 		runID := startResp.RunId
@@ -1111,7 +1112,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
-			Identity:   "cancelling-worker",
+			Identity:   identity,
 			RequestId:  s.tv.RequestID(),
 			Reason:     "Test Cancellation",
 		})
@@ -1154,6 +1155,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		require.Greater(t, info.GetExecutionDuration().AsDuration(), time.Duration(0))
 		require.NotNil(t, info.GetCloseTime())
 		protorequire.ProtoEqual(t, details, activityResp.GetOutcome().GetFailure().GetCanceledFailureInfo().GetDetails())
+		require.Equal(t, identity, activityResp.GetOutcome().GetFailure().GetCanceledFailureInfo().GetIdentity())
 	})
 
 	testByIDCases := []struct {
@@ -1177,6 +1179,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 
 			activityID := testcore.RandomizeStr(tc.name)
 			taskQueue := testcore.RandomizeStr(tc.name)
+			identity := "client-that-requested-cancellation"
 
 			startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
 			runID := startResp.RunId
@@ -1187,7 +1190,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 				Namespace:  s.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      runID,
-				Identity:   "cancelling-worker",
+				Identity:   identity,
 				RequestId:  s.tv.RequestID(),
 				Reason:     "Test Cancellation",
 			})
@@ -1235,6 +1238,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 				"expected Canceled but is %s", info.GetStatus())
 			require.Equal(t, "Test Cancellation", info.GetCanceledReason())
 			protorequire.ProtoEqual(t, details, activityResp.GetOutcome().GetFailure().GetCanceledFailureInfo().GetDetails())
+			require.Equal(t, identity, activityResp.GetOutcome().GetFailure().GetCanceledFailureInfo().GetIdentity())
 		})
 	}
 
@@ -1277,7 +1281,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 				Namespace:  s.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      runID,
-				Identity:   "cancelling-worker",
+				Identity:   "client-that-requested-cancellation",
 				RequestId:  "cancel-request-id",
 				Reason:     "Test Cancellation",
 			})
@@ -1312,6 +1316,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 	t.Run("DifferentRequestIDFails", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
+		identity := "client-that-requested-cancellation"
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
 		runID := startResp.RunId
@@ -1322,7 +1327,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
-			Identity:   "cancelling-worker",
+			Identity:   identity,
 			RequestId:  "cancel-request-id",
 			Reason:     "Test Cancellation",
 		})
@@ -1332,7 +1337,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
-			Identity:   "cancelling-worker",
+			Identity:   identity,
 			RequestId:  "different-cancel-request-id",
 			Reason:     "Test Cancellation",
 		})
@@ -1405,7 +1410,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 				Namespace:  s.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      runID,
-				Identity:   "cancelling-worker",
+				Identity:   "client-that-requested-cancellation",
 				RequestId:  s.tv.RequestID(),
 				Reason:     "Test Cancellation",
 			})
@@ -1506,7 +1511,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
 				Namespace: s.Namespace().String(),
 				Reason:    "Test Cancellation",
-				Identity:  "cancelling-worker",
+				Identity:  "client-that-requested-cancellation",
 			})
 
 			var invalidArgErr *serviceerror.InvalidArgument
@@ -1519,7 +1524,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 				ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)), // dynamic config default is 1000
 				Namespace:  s.Namespace().String(),
 				Reason:     "Test Cancellation",
-				Identity:   "cancelling-worker",
+				Identity:   "client-that-requested-cancellation",
 			})
 
 			var invalidArgErr *serviceerror.InvalidArgument
@@ -1534,7 +1539,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 				RequestId:  string(make([]byte, defaultMaxIDLengthLimit+1)), // dynamic config default is 1000
 				Namespace:  s.Namespace().String(),
 				Reason:     "Test Cancellation",
-				Identity:   "cancelling-worker",
+				Identity:   "client-that-requested-cancellation",
 			})
 
 			var invalidArgErr *serviceerror.InvalidArgument
@@ -1563,7 +1568,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 				RunId:      "invalid-run-id",
 				Namespace:  s.Namespace().String(),
 				Reason:     "Test Cancellation",
-				Identity:   "cancelling-worker",
+				Identity:   "client-that-requested-cancellation",
 			})
 
 			var invalidArgErr *serviceerror.InvalidArgument
@@ -1583,7 +1588,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 				ActivityId: testcore.RandomizeStr(t.Name()),
 				Namespace:  s.Namespace().String(),
 				Reason:     string(make([]byte, blobSizeLimitError+1)),
-				Identity:   "cancelling-worker",
+				Identity:   "client-that-requested-cancellation",
 			})
 
 			var invalidArgErr *serviceerror.InvalidArgument
@@ -1603,7 +1608,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
-			Identity:   "cancelling-worker",
+			Identity:   "client-that-requested-cancellation",
 			RequestId:  s.tv.RequestID(),
 			Reason:     "Test Cancellation",
 		})
@@ -1876,12 +1881,13 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 
 		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
+		identity := "terminator"
 		_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
 			Reason:     "Test Termination",
-			Identity:   "terminator",
+			Identity:   identity,
 		})
 		require.NoError(t, err)
 
@@ -1909,8 +1915,12 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 		require.Nil(t, info.GetLastFailure())
 
 		expectedFailure := &failurepb.Failure{
-			Message:     "Test Termination",
-			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
+			Message: "Test Termination",
+			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+				TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{
+					Identity: identity,
+				},
+			},
 		}
 		protorequire.ProtoEqual(t, expectedFailure, activityResp.GetOutcome().GetFailure())
 	})
