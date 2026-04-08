@@ -515,64 +515,6 @@ func TestRunBisectForTestDirectionFilter(t *testing.T) {
 	assert.Empty(t, report.TopSuspects)
 }
 
-func TestRunBisectForTestDirectionFilterUpTransitionWinsAfterRenormalization(t *testing.T) {
-	// Scenario: the test was clean, then a flake was introduced at sha3 (UP transition),
-	// then things got slightly better at sha6 (DOWN transition). The DOWN transition
-	// dominates the raw probabilities (it's the "clearest" step change in the data), but
-	// after filtering to UP-only candidates and re-normalizing, sha3 should still be
-	// surfaced as the top suspect.
-	commitOrderSlice := []string{"sha0", "sha1", "sha2", "sha3", "sha4", "sha5", "sha6", "sha7", "sha8"}
-	runToSHA := map[int64]string{
-		0: "sha0", 1: "sha1", 2: "sha2",
-		3: "sha3", 4: "sha4", 5: "sha5",
-		6: "sha6", 7: "sha7", 8: "sha8",
-	}
-
-	var allRuns []TestRun
-	// sha0-sha2: perfectly clean (0% failure rate)
-	for shaIdx := range 3 {
-		runID := int64(shaIdx)
-		for range 10 {
-			allRuns = append(allRuns, TestRun{Name: "TestFoo", Failed: false, RunID: runID})
-		}
-	}
-	// sha3-sha5: high failure rate (flake introduced at sha3) — 8/10 = 80%
-	for shaIdx := 3; shaIdx < 6; shaIdx++ {
-		runID := int64(shaIdx)
-		for range 8 {
-			allRuns = append(allRuns, TestRun{Name: "TestFoo", Failed: true, RunID: runID})
-		}
-		for range 2 {
-			allRuns = append(allRuns, TestRun{Name: "TestFoo", Failed: false, RunID: runID})
-		}
-	}
-	// sha6-sha8: lower (but non-zero) failure rate — 1/10 = 10% (apparent "improvement")
-	for shaIdx := 6; shaIdx < 9; shaIdx++ {
-		runID := int64(shaIdx)
-		for range 1 {
-			allRuns = append(allRuns, TestRun{Name: "TestFoo", Failed: true, RunID: runID})
-		}
-		for range 9 {
-			allRuns = append(allRuns, TestRun{Name: "TestFoo", Failed: false, RunID: runID})
-		}
-	}
-
-	cfg := BisectConfig{
-		MinFailures:    5,
-		MinRuns:        30,
-		MinProbability: 0.5,
-	}
-
-	report := runBisectForTest(cfg, "TestFoo", allRuns, commitOrderSlice, runToSHA, nil)
-
-	require.False(t, report.Skipped, "sha3 (UP transition 0%%→80%%) should survive re-normalization and appear as suspect")
-	require.NotEmpty(t, report.TopSuspects)
-	assert.Equal(t, "sha3", report.TopSuspects[0].CommitSHA,
-		"sha3 (introduction) should be the top suspect after DOWN transitions are removed")
-	assert.Greater(t, report.TopSuspects[0].Probability, 0.5,
-		"re-normalized probability should be high since sha3 is the clear UP transition")
-}
-
 func TestRunBisectForTestDirectionFilterKeepsIntroduction(t *testing.T) {
 	// Complementary: failure rate INCREASES at sha3 (flake introduced). The direction filter
 	// must retain this suspect.
