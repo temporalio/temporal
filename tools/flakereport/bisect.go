@@ -297,20 +297,14 @@ func runBisectForTest(cfg BisectConfig, testName string, allRuns []TestRun, comm
 		}
 	}
 
-	// Filter suspects below the minimum probability threshold.
-	if cfg.MinProbability > 0 {
-		filtered := results[:0]
-		for _, r := range results {
-			if r.Probability >= cfg.MinProbability {
-				filtered = append(filtered, r)
-			}
-		}
-		results = filtered
-	}
-
-	// Filter suspects where the failure rate did not increase at the transition commit.
-	// A decreasing failure rate indicates the commit fixed a flake, not introduced one,
-	// and is not actionable as a culprit.
+	// Filter to only introduction candidates: keep suspects where the failure rate
+	// increased at the transition commit. A decreasing rate means the commit fixed a
+	// flake, not introduced one, and is not actionable as a culprit.
+	//
+	// This runs BEFORE the min-probability filter so that probability mass from
+	// "fix" suspects does not crowd out the true introduction candidate. After
+	// filtering, re-normalize so that the min-probability threshold retains its
+	// meaning as a localization confidence among introduction candidates.
 	{
 		filtered := results[:0]
 		for _, r := range results {
@@ -324,7 +318,34 @@ func runBisectForTest(cfg BisectConfig, testName string, allRuns []TestRun, comm
 			if nAfter > 0 {
 				rateAfter = float64(r.FailsAfter) / float64(nAfter)
 			}
-			if rateAfter > rateBefore {
+			// nBefore == 0 means this is the very first commit in the window: there is no
+			// before-period to establish that the test was previously clean. This is
+			// indistinguishable from a test that has been flaky throughout the window
+			// (introduction older than the window), so we exclude it.
+			if nBefore > 0 && rateAfter > rateBefore {
+				filtered = append(filtered, r)
+			}
+		}
+		results = filtered
+		// Re-normalize probabilities among introduction candidates so they sum to 1.
+		if len(results) > 0 {
+			totalProb := 0.0
+			for _, r := range results {
+				totalProb += r.Probability
+			}
+			if totalProb > 0 && totalProb < 1.0 {
+				for i := range results {
+					results[i].Probability /= totalProb
+				}
+			}
+		}
+	}
+
+	// Filter suspects below the minimum probability threshold.
+	if cfg.MinProbability > 0 {
+		filtered := results[:0]
+		for _, r := range results {
+			if r.Probability >= cfg.MinProbability {
 				filtered = append(filtered, r)
 			}
 		}
