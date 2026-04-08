@@ -149,6 +149,11 @@ for signal / start / signal with start API if namespace is not active`,
 		true,
 		`EnableCrossNamespaceCommands is the key to enable commands for external namespaces`,
 	)
+	DisableStreamingAuthorizer = NewGlobalBoolSetting(
+		"system.disableStreamingAuthorizer",
+		false,
+		`DisableStreamingAuthorizer is the key to disable the auth on streaming endpoint`,
+	)
 	ClusterMetadataRefreshInterval = NewGlobalDurationSetting(
 		"system.clusterMetadataRefreshInterval",
 		time.Minute,
