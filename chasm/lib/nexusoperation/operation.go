@@ -178,9 +178,8 @@ func (o *Operation) loadStartArgs(
 		if err != nil {
 			return startArgs{}, err
 		}
-	} else {
-		// TODO(stephan): for standalone, populate the invocationData fields.
 	}
+	// TODO(stephan): for standalone, populate the invocationData fields.
 
 	serializedRef, err := ctx.Ref(o)
 	if err != nil {

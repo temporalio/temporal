@@ -1173,7 +1173,6 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 	// a CHASM sentinel (which would block the migration activity).
 	env := testcore.NewEnv(
 		t,
-		testcore.WithSdkWorker(),
 	)
 
 	ctx := testcore.NewContext()
