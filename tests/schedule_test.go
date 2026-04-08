@@ -77,6 +77,8 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestResetWithAdditionalCallback_ChasmCallbacks", func(t *testing.T) { testResetWithAdditionalCallback(t, newContext, true) })
 	t.Run("TestMigrationCallbackAttach", func(t *testing.T) { testMigrationCallbackAttach(t, newContext) })
 	t.Run("TestCreatesWorkflowSentinel", func(t *testing.T) { testCreatesWorkflowSentinel(t, newContext) })
+	t.Run("TestUpdateScheduleMemo", func(t *testing.T) { testUpdateScheduleMemo(t, newContext) })
+	t.Run("TestUpdateScheduleMemoOnly", func(t *testing.T) { testUpdateScheduleMemoOnly(t, newContext) })
 }
 
 func TestScheduleV1(t *testing.T) {
@@ -90,6 +92,7 @@ func TestScheduleV1(t *testing.T) {
 	t.Run("TestRateLimit", func(t *testing.T) { testRateLimit(t, newContext) })
 	t.Run("TestNextTimeCache", func(t *testing.T) { testNextTimeCache(t, newContext) })
 	t.Run("TestCreatesCHASMSentinel", func(t *testing.T) { testCreatesCHASMSentinel(t, newContext) })
+	t.Run("TestUpdateScheduleMemoRejected", func(t *testing.T) { testUpdateScheduleMemoRejected(t, newContext) })
 }
 
 func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
@@ -2347,4 +2350,260 @@ func assertRecentActionsNoDuplicateRunIDs(t *testing.T, actions []*schedulepb.Sc
 		}
 		seen[runID] = i
 	}
+}
+func testUpdateScheduleMemo(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+
+	sid := "sched-test-update-memo"
+	wid := "sched-test-update-memo-wf"
+	wt := "sched-test-update-memo-wt"
+
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error { return nil },
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	memo1 := payload.EncodeString("val1")
+	memo2 := payload.EncodeString("val2")
+
+	// Create schedule with initial memo.
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+		Memo: &commonpb.Memo{
+			Fields: map[string]*commonpb.Payload{
+				"key1": memo1,
+				"key2": memo2,
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Verify initial memo.
+	describeResp, err := s.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.Equal(t, memo1.Data, describeResp.Memo.Fields["key1"].Data)
+	require.Equal(t, memo2.Data, describeResp.Memo.Fields["key2"].Data)
+
+	// Update: replace memo with only key3 (key1 and key2 should be gone).
+	memo3 := payload.EncodeString("new")
+	_, err = s.FrontendClient().UpdateSchedule(newContext(s.Context()), &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+		Memo: &commonpb.Memo{
+			Fields: map[string]*commonpb.Payload{
+				"key3": memo3,
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Verify replaced memo.
+	describeResp, err = s.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.Nil(t, describeResp.Memo.Fields["key1"], "key1 should be gone after replace")
+	require.Nil(t, describeResp.Memo.Fields["key2"], "key2 should be gone after replace")
+	require.Equal(t, memo3.Data, describeResp.Memo.Fields["key3"].Data, "key3 should be set")
+
+	// Update with nil memo (no change).
+	_, err = s.FrontendClient().UpdateSchedule(newContext(s.Context()), &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	// Verify memo unchanged.
+	describeResp, err = s.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.Equal(t, memo3.Data, describeResp.Memo.Fields["key3"].Data, "key3 should be unchanged")
+
+	// Update with empty memo (clear all).
+	_, err = s.FrontendClient().UpdateSchedule(newContext(s.Context()), &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+		Memo: &commonpb.Memo{
+			Fields: map[string]*commonpb.Payload{},
+		},
+	})
+	require.NoError(t, err)
+
+	// Verify memo cleared.
+	describeResp, err = s.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.Empty(t, describeResp.Memo.GetFields(), "memo should be empty after replace with empty map")
+}
+
+func testUpdateScheduleMemoRejected(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+
+	sid := "sched-test-update-memo-rejected"
+	wid := "sched-test-update-memo-rejected-wf"
+	wt := "sched-test-update-memo-rejected-wt"
+
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error { return nil },
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	// Create V1 schedule.
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	// Update with memo should be rejected.
+	_, err = s.FrontendClient().UpdateSchedule(newContext(s.Context()), &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+		Memo: &commonpb.Memo{
+			Fields: map[string]*commonpb.Payload{
+				"key": payload.EncodeString("value"),
+			},
+		},
+	})
+	require.Error(t, err)
+	var failedPrecondition *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPrecondition)
+	require.Contains(t, err.Error(), "memo updates are not supported on workflow-backed schedules")
+}
+
+func testUpdateScheduleMemoOnly(t *testing.T, newContext contextFactory) {
+	// UpdateScheduleRequest uses replace semantics for the schedule field, so omitting it
+	// causes the schedule to be unset. Memo-only updates require the server to skip replacing
+	// the schedule when the field is nil, similar to how memo and search_attributes are handled.
+	t.Skip("memo-only updates not yet supported: omitting the schedule field unsets the schedule")
+
+	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+
+	sid := "sched-test-update-memo-only"
+	wid := "sched-test-update-memo-only-wf"
+	wt := "sched-test-update-memo-only-wt"
+
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error { return nil },
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	// Create schedule with initial memo.
+	memo1 := payload.EncodeString("val1")
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+		Memo: &commonpb.Memo{
+			Fields: map[string]*commonpb.Payload{"key1": memo1},
+		},
+	})
+	require.NoError(t, err)
+
+	// Update only memo, without setting the schedule field.
+	memo2 := payload.EncodeString("val2")
+	_, err = s.FrontendClient().UpdateSchedule(newContext(s.Context()), &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+		Memo: &commonpb.Memo{
+			Fields: map[string]*commonpb.Payload{"key1": memo2},
+		},
+	})
+	require.NoError(t, err)
+
+	// Verify memo was updated and schedule is still intact.
+	describeResp, err := s.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.Equal(t, memo2.Data, describeResp.Memo.Fields["key1"].Data, "memo should be updated")
+	require.NotNil(t, describeResp.Schedule.Spec, "schedule spec should not be nil")
+	require.NotEmpty(t, describeResp.Schedule.Spec.Interval, "schedule spec intervals should be preserved")
+	require.NotNil(t, describeResp.Schedule.Action, "schedule action should be preserved")
 }

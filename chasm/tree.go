@@ -358,7 +358,7 @@ func searchAttributeKeyValuesToMap(saSlice []SearchAttributeKeyValue) map[string
 }
 
 func (n *Node) SetRootComponent(
-	rootComponent Component,
+	rootComponent RootComponent,
 ) error {
 	root := n.root()
 	root.setValue(rootComponent)
