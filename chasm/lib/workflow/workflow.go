@@ -119,7 +119,7 @@ func (w *Workflow) AddCompletionCallbacks(
 				},
 			}
 		default:
-			return fmt.Errorf("unsupported callback variant: %T", variant)
+			return serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", variant)
 		}
 
 		id := fmt.Sprintf("%s-%d", requestID, idx)
@@ -143,16 +143,31 @@ func (w *Workflow) AddNexusOperation(
 	w.Operations[key] = chasm.NewComponentField(ctx, op)
 }
 
-// AddAndApplyHistoryEvent adds a history event to the workflow and applies the corresponding event definition.
-func (w *Workflow) AddAndApplyHistoryEvent(
+// AddAndApplyHistoryEvent adds a history event to the workflow and applies the corresponding event definition,
+// looked up by Go type. This is the preferred way to add and apply events as it provides go-to-definition navigation.
+func AddAndApplyHistoryEvent[D EventDefinition](
+	w *Workflow,
+	ctx chasm.MutableContext,
+	setAttributes func(*historypb.HistoryEvent),
+) (*historypb.HistoryEvent, error) {
+	def, ok := EventDefinitionByGoType[D](workflowContextFromChasm(ctx).registry)
+	if !ok {
+		return nil, serviceerror.NewInternalf("no event definition registered for Go type %T", (*D)(nil))
+	}
+	event := w.AddHistoryEvent(def.Type(), setAttributes)
+	return event, def.Apply(ctx, w, event)
+}
+
+// AddAndApplyHistoryEventByEventType adds a history event to the workflow and applies the corresponding event definition.
+func (w *Workflow) AddAndApplyHistoryEventByEventType(
 	ctx chasm.MutableContext,
 	t enumspb.EventType,
 	setAttributes func(*historypb.HistoryEvent),
 ) (*historypb.HistoryEvent, error) {
 	event := w.AddHistoryEvent(t, setAttributes)
-	def, ok := workflowContextFromChasm(ctx).registry.EventDefinition(t)
+	def, ok := workflowContextFromChasm(ctx).registry.EventDefinitionByEventType(t)
 	if !ok {
-		return nil, fmt.Errorf("no event definition registered for %v", t)
+		return nil, serviceerror.NewInternalf("no event definition registered for %v", t)
 	}
 	return event, def.Apply(ctx, w, event)
 }
@@ -172,10 +187,10 @@ func (w *Workflow) OnNexusOperationStarted(
 ) error {
 	parentData := &workflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
-		return serviceerror.NewFailedPreconditionf("failed to unmarshal nexus operation parent data: %v", err)
+		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
 	}
 
-	_, err := w.AddAndApplyHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
+	_, err := w.AddAndApplyHistoryEventByEventType(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
 		e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
 			NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
 				ScheduledEventId: parentData.GetScheduledEventId(),
@@ -188,20 +203,20 @@ func (w *Workflow) OnNexusOperationStarted(
 	return err
 }
 
-// OnNexusOperationCancelled adds a NexusOperationCanceled history event to the workflow and applies
+// OnNexusOperationCanceled adds a NexusOperationCanceled history event to the workflow and applies
 // the corresponding event definition.
-func (w *Workflow) OnNexusOperationCancelled(
+func (w *Workflow) OnNexusOperationCanceled(
 	ctx chasm.MutableContext,
 	op *nexusoperation.Operation,
 	cause *failurepb.Failure,
 ) error {
 	parentData := &workflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
-		return serviceerror.NewFailedPreconditionf("failed to unmarshal nexus operation parent data: %v", err)
+		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
 	}
 
 	scheduledEventID := parentData.GetScheduledEventId()
-	_, err := w.AddAndApplyHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {
+	_, err := w.AddAndApplyHistoryEventByEventType(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {
 		e.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
 			NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
 				ScheduledEventId: scheduledEventID,
@@ -222,11 +237,11 @@ func (w *Workflow) OnNexusOperationFailed(
 ) error {
 	parentData := &workflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
-		return serviceerror.NewFailedPreconditionf("failed to unmarshal nexus operation parent data: %v", err)
+		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
 	}
 
 	scheduledEventID := parentData.GetScheduledEventId()
-	_, err := w.AddAndApplyHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
+	_, err := w.AddAndApplyHistoryEventByEventType(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
 		e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
 			NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
 				ScheduledEventId: scheduledEventID,
@@ -248,10 +263,10 @@ func (w *Workflow) OnNexusOperationCompleted(
 ) error {
 	parentData := &workflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
-		return serviceerror.NewFailedPreconditionf("failed to unmarshal nexus operation parent data: %v", err)
+		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
 	}
 
-	_, err := w.AddAndApplyHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, func(e *historypb.HistoryEvent) {
+	_, err := w.AddAndApplyHistoryEventByEventType(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, func(e *historypb.HistoryEvent) {
 		e.Attributes = &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
 			NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{
 				ScheduledEventId: parentData.GetScheduledEventId(),
@@ -273,11 +288,11 @@ func (w *Workflow) OnNexusOperationTimedOut(
 ) error {
 	parentData := &workflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
-		return serviceerror.NewFailedPreconditionf("failed to unmarshal nexus operation parent data: %v", err)
+		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
 	}
 
 	scheduledEventID := parentData.GetScheduledEventId()
-	_, err := w.AddAndApplyHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, func(e *historypb.HistoryEvent) {
+	_, err := w.AddAndApplyHistoryEventByEventType(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, func(e *historypb.HistoryEvent) {
 		e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
 			NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
 				ScheduledEventId: scheduledEventID,
@@ -323,7 +338,7 @@ func (w *Workflow) NexusOperationInvocationData(
 ) (nexusoperation.InvocationData, error) {
 	parentData := &workflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
-		return nexusoperation.InvocationData{}, serviceerror.NewFailedPreconditionf(
+		return nexusoperation.InvocationData{}, serviceerror.NewInternalf(
 			"failed to unmarshal nexus operation parent data: %v", err,
 		)
 	}

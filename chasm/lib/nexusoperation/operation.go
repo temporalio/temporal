@@ -1,7 +1,7 @@
 package nexusoperation
 
 import (
-	"fmt"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -9,11 +9,11 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
-	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	"go.temporal.io/server/common/backoff"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-var _ chasm.Component = (*Operation)(nil)
 var _ chasm.StateMachine[nexusoperationpb.OperationStatus] = (*Operation)(nil)
 
 // ErrCancellationAlreadyRequested is returned when a cancellation has already been requested for an operation.
@@ -36,7 +36,7 @@ type InvocationData struct {
 // It's the responsibility of the parrent component to apply the appropriate state transitions to the operation.
 type OperationStore interface {
 	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation, operationToken string, links []*commonpb.Link) error
-	OnNexusOperationCancelled(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
+	OnNexusOperationCanceled(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation, result *commonpb.Payload, links []*commonpb.Link) error
@@ -56,6 +56,7 @@ type Operation struct {
 	Store chasm.ParentPtr[OperationStore]
 
 	// Cancellation is a child component that manages sending the cancel request to the Nexus endpoint.
+	// Created when cancelation is requested, nil otherwise.
 	Cancellation chasm.Field[*Cancellation]
 }
 
@@ -100,7 +101,8 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) erro
 	}
 
 	cancellation := newCancellation(&nexusoperationpb.CancellationState{
-		ParentData: parentData,
+		RequestedTime: timestamppb.New(ctx.Now(o)),
+		ParentData:    parentData,
 	})
 	o.Cancellation = chasm.NewComponentField(ctx, cancellation)
 
@@ -113,50 +115,53 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) erro
 	return nil
 }
 
-// OnStarted applies the started transition or delegates to the store if one is present.
-func (o *Operation) OnStarted(ctx chasm.MutableContext, operationToken string, links []*commonpb.Link) error {
+// onStarted applies the started transition or delegates to the store if one is present.
+func (o *Operation) onStarted(ctx chasm.MutableContext, operationToken string, links []*commonpb.Link) error {
 	store, ok := o.Store.TryGet(ctx)
 	if ok {
 		return store.OnNexusOperationStarted(ctx, o, operationToken, links)
 	}
+	// TODO(stephan): for standalone, store links
 	return TransitionStarted.Apply(o, ctx, EventStarted{
 		OperationToken: operationToken,
 	})
 }
 
-// OnCompleted applies the succeeded transition or delegates to the store if one is present.
-func (o *Operation) OnCompleted(ctx chasm.MutableContext, result *commonpb.Payload, links []*commonpb.Link) error {
+// onCompleted applies the succeeded transition or delegates to the store if one is present.
+func (o *Operation) onCompleted(ctx chasm.MutableContext, result *commonpb.Payload, links []*commonpb.Link) error {
 	store, ok := o.Store.TryGet(ctx)
 	if ok {
 		return store.OnNexusOperationCompleted(ctx, o, result, links)
 	}
+	// TODO(stephan): for standalone, store result and links
 	return TransitionSucceeded.Apply(o, ctx, EventSucceeded{})
 }
 
-// OnFailed applies the failed transition or delegates to the store if one is present.
-func (o *Operation) OnFailed(ctx chasm.MutableContext, cause *failurepb.Failure) error {
+// onFailed applies the failed transition or delegates to the store if one is present.
+func (o *Operation) onFailed(ctx chasm.MutableContext, cause *failurepb.Failure) error {
 	store, ok := o.Store.TryGet(ctx)
 	if ok {
 		return store.OnNexusOperationFailed(ctx, o, cause)
 	}
-	return TransitionFailed.Apply(o, ctx, EventFailed{})
+	return TransitionFailed.Apply(o, ctx, EventFailed{Failure: cause})
 }
 
-// OnCancelled applies the canceled transition or delegates to the store if one is present.
-func (o *Operation) OnCancelled(ctx chasm.MutableContext, cause *failurepb.Failure) error {
+// onCanceled applies the canceled transition or delegates to the store if one is present.
+func (o *Operation) onCanceled(ctx chasm.MutableContext, cause *failurepb.Failure) error {
 	store, ok := o.Store.TryGet(ctx)
 	if ok {
-		return store.OnNexusOperationCancelled(ctx, o, cause)
+		return store.OnNexusOperationCanceled(ctx, o, cause)
 	}
-	return TransitionCanceled.Apply(o, ctx, EventCanceled{})
+	return TransitionCanceled.Apply(o, ctx, EventCanceled{Failure: cause})
 }
 
-// OnTimedOut applies the timed out transition or delegates to the store if one is present.
-func (o *Operation) OnTimedOut(ctx chasm.MutableContext, cause *failurepb.Failure) error {
+// onTimedOut applies the timed out transition or delegates to the store if one is present.
+func (o *Operation) onTimedOut(ctx chasm.MutableContext, cause *failurepb.Failure) error {
 	store, ok := o.Store.TryGet(ctx)
 	if ok {
 		return store.OnNexusOperationTimedOut(ctx, o, cause)
 	}
+	// TODO(stephan): for standalone, store failure
 	return TransitionTimedOut.Apply(o, ctx, EventTimedOut{})
 }
 
@@ -198,38 +203,55 @@ func (o *Operation) loadStartArgs(
 	}, nil
 }
 
-// saveResult is an UpdateComponent callback that saves the invocation outcome.
-func (o *Operation) saveResult(
+// saveInvocationResultInput is the input to the Operation.saveResult method used in UpdateComponent.
+type saveInvocationResultInput struct {
+	result      invocationResult
+	retryPolicy backoff.RetryPolicy
+}
+
+func (o *Operation) saveInvocationResult(
 	ctx chasm.MutableContext,
-	input saveResultInput,
+	input saveInvocationResultInput,
 ) (chasm.NoValue, error) {
 	switch r := input.result.(type) {
 	case invocationResultOK:
+		links := convertResponseLinks(r.response.Links, ctx.Logger())
 		if r.response.Pending != nil {
-			return nil, o.OnStarted(ctx, r.response.Pending.Token, r.links)
+			return nil, o.onStarted(ctx, r.response.Pending.Token, links)
 		}
-		return nil, o.OnCompleted(ctx, r.response.Successful, r.links)
+		return nil, o.onCompleted(ctx, r.response.Successful, links)
+	case invocationResultCancel:
+		return nil, o.onCanceled(ctx, r.failure)
 	case invocationResultFail:
-		return nil, o.OnFailed(ctx, r.failure)
-	case invocationResultCanceled:
-		return nil, o.OnCancelled(ctx, r.failure)
+		return nil, o.onFailed(ctx, r.failure)
+	case invocationResultTimeout:
+		return nil, o.onTimedOut(ctx, r.failure)
 	case invocationResultRetry:
 		return nil, transitionAttemptFailed.Apply(o, ctx, EventAttemptFailed{
 			Failure:     r.failure,
-			RetryPolicy: input.retryPolicy(),
-		})
-	case invocationResultTimeout:
-		return nil, o.OnTimedOut(ctx, &failurepb.Failure{
-			Message: "operation timed out",
-			FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
-				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-					TimeoutType: r.timeoutType,
-				},
-			},
+			RetryPolicy: input.retryPolicy,
 		})
 	default:
-		return nil, queueserrors.NewUnprocessableTaskError(
-			fmt.Sprintf("unrecognized invocation result %T", input.result),
-		)
+		return nil, serviceerror.NewInternalf("cannot save invocation result of type %T", r)
 	}
+}
+
+func (o *Operation) resolveUnsuccessfully(ctx chasm.MutableContext, failure *failurepb.Failure, closeTime time.Time) error {
+	// When we transition from scheduled to failed it is always due to the attempt failing with a non
+	// retryable failure. The failure should be recorded in the state for standalone Nexus operations.
+	// Workflow operations will be deleted immediately after this transition leaving no trace of the failure
+	// object.
+	if o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED {
+		o.LastAttemptCompleteTime = timestamppb.New(ctx.Now(o))
+		o.LastAttemptFailure = failure
+	}
+	// TODO(stephan): store failure when unsuccessful outside of an attempt.
+
+	o.ClosedTime = timestamppb.New(closeTime)
+
+	// Clear the next attempt schedule time when leaving BACKING_OFF state. This field is only valid in
+	// BACKING_OFF state.
+	o.NextAttemptScheduleTime = nil
+	// Terminal state - no tasks to emit.
+	return nil
 }
