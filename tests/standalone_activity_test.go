@@ -4901,13 +4901,14 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
+		originalStartToClose := 8 * time.Second
 
 		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:              s.Namespace().String(),
 			ActivityId:             activityID,
 			ActivityType:           &commonpb.ActivityType{Name: "test-activity"},
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
-			StartToCloseTimeout:    durationpb.New(30 * time.Minute),
+			StartToCloseTimeout:    durationpb.New(originalStartToClose),
 			ScheduleToCloseTimeout: durationpb.New(8 * time.Second),
 			RetryPolicy: &commonpb.RetryPolicy{
 				InitialInterval: durationpb.New(5 * time.Second),
@@ -4953,7 +4954,7 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 		require.NotNil(t, updateResp)
 		require.Equal(t, int64(newScheduleToClose.Seconds()), updateResp.GetActivityOptions().GetScheduleToCloseTimeout().GetSeconds())
 		// Verify that the unmodified start_to_close_timeout is preserved in the response.
-		require.Equal(t, int64((30 * time.Minute).Seconds()), updateResp.GetActivityOptions().GetStartToCloseTimeout().GetSeconds())
+		require.Equal(t, int64(originalStartToClose.Seconds()), updateResp.GetActivityOptions().GetStartToCloseTimeout().GetSeconds())
 
 		// Attempt 2 should be available immediately.
 		pollResp2, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{

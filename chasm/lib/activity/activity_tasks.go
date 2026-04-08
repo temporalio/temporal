@@ -126,10 +126,22 @@ func newScheduleToCloseTimeoutTaskHandler() *scheduleToCloseTimeoutTaskHandler {
 func (h *scheduleToCloseTimeoutTaskHandler) Validate(
 	_ chasm.Context,
 	activity *Activity,
-	_ chasm.TaskAttributes,
+	attrs chasm.TaskAttributes,
 	_ *activitypb.ScheduleToCloseTimeoutTask,
 ) (bool, error) {
-	return TransitionTimedOut.Possible(activity), nil
+	if !TransitionTimedOut.Possible(activity) {
+		return false, nil
+	}
+	// Discard stale tasks created before a schedule-to-close extension.
+	// When the deadline is extended, a new task is added at the updated deadline; any earlier
+	// task (from the old shorter deadline) must not time out the activity prematurely.
+	if timeout := activity.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
+		currentDeadline := activity.GetScheduleTime().AsTime().Add(timeout)
+		if attrs.ScheduledTime.Before(currentDeadline) {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func (h *scheduleToCloseTimeoutTaskHandler) Execute(
