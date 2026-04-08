@@ -3473,7 +3473,7 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 			return nil, checkErr
 		}
 		if isReal {
-			return nil, scheduleAlreadyExistsErr(serviceerror.NewAlreadyExistsf("schedule %q is already registered", request.ScheduleId))
+			return nil, serviceerror.NewWorkflowExecutionAlreadyStartedf("", "", "schedule %q is already registered", request.ScheduleId)
 		}
 	}
 
@@ -3489,7 +3489,7 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 		if isSchedulerErrorLegacyRoutable(err) {
 			wh.logger.Warn("CreateSchedule race detected: sentinel found at CHASM key",
 				tag.ScheduleID(request.ScheduleId))
-			return nil, scheduleAlreadyExistsErr(serviceerror.NewAlreadyExistsf("schedule %q: concurrent creation detected", request.ScheduleId))
+			return nil, serviceerror.NewWorkflowExecutionAlreadyStartedf("", "", "schedule %q is already registered", request.ScheduleId)
 		}
 		return nil, scheduleAlreadyExistsErr(err)
 	}
@@ -3602,9 +3602,9 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 				// A dummy workflow exists — a CHASM-path node raced us.
 				wh.logger.Warn("CreateSchedule race detected: sentinel found at V1 key",
 					tag.ScheduleID(request.ScheduleId))
-				return nil, scheduleAlreadyExistsErr(serviceerror.NewAlreadyExistsf("schedule %q: concurrent creation detected", request.ScheduleId))
+				return nil, serviceerror.NewWorkflowExecutionAlreadyStartedf("", "", "schedule %q is already registered", request.ScheduleId)
 			}
-			return nil, scheduleAlreadyExistsErr(serviceerror.NewAlreadyExistsf("schedule %q is already registered", request.ScheduleId))
+			return nil, serviceerror.NewWorkflowExecutionAlreadyStartedf("", "", "schedule %q is already registered", request.ScheduleId)
 		}
 		return nil, err
 	}
