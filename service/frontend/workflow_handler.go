@@ -4533,6 +4533,11 @@ func (wh *WorkflowHandler) UpdateSchedule(
 		}
 	}
 
+	// Reject memo updates for V1 schedules.
+	if request.GetMemo() != nil {
+		return nil, serviceerror.NewFailedPrecondition("memo updates are not supported on workflow-backed schedules")
+	}
+
 	return wh.updateScheduleWorkflow(ctx, request)
 }
 
@@ -4663,8 +4668,6 @@ func (wh *WorkflowHandler) PatchSchedule(
 		return nil, err
 	}
 
-	// TODO - when V2 supports updating the scheduler memo, make sure to add that to
-	// the size validation here (like in CreateSchedule).
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
 	if err := common.CheckEventBlobSizeLimit(
