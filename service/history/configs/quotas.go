@@ -3,7 +3,10 @@ package configs
 import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/softassert"
 )
 
 const (
@@ -26,6 +29,7 @@ var (
 func NewPriorityRateLimiter(
 	rateFn quotas.RateFn,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
+	logger log.Logger,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range APIPrioritiesOrdered {
@@ -40,6 +44,7 @@ func NewPriorityRateLimiter(
 			return priority
 		}
 		// unknown caller type, default to api to be consistent with existing behavior
+		softassert.Fail(logger, "unknown caller type", tag.NewStringTag("caller-type", req.CallerType))
 		return CallerTypeToPriority[headers.CallerTypeAPI]
 	}, rateLimiters)
 }

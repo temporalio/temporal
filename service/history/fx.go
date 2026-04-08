@@ -264,9 +264,10 @@ func HistoryAdditionalInterceptorsProvider(
 
 func RateLimitInterceptorProvider(
 	serviceConfig *configs.Config,
+	logger log.Logger,
 ) *interceptor.RateLimitInterceptor {
 	return interceptor.NewRateLimitInterceptor(
-		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, serviceConfig.OperatorRPSRatio),
+		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, serviceConfig.OperatorRPSRatio, logger),
 		map[string]int{
 			healthpb.Health_Check_FullMethodName:                         0, // exclude health check requests from rate limiting.
 			historyservice.HistoryService_DeepHealthCheck_FullMethodName: 0, // exclude deep health check requests from rate limiting.

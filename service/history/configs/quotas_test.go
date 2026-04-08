@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -52,7 +53,7 @@ func (s *quotasSuite) TestAPIPrioritiesOrdered() {
 func (s *quotasSuite) TestOperatorPrioritized() {
 	rateFn := func() float64 { return 5 }
 	operatorRPSRatioFn := func() float64 { return 0.2 }
-	limiter := NewPriorityRateLimiter(rateFn, operatorRPSRatioFn)
+	limiter := NewPriorityRateLimiter(rateFn, operatorRPSRatioFn, log.NewNoopLogger())
 
 	operatorRequest := quotas.NewRequest(
 		"/temporal.server.api.historyservice.v1.HistoryService/StartWorkflowExecution",
