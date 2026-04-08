@@ -168,7 +168,11 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 				s.NoError(err)
 				s.Len(description.PendingActivities, 1)
 
-				activityUpdated <- struct{}{}
+				select {
+				case activityUpdated <- struct{}{}:
+				case <-ctx.Done():
+					t.Fatal("timed out waiting for activity to receive update signal")
+				}
 
 				s.EventuallyWithT(func(t *assert.CollectT) {
 					description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
@@ -431,7 +435,11 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 				s.NoError(err)
 
 				// let activity finish
-				activityUpdated <- struct{}{}
+				select {
+				case activityUpdated <- struct{}{}:
+				case <-ctx.Done():
+					t.Fatal("timed out waiting for activity to receive update signal")
+				}
 
 				// wait for activity to finish
 				s.EventuallyWithT(func(t *assert.CollectT) {
@@ -456,7 +464,7 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 	t.Parallel()
 
-	t.Run("TestActivityUpdateExecutionOptionsApi_ChangeRetryInterval", func(t *testing.T) {
+	t.Run("ChangeRetryInterval", func(t *testing.T) {
 		s := testcore.NewEnv(t, testcore.WithSdkWorker())
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -506,7 +514,11 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 		s.NoError(err)
 		s.NotNil(resp)
 
-		activityUpdated <- struct{}{}
+		select {
+		case activityUpdated <- struct{}{}:
+		case <-ctx.Done():
+			t.Fatal("timed out waiting for activity to receive update signal")
+		}
 
 		s.EventuallyWithT(func(t *assert.CollectT) {
 			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
@@ -520,7 +532,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 		s.NoError(err)
 	})
 
-	t.Run("TestActivityUpdateExecutionOptionsApi_ChangeScheduleToClose", func(t *testing.T) {
+	t.Run("ChangeScheduleToClose", func(t *testing.T) {
 		s := testcore.NewEnv(t, testcore.WithSdkWorker())
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -583,7 +595,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 		s.Equal(int32(1), startedActivityCount.Load())
 	})
 
-	t.Run("TestActivityUpdateExecutionOptionsApi_ChangeScheduleToCloseAndRetry", func(t *testing.T) {
+	t.Run("ChangeScheduleToCloseAndRetry", func(t *testing.T) {
 		s := testcore.NewEnv(t, testcore.WithSdkWorker())
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -644,7 +656,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 		s.NoError(err)
 	})
 
-	t.Run("TestActivityUpdateExecutionOptionsApi_ResetDefaultOptions", func(t *testing.T) {
+	t.Run("ResetDefaultOptions", func(t *testing.T) {
 		s := testcore.NewEnv(t, testcore.WithSdkWorker())
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -737,7 +749,11 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 		s.NoError(err)
 		s.NotNil(resp)
 
-		activityUpdated <- struct{}{}
+		select {
+		case activityUpdated <- struct{}{}:
+		case <-ctx.Done():
+			t.Fatal("timed out waiting for activity to receive update signal")
+		}
 
 		s.EventuallyWithT(func(t *assert.CollectT) {
 			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())

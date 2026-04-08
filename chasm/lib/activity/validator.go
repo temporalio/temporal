@@ -381,11 +381,6 @@ func validateUpdateActivityExecutionOptionsRequest(
 			len(req.GetActivityId()), maxIDLengthLimit)
 	}
 
-	// if len(req.GetRequestId()) > maxIDLengthLimit {
-	// 	return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
-	// 		len(req.GetRequestId()), maxIDLengthLimit)
-	// }
-
 	if len(req.GetIdentity()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
 			len(req.GetIdentity()), maxIDLengthLimit)

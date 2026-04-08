@@ -4675,6 +4675,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		protorequire.ProtoEqual(t, defaultResult, pollResp.GetOutcome().GetResult())
 	})
 }
+
 func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 	t := s.T()
 

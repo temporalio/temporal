@@ -403,15 +403,15 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		}
 	}
 
-	if req.GetFrontendRequest().GetRestoreOriginal() {
+	if frontendReq.GetRestoreOriginal() {
 		ogOptions := a.GetOriginalOptions()
-		a.TaskQueue = ogOptions.GetTaskQueue()
-		a.ScheduleToCloseTimeout = ogOptions.GetScheduleToCloseTimeout()
-		a.ScheduleToStartTimeout = ogOptions.GetScheduleToStartTimeout()
-		a.StartToCloseTimeout = ogOptions.GetStartToCloseTimeout()
-		a.HeartbeatTimeout = ogOptions.GetHeartbeatTimeout()
-		a.RetryPolicy = ogOptions.GetRetryPolicy()
-		a.Priority = ogOptions.GetPriority()
+		a.TaskQueue = common.CloneProto(ogOptions.GetTaskQueue())
+		a.ScheduleToCloseTimeout = common.CloneProto(ogOptions.GetScheduleToCloseTimeout())
+		a.ScheduleToStartTimeout = common.CloneProto(ogOptions.GetScheduleToStartTimeout())
+		a.StartToCloseTimeout = common.CloneProto(ogOptions.GetStartToCloseTimeout())
+		a.HeartbeatTimeout = common.CloneProto(ogOptions.GetHeartbeatTimeout())
+		a.RetryPolicy = common.CloneProto(ogOptions.GetRetryPolicy())
+		a.Priority = common.CloneProto(ogOptions.GetPriority())
 	} else {
 		if err := a.mergeActivityOptions(frontendReq); err != nil {
 			return nil, err
@@ -554,10 +554,6 @@ func (a *Activity) mergeActivityOptions(
 		a.Priority.FairnessWeight = opts.GetPriority().GetFairnessWeight()
 	}
 
-	if a.RetryPolicy == nil {
-		a.RetryPolicy = &commonpb.RetryPolicy{}
-	}
-
 	if _, ok := updateFields["retryPolicy"]; ok {
 		a.RetryPolicy = opts.GetRetryPolicy()
 	}
@@ -566,12 +562,18 @@ func (a *Activity) mergeActivityOptions(
 		if opts.GetRetryPolicy() == nil {
 			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
 		}
+		if a.RetryPolicy == nil {
+			a.RetryPolicy = &commonpb.RetryPolicy{}
+		}
 		a.RetryPolicy.InitialInterval = opts.GetRetryPolicy().GetInitialInterval()
 	}
 
 	if _, ok := updateFields["retryPolicy.backoffCoefficient"]; ok {
 		if opts.GetRetryPolicy() == nil {
 			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
+		}
+		if a.RetryPolicy == nil {
+			a.RetryPolicy = &commonpb.RetryPolicy{}
 		}
 		a.RetryPolicy.BackoffCoefficient = opts.GetRetryPolicy().GetBackoffCoefficient()
 	}
@@ -580,12 +582,18 @@ func (a *Activity) mergeActivityOptions(
 		if opts.GetRetryPolicy() == nil {
 			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
 		}
+		if a.RetryPolicy == nil {
+			a.RetryPolicy = &commonpb.RetryPolicy{}
+		}
 		a.RetryPolicy.MaximumInterval = opts.GetRetryPolicy().GetMaximumInterval()
 	}
 
 	if _, ok := updateFields["retryPolicy.maximumAttempts"]; ok {
 		if opts.GetRetryPolicy() == nil {
 			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
+		}
+		if a.RetryPolicy == nil {
+			a.RetryPolicy = &commonpb.RetryPolicy{}
 		}
 		a.RetryPolicy.MaximumAttempts = opts.GetRetryPolicy().GetMaximumAttempts()
 	}
