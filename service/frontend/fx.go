@@ -171,6 +171,7 @@ func AuthorizationInterceptorProvider(
 		cfg.Global.Authorization.AuthHeaderName,
 		cfg.Global.Authorization.AuthExtraHeaderName,
 		dynamicconfig.EnableCrossNamespaceCommands.Get(dc),
+		dynamicconfig.DisableStreamingAuthorizer.Get(dc),
 	)
 }
 

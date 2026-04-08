@@ -82,6 +82,7 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 		"",
 		"",
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
+		dynamicconfig.GetBoolPropertyFn(false), // disableStreamingAuthorizer
 	)
 	s.handler = func(ctx context.Context, req interface{}) (interface{}, error) { return true, nil }
 }
@@ -165,6 +166,7 @@ func (s *authorizerInterceptorSuite) TestNoopClaimMapperWithoutTLS() {
 		"",
 		"",
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
+		dynamicconfig.GetBoolPropertyFn(false), // disableStreamingAuthorizer
 	)
 	_, err := interceptor.Intercept(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
 	s.NoError(err)
@@ -181,6 +183,7 @@ func (s *authorizerInterceptorSuite) TestAlternateHeaders() {
 		"custom-header",
 		"custom-extra-header",
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
+		dynamicconfig.GetBoolPropertyFn(false), // disableStreamingAuthorizer
 	)
 
 	cases := []struct {
@@ -288,7 +291,8 @@ func (s *authorizerInterceptorSuite) newCrossNamespaceInterceptor(namespaces ...
 		nil,
 		"",
 		"",
-		dynamicconfig.GetBoolPropertyFn(true), // enableCrossNamespaceCommands
+		dynamicconfig.GetBoolPropertyFn(true),  // enableCrossNamespaceCommands
+		dynamicconfig.GetBoolPropertyFn(false), // disableStreamingAuthorizer
 	)
 }
 
@@ -605,6 +609,7 @@ func (s *authorizerInterceptorSuite) TestInterceptStream_AuthDisabled() {
 		"",
 		"",
 		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetBoolPropertyFn(false),
 	)
 
 	handlerCalled := false
@@ -629,6 +634,7 @@ func (s *authorizerInterceptorSuite) TestInterceptStream_InvalidToken() {
 		nil,
 		"",
 		"",
+		dynamicconfig.GetBoolPropertyFn(false),
 		dynamicconfig.GetBoolPropertyFn(false),
 	)
 
