@@ -889,7 +889,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		case enumspb.PENDING_ACTIVITY_STATE_STARTED:
 			runState = enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED
 		default:
-			// no default, but required for linters
+			// no action for terminal or other states
 		}
 	}
 

@@ -5759,18 +5759,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// After fail, activity should be PAUSED (SCHEDULED + paused) at attempt=2.
-		require.Eventually(t, func() bool {
-			dr, dErr := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				ActivityId: activityID,
-			})
-			return dErr == nil &&
-				dr.GetInfo().GetRunState() == enumspb.PENDING_ACTIVITY_STATE_PAUSED &&
-				dr.GetInfo().GetAttempt() == 2
-		}, 10*time.Second, 200*time.Millisecond)
-
-		// Verify activity is PAUSED at attempt=2 with a recorded failure.
+		// After fail, activity should be PAUSED (SCHEDULED + paused) at attempt=2 with a recorded failure.
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			dr, dErr := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  s.Namespace().String(),
@@ -5866,24 +5855,17 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Verify attempt is now 2, LastFailure is set, and activity is still paused.
-		require.Eventually(t, func() bool {
+		// Verify attempt is now 2, activity is still paused, and LastFailure is populated.
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			dr, dErr := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  s.Namespace().String(),
 				ActivityId: activityID,
 			})
-			return dErr == nil &&
-				dr.GetInfo().GetRunState() == enumspb.PENDING_ACTIVITY_STATE_PAUSED &&
-				dr.GetInfo().GetAttempt() == 2 &&
-				dr.GetInfo().GetLastFailure() != nil
+			assert.NoError(c, dErr)
+			assert.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, dr.GetInfo().GetRunState())
+			assert.EqualValues(c, 2, dr.GetInfo().GetAttempt())
+			assert.Equal(c, failureMsg, dr.GetInfo().GetLastFailure().GetMessage())
 		}, 10*time.Second, 200*time.Millisecond)
-
-		descResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  s.Namespace().String(),
-			ActivityId: activityID,
-		})
-		require.NoError(t, err)
-		require.Equal(t, failureMsg, descResp.GetInfo().GetLastFailure().GetMessage())
 
 		// Unpause and complete.
 		_, err = s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
@@ -6303,6 +6285,19 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, activityID, pollResp.GetActivityId())
+	})
+
+	t.Run("UnpauseNotFound", func(t *testing.T) {
+		ctx := testcore.NewContext()
+
+		_, err := s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: testcore.RandomizeStr(t.Name()),
+			Identity:   "test-identity",
+		})
+		require.Error(t, err)
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
 	})
 }
 
