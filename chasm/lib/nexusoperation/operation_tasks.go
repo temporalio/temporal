@@ -117,7 +117,7 @@ func (h *operationInvocationTaskHandler) Execute(
 			if err != nil {
 				return fmt.Errorf("failed to construct invocation result: %w", err)
 			}
-			_, _, err = chasm.UpdateComponent(ctx, opRef, (*Operation).saveInvocationResult, saveResultInput{
+			_, _, err = chasm.UpdateComponent(ctx, opRef, (*Operation).saveInvocationResult, saveInvocationResultInput{
 				result:      result,
 				retryPolicy: h.config.RetryPolicy(),
 			})
@@ -205,7 +205,7 @@ func (h *operationInvocationTaskHandler) Execute(
 	if err != nil {
 		return fmt.Errorf("failed to construct invocation result: %w", err)
 	}
-	_, _, saveErr := chasm.UpdateComponent(ctx, opRef, (*Operation).saveInvocationResult, saveResultInput{
+	_, _, saveErr := chasm.UpdateComponent(ctx, opRef, (*Operation).saveInvocationResult, saveInvocationResultInput{
 		result:      result,
 		retryPolicy: h.config.RetryPolicy(),
 	})

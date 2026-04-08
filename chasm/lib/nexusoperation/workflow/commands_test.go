@@ -57,7 +57,7 @@ var defaultConfig = &nexusoperation.Config{
 	ChasmNexusEnabled:                  dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	MaxServiceNameLength:               dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("service")),
 	MaxOperationNameLength:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("op")),
-	MaxConcurrentOperations:            dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
+	MaxConcurrentOperationsPerWorkflow: dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
 	MaxOperationHeaderSize:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(20),
 	DisallowedOperationHeaders:         dynamicconfig.GetTypedPropertyFn([]string{"request-timeout"}),
 	MaxOperationScheduleToCloseTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Hour * 24),

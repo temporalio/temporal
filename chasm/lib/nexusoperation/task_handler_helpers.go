@@ -117,6 +117,7 @@ func newInvocationResult(
 	if callErr == nil {
 		return invocationResultOK{response: response}, nil
 	}
+
 	if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
 		retryable := common.IsRetryableRPCError(callErr)
 		failure := &failurepb.Failure{
@@ -164,6 +165,7 @@ func newInvocationResult(
 		}
 		return invocationResultFail{failure: failure}, nil
 	}
+
 	if opTimeoutBelowMinErr, ok := errors.AsType[*operationTimeoutBelowMinError](callErr); ok {
 		failure := &failurepb.Failure{
 			Message: "operation timed out",
@@ -177,7 +179,7 @@ func newInvocationResult(
 	}
 
 	if errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled) {
-		// If timed out, don't leak internal info to the user
+		// If timed out, don't leak internal info to the user.
 		callErr = errRequestTimedOut
 	}
 
@@ -188,21 +190,34 @@ func newInvocationResult(
 			ServerFailureInfo: &failurepb.ServerFailureInfo{},
 		},
 	}
+	if errors.Is(callErr, ErrResponseBodyTooLarge) || errors.Is(callErr, ErrInvalidOperationToken) {
+		return invocationResultFail{failure: failure}, nil
+	}
 	return invocationResultRetry{failure: failure}, nil
 }
 
 // classifyOperationError converts a Nexus OperationError to the appropriate invocation result.
 func operationErrorToFailure(opErr *nexus.OperationError) (*failurepb.Failure, error) {
+	var nf nexus.Failure
+	if opErr.OriginalFailure != nil {
+		nf = *opErr.OriginalFailure
+	} else {
+		var err error
+		nf, err = nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
+		if err != nil {
+			return nil, err
+		}
+	}
 	// Special marker for Temporal->Temporal calls to indicate that the original failure should be unwrapped.
 	// Temporal uses a wrapper operation error with no additional information to transmit the OperationError over the network.
 	// The meaningful information is in the operation error's cause.
-	unwrapError := opErr.OriginalFailure.Metadata["unwrap-error"] == "true"
+	unwrapError := nf.Metadata["unwrap-error"] == "true"
 
-	if unwrapError && opErr.OriginalFailure.Cause != nil {
-		return commonnexus.NexusFailureToTemporalFailure(*opErr.OriginalFailure.Cause)
+	if unwrapError && nf.Cause != nil {
+		return commonnexus.NexusFailureToTemporalFailure(*nf.Cause)
 	}
 	// Transform the OperationError to either ApplicationFailure or CanceledFailure based on the operation error state.
-	return commonnexus.NexusFailureToTemporalFailure(*opErr.OriginalFailure)
+	return commonnexus.NexusFailureToTemporalFailure(nf)
 }
 
 func buildCallbackURL(

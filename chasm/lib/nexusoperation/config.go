@@ -193,7 +193,7 @@ type Config struct {
 	NumHistoryShards                    int32
 	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MinRequestTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	MaxConcurrentOperations             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxConcurrentOperationsPerWorkflow  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxServiceNameLength                dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationNameLength              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationTokenLength             dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -215,7 +215,7 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		NumHistoryShards:                   cfg.NumHistoryShards,
 		RequestTimeout:                     RequestTimeout.Get(dc),
 		MinRequestTimeout:                  MinRequestTimeout.Get(dc),
-		MaxConcurrentOperations:            MaxConcurrentOperationsPerWorkflow.Get(dc),
+		MaxConcurrentOperationsPerWorkflow: MaxConcurrentOperationsPerWorkflow.Get(dc),
 		MaxServiceNameLength:               MaxServiceNameLength.Get(dc),
 		MaxOperationNameLength:             MaxOperationNameLength.Get(dc),
 		MaxOperationTokenLength:            MaxOperationTokenLength.Get(dc),

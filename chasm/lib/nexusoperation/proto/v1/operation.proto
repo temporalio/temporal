@@ -53,7 +53,7 @@ message OperationState {
   google.protobuf.Any parent_data = 13;
 
   // The number of attempts made to deliver the start operation request.
-  // This number is approximate, it is incremeted when a task is added to the history queue.
+  // This number is approximate, it is incremented when a task is added to the history queue.
   // In practice, there could be more attempts if a task is executed but fails to commit, or less attempts if a task was
   // never executed.
   int32 attempt = 14;

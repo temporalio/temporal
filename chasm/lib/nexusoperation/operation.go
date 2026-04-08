@@ -203,15 +203,15 @@ func (o *Operation) loadStartArgs(
 	}, nil
 }
 
-// saveResultInput is the input to the Operation.saveResult method used in UpdateComponent.
-type saveResultInput struct {
+// saveInvocationResultInput is the input to the Operation.saveResult method used in UpdateComponent.
+type saveInvocationResultInput struct {
 	result      invocationResult
 	retryPolicy backoff.RetryPolicy
 }
 
 func (o *Operation) saveInvocationResult(
 	ctx chasm.MutableContext,
-	input saveResultInput,
+	input saveInvocationResultInput,
 ) (chasm.NoValue, error) {
 	switch r := input.result.(type) {
 	case invocationResultOK:

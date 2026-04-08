@@ -171,7 +171,7 @@ func (ch *commandHandler) handleScheduleCommand(
 		}
 	}
 
-	maxPendingOperations := ch.config.MaxConcurrentOperations(nsName)
+	maxPendingOperations := ch.config.MaxConcurrentOperationsPerWorkflow(nsName)
 	if wf.PendingNexusOperationCount() >= maxPendingOperations {
 		return chasmworkflow.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_NEXUS_OPERATIONS_LIMIT_EXCEEDED,

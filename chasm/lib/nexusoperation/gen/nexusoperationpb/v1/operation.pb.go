@@ -240,7 +240,7 @@ type OperationState struct {
 	// The operation component itself does not interpret this field.
 	ParentData *anypb.Any `protobuf:"bytes,13,opt,name=parent_data,json=parentData,proto3" json:"parent_data,omitempty"`
 	// The number of attempts made to deliver the start operation request.
-	// This number is approximate, it is incremeted when a task is added to the history queue.
+	// This number is approximate, it is incremented when a task is added to the history queue.
 	// In practice, there could be more attempts if a task is executed but fails to commit, or less attempts if a task was
 	// never executed.
 	Attempt int32 `protobuf:"varint,14,opt,name=attempt,proto3" json:"attempt,omitempty"`

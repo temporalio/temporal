@@ -324,21 +324,45 @@ func TestTransitionStarted(t *testing.T) {
 }
 
 func TestTransitionSucceeded(t *testing.T) {
-	ctx := &chasm.MockMutableContext{
-		MockContext: chasm.MockContext{
-			HandleNow: func(chasm.Component) time.Time { return defaultTime },
+	customCompleteTime := defaultTime.Add(time.Minute)
+
+	testCases := []struct {
+		name               string
+		completeTime       *time.Time
+		expectedClosedTime time.Time
+	}{
+		{
+			name:               "uses default time",
+			expectedClosedTime: defaultTime,
+		},
+		{
+			name:               "uses event CompleteTime",
+			completeTime:       &customCompleteTime,
+			expectedClosedTime: customCompleteTime,
 		},
 	}
 
-	operation := newTestOperation()
-	operation.Status = nexusoperationpb.OPERATION_STATUS_STARTED
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{
+				MockContext: chasm.MockContext{
+					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+				},
+			}
 
-	err := TransitionSucceeded.Apply(operation, ctx, EventSucceeded{})
-	require.NoError(t, err)
+			operation := newTestOperation()
+			operation.Status = nexusoperationpb.OPERATION_STATUS_STARTED
 
-	require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, operation.Status)
-	require.Equal(t, defaultTime, operation.ClosedTime.AsTime())
-	require.Empty(t, ctx.Tasks)
+			err := TransitionSucceeded.Apply(operation, ctx, EventSucceeded{
+				CompleteTime: tc.completeTime,
+			})
+			require.NoError(t, err)
+
+			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, operation.Status)
+			require.Equal(t, tc.expectedClosedTime, operation.ClosedTime.AsTime())
+			require.Empty(t, ctx.Tasks)
+		})
+	}
 }
 
 func TestTransitionFailed(t *testing.T) {

@@ -171,8 +171,12 @@ var TransitionSucceeded = chasm.NewTransition(
 	func(o *Operation, ctx chasm.MutableContext, event EventSucceeded) error {
 		// Clear the next attempt schedule time when leaving BACKING_OFF state. This field is only valid in
 		// BACKING_OFF state.
+		closeTime := ctx.Now(o)
+		if event.CompleteTime != nil {
+			closeTime = *event.CompleteTime
+		}
 		o.NextAttemptScheduleTime = nil
-		o.ClosedTime = timestamppb.New(ctx.Now(o))
+		o.ClosedTime = timestamppb.New(closeTime)
 		// Terminal state - no tasks to emit.
 		return nil
 	},
