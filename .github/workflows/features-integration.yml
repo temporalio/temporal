@@ -69,7 +69,7 @@ jobs:
 
   feature-tests-ts:
     needs: build-docker-image
-    uses: temporalio/features/.github/workflows/typescript.yaml@61b6d24
+    uses: temporalio/features/.github/workflows/typescript.yaml@61b6d24dd76313fa13d63b7da43b29fa5bf981c3
     with:
       # This field is not actually used by these workflow if docker-image-artifact-name
       # is set, but it's marked as required, so supply some string.
@@ -79,7 +79,7 @@ jobs:
 
   feature-tests-go:
     needs: build-docker-image
-    uses: temporalio/features/.github/workflows/go.yaml@61b6d24
+    uses: temporalio/features/.github/workflows/go.yaml@61b6d24dd76313fa13d63b7da43b29fa5bf981c3
     with:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
@@ -87,7 +87,7 @@ jobs:
 
   feature-tests-go-chasm-scheduler:
     needs: build-docker-image
-    uses: temporalio/features/.github/workflows/go.yaml@61b6d24
+    uses: temporalio/features/.github/workflows/go.yaml@61b6d24dd76313fa13d63b7da43b29fa5bf981c3
     with:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
@@ -102,7 +102,7 @@ jobs:
 
   feature-tests-python:
     needs: build-docker-image
-    uses: temporalio/features/.github/workflows/python.yaml@61b6d24
+    uses: temporalio/features/.github/workflows/python.yaml@61b6d24dd76313fa13d63b7da43b29fa5bf981c3
     with:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
@@ -110,7 +110,7 @@ jobs:
 
   feature-tests-java:
     needs: build-docker-image
-    uses: temporalio/features/.github/workflows/java.yaml@61b6d24
+    uses: temporalio/features/.github/workflows/java.yaml@61b6d24dd76313fa13d63b7da43b29fa5bf981c3
     with:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
@@ -118,7 +118,7 @@ jobs:
 
   feature-tests-dotnet:
     needs: build-docker-image
-    uses: temporalio/features/.github/workflows/dotnet.yaml@61b6d24
+    uses: temporalio/features/.github/workflows/dotnet.yaml@61b6d24dd76313fa13d63b7da43b29fa5bf981c3
     with:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
@@ -126,7 +126,7 @@ jobs:
 
   feature-tests-ruby:
     needs: build-docker-image
-    uses: temporalio/features/.github/workflows/ruby.yaml@61b6d24
+    uses: temporalio/features/.github/workflows/ruby.yaml@61b6d24dd76313fa13d63b7da43b29fa5bf981c3
     with:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
