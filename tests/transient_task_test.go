@@ -51,7 +51,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskTimeout() {
 		Identity:            identity,
 	}
 
-	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
 	env.NoError(err0)
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -142,7 +142,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 		Identity:            identity,
 	}
 
-	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
 	env.NoError(err0)
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -364,7 +364,7 @@ func (s *TransientTaskSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents
 		Identity:            identity,
 	}
 
-	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
 	env.NoError(err0)
 
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -376,7 +376,7 @@ func (s *TransientTaskSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents
 		if !continueAsNewAndSignal {
 			continueAsNewAndSignal = true
 			// this will create new event when there is in-flight workflow task, and the new event will be buffered
-			_, err := env.FrontendClient().SignalWorkflowExecution(testcore.NewContext(),
+			_, err := env.FrontendClient().SignalWorkflowExecution(env.Context(),
 				&workflowservice.SignalWorkflowExecutionRequest{
 					Namespace: env.Namespace().String(),
 					WorkflowExecution: &commonpb.WorkflowExecution{
