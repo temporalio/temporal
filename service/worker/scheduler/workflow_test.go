@@ -2113,12 +2113,12 @@ func (s *workflowSuite) TestUnpauseAfterRetentionPeriodDoesNotClose() {
 
 	s.env.RegisterDelayedCallback(func() {
 		s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
-			Pause: "paused for a long time"
+			Pause: "paused for a long time",
 		})
 	}, pauseTime.Sub(baseStartTime))
 	s.env.RegisterDelayedCallback(func() {
 		s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
-			Unpause: "go ahead"
+			Unpause: "go ahead",
 		})
 	}, unpauseTime.Sub(baseStartTime))
 	s.env.RegisterDelayedCallback(func() {
