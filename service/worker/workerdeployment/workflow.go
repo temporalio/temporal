@@ -149,7 +149,7 @@ func (d *WorkflowRunner) syncVersionSummaryFromVersionWorkflow(ctx workflow.Cont
 	// Preserve create_request_id since the version workflow doesn't know about it.
 	summary.CreateRequestId = existing.GetCreateRequestId()
 	d.State.Versions[summary.GetVersion()] = summary
-	if workflow.GetVersion(ctx, "update-memo-with summary", workflow.DefaultVersion, 0) != workflow.DefaultVersion {
+	if workflow.GetVersion(ctx, "update-memo-with-summary", workflow.DefaultVersion, 0) != workflow.DefaultVersion {
 		if err := d.updateMemo(ctx); err != nil {
 			d.logger.Error("failed to update memo", "error", err)
 		}

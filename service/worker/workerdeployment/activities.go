@@ -289,6 +289,9 @@ func (a *Activities) UpdateWorkerControllerInstanceFromDeployment(ctx context.Co
 		}
 		return nil, err
 	}
+	if resp == nil {
+		return nil, nil
+	}
 	return wciSpecToComputeConfigSummary(resp.Spec), nil
 }
 
