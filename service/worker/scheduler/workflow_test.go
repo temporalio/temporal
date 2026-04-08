@@ -2107,7 +2107,6 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
 }
 
 func (s *workflowSuite) TestUnpauseAfterRetentionPeriodDoesNotClose() {
-	// regression: unpausing after longer than retention period should reset the timer, not close the workflow
 	scheduleId := "myschedule"
 	pauseTime := baseStartTime.Add(time.Minute)
 	unpauseTime := baseStartTime.Add(CurrentTweakablePolicies.RetentionTime + 2*time.Minute)
