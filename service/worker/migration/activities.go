@@ -230,7 +230,7 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 	for _, localShard := range localShards {
 		remoteShardProgress, hasRemoteShardProgress := localShard.RemoteClusters[waitRequest.RemoteCluster]
 		if !hasRemoteShardProgress {
-			a.logger.Info("Wait catchup missing remote cluster info", tag.ShardID(localShard.ShardId), tag.ClusterName(waitRequest.RemoteCluster))
+			a.logger.Info("GetReplicationStatus response missing expected remote cluster for shard during replication catchup", tag.ShardID(localShard.ShardId), tag.ClusterName(waitRequest.RemoteCluster))
 
 			// this is not expected, so fail activity to surface the error, but retryPolicy will keep retrying.
 			return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", localShard.ShardId, waitRequest.RemoteCluster)
@@ -349,7 +349,7 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	for _, localShard := range localShards {
 		remoteShardProgress, hasRemoteShardProgress := localShard.RemoteClusters[waitRequest.RemoteCluster]
 		if !hasRemoteShardProgress {
-			a.logger.Info("Wait handover missing remote cluster info", tag.ShardID(localShard.ShardId), tag.ClusterName(waitRequest.RemoteCluster))
+			a.logger.Info("GetReplicationStatus response missing expected remote cluster for shard during handover", tag.ShardID(localShard.ShardId), tag.ClusterName(waitRequest.RemoteCluster))
 
 			// this is not expected, so fail activity to surface the error, but retryPolicy will keep retrying.
 			return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", localShard.ShardId, waitRequest.RemoteCluster)
@@ -1080,7 +1080,7 @@ func (a *activities) checkReplicationOnRemoteCluster(ctx context.Context, waitRe
 	for _, localShard := range localShards {
 		remoteShardProgress, hasRemoteShardProgress := localShard.RemoteClusters[waitRequest.CatchupCluster]
 		if !hasRemoteShardProgress {
-			a.logger.Info("Wait catchup missing remote cluster info", tag.ShardID(localShard.ShardId), tag.ClusterName(waitRequest.CatchupCluster))
+			a.logger.Info("GetReplicationStatus response missing expected remote cluster for shard during remote cluster replication catchup", tag.ShardID(localShard.ShardId), tag.ClusterName(waitRequest.CatchupCluster))
 			// this is not expected, so fail activity to surface the error, but retryPolicy will keep retrying.
 			return false, temporal.NewNonRetryableApplicationError(fmt.Sprintf("GetReplicationStatus response for shard %d does not contains remote cluster %s", localShard.ShardId, waitRequest.CatchupCluster), "", nil)
 		}
