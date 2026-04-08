@@ -5,9 +5,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
-	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -122,4 +125,30 @@ func TestIdleTask_Validate_SchedulerAlreadyClosed(t *testing.T) {
 		idleMatchesScheduledTime: true,
 		expectedValid:            false, // Should return !scheduler.Closed (false when closed).
 	})
+}
+
+func TestPatch_UnpauseResetsRetentionTimer(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := env.MutableContext()
+	sched := env.Scheduler
+
+	sched.Schedule.State.Paused = true
+
+	idleTime := scheduler.DefaultTweakables.IdleTime
+	env.TimeSource.Update(env.TimeSource.Now().Add(idleTime * 2))
+
+	env.NodeBackend.TasksByCategory = nil
+
+	_, err := sched.Patch(ctx, &schedulerpb.PatchScheduleRequest{
+		FrontendRequest: &workflowservice.PatchScheduleRequest{
+			Patch: &schedulepb.SchedulePatch{
+				Unpause: "resuming after long pause",
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NoError(t, env.CloseTransaction())
+
+	require.True(t, env.HasTask(&tasks.ChasmTask{}, chasm.TaskScheduledTimeImmediate),
+		"generator should be kicked on unpause to reset idle expiration")
 }
