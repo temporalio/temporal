@@ -55,6 +55,17 @@ func (m *mockNexusCompletionGetterComponent) LifecycleState(_ chasm.Context) cha
 	return chasm.LifecycleStateRunning
 }
 
+func (m *mockNexusCompletionGetterComponent) ContextMetadata(chasm.Context) map[string]string {
+	return nil
+}
+
+func (m *mockNexusCompletionGetterComponent) Terminate(
+	chasm.MutableContext,
+	chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	return chasm.TerminateComponentResponse{}, nil
+}
+
 type mockNexusCompletionGetterLibrary struct {
 	chasm.UnimplementedLibrary
 }

@@ -18,9 +18,9 @@ import (
 )
 
 type (
-	Option[T chasm.Component] func(*Engine[T])
+	Option[T chasm.RootComponent] func(*Engine[T])
 
-	Engine[T chasm.Component] struct {
+	Engine[T chasm.RootComponent] struct {
 		t        *testing.T
 		registry *chasm.Registry
 		logger   log.Logger
@@ -28,16 +28,16 @@ type (
 
 		rootExecutionKey chasm.ExecutionKey
 		root             T
-		rootRuntime      *runtime
-		executions       map[executionLookupKey]*runtime
+		rootExecution    *execution
+		executions       map[executionLookupKey]*execution
 	}
 
-	runtime struct {
+	execution struct {
 		key        chasm.ExecutionKey
 		node       *chasm.Node
 		backend    *chasm.MockNodeBackend
 		timeSource *clock.EventTimeSource
-		root       chasm.Component
+		root       chasm.RootComponent
 	}
 
 	executionLookupKey struct {
@@ -46,7 +46,7 @@ type (
 	}
 )
 
-func NewEngine[T chasm.Component](
+func NewEngine[T chasm.RootComponent](
 	t *testing.T,
 	registry *chasm.Registry,
 	opts ...Option[T],
@@ -63,7 +63,7 @@ func NewEngine[T chasm.Component](
 			BusinessID:  "test-workflow-id",
 			RunID:       "test-run-id",
 		},
-		executions: make(map[executionLookupKey]*runtime),
+		executions: make(map[executionLookupKey]*execution),
 	}
 
 	for _, opt := range opts {
@@ -73,24 +73,24 @@ func NewEngine[T chasm.Component](
 	return e
 }
 
-func WithRoot[T chasm.Component](
+func WithRoot[T chasm.RootComponent](
 	factory func(chasm.MutableContext) T,
 ) Option[T] {
 	return func(e *Engine[T]) {
-		runtime := e.newRuntime(e.rootExecutionKey)
-		ctx := chasm.NewMutableContext(context.Background(), runtime.node)
+		execution := e.newExecution(e.rootExecutionKey)
+		ctx := chasm.NewMutableContext(context.Background(), execution.node)
 		root := factory(ctx)
-		require.NoError(e.t, runtime.node.SetRootComponent(root))
-		_, err := runtime.node.CloseTransaction()
+		require.NoError(e.t, execution.node.SetRootComponent(root))
+		_, err := execution.node.CloseTransaction()
 		require.NoError(e.t, err)
 		e.root = root
-		runtime.root = root
-		e.rootRuntime = runtime
-		e.executions[newExecutionLookupKey(runtime.key)] = runtime
+		execution.root = root
+		e.rootExecution = execution
+		e.executions[newExecutionLookupKey(execution.key)] = execution
 	}
 }
 
-func WithExecutionKey[T chasm.Component](key chasm.ExecutionKey) Option[T] {
+func WithExecutionKey[T chasm.RootComponent](key chasm.ExecutionKey) Option[T] {
 	return func(e *Engine[T]) {
 		e.rootExecutionKey = key
 	}
@@ -105,8 +105,8 @@ func (e *Engine[T]) EngineContext() context.Context {
 }
 
 func (e *Engine[T]) Ref(component chasm.Component) chasm.ComponentRef {
-	for _, runtime := range e.executions {
-		ref, err := runtime.node.Ref(component)
+	for _, execution := range e.executions {
+		ref, err := execution.node.Ref(component)
 		if err != nil {
 			continue
 		}
@@ -129,30 +129,30 @@ func (e *Engine[T]) StartExecution(
 		return chasm.StartExecutionResult{}, chasm.NewExecutionAlreadyStartedErr("already exists", "", ref.RunID)
 	}
 
-	runtime := e.newRuntime(ref.ExecutionKey)
-	mutableCtx := chasm.NewMutableContext(ctx, runtime.node)
+	execution := e.newExecution(ref.ExecutionKey)
+	mutableCtx := chasm.NewMutableContext(ctx, execution.node)
 	root, err := startFn(mutableCtx)
 	if err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
-	if err := runtime.node.SetRootComponent(root); err != nil {
+	if err := execution.node.SetRootComponent(root); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
-	_, err = runtime.node.CloseTransaction()
+	_, err = execution.node.CloseTransaction()
 	if err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
 
-	runtime.root = root
-	e.executions[newExecutionLookupKey(runtime.key)] = runtime
+	execution.root = root
+	e.executions[newExecutionLookupKey(execution.key)] = execution
 
-	serializedRef, err := runtime.node.Ref(root)
+	serializedRef, err := execution.node.Ref(root)
 	if err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
 
 	return chasm.StartExecutionResult{
-		ExecutionKey: runtime.key,
+		ExecutionKey: execution.key,
 		ExecutionRef: serializedRef,
 		Created:      true,
 	}, nil
@@ -165,45 +165,45 @@ func (e *Engine[T]) UpdateWithStartExecution(
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	_ ...chasm.TransitionOption,
 ) (chasm.EngineUpdateWithStartExecutionResult, error) {
-	if runtime, ok := e.executionForKey(ref.ExecutionKey); ok {
-		serializedRef, err := e.updateComponentInRuntime(ctx, runtime, ref, updateFn)
+	if execution, ok := e.executionForKey(ref.ExecutionKey); ok {
+		serializedRef, err := e.updateComponentInExecution(ctx, execution, ref, updateFn)
 		if err != nil {
 			return chasm.EngineUpdateWithStartExecutionResult{}, err
 		}
 		return chasm.EngineUpdateWithStartExecutionResult{
-			ExecutionKey: runtime.key,
+			ExecutionKey: execution.key,
 			ExecutionRef: serializedRef,
 			Created:      false,
 		}, nil
 	}
 
-	runtime := e.newRuntime(ref.ExecutionKey)
-	mutableCtx := chasm.NewMutableContext(ctx, runtime.node)
+	execution := e.newExecution(ref.ExecutionKey)
+	mutableCtx := chasm.NewMutableContext(ctx, execution.node)
 	root, err := startFn(mutableCtx)
 	if err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
-	if err := runtime.node.SetRootComponent(root); err != nil {
+	if err := execution.node.SetRootComponent(root); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 	if err := updateFn(mutableCtx, root); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
-	_, err = runtime.node.CloseTransaction()
+	_, err = execution.node.CloseTransaction()
 	if err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 
-	runtime.root = root
-	e.executions[newExecutionLookupKey(runtime.key)] = runtime
+	execution.root = root
+	e.executions[newExecutionLookupKey(execution.key)] = execution
 
-	serializedRef, err := runtime.node.Ref(root)
+	serializedRef, err := execution.node.Ref(root)
 	if err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 
 	return chasm.EngineUpdateWithStartExecutionResult{
-		ExecutionKey: runtime.key,
+		ExecutionKey: execution.key,
 		ExecutionRef: serializedRef,
 		Created:      true,
 	}, nil
@@ -215,11 +215,11 @@ func (e *Engine[T]) UpdateComponent(
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	_ ...chasm.TransitionOption,
 ) ([]byte, error) {
-	runtime, err := e.mustExecutionForRef(ref)
+	execution, err := e.mustExecutionForRef(ref)
 	if err != nil {
 		return nil, err
 	}
-	return e.updateComponentInRuntime(ctx, runtime, ref, updateFn)
+	return e.updateComponentInExecution(ctx, execution, ref, updateFn)
 }
 
 func (e *Engine[T]) ReadComponent(
@@ -228,17 +228,17 @@ func (e *Engine[T]) ReadComponent(
 	readFn func(chasm.Context, chasm.Component) error,
 	_ ...chasm.TransitionOption,
 ) error {
-	runtime, err := e.mustExecutionForRef(ref)
+	execution, err := e.mustExecutionForRef(ref)
 	if err != nil {
 		return err
 	}
 
-	component, err := runtime.node.Component(chasm.NewContext(ctx, runtime.node), ref)
+	component, err := execution.node.Component(chasm.NewContext(ctx, execution.node), ref)
 	if err != nil {
 		return err
 	}
 
-	readCtx := chasm.NewContext(ctx, runtime.node)
+	readCtx := chasm.NewContext(ctx, execution.node)
 	return readFn(readCtx, component)
 }
 
@@ -261,7 +261,7 @@ func (e *Engine[T]) DeleteExecution(
 
 func (e *Engine[T]) NotifyExecution(chasm.ExecutionKey) {}
 
-func (e *Engine[T]) newRuntime(key chasm.ExecutionKey) *runtime {
+func (e *Engine[T]) newExecution(key chasm.ExecutionKey) *execution {
 	key = normalizeExecutionKey(key)
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(time.Now())
@@ -279,7 +279,7 @@ func (e *Engine[T]) newRuntime(key chasm.ExecutionKey) *runtime {
 			}
 		},
 	}
-	return &runtime{
+	return &execution{
 		key:        key,
 		backend:    backend,
 		timeSource: timeSource,
@@ -294,38 +294,38 @@ func (e *Engine[T]) newRuntime(key chasm.ExecutionKey) *runtime {
 	}
 }
 
-func (e *Engine[T]) executionForKey(key chasm.ExecutionKey) (*runtime, bool) {
-	runtime, ok := e.executions[newExecutionLookupKey(normalizeExecutionKey(key))]
-	return runtime, ok
+func (e *Engine[T]) executionForKey(key chasm.ExecutionKey) (*execution, bool) {
+	execution, ok := e.executions[newExecutionLookupKey(normalizeExecutionKey(key))]
+	return execution, ok
 }
 
-func (e *Engine[T]) mustExecutionForRef(ref chasm.ComponentRef) (*runtime, error) {
-	runtime, ok := e.executionForKey(ref.ExecutionKey)
+func (e *Engine[T]) mustExecutionForRef(ref chasm.ComponentRef) (*execution, error) {
+	execution, ok := e.executionForKey(ref.ExecutionKey)
 	if !ok {
 		return nil, serviceerror.NewNotFound(
 			fmt.Sprintf("execution not found: namespace=%q business_id=%q run_id=%q", ref.NamespaceID, ref.BusinessID, ref.RunID),
 		)
 	}
-	return runtime, nil
+	return execution, nil
 }
 
-func (e *Engine[T]) updateComponentInRuntime(
+func (e *Engine[T]) updateComponentInExecution(
 	ctx context.Context,
-	runtime *runtime,
+	execution *execution,
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 ) ([]byte, error) {
-	component, err := runtime.node.Component(chasm.NewContext(ctx, runtime.node), ref)
+	component, err := execution.node.Component(chasm.NewContext(ctx, execution.node), ref)
 	if err != nil {
 		return nil, err
 	}
 
-	mutableCtx := chasm.NewMutableContext(ctx, runtime.node)
+	mutableCtx := chasm.NewMutableContext(ctx, execution.node)
 	if err := updateFn(mutableCtx, component); err != nil {
 		return nil, err
 	}
 
-	_, err = runtime.node.CloseTransaction()
+	_, err = execution.node.CloseTransaction()
 	if err != nil {
 		return nil, err
 	}
