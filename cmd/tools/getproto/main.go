@@ -93,8 +93,8 @@ func genFileList(protoImports []string) {
 			}
 			goImportsMap[goImport] = base
 			protoToPackage[i] = base
-		} else if strings.HasPrefix(i, "nexus/") {
-			goImport := filepath.Dir(strings.Replace(i, "nexus/", "github.com/bergundy/nexus-proto-annotations/go/nexus/", 1))
+		} else if strings.HasPrefix(i, "nexusannotations/") {
+			goImport := filepath.Dir(strings.Replace(i, "nexusannotations/", "github.com/nexus-rpc/nexus-proto-annotations/go/nexusannotations/", 1))
 			importName := "nexusannotations"
 			goImportsMap[goImport] = importName
 			protoToPackage[i] = importName

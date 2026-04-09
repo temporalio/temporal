@@ -7,7 +7,7 @@ package main
 import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	nexusannotations "github.com/bergundy/nexus-proto-annotations/go/nexus/v1"
+	nexusannotations "github.com/nexus-rpc/nexus-proto-annotations/go/nexusannotations/v1"
 	activity "go.temporal.io/api/activity/v1"
 	batch "go.temporal.io/api/batch/v1"
 	command "go.temporal.io/api/command/v1"
@@ -50,7 +50,7 @@ func init() {
 	importMap["google/protobuf/field_mask.proto"] = fieldmaskpb.File_google_protobuf_field_mask_proto
 	importMap["google/protobuf/timestamp.proto"] = timestamppb.File_google_protobuf_timestamp_proto
 	importMap["google/protobuf/wrappers.proto"] = wrapperspb.File_google_protobuf_wrappers_proto
-	importMap["nexus/v1/options.proto"] = nexusannotations.File_nexus_v1_options_proto
+	importMap["nexusannotations/v1/options.proto"] = nexusannotations.File_nexusannotations_v1_options_proto
 	importMap["temporal/api/activity/v1/message.proto"] = activity.File_temporal_api_activity_v1_message_proto
 	importMap["temporal/api/batch/v1/message.proto"] = batch.File_temporal_api_batch_v1_message_proto
 	importMap["temporal/api/command/v1/message.proto"] = command.File_temporal_api_command_v1_message_proto
