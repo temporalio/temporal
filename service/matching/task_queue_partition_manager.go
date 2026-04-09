@@ -186,7 +186,7 @@ func (pm *taskQueuePartitionManagerImpl) computeEffectiveConfig(autoEnable, fair
 		effectiveNewMatcher = true
 		effectiveEnableFairness = !isSticky
 	default:
-		softassert.Fail(pm.logger, "unknown fairnessState in user data")
+		pm.logger.Error("unknown fairnessState in user data")
 	}
 	return effectiveNewMatcher, effectiveEnableFairness
 }
