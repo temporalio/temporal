@@ -715,6 +715,8 @@ func (c *TemporalImpl) TlsConfigProvider() *encryption.FixedTLSConfigProvider {
 	return c.tlsConfigProvider
 }
 
+// Deprecated: metric capture is cluster-global.
+// Use (*TestEnv).StartGlobalMetricCapture() or (*TestEnv).StartNamespaceMetricCapture() instead.
 func (c *TemporalImpl) CaptureMetricsHandler() *metricstest.CaptureHandler {
 	return c.captureMetricsHandler
 }
