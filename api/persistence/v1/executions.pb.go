@@ -2601,7 +2601,8 @@ type ActivityInfo struct {
 	// set to true if reset heartbeat flag was set with an activity reset
 	ResetHeartbeats bool  `protobuf:"varint,48,opt,name=reset_heartbeats,json=resetHeartbeats,proto3" json:"reset_heartbeats,omitempty"`
 	StartVersion    int64 `protobuf:"varint,50,opt,name=start_version,json=startVersion,proto3" json:"start_version,omitempty"`
-	// The task queue on which the server will send control tasks to the worker running this activity.
+	// A dedicated per-worker Nexus task queue on which the server sends control
+	// tasks (e.g. activity cancellation) to this specific worker instance.
 	WorkerControlTaskQueue string `protobuf:"bytes,51,opt,name=worker_control_task_queue,json=workerControlTaskQueue,proto3" json:"worker_control_task_queue,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
