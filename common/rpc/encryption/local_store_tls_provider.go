@@ -48,6 +48,8 @@ type localStoreTlsProvider struct {
 var _ TLSConfigProvider = (*localStoreTlsProvider)(nil)
 var _ CertExpirationChecker = (*localStoreTlsProvider)(nil)
 
+const defaultRemoteCluster = "*"
+
 func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, metricsHandler metrics.Handler, logger log.Logger, certProviderFactory CertProviderFactory,
 ) (TLSConfigProvider, error) {
 
@@ -141,7 +143,23 @@ func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 func (s *localStoreTlsProvider) GetRemoteClusterClientConfig(hostname string) (*tls.Config, error) {
 	groupTLS, ok := s.settings.RemoteClusters[hostname]
 	if !ok {
-		return nil, nil
+		// Fall back to default/wildcard config if present
+		groupTLS, ok = s.settings.RemoteClusters[defaultRemoteCluster]
+		if !ok {
+			return nil, nil
+		}
+		return s.getOrCreateRemoteClusterClientConfig(
+			hostname,
+			func() (*tls.Config, error) {
+				return newClientTLSConfig(
+					s.remoteClusterClientCertProvider[defaultRemoteCluster],
+					groupTLS.Client.ServerName,
+					groupTLS.Server.RequireClientAuth,
+					false,
+					!groupTLS.Client.DisableHostVerification)
+			},
+			groupTLS.IsClientEnabled(),
+		)
 	}
 
 	return s.getOrCreateRemoteClusterClientConfig(

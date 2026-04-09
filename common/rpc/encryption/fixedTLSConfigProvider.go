@@ -41,7 +41,11 @@ func (f *FixedTLSConfigProvider) GetFrontendClientConfig() (*tls.Config, error) 
 
 // GetRemoteClusterClientConfig implements [TLSConfigProvider.GetRemoteClusterClientConfig].
 func (f *FixedTLSConfigProvider) GetRemoteClusterClientConfig(hostname string) (*tls.Config, error) {
-	return f.RemoteClusterClientConfigs[hostname], nil
+	if cfg, ok := f.RemoteClusterClientConfigs[hostname]; ok {
+		return cfg, nil
+	}
+	// Fall back to default/wildcard config
+	return f.RemoteClusterClientConfigs[defaultRemoteCluster], nil
 }
 
 // GetExpiringCerts implements [TLSConfigProvider.GetExpiringCerts].
