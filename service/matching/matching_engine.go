@@ -21,7 +21,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/adminservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -724,7 +723,7 @@ pollLoop:
 			// we return full history.
 			isStickyEnabled := taskQueueName == mutableStateResp.StickyTaskQueue.GetName()
 
-			hist, rawHistoryBytes, nextPageToken, err := e.getHistoryForQueryTask(ctx, namespaceID, task, isStickyEnabled)
+			hist, nextPageToken, err := e.getHistoryForQueryTask(ctx, namespaceID, task, isStickyEnabled)
 
 			if err != nil {
 				// will notify query client that the query task failed
@@ -742,7 +741,6 @@ pollLoop:
 				StartedEventId:             common.EmptyEventID,
 				Attempt:                    1,
 				History:                    hist,
-				RawHistoryBytes:            rawHistoryBytes,
 				NextPageToken:              nextPageToken,
 			}
 
@@ -838,53 +836,17 @@ pollLoop:
 	}
 }
 
-// getHistoryForQueryTask retrieves history associated with a query task returned
-// by PollWorkflowTaskQueue. Returns empty history for sticky query and full history for non-sticky.
-// Returns either deserialized history OR raw history bytes (not both).
-// When SendRawHistoryBytesToMatchingService is enabled, it uses GetWorkflowExecutionRawHistory API
-// to get raw bytes and passes them through to frontend without deserializing.
 func (e *matchingEngineImpl) getHistoryForQueryTask(
 	ctx context.Context,
 	nsID namespace.ID,
 	task *internalTask,
 	isStickyEnabled bool,
-) (*historypb.History, [][]byte, []byte, error) {
+) (*historypb.History, []byte, error) {
 	if isStickyEnabled {
-		return &historypb.History{Events: []*historypb.HistoryEvent{}}, nil, nil, nil
+		return &historypb.History{Events: []*historypb.HistoryEvent{}}, nil, nil
 	}
 
 	maxPageSize := int32(e.config.HistoryMaxPageSize(task.namespace.String()))
-
-	// When SendRawHistoryBytesToMatchingService is enabled, use GetWorkflowExecutionRawHistory API
-	// to get raw bytes and pass them through to frontend without deserializing in matching service.
-	if e.config.SendRawHistoryBytesToMatchingService() {
-		resp, err := e.historyClient.GetWorkflowExecutionRawHistory(ctx,
-			&historyservice.GetWorkflowExecutionRawHistoryRequest{
-				NamespaceId: nsID.String(),
-				Request: &adminservice.GetWorkflowExecutionRawHistoryRequest{
-					NamespaceId:       nsID.String(),
-					Execution:         task.workflowExecution(),
-					StartEventId:      common.FirstEventID,
-					StartEventVersion: common.EmptyVersion,
-					EndEventId:        common.EmptyEventID,
-					EndEventVersion:   common.EmptyVersion,
-					MaximumPageSize:   maxPageSize,
-				},
-			})
-		if err != nil {
-			return nil, nil, nil, err
-		}
-
-		// Extract raw bytes from HistoryBatches
-		historyBatches := resp.GetResponse().GetHistoryBatches()
-		rawHistoryBytes := make([][]byte, len(historyBatches))
-		for i, blob := range historyBatches {
-			rawHistoryBytes[i] = blob.Data
-		}
-		return nil, rawHistoryBytes, resp.GetResponse().GetNextPageToken(), nil
-	}
-
-	// Use regular GetWorkflowExecutionHistory API
 	resp, err := e.historyClient.GetWorkflowExecutionHistory(ctx,
 		&historyservice.GetWorkflowExecutionHistoryRequest{
 			NamespaceId: nsID.String(),
@@ -897,14 +859,14 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 			},
 		})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	// History service can send history events in response.History.Events. In that case use that directly.
 	// This happens when history.sendRawHistoryBetweenInternalServices is enabled.
 	ns, err := e.namespaceRegistry.GetNamespaceName(nsID)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	err = api.ProcessInternalRawHistory(
 		ctx,
@@ -917,7 +879,7 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 		false,
 	)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	hist := resp.GetResponse().GetHistory()
@@ -926,14 +888,14 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 		for _, blob := range resp.GetResponse().GetRawHistory() {
 			events, err := e.historySerializer.DeserializeEvents(blob)
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, nil, err
 			}
 			historyEvents = append(historyEvents, events...)
 		}
 		hist = &historypb.History{Events: historyEvents}
 	}
 
-	return hist, nil, resp.GetResponse().GetNextPageToken(), nil
+	return hist, resp.GetResponse().GetNextPageToken(), nil
 }
 
 func (e *matchingEngineImpl) nonRetryableErrorsDropTask(task *internalTask, taskQueueName string, err error) {

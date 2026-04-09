@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -5464,26 +5463,22 @@ func TestGetHistoryForQueryTask(t *testing.T) {
 	runID := "test-run-id"
 
 	tests := []struct {
-		name                                 string
-		isStickyEnabled                      bool
-		sendRawHistoryBytesToMatchingService bool
-		setupMocks                           func(*historyservicemock.MockHistoryServiceClient, *namespace.MockRegistry)
-		expectHistory                        bool
-		expectRawHistoryBytes                bool
-		expectNextPageToken                  bool
-		expectError                          bool
+		name                string
+		isStickyEnabled     bool
+		setupMocks          func(*historyservicemock.MockHistoryServiceClient, *namespace.MockRegistry)
+		expectHistory       bool
+		expectNextPageToken bool
+		expectError         bool
 	}{
 		{
-			name:                                 "sticky enabled returns empty history",
-			isStickyEnabled:                      true,
-			sendRawHistoryBytesToMatchingService: false,
-			setupMocks:                           func(_ *historyservicemock.MockHistoryServiceClient, _ *namespace.MockRegistry) {},
-			expectHistory:                        true, // empty history
+			name:            "sticky enabled returns empty history",
+			isStickyEnabled: true,
+			setupMocks:      func(_ *historyservicemock.MockHistoryServiceClient, _ *namespace.MockRegistry) {},
+			expectHistory:   true, // empty history
 		},
 		{
-			name:                                 "SendRawHistoryBytesToMatchingService disabled uses GetWorkflowExecutionHistory",
-			isStickyEnabled:                      false,
-			sendRawHistoryBytesToMatchingService: false,
+			name:            "non-sticky uses GetWorkflowExecutionHistory",
+			isStickyEnabled: false,
 			setupMocks: func(mockHistoryClient *historyservicemock.MockHistoryServiceClient, mockNsRegistry *namespace.MockRegistry) {
 				mockNsRegistry.EXPECT().GetNamespaceName(nsID).Return(nsName, nil).Times(1)
 				mockHistoryClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any()).Return(
@@ -5502,38 +5497,8 @@ func TestGetHistoryForQueryTask(t *testing.T) {
 			expectNextPageToken: true,
 		},
 		{
-			name:                                 "SendRawHistoryBytesToMatchingService enabled uses GetWorkflowExecutionRawHistory",
-			isStickyEnabled:                      false,
-			sendRawHistoryBytesToMatchingService: true,
-			setupMocks: func(mockHistoryClient *historyservicemock.MockHistoryServiceClient, _ *namespace.MockRegistry) {
-				mockHistoryClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), gomock.Any()).Return(
-					&historyservice.GetWorkflowExecutionRawHistoryResponse{
-						Response: &adminservice.GetWorkflowExecutionRawHistoryResponse{
-							HistoryBatches: []*commonpb.DataBlob{
-								{Data: []byte("raw-history-batch-1")},
-								{Data: []byte("raw-history-batch-2")},
-							},
-							NextPageToken: []byte("raw-next-token"),
-						},
-					}, nil).Times(1)
-			},
-			expectRawHistoryBytes: true,
-			expectNextPageToken:   true,
-		},
-		{
-			name:                                 "GetWorkflowExecutionRawHistory error is propagated",
-			isStickyEnabled:                      false,
-			sendRawHistoryBytesToMatchingService: true,
-			setupMocks: func(mockHistoryClient *historyservicemock.MockHistoryServiceClient, _ *namespace.MockRegistry) {
-				mockHistoryClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), gomock.Any()).Return(
-					nil, errors.New("history service error")).Times(1)
-			},
-			expectError: true,
-		},
-		{
-			name:                                 "GetWorkflowExecutionHistory error is propagated",
-			isStickyEnabled:                      false,
-			sendRawHistoryBytesToMatchingService: false,
+			name:            "GetWorkflowExecutionHistory error is propagated",
+			isStickyEnabled: false,
 			setupMocks: func(mockHistoryClient *historyservicemock.MockHistoryServiceClient, _ *namespace.MockRegistry) {
 				mockHistoryClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any()).Return(
 					nil, errors.New("history service error")).Times(1)
@@ -5555,12 +5520,10 @@ func TestGetHistoryForQueryTask(t *testing.T) {
 			mockSAMapperProvider := searchattribute.NewMockMapperProvider(ctrl)
 			mockVisibilityManager := manager.NewMockVisibilityManager(ctrl)
 
-			// Set up config
 			config := defaultTestConfig()
-			config.SendRawHistoryBytesToMatchingService = dynamicconfig.GetBoolPropertyFn(tc.sendRawHistoryBytesToMatchingService)
 
-			// Set up mock expectations for ProcessInternalRawHistory when using old path
-			if !tc.isStickyEnabled && !tc.sendRawHistoryBytesToMatchingService && !tc.expectError {
+			// Set up mock expectations for ProcessInternalRawHistory
+			if !tc.isStickyEnabled && !tc.expectError {
 				mockVisibilityManager.EXPECT().GetIndexName().Return("test-index").AnyTimes()
 				mockSAProvider.EXPECT().GetSearchAttributes("test-index", false).Return(searchattribute.NameTypeMap{}, nil).AnyTimes()
 				mockSAMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
@@ -5592,7 +5555,7 @@ func TestGetHistoryForQueryTask(t *testing.T) {
 				},
 			}
 
-			hist, rawHistoryBytes, nextPageToken, err := engine.getHistoryForQueryTask(
+			hist, nextPageToken, err := engine.getHistoryForQueryTask(
 				context.Background(),
 				nsID,
 				task,
@@ -5607,25 +5570,14 @@ func TestGetHistoryForQueryTask(t *testing.T) {
 			require.NoError(t, err)
 
 			if tc.isStickyEnabled {
-				// Sticky enabled should return empty history
 				assert.NotNil(t, hist)
 				assert.Empty(t, hist.Events)
-				assert.Nil(t, rawHistoryBytes)
 				assert.Nil(t, nextPageToken)
 				return
 			}
 
-			if tc.expectRawHistoryBytes {
-				assert.Nil(t, hist)
-				assert.NotNil(t, rawHistoryBytes)
-				assert.Len(t, rawHistoryBytes, 2)
-				assert.Equal(t, []byte("raw-history-batch-1"), rawHistoryBytes[0])
-				assert.Equal(t, []byte("raw-history-batch-2"), rawHistoryBytes[1])
-			}
-
 			if tc.expectHistory {
 				assert.NotNil(t, hist)
-				assert.Nil(t, rawHistoryBytes)
 			}
 
 			if tc.expectNextPageToken {
