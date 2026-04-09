@@ -35,12 +35,14 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
+	persistenceclient "go.temporal.io/server/common/persistence/client"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
+	"go.temporal.io/server/common/persistence/serialization"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/temporal"
@@ -227,17 +229,15 @@ func newClusterWithPersistenceTestBaseFactory(
 		testBase.ExecutionManager,
 		logger,
 	)
+	var err error
 
 	pConfig := testBase.DefaultTestCluster.Config()
 	pConfig.NumHistoryShards = clusterConfig.HistoryConfig.NumHistoryShards
 
 	var (
-		indexName string
-		esClient  esclient.Client
-		saTypeMap searchattribute.NameTypeMap
+		esClient esclient.Client
 	)
 	if !UseSQLVisibility() {
-		saTypeMap = searchattribute.TestEsNameTypeMap()
 		clusterConfig.ESConfig = &esclient.Config{
 			Indices: map[string]string{
 				esclient.VisibilityAppName: RandomizeStr("temporal_visibility_v1_test"),
@@ -250,7 +250,7 @@ func newClusterWithPersistenceTestBaseFactory(
 			DisableGzip: true, // lowers memory and CPU usage significantly in tests
 		}
 
-		err := setupIndex(clusterConfig.ESConfig, logger)
+		err = setupIndex(clusterConfig.ESConfig, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -259,18 +259,12 @@ func newClusterWithPersistenceTestBaseFactory(
 		pConfig.DataStores[pConfig.VisibilityStore] = config.DataStore{
 			Elasticsearch: clusterConfig.ESConfig,
 		}
-		indexName = clusterConfig.ESConfig.GetVisibilityIndex()
 		esClient, err = esclient.NewClient(clusterConfig.ESConfig, nil, logger)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		saTypeMap = searchattribute.TestNameTypeMap()
 		clusterConfig.ESConfig = nil
-		storeConfig := pConfig.DataStores[pConfig.VisibilityStore]
-		if storeConfig.SQL != nil {
-			indexName = storeConfig.SQL.DatabaseName
-		}
 	}
 
 	clusterInfoMap := make(map[string]cluster.ClusterInformation)
@@ -290,19 +284,28 @@ func newClusterWithPersistenceTestBaseFactory(
 				ClusterAddress:           clusterInfo.RPCAddress,
 				HttpAddress:              clusterInfo.HTTPAddress,
 				InitialFailoverVersion:   clusterInfo.InitialFailoverVersion,
-			}})
+			}},
+		)
 		if err != nil {
 			return nil, err
 		}
 	}
 	clusterMetadataConfig.ClusterInformation = clusterInfoMap
 
-	// This will save custom test search attributes to cluster metadata.
-	// Actual Elasticsearch fields are created in setupIndex.
-	err := testBase.SearchAttributesManager.SaveSearchAttributes(
-		context.Background(),
-		indexName,
-		saTypeMap.Custom(),
+	cfg := &config.Config{
+		Persistence:     pConfig,
+		ClusterMetadata: clusterMetadataConfig,
+		Visibility:      config.Visibility{},
+	}
+	clusterMetadataConfig, pConfig, err = temporal.ApplyClusterMetadataConfigProvider(
+		logger,
+		cfg,
+		resolver.NewNoopResolver(),
+		persistenceclient.FactoryProvider,
+		testBase.AbstractDataStoreFactory,
+		testBase.VisibilityStoreFactory,
+		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	if err != nil {
 		return nil, err
@@ -431,10 +434,6 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 	logger.Info("Index created.", tag.ESIndex(esConfig.GetVisibilityIndex()))
 
 	logger.Info("Add custom search attributes for tests.")
-	_, err = esClient.PutMapping(ctx, esConfig.GetVisibilityIndex(), searchattribute.TestEsNameTypeMap().Custom())
-	if err != nil {
-		return err
-	}
 	if err := waitForYellowStatus(esClient, esConfig.GetVisibilityIndex()); err != nil {
 		return err
 	}
