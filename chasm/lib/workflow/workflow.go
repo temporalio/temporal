@@ -311,6 +311,57 @@ func (w *Workflow) OnNexusOperationTimedOut(
 	return err
 }
 
+func (w *Workflow) OnNexusOperationCancellationCompleted(ctx chasm.MutableContext, op *nexusoperation.Operation) error {
+	parentData := &workflowpb.NexusOperationParentData{}
+	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
+		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
+	}
+
+	cancelParentData := &workflowpb.NexusCancellationParentData{}
+	if err := op.Cancellation.Get(ctx).GetParentData().UnmarshalTo(cancelParentData); err != nil {
+		return serviceerror.NewInternalf("failed to unmarshal nexus cancellation parent data: %v", err)
+	}
+
+	_, err := w.AddAndApplyHistoryEventByEventType(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED, func(e *historypb.HistoryEvent) {
+		e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestCompletedEventAttributes{
+			NexusOperationCancelRequestCompletedEventAttributes: &historypb.NexusOperationCancelRequestCompletedEventAttributes{
+				ScheduledEventId: parentData.GetScheduledEventId(),
+				RequestedEventId: cancelParentData.GetRequestedEventId(),
+			},
+		}
+		// nolint:revive // We must mutate here even if the linter doesn't like it.
+		e.WorkerMayIgnore = true // For compatibility with older SDKs.
+	})
+	return err
+
+}
+
+func (w *Workflow) OnNexusOperationCancellationFailed(ctx chasm.MutableContext, op *nexusoperation.Operation, failure *failurepb.Failure) error {
+	parentData := &workflowpb.NexusOperationParentData{}
+	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
+		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
+	}
+
+	cancelParentData := &workflowpb.NexusCancellationParentData{}
+	if err := op.Cancellation.Get(ctx).GetParentData().UnmarshalTo(cancelParentData); err != nil {
+		return serviceerror.NewInternalf("failed to unmarshal nexus cancellation parent data: %v", err)
+	}
+
+	_, err := w.AddAndApplyHistoryEventByEventType(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED, func(e *historypb.HistoryEvent) {
+		e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestFailedEventAttributes{
+			NexusOperationCancelRequestFailedEventAttributes: &historypb.NexusOperationCancelRequestFailedEventAttributes{
+				ScheduledEventId: parentData.GetScheduledEventId(),
+				RequestedEventId: cancelParentData.GetRequestedEventId(),
+				Failure:          failure,
+			},
+		}
+		// nolint:revive // We must mutate here even if the linter doesn't like it.
+		e.WorkerMayIgnore = true // For compatibility with older SDKs.
+	})
+	return err
+
+}
+
 // createNexusOperationFailure creates a NexusOperationExecutionFailure wrapping the given cause.
 func createNexusOperationFailure(op *nexusoperation.Operation, scheduledEventID int64, cause *failurepb.Failure) *failurepb.Failure {
 	return &failurepb.Failure{
