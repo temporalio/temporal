@@ -352,6 +352,44 @@ func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, va
 	return e.cluster.host.overrideDynamicConfig(e.t, setting.Key(), value)
 }
 
+// StartGlobalMetricCapture starts a cluster-global metrics capture for this test and automatically stops it during cleanup.
+// Metric capture is cluster-global, so it is only safe on dedicated clusters.
+// Misuse detection is best-effort and only applies to queried metrics that produced recordings.
+func (e *TestEnv) StartGlobalMetricCapture() *GlobalMetricCapture {
+	if e.isShared {
+		e.t.Fatal("StartGlobalMetricCapture cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
+	}
+
+	handler := e.cluster.host.CaptureMetricsHandler()
+	if handler == nil {
+		e.t.Fatal("StartGlobalMetricCapture is unavailable because metrics capture is not enabled on this cluster")
+	}
+
+	capture := handler.StartCapture()
+	globalCapture := newGlobalMetricCapture(capture)
+	e.t.Cleanup(func() {
+		defer handler.StopCapture(capture)
+		globalCapture.checkForNamespaceCaptureMisuse()
+	})
+	return globalCapture
+}
+
+// StartNamespaceMetricCapture starts a metrics capture that only allows safe per-metric namespace filtering.
+// Namespace captures are safe on shared clusters because reads are restricted to
+// per-metric namespace-filtered iteration and reject non-namespaced metrics.
+func (e *TestEnv) StartNamespaceMetricCapture() *NamespaceMetricCapture {
+	handler := e.cluster.host.CaptureMetricsHandler()
+	if handler == nil {
+		e.t.Fatal("StartNamespaceMetricCapture is unavailable because metrics capture is not enabled on this cluster")
+	}
+
+	capture := handler.StartCapture()
+	e.t.Cleanup(func() {
+		handler.StopCapture(capture)
+	})
+	return newNamespaceMetricCapture(capture, e.Namespace().String())
+}
+
 func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
 	switch p {
 	case dynamicconfig.PrecedenceNamespace,
