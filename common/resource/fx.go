@@ -408,6 +408,8 @@ func getFrontendConnectionDetails(
 	// runs on FrontendService with GetFrontendServerConfig() TLS.
 	var frontendHTTPTLSConfig *tls.Config
 	if hasIFE {
+		// Note: when hasIFE=true, config validation ensures forceTLSConfig is unset,
+		// so frontendTLSConfig above is always internode TLS in this branch.
 		// Even though gRPC uses internode TLS (for IFE), HTTP needs frontend TLS
 		// because the HTTP server runs on the regular frontend.
 		frontendHTTPTLSConfig, err = tlsConfigProvider.GetFrontendClientConfig()

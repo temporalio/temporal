@@ -69,6 +69,12 @@ func GRPCResolverURLForTesting(monitor Monitor, service primitives.ServiceName) 
 	return newGRPCResolver(monitor).MakeURL(service)
 }
 
+// NewGRPCResolverForTesting creates a GRPCResolver for use in unit tests.
+// Monitor may be nil if resolution is not needed.
+func NewGRPCResolverForTesting(monitor Monitor) *GRPCResolver {
+	return newGRPCResolver(monitor)
+}
+
 func newGRPCResolver(monitor Monitor) *GRPCResolver {
 	res := &GRPCResolver{monitor: monitor}
 	globalGrpcBuilder.resolvers.Store(fmt.Sprintf("%p", res), res)
