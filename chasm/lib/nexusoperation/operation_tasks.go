@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -206,6 +207,21 @@ func (h *operationInvocationTaskHandler) validateStartResult(
 		return ErrResponseBodyTooLarge
 	}
 	return nil
+}
+
+// generateCallbackToken creates a callback token for the given operation reference.
+func (h *operationInvocationTaskHandler) generateCallbackToken(
+	serializedRef []byte,
+	requestID string,
+) (string, error) {
+	token, err := h.callbackTokenGenerator.Tokenize(&tokenspb.NexusOperationCompletion{
+		ComponentRef: serializedRef,
+		RequestId:    requestID,
+	})
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", queueserrors.NewUnprocessableTaskError("failed to generate a callback token"), err)
+	}
+	return token, nil
 }
 
 type operationBackoffTaskHandler struct {
