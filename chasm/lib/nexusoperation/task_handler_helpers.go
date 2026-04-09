@@ -13,21 +13,21 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/resource"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	"go.uber.org/fx"
 )
 
 var (
@@ -50,6 +50,44 @@ func (o *operationTimeoutBelowMinError) Error() string {
 // ClientProvider provides a nexus client for a given endpoint.
 type ClientProvider func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error)
 
+// commonTaskHandlerOptions is the fx parameter object for common options supplied to common task handlers.
+type commonTaskHandlerOptions struct {
+	fx.In
+
+	Config *Config
+
+	MetricsHandler metrics.Handler
+	Logger         log.Logger
+}
+
+// invocationTaskHandlerOptions groups the common dependencies shared by the invocation and cancellation task
+// handlers. It does not include fx.In — concrete fx option structs embed this and add fx.In themselves.
+type invocationTaskHandlerOptions struct {
+	Config            *Config
+	NamespaceRegistry namespace.Registry
+	MetricsHandler    metrics.Handler
+	Logger            log.Logger
+	ClientProvider    ClientProvider
+	EndpointRegistry  commonnexus.EndpointRegistry
+	HTTPTraceProvider commonnexus.HTTPClientTraceProvider
+	HistoryClient     resource.HistoryClient
+	ChasmRegistry     *chasm.Registry
+}
+
+func (o invocationTaskHandlerOptions) toBase() nexusTaskHandlerBase {
+	return nexusTaskHandlerBase{
+		config:            o.Config,
+		namespaceRegistry: o.NamespaceRegistry,
+		metricsHandler:    o.MetricsHandler,
+		logger:            o.Logger,
+		clientProvider:    o.ClientProvider,
+		endpointRegistry:  o.EndpointRegistry,
+		httpTraceProvider: o.HTTPTraceProvider,
+		historyClient:     o.HistoryClient,
+		chasmRegistry:     o.ChasmRegistry,
+	}
+}
+
 // startArgs holds the arguments needed to start a Nexus operation invocation.
 type startArgs struct {
 	service                string
@@ -68,9 +106,20 @@ type startArgs struct {
 	serializedRef          []byte
 }
 
-func buildCallbackURL(
-	useSystemCallback bool,
-	callbackTemplate *template.Template,
+// nexusTaskHandlerBase contains common dependencies shared by the invocation and cancellation task handlers.
+type nexusTaskHandlerBase struct {
+	config            *Config
+	namespaceRegistry namespace.Registry
+	metricsHandler    metrics.Handler
+	logger            log.Logger
+	clientProvider    ClientProvider
+	endpointRegistry  commonnexus.EndpointRegistry
+	httpTraceProvider commonnexus.HTTPClientTraceProvider
+	historyClient     resource.HistoryClient
+	chasmRegistry     *chasm.Registry
+}
+
+func (b *nexusTaskHandlerBase) buildCallbackURL(
 	ns *namespace.Namespace,
 	endpoint *persistencespb.NexusEndpointEntry,
 ) (string, error) {
@@ -80,14 +129,14 @@ func buildCallbackURL(
 		return commonnexus.SystemCallbackURL, nil
 	}
 	target := endpoint.GetEndpoint().GetSpec().GetTarget().GetVariant()
-	if !useSystemCallback {
-		return buildCallbackFromTemplate(callbackTemplate, ns)
+	if !b.config.UseSystemCallbackURL() {
+		return buildCallbackFromTemplate(b.config.CallbackURLTemplate(), ns)
 	}
 	switch target.(type) {
 	case *persistencespb.NexusEndpointTarget_Worker_:
 		return commonnexus.SystemCallbackURL, nil
 	case *persistencespb.NexusEndpointTarget_External_:
-		return buildCallbackFromTemplate(callbackTemplate, ns)
+		return buildCallbackFromTemplate(b.config.CallbackURLTemplate(), ns)
 	default:
 		return "", fmt.Errorf("unknown endpoint target type: %T", target)
 	}
@@ -108,19 +157,87 @@ func buildCallbackFromTemplate(callbackTemplate *template.Template, ns *namespac
 	return builder.String(), nil
 }
 
+// newInvocation creates an invocation for the given endpoint, selecting the appropriate implementation
+// based on the call timeout and endpoint type.
+func (b *nexusTaskHandlerBase) newInvocation(
+	ctx context.Context,
+	ns *namespace.Namespace,
+	endpoint *persistencespb.NexusEndpointEntry,
+	endpointName string,
+	service string,
+	callTimeout time.Duration,
+	timeoutType enumspb.TimeoutType,
+	traceCtx invocationTraceContext,
+) (invocation, error) {
+	if callTimeout < b.config.MinRequestTimeout(ns.Name().String()) {
+		return &invocationTimeout{timeoutType}, nil
+	}
+	if endpointName == commonnexus.SystemEndpoint {
+		return b.newInvocationSystem(ns), nil
+	}
+	return b.newInvocationHTTP(ctx, ns, endpoint, service, traceCtx)
+}
+
 // lookupEndpoint gets an endpoint from the registry, preferring to look up by ID and falling back to name lookup.
 // The fallback is needed because endpoints may be deleted and recreated with the same name but a different ID.
 // In that case, the ID stored in the operation state becomes stale, but the name-based lookup still resolves correctly.
-func lookupEndpoint(ctx context.Context, registry commonnexus.EndpointRegistry, namespaceID namespace.ID, endpointID, endpointName string) (*persistencespb.NexusEndpointEntry, error) {
-	entry, err := registry.GetByID(ctx, endpointID)
+// Returns a nil entry if the endpoint name is the system nexus endpoint.
+func (b *nexusTaskHandlerBase) lookupEndpoint(ctx context.Context, namespaceID namespace.ID, endpointID, endpointName string) (*persistencespb.NexusEndpointEntry, error) {
+	// Skip endpoint lookup for system-internal operations.
+	if endpointName == commonnexus.SystemEndpoint {
+		return nil, nil
+	}
+
+	entry, err := b.endpointRegistry.GetByID(ctx, endpointID)
 	if err != nil {
 		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			// Endpoint was not found by ID, fall back to name lookup.
-			return registry.GetByName(ctx, namespaceID, endpointName)
+			return b.endpointRegistry.GetByName(ctx, namespaceID, endpointName)
 		}
 		return nil, err
 	}
 	return entry, nil
+}
+
+// setupCallContext creates a context with a timeout and attaches the failure source tracking value.
+func (b *nexusTaskHandlerBase) setupCallContext(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	callCtx = context.WithValue(callCtx, commonnexus.FailureSourceContextKey, &atomic.Value{})
+	return callCtx, cancel
+}
+
+// recordCallOutcome records metrics and logs errors for the outcome of an outbound Nexus call.
+func (b *nexusTaskHandlerBase) recordCallOutcome(
+	ns *namespace.Namespace,
+	endpoint *persistencespb.NexusEndpointEntry,
+	endpointName string,
+	methodName string,
+	outcomeTag string,
+	callErr error,
+	callDuration time.Duration,
+	failureSource string,
+) {
+	methodTag := metrics.NexusMethodTag(methodName)
+	namespaceTag := metrics.NamespaceTag(ns.Name().String())
+	var destTag metrics.Tag
+	if endpoint != nil {
+		destTag = metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
+	} else {
+		destTag = metrics.DestinationTag(endpointName)
+	}
+	outcomeMetricTag := metrics.OutcomeTag(outcomeTag)
+	failureSourceTag := metrics.FailureSourceTag(failureSource)
+	OutboundRequestCounter.With(b.metricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeMetricTag, failureSourceTag)
+	OutboundRequestLatency.With(b.metricsHandler).Record(callDuration, namespaceTag, destTag, methodTag, outcomeMetricTag, failureSourceTag)
+
+	if callErr != nil {
+		_, isTimeoutBelowMin := errors.AsType[*operationTimeoutBelowMinError](callErr)
+		if failureSource == commonnexus.FailureSourceWorker || isTimeoutBelowMin {
+			b.logger.Debug(fmt.Sprintf("Nexus %s request failed", methodName), tag.Error(callErr))
+		} else {
+			b.logger.Error(fmt.Sprintf("Nexus %s request failed", methodName), tag.Error(callErr))
+		}
+	}
 }
 
 func convertResponseLinks(links []nexus.Link, logger log.Logger) []*commonpb.Link {
@@ -263,12 +380,30 @@ func (h *operationInvocationTaskHandler) generateCallbackToken(
 	return token, nil
 }
 
+// invocationTraceContext captures per-call contextual information needed to set up HTTP tracing.
+type invocationTraceContext struct {
+	operationTag  string // "StartOperation" or "CancelOperation"
+	namespaceName string
+	requestID     string
+	operation     string
+	endpointName  string
+	workflowID    string
+	runID         string
+	attemptStart  time.Time
+	attempt       int32
+}
+
 type invocation interface {
 	Start(
 		ctx context.Context,
 		args startArgs,
 		options nexus.StartOperationOptions,
 	) (*nexusrpc.ClientStartOperationResponse[*commonpb.Payload], error)
+	Cancel(
+		ctx context.Context,
+		args cancelArgs,
+		options nexus.CancelOperationOptions,
+	) error
 }
 
 type invocationTimeout struct {
@@ -283,38 +418,44 @@ func (i *invocationTimeout) Start(
 	return nil, &operationTimeoutBelowMinError{timeoutType: i.timeoutType}
 }
 
+func (i *invocationTimeout) Cancel(
+	_ context.Context,
+	_ cancelArgs,
+	_ nexus.CancelOperationOptions,
+) error {
+	return &operationTimeoutBelowMinError{timeoutType: i.timeoutType}
+}
+
 type invocationHTTP struct {
 	client      *nexusrpc.HTTPClient
 	clientTrace *httptrace.ClientTrace
 }
 
-func newInvocationHTTP(
+func (b *nexusTaskHandlerBase) newInvocationHTTP(
 	ctx context.Context,
-	h *operationInvocationTaskHandler,
 	ns *namespace.Namespace,
 	endpoint *persistencespb.NexusEndpointEntry,
-	opRef chasm.ComponentRef,
-	task *nexusoperationpb.InvocationTask,
-	args startArgs,
+	service string,
+	traceCtx invocationTraceContext,
 ) (*invocationHTTP, error) {
-	client, err := h.clientProvider(ctx, ns.ID().String(), endpoint, args.service)
+	client, err := b.clientProvider(ctx, ns.ID().String(), endpoint, service)
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef("failed to get a client: %v", err)
 	}
 	var clientTrace *httptrace.ClientTrace
-	if h.httpTraceProvider != nil {
-		traceLogger := log.With(h.logger,
-			tag.Operation("StartOperation"),
-			tag.WorkflowNamespace(ns.Name().String()),
-			tag.RequestID(args.requestID),
-			tag.NexusOperation(args.operation),
-			tag.Endpoint(args.endpointName),
-			tag.WorkflowID(opRef.BusinessID),
-			tag.WorkflowRunID(opRef.RunID),
-			tag.AttemptStart(args.currentTime.UTC()),
-			tag.Attempt(task.GetAttempt()),
+	if b.httpTraceProvider != nil {
+		traceLogger := log.With(b.logger,
+			tag.Operation(traceCtx.operationTag),
+			tag.WorkflowNamespace(traceCtx.namespaceName),
+			tag.RequestID(traceCtx.requestID),
+			tag.NexusOperation(traceCtx.operation),
+			tag.Endpoint(traceCtx.endpointName),
+			tag.WorkflowID(traceCtx.workflowID),
+			tag.WorkflowRunID(traceCtx.runID),
+			tag.AttemptStart(traceCtx.attemptStart),
+			tag.Attempt(traceCtx.attempt),
 		)
-		clientTrace = h.httpTraceProvider.NewTrace(task.GetAttempt(), traceLogger)
+		clientTrace = b.httpTraceProvider.NewTrace(traceCtx.attempt, traceLogger)
 	}
 	return &invocationHTTP{client: client, clientTrace: clientTrace}, nil
 }
@@ -355,6 +496,21 @@ func (i *invocationHTTP) Start(
 	return result, callErr
 }
 
+func (i *invocationHTTP) Cancel(
+	ctx context.Context,
+	args cancelArgs,
+	options nexus.CancelOperationOptions,
+) error {
+	if i.clientTrace != nil {
+		ctx = httptrace.WithClientTrace(ctx, i.clientTrace)
+	}
+	handle, err := i.client.NewOperationHandle(args.operation, args.token)
+	if err != nil {
+		return serviceerror.NewUnavailablef("failed to get handle for operation: %v", err)
+	}
+	return handle.Cancel(ctx, options)
+}
+
 type invocationSystem struct {
 	ns            *namespace.Namespace
 	chasmRegistry *chasm.Registry
@@ -363,16 +519,15 @@ type invocationSystem struct {
 	logger        log.Logger
 }
 
-func newInvocationSystem(
-	h *operationInvocationTaskHandler,
+func (b *nexusTaskHandlerBase) newInvocationSystem(
 	ns *namespace.Namespace,
 ) *invocationSystem {
 	return &invocationSystem{
 		ns:            ns,
-		chasmRegistry: h.chasmRegistry,
-		historyClient: h.historyClient,
-		config:        h.config,
-		logger:        h.logger,
+		chasmRegistry: b.chasmRegistry,
+		historyClient: b.historyClient,
+		config:        b.config,
+		logger:        b.logger,
 	}
 }
 
@@ -444,4 +599,30 @@ func (i *invocationSystem) Start(
 	}
 
 	return result, nil
+}
+
+func (i *invocationSystem) Cancel(
+	ctx context.Context,
+	args cancelArgs,
+	_ nexus.CancelOperationOptions,
+) error {
+	res, err := i.chasmRegistry.NexusEndpointProcessor.ProcessInput(chasm.NexusOperationProcessorContext{
+		Namespace: i.ns,
+		RequestID: args.requestID,
+		// Links are not needed for cancellation.
+	}, args.service, args.operation, args.payload)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errOpProcessorFailed, err)
+	}
+
+	_, err = i.historyClient.CancelNexusOperation(ctx, &historyservice.CancelNexusOperationRequest{
+		NamespaceId: i.ns.ID().String(),
+		ShardId:     res.RoutingKey.ShardID(i.config.NumHistoryShards),
+		Request: &nexuspb.CancelOperationRequest{
+			Service:        args.service,
+			Operation:      args.operation,
+			OperationToken: args.token,
+		},
+	})
+	return err
 }
