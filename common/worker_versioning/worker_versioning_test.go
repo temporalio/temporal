@@ -616,7 +616,7 @@ func TestFindDeploymentVersionForWorkflowID(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(tt.current.GetVersion(), 0, tt.ramping.GetVersion(), tt.ramping.GetRampPercentage(), 0, "my-wf-id", nil); !got.Equal(tt.want) {
+			if got, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(tt.current.GetVersion(), 0, tt.ramping.GetVersion(), tt.ramping.GetRampPercentage(), 0, "my-wf-id", false); !got.Equal(tt.want) {
 				t.Errorf("FindTargetDeploymentVersionAndRevisionNumberForWorkflowID() = %v, want %v", got, tt.want)
 			}
 		})
@@ -651,7 +651,7 @@ func TestFindDeploymentVersionForWorkflowID_PartialRamp(t *testing.T) {
 			histogram := make(map[string]int)
 			runs := 1000000
 			for i := range runs {
-				v, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current.GetVersion(), 0, ramping.GetVersion(), ramping.GetRampPercentage(), 0, "wf-"+strconv.Itoa(i), nil)
+				v, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current.GetVersion(), 0, ramping.GetVersion(), ramping.GetRampPercentage(), 0, "wf-"+strconv.Itoa(i), false)
 				histogram[v.GetBuildId()]++
 			}
 
