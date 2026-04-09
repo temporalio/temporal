@@ -40,6 +40,8 @@ type OperationStore interface {
 	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation, result *commonpb.Payload, links []*commonpb.Link) error
+	OnNexusOperationCancellationCompleted(ctx chasm.MutableContext, operation *Operation) error
+	OnNexusOperationCancellationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	// NexusOperationInvocationData loads invocation data (Input, Header, NexusLink) from the scheduled history event.
 	NexusOperationInvocationData(ctx chasm.Context, operation *Operation) (InvocationData, error)
 }
@@ -109,7 +111,9 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) erro
 	// Once started, the handler returns a token that can be used in the cancelation request.
 	// Until then, no need to schedule the cancelation.
 	if o.Status == nexusoperationpb.OPERATION_STATUS_STARTED {
-		return TransitionCancellationScheduled.Apply(cancellation, ctx, EventCancellationScheduled{})
+		return TransitionCancellationScheduled.Apply(cancellation, ctx, EventCancellationScheduled{
+			Destination: o.GetEndpoint(),
+		})
 	}
 
 	return nil
