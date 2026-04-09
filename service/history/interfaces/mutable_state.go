@@ -342,6 +342,9 @@ type (
 		ChasmEnabled() bool
 		ChasmWorkflowComponent(ctx context.Context) (*chasmworkflow.Workflow, chasm.MutableContext, error)
 		ChasmWorkflowComponentReadOnly(ctx context.Context) (*chasmworkflow.Workflow, chasm.Context, error)
+		// Ensures that the chasm workflow component is installed in the mutable state CHASM tree.
+		// Must be called before adding any components to the tree.
+		EnsureChasmWorkflowComponent(ctx context.Context)
 
 		// NextTransitionCount returns the next state transition count from the state transition history.
 		// If state transition history is empty (e.g. when disabled or fresh mutable state), returns 0.
