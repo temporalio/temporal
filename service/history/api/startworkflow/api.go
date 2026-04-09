@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
@@ -816,39 +815,21 @@ func (s *Starter) generateResponse(
 }
 
 func (s *Starter) generateStartedEventRefLink(runID string) *commonpb.Link {
-	return &commonpb.Link{
-		Variant: &commonpb.Link_WorkflowEvent_{
-			WorkflowEvent: &commonpb.Link_WorkflowEvent{
-				Namespace:  s.namespace.Name().String(),
-				WorkflowId: s.request.StartRequest.WorkflowId,
-				RunId:      runID,
-				Reference: &commonpb.Link_WorkflowEvent_EventRef{
-					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-						EventId:   common.FirstEventID,
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-					},
-				},
-			},
-		},
-	}
+	return api.GenerateStartedEventRefLink(
+		s.namespace.Name().String(),
+		s.request.StartRequest.WorkflowId,
+		runID,
+	)
 }
 
 func (s *Starter) generateRequestIdRefLink(runID string) *commonpb.Link {
-	return &commonpb.Link{
-		Variant: &commonpb.Link_WorkflowEvent_{
-			WorkflowEvent: &commonpb.Link_WorkflowEvent{
-				Namespace:  s.namespace.Name().String(),
-				WorkflowId: s.request.StartRequest.WorkflowId,
-				RunId:      runID,
-				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-						RequestId: s.request.StartRequest.RequestId,
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-					},
-				},
-			},
-		},
-	}
+	return api.GenerateRequestIDRefLink(
+		s.namespace.Name().String(),
+		s.request.StartRequest.WorkflowId,
+		runID,
+		s.request.StartRequest.RequestId,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+	)
 }
 
 func (s StartOutcome) String() string {

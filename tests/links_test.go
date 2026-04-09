@@ -49,7 +49,6 @@ func (s *LinksSuite) TestTerminateWorkflow_LinksAttachedToEvent() {
 	)
 	s.NoError(err)
 
-	// TODO(bergundy): Use SdkClient if and when it exposes links on TerminateWorkflow.
 	_, err = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -60,6 +59,7 @@ func (s *LinksSuite) TestTerminateWorkflow_LinksAttachedToEvent() {
 	})
 	s.NoError(err)
 
+	// TODO(bergundy): Use SdkClient if and when it exposes links on TerminateWorkflow.
 	history := env.SdkClient().GetWorkflowHistory(ctx, run.GetID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT)
 	event, err := history.Next()
 	s.NoError(err)
@@ -79,7 +79,6 @@ func (s *LinksSuite) TestRequestCancelWorkflow_LinksAttachedToEvent() {
 	)
 	s.NoError(err)
 
-	// TODO(bergundy): Use SdkClient if and when it exposes links on CancelWorkflow.
 	_, err = env.FrontendClient().RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -90,6 +89,7 @@ func (s *LinksSuite) TestRequestCancelWorkflow_LinksAttachedToEvent() {
 	})
 	s.NoError(err)
 
+	// TODO(bergundy): Use SdkClient if and when it exposes links on CancelWorkflow.
 	history := env.SdkClient().GetWorkflowHistory(ctx, run.GetID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	foundEvent := false
 	for history.HasNext() {
@@ -117,8 +117,7 @@ func (s *LinksSuite) TestSignalWorkflowExecution_LinksAttachedToEvent() {
 	)
 	s.NoError(err)
 
-	// TODO(bergundy): Use SdkClient if and when it exposes links on SignalWorkflow.
-	_, err = env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+	req := &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: run.GetID(),
@@ -127,21 +126,67 @@ func (s *LinksSuite) TestSignalWorkflowExecution_LinksAttachedToEvent() {
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 		Links:      links,
-	})
+	}
+	expectedLink := &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  env.Namespace().String(),
+				WorkflowId: run.GetID(),
+				RunId:      run.GetRunID(),
+				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+						RequestId: req.RequestId,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+					},
+				},
+			},
+		},
+	}
+
+	// TODO(bergundy): Use SdkClient if and when it exposes links on SignalWorkflow.
+	resp, err := env.FrontendClient().SignalWorkflowExecution(ctx, req)
 	s.NoError(err)
+	protorequire.ProtoEqual(s.T(), expectedLink, resp.GetLink())
+
+	// Second call with same RequestId hits the dedup path but must still return the same link.
+	resp, err = env.FrontendClient().SignalWorkflowExecution(ctx, req)
+	s.NoError(err)
+	protorequire.ProtoEqual(s.T(), expectedLink, resp.GetLink())
 
 	history := env.SdkClient().GetWorkflowHistory(ctx, run.GetID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	foundEvent := false
+	foundDuplicatedEvent := false
+	var signaledEventID int64
 	for history.HasNext() {
 		event, err := history.Next()
 		s.NoError(err)
 		if event.EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 			continue
 		}
+		if foundEvent {
+			foundDuplicatedEvent = true
+		} else {
+			signaledEventID = event.GetEventId()
+		}
 		foundEvent = true
 		protorequire.ProtoSliceEqual(s.T(), links, event.Links)
 	}
 	s.True(foundEvent)
+	s.False(foundDuplicatedEvent, "second signal with same RequestId should be deduped and not produce a second event")
+
+	// Verify the requestID is tracked and resolves to the correct event ID.
+	descResp, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: run.GetID(),
+		},
+	})
+	s.NoError(err)
+	requestIDInfos := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()
+	s.Contains(requestIDInfos, req.RequestId)
+	info := requestIDInfos[req.RequestId]
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, info.GetEventType())
+	s.Equal(signaledEventID, info.GetEventId(), "requestID map entry must point to the SIGNALED event in history")
 }
 
 func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToRelevantEvents() {
@@ -151,7 +196,6 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToRelevan
 
 	workflowID := testcore.RandomizeStr(s.T().Name())
 
-	// TODO(bergundy): Use SdkClient if and when it exposes links on SignalWithStartWorkflow.
 	request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		Namespace:  env.Namespace().String(),
 		WorkflowId: workflowID,
@@ -166,26 +210,74 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToRelevan
 		RequestId: uuid.NewString(),
 		Links:     links,
 	}
-	_, err := env.FrontendClient().SignalWithStartWorkflowExecution(ctx, request)
+
+	// TODO(bergundy): Use SdkClient if and when it exposes links on SignalWithStartWorkflow.
+	resp, err := env.FrontendClient().SignalWithStartWorkflowExecution(ctx, request)
 	s.NoError(err)
+	firstRunID := resp.GetRunId()
+	protorequire.ProtoEqual(
+		s.T(),
+		&commonpb.Link{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  env.Namespace().String(),
+					WorkflowId: workflowID,
+					RunId:      firstRunID,
+					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+							RequestId: request.RequestId,
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+						},
+					},
+				},
+			},
+		},
+		resp.GetSignalLink(),
+	)
+
+	firstRequestID := request.RequestId
 
 	// Send a second request and verify that the new signal has links attached to it too.
 	request.RequestId = uuid.NewString()
-	_, err = env.FrontendClient().SignalWithStartWorkflowExecution(ctx, request)
+	resp, err = env.FrontendClient().SignalWithStartWorkflowExecution(ctx, request)
 	s.NoError(err)
+	// Expect backlinks with the same RunID as before since the workflow execution didn't change,
+	// but the signal requestID should differ since this is a different request.
+	protorequire.ProtoEqual(
+		s.T(),
+		&commonpb.Link{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  env.Namespace().String(),
+					WorkflowId: workflowID,
+					RunId:      resp.GetRunId(),
+					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+							RequestId: request.RequestId, // This requestID should differ from the first backlink.
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+						},
+					},
+				},
+			},
+		},
+		resp.GetSignalLink(),
+	)
 
 	history := env.SdkClient().GetWorkflowHistory(ctx, workflowID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	foundStartEvent := false
 	foundFirstSignal := false
 	foundSecondSignal := false
+	var firstSignalEventID, secondSignalEventID int64
 	for history.HasNext() {
 		event, err := history.Next()
 		s.NoError(err)
 		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 			if foundFirstSignal {
 				foundSecondSignal = true
+				secondSignalEventID = event.GetEventId()
 			} else {
 				foundFirstSignal = true
+				firstSignalEventID = event.GetEventId()
 			}
 			protorequire.ProtoSliceEqual(s.T(), links, event.Links)
 		}
@@ -197,4 +289,24 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToRelevan
 	s.True(foundStartEvent)
 	s.True(foundFirstSignal)
 	s.True(foundSecondSignal)
+
+	// Verify both requestIDs are tracked and resolve to the correct signal event IDs.
+	descResp, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+		},
+	})
+	s.NoError(err)
+	requestIDInfos := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()
+
+	s.Contains(requestIDInfos, firstRequestID)
+	firstInfo := requestIDInfos[firstRequestID]
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, firstInfo.GetEventType())
+	s.Equal(firstSignalEventID, firstInfo.GetEventId(), "first requestID map entry must point to the first SIGNALED event in history")
+
+	s.Contains(requestIDInfos, request.RequestId)
+	secondInfo := requestIDInfos[request.RequestId]
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, secondInfo.GetEventType())
+	s.Equal(secondSignalEventID, secondInfo.GetEventId(), "second requestID map entry must point to the second SIGNALED event in history")
 }

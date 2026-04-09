@@ -102,6 +102,7 @@ type (
 			input *commonpb.Payloads,
 			identity string,
 			header *commonpb.Header,
+			requestID string,
 			links []*commonpb.Link,
 		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionSignaledEvent(
@@ -110,6 +111,7 @@ type (
 			identity string,
 			header *commonpb.Header,
 			externalWorkflowExecution *commonpb.WorkflowExecution,
+			requestID string,
 			links []*commonpb.Link,
 		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEvent(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)

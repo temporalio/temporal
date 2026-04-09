@@ -5826,6 +5826,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaled(
 	input *commonpb.Payloads,
 	identity string,
 	header *commonpb.Header,
+	requestID string,
 	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	return ms.AddWorkflowExecutionSignaledEvent(
@@ -5834,6 +5835,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaled(
 		identity,
 		header,
 		nil,
+		requestID,
 		links,
 	)
 }
@@ -5844,6 +5846,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaledEvent(
 	identity string,
 	header *commonpb.Header,
 	externalWorkflowExecution *commonpb.WorkflowExecution,
+	requestID string,
 	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowSignaled
@@ -5857,6 +5860,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaledEvent(
 		identity,
 		header,
 		externalWorkflowExecution,
+		requestID,
 		links,
 	)
 	if err := ms.ApplyWorkflowExecutionSignaled(event); err != nil {

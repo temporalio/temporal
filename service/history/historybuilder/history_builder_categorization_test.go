@@ -223,6 +223,29 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 		}
 	})
 
+	t.Run("signal requestID should be wired into requestIDToEventID map after flush", func(t *testing.T) {
+		nextEventID := int64(12)
+		hb := newHistoryBuilderFromConfig(builderConfig{nextEventId: nextEventID})
+		// Signal events are buffered (go to memBufferBatch)
+		signalEvent := hb.AddWorkflowExecutionSignaledEvent("signal-name", nil, "identity-1", nil, nil, "signal-request-id", nil)
+		if signalEvent.EventId != common.BufferedEventID {
+			t.Fatalf("expected signal to be buffered, got event id %d", signalEvent.EventId)
+		}
+
+		_, requestIDToEventID := hb.FlushBufferToCurrentBatch()
+
+		if signalEvent.EventId != nextEventID {
+			t.Errorf("expected signal event id %d after flush, got %d", nextEventID, signalEvent.EventId)
+		}
+		eventID, ok := requestIDToEventID["signal-request-id"]
+		if !ok {
+			t.Fatal("signal requestID not found in requestIDToEventID map after flush")
+		}
+		if eventID != nextEventID {
+			t.Errorf("expected requestIDToEventID[signal-request-id] == %d, got %d", nextEventID, eventID)
+		}
+	})
+
 	t.Run("when there is ACTIVITY_TASK_COMPLETED event will move it to the end", func(t *testing.T) {
 		hb := newHistoryBuilderFromConfig(builderConfig{nextEventId: 12})
 		hb.AddActivityTaskCompletedEvent(14, 13, "activity-completed", nil, defaultNamespace)
@@ -1473,6 +1496,7 @@ func (s *sutTestingAdapter) AddWorkflowExecutionSignaledEvent(_ ...eventConfig) 
 		"identity-1",
 		nil,
 		nil,
+		"",
 		nil,
 	)
 }

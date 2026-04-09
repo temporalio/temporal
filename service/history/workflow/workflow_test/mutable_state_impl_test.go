@@ -186,6 +186,7 @@ func addWorkflowExecutionSignaled(t *testing.T, i int, ms *workflow.MutableState
 		payload,
 		identity,
 		header,
+		"",
 		nil,
 	)
 	if err != nil {
