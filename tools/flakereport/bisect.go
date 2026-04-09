@@ -308,6 +308,29 @@ func runBisectForTest(cfg BisectConfig, testName string, allRuns []TestRun, comm
 		results = filtered
 	}
 
+	// Filter suspects where the failure rate did not increase at the transition commit.
+	// A decreasing failure rate indicates the commit fixed a flake, not introduced one,
+	// and is not actionable as a culprit.
+	{
+		filtered := results[:0]
+		for _, r := range results {
+			nBefore := r.PassesBefore + r.FailsBefore
+			nAfter := r.PassesAfter + r.FailsAfter
+			rateBefore := 0.0
+			if nBefore > 0 {
+				rateBefore = float64(r.FailsBefore) / float64(nBefore)
+			}
+			rateAfter := 0.0
+			if nAfter > 0 {
+				rateAfter = float64(r.FailsAfter) / float64(nAfter)
+			}
+			if rateAfter > rateBefore {
+				filtered = append(filtered, r)
+			}
+		}
+		results = filtered
+	}
+
 	if len(results) == 0 {
 		return TestBisectReport{
 			TestName: testName,

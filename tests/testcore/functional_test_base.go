@@ -659,6 +659,15 @@ func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{
 	}
 }
 
+func (s *FunctionalTestBase) SendToChannel(ctx context.Context, ch chan struct{}) {
+	s.T().Helper()
+	select {
+	case ch <- struct{}{}:
+	case <-ctx.Done():
+		s.FailNow("context timeout while sending to channel")
+	}
+}
+
 // TODO (alex): change to nsName namespace.Name
 func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
