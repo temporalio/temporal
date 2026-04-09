@@ -87,7 +87,7 @@ func (h *cancellationInvocationTaskHandler) Execute(
 	callCtx, cancel := h.setupCallContext(ctx, callTimeout)
 	defer cancel()
 
-	inv, err := h.nexusTaskHandlerBase.newInvocation(
+	inv, err := h.newInvocation(
 		callCtx, ns, endpoint, args.endpointName, args.service,
 		callTimeout, timeoutType,
 		invocationTraceContext{
