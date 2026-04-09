@@ -1765,7 +1765,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 	})
 	s.NoError(err)
 
-	canStartCh <- struct{}{}
+	env.SendToChannel(ctx, canStartCh)
 	env.WaitForChannel(ctx, cancelSentCh)
 
 	// Terminate the workflow for good measure.
