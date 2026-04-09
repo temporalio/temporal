@@ -21,6 +21,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -70,6 +72,7 @@ func TestScheduleCHASM(t *testing.T) {
 	// CHASM-only tests
 	newContext := chasmContextFactory
 	t.Run("TestCreateScheduleAlreadyExists", func(t *testing.T) { testCreateScheduleAlreadyExists(t, newContext) })
+	t.Run("TestCreateScheduleDuplicateSdkError", func(t *testing.T) { testCreateScheduleDuplicateSdkError(t, true) })
 	t.Run("TestPatchRejectsExcessBackfillers", func(t *testing.T) { testPatchRejectsExcessBackfillers(t, newContext) })
 	t.Run("TestDoubleReset_HSMCallbacks", func(t *testing.T) { testScheduledWorkflowDoubleReset(t, newContext, false) })
 	t.Run("TestDoubleReset_ChasmCallbacks", func(t *testing.T) { testScheduledWorkflowDoubleReset(t, newContext, true) })
@@ -87,6 +90,7 @@ func TestScheduleV1(t *testing.T) {
 
 	// V1-only tests
 	newContext := v1ContextFactory
+	t.Run("TestCreateScheduleDuplicateSdkError", func(t *testing.T) { testCreateScheduleDuplicateSdkError(t, false) })
 	t.Run("TestCHASMCanListV1Schedules", func(t *testing.T) { testCHASMCanListV1Schedules(t, newContext) })
 	t.Run("TestRefresh", func(t *testing.T) { testRefresh(t, newContext) })
 	t.Run("TestListBeforeRun", func(t *testing.T) { testListBeforeRun(t, newContext) })
@@ -1702,9 +1706,41 @@ func testCreateScheduleAlreadyExists(t *testing.T, newContext contextFactory) {
 	_, err = s.FrontendClient().CreateSchedule(ctx, req)
 	s.Error(err)
 
-	var alreadyExists *serviceerror.AlreadyExists
-	s.ErrorAs(err, &alreadyExists)
+	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+	s.ErrorAs(err, &alreadyStarted)
 	s.Contains(err.Error(), sid)
+}
+
+// CreateSchedule is special-cased in the SDKs to translate
+// serviceerror.WorkflowExecutionAlreadyStarted into
+// temporal.ErrScheduleAlreadyRunning. This tests the SDK's behavior E2E against
+// the handler. A similar test exists in the features repository.
+func testCreateScheduleDuplicateSdkError(t *testing.T, useCHASM bool) {
+	opts := scheduleCommonOpts()
+	if useCHASM {
+		opts = append(opts, testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true))
+	}
+	s := testcore.NewEnv(t, opts...)
+
+	sid := "sched-test-duplicate-sdk-" + uuid.NewString()[:8]
+	schedOpts := sdkclient.ScheduleOptions{
+		ID:   sid,
+		Spec: sdkclient.ScheduleSpec{},
+		Action: &sdkclient.ScheduleWorkflowAction{
+			ID:        "wf-" + sid,
+			Workflow:  "noop",
+			TaskQueue: s.WorkerTaskQueue(),
+		},
+		Paused: true,
+	}
+
+	ctx := s.Context()
+	handle, err := s.SdkClient().ScheduleClient().Create(ctx, schedOpts)
+	s.NoError(err)
+	defer func() { _ = handle.Delete(context.Background()) }()
+
+	_, err = s.SdkClient().ScheduleClient().Create(ctx, schedOpts)
+	s.ErrorIs(err, temporal.ErrScheduleAlreadyRunning)
 }
 
 func testPatchRejectsExcessBackfillers(t *testing.T, newContext contextFactory) {

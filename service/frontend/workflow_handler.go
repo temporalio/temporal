@@ -3473,7 +3473,8 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 			return nil, checkErr
 		}
 		if isReal {
-			return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", request.ScheduleId)
+			return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
+				fmt.Sprintf("schedule %q is already registered", request.ScheduleId), "", "")
 		}
 	}
 
@@ -3485,11 +3486,17 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 	if err != nil {
 		// The CHASM handler returns NotFound when the key is occupied by a
 		// sentinel (written by a V1-path node that raced us). Translate to
-		// AlreadyExists so the caller gets a sensible error.
+		// WorkflowExecutionAlreadyStarted so the SDK can map it to
+		// ErrScheduleAlreadyRunning.
 		if isSchedulerErrorLegacyRoutable(err) {
 			wh.logger.Warn("CreateSchedule race detected: sentinel found at CHASM key",
 				tag.ScheduleID(request.ScheduleId))
-			return nil, serviceerror.NewAlreadyExistsf("schedule %q: concurrent creation detected", request.ScheduleId)
+			return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
+				fmt.Sprintf("schedule %q: concurrent creation detected", request.ScheduleId), "", "")
+		}
+		var alreadyExistsErr *serviceerror.AlreadyExists
+		if errors.As(err, &alreadyExistsErr) {
+			return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(alreadyExistsErr.Message, "", "")
 		}
 		return nil, err
 	}
@@ -3517,6 +3524,12 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 	// fleet, so it is stable for usage here.
 	if wh.config.EnableChasm(namespaceName.String()) {
 		if err := wh.writeSchedulerCHASMSentinel(ctx, namespaceID.String(), namespaceName.String(), request.ScheduleId); err != nil {
+			// Translate AlreadyExists (from CHASM handler) to
+			// WorkflowExecutionAlreadyStarted for SDK compatibility.
+			var alreadyExistsErr *serviceerror.AlreadyExists
+			if errors.As(err, &alreadyExistsErr) {
+				return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(alreadyExistsErr.Message, "", "")
+			}
 			// Ignore unimplemented to avoid issues with mixed brain testing.
 			//
 			// We wouldn't hit this condition in prod, as we wouldn't migrate with the fleet
@@ -3602,9 +3615,11 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 				// A dummy workflow exists — a CHASM-path node raced us.
 				wh.logger.Warn("CreateSchedule race detected: sentinel found at V1 key",
 					tag.ScheduleID(request.ScheduleId))
-				return nil, serviceerror.NewAlreadyExistsf("schedule %q: concurrent creation detected", request.ScheduleId)
+				return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
+					fmt.Sprintf("schedule %q: concurrent creation detected", request.ScheduleId), "", "")
 			}
-			return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", request.ScheduleId)
+			return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
+				fmt.Sprintf("schedule %q is already registered", request.ScheduleId), "", "")
 		}
 		return nil, err
 	}
