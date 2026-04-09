@@ -94,6 +94,19 @@ type RespondCancelledEvent struct {
 	Token   *tokenspb.Task
 }
 
+func (a *Activity) isTerminal() bool {
+	switch a.GetStatus() {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
+		return true
+	default:
+		return false
+	}
+}
+
 // LifecycleState implements the chasm.Component interface.
 func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	switch a.Status {
@@ -625,6 +638,10 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activitypb.PauseActivityExecutionRequest) (
 	*activitypb.PauseActivityExecutionResponse, error,
 ) {
+	if a.isTerminal() {
+		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
+	}
+
 	frontendReq := req.GetFrontendRequest()
 
 	// Idempotent: already paused → no-op.
@@ -652,6 +669,10 @@ func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activityp
 func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activitypb.UnpauseActivityExecutionRequest) (
 	*activitypb.UnpauseActivityExecutionResponse, error,
 ) {
+	if a.isTerminal() {
+		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
+	}
+
 	frontendReq := req.GetFrontendRequest()
 
 	// Not paused → no-op.
