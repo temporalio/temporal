@@ -398,6 +398,7 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			params.ClusterMetadata,
 			params.Cfg,
 			params.SpanExporters,
+			params.ServiceNames,
 		),
 		fx.Provide(
 			resource.DefaultSnTaggedLoggerProvider,

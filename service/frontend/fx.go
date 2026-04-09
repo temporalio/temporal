@@ -989,10 +989,18 @@ func NexusEndpointClientProvider(
 func NexusEndpointRegistryProvider(
 	matchingClient resource.MatchingClient,
 	nexusEndpointManager persistence.NexusEndpointManager,
+	serviceNames resource.ServiceNames,
 	dc *dynamicconfig.Collection,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) nexus.EndpointRegistry {
+	if resource.IsSingleProcessServiceSet(serviceNames) {
+		return nexus.NewDirectEndpointRegistry(
+			dynamicconfig.NexusEndpointListDefaultPageSize.Get(dc)(),
+			nexusEndpointManager,
+		)
+	}
+
 	registryConfig := nexus.NewEndpointRegistryConfig(dc)
 	return nexus.NewEndpointRegistry(
 		registryConfig,

@@ -68,10 +68,18 @@ func register(
 func endpointRegistryProvider(
 	matchingClient resource.MatchingClient,
 	endpointManager persistence.NexusEndpointManager,
+	serviceNames resource.ServiceNames,
 	dc *dynamicconfig.Collection,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) commonnexus.EndpointRegistry {
+	if resource.IsSingleProcessServiceSet(serviceNames) {
+		return commonnexus.NewDirectEndpointRegistry(
+			dynamicconfig.NexusEndpointListDefaultPageSize.Get(dc)(),
+			endpointManager,
+		)
+	}
+
 	registryConfig := commonnexus.NewEndpointRegistryConfig(dc)
 	return commonnexus.NewEndpointRegistry(
 		registryConfig,

@@ -190,6 +190,23 @@ var chasmFxOptions = fx.Options(
 	chasmtests.Module,
 )
 
+func (c *TemporalImpl) serviceNames() resource.ServiceNames {
+	serviceNames := make(resource.ServiceNames)
+	if c.frontendConfig.NumFrontendHosts > 0 {
+		serviceNames[primitives.FrontendService] = struct{}{}
+	}
+	if c.historyConfig.NumHistoryHosts > 0 {
+		serviceNames[primitives.HistoryService] = struct{}{}
+	}
+	if c.matchingConfig.NumMatchingHosts > 0 {
+		serviceNames[primitives.MatchingService] = struct{}{}
+	}
+	if c.workerConfig.NumWorkers > 0 {
+		serviceNames[primitives.WorkerService] = struct{}{}
+	}
+	return serviceNames
+}
+
 // newTemporal returns an instance that hosts full temporal in one process
 func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 	impl := &TemporalImpl{
@@ -368,6 +385,7 @@ func (c *TemporalImpl) startFrontend() {
 				c.copyPersistenceConfig(),
 				serviceName,
 				c.mockAdminClient,
+				c.serviceNames(),
 			),
 			fx.Provide(c.frontendConfigProvider),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
@@ -464,6 +482,7 @@ func (c *TemporalImpl) startHistory() {
 				c.copyPersistenceConfig(),
 				serviceName,
 				c.mockAdminClient,
+				c.serviceNames(),
 			),
 			fx.Provide(c.configProvider),
 			fx.Provide(c.GetMetricsHandler),
@@ -615,6 +634,7 @@ func (c *TemporalImpl) startWorker() {
 				c.copyPersistenceConfig(),
 				serviceName,
 				c.mockAdminClient,
+				c.serviceNames(),
 			),
 			fx.Provide(c.configProvider),
 			fx.Provide(c.GetMetricsHandler),
