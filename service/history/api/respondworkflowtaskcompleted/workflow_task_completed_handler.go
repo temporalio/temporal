@@ -333,8 +333,9 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 
 		// Try CHASM command handler first, fall back to HSM if not supported.
 		handledByCHASM := false
-		if handler.config.ChasmEnabled(handler.mutableState.GetNamespaceEntry().Name().String()) {
+		if handler.mutableState.ChasmEnabled() {
 			if chasmHandler, ok := handler.chasmWorkflowRegistry.CommandHandler(command.GetCommandType()); ok {
+				handler.mutableState.EnsureChasmWorkflowComponent(ctx)
 				chasmWorkflow, chasmCtx, chasmErr := handler.mutableState.ChasmWorkflowComponent(ctx)
 				if chasmErr != nil {
 					return nil, chasmErr
