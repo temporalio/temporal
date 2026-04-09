@@ -1,10 +1,11 @@
 syntax = "proto3";
 
 package temporal.server.api.matchingservice.v1;
-option go_package = "go.temporal.io/server/api/matchingservice/v1;matchingservice";
 
-import "temporal/server/api/matchingservice/v1/request_response.proto";
 import "temporal/server/api/common/v1/api_category.proto";
+import "temporal/server/api/matchingservice/v1/request_response.proto";
+
+option go_package = "go.temporal.io/server/api/matchingservice/v1;matchingservice";
 
 // MatchingService API is exposed to provide support for polling from long running applications.
 // Such applications are expected to have a worker which regularly polls for WorkflowTask and ActivityTask.  For each
@@ -12,268 +13,267 @@ import "temporal/server/api/common/v1/api_category.proto";
 // commands.  For each ActivityTask, application is expected to execute the actual logic for that task and respond back
 // with completion or failure.
 service MatchingService {
-    // PollWorkflowTaskQueue is called by frontend to process WorkflowTask from a specific task queue.  A
-    // WorkflowTask is dispatched to callers for active workflow executions, with pending workflow tasks.
-    rpc PollWorkflowTaskQueue (PollWorkflowTaskQueueRequest) returns (PollWorkflowTaskQueueResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
-    }
+  // PollWorkflowTaskQueue is called by frontend to process WorkflowTask from a specific task queue.  A
+  // WorkflowTask is dispatched to callers for active workflow executions, with pending workflow tasks.
+  rpc PollWorkflowTaskQueue(PollWorkflowTaskQueueRequest) returns (PollWorkflowTaskQueueResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
+  }
 
-    // PollActivityTaskQueue is called by frontend to process ActivityTask from a specific task queue.  ActivityTask
-    // is dispatched to callers whenever a ScheduleTask command is made for a workflow execution.
-    rpc PollActivityTaskQueue (PollActivityTaskQueueRequest) returns (PollActivityTaskQueueResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
-    }
+  // PollActivityTaskQueue is called by frontend to process ActivityTask from a specific task queue.  ActivityTask
+  // is dispatched to callers whenever a ScheduleTask command is made for a workflow execution.
+  rpc PollActivityTaskQueue(PollActivityTaskQueueRequest) returns (PollActivityTaskQueueResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
+  }
 
-    // AddWorkflowTask is called by the history service when a workflow task is scheduled, so that it can be dispatched
-    // by the MatchingEngine.
-    rpc AddWorkflowTask (AddWorkflowTaskRequest) returns (AddWorkflowTaskResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // AddWorkflowTask is called by the history service when a workflow task is scheduled, so that it can be dispatched
+  // by the MatchingEngine.
+  rpc AddWorkflowTask(AddWorkflowTaskRequest) returns (AddWorkflowTaskResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // AddActivityTask is called by the history service when a workflow task is scheduled, so that it can be dispatched
-    // by the MatchingEngine.
-    rpc AddActivityTask (AddActivityTaskRequest) returns (AddActivityTaskResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // AddActivityTask is called by the history service when a workflow task is scheduled, so that it can be dispatched
+  // by the MatchingEngine.
+  rpc AddActivityTask(AddActivityTaskRequest) returns (AddActivityTaskResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // QueryWorkflow is called by frontend to query a workflow.
-    rpc QueryWorkflow (QueryWorkflowRequest) returns (QueryWorkflowResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
-    }
+  // QueryWorkflow is called by frontend to query a workflow.
+  rpc QueryWorkflow(QueryWorkflowRequest) returns (QueryWorkflowResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
+  }
 
-    // RespondQueryTaskCompleted is called by frontend to respond query completed.
-    rpc RespondQueryTaskCompleted (RespondQueryTaskCompletedRequest) returns (RespondQueryTaskCompletedResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // RespondQueryTaskCompleted is called by frontend to respond query completed.
+  rpc RespondQueryTaskCompleted(RespondQueryTaskCompletedRequest) returns (RespondQueryTaskCompletedResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // Request from frontend to synchronously dispatch a nexus task to a worker.
-    rpc DispatchNexusTask (DispatchNexusTaskRequest) returns (DispatchNexusTaskResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // Request from frontend to synchronously dispatch a nexus task to a worker.
+  rpc DispatchNexusTask(DispatchNexusTaskRequest) returns (DispatchNexusTaskResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // Request from worker (via frontend) to long poll on nexus tasks.
-    rpc PollNexusTaskQueue (PollNexusTaskQueueRequest) returns (PollNexusTaskQueueResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
-    }
+  // Request from worker (via frontend) to long poll on nexus tasks.
+  rpc PollNexusTaskQueue(PollNexusTaskQueueRequest) returns (PollNexusTaskQueueResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
+  }
 
-    // Response from a worker (via frontend) to a Nexus task, unblocks the corresponding DispatchNexusTask request.
-    rpc RespondNexusTaskCompleted (RespondNexusTaskCompletedRequest) returns (RespondNexusTaskCompletedResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // Response from a worker (via frontend) to a Nexus task, unblocks the corresponding DispatchNexusTask request.
+  rpc RespondNexusTaskCompleted(RespondNexusTaskCompletedRequest) returns (RespondNexusTaskCompletedResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // Response from a worker (via frontend) to a Nexus task, unblocks the corresponding DispatchNexusTask request.
-    rpc RespondNexusTaskFailed (RespondNexusTaskFailedRequest) returns (RespondNexusTaskFailedResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // Response from a worker (via frontend) to a Nexus task, unblocks the corresponding DispatchNexusTask request.
+  rpc RespondNexusTaskFailed(RespondNexusTaskFailedRequest) returns (RespondNexusTaskFailedResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // CancelOutstandingPoll is called by frontend to unblock long polls on matching for zombie pollers.
-    // Our rpc stack does not support context propagation, so when a client connection goes away frontend sees
-    // cancellation of context for that handler, but any corresponding calls (long-poll) to matching service does not
-    // see the cancellation propagated so it can unblock corresponding long-polls on its end.  This results is tasks
-    // being dispatched to zombie pollers in this situation.  This API is added so every time frontend makes a long-poll
-    // api call to matching it passes in a pollerId and then calls this API when it detects client connection is closed
-    // to unblock long polls for this poller and prevent tasks being sent to these zombie pollers.
-    rpc CancelOutstandingPoll (CancelOutstandingPollRequest) returns (CancelOutstandingPollResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // CancelOutstandingPoll is called by frontend to unblock long polls on matching for zombie pollers.
+  // Our rpc stack does not support context propagation, so when a client connection goes away frontend sees
+  // cancellation of context for that handler, but any corresponding calls (long-poll) to matching service does not
+  // see the cancellation propagated so it can unblock corresponding long-polls on its end.  This results is tasks
+  // being dispatched to zombie pollers in this situation.  This API is added so every time frontend makes a long-poll
+  // api call to matching it passes in a pollerId and then calls this API when it detects client connection is closed
+  // to unblock long polls for this poller and prevent tasks being sent to these zombie pollers.
+  rpc CancelOutstandingPoll(CancelOutstandingPollRequest) returns (CancelOutstandingPollResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // CancelOutstandingWorkerPolls cancels any outstanding polls for a given worker instance key.
-    // These polls could be waiting on different partitions of the task queue.
-    // This is called during worker shutdown to eagerly cancel polls and avoid giving out tasks to workers that are shutting down.
-    // Note: This only cancels polls that are currently outstanding. The caller must ensure no new polls
-    // are issued after calling this RPC, otherwise those polls will not be cancelled.
-    rpc CancelOutstandingWorkerPolls (CancelOutstandingWorkerPollsRequest) returns (CancelOutstandingWorkerPollsResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // CancelOutstandingWorkerPolls cancels any outstanding polls for a given worker instance key.
+  // These polls could be waiting on different partitions of the task queue.
+  // This is called during worker shutdown to eagerly cancel polls and avoid giving out tasks to workers that are shutting down.
+  // Note: This only cancels polls that are currently outstanding. The caller must ensure no new polls
+  // are issued after calling this RPC, otherwise those polls will not be cancelled.
+  rpc CancelOutstandingWorkerPolls(CancelOutstandingWorkerPollsRequest) returns (CancelOutstandingWorkerPollsResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // DescribeTaskQueue returns information about the target task queue, right now this API returns the
-    // pollers which polled this task queue in last few minutes.
-    rpc DescribeTaskQueue (DescribeTaskQueueRequest) returns (DescribeTaskQueueResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // DescribeTaskQueue returns information about the target task queue, right now this API returns the
+  // pollers which polled this task queue in last few minutes.
+  rpc DescribeTaskQueue(DescribeTaskQueueRequest) returns (DescribeTaskQueueResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // DescribeTaskQueuePartition returns information about the target task queue partition.
-    rpc DescribeTaskQueuePartition (DescribeTaskQueuePartitionRequest) returns (DescribeTaskQueuePartitionResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // DescribeTaskQueuePartition returns information about the target task queue partition.
+  rpc DescribeTaskQueuePartition(DescribeTaskQueuePartitionRequest) returns (DescribeTaskQueuePartitionResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // DescribeVersionedTaskQueues returns details about the requested versioned task queues.
-    // It is an internal API; there is no direct user-facing equivalent.
-    rpc DescribeVersionedTaskQueues (DescribeVersionedTaskQueuesRequest) returns (DescribeVersionedTaskQueuesResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // DescribeVersionedTaskQueues returns details about the requested versioned task queues.
+  // It is an internal API; there is no direct user-facing equivalent.
+  rpc DescribeVersionedTaskQueues(DescribeVersionedTaskQueuesRequest) returns (DescribeVersionedTaskQueuesResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
-    rpc  ListTaskQueuePartitions(ListTaskQueuePartitionsRequest) returns (ListTaskQueuePartitionsResponse){
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
+  rpc ListTaskQueuePartitions(ListTaskQueuePartitionsRequest) returns (ListTaskQueuePartitionsResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // (-- api-linter: core::0134::response-message-name=disabled
-    //     aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
-    // (-- api-linter: core::0134::method-signature=disabled
-    //     aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
-    rpc UpdateWorkerBuildIdCompatibility (UpdateWorkerBuildIdCompatibilityRequest) returns (UpdateWorkerBuildIdCompatibilityResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // (-- api-linter: core::0134::response-message-name=disabled
+  //     aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
+  // (-- api-linter: core::0134::method-signature=disabled
+  //     aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
+  rpc UpdateWorkerBuildIdCompatibility(UpdateWorkerBuildIdCompatibilityRequest) returns (UpdateWorkerBuildIdCompatibilityResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    rpc GetWorkerBuildIdCompatibility (GetWorkerBuildIdCompatibilityRequest) returns (GetWorkerBuildIdCompatibilityResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  rpc GetWorkerBuildIdCompatibility(GetWorkerBuildIdCompatibilityRequest) returns (GetWorkerBuildIdCompatibilityResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // Fetch user data for a task queue, this request should always be routed to the node holding the root partition of the workflow task queue.
-    rpc GetTaskQueueUserData (GetTaskQueueUserDataRequest) returns (GetTaskQueueUserDataResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // Fetch user data for a task queue, this request should always be routed to the node holding the root partition of the workflow task queue.
+  rpc GetTaskQueueUserData(GetTaskQueueUserDataRequest) returns (GetTaskQueueUserDataResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // Allows updating the Build ID assignment and redirect rules for a given Task Queue.
-    // (-- api-linter: core::0134::method-signature=disabled
-    //     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
-    // (-- api-linter: core::0134::response-message-name=disabled
-    //     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
-    rpc UpdateWorkerVersioningRules (UpdateWorkerVersioningRulesRequest) returns (UpdateWorkerVersioningRulesResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // Allows updating the Build ID assignment and redirect rules for a given Task Queue.
+  // (-- api-linter: core::0134::method-signature=disabled
+  //     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+  // (-- api-linter: core::0134::response-message-name=disabled
+  //     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+  rpc UpdateWorkerVersioningRules(UpdateWorkerVersioningRulesRequest) returns (UpdateWorkerVersioningRulesResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // Fetches the Build ID assignment and redirect rules for a Task Queue
-    // (-- api-linter: core::0127::resource-name-extraction=disabled
-    //     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
-    // (-- api-linter: core::0131::http-uri-name=disabled
-    //     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
-    rpc GetWorkerVersioningRules (GetWorkerVersioningRulesRequest) returns (GetWorkerVersioningRulesResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // Fetches the Build ID assignment and redirect rules for a Task Queue
+  // (-- api-linter: core::0127::resource-name-extraction=disabled
+  //     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+  // (-- api-linter: core::0131::http-uri-name=disabled
+  //     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+  rpc GetWorkerVersioningRules(GetWorkerVersioningRulesRequest) returns (GetWorkerVersioningRulesResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // This request should always be routed to the node holding the root partition of the workflow task queue.
-    rpc SyncDeploymentUserData (SyncDeploymentUserDataRequest) returns (SyncDeploymentUserDataResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // This request should always be routed to the node holding the root partition of the workflow task queue.
+  rpc SyncDeploymentUserData(SyncDeploymentUserDataRequest) returns (SyncDeploymentUserDataResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // Apply a user data replication event.
-    rpc ApplyTaskQueueUserDataReplicationEvent (ApplyTaskQueueUserDataReplicationEventRequest) returns (ApplyTaskQueueUserDataReplicationEventResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // Apply a user data replication event.
+  rpc ApplyTaskQueueUserDataReplicationEvent(ApplyTaskQueueUserDataReplicationEventRequest) returns (ApplyTaskQueueUserDataReplicationEventResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // Gets all task queue names mapped to a given build ID
-    rpc GetBuildIdTaskQueueMapping (GetBuildIdTaskQueueMappingRequest) returns (GetBuildIdTaskQueueMappingResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
-    // Force loading a task queue partition. Used by matching node owning root partition.
-    // When root partition is loaded this is called for all child partitions.
-    // This addresses the posibility of unloaded child partitions having backlog,
-    // but not being forwarded/synced to the root partition to find the polling
-    // worker which triggered the root partition being loaded in the first place.
-    rpc ForceLoadTaskQueuePartition (ForceLoadTaskQueuePartitionRequest) returns (ForceLoadTaskQueuePartitionResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // Gets all task queue names mapped to a given build ID
+  rpc GetBuildIdTaskQueueMapping(GetBuildIdTaskQueueMappingRequest) returns (GetBuildIdTaskQueueMappingResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+  // Force loading a task queue partition. Used by matching node owning root partition.
+  // When root partition is loaded this is called for all child partitions.
+  // This addresses the posibility of unloaded child partitions having backlog,
+  // but not being forwarded/synced to the root partition to find the polling
+  // worker which triggered the root partition being loaded in the first place.
+  rpc ForceLoadTaskQueuePartition(ForceLoadTaskQueuePartitionRequest) returns (ForceLoadTaskQueuePartitionResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // TODO Shivam - remove this in 123. Present for backwards compatibility.
-    rpc ForceUnloadTaskQueue (ForceUnloadTaskQueueRequest) returns (ForceUnloadTaskQueueResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // TODO Shivam - remove this in 123. Present for backwards compatibility.
+  rpc ForceUnloadTaskQueue(ForceUnloadTaskQueueRequest) returns (ForceUnloadTaskQueueResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // Force unloading a task queue partition.
-    rpc ForceUnloadTaskQueuePartition (ForceUnloadTaskQueuePartitionRequest) returns (ForceUnloadTaskQueuePartitionResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // Force unloading a task queue partition.
+  rpc ForceUnloadTaskQueuePartition(ForceUnloadTaskQueuePartitionRequest) returns (ForceUnloadTaskQueuePartitionResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // Update task queue user data in owning node for all updates in namespace.
-    // All user data updates must first go through the task queue owner using the `UpdateWorkerBuildIdCompatibility`
-    // API.
-    // (-- api-linter: core::0134::response-message-name=disabled
-    //     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
-    // (-- api-linter: core::0134::method-signature=disabled
-    //     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
-    rpc UpdateTaskQueueUserData(UpdateTaskQueueUserDataRequest) returns (UpdateTaskQueueUserDataResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // Update task queue user data in owning node for all updates in namespace.
+  // All user data updates must first go through the task queue owner using the `UpdateWorkerBuildIdCompatibility`
+  // API.
+  // (-- api-linter: core::0134::response-message-name=disabled
+  //     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+  // (-- api-linter: core::0134::method-signature=disabled
+  //     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+  rpc UpdateTaskQueueUserData(UpdateTaskQueueUserDataRequest) returns (UpdateTaskQueueUserDataResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
-    rpc ReplicateTaskQueueUserData(ReplicateTaskQueueUserDataRequest) returns (ReplicateTaskQueueUserDataResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
+  rpc ReplicateTaskQueueUserData(ReplicateTaskQueueUserDataRequest) returns (ReplicateTaskQueueUserDataResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // Blocks on user data propagation to all loaded partitions. If successful, all loaded
-    // workflow + activity partitions have the requested version or higher.
-    // Routed to user data owner (root partition of workflow task queue).
-    rpc CheckTaskQueueUserDataPropagation(CheckTaskQueueUserDataPropagationRequest) returns (CheckTaskQueueUserDataPropagationResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // Blocks on user data propagation to all loaded partitions. If successful, all loaded
+  // workflow + activity partitions have the requested version or higher.
+  // Routed to user data owner (root partition of workflow task queue).
+  rpc CheckTaskQueueUserDataPropagation(CheckTaskQueueUserDataPropagationRequest) returns (CheckTaskQueueUserDataPropagationResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // Create a Nexus endpoint.
-    // (-- api-linter: core::0133::method-signature=disabled
-    //     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
-    // (-- api-linter: core::0133::response-message-name=disabled
-    //     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
-    // (-- api-linter: core::0133::http-uri-parent=disabled
-    //     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
-    rpc	CreateNexusEndpoint(CreateNexusEndpointRequest) returns (CreateNexusEndpointResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
-    // Optimistically update a Nexus endpoint based on provided version.
-    // If this request is accepted, the input is considered the "current" state of this service at the time it was
-    // persisted and the updated version is returned.
-    // (-- api-linter: core::0134::method-signature=disabled
-    //     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
-    // (-- api-linter: core::0134::response-message-name=disabled
-    //     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
-    // (-- api-linter: core::0134::request-resource-required=disabled
-    //     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
-    rpc	UpdateNexusEndpoint(UpdateNexusEndpointRequest) returns (UpdateNexusEndpointResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
-    // Delete a service by its name.
-    rpc	DeleteNexusEndpoint(DeleteNexusEndpointRequest) returns (DeleteNexusEndpointResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
-    // List all registered services.
-    rpc	ListNexusEndpoints(ListNexusEndpointsRequest) returns (ListNexusEndpointsResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // Create a Nexus endpoint.
+  // (-- api-linter: core::0133::method-signature=disabled
+  //     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+  // (-- api-linter: core::0133::response-message-name=disabled
+  //     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+  // (-- api-linter: core::0133::http-uri-parent=disabled
+  //     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+  rpc CreateNexusEndpoint(CreateNexusEndpointRequest) returns (CreateNexusEndpointResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+  // Optimistically update a Nexus endpoint based on provided version.
+  // If this request is accepted, the input is considered the "current" state of this service at the time it was
+  // persisted and the updated version is returned.
+  // (-- api-linter: core::0134::method-signature=disabled
+  //     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+  // (-- api-linter: core::0134::response-message-name=disabled
+  //     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+  // (-- api-linter: core::0134::request-resource-required=disabled
+  //     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+  rpc UpdateNexusEndpoint(UpdateNexusEndpointRequest) returns (UpdateNexusEndpointResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+  // Delete a service by its name.
+  rpc DeleteNexusEndpoint(DeleteNexusEndpointRequest) returns (DeleteNexusEndpointResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+  // List all registered services.
+  rpc ListNexusEndpoints(ListNexusEndpointsRequest) returns (ListNexusEndpointsResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // RecordWorkerHeartbeat receive heartbeat request from the worker.
-    rpc RecordWorkerHeartbeat (RecordWorkerHeartbeatRequest) returns (RecordWorkerHeartbeatResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // RecordWorkerHeartbeat receive heartbeat request from the worker.
+  rpc RecordWorkerHeartbeat(RecordWorkerHeartbeatRequest) returns (RecordWorkerHeartbeatResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.
-    // Supports pagination for large result sets. Returns an empty list if no workers match the criteria.
-    // Returns an error if the namespace doesn't exist.
-    rpc ListWorkers (ListWorkersRequest) returns (ListWorkersResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.
+  // Supports pagination for large result sets. Returns an empty list if no workers match the criteria.
+  // Returns an error if the namespace doesn't exist.
+  rpc ListWorkers(ListWorkersRequest) returns (ListWorkersResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // Set the persisted task queue configuration.
-    // (-- api-linter: core::0134::method-signature=disabled
-    //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
-    // (-- api-linter: core::0134::response-message-name=disabled
-    //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
-    // (-- api-linter: core::0134::request-resource-required=disabled
-    //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
-    rpc UpdateTaskQueueConfig (UpdateTaskQueueConfigRequest) returns (UpdateTaskQueueConfigResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // Set the persisted task queue configuration.
+  // (-- api-linter: core::0134::method-signature=disabled
+  //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+  // (-- api-linter: core::0134::response-message-name=disabled
+  //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+  // (-- api-linter: core::0134::request-resource-required=disabled
+  //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+  rpc UpdateTaskQueueConfig(UpdateTaskQueueConfigRequest) returns (UpdateTaskQueueConfigResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // DescribeWorker retrieves a worker information in the specified namespace that match the provided instance key.
-    // Returns an error if the namespace or worker doesn't exist.
-    rpc DescribeWorker (DescribeWorkerRequest) returns (DescribeWorkerResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // DescribeWorker retrieves a worker information in the specified namespace that match the provided instance key.
+  // Returns an error if the namespace or worker doesn't exist.
+  rpc DescribeWorker(DescribeWorkerRequest) returns (DescribeWorkerResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // UpdateFairnessState changes the fairness_state stored in UserData for automatically enabling
-    // priority and fairness.
-    // (-- api-linter: core::0134::method-signature=disabled
-    //     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
-    // (-- api-linter: core::0134::response-message-name=disabled
-    //     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
-    // (-- api-linter: core::0134::request-resource-required=disabled
-    //     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
-    rpc UpdateFairnessState(UpdateFairnessStateRequest) returns (UpdateFairnessStateResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
+  // UpdateFairnessState changes the fairness_state stored in UserData for automatically enabling
+  // priority and fairness.
+  // (-- api-linter: core::0134::method-signature=disabled
+  //     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+  // (-- api-linter: core::0134::response-message-name=disabled
+  //     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+  // (-- api-linter: core::0134::request-resource-required=disabled
+  //     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+  rpc UpdateFairnessState(UpdateFairnessStateRequest) returns (UpdateFairnessStateResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 
-    // CheckTaskQueueVersionMembership checks if a task queue is part of a specific deployment version.
-    rpc CheckTaskQueueVersionMembership(CheckTaskQueueVersionMembershipRequest) returns (CheckTaskQueueVersionMembershipResponse) {
-        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-    }
-
+  // CheckTaskQueueVersionMembership checks if a task queue is part of a specific deployment version.
+  rpc CheckTaskQueueVersionMembership(CheckTaskQueueVersionMembershipRequest) returns (CheckTaskQueueVersionMembershipResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 }
