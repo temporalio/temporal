@@ -126,20 +126,21 @@ func newScheduleToCloseTimeoutTaskHandler() *scheduleToCloseTimeoutTaskHandler {
 func (h *scheduleToCloseTimeoutTaskHandler) Validate(
 	_ chasm.Context,
 	activity *Activity,
-	attrs chasm.TaskAttributes,
-	_ *activitypb.ScheduleToCloseTimeoutTask,
+	_ chasm.TaskAttributes,
+	task *activitypb.ScheduleToCloseTimeoutTask,
 ) (bool, error) {
 	if !TransitionTimedOut.Possible(activity) {
 		return false, nil
 	}
-	// Discard stale tasks created before a schedule-to-close extension.
-	// When the deadline is extended, a new task is added at the updated deadline; any earlier
-	// task (from the old shorter deadline) must not time out the activity prematurely.
-	if timeout := activity.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
-		currentDeadline := activity.GetScheduleTime().AsTime().Add(timeout)
-		if attrs.ScheduledTime.Before(currentDeadline) {
-			return false, nil
-		}
+	// If schedule-to-close was disabled via an options update, discard this task.
+	if activity.GetScheduleToCloseTimeout().AsDuration() <= 0 {
+		return false, nil
+	}
+	// Stamp check: discard tasks from before the most recent ScheduleToCloseTimeoutTask was
+	// scheduled (e.g. after a schedule-to-close extension or a disable+re-enable cycle).
+	// Tasks without a stamp (stamp=0) predate this field and are not validated by stamp.
+	if task.GetStamp() != 0 && task.GetStamp() != activity.GetScheduleToCloseStamp() {
+		return false, nil
 	}
 	return true, nil
 }

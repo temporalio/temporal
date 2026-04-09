@@ -545,9 +545,6 @@ func (h *frontendHandler) UpdateActivityExecutionOptions(
 	if err := validateUpdateActivityExecutionOptionsRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
-		h.config.BlobSizeLimitError,
-		h.config.BlobSizeLimitWarn,
-		h.logger,
 	); err != nil {
 		return nil, err
 	}

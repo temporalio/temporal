@@ -390,18 +390,16 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	ctx chasm.MutableContext,
 	req *activitypb.UpdateActivityExecutionOptionsRequest,
 ) (*activitypb.UpdateActivityExecutionOptionsResponse, error) {
+	switch a.Status {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
+		return nil, serviceerror.NewInvalidArgumentf("Cannot update options for activity in state %s", a.Status.String())
+	}
+
 	frontendReq := req.GetFrontendRequest()
-	if frontendReq.GetUpdateMask() != nil && frontendReq.GetRestoreOriginal() {
-		return nil, serviceerror.NewInvalidArgument("Both UpdateMask and RestoreOriginal are provided")
-	}
-	if !frontendReq.GetRestoreOriginal() {
-		if frontendReq.GetActivityOptions() == nil {
-			return nil, serviceerror.NewInvalidArgument("ActivityOptions are not provided")
-		}
-		if frontendReq.GetUpdateMask() == nil {
-			return nil, serviceerror.NewInvalidArgument("UpdateMask is not provided")
-		}
-	}
 
 	if frontendReq.GetRestoreOriginal() {
 		ogOptions := a.GetOriginalOptions()
@@ -428,17 +426,31 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	}
 
 	// Add a new ScheduleToCloseTimeoutTask at the (possibly updated) deadline.
-	// This ensures a shortened schedule-to-close timeout fires at the new deadline.
+	// Increment the stamp so the previous task is invalidated by the Validate check.
 	if timeout := a.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
+		a.ScheduleToCloseStamp++
 		deadline := a.GetScheduleTime().AsTime().Add(timeout)
 		ctx.AddTask(
 			a,
 			chasm.TaskAttributes{ScheduledTime: deadline},
-			&activitypb.ScheduleToCloseTimeoutTask{},
+			&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetScheduleToCloseStamp()},
 		)
 	}
 
 	attempt.Stamp++
+
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED {
+		// Re-create the start-to-close timeout task with the new stamp and (possibly updated) timeout.
+		// The old task was invalidated by the stamp increment above.
+		if timeout := a.GetStartToCloseTimeout().AsDuration(); timeout > 0 {
+			deadline := attempt.GetStartedTime().AsTime().Add(timeout)
+			ctx.AddTask(
+				a,
+				chasm.TaskAttributes{ScheduledTime: deadline},
+				&activitypb.StartToCloseTimeoutTask{Stamp: attempt.GetStamp()},
+			)
+		}
+	}
 
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
 		// Re dispatch this activity
@@ -597,6 +609,23 @@ func (a *Activity) mergeActivityOptions(
 		}
 		a.RetryPolicy.MaximumAttempts = opts.GetRetryPolicy().GetMaximumAttempts()
 	}
+
+	// Re-normalize timeouts after the update so that relationships like
+	// start_to_close <= schedule_to_close and heartbeat <= start_to_close are preserved.
+	// This mirrors adjustActivityOptions for workflow-embedded activities.
+	updatedOpts := &apiactivitypb.ActivityOptions{
+		ScheduleToCloseTimeout: a.ScheduleToCloseTimeout,
+		ScheduleToStartTimeout: a.ScheduleToStartTimeout,
+		StartToCloseTimeout:    a.StartToCloseTimeout,
+		HeartbeatTimeout:       a.HeartbeatTimeout,
+	}
+	if err := normalizeAndValidateTimeouts(req.GetActivityId(), a.GetActivityType().GetName(), durationpb.New(0), updatedOpts); err != nil {
+		return err
+	}
+	a.ScheduleToCloseTimeout = updatedOpts.ScheduleToCloseTimeout
+	a.ScheduleToStartTimeout = updatedOpts.ScheduleToStartTimeout
+	a.StartToCloseTimeout = updatedOpts.StartToCloseTimeout
+	a.HeartbeatTimeout = updatedOpts.HeartbeatTimeout
 
 	return nil
 }

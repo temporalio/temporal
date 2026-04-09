@@ -94,6 +94,12 @@ message ActivityState {
 
     // Options for the first scheduled attempt to support `restore_original`
     temporal.api.activity.v1.ActivityOptions original_options = 13;
+
+    // An incremental version number used to validate ScheduleToCloseTimeoutTask tasks.
+    // Incremented each time a new ScheduleToCloseTimeoutTask is scheduled (at activity creation
+    // and on each options update that re-schedules the task). Unlike attempt.stamp, this counter
+    // is NOT reset on retries, because schedule-to-close spans the full activity lifetime.
+    int32 schedule_to_close_stamp = 14;
 }
 
 message ActivityCancelState {

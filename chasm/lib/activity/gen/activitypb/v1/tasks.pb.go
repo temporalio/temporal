@@ -113,7 +113,11 @@ func (x *ScheduleToStartTimeoutTask) GetStamp() int32 {
 }
 
 type ScheduleToCloseTimeoutTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The current schedule-to-close stamp for this activity. Used for task validation.
+	// See also [ActivityState.schedule_to_close_stamp].
+	// Tasks without a stamp (stamp=0) predate this field and are not validated by stamp.
+	Stamp         int32 `protobuf:"varint,1,opt,name=stamp,proto3" json:"stamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -146,6 +150,13 @@ func (x *ScheduleToCloseTimeoutTask) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ScheduleToCloseTimeoutTask.ProtoReflect.Descriptor instead.
 func (*ScheduleToCloseTimeoutTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ScheduleToCloseTimeoutTask) GetStamp() int32 {
+	if x != nil {
+		return x.Stamp
+	}
+	return 0
 }
 
 type StartToCloseTimeoutTask struct {
@@ -247,8 +258,9 @@ const file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc = "" 
 	"\x14ActivityDispatchTask\x12\x14\n" +
 	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\"2\n" +
 	"\x1aScheduleToStartTimeoutTask\x12\x14\n" +
-	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\"\x1c\n" +
-	"\x1aScheduleToCloseTimeoutTask\"/\n" +
+	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\"2\n" +
+	"\x1aScheduleToCloseTimeoutTask\x12\x14\n" +
+	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\"/\n" +
 	"\x17StartToCloseTimeoutTask\x12\x14\n" +
 	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\",\n" +
 	"\x14HeartbeatTimeoutTask\x12\x14\n" +

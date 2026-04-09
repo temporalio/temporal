@@ -368,9 +368,6 @@ func validateRequestCancelActivityExecutionRequest(
 func validateUpdateActivityExecutionOptionsRequest(
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
 	maxIDLengthLimit int,
-	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	logger log.Logger,
 ) error {
 	if req.GetActivityId() == "" {
 		return serviceerror.NewInvalidArgument("activity ID is required")
@@ -390,6 +387,18 @@ func validateUpdateActivityExecutionOptionsRequest(
 		_, err := uuid.Parse(runID)
 		if err != nil {
 			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
+		}
+	}
+
+	if req.GetUpdateMask() != nil && req.GetRestoreOriginal() {
+		return serviceerror.NewInvalidArgument("Both UpdateMask and RestoreOriginal are provided")
+	}
+	if !req.GetRestoreOriginal() {
+		if req.GetActivityOptions() == nil {
+			return serviceerror.NewInvalidArgument("ActivityOptions are not provided")
+		}
+		if req.GetUpdateMask() == nil {
+			return serviceerror.NewInvalidArgument("UpdateMask is not provided")
 		}
 	}
 
