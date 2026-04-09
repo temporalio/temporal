@@ -160,13 +160,12 @@ func TestUnpause_ResumesProcessing(t *testing.T) {
 	env := newTestEnv(t)
 
 	// Pause the schedule.
-	ctx := env.MutableContext()
 	env.Scheduler.Schedule.State.Paused = true
 	require.NoError(t, env.CloseTransaction())
 
 	// Clear tasks from setup, then unpause. UpdateTime is captured at T0.
 	env.NodeBackend.TasksByCategory = nil
-	ctx = env.MutableContext()
+	ctx := env.MutableContext()
 	_, err := env.Scheduler.Patch(ctx, &schedulerpb.PatchScheduleRequest{
 		FrontendRequest: &workflowservice.PatchScheduleRequest{
 			Patch: &schedulepb.SchedulePatch{Unpause: "resuming"},
