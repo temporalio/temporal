@@ -9120,9 +9120,12 @@ func (ms *MutableStateImpl) SetVersioningRevisionNumber(revisionNumber int64) {
 
 func (ms *MutableStateImpl) GetEffectiveRampPolicy() *deploymentspb.RampPolicy {
 	executionInfo := ms.GetExecutionInfo()
-	if executionInfo.GetLastCompletedWorkflowTaskStartedEventId() == common.EmptyEventID && // this is the first WFT
-		executionInfo.GetVersioningInfo().GetInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_USE_RAMPING_VERSION {
-		return &deploymentspb.RampPolicy{Value: &deploymentspb.RampPolicy_UseRampingVersion{UseRampingVersion: true}}
+	if executionInfo.GetLastCompletedWorkflowTaskStartedEventId() == common.EmptyEventID { // this is the first WFT
+		versioningInfo := executionInfo.GetVersioningInfo()
+		if versioningInfo.GetInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_USE_RAMPING_VERSION &&
+			versioningInfo.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+			return &deploymentspb.RampPolicy{Value: &deploymentspb.RampPolicy_UseRampingVersion{UseRampingVersion: true}}
+		}
 	}
 	return nil
 }

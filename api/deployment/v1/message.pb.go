@@ -84,6 +84,8 @@ func (x *WorkerDeploymentVersion) GetBuildId() string {
 	return ""
 }
 
+// Defines how to determine whether a workflow should use the Ramping Version or the Current Version of its Task Queue.
+// Default Ramp Policy is simply f(workflow_id, ramp_percentage).
 type RampPolicy struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Value:
