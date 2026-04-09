@@ -812,7 +812,9 @@ func MuxRouterProvider() *mux.Router {
 }
 
 func httpEnabled(cfg *config.Config, serviceName primitives.ServiceName) bool {
-	// If the service is not the frontend service, HTTP API is disabled
+	// HTTP API only runs on the regular frontend service, not on internal-frontend.
+	// This means getFrontendConnectionDetails (common/resource/fx.go) must route
+	// HTTP clients to FrontendService, not InternalFrontendService.
 	if serviceName != primitives.FrontendService {
 		return false
 	}

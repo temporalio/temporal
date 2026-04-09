@@ -686,6 +686,7 @@ func (c *TemporalImpl) newRPCFactory(
 		grpcResolver.MakeURL(primitives.FrontendService),
 		int(httpPort),
 		frontendTLSConfig,
+		frontendTLSConfig, // HTTP uses same TLS in non-IFE test setup
 		options,
 		monitor,
 	), nil

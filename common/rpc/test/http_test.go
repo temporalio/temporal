@@ -38,7 +38,8 @@ func TestCreateLocalFrontendHTTPClient_UsingMembership(t *testing.T) {
 		membership.GRPCResolverURLForTesting(monitor, primitives.FrontendService),
 		membership.GRPCResolverURLForTesting(monitor, primitives.FrontendService),
 		int(port),
-		nil, // No TLS
+		nil, // No gRPC TLS
+		nil, // No HTTP TLS
 		nil,
 		monitor,
 	)
@@ -68,7 +69,8 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort(t *testing.T) {
 		membership.GRPCResolverURLForTesting(nil, primitives.FrontendService),
 		addr.String(),
 		0,   // Port is unused
-		nil, // No TLS
+		nil, // No gRPC TLS
+		nil, // No HTTP TLS
 		nil,
 		nil, // monitor should not be used
 	)
@@ -100,6 +102,7 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort_AndTLS(t *testing.T) {
 		addr.String(),
 		0, // Port is unused
 		tlsConfig,
+		tlsConfig, // HTTP uses same TLS in non-IFE case
 		nil,
 		nil, // monitor should not be used
 	)

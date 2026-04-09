@@ -314,7 +314,7 @@ func SdkClientFactoryProvider(
 	resolver *membership.GRPCResolver,
 	dc *dynamicconfig.Collection,
 ) (sdk.ClientFactory, error) {
-	frontendURL, _, _, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
+	frontendURL, _, _, frontendTLSConfig, _, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -340,7 +340,7 @@ func RPCFactoryProvider(
 	tracingStatsHandler telemetry.ClientStatsHandler,
 	monitor membership.Monitor,
 ) (common.RPCFactory, error) {
-	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
+	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, frontendHTTPTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -358,6 +358,7 @@ func RPCFactoryProvider(
 		frontendHTTPURL,
 		frontendHTTPPort,
 		frontendTLSConfig,
+		frontendHTTPTLSConfig,
 		options,
 		monitor,
 	), nil
@@ -374,7 +375,7 @@ func getFrontendConnectionDetails(
 	cfg *config.Config,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	resolver *membership.GRPCResolver,
-) (string, string, int, *tls.Config, error) {
+) (string, string, int, *tls.Config, *tls.Config, error) {
 	// To simplify the static config, we switch default values based on whether the config
 	// defines an "internal-frontend" service. The default for TLS config can be overridden
 	// with publicClient.forceTLSConfig.
@@ -400,7 +401,23 @@ func getFrontendConnectionDetails(
 		err = fmt.Errorf("invalid forceTLSConfig")
 	}
 	if err != nil {
-		return "", "", 0, nil, fmt.Errorf("unable to load TLS configuration: %w", err)
+		return "", "", 0, nil, nil, fmt.Errorf("unable to load TLS configuration: %w", err)
+	}
+
+	// HTTP TLS always uses frontend client config since the HTTP server
+	// runs on FrontendService with GetFrontendServerConfig() TLS.
+	var frontendHTTPTLSConfig *tls.Config
+	if hasIFE {
+		// Even though gRPC uses internode TLS (for IFE), HTTP needs frontend TLS
+		// because the HTTP server runs on the regular frontend.
+		frontendHTTPTLSConfig, err = tlsConfigProvider.GetFrontendClientConfig()
+		if err != nil {
+			return "", "", 0, nil, nil, fmt.Errorf("unable to load frontend HTTP TLS configuration: %w", err)
+		}
+	} else {
+		// When there's no IFE, both gRPC and HTTP target the same service,
+		// so they use the same TLS config.
+		frontendHTTPTLSConfig = frontendTLSConfig
 	}
 
 	frontendURL := cfg.PublicClient.HostPort
@@ -413,19 +430,15 @@ func getFrontendConnectionDetails(
 	}
 	frontendHTTPURL := cfg.PublicClient.HTTPHostPort
 	if frontendHTTPURL == "" {
-		if hasIFE {
-			frontendHTTPURL = resolver.MakeURL(primitives.InternalFrontendService)
-		} else {
-			frontendHTTPURL = resolver.MakeURL(primitives.FrontendService)
-		}
+		// HTTP always targets the regular frontend service, even when internal-frontend
+		// is configured, because the HTTP API server only runs on FrontendService
+		// (see httpEnabled in service/frontend/fx.go).
+		frontendHTTPURL = resolver.MakeURL(primitives.FrontendService)
 	}
 
-	var frontendHTTPPort int
-	if hasIFE {
-		frontendHTTPPort = cfg.Services[string(primitives.InternalFrontendService)].RPC.HTTPPort
-	} else {
-		frontendHTTPPort = cfg.Services[string(primitives.FrontendService)].RPC.HTTPPort
-	}
+	// HTTP port is always read from the frontend service config, since that's where
+	// the HTTP server runs.
+	frontendHTTPPort := cfg.Services[string(primitives.FrontendService)].RPC.HTTPPort
 
-	return frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, nil
+	return frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, frontendHTTPTLSConfig, nil
 }

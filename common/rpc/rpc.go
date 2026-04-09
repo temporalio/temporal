@@ -33,10 +33,11 @@ type RPCFactory struct {
 	serviceName primitives.ServiceName
 	logger      log.Logger
 
-	frontendURL       string
-	frontendHTTPURL   string
-	frontendHTTPPort  int
-	frontendTLSConfig *tls.Config
+	frontendURL           string
+	frontendHTTPURL       string
+	frontendHTTPPort      int
+	frontendTLSConfig     *tls.Config
+	frontendHTTPTLSConfig *tls.Config
 
 	grpcListener func() net.Listener
 	tlsFactory   encryption.TLSConfigProvider
@@ -58,20 +59,22 @@ func NewFactory(
 	frontendHTTPURL string,
 	frontendHTTPPort int,
 	frontendTLSConfig *tls.Config,
+	frontendHTTPTLSConfig *tls.Config,
 	dialOptions []grpc.DialOption,
 	monitor membership.Monitor,
 ) *RPCFactory {
 	f := &RPCFactory{
-		config:            cfg,
-		serviceName:       sName,
-		logger:            logger,
-		frontendURL:       frontendURL,
-		frontendHTTPURL:   frontendHTTPURL,
-		frontendHTTPPort:  frontendHTTPPort,
-		frontendTLSConfig: frontendTLSConfig,
-		tlsFactory:        tlsProvider,
-		dialOptions:       dialOptions,
-		monitor:           monitor,
+		config:                cfg,
+		serviceName:           sName,
+		logger:                logger,
+		frontendURL:           frontendURL,
+		frontendHTTPURL:       frontendHTTPURL,
+		frontendHTTPPort:      frontendHTTPPort,
+		frontendTLSConfig:     frontendTLSConfig,
+		frontendHTTPTLSConfig: frontendHTTPTLSConfig,
+		tlsFactory:            tlsProvider,
+		dialOptions:           dialOptions,
+		monitor:               monitor,
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
@@ -297,8 +300,8 @@ func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 
 	// Default to http unless TLS is configured.
 	scheme := "http"
-	if d.frontendTLSConfig != nil {
-		transport.TLSClientConfig = d.frontendTLSConfig
+	if d.frontendHTTPTLSConfig != nil {
+		transport.TLSClientConfig = d.frontendHTTPTLSConfig
 		scheme = "https"
 	}
 

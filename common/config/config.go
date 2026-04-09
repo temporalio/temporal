@@ -628,8 +628,8 @@ func (c *Config) Validate() error {
 	}
 
 	_, hasIFE := c.Services[string(primitives.InternalFrontendService)]
-	if hasIFE && (c.PublicClient.HostPort != "" || c.PublicClient.ForceTLSConfig != "" || c.PublicClient.HTTPHostPort != "") {
-		return fmt.Errorf("when using internal-frontend, publicClient must be empty")
+	if hasIFE && (c.PublicClient.HostPort != "" || c.PublicClient.ForceTLSConfig != "") {
+		return fmt.Errorf("when using internal-frontend, publicClient.hostPort and publicClient.forceTLSConfig must not be set (publicClient.httpHostPort is allowed)")
 	}
 
 	switch c.PublicClient.ForceTLSConfig {
