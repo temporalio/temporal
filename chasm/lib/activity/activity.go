@@ -451,7 +451,28 @@ func (a *Activity) UpdateActivityExecutionOptions(
 				&activitypb.StartToCloseTimeoutTask{Stamp: attempt.GetStamp()},
 			)
 		}
+
+		if hbTimeout := a.GetHeartbeatTimeout().AsDuration(); hbTimeout > 0 {
+			// The next heartbeat time is the max of (the last heartbeats recorded time and
+			// the current attempts started time) plus the heartbeat timeout
+			lastHb, _ := a.LastHeartbeat.TryGet(ctx)
+			lastHBTime := util.MaxTime(
+				lastHb.GetRecordedTime().AsTime(),
+				attempt.GetStartedTime().AsTime(),
+			).Add(hbTimeout)
+			ctx.AddTask(
+				a,
+				chasm.TaskAttributes{
+					ScheduledTime: lastHBTime,
+				},
+				&activitypb.HeartbeatTimeoutTask{
+					Stamp: attempt.GetStamp(),
+				},
+			)
+		}
 	}
+
+	// TODO(saa-ga): need to handle the StartDelay timer
 
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
 		// Re dispatch this activity

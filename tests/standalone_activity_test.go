@@ -5263,8 +5263,9 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 	})
 
 	t.Run("ChangeHeartbeatTimeout", func(t *testing.T) {
-		// Poll the activity (STARTED), shorten heartbeat timeout via update, then heartbeat once
-		// to arm the new timer. Stopping heartbeats after that should trigger HEARTBEAT timeout.
+		// Poll the activity (STARTED), then shorten heartbeat timeout via update.
+		// The update re-creates the HeartbeatTimeoutTask with the new timeout, so no further
+		// heartbeats are needed — the activity should time out with HEARTBEAT.
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
 
@@ -5301,14 +5302,6 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 				HeartbeatTimeout: durationpb.New(2 * time.Second),
 			},
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"heartbeat_timeout"}},
-		})
-		require.NoError(t, err)
-
-		// Heartbeat once — this creates a new HeartbeatTimeoutTask with the updated 2s timeout
-		// and the new stamp. Without this heartbeat the timer would not be armed.
-		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
-			Namespace: s.Namespace().String(),
-			TaskToken: pollResp.TaskToken,
 		})
 		require.NoError(t, err)
 

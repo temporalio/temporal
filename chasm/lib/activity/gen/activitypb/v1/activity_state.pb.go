@@ -456,10 +456,13 @@ type ActivityAttemptState struct {
 	// including start-to-close timeout. Activity success, termination, schedule-to-start and schedule-to-close timeouts
 	// will not reset it.
 	LastFailureDetails *ActivityAttemptState_LastFailureDetails `protobuf:"bytes,5,opt,name=last_failure_details,json=lastFailureDetails,proto3" json:"last_failure_details,omitempty"`
-	// An incremental version number used to validate tasks.
-	// Initially this only verifies that a task belong to the current attempt.
-	// Later on this stamp will be used to also invalidate tasks when the activity is paused, reset, or has its options
-	// updated.
+	// An incremental version number used to validate attempt-scoped tasks
+	// (ActivityDispatchTask, ScheduleToStartTimeoutTask, StartToCloseTimeoutTask, HeartbeatTimeoutTask).
+	// Incremented on each new attempt and on options updates, so that in-flight tasks from the
+	// previous attempt or pre-update state are discarded.
+	// Note: ScheduleToCloseTimeoutTask uses a separate ActivityState.schedule_to_close_stamp because
+	// it spans the full activity lifetime and must not be invalidated on retry.
+	// TODO: also invalidate on pause and reset when those are supported.
 	Stamp              int32  `protobuf:"varint,6,opt,name=stamp,proto3" json:"stamp,omitempty"`
 	LastWorkerIdentity string `protobuf:"bytes,7,opt,name=last_worker_identity,json=lastWorkerIdentity,proto3" json:"last_worker_identity,omitempty"`
 	// The Worker Deployment Version this activity was dispatched to most recently.
