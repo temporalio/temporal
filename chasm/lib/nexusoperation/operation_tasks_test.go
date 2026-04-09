@@ -98,6 +98,14 @@ func (m *mockStoreComponent) OnNexusOperationTimedOut(ctx chasm.MutableContext, 
 	return TransitionTimedOut.Apply(op, ctx, EventTimedOut{})
 }
 
+func (m *mockStoreComponent) ContextMetadata(_ chasm.Context) map[string]string {
+	return nil
+}
+
+func (m *mockStoreComponent) Terminate(_ chasm.MutableContext, _ chasm.TerminateComponentRequest) (chasm.TerminateComponentResponse, error) {
+	return chasm.TerminateComponentResponse{}, nil
+}
+
 // mockStoreLibrary registers the mockStoreComponent so the CHASM tree can work with it.
 type mockStoreLibrary struct {
 	chasm.UnimplementedLibrary
