@@ -2462,6 +2462,140 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 	})
 }
 
+// TestPinnedCaN_UseRampingVersionOnCaN tests that a Pinned workflow's CaN lands on the ramping version.
+func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN() {
+	s.testPinnedCaNUseRampingVersionOnCaN(false, false)
+}
+
+// TestPinnedCaN_UseRampingVersionOnCaN_PinnedOverride tests that a Pinned override wins over UseRampingVersion:
+// even though the CaN requests the ramping version, the override keeps the new run on v1.
+func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_PinnedOverride() {
+	s.testPinnedCaNUseRampingVersionOnCaN(true, false)
+}
+
+// TestPinnedCaN_UseRampingVersionOnCaN_NoRampingVersionFallsBackToCurrent tests that UseRampingVersion
+// falls back to the current version when no ramping version is configured.
+func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_NoRampingVersionFallsBackToCurrent() {
+	s.testPinnedCaNUseRampingVersionOnCaN(false, true)
+}
+
+// testPinnedCaNUseRampingVersionOnCaN tests that a Pinned workflow can ContinueAsNew to the
+// ramping version using CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_USE_RAMPING_VERSION.
+//
+// Unlike the AUTO_UPGRADE variants, this test does not vary WFT type (normal/speculative/transient).
+// The UseRampingVersion routing decision happens in matching when the new run's first WFT is
+// dispatched; it is independent of how the triggering WFT was delivered. WFT type coverage for
+// the TargetWorkerDeploymentVersionChanged flag is provided by the AUTO_UPGRADE variants.
+//
+// Flow:
+//  1. Set v1 as current, start workflow
+//  2. First WFT: worker declares vbPinned -> workflow becomes pinned to v1
+//  3. Unless noRampingVersion: set v2 as ramping at 0% (not current) — no workflows move via hash
+//  4. Signal workflow to trigger a normal WFT
+//  5. On WFT: confirm TargetWorkerDeploymentVersionChanged=false (setting a ramping version does
+//     not change the target for a Pinned workflow), then issue CaN with USE_RAMPING_VERSION
+//  6. New run lands on v2 (ramping) and is pinned after WFT completion, with two exceptions:
+//     - noRampingVersion=true: no ramping version exists, falls back to current (v1)
+//     - pinnedOverride=true: override wins, new run stays on v1
+func (s *Versioning3Suite) testPinnedCaNUseRampingVersionOnCaN(pinnedOverride, noRampingVersion bool) {
+	s.RunTestWithMatchingBehavior(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		tv1 := testvars.New(s).WithBuildIDNumber(1)
+		tv2 := tv1.WithBuildIDNumber(2)
+
+		// Set up v1 as current, start workflow
+		var override *workflowpb.VersioningOverride
+		var execution *commonpb.WorkflowExecution
+		if pinnedOverride {
+			override = s.makePinnedOverride(tv1)
+			execution, _ = s.drainWorkflowTaskAfterSetCurrentWithOverride(tv1, override)
+		} else {
+			execution, _ = s.drainWorkflowTaskAfterSetCurrent(tv1)
+		}
+
+		// Trigger a normal WFT to make the workflow pinned on v1
+		s.triggerNormalWFT(ctx, tv1, execution)
+		s.pollWftAndHandle(tv1, false, nil,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.NotNil(task)
+				return respondEmptyWft(tv1, false, vbPinned), nil
+			})
+		s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), override, nil)
+		s.verifyVersioningSAs(tv1, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, tv1)
+
+		if !noRampingVersion {
+			// Register v2 poller before setting it as ramping
+			s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "should not get any tasks yet")
+			// Set v2 as ramping at 0%: no workflows move via hash, only via UseRampingVersion CaN
+			s.setRampingDeployment(tv2, 0, false)
+			s.waitForDeploymentDataPropagation(tv2, versionStatusRamping, false, tqTypeWf)
+		}
+
+		// Trigger the WFT that will issue the CaN
+		s.triggerNormalWFT(ctx, tv1, execution)
+
+		// Process the WFT and issue ContinueAsNew with USE_RAMPING_VERSION
+		s.pollWftAndHandle(tv1, false, nil,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.NotNil(task)
+
+				for _, event := range task.History.GetEvents() {
+					if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+						attr := event.GetWorkflowTaskStartedEventAttributes()
+						s.False(attr.GetSuggestContinueAsNew())
+						s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+						// Setting a ramping version does not change the target for a Pinned workflow:
+						// the target is the pinned version, not current or ramping.
+						s.False(attr.GetTargetWorkerDeploymentVersionChanged(),
+							"target should not change when only ramping version is updated (event %d)", event.GetEventId())
+					}
+				}
+
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Commands: []*commandpb.Command{
+						{
+							CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+							Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+								ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+									WorkflowType:              tv1.WorkflowType(),
+									TaskQueue:                 tv1.TaskQueue(),
+									Input:                     tv1.Any().Payloads(),
+									InitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_USE_RAMPING_VERSION,
+								},
+							},
+						},
+					},
+					ForceCreateNewWorkflowTask: false,
+					VersioningBehavior:         vbPinned,
+					DeploymentOptions:          tv1.WorkerDeploymentOptions(true),
+				}, nil
+			})
+
+		// Determine where the new run lands:
+		// - noRampingVersion: no ramping version exists, falls back to current (v1)
+		// - pinnedOverride: override wins, new run stays on v1
+		// - default: new run lands on v2 (the ramping version)
+		postCaNTV := tv2
+		if noRampingVersion || pinnedOverride {
+			postCaNTV = tv1
+		}
+
+		// Receive the new run's first WFT on postCaNTV and complete it pinned
+		wftNewRunDone := make(chan struct{})
+		s.pollWftAndHandle(postCaNTV, false, wftNewRunDone,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.NotNil(task)
+				return respondCompleteWorkflow(postCaNTV, vbPinned), nil
+			})
+		s.WaitForChannel(ctx, wftNewRunDone)
+
+		s.verifyWorkflowVersioning(s.Assertions, postCaNTV, vbPinned, postCaNTV.Deployment(), override, nil)
+		s.verifyVersioningSAs(postCaNTV, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, postCaNTV)
+	})
+}
+
 // Signal to trigger a normal WFT
 func (s *Versioning3Suite) triggerNormalWFT(ctx context.Context, tv *testvars.TestVars, execution *commonpb.WorkflowExecution) {
 	_, err := s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
