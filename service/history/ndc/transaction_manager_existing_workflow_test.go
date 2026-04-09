@@ -46,7 +46,9 @@ func (s *transactionMgrForExistingWorkflowSuite) SetupTest() {
 	s.NoError(err)
 	s.mockShard.EXPECT().StateMachineRegistry().Return(reg).AnyTimes()
 
-	s.updateMgr = newNDCTransactionMgrForExistingWorkflow(s.mockShard, s.mockTransactionMgr, false)
+	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
+	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), false).Return(nil).AnyTimes()
+	s.updateMgr = newNDCTransactionMgrForExistingWorkflow(s.mockShard, s.mockTransactionMgr, false, mockTaskRefresher)
 }
 
 func (s *transactionMgrForExistingWorkflowSuite) TearDownTest() {
@@ -121,7 +123,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	newWorkflow.EXPECT().GetContext().Return(newContext).AnyTimes()
 	newWorkflow.EXPECT().GetMutableState().Return(newMutableState).AnyTimes()
 	newWorkflow.EXPECT().GetReleaseFn().Return(newReleaseFn).AnyTimes()
-	newWorkflow.EXPECT().Revive().Return(nil)
+	newWorkflow.EXPECT().Revive(gomock.Any(), gomock.Any()).Return(nil)
 
 	currentWorkflow := NewMockWorkflow(s.controller)
 	currentContext := historyi.NewMockWorkflowContext(s.controller)
@@ -145,7 +147,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(true, nil)
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(historyi.TransactionPolicyPassive, nil)
-	targetWorkflow.EXPECT().Revive().Return(nil)
+	targetWorkflow.EXPECT().Revive(gomock.Any(), gomock.Any()).Return(nil)
 
 	targetContext.EXPECT().ConflictResolveWorkflowExecution(
 		gomock.Any(),
@@ -197,7 +199,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	newWorkflow.EXPECT().GetContext().Return(newContext).AnyTimes()
 	newWorkflow.EXPECT().GetMutableState().Return(newMutableState).AnyTimes()
 	newWorkflow.EXPECT().GetReleaseFn().Return(newReleaseFn).AnyTimes()
-	newWorkflow.EXPECT().Revive().Return(nil)
+	newWorkflow.EXPECT().Revive(gomock.Any(), gomock.Any()).Return(nil)
 
 	currentWorkflow := NewMockWorkflow(s.controller)
 	currentContext := historyi.NewMockWorkflowContext(s.controller)
@@ -221,7 +223,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(true, nil)
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(historyi.TransactionPolicyPassive, nil).Times(0)
-	targetWorkflow.EXPECT().Revive().Return(nil)
+	targetWorkflow.EXPECT().Revive(gomock.Any(), gomock.Any()).Return(nil)
 
 	targetContext.EXPECT().ConflictResolveWorkflowExecution(
 		gomock.Any(),
@@ -480,7 +482,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	newWorkflow.EXPECT().GetContext().Return(newContext).AnyTimes()
 	newWorkflow.EXPECT().GetMutableState().Return(newMutableState).AnyTimes()
 	newWorkflow.EXPECT().GetReleaseFn().Return(newReleaseFn).AnyTimes()
-	newWorkflow.EXPECT().Revive().Return(nil)
+	newWorkflow.EXPECT().Revive(gomock.Any(), gomock.Any()).Return(nil)
 
 	currentWorkflow := NewMockWorkflow(s.controller)
 	currentContext := historyi.NewMockWorkflowContext(s.controller)
@@ -503,7 +505,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(true, nil)
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(historyi.TransactionPolicyActive, nil)
-	targetWorkflow.EXPECT().Revive().Return(nil)
+	targetWorkflow.EXPECT().Revive(gomock.Any(), gomock.Any()).Return(nil)
 
 	targetContext.EXPECT().ConflictResolveWorkflowExecution(
 		gomock.Any(),

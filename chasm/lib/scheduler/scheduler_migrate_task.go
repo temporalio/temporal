@@ -30,7 +30,7 @@ import (
 )
 
 type (
-	SchedulerMigrateToWorkflowTaskExecutorOptions struct {
+	SchedulerMigrateToWorkflowTaskHandlerOptions struct {
 		fx.In
 
 		Config         *Config
@@ -39,7 +39,8 @@ type (
 		HistoryClient  resource.HistoryClient
 	}
 
-	SchedulerMigrateToWorkflowTaskExecutor struct {
+	SchedulerMigrateToWorkflowTaskHandler struct {
+		chasm.SideEffectTaskHandlerBase[*schedulerpb.SchedulerMigrateToWorkflowTask]
 		config         *Config
 		metricsHandler metrics.Handler
 		baseLogger     log.Logger
@@ -47,10 +48,10 @@ type (
 	}
 )
 
-func NewSchedulerMigrateToWorkflowTaskExecutor(
-	opts SchedulerMigrateToWorkflowTaskExecutorOptions,
-) *SchedulerMigrateToWorkflowTaskExecutor {
-	return &SchedulerMigrateToWorkflowTaskExecutor{
+func NewSchedulerMigrateToWorkflowTaskHandler(
+	opts SchedulerMigrateToWorkflowTaskHandlerOptions,
+) *SchedulerMigrateToWorkflowTaskHandler {
+	return &SchedulerMigrateToWorkflowTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
 		baseLogger:     opts.BaseLogger,
@@ -58,7 +59,7 @@ func NewSchedulerMigrateToWorkflowTaskExecutor(
 	}
 }
 
-func (e *SchedulerMigrateToWorkflowTaskExecutor) Validate(
+func (h *SchedulerMigrateToWorkflowTaskHandler) Validate(
 	_ chasm.Context,
 	scheduler *Scheduler,
 	_ chasm.TaskAttributes,
@@ -70,7 +71,7 @@ func (e *SchedulerMigrateToWorkflowTaskExecutor) Validate(
 	return scheduler.WorkflowMigration != nil, nil
 }
 
-func (e *SchedulerMigrateToWorkflowTaskExecutor) Execute(
+func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 	ctx context.Context,
 	schedulerRef chasm.ComponentRef,
 	_ chasm.TaskAttributes,
@@ -169,7 +170,7 @@ func (e *SchedulerMigrateToWorkflowTaskExecutor) Execute(
 		Priority:                 &commonpb.Priority{},
 	}
 
-	_, err = e.historyClient.StartWorkflowExecution(
+	_, err = h.historyClient.StartWorkflowExecution(
 		ctx,
 		common.CreateHistoryStartWorkflowRequest(result.namespaceID, startReq, nil, nil, result.now),
 	)

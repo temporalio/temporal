@@ -2134,6 +2134,9 @@ func (f *fakeSchedulerClient) ListScheduleMatchingTimes(context.Context, *schedu
 func (f *fakeSchedulerClient) CreateFromMigrationState(_ context.Context, _ *schedulerpb.CreateFromMigrationStateRequest, _ ...grpc.CallOption) (*schedulerpb.CreateFromMigrationStateResponse, error) {
 	panic("not implemented")
 }
+func (f *fakeSchedulerClient) CreateSentinel(context.Context, *schedulerpb.CreateSentinelRequest, ...grpc.CallOption) (*schedulerpb.CreateSentinelResponse, error) {
+	panic("not implemented")
+}
 func (f *fakeSchedulerClient) MigrateToWorkflow(ctx context.Context, req *schedulerpb.MigrateToWorkflowRequest, _ ...grpc.CallOption) (*schedulerpb.MigrateToWorkflowResponse, error) {
 	return f.migrateToWorkflowFn(ctx, req)
 }

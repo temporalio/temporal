@@ -25,6 +25,14 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.CreateScheduleResponse:
 		return nil
+	case *workflowservice.CreateWorkerDeploymentRequest:
+		return nil
+	case *workflowservice.CreateWorkerDeploymentResponse:
+		return nil
+	case *workflowservice.CreateWorkerDeploymentVersionRequest:
+		return nil
+	case *workflowservice.CreateWorkerDeploymentVersionResponse:
+		return nil
 	case *workflowservice.CreateWorkflowRuleRequest:
 		return nil
 	case *workflowservice.CreateWorkflowRuleResponse:
@@ -525,6 +533,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.UpdateWorkerConfigResponse:
 		return nil
+	case *workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest:
+		return nil
+	case *workflowservice.UpdateWorkerDeploymentVersionComputeConfigResponse:
+		return nil
 	case *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest:
 		return nil
 	case *workflowservice.UpdateWorkerDeploymentVersionMetadataResponse:
@@ -549,6 +561,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
 		}
 	case *workflowservice.UpdateWorkflowExecutionOptionsResponse:
+		return nil
+	case *workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest:
+		return nil
+	case *workflowservice.ValidateWorkerDeploymentVersionComputeConfigResponse:
 		return nil
 	default:
 		return nil

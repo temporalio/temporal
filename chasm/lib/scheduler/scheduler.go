@@ -90,6 +90,7 @@ var (
 	ErrTooManyBackfillers    = serviceerror.NewFailedPrecondition("too many concurrent backfillers")
 	ErrInvalidQuery          = serviceerror.NewInvalidArgument("missing or invalid query")
 	ErrSentinel              = serviceerror.NewNotFound("schedule is a sentinel")
+	ErrSentinelBlocked       = serviceerror.NewUnavailable("schedule is a sentinel; please retry after sentinel expires")
 	ErrMigrationPending      = serviceerror.NewUnavailable("schedule has a pending migration to workflow; please retry later")
 )
 
@@ -137,22 +138,42 @@ func NewScheduler(
 }
 
 // NewSentinel returns a sentinel CHASM scheduler that exists only to reserve
-// the schedule ID. Sentinels have no sub-components and return NotFound
-// on all API operations.
+// the schedule ID. Sentinels have no sub-components (other than Info for idle
+// tracking) and return NotFound on all API operations. An idle task auto-closes
+// the sentinel after SentinelIdleTime.
 func NewSentinel(
 	ctx chasm.MutableContext,
 	namespace, namespaceID, scheduleID string,
 ) *Scheduler {
-	return &Scheduler{
+	s := &Scheduler{
 		SchedulerState: &schedulerpb.SchedulerState{
 			Namespace:     namespace,
 			NamespaceId:   namespaceID,
 			ScheduleId:    scheduleID,
 			Sentinel:      true,
 			ConflictToken: scheduler.InitialConflictToken,
+			Info:          &schedulepb.ScheduleInfo{},
 		},
 		cacheConflictToken: scheduler.InitialConflictToken,
 	}
+	s.Info.CreateTime = timestamppb.New(ctx.Now(s))
+
+	ctx.AddTask(s, chasm.TaskAttributes{
+		ScheduledTime: ctx.Now(s).Add(SentinelIdleTime),
+	}, &schedulerpb.SchedulerIdleTask{
+		IdleTimeTotal: durationpb.New(SentinelIdleTime),
+	})
+
+	return s
+}
+
+// CreateSentinelFn is the chasm.StartExecution factory for creating sentinel
+// schedulers. Used by the V1 path to reserve the CHASM key space.
+func CreateSentinelFn(
+	ctx chasm.MutableContext,
+	req *schedulerpb.CreateSentinelRequest,
+) (*Scheduler, error) {
+	return NewSentinel(ctx, req.Namespace, req.NamespaceId, req.ScheduleId), nil
 }
 
 // IsSentinel returns true if this is a sentinel scheduler.
@@ -265,6 +286,11 @@ func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	}
 
 	return chasm.LifecycleStateRunning
+}
+
+func (s *Scheduler) ContextMetadata(_ chasm.Context) map[string]string {
+	// TODO: Export scheduler context metadata.
+	return nil
 }
 
 // Terminate implements the chasm.RootComponent interface.
@@ -428,12 +454,15 @@ func (s *Scheduler) getIdleExpiration(
 	// The idle timer to close off the component is started only for schedules with
 	// no more work to do. Paused schedules are held open indefinitely.
 	if idleTime == 0 ||
-		s.Schedule.State.Paused ||
+		s.GetSchedule().GetState().GetPaused() ||
 		(!nextWakeup.IsZero() && s.useScheduledAction(false)) ||
 		s.hasMoreAllowAllBackfills(ctx) {
 		return time.Time{}, false
 	}
 
+	if s.IsSentinel() {
+		return s.Info.GetCreateTime().AsTime().Add(idleTime), true
+	}
 	return s.getLastEventTime(ctx).Add(idleTime), true
 }
 
@@ -720,14 +749,16 @@ func (s *Scheduler) Update(
 	if s.Sentinel {
 		return nil, ErrSentinel
 	}
+	// UpdateComponent does not reject mutations on completed executions,
+	// so we must check explicitly here.
+	if s.Closed {
+		return nil, ErrClosed
+	}
 	if !s.validateConflictToken(req.FrontendRequest.ConflictToken) {
 		return nil, ErrConflictTokenMismatch
 	}
 
 	// Update custom search attributes.
-	//
-	// TODO - we could also easily support allowing the customer to update their
-	// memo here.
 	if req.FrontendRequest.GetSearchAttributes() != nil {
 		// To preserve compatibility with V1 scheduler, we do a full replacement
 		// of search attributes, dropping any that aren't a part of the update's
@@ -747,6 +778,12 @@ func (s *Scheduler) Update(
 	// not silently lost during the migration window.
 	if s.WorkflowMigration != nil {
 		return nil, ErrMigrationPending
+	}
+
+	// Update custom memo.
+	if req.FrontendRequest.GetMemo() != nil {
+		visibility := s.Visibility.Get(ctx)
+		visibility.ReplaceCustomMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
 	}
 
 	s.Schedule = req.FrontendRequest.Schedule
@@ -771,6 +808,11 @@ func (s *Scheduler) Patch(
 ) (*schedulerpb.PatchScheduleResponse, error) {
 	if s.Sentinel {
 		return nil, ErrSentinel
+	}
+	// UpdateComponent does not reject mutations on completed executions,
+	// so we must check explicitly here.
+	if s.Closed {
+		return nil, ErrClosed
 	}
 	// Handle paused status.
 	if req.FrontendRequest.Patch.Pause != "" {

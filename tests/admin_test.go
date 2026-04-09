@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
@@ -15,43 +14,37 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
 
 type AdminTestSuite struct {
-	testcore.FunctionalTestBase
-	testContext context.Context
+	parallelsuite.Suite[*AdminTestSuite]
 }
 
-func TestAdminTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(AdminTestSuite))
+func TestAdminRebuildMutableState_ChasmDisabled(t *testing.T) {
+	parallelsuite.Run(t, &AdminTestSuite{}, false)
 }
 
-func (s *AdminTestSuite) SetupSuite() {
-	// Call parent setup to initialize the test cluster
-	s.FunctionalTestBase.SetupSuite()
-	s.testContext = context.Background()
+func TestAdminRebuildMutableState_ChasmEnabled(t *testing.T) {
+	parallelsuite.Run(t, &AdminTestSuite{}, true)
 }
 
-func (s *AdminTestSuite) TestAdminRebuildMutableState_ChasmDisabled() {
-	rebuildMutableStateWorkflowHelper(s, false)
-}
+func (s *AdminTestSuite) TestAdminRebuildMutableState(testWithChasm bool) {
+	var opts []testcore.TestOption
+	if testWithChasm {
+		opts = append(opts, testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true))
+	}
+	env := testcore.NewEnv(s.T(), opts...)
 
-func (s *AdminTestSuite) TestAdminRebuildMutableState_ChasmEnabled() {
-	cleanup := s.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
-	defer cleanup()
+	if testWithChasm {
+		configValues := env.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.EnableChasm.Key())
+		s.NotEmpty(configValues, "EnableChasm config should be set")
+		configValue, _ := configValues[0].Value.(bool)
+		s.True(configValue, "EnableChasm config should be true")
+	}
 
-	configValues := s.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.EnableChasm.Key())
-	s.NotEmpty(configValues, "EnableChasm config should be set")
-	configValue, _ := configValues[0].Value.(bool)
-	s.True(configValue, "EnableChasm config should be true")
-	rebuildMutableStateWorkflowHelper(s, true)
-}
-
-// common test helper
-func rebuildMutableStateWorkflowHelper(s *AdminTestSuite, testWithChasm bool) {
 	tv := testvars.New(s.T())
 	workflowFn := func(ctx workflow.Context) error {
 		var randomUUID string
@@ -65,18 +58,18 @@ func rebuildMutableStateWorkflowHelper(s *AdminTestSuite, testWithChasm bool) {
 		return nil
 	}
 
-	s.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowID := tv.Any().String()
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 workflowID,
-		TaskQueue:          s.TaskQueue(),
+		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
-	ctx, cancel := context.WithTimeout(s.testContext, 30*time.Second)
+	ctx, cancel := context.WithTimeout(env.Context(), 30*time.Second)
 	defer cancel()
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(s.testContext, workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(env.Context(), workflowOptions, workflowFn)
 	s.NoError(err)
 	runID := workflowRun.GetRunID()
 
@@ -92,8 +85,8 @@ func rebuildMutableStateWorkflowHelper(s *AdminTestSuite, testWithChasm bool) {
 
 	var response1 *adminservice.DescribeMutableStateResponse
 	for {
-		response1, err = s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-			Namespace: s.Namespace().String(),
+		response1, err = env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -112,8 +105,8 @@ func rebuildMutableStateWorkflowHelper(s *AdminTestSuite, testWithChasm bool) {
 		time.Sleep(20 * time.Millisecond) //nolint:forbidigo
 	}
 
-	_, err = s.AdminClient().RebuildMutableState(ctx, &adminservice.RebuildMutableStateRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.AdminClient().RebuildMutableState(ctx, &adminservice.RebuildMutableStateRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -121,8 +114,8 @@ func rebuildMutableStateWorkflowHelper(s *AdminTestSuite, testWithChasm bool) {
 	})
 	s.NoError(err)
 
-	response2, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-		Namespace: s.Namespace().String(),
+	response2, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,

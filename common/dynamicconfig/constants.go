@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/matching/counter"
 )
 
@@ -172,6 +173,12 @@ config as the other services.`,
 		3*time.Second,
 		`RingpopApproximateMaxPropagationTime is used for timing certain startup and shutdown processes.
 (It is not and doesn't have to be a guarantee.)`,
+	)
+	RingpopReplicaPoints = NewGlobalIntSetting(
+		"system.ringpopReplicaPoints",
+		100,
+		`RingpopReplicaPoints is the number of virtual nodes (replica points) per physical host
+in the consistent hash ring used by ringpop. Changing it may cause service disruption during deployment.`,
 	)
 	EnableParentClosePolicyWorker = NewGlobalBoolSetting(
 		"system.enableParentClosePolicyWorker",
@@ -681,6 +688,15 @@ instances in the cluster, for a given namespace, per-API method. If this is set 
 ignored. The name 'frontend.globalNamespaceCount' is kept for consistency with the per-instance limit name,
 'frontend.namespaceCount'.`,
 	)
+	FrontendPollWaitForNamespaceRateLimitToken = NewNamespaceBoolSetting(
+		"frontend.pollWaitForNamespaceRateLimitToken",
+		false,
+		`FrontendPollWaitForNamespaceRateLimitToken controls whether poll requests wait for
+a namespace RPS rate limit token to become available instead of immediately rejecting
+with ResourceExhausted. When enabled, poll requests block until a token is available
+or the request context deadline is reached. The concurrent request rate limiter fires
+before this limiter and will still reject requests that exceed the concurrent limit.`,
+	)
 	FrontendMaxNamespaceVisibilityRPSPerInstance = NewNamespaceIntSetting(
 		"frontend.namespaceRPS.visibility",
 		10,
@@ -829,6 +845,12 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		`ExposeAuthorizerErrors controls whether the frontend authorization interceptor will pass through errors returned by
 the Authorizer component. If false, a generic PermissionDenied error without details will be returned. Default false.`,
 	)
+	EnablePrincipalPropagation = NewNamespaceBoolSetting(
+		"frontend.enablePrincipalPropagation",
+		false,
+		`EnablePrincipalPropagation controls whether the authorization interceptor propagates the authenticated
+principal identity as gRPC headers.`,
+	)
 	KeepAliveMinTime = NewGlobalDurationSetting(
 		"frontend.keepAliveMinTime",
 		10*time.Second,
@@ -898,7 +920,7 @@ and deployment interaction in matching and history.`,
 	)
 	UseRevisionNumberForWorkerVersioning = NewNamespaceBoolSetting(
 		"system.useRevisionNumberForWorkerVersioning",
-		false,
+		true,
 		`UseRevisionNumberForWorkerVersioning enables the use of revision number to resolve consistency problems that may arise during task dispatch time.`,
 	)
 	EnableSuggestCaNOnNewTargetVersion = NewNamespaceBoolSetting(
@@ -942,10 +964,17 @@ used when the first cache layer has a miss. Requires server restart for change t
 	FrontendNexusRequestHeadersBlacklist = NewGlobalTypedSettingWithConverter(
 		"frontend.nexusRequestHeadersBlacklist",
 		ConvertWildcardStringListToRegexp,
-		MatchNothingRE,
-		`Nexus request headers to be removed before being sent to a user handler.
-Wildcards (*) are expanded to allow any substring. By default blacklist is empty.
-Concrete type should be list of strings.`,
+		// Failure support is an internal implementation detail that shouldn't propagate to the user.
+		util.MustWildCardStringsToRegexp([]string{
+			"accept-encoding",
+			"x-forwarded-for",
+			"xdc-redirection",
+			"xdc-redirection-api",
+			"temporal-nexus-failure-support",
+		}),
+		`Nexus request headers to be removed before being sent to a user handler. Wildcards (*) are expanded to
+allow any substring. By default headers that are meant for internal use are disallowed. Concrete type should be list of
+strings.`,
 	)
 	FrontendNexusForwardRequestUseEndpointDispatch = NewGlobalBoolSetting(
 		"frontend.nexusForwardRequestUseEndpointDispatch",
@@ -1335,7 +1364,7 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 	)
 	MatchingDeploymentWorkflowVersion = NewNamespaceIntSetting(
 		"matching.deploymentWorkflowVersion",
-		0,
+		2,
 		`MatchingDeploymentWorkflowVersion controls what version of the logic should the manager workflows use.`,
 	)
 	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
@@ -1384,8 +1413,8 @@ second per poller by one physical queue manager`,
 	)
 	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",
-		ConvertGradualChange(false),
-		StaticGradualChange(false),
+		ConvertGradualChange(true),
+		StaticGradualChange(true),
 		`Use priority-enabled TaskMatcher`,
 	)
 	MatchingEnableFairness = NewTaskQueueTypedSettingWithConverter(
@@ -1396,7 +1425,7 @@ second per poller by one physical queue manager`,
 	)
 	MatchingEnableMigration = NewTaskQueueBoolSetting(
 		"matching.enableMigration",
-		false,
+		true,
 		`Allows migration between v1 and v2 (fairness) task backlogs.`,
 	)
 	MatchingPriorityLevels = NewTaskQueueIntSetting(
@@ -1503,6 +1532,13 @@ Don't change this on a live cluster without using the gradual change mechanism.
 		true,
 		`EnableHistoryReplicationDLQV2 switches to the DLQ v2 implementation for history replication. See details in
 [go.temporal.io/server/common/persistence.QueueV2]`,
+	)
+
+	EnableDeleteWorkflowExecutionReplication = NewGlobalBoolSetting(
+		"history.enableDeleteWorkflowExecutionReplication",
+		false,
+		`EnableDeleteWorkflowExecutionReplication controls whether a replication task is generated when a workflow
+execution is deleted. When enabled, workflow deletions on the active cluster will be replicated to passive clusters.`,
 	)
 
 	HistoryRPS = NewGlobalIntSetting(

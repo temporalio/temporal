@@ -54,6 +54,17 @@ func (m *mockNexusCompletionGetterComponent) LifecycleState(_ chasm.Context) cha
 	return chasm.LifecycleStateRunning
 }
 
+func (m *mockNexusCompletionGetterComponent) ContextMetadata(_ chasm.Context) map[string]string {
+	return nil
+}
+
+func (m *mockNexusCompletionGetterComponent) Terminate(
+	_ chasm.MutableContext,
+	_ chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	return chasm.TerminateComponentResponse{}, nil
+}
+
 type mockNexusCompletionGetterLibrary struct {
 	chasm.UnimplementedLibrary
 }
@@ -68,7 +79,7 @@ func (l *mockNexusCompletionGetterLibrary) Components() []*chasm.RegistrableComp
 	}
 }
 
-// Test the full executeInvocationTask flow with direct executor calls
+// Test the full executeInvocationTask flow with direct handler calls
 func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 	cases := []struct {
 		name                  string
@@ -143,6 +154,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 
 			// Setup metrics expectations
 			metricsHandler := metrics.NewMockHandler(ctrl)
+			metricsHandler.EXPECT().WithTags(gomock.Any()).Return(metricsHandler).AnyTimes()
 			counter := metrics.NewMockCounterIface(ctrl)
 			timer := metrics.NewMockTimerIface(ctrl)
 			metricsHandler.EXPECT().Counter(RequestCounter.Name()).Return(counter)
@@ -161,13 +173,13 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			timeSource := clock.NewEventTimeSource()
 			timeSource.Update(time.Now())
 
-			// Create task executor with mock namespace registry
+			// Create task handler with mock namespace registry
 			nsRegistry := namespace.NewMockRegistry(ctrl)
 			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
 
 			// Create mock engine
 			mockEngine := chasm.NewMockEngine(ctrl)
-			executor := &InvocationTaskExecutor{
+			handler := &invocationTaskHandler{
 				config: &Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 					RetryPolicy: func() backoff.RetryPolicy {
@@ -184,7 +196,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 
 			chasmRegistry := chasm.NewRegistry(logger)
 			err = chasmRegistry.Register(&Library{
-				InvocationTaskExecutor: executor,
+				InvocationTaskHandler: handler,
 			})
 			require.NoError(t, err)
 			err = chasmRegistry.Register(&mockNexusCompletionGetterLibrary{})
@@ -224,12 +236,12 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			_, err = root.CloseTransaction()
 			require.NoError(t, err)
 
-			// Setup engine expectations to directly call executor logic with MockMutableContext
+			// Setup engine expectations to directly call handler logic with MockMutableContext
 			mockEngine.EXPECT().ReadComponent(
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
-			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, readFn func(chasm.Context, chasm.Component, *chasm.Registry) error, opts ...chasm.TransitionOption) error {
+			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, readFn func(chasm.Context, chasm.Component) error, opts ...chasm.TransitionOption) error {
 				mockCtx := &chasm.MockContext{
 					HandleNow: func(component chasm.Component) time.Time {
 						return timeSource.Now()
@@ -238,14 +250,14 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 						return []byte{}, nil
 					},
 				}
-				return readFn(mockCtx, callback, chasmRegistry)
+				return readFn(mockCtx, callback)
 			})
 
 			mockEngine.EXPECT().UpdateComponent(
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
-			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error, opts ...chasm.TransitionOption) ([]any, error) {
+			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, opts ...chasm.TransitionOption) ([]any, error) {
 				mockCtx := &chasm.MockMutableContext{
 					MockContext: chasm.MockContext{
 						HandleNow: func(component chasm.Component) time.Time {
@@ -256,7 +268,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 						},
 					},
 				}
-				err := updateFn(mockCtx, callback, chasmRegistry)
+				err := updateFn(mockCtx, callback)
 				return nil, err
 			})
 
@@ -269,7 +281,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 
 			// Execute with engine context
 			engineCtx := chasm.NewEngineContext(context.Background(), mockEngine)
-			err = executor.Invoke(
+			err = handler.Execute(
 				engineCtx,
 				ref,
 				chasm.TaskAttributes{Destination: "http://localhost"},
@@ -288,7 +300,6 @@ func TestProcessBackoffTask(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	logger := log.NewTestLogger()
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(time.Now())
 
@@ -321,20 +332,12 @@ func TestProcessBackoffTask(t *testing.T) {
 		},
 	}
 
-	executor := BackoffTaskExecutor{
-		config: &Config{
-			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
-			RetryPolicy: func() backoff.RetryPolicy {
-				return backoff.NewExponentialRetryPolicy(time.Second)
-			},
-		},
-		logger: logger,
-	}
+	handler := backoffTaskHandler{}
 
 	// Execute the backoff task
 	task := &callbackspb.BackoffTask{Attempt: 1}
 	attrs := chasm.TaskAttributes{Destination: "http://localhost"}
-	err := executor.Execute(mockCtx, callback, attrs, task)
+	err := handler.Execute(mockCtx, callback, attrs, task)
 
 	// Verify no error
 	require.NoError(t, err)
@@ -549,7 +552,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 
 			// Create mock engine and setup expectations
 			mockEngine := chasm.NewMockEngine(ctrl)
-			executor := &InvocationTaskExecutor{
+			handler := &invocationTaskHandler{
 				config: &Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 					RetryPolicy: func() backoff.RetryPolicy {
@@ -564,7 +567,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 
 			chasmRegistry := chasm.NewRegistry(logger)
 			err = chasmRegistry.Register(&Library{
-				InvocationTaskExecutor: executor,
+				InvocationTaskHandler: handler,
 			})
 			require.NoError(t, err)
 			err = chasmRegistry.Register(&mockNexusCompletionGetterLibrary{})
@@ -613,7 +616,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
-			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, readFn func(chasm.Context, chasm.Component, *chasm.Registry) error, opts ...chasm.TransitionOption) error {
+			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, readFn func(chasm.Context, chasm.Component) error, opts ...chasm.TransitionOption) error {
 				// Create a mock context
 				mockCtx := &chasm.MockContext{
 					HandleNow: func(component chasm.Component) time.Time {
@@ -632,14 +635,14 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				}
 
 				// Call the readFn with our callback
-				return readFn(mockCtx, callback, chasmRegistry)
+				return readFn(mockCtx, callback)
 			})
 
 			mockEngine.EXPECT().UpdateComponent(
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
-			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error, opts ...chasm.TransitionOption) ([]any, error) {
+			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, opts ...chasm.TransitionOption) ([]any, error) {
 				// Create a mock mutable context
 				mockCtx := &chasm.MockMutableContext{
 					MockContext: chasm.MockContext{
@@ -653,7 +656,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				}
 
 				// Call the updateFn with our callback
-				err := updateFn(mockCtx, callback, chasmRegistry)
+				err := updateFn(mockCtx, callback)
 				return nil, err
 			})
 
@@ -669,7 +672,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 
 			// Execute the invocation task
 			task := &callbackspb.InvocationTask{Attempt: 1}
-			err = executor.Invoke(
+			err = handler.Execute(
 				ctx,
 				ref,
 				chasm.TaskAttributes{},
