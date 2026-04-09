@@ -206,7 +206,6 @@ func recordActivityTaskStarted(
 			matchingClient,
 			routingInfoCache,
 			mutableState.GetWorkflowKey().WorkflowID,
-			mutableState.GetEffectiveRampPolicy(),
 		)
 		if err != nil {
 			// Let matching retry
@@ -289,7 +288,6 @@ func getDeploymentVersionAndRevisionNumberForWorkflowID(
 	matchingClient matchingservice.MatchingServiceClient,
 	routingInfoCache worker_versioning.RoutingInfoCache,
 	workflowId string,
-	rampPolicy *deploymentspb.RampPolicy,
 ) (*deploymentspb.WorkerDeploymentVersion, int64, error) {
 	// Check cache first for task queue routing info (independent of workflow ID)
 	routingInfo, ok := routingInfoCache.Get(namespaceID, taskQueueName, taskQueueType)
@@ -317,7 +315,9 @@ func getDeploymentVersionAndRevisionNumberForWorkflowID(
 	}
 
 	// Apply workflow-specific routing logic
-	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(routingInfo.Current, routingInfo.CurrentRevisionNumber, routingInfo.Ramping, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber, workflowId, rampPolicy)
+	// Note: Passing a nil ramp policy because, RampPolicy is only used for the first workflow task of a workflow.
+	// If we expand RampPolicy to apply to Activities in the future, this logic will need to be updated.
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(routingInfo.Current, routingInfo.CurrentRevisionNumber, routingInfo.Ramping, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber, workflowId, nil)
 
 	return targetDeploymentVersion, targetDeploymentRevisionNumber, nil
 }

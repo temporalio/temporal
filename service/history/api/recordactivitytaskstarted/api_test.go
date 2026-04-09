@@ -103,7 +103,6 @@ func TestGetDeploymentVersionForWorkflowID_CacheHit(t *testing.T) {
 		mockMatchingClient,
 		mockCache,
 		workflowID,
-		nil,
 	)
 
 	// Verify cache was queried
@@ -191,7 +190,6 @@ func TestGetDeploymentVersionForWorkflowID_CacheMiss(t *testing.T) {
 		mockMatchingClient,
 		mockCache,
 		workflowID,
-		nil,
 	)
 
 	// Verify cache was queried and populated
@@ -248,7 +246,6 @@ func TestGetDeploymentVersionForWorkflowID_UnversionedTaskQueue(t *testing.T) {
 		mockMatchingClient,
 		mockCache,
 		workflowID,
-		nil,
 	)
 
 	// Verify cache was queried and populated even for unversioned task queue
