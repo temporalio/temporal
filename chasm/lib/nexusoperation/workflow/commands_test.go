@@ -54,7 +54,7 @@ func (tcx *testContext) setHasAnyBufferedEvent(value bool) {
 }
 
 var defaultConfig = &nexusoperation.Config{
-	ChasmNexusEnabled:                  dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+	EnableChasmNexus:                   dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	MaxServiceNameLength:               dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("service")),
 	MaxOperationNameLength:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("op")),
 	MaxConcurrentOperationsPerWorkflow: dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
@@ -136,7 +136,7 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 func TestHandleScheduleCommand(t *testing.T) {
 	t.Run("chasm nexus not enabled", func(t *testing.T) {
 		tcx := newTestContext(t, &nexusoperation.Config{
-			ChasmNexusEnabled: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			EnableChasmNexus: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		})
 		err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.ErrorIs(t, err, chasmworkflow.ErrCommandNotSupported)
@@ -634,7 +634,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 func TestHandleCancelCommand(t *testing.T) {
 	t.Run("chasm nexus not enabled", func(t *testing.T) {
 		tcx := newTestContext(t, &nexusoperation.Config{
-			ChasmNexusEnabled: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			EnableChasmNexus: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		})
 		err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.ErrorIs(t, err, chasmworkflow.ErrCommandNotSupported)
