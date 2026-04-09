@@ -262,8 +262,8 @@ func SetupNewWorkflowForRetryOrCron(
 			sourceDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousMutableState.GetEffectiveDeployment())
 			sourceDeploymentRevisionNumber := previousMutableState.GetVersioningRevisionNumber()
 			// Carry forward ContinueAsNewInitialVersioningBehavior so that the first task of each
-			// retry run also receives the same ramp policy (e.g. UseRampingVersion). Per the API
-			// spec this behavior is scoped to the initial task of this run and of any retries.
+			// retry run also receives the same InitialVersioningBehavior. Per the API spec, this
+			// behavior is scoped to the initial task of this run and of any retries.
 			// Note: GetShouldUseRampingVersion() gates the policy on LastCompletedWorkflowTaskStartedEventId
 			// == EmptyEventID, so subsequent tasks of the retry run are unaffected even though the
 			// field remains stored in VersioningInfo for the lifetime of that run.
