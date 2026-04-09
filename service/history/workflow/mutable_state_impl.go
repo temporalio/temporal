@@ -2621,9 +2621,9 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// Add InheritedAutoUpgradeInfo if InheritedPinnedVersion is not set and source deployment version and revision number are set.
 	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 && inheritedPinnedVersion == nil {
 		req.InheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
-			SourceDeploymentVersion:        sourceDeploymentVersion,
-			SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
-			InitialVersioningBehavior:      command.GetInitialVersioningBehavior(), // pass from command (not source) to CaN
+			SourceDeploymentVersion:                sourceDeploymentVersion,
+			SourceDeploymentRevisionNumber:         sourceDeploymentRevisionNumber,
+			ContinueAsNewInitialVersioningBehavior: command.GetInitialVersioningBehavior(), // pass from command (not source) to CaN
 		}
 	}
 
@@ -2965,7 +2965,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.executionInfo.VersioningInfo.DeploymentVersion = event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentVersion()
 		// Assume AutoUpgrade behavior for the first workflow task.
 		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
-		ms.executionInfo.VersioningInfo.InitialVersioningBehavior = event.GetInheritedAutoUpgradeInfo().GetInitialVersioningBehavior()
+		ms.executionInfo.VersioningInfo.ContinueAsNewInitialVersioningBehavior = event.GetInheritedAutoUpgradeInfo().GetContinueAsNewInitialVersioningBehavior()
 	}
 
 	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {
@@ -9122,7 +9122,7 @@ func (ms *MutableStateImpl) GetEffectiveRampPolicy() *deploymentspb.RampPolicy {
 	executionInfo := ms.GetExecutionInfo()
 	if executionInfo.GetLastCompletedWorkflowTaskStartedEventId() == common.EmptyEventID { // this is the first WFT
 		versioningInfo := executionInfo.GetVersioningInfo()
-		if versioningInfo.GetInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_USE_RAMPING_VERSION &&
+		if versioningInfo.GetContinueAsNewInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_USE_RAMPING_VERSION &&
 			versioningInfo.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
 			return &deploymentspb.RampPolicy{Value: &deploymentspb.RampPolicy_UseRampingVersion{UseRampingVersion: true}}
 		}
