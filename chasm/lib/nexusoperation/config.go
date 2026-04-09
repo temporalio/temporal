@@ -13,7 +13,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 )
 
-var ChasmNexusEnabled = dynamicconfig.NewNamespaceBoolSetting(
+var EnableChasmNexus = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.enableChasm",
 	false,
 	`Feature flag that controls whether the legacy HSM-based implementation (when flag is false; default) or the newer
@@ -188,8 +188,8 @@ Added for safety. Defaults to true. Likely to be removed in future server versio
 )
 
 type Config struct {
-	ChasmEnabled                        dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ChasmNexusEnabled                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableChasm                         dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableChasmNexus                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NumHistoryShards                    int32
 	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MinRequestTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
@@ -210,8 +210,8 @@ type Config struct {
 
 func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Config {
 	return &Config{
-		ChasmEnabled:                       dynamicconfig.EnableChasm.Get(dc),
-		ChasmNexusEnabled:                  ChasmNexusEnabled.Get(dc),
+		EnableChasm:                        dynamicconfig.EnableChasm.Get(dc),
+		EnableChasmNexus:                   EnableChasmNexus.Get(dc),
 		NumHistoryShards:                   cfg.NumHistoryShards,
 		RequestTimeout:                     RequestTimeout.Get(dc),
 		MinRequestTimeout:                  MinRequestTimeout.Get(dc),
