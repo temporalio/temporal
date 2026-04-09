@@ -204,7 +204,7 @@ func (u *Updater) ApplyRequest(
 		ms.GetEffectiveVersioningBehavior(),
 		ms.GetEffectiveDeployment(),
 		ms.GetVersioningRevisionNumber(),
-		ms.GetEffectiveRampPolicy(),
+		ms.GetShouldUseRampingVersion(),
 	)
 
 	return &api.UpdateWorkflowAction{

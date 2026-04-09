@@ -26,7 +26,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
-	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -2621,8 +2620,8 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// Add InheritedAutoUpgradeInfo if InheritedPinnedVersion is not set and source deployment version and revision number are set.
 	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 && inheritedPinnedVersion == nil {
 		req.InheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
-			SourceDeploymentVersion:                sourceDeploymentVersion,
-			SourceDeploymentRevisionNumber:         sourceDeploymentRevisionNumber,
+			SourceDeploymentVersion:        sourceDeploymentVersion,
+			SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
 			// ContinueAsNewInitialVersioningBehavior is taken from the command that triggered this CaN,
 			// not from the previous workflow's InheritedAutoUpgradeInfo. This ensures that each CaN hop
 			// carries only the behavior the user explicitly requested for that hop, and that a
@@ -9123,24 +9122,16 @@ func (ms *MutableStateImpl) SetVersioningRevisionNumber(revisionNumber int64) {
 	ms.GetExecutionInfo().GetVersioningInfo().RevisionNumber = revisionNumber
 }
 
-func (ms *MutableStateImpl) GetEffectiveRampPolicy() *deploymentspb.RampPolicy {
-	executionInfo := ms.GetExecutionInfo()
-	if executionInfo.GetLastCompletedWorkflowTaskStartedEventId() == common.EmptyEventID { // this is the first WFT
-		versioningInfo := executionInfo.GetVersioningInfo()
+func (ms *MutableStateImpl) GetShouldUseRampingVersion() bool {
+	return ms.GetExecutionInfo().GetLastCompletedWorkflowTaskStartedEventId() == common.EmptyEventID &&
 		// ContinueAsNewInitialVersioningBehavior is only populated (in ApplyWorkflowExecutionStartedEvent)
 		// from InheritedAutoUpgradeInfo, which always sets Behavior to AUTO_UPGRADE. So there is no world
 		// in which ContinueAsNewInitialVersioningBehavior is set without Behavior also being AUTO_UPGRADE.
-		// The Behavior check here is therefore defensive, not a meaningful filter.
 		//
 		// Backward-compat note: history events written before this field existed carry UNSPECIFIED, which
-		// does not match USE_RAMPING_VERSION, so those runs correctly fall through and return nil — the
+		// does not match USE_RAMPING_VERSION, so those runs correctly fall through and return false — the
 		// same as AUTO_UPGRADE behavior.
-		if versioningInfo.GetContinueAsNewInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_USE_RAMPING_VERSION &&
-			versioningInfo.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
-			return &deploymentspb.RampPolicy{Value: &deploymentspb.RampPolicy_UseRampingVersion{UseRampingVersion: true}}
-		}
-	}
-	return nil
+		ms.GetExecutionInfo().GetVersioningInfo().GetContinueAsNewInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_USE_RAMPING_VERSION
 }
 
 // reschedulePendingActivities reschedules all the activities that are not started, so they are

@@ -17,7 +17,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
-	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -380,7 +379,7 @@ type (
 		StartDeploymentTransition(deployment *deploymentpb.Deployment, revisionNumber int64) error
 		GetVersioningRevisionNumber() int64
 		SetVersioningRevisionNumber(revisionNumber int64)
-		GetEffectiveRampPolicy() *deploymentspb.RampPolicy
+		GetShouldUseRampingVersion() bool
 
 		AddReapplyCandidateEvent(event *historypb.HistoryEvent)
 		GetReapplyCandidateEvents() []*historypb.HistoryEvent

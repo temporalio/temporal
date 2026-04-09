@@ -21,16 +21,6 @@ message WorkerDeploymentVersion {
   string build_id = 2;
 }
 
-// Defines how to determine whether a workflow should use the Ramping Version or the Current Version of its Task Queue.
-// Default Ramp Policy is simply f(workflow_id, ramp_percentage).
-message RampPolicy {
-  oneof value {
-    // True if the workflow should use the Ramping Version of its Task Queue regardless of f(workflow_id, ramp_percentage).
-    // If there is no Ramping Version at the time of task dispatch, the Current Version will be used instead.
-    bool use_ramping_version = 1;
-  }
-}
-
 // The source of truth for this data is in the WorkerDeployment entity workflows, which is
 // synced to all TQs whenever the source changes.
 // Deprecated.

@@ -315,9 +315,8 @@ func getDeploymentVersionAndRevisionNumberForWorkflowID(
 	}
 
 	// Apply workflow-specific routing logic
-	// Note: Passing a nil ramp policy because, RampPolicy is only used for the first workflow task of a workflow.
-	// If we expand RampPolicy to apply to Activities in the future, this logic will need to be updated.
-	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(routingInfo.Current, routingInfo.CurrentRevisionNumber, routingInfo.Ramping, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber, workflowId, nil)
+	// Note: Passing false useRampingVersionForInitialTask because activity is never the initial task.
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(routingInfo.Current, routingInfo.CurrentRevisionNumber, routingInfo.Ramping, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber, workflowId, false)
 
 	return targetDeploymentVersion, targetDeploymentRevisionNumber, nil
 }

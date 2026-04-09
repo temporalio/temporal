@@ -206,7 +206,7 @@ func MakeDirectiveForWorkflowTask(ms historyi.MutableState) *taskqueuespb.TaskVe
 		ms.GetEffectiveVersioningBehavior(),
 		ms.GetEffectiveDeployment(),
 		ms.GetVersioningRevisionNumber(),
-		ms.GetEffectiveRampPolicy(),
+		ms.GetShouldUseRampingVersion(),
 	)
 }
 
@@ -216,12 +216,12 @@ func MakeDirectiveForActivityTask(mutableState historyi.MutableState, activityIn
 		return &taskqueuespb.TaskVersionDirective{Behavior: behavior,
 			DeploymentVersion: worker_versioning.DeploymentVersionFromDeployment(d),
 			RevisionNumber:    mutableState.GetVersioningRevisionNumber(),
-			// Don't pass RampPolicy for activity tasks. RampPolicy (UseRampingVersion) only applies to
+			// Don't pass UseRampingVersionInitialTask for activity tasks, because it only applies to
 			// the first workflow task of a CaN run. Activities are always scheduled by a WFT completion,
 			// so by the time an activity task is dispatched the first WFT has already completed and
-			// GetEffectiveRampPolicy() would return nil anyway. Passing nil explicitly to make it very
-			// explicit that RampPolicy is not used for activities right now.
-			RampPolicy: nil,
+			// GetShouldUseRampingVersion() would return false anyway. Passing nil explicitly to make it very
+			// explicit that UseRampingVersionInitialTask is not used for activities.
+			UseRampingVersionInitialTask: false,
 		}
 	}
 	if !activityInfo.UseCompatibleVersion && activityInfo.GetUseWorkflowBuildIdInfo() == nil {
