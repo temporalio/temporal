@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -116,10 +117,89 @@ func CleanSpec(spec *schedulepb.ScheduleSpec) {
 	}
 }
 
+// compactRanges normalizes Range entries to use proto default values: Step=1
+// is stored as 0 (the proto default), and End=Start is stored as 0. This
+// matches the form produced by makeRange / parseCronString and is the inverse
+// of what CleanSpec does, so that proto.Equal can identify duplicates across
+// entries that arrived via different paths.
+func compactRanges(ranges []*schedulepb.Range) {
+	for _, r := range ranges {
+		if r.Step == 1 {
+			r.Step = 0
+		}
+		if r.End == r.Start {
+			r.End = 0
+		}
+	}
+}
+
+// compactStructuredCalendarSpec normalizes all Range fields of sc to compact
+// proto-default form in place.
+func compactStructuredCalendarSpec(sc *schedulepb.StructuredCalendarSpec) {
+	compactRanges(sc.Second)
+	compactRanges(sc.Minute)
+	compactRanges(sc.Hour)
+	compactRanges(sc.DayOfMonth)
+	compactRanges(sc.Month)
+	compactRanges(sc.Year)
+	compactRanges(sc.DayOfWeek)
+}
+
+// deduplicateStructuredCalendars removes duplicate entries from a StructuredCalendarSpec
+// slice, preserving order. All entries must already be in compact form (Step=1 stored
+// as 0, End=Start stored as 0) so that proto.Equal identifies semantic equivalents.
+func deduplicateStructuredCalendars(entries []*schedulepb.StructuredCalendarSpec) []*schedulepb.StructuredCalendarSpec {
+	out := entries[:0:0]
+	for _, e := range entries {
+		duplicate := false
+		for _, seen := range out {
+			//workflowcheck:ignore (proto.Equal is falsely flagged as non-deterministic)
+			if proto.Equal(e, seen) {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// deduplicateIntervals removes duplicate IntervalSpec entries from a slice.
+func deduplicateIntervals(entries []*schedulepb.IntervalSpec) []*schedulepb.IntervalSpec {
+	out := entries[:0:0]
+	for _, e := range entries {
+		duplicate := false
+		for _, seen := range out {
+			//workflowcheck:ignore (proto.Equal is falsely flagged as non-deterministic)
+			if proto.Equal(e, seen) {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 //revive:disable-next-line:cognitive-complexity
 func canonicalizeSpec(spec *schedulepb.ScheduleSpec) (*schedulepb.ScheduleSpec, error) {
 	// make copy so we can change some fields
 	spec = common.CloneProto(spec)
+
+	// Normalize pre-existing StructuredCalendar entries to compact form so they
+	// match the output of makeRange / parseCronString. Entries that arrived via
+	// Describe have been through CleanSpec (Step=0→1, End<Start→End=Start);
+	// compactStructuredCalendarSpec reverses that, enabling proto.Equal dedup below.
+	for _, sc := range spec.StructuredCalendar {
+		compactStructuredCalendarSpec(sc)
+	}
+	for _, sc := range spec.ExcludeStructuredCalendar {
+		compactStructuredCalendarSpec(sc)
+	}
 
 	// parse CalendarSpecs to StructuredCalendarSpecs
 	for _, cal := range spec.Calendar {
@@ -162,6 +242,14 @@ func canonicalizeSpec(spec *schedulepb.ScheduleSpec) (*schedulepb.ScheduleSpec, 
 		}
 	}
 	spec.CronString = nil
+
+	// Deduplicate. The describe-then-update pattern sends back StructuredCalendar
+	// (from the describe response) alongside CronExpressions that compile to the
+	// same entries; without this, each update appends a duplicate. All entries are
+	// now in compact form, so proto.Equal correctly identifies semantic equivalents.
+	spec.StructuredCalendar = deduplicateStructuredCalendars(spec.StructuredCalendar)
+	spec.ExcludeStructuredCalendar = deduplicateStructuredCalendars(spec.ExcludeStructuredCalendar)
+	spec.Interval = deduplicateIntervals(spec.Interval)
 
 	// if we have cron string(s), copy the timezone to spec, checking for conflict first.
 	// if cron string timezone is empty string, don't copy, let the one in spec be used.

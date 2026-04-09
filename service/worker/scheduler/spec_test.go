@@ -204,6 +204,81 @@ func (s *specSuite) TestCanonicalize() {
 	s.Error(err)
 }
 
+func (s *specSuite) TestCanonicalizeDedup() {
+	// "0 5,7 * * *" in compact form — what canonicalizeSpec stores.
+	compact := &schedulepb.StructuredCalendarSpec{
+		Second:     []*schedulepb.Range{{Start: 0}},
+		Minute:     []*schedulepb.Range{{Start: 0}},
+		Hour:       []*schedulepb.Range{{Start: 5}, {Start: 7}},
+		DayOfMonth: []*schedulepb.Range{{Start: 1, End: 31}},
+		Month:      []*schedulepb.Range{{Start: 1, End: 12}},
+		DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6}},
+	}
+
+	// Same spec after CleanSpec runs on a DescribeSchedule response: Step=0→1,
+	// and End=0 is expanded to End=Start for ranges where End < Start.
+	afterCleanSpec := &schedulepb.StructuredCalendarSpec{
+		Second:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
+		Minute:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
+		Hour:       []*schedulepb.Range{{Start: 5, End: 5, Step: 1}, {Start: 7, End: 7, Step: 1}},
+		DayOfMonth: []*schedulepb.Range{{Start: 1, End: 31, Step: 1}},
+		Month:      []*schedulepb.Range{{Start: 1, End: 12, Step: 1}},
+		DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6, Step: 1}},
+	}
+
+	// Core bug scenario: user sends the StructuredCalendar they received from
+	// DescribeSchedule (which went through CleanSpec) alongside the same cron
+	// as a CronString. Without dedup this appends a second identical entry.
+	canonical, err := canonicalizeSpec(&schedulepb.ScheduleSpec{
+		StructuredCalendar: []*schedulepb.StructuredCalendarSpec{afterCleanSpec},
+		CronString:         []string{"0 5,7 * * *"},
+	})
+	s.NoError(err)
+	s.ProtoEqual(&schedulepb.ScheduleSpec{
+		StructuredCalendar: []*schedulepb.StructuredCalendarSpec{compact},
+	}, canonical)
+
+	// Duplicate CronStrings with no pre-existing StructuredCalendar.
+	canonical, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
+		CronString: []string{"0 5,7 * * *", "0 5,7 * * *"},
+	})
+	s.NoError(err)
+	s.ProtoEqual(&schedulepb.ScheduleSpec{
+		StructuredCalendar: []*schedulepb.StructuredCalendarSpec{compact},
+	}, canonical)
+
+	// Duplicate @every intervals.
+	canonical, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
+		CronString: []string{"@every 1h", "@every 1h"},
+	})
+	s.NoError(err)
+	s.Len(canonical.Interval, 1)
+
+	// Two different CronStrings — both entries are kept.
+	canonical, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
+		CronString: []string{"0 5,7 * * *", "30 9 * * *"},
+	})
+	s.NoError(err)
+	s.Len(canonical.StructuredCalendar, 2)
+
+	// First occurrence wins when deduplicating.
+	other := &schedulepb.StructuredCalendarSpec{
+		Second:     []*schedulepb.Range{{Start: 0}},
+		Minute:     []*schedulepb.Range{{Start: 30}},
+		Hour:       []*schedulepb.Range{{Start: 9}},
+		DayOfMonth: []*schedulepb.Range{{Start: 1, End: 31}},
+		Month:      []*schedulepb.Range{{Start: 1, End: 12}},
+		DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6}},
+	}
+	canonical, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
+		CronString: []string{"30 9 * * *", "0 5,7 * * *", "30 9 * * *"},
+	})
+	s.NoError(err)
+	s.ProtoEqual(&schedulepb.ScheduleSpec{
+		StructuredCalendar: []*schedulepb.StructuredCalendarSpec{other, compact},
+	}, canonical)
+}
+
 func (s *specSuite) TestSpecIntervalBasic() {
 	s.checkSequenceRaw(
 		&schedulepb.ScheduleSpec{

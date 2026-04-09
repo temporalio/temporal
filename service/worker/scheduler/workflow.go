@@ -65,6 +65,8 @@ const (
 	LimitMemoSpecSize = 11
 	// trigger immediately timestamp is added to the PatchRequest
 	TriggerImmediatelyTimestamp = 12
+	// heal accumulated duplicate StructuredCalendar entries via compileSpec
+	DeduplicateSpec = 13
 )
 
 const (
@@ -210,7 +212,7 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
-		Version:                           TriggerImmediatelyTimestamp,
+		Version:                           DeduplicateSpec,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -425,6 +427,18 @@ func (s *scheduler) compileSpec() {
 	} else {
 		s.Info.InvalidScheduleError = ""
 		s.cspec = cspec
+		// Persist the deduplicated canonical spec so that existing schedules with
+		// accumulated duplicate entries are healed on the next workflow run.
+		// GetVersion gates this to new runs only: old runs replay with DefaultVersion
+		// and skip the assignment, preserving their recorded decisions. Guard with
+		// s.ctx != nil because compileSpec is also called from GetListInfoFromStartArgs
+		// outside of a workflow context.
+		if s.ctx != nil {
+			v := workflow.GetVersion(s.ctx, "dedup-spec", workflow.DefaultVersion, 1)
+			if v >= 1 {
+				s.Schedule.Spec = cspec.CanonicalForm()
+			}
+		}
 	}
 }
 
