@@ -210,7 +210,7 @@ func (o *Operation) loadStartArgs(
 
 // saveInvocationResultInput is the input to the Operation.saveResult method used in UpdateComponent.
 type saveInvocationResultInput struct {
-	result      invocationResult
+	result      startResult
 	retryPolicy backoff.RetryPolicy
 }
 
@@ -219,19 +219,19 @@ func (o *Operation) saveInvocationResult(
 	input saveInvocationResultInput,
 ) (chasm.NoValue, error) {
 	switch r := input.result.(type) {
-	case invocationResultOK:
+	case startResultOK:
 		links := convertResponseLinks(r.response.Links, ctx.Logger())
 		if r.response.Pending != nil {
 			return nil, o.onStarted(ctx, r.response.Pending.Token, links)
 		}
 		return nil, o.onCompleted(ctx, r.response.Successful, links)
-	case invocationResultCancel:
+	case startResultCancel:
 		return nil, o.onCanceled(ctx, r.failure)
-	case invocationResultFail:
+	case startResultFail:
 		return nil, o.onFailed(ctx, r.failure)
-	case invocationResultTimeout:
+	case startResultTimeout:
 		return nil, o.onTimedOut(ctx, r.failure)
-	case invocationResultRetry:
+	case startResultRetry:
 		return nil, transitionAttemptFailed.Apply(o, ctx, EventAttemptFailed{
 			Failure:     r.failure,
 			RetryPolicy: input.retryPolicy,
