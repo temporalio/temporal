@@ -343,9 +343,9 @@ func queryDirectlyThroughMatching(
 		workflow.GetEffectiveVersioningBehavior(msResp.GetVersioningInfo()),
 		workflow.GetEffectiveDeployment(msResp.GetVersioningInfo()),
 		msResp.GetVersioningInfo().GetRevisionNumber(),
-		// Don't do ramp policy for query, because it is not an initial first workflow task.
-		// If we later expand ramp policy to apply beyond first workflow task and apply to queries,
-		// we can pass the necessary info to this place.
+		// Don't do ramp policy for query, because it is not a first workflow task to which initial
+		// versioning behavior applies. If we later expand RampPolicy to apply beyond the first workflow
+		// task and apply to queries, we can pass the necessary info to this place.
 		nil,
 	)
 
