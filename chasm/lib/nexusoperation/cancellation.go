@@ -140,7 +140,8 @@ func (c *Cancellation) saveResult(
 		return nil, c.onFailed(ctx, r.failure)
 	case cancellationResultRetry:
 		return nil, transitionCancellationAttemptFailed.Apply(c, ctx, EventCancellationAttemptFailed{
-			Failure: r.failure,
+			Failure:     r.failure,
+			RetryPolicy: input.retryPolicy(),
 		})
 	default:
 		return nil, serviceerror.NewInternalf("cannot save invocation result of type %T", r)
