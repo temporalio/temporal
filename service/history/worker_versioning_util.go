@@ -206,7 +206,7 @@ func MakeDirectiveForWorkflowTask(ms historyi.MutableState) *taskqueuespb.TaskVe
 		ms.GetEffectiveVersioningBehavior(),
 		ms.GetEffectiveDeployment(),
 		ms.GetVersioningRevisionNumber(),
-		ms.GetExecutionInfo().GetVersioningInfo().GetRampPolicy(),
+		ms.GetEffectiveRampPolicy(),
 	)
 }
 
@@ -216,6 +216,7 @@ func MakeDirectiveForActivityTask(mutableState historyi.MutableState, activityIn
 		return &taskqueuespb.TaskVersionDirective{Behavior: behavior,
 			DeploymentVersion: worker_versioning.DeploymentVersionFromDeployment(d),
 			RevisionNumber:    mutableState.GetVersioningRevisionNumber(),
+			RampPolicy:        mutableState.GetEffectiveRampPolicy(),
 		}
 	}
 	if !activityInfo.UseCompatibleVersion && activityInfo.GetUseWorkflowBuildIdInfo() == nil {

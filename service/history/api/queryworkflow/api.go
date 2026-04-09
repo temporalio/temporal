@@ -343,7 +343,10 @@ func queryDirectlyThroughMatching(
 		workflow.GetEffectiveVersioningBehavior(msResp.GetVersioningInfo()),
 		workflow.GetEffectiveDeployment(msResp.GetVersioningInfo()),
 		msResp.GetVersioningInfo().GetRevisionNumber(),
-		msResp.GetVersioningInfo().GetRampPolicy(),
+		// Don't do ramp policy for query, because it is not an initial first workflow task.
+		// If we later expand ramp policy to apply beyond first workflow task and apply to queries,
+		// we can pass the necessary info to this place.
+		nil,
 	)
 
 	if msResp.GetIsStickyTaskQueueEnabled() &&

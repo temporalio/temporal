@@ -54,7 +54,7 @@ type TaskVersionDirective struct {
 	RevisionNumber int64 `protobuf:"varint,6,opt,name=revision_number,json=revisionNumber,proto3" json:"revision_number,omitempty"`
 	// Defines how to determine whether a workflow should use the Ramping Version or the Current Version of its Task Queue.
 	// Default Ramp Policy is simply f(workflow_id, ramp_percentage).
-	RampPolicy    *v11.RampPolicy `protobuf:"bytes,7,opt,name=ramp_policy,json=rampPolicy,proto3" json:"ramp_policy,omitempty"`
+	RampPolicy    *v12.RampPolicy `protobuf:"bytes,7,opt,name=ramp_policy,json=rampPolicy,proto3" json:"ramp_policy,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -142,7 +142,7 @@ func (x *TaskVersionDirective) GetRevisionNumber() int64 {
 	return 0
 }
 
-func (x *TaskVersionDirective) GetRampPolicy() *v11.RampPolicy {
+func (x *TaskVersionDirective) GetRampPolicy() *v12.RampPolicy {
 	if x != nil {
 		return x.RampPolicy
 	}
@@ -941,7 +941,7 @@ var File_temporal_server_api_taskqueue_v1_message_proto protoreflect.FileDescrip
 
 const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"\n" +
-	".temporal/server/api/taskqueue/v1/message.proto\x12 temporal.server.api.taskqueue.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a(temporal/api/deployment/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a/temporal/server/api/deployment/v1/message.proto\x1a'temporal/server/api/enums/v1/task.proto\"\x88\x04\n" +
+	".temporal/server/api/taskqueue/v1/message.proto\x12 temporal.server.api.taskqueue.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a(temporal/api/deployment/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a/temporal/server/api/deployment/v1/message.proto\x1a'temporal/server/api/enums/v1/task.proto\"\x8f\x04\n" +
 	"\x14TaskVersionDirective\x12J\n" +
 	"\x14use_assignment_rules\x18\x01 \x01(\v2\x16.google.protobuf.EmptyH\x00R\x12useAssignmentRules\x12,\n" +
 	"\x11assigned_build_id\x18\x02 \x01(\tH\x00R\x0fassignedBuildId\x12E\n" +
@@ -950,8 +950,8 @@ const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"deployment\x18\x04 \x01(\v2&.temporal.api.deployment.v1.DeploymentR\n" +
 	"deployment\x12i\n" +
 	"\x12deployment_version\x18\x05 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\x11deploymentVersion\x12'\n" +
-	"\x0frevision_number\x18\x06 \x01(\x03R\x0erevisionNumber\x12G\n" +
-	"\vramp_policy\x18\a \x01(\v2&.temporal.api.deployment.v1.RampPolicyR\n" +
+	"\x0frevision_number\x18\x06 \x01(\x03R\x0erevisionNumber\x12N\n" +
+	"\vramp_policy\x18\a \x01(\v2-.temporal.server.api.deployment.v1.RampPolicyR\n" +
 	"rampPolicyB\n" +
 	"\n" +
 	"\bbuild_id\"A\n" +
@@ -1045,7 +1045,7 @@ var file_temporal_server_api_taskqueue_v1_message_proto_goTypes = []any{
 	(v1.VersioningBehavior)(0),           // 14: temporal.api.enums.v1.VersioningBehavior
 	(*v11.Deployment)(nil),               // 15: temporal.api.deployment.v1.Deployment
 	(*v12.WorkerDeploymentVersion)(nil),  // 16: temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	(*v11.RampPolicy)(nil),               // 17: temporal.api.deployment.v1.RampPolicy
+	(*v12.RampPolicy)(nil),               // 17: temporal.server.api.deployment.v1.RampPolicy
 	(*v13.TaskIdBlock)(nil),              // 18: temporal.api.taskqueue.v1.TaskIdBlock
 	(*v13.PollerInfo)(nil),               // 19: temporal.api.taskqueue.v1.PollerInfo
 	(*v13.TaskQueueStats)(nil),           // 20: temporal.api.taskqueue.v1.TaskQueueStats
@@ -1058,7 +1058,7 @@ var file_temporal_server_api_taskqueue_v1_message_proto_depIdxs = []int32{
 	14, // 1: temporal.server.api.taskqueue.v1.TaskVersionDirective.behavior:type_name -> temporal.api.enums.v1.VersioningBehavior
 	15, // 2: temporal.server.api.taskqueue.v1.TaskVersionDirective.deployment:type_name -> temporal.api.deployment.v1.Deployment
 	16, // 3: temporal.server.api.taskqueue.v1.TaskVersionDirective.deployment_version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	17, // 4: temporal.server.api.taskqueue.v1.TaskVersionDirective.ramp_policy:type_name -> temporal.api.deployment.v1.RampPolicy
+	17, // 4: temporal.server.api.taskqueue.v1.TaskVersionDirective.ramp_policy:type_name -> temporal.server.api.deployment.v1.RampPolicy
 	1,  // 5: temporal.server.api.taskqueue.v1.InternalTaskQueueStatus.fair_read_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
 	1,  // 6: temporal.server.api.taskqueue.v1.InternalTaskQueueStatus.fair_ack_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
 	18, // 7: temporal.server.api.taskqueue.v1.InternalTaskQueueStatus.task_id_block:type_name -> temporal.api.taskqueue.v1.TaskIdBlock

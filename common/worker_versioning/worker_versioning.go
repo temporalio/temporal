@@ -262,7 +262,7 @@ func MakeDirectiveForWorkflowTask(
 	behavior enumspb.VersioningBehavior,
 	deployment *deploymentpb.Deployment,
 	revisionNumber int64,
-	rampPolicy *deploymentpb.RampPolicy,
+	rampPolicy *deploymentspb.RampPolicy,
 ) *taskqueuespb.TaskVersionDirective {
 	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		return &taskqueuespb.TaskVersionDirective{
@@ -733,9 +733,9 @@ func FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
 	rampingPercentage float32,
 	rampingRevisionNumber int64,
 	workflowId string,
-	rampPolicy *deploymentpb.RampPolicy,
+	rampPolicy *deploymentspb.RampPolicy,
 ) (*deploymentspb.WorkerDeploymentVersion, int64) {
-	if rampPolicy != nil && rampPolicy.GetUseRampingVersion() {
+	if rampPolicy != nil && rampPolicy.GetUseRampingVersion() && ramping != nil {
 		return ramping, rampingRevisionNumber
 	}
 

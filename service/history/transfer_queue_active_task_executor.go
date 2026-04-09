@@ -950,7 +950,6 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	var inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo
 	sourceDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
 	sourceDeploymentRevisionNumber := mutableState.GetVersioningRevisionNumber()
-	sourceRampPolicy := mutableState.GetExecutionInfo().GetVersioningInfo().GetRampPolicy()
 
 	// Only set inherited auto upgrade info if source deployment version and revision number are not nil
 	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
@@ -958,7 +957,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
 				SourceDeploymentVersion:        sourceDeploymentVersion,
 				SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
-				RampPolicy:                     sourceRampPolicy,
+				InitialVersioningBehavior:      enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED, // don't pass to child
 			}
 
 			newTQ := attributes.GetTaskQueue().GetName()

@@ -1805,7 +1805,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	// that the workflow will inherit that Ramp Policy on the next ContinueAsNew, which is
 	// when the Pinned workflow's Target Version will be invoked.
 	// Ramp Policy of a workflow is only used for the first ContinueAsNew.
-	var rampPolicy *deploymentpb.RampPolicy
+	var rampPolicy *deploymentspb.RampPolicy
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
 		rampPolicy = directive.GetRampPolicy()
 	}

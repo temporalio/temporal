@@ -26,6 +26,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -2493,7 +2494,8 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// AutoUpgrade in the first task and then assume the SDK-sent behavior on first workflow task completion.
 	var inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion
 	if previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
-		command.GetInitialVersioningBehavior() != enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+		command.GetInitialVersioningBehavior() != enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE &&
+		command.GetInitialVersioningBehavior() != enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_USE_RAMPING_VERSION {
 		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
 		newTQ := command.GetTaskQueue().GetName()
 		if newTQ != previousExecutionInfo.GetTaskQueue() {
@@ -2621,9 +2623,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		req.InheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
 			SourceDeploymentVersion:        sourceDeploymentVersion,
 			SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
-		}
-		if command.GetInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_USE_RAMPING_VERSION {
-			req.InheritedAutoUpgradeInfo.RampPolicy = &deploymentpb.RampPolicy{Value: &deploymentpb.RampPolicy_UseRampingVersion{UseRampingVersion: true}}
+			InitialVersioningBehavior:      command.GetInitialVersioningBehavior(), // pass from command (not source) to CaN
 		}
 	}
 
@@ -2965,7 +2965,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.executionInfo.VersioningInfo.DeploymentVersion = event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentVersion()
 		// Assume AutoUpgrade behavior for the first workflow task.
 		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
-		ms.executionInfo.VersioningInfo.RampPolicy = event.GetInheritedAutoUpgradeInfo().GetRampPolicy()
+		ms.executionInfo.VersioningInfo.InitialVersioningBehavior = event.GetInheritedAutoUpgradeInfo().GetInitialVersioningBehavior()
 	}
 
 	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {
@@ -9116,6 +9116,15 @@ func (ms *MutableStateImpl) SetVersioningRevisionNumber(revisionNumber int64) {
 		ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
 	}
 	ms.GetExecutionInfo().GetVersioningInfo().RevisionNumber = revisionNumber
+}
+
+func (ms *MutableStateImpl) GetEffectiveRampPolicy() *deploymentspb.RampPolicy {
+	executionInfo := ms.GetExecutionInfo()
+	if executionInfo.GetLastCompletedWorkflowTaskStartedEventId() == common.EmptyEventID && // this is the first WFT
+		executionInfo.GetVersioningInfo().GetInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_USE_RAMPING_VERSION {
+		return &deploymentspb.RampPolicy{Value: &deploymentspb.RampPolicy_UseRampingVersion{UseRampingVersion: true}}
+	}
+	return nil
 }
 
 // reschedulePendingActivities reschedules all the activities that are not started, so they are
