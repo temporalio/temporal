@@ -158,6 +158,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
 				Clusters:          ConvertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters),
+				State:             task.ReplicationConfig.GetState(),
 				FailoverHistory:   ConvertFailoverHistoryToPersistenceProto(task.GetFailoverHistory()),
 			},
 			ConfigVersion:   task.GetConfigVersion(),

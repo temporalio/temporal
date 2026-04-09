@@ -197,6 +197,7 @@ type (
 		// TODO: Add methods needed from MutateState here.
 		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
+		GetApproximatePersistedSize() int
 		GetCurrentVersion() int64
 		NextTransitionCount() int64
 		CurrentVersionedTransition() *persistencespb.VersionedTransition
@@ -357,7 +358,7 @@ func searchAttributeKeyValuesToMap(saSlice []SearchAttributeKeyValue) map[string
 }
 
 func (n *Node) SetRootComponent(
-	rootComponent Component,
+	rootComponent RootComponent,
 ) error {
 	root := n.root()
 	root.setValue(rootComponent)
@@ -2993,7 +2994,14 @@ func (n *Node) ExecutePureTask(
 
 	defer log.CapturePanic(n.logger, &retErr)
 
-	return true, registrableTask.pureTaskExecuteFn(
+	archetypeTag := metrics.ArchetypeTag("")
+	if name, ok := n.registry.ArchetypeDisplayName(n.ArchetypeID()); ok {
+		archetypeTag = metrics.ArchetypeTag(name)
+	}
+	chasmTaskTypeTag := metrics.ChasmTaskTypeTag(registrableTask.fqType())
+	metricsHandler := n.metricsHandler.WithTags(archetypeTag)
+
+	execErr := registrableTask.pureTaskExecuteFn(
 		executionContext,
 		component,
 		taskAttributes,
@@ -3001,12 +3009,21 @@ func (n *Node) ExecutePureTask(
 		n.registry,
 	)
 
+	metrics.ChasmPureTaskRequests.With(metricsHandler).Record(1, chasmTaskTypeTag)
+
+	if execErr != nil {
+		metrics.ChasmPureTaskErrors.With(metricsHandler).Record(1, chasmTaskTypeTag)
+		return true, execErr
+	}
+
 	// TODO - a task validator must succeed validation after a task executes
 	// successfully (without error), otherwise it will generate an infinite loop.
 	// Check for this case by marking the in-memory task as having executed, which the
 	// CloseTransaction method will check against.
 	//
 	// See: https://github.com/temporalio/temporal/pull/7701#discussion_r2072026993
+
+	return true, nil
 }
 
 // ValidatePureTask runs a pure task's associated validator, returning true
