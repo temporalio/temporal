@@ -77,7 +77,6 @@ func (c *GlobalMetricCapture) queriedMetricNames() []string {
 }
 
 func allQueriedMetricsAreNamespaceScoped(snap metricstest.CaptureSnapshot, queriedMetrics []string) bool {
-	hasNamespaceScopedMetric := false
 	for _, name := range queriedMetrics {
 		recordings := snap[name]
 		if len(recordings) == 0 {
@@ -88,9 +87,8 @@ func allQueriedMetricsAreNamespaceScoped(snap metricstest.CaptureSnapshot, queri
 				return false
 			}
 		}
-		hasNamespaceScopedMetric = true
 	}
-	return hasNamespaceScopedMetric
+	return true
 }
 
 type NamespaceMetricCapture struct {
