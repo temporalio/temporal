@@ -11,7 +11,9 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -158,4 +160,55 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 		return "unknown-error"
 	}
 	return "successful"
+}
+
+// callErrorToFailure converts a Nexus call error to a Temporal failure with retryability.
+// Always returns a non-nil failure.
+func callErrorToFailure(callErr error) (failure *failurepb.Failure, retryable bool, err error) {
+	if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
+		retryable := common.IsRetryableRPCError(callErr)
+		failure := &failurepb.Failure{
+			Message: fmt.Sprintf("%s: %s", strings.Replace(fmt.Sprintf("%T", serviceErr), "*serviceerror.", "", 1), serviceErr.Error()),
+			FailureInfo: &failurepb.Failure_ServerFailureInfo{
+				ServerFailureInfo: &failurepb.ServerFailureInfo{
+					NonRetryable: !retryable,
+				},
+			},
+		}
+		return failure, retryable, nil
+	}
+
+	if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok {
+		var nf nexus.Failure
+		if handlerErr.OriginalFailure != nil {
+			nf = *handlerErr.OriginalFailure
+		} else {
+			nf, err = nexusrpc.DefaultFailureConverter().ErrorToFailure(handlerErr)
+			if err != nil {
+				return nil, false, err
+			}
+		}
+		failure, err := commonnexus.NexusFailureToTemporalFailure(nf)
+		if err != nil {
+			return nil, false, err
+		}
+		return failure, handlerErr.Retryable(), nil
+	}
+
+	if errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled) {
+		// If timed out, don't leak internal info to the user.
+		callErr = errRequestTimedOut
+	}
+
+	// Fallback to server failure.
+	failure = &failurepb.Failure{
+		Message: callErr.Error(),
+		FailureInfo: &failurepb.Failure_ServerFailureInfo{
+			ServerFailureInfo: &failurepb.ServerFailureInfo{},
+		},
+	}
+	if errors.Is(callErr, ErrResponseBodyTooLarge) || errors.Is(callErr, ErrInvalidOperationToken) {
+		return failure, false, nil
+	}
+	return failure, true, nil
 }

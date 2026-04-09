@@ -8,6 +8,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
@@ -18,6 +19,53 @@ import (
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 )
+
+type cancellationResult interface {
+	mustImplementCancellationResult()
+}
+
+type cancellationResultOK struct{}
+
+func (cancellationResultOK) mustImplementCancellationResult() {}
+
+type cancellationResultFail struct {
+	failure *failurepb.Failure
+}
+
+func (cancellationResultFail) mustImplementCancellationResult() {}
+
+type cancellationResultRetry struct {
+	failure *failurepb.Failure
+}
+
+func (cancellationResultRetry) mustImplementCancellationResult() {}
+
+func newCancellationResult(callErr error) (cancellationResult, error) {
+	if callErr == nil {
+		return cancellationResultOK{}, nil
+	}
+
+	if opTimeoutBelowMinErr, ok := errors.AsType[*operationTimeoutBelowMinError](callErr); ok {
+		failure := &failurepb.Failure{
+			Message: "operation timed out before cancellation could be delivered",
+			FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: opTimeoutBelowMinErr.timeoutType,
+				},
+			},
+		}
+		return cancellationResultFail{failure: failure}, nil
+	}
+
+	failure, retryable, err := callErrorToFailure(callErr)
+	if err != nil {
+		return nil, err
+	}
+	if retryable {
+		return cancellationResultRetry{failure: failure}, nil
+	}
+	return cancellationResultFail{failure: failure}, nil
+}
 
 type cancellationInvocationTaskHandlerOptions struct {
 	fx.In
