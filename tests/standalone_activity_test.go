@@ -7304,6 +7304,67 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.NoError(t, err)
 	})
 
+	t.Run("WhileCancelRequested", func(t *testing.T) {
+		// Reset while the activity is in CANCEL_REQUESTED state.
+		// handleReset sets the ActivityReset flag (same deferred path as STARTED).
+		// NOTE: TransitionRescheduled currently only allows STARTED as a source state, so a
+		// CANCEL_REQUESTED activity that fails retryably goes to FAILED (terminal) rather
+		// than retrying — the ActivityReset flag would have no effect in that case. This test
+		// verifies: (1) the reset API succeeds, (2) the activity remains in CANCEL_REQUESTED
+		// with its state intact, and (3) the activity can still complete normally. Full
+		// deferred-reset verification (attempt count reset to 1) requires extending
+		// TransitionRescheduled to accept CANCEL_REQUESTED as a source state.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		startResp, pollResp1, _ := startAndPollActivity(ctx, t, activityID, &commonpb.RetryPolicy{
+			InitialInterval:    durationpb.New(time.Second),
+			BackoffCoefficient: 1.0,
+		})
+		require.EqualValues(t, 1, pollResp1.Attempt)
+
+		// Request cancellation — moves to CANCEL_REQUESTED
+		_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+			Identity:   defaultIdentity,
+			RequestId:  testcore.RandomizeStr(activityID),
+		})
+		require.NoError(t, err)
+
+		// Verify CANCEL_REQUESTED state
+		desc, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED, desc.GetInfo().GetRunState())
+
+		// Reset while CANCEL_REQUESTED — must succeed without error
+		resetActivity(ctx, t, activityID, startResp.GetRunId(), false)
+
+		// Activity must still be in CANCEL_REQUESTED (reset is deferred, no immediate side effect)
+		desc, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED, desc.GetInfo().GetRunState())
+
+		// Worker ignores the cancel and completes — activity should complete cleanly
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp1.TaskToken,
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+	})
+
 	t.Run("InRetryWithLongInterval", func(t *testing.T) {
 		// Activity is backing off for a long interval. Reset re-dispatches immediately.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

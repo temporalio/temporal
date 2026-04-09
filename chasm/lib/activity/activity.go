@@ -894,6 +894,7 @@ func (a *Activity) pause(
 func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetActivityExecutionRequest) (*activitypb.ResetActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
 	resetHeartbeats := frontendReq.GetResetHeartbeat()
+	keepPaused := frontendReq.GetKeepPaused()
 
 	switch a.Status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
@@ -941,8 +942,46 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 
 		return &activitypb.ResetActivityExecutionResponse{}, nil
 
+	// TODO(saa-preview): Handle paused activities when PauseActivityExecution is implemented for SAA.
+	// Paused activities are still active and should be resetable. The behavior should mirror the
+	// workflow activity reset (service/history/workflow/activity.go:ResetActivity):
+	//
+	// A paused activity may be in one of two sub-states:
+	//   - Paused+SCHEDULED (no running worker): Count can be reset immediately.
+	//   - Paused+STARTED  (worker still running, i.e. pause-requested): must defer via ActivityReset.
+	//
+	// case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
+	//     attempt := a.LastAttempt.Get(ctx)
+	//     attempt.Count = 1
+	//     attempt.Stamp++
+	//     if resetHeartbeats {
+	//         if hb, ok := a.LastHeartbeat.TryGet(ctx); ok {
+	//             hb.Details = nil
+	//             hb.RecordedTime = nil
+	//         }
+	//     }
+	//     if keepPaused {
+	//         // Remain paused at attempt 1 — no dispatch task added.
+	//         return &activitypb.ResetActivityExecutionResponse{}, nil
+	//     }
+	//     // keepPaused=false: unpause and re-dispatch immediately.
+	//     a.Paused = false  // clear pause state (exact field TBD)
+	//     scheduleTime := ctx.Now(a)
+	//     if jitter := frontendReq.GetJitter().AsDuration(); jitter > 0 {
+	//         randomOffset := time.Duration(rand.Int63n(int64(jitter))) //nolint:gosec
+	//         scheduleTime = scheduleTime.Add(randomOffset)
+	//     }
+	//     if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+	//         ctx.AddTask(a, chasm.TaskAttributes{ScheduledTime: scheduleTime.Add(timeout)},
+	//             &activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()})
+	//     }
+	//     ctx.AddTask(a, chasm.TaskAttributes{ScheduledTime: scheduleTime},
+	//         &activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()})
+	//     return &activitypb.ResetActivityExecutionResponse{}, nil
+
 	default:
 		// Terminal or unspecified state.
+		_ = keepPaused // used once paused state is implemented above
 		return nil, serviceerror.NewNotFound("activity execution is not running")
 	}
 }
