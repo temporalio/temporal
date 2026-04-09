@@ -603,11 +603,11 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 
 func TestFindDeploymentVersionForWorkflowID(t *testing.T) {
 	tests := []struct {
-		name                    string
-		current                 *deploymentspb.DeploymentVersionData
-		ramping                 *deploymentspb.DeploymentVersionData
+		name                         string
+		current                      *deploymentspb.DeploymentVersionData
+		ramping                      *deploymentspb.DeploymentVersionData
 		useRampingVersionInitialTask bool
-		want                    *deploymentspb.WorkerDeploymentVersion
+		want                         *deploymentspb.WorkerDeploymentVersion
 	}{
 		{name: "nil current and ramping info", want: nil},
 		{name: "with current version", current: &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, want: v1},

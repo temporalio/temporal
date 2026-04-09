@@ -2727,10 +2727,10 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_RetryInheritsIni
 						CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 						Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
 							ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-								WorkflowType:  tv1.WorkflowType(),
-								TaskQueue:     tv1.TaskQueue(),
-								Input:         tv1.Any().Payloads(),
-								RetryPolicy:   &commonpb.RetryPolicy{MaximumAttempts: 2, InitialInterval: durationpb.New(time.Millisecond)},
+								WorkflowType:              tv1.WorkflowType(),
+								TaskQueue:                 tv1.TaskQueue(),
+								Input:                     tv1.Any().Payloads(),
+								RetryPolicy:               &commonpb.RetryPolicy{MaximumAttempts: 2, InitialInterval: durationpb.New(time.Millisecond)},
 								InitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_USE_RAMPING_VERSION,
 							},
 						},
