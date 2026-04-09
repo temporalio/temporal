@@ -164,6 +164,61 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 	s.Error(err)
 }
 
+func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionByRetention_SkipsReplication() {
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
+	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
+	closeExecutionVisibilityTaskID := int64(39)
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
+	})
+	mockMutableState.EXPECT().ChasmTree().Return(workflow.NoopChasmTree).AnyTimes()
+	stage := tasks.DeleteWorkflowExecutionStageNone
+
+	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
+		gomock.Any(),
+		definition.WorkflowKey{
+			NamespaceID: tests.NamespaceID.String(),
+			WorkflowID:  tests.WorkflowID,
+			RunID:       tests.RunID,
+		},
+		workflow.NoopChasmTree.ArchetypeID(),
+		[]byte{22, 8, 78},
+		closeExecutionVisibilityTaskID,
+		time.Unix(0, 0).UTC(),
+		gomock.Any(),
+	).DoAndReturn(func(
+		_ context.Context,
+		_ definition.WorkflowKey,
+		_ chasm.ArchetypeID,
+		_ []byte,
+		_ int64,
+		_ time.Time,
+		stagePtr *tasks.DeleteWorkflowExecutionStage,
+	) error {
+		// Verify that replication stage is already marked as processed before DeleteWorkflowExecution is called.
+		s.True(stagePtr.IsProcessed(tasks.DeleteWorkflowExecutionStageReplication),
+			"Replication stage should be pre-marked as processed for retention-based deletion")
+		return nil
+	})
+	mockWeCtx.EXPECT().Clear()
+
+	err := s.deleteManager.DeleteWorkflowExecutionByRetention(
+		context.Background(),
+		tests.NamespaceID,
+		&we,
+		mockWeCtx,
+		mockMutableState,
+		&stage,
+	)
+	s.NoError(err)
+}
+
 func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() {
 	we := commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,

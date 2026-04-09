@@ -645,7 +645,7 @@ func TestNode_DeleteDeepHierarchy(t *testing.T) {
 	// Build hierarchy
 	current := root
 	var nodes []*hsm.Node
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		node, err := current.AddChild(hsm.Key{Type: def1.Type(), ID: fmt.Sprintf("node%d", i)}, hsmtest.NewData(hsmtest.State1))
 		require.NoError(t, err)
 		nodes = append(nodes, node)
@@ -692,7 +692,7 @@ func TestNode_MixedOperationsBeforeDeletion(t *testing.T) {
 	l1, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "l1"}, hsmtest.NewData(hsmtest.State1))
 	require.NoError(t, err)
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		err = hsm.MachineTransition(l1, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
 			d.SetState(hsmtest.State2)
 			return hsm.TransitionOutput{}, nil

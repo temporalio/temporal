@@ -76,11 +76,11 @@ func (s *WorkflowBufferedEventsTestSuite) TestRateLimitBufferedEvents() {
 		if !signalsSent {
 			signalsSent = true
 			// Buffered Signals
-			for i := 0; i < 100; i++ {
+			for i := range 100 {
 				buf := new(bytes.Buffer)
 				err := binary.Write(buf, binary.LittleEndian, byte(i))
 				s.NoError(err)
-				s.Nil(s.SendSignal(s.Namespace().String(), workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity))
+				s.NoError(s.SendSignal(s.Namespace().String(), workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity))
 			}
 
 			buf := new(bytes.Buffer)
@@ -116,7 +116,7 @@ func (s *WorkflowBufferedEventsTestSuite) TestRateLimitBufferedEvents() {
 	// first workflow task to send 101 signals, the last signal will force fail workflow task and flush buffered events.
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.Equal("Workflow task not found.", err.Error())
 

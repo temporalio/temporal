@@ -200,7 +200,7 @@ func (d *MutableStateTaskStore) AddHistoryTasks(
 		request.RangeID,
 	)
 
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, iter, err := d.Session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
 		return gocql.ConvertError("AddTasks", err)
@@ -217,7 +217,7 @@ func (d *MutableStateTaskStore) AddHistoryTasks(
 				Msg:     fmt.Sprintf("Failed to add tasks.  Request RangeID: %v, Actual RangeID: %v", request.RangeID, previousRangeID),
 			}
 		} else {
-			return serviceerror.NewUnavailable("AddTasks operation failed: %v")
+			return serviceerror.NewUnavailable("AddTasks operation failed because of conditional failure.")
 		}
 	}
 	return nil

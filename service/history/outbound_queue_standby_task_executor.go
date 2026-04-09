@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -26,6 +27,7 @@ type outboundQueueStandbyTaskExecutor struct {
 	config      *configs.Config
 
 	clusterName string
+	clientBean  client.Bean
 }
 
 var _ queues.Executor = &outboundQueueStandbyTaskExecutor{}
@@ -37,6 +39,7 @@ func newOutboundQueueStandbyTaskExecutor(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	chasmEngine chasm.Engine,
+	clientBean client.Bean,
 ) *outboundQueueStandbyTaskExecutor {
 	return &outboundQueueStandbyTaskExecutor{
 		stateMachineEnvironment: stateMachineEnvironment{
@@ -50,6 +53,7 @@ func newOutboundQueueStandbyTaskExecutor(
 		config:      shardCtx.GetConfig(),
 		clusterName: clusterName,
 		chasmEngine: chasmEngine,
+		clientBean:  clientBean,
 	}
 }
 
@@ -62,6 +66,7 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 	namespaceTag, _ := getNamespaceTagAndReplicationStateByID(
 		e.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
+		executable.GetWorkflowID(),
 	)
 	respond := func(err error) queues.ExecuteResponse {
 		metricsTags := []metrics.Tag{
@@ -178,14 +183,27 @@ func (e *outboundQueueStandbyTaskExecutor) executeChasmSideEffectTask(
 		return err
 	}
 
-	shouldRetry, err := validateChasmSideEffectTask(
-		ctx,
-		ms,
-		task,
-	)
-	if shouldRetry != nil {
-		err = consts.ErrTaskRetry
+	valid, err := validateChasmSideEffectTask(ctx, ms, task)
+	if err != nil || !valid {
+		return err
 	}
 
-	return err
+	// Task is still valid — check discard delay.
+	chasmTaskType, _ := e.shardContext.ChasmRegistry().TaskFqnByID(task.Info.GetTypeId())
+	discardTime := task.GetVisibilityTime().Add(e.config.ChasmStandbyTaskDiscardDelay(chasmTaskType))
+	if !e.Now().After(discardTime) {
+		return consts.ErrTaskRetry
+	}
+
+	return discardChasmSideEffectTask(
+		ctx,
+		e.chasmEngine,
+		e.shardContext.ChasmRegistry(),
+		ms.ChasmTree(),
+		task,
+		e.logger,
+		e.clusterName,
+		e.clientBean,
+		e.shardContext.GetNamespaceRegistry(),
+	)
 }

@@ -88,7 +88,7 @@ var Module = fx.Options(
 	fx.Provide(ReplicationProgressCacheProvider),
 	fx.Provide(VersionMembershipCacheProvider),
 	fx.Provide(ReactivationSignalCacheProvider),
-	fx.Provide(workerdeployment.ClientProvider),
+	workerdeployment.ClientModule,
 	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 
@@ -366,10 +366,12 @@ func VisibilityManagerProvider(
 
 func ChasmVisibilityManagerProvider(
 	chasmRegistry *chasm.Registry,
+	nsRegistry namespace.Registry,
 	visibilityManager manager.VisibilityManager,
 ) chasm.VisibilityManager {
 	return visibility.NewChasmVisibilityManager(
 		chasmRegistry,
+		nsRegistry,
 		visibilityManager,
 	)
 }

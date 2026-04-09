@@ -199,7 +199,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			now = now.Add(scheduleLatency)
 			s.timeSource.Update(now)
 
-			s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo interface{}) {
+			s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo any) {
 				metrics.ContextCounterAdd(
 					ctx,
 					metrics.HistoryWorkflowExecutionCacheLatency.Name(),
@@ -275,7 +275,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_MultipleAttempts() {
 		now = now.Add(scheduleLatencies[i])
 		s.timeSource.Update(now)
 
-		s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo interface{}) {
+		s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo any) {
 			metrics.ContextCounterAdd(
 				ctx,
 				metrics.HistoryWorkflowExecutionCacheLatency.Name(),
@@ -368,6 +368,75 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 		},
 	)
 	s.NoError(executable.Execute())
+}
+
+func (s *executableSuite) TestExecute_TaskProcessingNoPersistenceLatency_RecordedWhenPersistenceInContext() {
+	scheduleLatency := 100 * time.Millisecond
+	persistenceDuration := 50 * time.Millisecond
+	attemptLatency := 200 * time.Millisecond
+	expectedNoPersistence := attemptLatency - persistenceDuration
+
+	executable := s.newTestExecutable()
+
+	now := time.Now()
+	s.timeSource.Update(now)
+	executable.SetScheduledTime(now)
+
+	now = now.Add(scheduleLatency)
+	s.timeSource.Update(now)
+
+	capture := s.metricsHandler.StartCapture()
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, _ any) {
+		metrics.ContextCounterAdd(ctx, metrics.TaskPersistenceLatency.Name(), int64(persistenceDuration))
+		now = now.Add(attemptLatency)
+		s.timeSource.Update(now)
+	}).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        nil,
+	})
+
+	s.NoError(executable.Execute())
+
+	snapshot := capture.Snapshot()
+	recordings := snapshot[metrics.TaskProcessingNoPersistenceLatency.Name()]
+	s.Require().Len(recordings, 1)
+	actualNoPersistence, ok := recordings[0].Value.(time.Duration)
+	s.Require().True(ok)
+	s.Equal(expectedNoPersistence, actualNoPersistence)
+}
+
+func (s *executableSuite) TestExecute_TaskProcessingNoPersistenceLatency_NotRecordedWhenNoPersistence() {
+	scheduleLatency := 100 * time.Millisecond
+	attemptLatency := 200 * time.Millisecond
+
+	executable := s.newTestExecutable()
+
+	now := time.Now()
+	s.timeSource.Update(now)
+	executable.SetScheduledTime(now)
+
+	now = now.Add(scheduleLatency)
+	s.timeSource.Update(now)
+
+	capture := s.metricsHandler.StartCapture()
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, _ any) {
+		// Do not add TaskPersistenceLatency to context (simulates transfer/timer task that never calls visibility).
+		now = now.Add(attemptLatency)
+		s.timeSource.Update(now)
+	}).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        nil,
+	})
+
+	s.NoError(executable.Execute())
+
+	snapshot := capture.Snapshot()
+	recordings := snapshot[metrics.TaskProcessingNoPersistenceLatency.Name()]
+	s.Empty(recordings)
 }
 
 func (s *executableSuite) TestExecuteHandleErr_ResetAttempt() {
@@ -1190,6 +1259,121 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 			params.DLQErrorPattern = p.dlqErrorPattern
 		},
 	)
+}
+
+// mockSchedulerWithBusyHandler is a mock scheduler that also implements BusyWorkflowHandler
+type mockSchedulerWithBusyHandler struct {
+	*queues.MockScheduler
+	handleBusyWorkflowCalled bool
+	handleBusyWorkflowReturn bool
+}
+
+func (m *mockSchedulerWithBusyHandler) HandleBusyWorkflow(executable queues.Executable) bool {
+	m.handleBusyWorkflowCalled = true
+	return m.handleBusyWorkflowReturn
+}
+
+func (s *executableSuite) TestTaskNack_BusyWorkflow_HandledByBusyWorkflowHandler() {
+	// Create a mock scheduler that implements BusyWorkflowHandler
+	mockScheduler := &mockSchedulerWithBusyHandler{
+		MockScheduler:            queues.NewMockScheduler(s.controller),
+		handleBusyWorkflowReturn: true, // Handler successfully handles the task
+	}
+
+	executable := queues.NewExecutable(
+		queues.DefaultReaderId,
+		tasks.NewFakeTask(
+			definition.NewWorkflowKey(
+				tests.NamespaceID.String(),
+				tests.WorkflowID,
+				tests.RunID,
+			),
+			tasks.CategoryTransfer,
+			s.timeSource.Now(),
+		),
+		s.mockExecutor,
+		mockScheduler,
+		s.mockRescheduler,
+		queues.NewNoopPriorityAssigner(),
+		s.timeSource,
+		s.mockNamespaceRegistry,
+		s.mockClusterMetadata,
+		s.chasmRegistry,
+		queues.GetTaskTypeTagValue,
+		log.NewTestLogger(),
+		s.metricsHandler,
+		telemetry.NoopTracer,
+		func(params *queues.ExecutableParams) {
+			params.DLQEnabled = func() bool { return false }
+		},
+	)
+
+	// Nack with ErrResourceExhaustedBusyWorkflow should trigger HandleBusyWorkflow
+	executable.Nack(consts.ErrResourceExhaustedBusyWorkflow)
+
+	// Verify HandleBusyWorkflow was called
+	s.True(mockScheduler.handleBusyWorkflowCalled, "HandleBusyWorkflow should be called for busy workflow errors")
+}
+
+func (s *executableSuite) TestTaskNack_BusyWorkflow_FallbackToReschedule() {
+	// Create a mock scheduler that implements BusyWorkflowHandler but returns false
+	mockScheduler := &mockSchedulerWithBusyHandler{
+		MockScheduler:            queues.NewMockScheduler(s.controller),
+		handleBusyWorkflowReturn: false, // Handler does not handle the task
+	}
+
+	executable := queues.NewExecutable(
+		queues.DefaultReaderId,
+		tasks.NewFakeTask(
+			definition.NewWorkflowKey(
+				tests.NamespaceID.String(),
+				tests.WorkflowID,
+				tests.RunID,
+			),
+			tasks.CategoryTransfer,
+			s.timeSource.Now(),
+		),
+		s.mockExecutor,
+		mockScheduler,
+		s.mockRescheduler,
+		queues.NewNoopPriorityAssigner(),
+		s.timeSource,
+		s.mockNamespaceRegistry,
+		s.mockClusterMetadata,
+		s.chasmRegistry,
+		queues.GetTaskTypeTagValue,
+		log.NewTestLogger(),
+		s.metricsHandler,
+		telemetry.NoopTracer,
+		func(params *queues.ExecutableParams) {
+			params.DLQEnabled = func() bool { return false }
+		},
+	)
+
+	// When HandleBusyWorkflow returns false, normal Nack logic kicks in.
+	// For busy workflow errors, shouldResubmitOnNack returns true, so TrySubmit is called first.
+	// If TrySubmit fails (returns false), then rescheduler.Add is called.
+	mockScheduler.EXPECT().TrySubmit(executable).Return(false).Times(1)
+	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).Times(1)
+
+	executable.Nack(consts.ErrResourceExhaustedBusyWorkflow)
+
+	// Verify HandleBusyWorkflow was called first
+	s.True(mockScheduler.handleBusyWorkflowCalled, "HandleBusyWorkflow should be called for busy workflow errors")
+}
+
+func (s *executableSuite) TestTaskNack_BusyWorkflow_NoHandlerFallsBackToReschedule() {
+	// Test that when scheduler does not implement BusyWorkflowHandler,
+	// busy workflow errors fall back to normal Nack path (TrySubmit then reschedule)
+	executable := s.newTestExecutable()
+
+	// When scheduler doesn't implement BusyWorkflowHandler, normal Nack flow is used.
+	// For busy workflow errors, shouldResubmitOnNack returns true, so TrySubmit is called first.
+	// If TrySubmit fails (returns false), then rescheduler.Add is called.
+	s.mockScheduler.EXPECT().TrySubmit(executable).Return(false).Times(1)
+	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).Times(1)
+
+	executable.Nack(consts.ErrResourceExhaustedBusyWorkflow)
 }
 
 func (s *executableSuite) accessInternalState(executable queues.Executable) {

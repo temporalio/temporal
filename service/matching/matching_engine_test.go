@@ -42,6 +42,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
@@ -213,8 +214,8 @@ func (s *matchingEngineSuite) newConfig() *Config {
 	res := defaultTestConfig()
 	if s.fairness {
 		useFairness(res)
-	} else if s.newMatcher {
-		useNewMatcher(res)
+	} else if !s.newMatcher {
+		useClassicMatcher(res)
 	}
 	return res
 }
@@ -239,7 +240,7 @@ func newMatchingEngine(
 	mockVisibilityManager manager.VisibilityManager, mockHostInfoProvider membership.HostInfoProvider,
 	mockServiceResolver membership.ServiceResolver, nexusEndpointManager persistence.NexusEndpointManager,
 ) *matchingEngineImpl {
-	return &matchingEngineImpl{
+	e := &matchingEngineImpl{
 		taskManager:     taskMgr,
 		fairTaskManager: fairTaskMgr,
 		historyClient:   mockHistoryClient,
@@ -250,23 +251,24 @@ func newMatchingEngine(
 			loadedTaskQueuePartitionCount: make(map[taskQueueCounterKey]int),
 			loadedPhysicalTaskQueueCount:  make(map[taskQueueCounterKey]int),
 		},
-		queryResults:                  collection.NewSyncMap[string, chan *queryResult](),
-		logger:                        logger,
-		throttledLogger:               log.ThrottledLogger(logger),
-		metricsHandler:                metrics.NoopMetricsHandler,
-		matchingRawClient:             mockMatchingClient,
-		tokenSerializer:               tasktoken.NewSerializer(),
-		config:                        config,
-		namespaceRegistry:             mockNamespaceCache,
-		hostInfoProvider:              mockHostInfoProvider,
-		serviceResolver:               mockServiceResolver,
-		membershipChangedCh:           make(chan *membership.ChangedEvent, 1),
-		clusterMeta:                   clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
-		timeSource:                    clock.NewRealTimeSource(),
-		visibilityManager:             mockVisibilityManager,
-		nexusEndpointClient:           newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
-		nexusEndpointsOwnershipLostCh: make(chan struct{}),
+		queryResults:        collection.NewSyncMap[string, chan *queryResult](),
+		logger:              logger,
+		throttledLogger:     log.ThrottledLogger(logger),
+		metricsHandler:      metrics.NoopMetricsHandler,
+		matchingRawClient:   mockMatchingClient,
+		tokenSerializer:     tasktoken.NewSerializer(),
+		config:              config,
+		namespaceRegistry:   mockNamespaceCache,
+		hostInfoProvider:    mockHostInfoProvider,
+		serviceResolver:     mockServiceResolver,
+		membershipChangedCh: make(chan *membership.ChangedEvent, 1),
+		clusterMeta:         clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
+		timeSource:          clock.NewRealTimeSource(),
+		visibilityManager:   mockVisibilityManager,
+		nexusEndpointClient: newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
 	}
+	e.nexusEndpointsOwnershipLostCh.Store(make(chan struct{}))
+	return e
 }
 
 func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *Config) taskQueuePartitionManager {
@@ -316,7 +318,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 	var taskQueueType enumspb.TaskQueueType
 	tlID := newUnversionedRootQueueKey(namespaceID, tl, taskType)
 	const pollCount = 10
-	for i := 0; i < pollCount; i++ {
+	for range pollCount {
 		if taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 			pollResp, err := s.matchingEngine.PollActivityTaskQueue(callContext, &matchingservice.PollActivityTaskQueueRequest{
 				NamespaceId: namespaceID,
@@ -466,7 +468,7 @@ func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
 
 	s.mockHistoryClient.EXPECT().
 		RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, _ *historyservice.RecordWorkflowTaskStartedRequest, _ ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+		DoAndReturn(func(_ context.Context, _ *historyservice.RecordWorkflowTaskStartedRequest, _ ...any) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 			s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
 			return nil, recordError
 		})
@@ -508,7 +510,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 
 	// History service is using mock
 	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...any) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest")
 			response := &historyservice.RecordWorkflowTaskStartedResponse{
 				WorkflowType:               workflowType,
@@ -883,7 +885,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 	workflowID := "workflow1"
 	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 
-	for i := int64(0); i < taskCount; i++ {
+	for i := range int64(taskCount) {
 		scheduledEventID := i * 3
 		var err error
 		if taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
@@ -987,7 +989,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 
-	for i := int64(0); i < taskCount; i++ {
+	for i := range int64(taskCount) {
 		scheduledEventID := i * 3
 		addRequest := matchingservice.AddActivityTaskRequest{
 			NamespaceId:            namespaceID,
@@ -1011,7 +1013,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 
 	// History service is using mock
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
+		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...any) (*historyservice.RecordActivityTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			resp := &historyservice.RecordActivityTaskStartedResponse{
 				Attempt: 1,
@@ -1123,7 +1125,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	identity := "nobody"
 
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
+		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...any) (*historyservice.RecordActivityTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &historyservice.RecordActivityTaskStartedResponse{
 				Attempt: 1,
@@ -1158,7 +1160,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			},
 		}, metrics.NoopMetricsHandler)
 	}
-	for i := int64(0); i < taskCount; i++ {
+	for i := range int64(taskCount) {
 		scheduledEventID := i * 3
 
 		var wg sync.WaitGroup
@@ -1229,7 +1231,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		assert.EqualValues(collect, 0, s.taskManager.getTaskCount(dbq))
 	}, 2*time.Second, 100*time.Millisecond)
 
-	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+namespace="+matchingTestNamespace+",namespace_state=active,operation=TaskQueueMgr,partition=0,service_name=matching,task_type=Activity,taskqueue=makeToast,worker_version=__unversioned__"]
+	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+namespace="+matchingTestNamespace+",namespace_state=active,operation=TaskQueueMgr,partition=0,service_name=matching,task_type=Activity,taskqueue=makeToast,worker_build_id=,worker_deployment_name=,worker_version=__unversioned__"]
 	s.Equal(1, int(syncCtr.Value())) // Check times zero rps is set = throttle counter
 	expectedRange := int64((taskCount + 1) / 30)
 	// Due to conflicts some ids are skipped and more real ranges are used.
@@ -1310,7 +1312,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 	identity := "nobody"
 
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
+		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...any) (*historyservice.RecordActivityTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &historyservice.RecordActivityTaskStartedResponse{
 				Attempt: 1,
@@ -1350,7 +1352,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 	const taskCount = 2
 	resultChan := make(chan *matchingservice.PollActivityTaskQueueResponse)
 
-	for i := int64(0); i < taskCount; i++ {
+	for i := range int64(taskCount) {
 		maxDispatch := defaultTaskDispatchRPS
 		if i == 1 {
 			maxDispatch = 0 // second poller overrides the dispatch rate to 0
@@ -1400,7 +1402,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 	})
 	s.NoError(err)
 
-	for i := int64(0); i < taskCount; i++ {
+	for i := range int64(taskCount) {
 		scheduledEventID := i * 3
 		addRequest := matchingservice.AddActivityTaskRequest{
 			NamespaceId:            namespaceID,
@@ -1422,14 +1424,14 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 	}
 
 	// Verifying that both the pollers don't receive any tasks since the overall dispatch rate has been set to 0
-	for i := int64(0); i < taskCount; i++ {
+	for range int64(taskCount) {
 		receivedResult := <-resultChan
 		s.Nil(receivedResult.TaskToken)
 	}
 
 	// Restart the pollers with maxTasksPerSecond = defaultTaskDispatchRPS so that they can receive tasks
 	maxDispatch := float64(defaultTaskDispatchRPS)
-	for i := int64(0); i < taskCount; i++ {
+	for i := range int64(taskCount) {
 		go func() {
 			result, _ := pollFunc(maxDispatch, strconv.FormatInt(int64(i), 10))
 			resultChan <- result
@@ -1437,7 +1439,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 	}
 
 	// Verifying that both the pollers receive the tasks which were added previously
-	for i := int64(0); i < taskCount; i++ {
+	for range int64(taskCount) {
 		receivedResult := <-resultChan
 
 		s.NotNil(receivedResult)
@@ -1508,7 +1510,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	var wg sync.WaitGroup
 	wg.Add(2 * workerCount)
 
-	for p := 0; p < workerCount; p++ {
+	for range workerCount {
 		go func() {
 			defer wg.Done()
 			for i := int64(0); i < taskCount; i++ {
@@ -1541,7 +1543,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 
 	// History service is using mock
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
+		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...any) (*historyservice.RecordActivityTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &historyservice.RecordActivityTaskStartedResponse{
 				Attempt: 1,
@@ -1563,7 +1565,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 			}, nil
 		}).AnyTimes()
 
-	for p := 0; p < workerCount; p++ {
+	for p := range workerCount {
 		go func(wNum int) {
 			defer wg.Done()
 			for i := int64(0); i < taskCount; {
@@ -1651,9 +1653,9 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 
 	var wg sync.WaitGroup
 	wg.Add(2 * workerCount)
-	for p := 0; p < workerCount; p++ {
+	for range workerCount {
 		go func() {
-			for i := int64(0); i < taskCount; i++ {
+			for range int64(taskCount) {
 				addRequest := matchingservice.AddWorkflowTaskRequest{
 					NamespaceId:            namespaceID,
 					Execution:              workflowExecution,
@@ -1677,7 +1679,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 
 	// History service is using mock
 	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...any) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest")
 			return &historyservice.RecordWorkflowTaskStartedResponse{
 				PreviousStartedEventId: startedEventID,
@@ -1690,7 +1692,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 			}, nil
 		}).AnyTimes()
 
-	for p := 0; p < workerCount; p++ {
+	for range workerCount {
 		go func() {
 			for i := int64(0); i < taskCount; {
 				result, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
@@ -1852,15 +1854,15 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	}
 
 	engines := make([]*matchingEngineImpl, engineCount)
-	for p := 0; p < engineCount; p++ {
+	for p := range engineCount {
 		e := s.newMatchingEngine(s.newConfig(), s.classicTaskManager, s.fairTaskManager)
 		e.config.RangeSize = rangeSize
 		engines[p] = e
 		e.Start()
 	}
 
-	for j := 0; j < iterations; j++ {
-		for p := 0; p < engineCount; p++ {
+	for range iterations {
+		for p := range engineCount {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matchingservice.AddActivityTaskRequest{
@@ -1899,7 +1901,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 
 	// History service is using mock
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
+		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...any) (*historyservice.RecordActivityTaskStartedResponse, error) {
 			if _, ok := startedTasks[taskRequest.GetScheduledEventId()]; ok {
 				s.logger.Debug("From error function Mock Received DUPLICATED RecordActivityTaskStartedRequest", tag.Int64("scheduled-event-id", taskRequest.GetScheduledEventId()))
 				return nil, serviceerror.NewNotFound("already started")
@@ -1925,8 +1927,8 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 					}),
 			}, nil
 		}).AnyTimes()
-	for j := 0; j < iterations; j++ {
-		for p := 0; p < engineCount; p++ {
+	for range iterations {
+		for p := range engineCount {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
 				result, err := engine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
@@ -2008,15 +2010,15 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 	}
 
 	engines := make([]*matchingEngineImpl, engineCount)
-	for p := 0; p < engineCount; p++ {
+	for p := range engineCount {
 		e := s.newMatchingEngine(s.newConfig(), s.classicTaskManager, s.fairTaskManager)
 		e.config.RangeSize = rangeSize
 		engines[p] = e
 		e.Start()
 	}
 
-	for j := 0; j < iterations; j++ {
-		for p := 0; p < engineCount; p++ {
+	for range iterations {
+		for p := range engineCount {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matchingservice.AddWorkflowTaskRequest{
@@ -2051,7 +2053,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 
 	// History service is using mock
 	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...any) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 			if _, ok := startedTasks[taskRequest.GetScheduledEventId()]; ok {
 				s.logger.Debug("From error function Mock Received DUPLICATED RecordWorkflowTaskStartedRequest", tag.Int64("scheduled-event-id", taskRequest.GetScheduledEventId()))
 				return nil, serviceerrors.NewTaskAlreadyStarted("Workflow")
@@ -2070,8 +2072,8 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 			}, nil
 		}).AnyTimes()
 
-	for j := 0; j < iterations; j++ {
-		for p := 0; p < engineCount; p++ {
+	for range iterations {
+		for p := range engineCount {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
 				result, err := engine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
@@ -2192,7 +2194,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	s.matchingEngine.config.RangeSize = rangeSize
 
 	// add taskCount tasks
-	for i := int64(0); i < taskCount; i++ {
+	for i := range int64(taskCount) {
 		scheduledEventID := i * 3
 		addRequest := matchingservice.AddActivityTaskRequest{
 			NamespaceId:            namespaceID,
@@ -2244,7 +2246,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	blm.taskAckManager.setReadLevel(int64(expectedBufSize))
 
 	// complete rangeSize events
-	for i := int64(0); i < rangeSize; i++ {
+	for range int64(rangeSize) {
 		identity := "nobody"
 		result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: namespaceID,
@@ -2273,7 +2275,7 @@ func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 	config := s.newConfig()
 	dbq := newUnversionedRootQueueKey(uuid.NewString(), "makeToast", enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		prevGetTasksCount := s.taskManager.getGetTasksCount(dbq)
 
 		mgr := s.newPartitionManager(dbq.partition, config)
@@ -2319,7 +2321,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 	}
 
 	for _, tc := range testCases {
-		for i := int64(0); i < taskCount; i++ {
+		for i := range int64(taskCount) {
 			scheduledEventID := i * 3
 			addRequest := matchingservice.AddActivityTaskRequest{
 				NamespaceId:            namespaceID,
@@ -2363,9 +2365,9 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 		}
 
 		remaining := taskCount
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			// verify that (1) expired tasks are not returned in poll result (2) taskCleaner deletes tasks correctly
-			for i := int64(0); i < taskCount/4; i++ {
+			for range int64(taskCount / 4) {
 				result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), pollReq, metrics.NoopMetricsHandler)
 				s.NoError(err)
 				s.NotNil(result)
@@ -2403,7 +2405,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.NotNil(res)
 
 	// Set a long list of versions
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		id := fmt.Sprintf("%d", i)
 		res, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
@@ -2424,7 +2426,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 		s.NotNil(res)
 	}
 	// Make a long compat-versions chain
-	for i := 0; i < 80; i++ {
+	for i := range 80 {
 		id := fmt.Sprintf("9.%d", i)
 		prevCompat := fmt.Sprintf("9.%d", i-1)
 		if i == 0 {
@@ -3214,7 +3216,7 @@ func (s *matchingEngineSuite) generateWorkflowExecution() (*commonpb.WorkflowTyp
 
 func (s *matchingEngineSuite) mockHistoryWhilePolling(workflowType *commonpb.WorkflowType) {
 	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...any) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 			return &historyservice.RecordWorkflowTaskStartedResponse{
 				PreviousStartedEventId: 1,
 				StartedEventId:         1,
@@ -3285,13 +3287,11 @@ func (s *matchingEngineSuite) addWorkflowTasksConcurrently(
 	taskQueue *taskqueuepb.TaskQueue, workflowExecution *commonpb.WorkflowExecution,
 ) {
 	for range numWorkers {
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			for range taskCount {
 				s.addWorkflowTask(workflowExecution, taskQueue)
 			}
-			wg.Done()
-		}()
+		})
 	}
 }
 
@@ -3322,13 +3322,11 @@ func (s *matchingEngineSuite) pollWorkflowTasksConcurrently(
 ) {
 	s.mockHistoryWhilePolling(workflowType)
 	for range numPollers {
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			for range taskCount {
 				s.createPollWorkflowTaskRequestAndPoll(taskQueue)
 			}
-			wg.Done()
-		}()
+		})
 	}
 }
 
@@ -3571,16 +3569,6 @@ func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksD
 	s.concurrentPublishAndConsumeValidateBacklogCounter(5, 500, 200)
 }
 
-func (s *matchingEngineSuite) TestOldestBacklogAge() {
-	firstAge := durationpb.New(100 * time.Second)
-	secondAge := durationpb.New(1 * time.Millisecond)
-	s.Same(firstAge, oldestBacklogAge(firstAge, secondAge))
-
-	thirdAge := durationpb.New(5 * time.Minute)
-	s.Same(thirdAge, oldestBacklogAge(firstAge, thirdAge))
-	s.Same(thirdAge, oldestBacklogAge(secondAge, thirdAge))
-}
-
 func (s *matchingEngineSuite) TestCheckNexusEndpointsOwnership() {
 	isOwner, _, err := s.matchingEngine.checkNexusEndpointsOwnership()
 	s.NoError(err)
@@ -3592,7 +3580,7 @@ func (s *matchingEngineSuite) TestCheckNexusEndpointsOwnership() {
 }
 
 func (s *matchingEngineSuite) TestNotifyNexusEndpointsOwnershipLost() {
-	ch := s.matchingEngine.nexusEndpointsOwnershipLostCh
+	ch := s.matchingEngine.nexusEndpointsOwnershipLostCh.Load().(chan struct{}) //nolint:revive // type is always chan struct{}
 	s.matchingEngine.notifyNexusEndpointsOwnershipChange()
 	select {
 	case <-ch:
@@ -4275,7 +4263,7 @@ func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) 
 
 	// History service is using mock
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
+		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...any) (*historyservice.RecordActivityTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &historyservice.RecordActivityTaskStartedResponse{
 				Attempt: 1,
@@ -4838,11 +4826,12 @@ type testQueueData struct {
 }
 
 type testQueuePersistenceStats struct {
-	createTaskCount  int
-	getTasksCount    int
-	getUserDataCount int
-	createCount      int
-	updateCount      int
+	createTaskCount      int
+	createTaskBatchCount int
+	getTasksCount        int
+	getUserDataCount     int
+	createCount          int
+	updateCount          int
 }
 
 func newTestQueueData() *testQueueData {
@@ -5082,6 +5071,7 @@ func (m *testTaskManager) CreateTasks(
 		tlm.tasks.Put(fairLevelFromAllocatedTask(task), common.CloneProto(task))
 		tlm.createTaskCount++
 	}
+	tlm.createTaskBatchCount++
 
 	resp := &persistence.CreateTasksResponse{}
 	if m.updateMetadataOnCreateTasks {
@@ -5144,12 +5134,20 @@ func (m *testTaskManager) getTaskCount(q *PhysicalTaskQueueKey) int {
 	return tlm.tasks.Size()
 }
 
-// getCreateTaskCount returns how many times CreateTask was called
+// getCreateTaskCount returns how many tasks were added
 func (m *testTaskManager) getCreateTaskCount(q *PhysicalTaskQueueKey) int {
 	tlm := m.getQueueDataByKey(q)
 	tlm.Lock()
 	defer tlm.Unlock()
 	return tlm.createTaskCount
+}
+
+// getCreateTaskBatchCount returns how many times CreateTask was called
+func (m *testTaskManager) getCreateTaskBatchCount(q *PhysicalTaskQueueKey) int {
+	tlm := m.getQueueDataByKey(q)
+	tlm.Lock()
+	defer tlm.Unlock()
+	return tlm.createTaskBatchCount
 }
 
 // getGetTasksCount returns how many times GetTasks was called
@@ -5681,8 +5679,8 @@ func (d *dynamicRateBurstWrapper) Burst() int {
 }
 
 // TODO(pri): cleanup; delete this
-func useNewMatcher(config *Config) {
-	config.NewMatcherSub = staticTrueChange
+func useClassicMatcher(config *Config) {
+	config.NewMatcherSub = staticFalseChange
 }
 
 func useFairness(config *Config) {
@@ -5693,6 +5691,10 @@ func staticTrueChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfig
 	return dynamicconfig.StaticGradualChange(true), func() {}
 }
 
+func staticFalseChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
+	return dynamicconfig.StaticGradualChange(false), func() {}
+}
+
 func TestCancelOutstandingWorkerPolls(t *testing.T) {
 	t.Parallel()
 
@@ -5700,6 +5702,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		t.Parallel()
 		engine := &matchingEngineImpl{
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		}
 
 		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
@@ -5715,6 +5718,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		t.Parallel()
 		engine := &matchingEngineImpl{
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		}
 
 		workerKey := "test-worker"
@@ -5741,6 +5745,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		worker2Cancelled := false
 		engine := &matchingEngineImpl{
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		}
 
 		// Set up pollers for worker1 and worker2
@@ -5763,6 +5768,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		t.Parallel()
 		engine := &matchingEngineImpl{
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		}
 
 		workerKey := "test-worker"
@@ -5784,5 +5790,39 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.Equal(t, int32(2), resp.CancelledCount)
 		require.True(t, childCancelled, "child partition poll should be cancelled")
 		require.True(t, parentCancelled, "parent partition poll should be cancelled")
+	})
+
+	t.Run("adds worker to shutdown cache", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+		}
+
+		workerKey := "test-worker"
+
+		_, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				WorkerInstanceKey: workerKey,
+			})
+
+		require.NoError(t, err)
+		require.NotNil(t, engine.shutdownWorkers.Get(workerKey), "worker should be in shutdown cache")
+	})
+
+	t.Run("empty worker key does not populate shutdown cache", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+		}
+
+		_, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				WorkerInstanceKey: "",
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, 0, engine.shutdownWorkers.Size())
 	})
 }

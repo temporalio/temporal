@@ -180,7 +180,7 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 			})
 			s.NoError(err)
 			s.Len(readRawTasksResponse.Tasks, 1)
-			s.Assert().Equal(int64(persistence.FirstQueueMessageID+2), readRawTasksResponse.Tasks[0].MessageMetadata.ID)
+			s.Equal(int64(persistence.FirstQueueMessageID+2), readRawTasksResponse.Tasks[0].MessageMetadata.ID)
 		})
 	}
 }
@@ -201,7 +201,7 @@ func (s *PurgeDLQTasksSuite) enqueueTasks(ctx context.Context, queueKey persiste
 	})
 	s.NoError(err)
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		_, err := s.dlq.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
 			QueueType:     queueKey.QueueType,
 			SourceCluster: queueKey.SourceCluster,

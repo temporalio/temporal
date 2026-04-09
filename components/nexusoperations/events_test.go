@@ -128,7 +128,7 @@ func TestTerminalStatesDeletion(t *testing.T) {
 	testCases := []struct {
 		name       string
 		def        hsm.EventDefinition
-		attributes interface{}
+		attributes any
 	}{
 		{
 			name: "CompletedDeletesStateMachine",

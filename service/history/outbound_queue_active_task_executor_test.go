@@ -156,7 +156,6 @@ func (s *outboundQueueActiveTaskExecutorSuite) TestExecute_ChasmTask() {
 						gomock.Any(),
 						gomock.Any(),
 						gomock.Any(),
-						gomock.Any(),
 					)
 			},
 			expectHandlerCalled: true,
@@ -194,6 +193,7 @@ func (s *outboundQueueActiveTaskExecutorSuite) TestExecute_ChasmTask() {
 
 			tc.setupMocks(task)
 			s.mockExecutable.EXPECT().GetTask().Return(task).AnyTimes()
+			s.mockExecutable.EXPECT().GetWorkflowID().Return("").AnyTimes()
 
 			result := s.executor.Execute(ctx, s.mockExecutable)
 
@@ -251,6 +251,7 @@ func (s *outboundQueueActiveTaskExecutorSuite) TestExecute_PreValidationFails() 
 			task := tc.setupTask()
 			tc.setupMocks(task)
 			s.mockExecutable.EXPECT().GetTask().Return(task)
+			s.mockExecutable.EXPECT().GetWorkflowID().Return("").AnyTimes()
 
 			result := s.executor.Execute(ctx, s.mockExecutable)
 

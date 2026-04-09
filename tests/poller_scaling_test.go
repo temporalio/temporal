@@ -18,7 +18,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/util"
@@ -29,13 +28,6 @@ import (
 
 type PollerScalingIntegSuite struct {
 	testcore.FunctionalTestBase
-}
-
-func (s *PollerScalingIntegSuite) mustToPayload(v any) *commonpb.Payload {
-	conv := converter.GetDefaultDataConverter()
-	payload, err := conv.ToPayload(v)
-	s.NoError(err)
-	return payload
 }
 
 func TestPollerScalingFunctionalSuite(t *testing.T) {
@@ -79,7 +71,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 	s.NoError(err)
 
 	// Queue up a couple workflows
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		_, err := s.SdkClient().ExecuteWorkflow(
 			ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 		s.NoError(err)
@@ -99,7 +91,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 
 		// Start enough activities / nexus tasks to ensure we will see scale up decisions
 		commands := make([]*commandpb.Command, 0, 5)
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			commands = append(commands, &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
@@ -117,7 +109,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 						Endpoint:  endpointName,
 						Service:   "service",
 						Operation: "operation",
-						Input:     s.mustToPayload("input"),
+						Input:     testcore.MustToPayload(s.T(), "input"),
 					},
 				},
 			},
@@ -152,7 +144,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 	})
 	s.NoError(err)
 	s.NotNil(actResp.PollerScalingDecision)
-	s.Assert().GreaterOrEqual(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
+	s.GreaterOrEqual(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
 
 	nexusResp, err := feClient.PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
 		Namespace: s.Namespace().String(),
@@ -189,7 +181,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingDecisionsAreSeenProbabilistic
 	}()
 
 	allScaleDecisions := make([]*taskqueuepb.PollerScalingDecision, 0, 15)
-	for i := 0; i < 15; i++ {
+	for range 15 {
 		resp, _ := s.FrontendClient().PollWorkflowTaskQueue(longctx, &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -204,7 +196,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingDecisionsAreSeenProbabilistic
 
 	// We must have seen at least a handful of non-nil scaling decisions
 	nonNilDecisions := util.FilterSlice(allScaleDecisions, func(d *taskqueuepb.PollerScalingDecision) bool { return d != nil })
-	s.Assert().GreaterOrEqual(len(nonNilDecisions), 3)
+	s.GreaterOrEqual(len(nonNilDecisions), 3)
 }
 
 // The following tests verify poller scaling decisions work with worker-versioning based concepts.
@@ -267,7 +259,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 	deploymentName := testcore.RandomizeStr(deploymentNamePrefix)
 
 	// Queueing up unversioned workflows
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		_, err := s.SdkClient().ExecuteWorkflow(
 			ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 		s.NoError(err)
@@ -352,7 +344,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 
 	// Start enough activities to ensure we will see scale up decisions. These are scheduled by an unversioned poller.
 	commands := make([]*commandpb.Command, 0, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		commands = append(commands, &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 			Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{

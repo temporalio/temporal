@@ -40,13 +40,6 @@ func (ch *commandHandler) HandleScheduleCommand(
 	ns := ms.GetNamespaceEntry()
 	nsName := ms.GetNamespaceEntry().Name().String()
 
-	if !ch.config.Enabled() {
-		return workflow.FailWorkflowTaskError{
-			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
-			Message: "Nexus operations disabled",
-		}
-	}
-
 	attrs := command.GetScheduleNexusOperationCommandAttributes()
 	if attrs == nil {
 		return workflow.FailWorkflowTaskError{
@@ -148,7 +141,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 		}
 	}
 
-	if !validator.IsValidPayloadSize(attrs.Input.Size()) {
+	if attrs.Endpoint != commonnexus.SystemEndpoint && !validator.IsValidPayloadSize(attrs.Input.Size()) {
 		return workflow.FailWorkflowTaskError{
 			Cause:             enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 			Message:           "ScheduleNexusOperationCommandAttributes.Input exceeds size limit",
@@ -243,13 +236,6 @@ func (ch *commandHandler) HandleCancelCommand(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.Command,
 ) error {
-	if !ch.config.Enabled() {
-		return workflow.FailWorkflowTaskError{
-			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
-			Message: "Nexus operations disabled",
-		}
-	}
-
 	attrs := command.GetRequestCancelNexusOperationCommandAttributes()
 	if attrs == nil {
 		return workflow.FailWorkflowTaskError{

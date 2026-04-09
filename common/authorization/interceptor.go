@@ -7,6 +7,7 @@ import (
 	"crypto/x509/pkix"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -30,7 +31,7 @@ type (
 type (
 	// JWTAudienceMapper returns JWT audience for a given request
 	JWTAudienceMapper interface {
-		Audience(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo) string
+		Audience(ctx context.Context, req any, info *grpc.UnaryServerInfo) string
 	}
 
 	NamespaceChecker interface {
@@ -90,6 +91,7 @@ type Interceptor struct {
 	authExtraHeaderName          string
 	exposeAuthorizerErrors       dynamicconfig.BoolPropertyFn
 	enableCrossNamespaceCommands dynamicconfig.BoolPropertyFn
+	enablePrincipalPropagation   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewInterceptor creates an authorization interceptor.
@@ -104,6 +106,7 @@ func NewInterceptor(
 	authExtraHeaderName string,
 	exposeAuthorizerErrors dynamicconfig.BoolPropertyFn,
 	enableCrossNamespaceCommands dynamicconfig.BoolPropertyFn,
+	enablePrincipalPropagation dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 ) *Interceptor {
 	return &Interceptor{
 		claimMapper:                  claimMapper,
@@ -116,15 +119,16 @@ func NewInterceptor(
 		audienceGetter:               audienceGetter,
 		exposeAuthorizerErrors:       exposeAuthorizerErrors,
 		enableCrossNamespaceCommands: enableCrossNamespaceCommands,
+		enablePrincipalPropagation:   enablePrincipalPropagation,
 	}
 }
 
 func (a *Interceptor) Intercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
+) (any, error) {
 	tlsConnection := TLSInfoFromContext(ctx)
 
 	authInfo := a.GetAuthInfo(tlsConnection, headers.NewGRPCHeaderGetter(ctx), func() string {
@@ -146,6 +150,10 @@ func (a *Interceptor) Intercept(
 		ctx = a.EnhanceContext(ctx, authInfo, claims)
 	}
 
+	// Always strip inbound principal headers to prevent external callers from
+	// spoofing principal identity, regardless of whether the authorizer is enabled.
+	ctx = headers.StripPrincipal(ctx)
+
 	if a.authorizer != nil {
 		var namespace string
 		requestWithNamespace, ok := req.(hasNamespace)
@@ -157,8 +165,12 @@ func (a *Interceptor) Intercept(
 			APIName:   info.FullMethod,
 			Request:   req,
 		}
-		if err := a.Authorize(ctx, claims, ct); err != nil {
+		principal, err := a.Authorize(ctx, claims, ct)
+		if err != nil {
 			return nil, err
+		}
+		if a.enablePrincipalPropagation != nil && a.enablePrincipalPropagation(namespace) && principal != nil {
+			ctx = headers.SetPrincipal(ctx, principal)
 		}
 
 		// Authorize target namespaces in cross-namespace commands
@@ -224,9 +236,10 @@ func (a *Interceptor) EnhanceContext(ctx context.Context, authInfo *AuthInfo, cl
 
 // Authorize uses the policy's authorizer to authorize a request based on provided claims and call target.
 // Logs and emits metrics when unauthorized.
-func (a *Interceptor) Authorize(ctx context.Context, claims *Claims, ct *CallTarget) error {
+// Returns the principal identity and any authorization error.
+func (a *Interceptor) Authorize(ctx context.Context, claims *Claims, ct *CallTarget) (*commonpb.Principal, error) {
 	if a.authorizer == nil {
-		return nil
+		return nil, nil
 	}
 
 	mh := a.getMetricsHandler(ct.Namespace)
@@ -238,19 +251,19 @@ func (a *Interceptor) Authorize(ctx context.Context, claims *Claims, ct *CallTar
 		metrics.ServiceErrAuthorizeFailedCounter.With(mh).Record(1)
 		a.logger.Error("Authorization error", tag.Error(err))
 		if a.exposeAuthorizerErrors() {
-			return err
+			return nil, err
 		}
-		return errUnauthorized // return a generic error to the caller without disclosing details
+		return nil, errUnauthorized // return a generic error to the caller without disclosing details
 	}
 	if result.Decision != DecisionAllow {
 		metrics.ServiceErrUnauthorizedCounter.With(mh).Record(1)
 		// if a reason is included in the result, include it in the error message
 		if result.Reason != "" {
-			return serviceerror.NewPermissionDenied(RequestUnauthorized, result.Reason)
+			return nil, serviceerror.NewPermissionDenied(RequestUnauthorized, result.Reason)
 		}
-		return errUnauthorized // return a generic error to the caller without disclosing details
+		return nil, errUnauthorized // return a generic error to the caller without disclosing details
 	}
-	return nil
+	return result.Principal, nil
 }
 
 // getMetricsHandler returns a metrics handler with a namespace tag
@@ -275,7 +288,7 @@ func (a *Interceptor) authorizeTargetNamespaces(
 	ctx context.Context,
 	claims *Claims,
 	sourceNamespace string,
-	req interface{},
+	req any,
 ) error {
 	// Skip if cross-namespace commands are not enabled
 	if !a.enableCrossNamespaceCommands() {
@@ -327,7 +340,7 @@ func (a *Interceptor) authorizeTargetNamespaces(
 		}
 
 		// Authorize access to target namespace for this specific API
-		if err := a.Authorize(ctx, claims, &CallTarget{
+		if _, err := a.Authorize(ctx, claims, &CallTarget{
 			APIName:   api.WorkflowServicePrefix + apiName,
 			Namespace: targetNamespace,
 			Request:   req,

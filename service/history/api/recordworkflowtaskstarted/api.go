@@ -165,7 +165,7 @@ func Invoke(
 				requestID,
 				pollerTaskQueue,
 				req.PollRequest.Identity,
-				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities),
+				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities, req.PollRequest.DeploymentOptions), //nolint:staticcheck // SA1019: WorkerVersionCapabilities is deprecated but still used for old versioning [cleanup-old-wv]
 				req.GetBuildIdRedirectInfo(),
 				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
@@ -336,12 +336,11 @@ func setHistoryForRecordWfTaskStartedResp(
 	var continuation []byte
 	if len(persistenceToken) != 0 {
 		continuation, err = api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
-			RunId:                 workflowKey.GetRunID(),
-			FirstEventId:          firstEventID,
-			NextEventId:           nextEventID,
-			PersistenceToken:      persistenceToken,
-			TransientWorkflowTask: response.GetTransientWorkflowTask(),
-			BranchToken:           response.GetBranchToken(),
+			RunId:            workflowKey.GetRunID(),
+			FirstEventId:     firstEventID,
+			NextEventId:      nextEventID,
+			PersistenceToken: persistenceToken,
+			BranchToken:      response.GetBranchToken(),
 		})
 		if err != nil {
 			return err

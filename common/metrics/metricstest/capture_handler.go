@@ -1,6 +1,8 @@
 package metricstest
 
 import (
+	"maps"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,19 +20,19 @@ type CapturedRecording struct {
 
 // Capture is a specific capture instance.
 type Capture struct {
-	recordings     map[string][]*CapturedRecording
+	recordings     CaptureSnapshot
 	recordingsLock sync.RWMutex
 }
 
+type CaptureSnapshot = map[string][]*CapturedRecording
+
 // Snapshot returns a copy of all metrics recorded, keyed by name.
-func (c *Capture) Snapshot() map[string][]*CapturedRecording {
+func (c *Capture) Snapshot() CaptureSnapshot {
 	c.recordingsLock.RLock()
 	defer c.recordingsLock.RUnlock()
-	ret := make(map[string][]*CapturedRecording, len(c.recordings))
-	for k, v := range c.recordings {
-		recs := make([]*CapturedRecording, len(v))
-		copy(recs, v)
-		ret[k] = recs
+	ret := maps.Clone(c.recordings)
+	for k, v := range ret {
+		ret[k] = slices.Clone(v)
 	}
 	return ret
 }
@@ -63,7 +65,7 @@ func NewCaptureHandler() *CaptureHandler {
 // StartCapture returns a started capture. StopCapture should be called on
 // complete.
 func (c *CaptureHandler) StartCapture() *Capture {
-	capture := &Capture{recordings: map[string][]*CapturedRecording{}}
+	capture := &Capture{recordings: make(CaptureSnapshot)}
 	c.capturesLock.Lock()
 	defer c.capturesLock.Unlock()
 

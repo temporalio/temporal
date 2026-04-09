@@ -111,7 +111,7 @@ func TestGetWhereCause_EdgeCases(t *testing.T) {
 	t.Run("Very long query", func(t *testing.T) {
 		// Test with a very long but valid query
 		var conditions []string
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			conditions = append(conditions, fmt.Sprintf("WorkerInstanceKey = 'worker%d'", i))
 		}
 		query := fmt.Sprintf("SELECT * FROM table1 WHERE %s", strings.Join(conditions, " OR "))

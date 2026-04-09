@@ -590,39 +590,22 @@ func TestTransitionTerminated(t *testing.T) {
 
 	controller := gomock.NewController(t)
 	metricsHandler := metrics.NewMockHandler(controller)
-	enrichedMetricsHandler := metrics.NewMockHandler(controller)
-
-	tags := []metrics.Tag{
-		metrics.OperationTag(metrics.ActivityTerminatedScope),
-		metrics.ActivityTypeTag("test-activity-type"),
-		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
-		metrics.WorkflowTypeTag(WorkflowTypeTag),
-		metrics.NamespaceTag("test-namespace"),
-		metrics.UnsafeTaskQueueTag("test-task-queue"),
-	}
-	metricsHandler.EXPECT().WithTags(tags).Return(enrichedMetricsHandler)
 
 	counterTerminate := metrics.NewMockCounterIface(controller)
 	counterTerminate.EXPECT().Record(int64(1)).Times(1)
-	enrichedMetricsHandler.EXPECT().Counter(metrics.ActivityTerminate.Name()).Return(counterTerminate)
+	metricsHandler.EXPECT().Counter(metrics.ActivityTerminate.Name()).Return(counterTerminate)
 
-	req := &activitypb.TerminateActivityExecutionRequest{
-		FrontendRequest: &workflowservice.TerminateActivityExecutionRequest{
-			Reason:    "Test Termination",
-			Identity:  "terminator",
-			RequestId: "test-request-id",
-		},
+	identity := "terminator"
+	req := chasm.TerminateComponentRequest{
+		Reason:    "Test Termination",
+		Identity:  identity,
+		RequestID: "test-request-id",
 	}
 
 	err := TransitionTerminated.Apply(activity, ctx, terminateEvent{
-		request: req,
-		MetricsHandlerBuilderParams: MetricsHandlerBuilderParams{
-			Handler:       metricsHandler,
-			NamespaceName: "test-namespace",
-			BreakdownMetricsByTaskQueue: func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) bool {
-				return namespace == "test-namespace" && taskQueue == "test-task-queue" && taskQueueType == enumspb.TASK_QUEUE_TYPE_ACTIVITY
-			},
-		},
+		request:        req,
+		metricsHandler: metricsHandler,
+		fromStatus:     activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 	})
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
@@ -631,8 +614,12 @@ func TestTransitionTerminated(t *testing.T) {
 	require.Equal(t, "test-request-id", activity.GetTerminateState().RequestId)
 
 	expectedFailure := &failurepb.Failure{
-		Message:     "Test Termination",
-		FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
+		Message: "Test Termination",
+		FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+			TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{
+				Identity: identity,
+			},
+		},
 	}
 	protorequire.ProtoEqual(t, expectedFailure, outcome.GetFailed().GetFailure())
 }
@@ -674,6 +661,7 @@ func TestTransitionCanceled(t *testing.T) {
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
 	attemptState := &activitypb.ActivityAttemptState{Count: 1}
 	outcome := &activitypb.ActivityOutcome{}
+	identity := "canceler"
 
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{
@@ -684,6 +672,9 @@ func TestTransitionCanceled(t *testing.T) {
 			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+			CancelState: &activitypb.ActivityCancelState{
+				Identity: identity,
+			},
 		},
 		LastAttempt: chasm.NewDataField(ctx, attemptState),
 		Outcome:     chasm.NewDataField(ctx, outcome),
@@ -717,7 +708,8 @@ func TestTransitionCanceled(t *testing.T) {
 		Message: "Activity canceled",
 		FailureInfo: &failurepb.Failure_CanceledFailureInfo{
 			CanceledFailureInfo: &failurepb.CanceledFailureInfo{
-				Details: payloads.EncodeString("Details"),
+				Details:  payloads.EncodeString("Details"),
+				Identity: identity,
 			},
 		},
 	}

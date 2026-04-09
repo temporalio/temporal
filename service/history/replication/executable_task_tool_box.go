@@ -1,6 +1,7 @@
 package replication
 
 import (
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -23,6 +24,7 @@ type (
 		ClusterMetadata           cluster.Metadata
 		ClientBean                client.Bean
 		ShardController           shard.Controller
+		ChasmEngine               chasm.Engine
 		NamespaceCache            namespace.Registry
 		EagerNamespaceRefresher   EagerNamespaceRefresher
 		ResendHandler             eventhandler.ResendHandler
@@ -31,6 +33,7 @@ type (
 		LowPriorityTaskScheduler ctasks.Scheduler[TrackableExecutableTask] `name:"LowPriorityTaskScheduler"`
 		MetricsHandler           metrics.Handler
 		Logger                   log.Logger
+		ThrottledLogger          log.ThrottledLogger
 		Serializer               serialization.Serializer
 		DLQWriter                DLQWriter
 		HistoryEventsHandler     eventhandler.HistoryEventsHandler

@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -112,9 +113,9 @@ func Invoke(
 			}
 			if !fabricateStartedEvent {
 				// leave it zero if the event is fabricated so the latency metrics are not emitted
-				attemptStartedTime = ai.StartedTime.AsTime()
+				attemptStartedTime = timestamp.TimeValue(ai.StartedTime)
 			}
-			firstScheduledTime = ai.FirstScheduledTime.AsTime()
+			firstScheduledTime = timestamp.TimeValue(ai.FirstScheduledTime)
 			taskQueue = ai.TaskQueue
 			versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
 			return &api.UpdateWorkflowAction{
