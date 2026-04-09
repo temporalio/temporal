@@ -378,7 +378,8 @@ func (tr *priTaskReader) signalNewTasks(resp subqueueCreateTasksResponse) {
 			// Because we checked readLevel, we know that getTasksPump can't have beat us to
 			// adding these tasks to outstandingTasks. So they should definitely not be there.
 			_, found := tr.outstandingTasks.Get(t.TaskId)
-			return softassert.That(tr.logger, !found, "newly-written task already present in outstanding tasks")
+			softassert.That(tr.logger, !found, "newly-written task already present in outstanding tasks")
+			return found
 		})
 
 	if !canAddDirect {

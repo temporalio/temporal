@@ -3,6 +3,7 @@ package xdc
 import (
 	"cmp"
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -11,7 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
@@ -23,6 +26,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
@@ -227,6 +231,66 @@ func (s *xdcBaseSuite) setupTest() {
 
 func (s *xdcBaseSuite) createGlobalNamespace() string {
 	return s.createNamespace(true, s.clusters)
+}
+
+func (s *xdcBaseSuite) registerTestSearchAttributes(ns string) {
+	expectedSearchAttributes := searchattribute.TestSearchAttributesToRegister()
+	addSearchAttributes := func(cl *testcore.TestCluster) {
+		_, err := cl.OperatorClient().AddSearchAttributes(testcore.NewContext(), &operatorservice.AddSearchAttributesRequest{
+			Namespace:        ns,
+			SearchAttributes: expectedSearchAttributes,
+		})
+		var alreadyExistsErr *serviceerror.AlreadyExists
+		if err != nil && !errors.As(err, &alreadyExistsErr) {
+			s.Require().NoError(err)
+		}
+	}
+
+	waitForListSearchAttributes := func(cl *testcore.TestCluster) {
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			resp, err := cl.OperatorClient().ListSearchAttributes(testcore.NewContext(), &operatorservice.ListSearchAttributesRequest{
+				Namespace: ns,
+			})
+			require.NoError(t, err)
+			for attrName, attrType := range expectedSearchAttributes {
+				gotType, ok := resp.GetCustomAttributes()[attrName]
+				require.True(t, ok, "expected search attribute %q to be registered", attrName)
+				require.Equal(t, attrType, gotType)
+			}
+		}, replicationWaitTime, replicationCheckInterval)
+	}
+
+	waitForNamespaceAliasPropagation := func() {
+		for _, cl := range s.clusters {
+			s.EventuallyWithT(func(t *assert.CollectT) {
+				resp, err := cl.FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
+					Namespace: ns,
+				})
+				require.NoError(t, err)
+
+				expectedAliases := resp.GetConfig().GetCustomSearchAttributeAliases()
+				for _, r := range cl.Host().NamespaceRegistries() {
+					cachedNS, err := r.GetNamespace(namespace.Name(ns))
+					require.NoError(t, err)
+					require.NotNil(t, cachedNS)
+					mapper := cachedNS.CustomSearchAttributesMapper()
+					require.Equal(t, expectedAliases, mapper.FieldToAliasMap())
+				}
+			}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
+		}
+	}
+
+	addSearchAttributes(s.clusters[0])
+	waitForListSearchAttributes(s.clusters[0])
+	waitForNamespaceAliasPropagation()
+
+	for _, cl := range s.clusters[1:] {
+		addSearchAttributes(cl)
+	}
+	for _, cl := range s.clusters {
+		waitForListSearchAttributes(cl)
+	}
+	waitForNamespaceAliasPropagation()
 }
 
 // TODO (alex): rename this to createLocalNamespace, and everywhere where it is called with isGlobal == true, add call to promoteNamespace.

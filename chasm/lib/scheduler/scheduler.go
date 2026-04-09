@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -289,8 +290,17 @@ func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 }
 
 func (s *Scheduler) ContextMetadata(_ chasm.Context) map[string]string {
-	// TODO: Export scheduler context metadata.
-	return nil
+	md := make(map[string]string, 2)
+	if wfType := s.Schedule.GetAction().GetStartWorkflow().GetWorkflowType().GetName(); wfType != "" {
+		md[contextutil.MetadataKeyWorkflowType] = wfType
+	}
+	if tq := s.Schedule.GetAction().GetStartWorkflow().GetTaskQueue().GetName(); tq != "" {
+		md[contextutil.MetadataKeyWorkflowTaskQueue] = tq
+	}
+	if len(md) == 0 {
+		return nil
+	}
+	return md
 }
 
 // Terminate implements the chasm.RootComponent interface.
@@ -759,9 +769,6 @@ func (s *Scheduler) Update(
 	}
 
 	// Update custom search attributes.
-	//
-	// TODO - we could also easily support allowing the customer to update their
-	// memo here.
 	if req.FrontendRequest.GetSearchAttributes() != nil {
 		// To preserve compatibility with V1 scheduler, we do a full replacement
 		// of search attributes, dropping any that aren't a part of the update's
@@ -781,6 +788,12 @@ func (s *Scheduler) Update(
 	// not silently lost during the migration window.
 	if s.WorkflowMigration != nil {
 		return nil, ErrMigrationPending
+	}
+
+	// Update custom memo.
+	if req.FrontendRequest.GetMemo() != nil {
+		visibility := s.Visibility.Get(ctx)
+		visibility.ReplaceCustomMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
 	}
 
 	s.Schedule = req.FrontendRequest.Schedule
