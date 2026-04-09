@@ -2663,9 +2663,21 @@ func testCHASMUnpauseResumesProcessing(t *testing.T, newContext contextFactory) 
 	})
 	s.NoError(err)
 
-	// Wait for the already-queued generator task to fire and find the schedule paused,
-	// after which it will not schedule another task and the generator goes dormant.
-	time.Sleep(3 * time.Second) //nolint:forbidigo
+	// Wait for the already-queued generator task to run after pause. That task
+	// observes paused state, performs no-op scheduling, and then the schedule
+	// becomes quiescent (no new runs over a stability window).
+	stableSamples := 0
+	lastRuns := atomic.LoadInt32(&runs)
+	s.Eventually(func() bool {
+		currentRuns := atomic.LoadInt32(&runs)
+		if currentRuns == lastRuns {
+			stableSamples++
+		} else {
+			lastRuns = currentRuns
+			stableSamples = 0
+		}
+		return stableSamples >= 6
+	}, 15*time.Second, 500*time.Millisecond)
 	runsBeforeUnpause := atomic.LoadInt32(&runs)
 
 	// Unpause.
