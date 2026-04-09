@@ -261,6 +261,12 @@ func SetupNewWorkflowForRetryOrCron(
 		} else if GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
 			sourceDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousMutableState.GetEffectiveDeployment())
 			sourceDeploymentRevisionNumber := previousMutableState.GetVersioningRevisionNumber()
+			// Carry forward ContinueAsNewInitialVersioningBehavior so that the first task of each
+			// retry run also receives the same ramp policy (e.g. UseRampingVersion). Per the API
+			// spec this behavior is scoped to the initial task of this run and of any retries.
+			// Note: GetEffectiveRampPolicy() gates the policy on LastCompletedWorkflowTaskStartedEventId
+			// == EmptyEventID, so subsequent tasks of the retry run are unaffected even though the
+			// field remains stored in VersioningInfo for the lifetime of that run.
 			sourceCaNInitialVersioningBehavior := previousMutableState.GetExecutionInfo().GetVersioningInfo().GetContinueAsNewInitialVersioningBehavior()
 
 			// Only set inherited auto upgrade info if source deployment version and revision number are not nil.
@@ -268,7 +274,7 @@ func SetupNewWorkflowForRetryOrCron(
 				inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
 					SourceDeploymentVersion:                sourceDeploymentVersion,
 					SourceDeploymentRevisionNumber:         sourceDeploymentRevisionNumber,
-					ContinueAsNewInitialVersioningBehavior: sourceCaNInitialVersioningBehavior, // pass from source on retry
+					ContinueAsNewInitialVersioningBehavior: sourceCaNInitialVersioningBehavior,
 				}
 			}
 		}

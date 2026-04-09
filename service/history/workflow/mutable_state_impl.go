@@ -2623,7 +2623,12 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		req.InheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
 			SourceDeploymentVersion:                sourceDeploymentVersion,
 			SourceDeploymentRevisionNumber:         sourceDeploymentRevisionNumber,
-			ContinueAsNewInitialVersioningBehavior: command.GetInitialVersioningBehavior(), // pass from command (not source) to CaN
+			// ContinueAsNewInitialVersioningBehavior is taken from the command that triggered this CaN,
+			// not from the previous workflow's InheritedAutoUpgradeInfo. This ensures that each CaN hop
+			// carries only the behavior the user explicitly requested for that hop, and that a
+			// UseRampingVersion CaN run cannot accidentally propagate the behavior through a child
+			// workflow or a future CaN of its own.
+			ContinueAsNewInitialVersioningBehavior: command.GetInitialVersioningBehavior(),
 		}
 	}
 
@@ -9122,6 +9127,14 @@ func (ms *MutableStateImpl) GetEffectiveRampPolicy() *deploymentspb.RampPolicy {
 	executionInfo := ms.GetExecutionInfo()
 	if executionInfo.GetLastCompletedWorkflowTaskStartedEventId() == common.EmptyEventID { // this is the first WFT
 		versioningInfo := executionInfo.GetVersioningInfo()
+		// ContinueAsNewInitialVersioningBehavior is only populated (in ApplyWorkflowExecutionStartedEvent)
+		// from InheritedAutoUpgradeInfo, which always sets Behavior to AUTO_UPGRADE. So there is no world
+		// in which ContinueAsNewInitialVersioningBehavior is set without Behavior also being AUTO_UPGRADE.
+		// The Behavior check here is therefore defensive, not a meaningful filter.
+		//
+		// Backward-compat note: history events written before this field existed carry UNSPECIFIED, which
+		// does not match USE_RAMPING_VERSION, so those runs correctly fall through and return nil — the
+		// same as AUTO_UPGRADE behavior.
 		if versioningInfo.GetContinueAsNewInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_USE_RAMPING_VERSION &&
 			versioningInfo.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
 			return &deploymentspb.RampPolicy{Value: &deploymentspb.RampPolicy_UseRampingVersion{UseRampingVersion: true}}
