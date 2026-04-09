@@ -11,9 +11,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
-	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -148,7 +148,7 @@ func (h *operationInvocationTaskHandler) Execute(
 		Links: []nexus.Link{args.nexusLink},
 	}
 
-	invocation, err := h.nexusTaskHandlerBase.newInvocation(
+	invocation, err := h.newInvocation(
 		callCtx, ns, endpoint, args.endpointName, args.service,
 		callTimeout, timeoutType,
 		invocationTraceContext{
