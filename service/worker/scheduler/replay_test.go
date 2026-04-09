@@ -27,16 +27,16 @@ func TestReplays(t *testing.T) {
 	logger := log.NewSdkLogger(log.NewTestLogger())
 
 	for _, filename := range files {
-		logger.Info("Replaying", "file", filename)
-		f, err := os.Open(filename)
-		require.NoError(t, err)
-		r, err := gzip.NewReader(f)
-		require.NoError(t, err)
-		history, err := client.HistoryFromJSON(r, client.HistoryJSONOptions{})
-		require.NoError(t, err)
-		err = replayer.ReplayWorkflowHistory(logger, history)
-		require.NoError(t, err)
-		_ = r.Close()
-		_ = f.Close()
+		t.Run(filepath.Base(filename), func(t *testing.T) {
+			f, err := os.Open(filename)
+			require.NoError(t, err)
+			defer f.Close()
+			r, err := gzip.NewReader(f)
+			require.NoError(t, err)
+			defer r.Close()
+			history, err := client.HistoryFromJSON(r, client.HistoryJSONOptions{})
+			require.NoError(t, err)
+			require.NoError(t, replayer.ReplayWorkflowHistory(logger, history))
+		})
 	}
 }
