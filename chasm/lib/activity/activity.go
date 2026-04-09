@@ -397,6 +397,7 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
 		return nil, serviceerror.NewInvalidArgumentf("Cannot update options for activity in state %s", a.Status.String())
+	default:
 	}
 
 	frontendReq := req.GetFrontendRequest()

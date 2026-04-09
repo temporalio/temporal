@@ -390,7 +390,7 @@ func validateUpdateActivityExecutionOptionsRequest(
 		}
 	}
 
-	if req.GetUpdateMask() != nil && req.GetRestoreOriginal() {
+	if len(req.GetUpdateMask().GetPaths()) > 0 && req.GetRestoreOriginal() {
 		return serviceerror.NewInvalidArgument("Both UpdateMask and RestoreOriginal are provided")
 	}
 	if !req.GetRestoreOriginal() {
