@@ -38,16 +38,17 @@ type (
 	GrpcServerOptionsParams struct {
 		fx.In
 
-		Logger                       log.Logger
-		RPCFactory                   common.RPCFactory
-		RetryableInterceptor         *interceptor.RetryableInterceptor
-		TelemetryInterceptor         *interceptor.TelemetryInterceptor
-		RateLimitInterceptor         *interceptor.RateLimitInterceptor
-		TracingStatsHandler          telemetry.ServerStatsHandler
-		MetricsStatsHandler          metrics.ServerStatsHandler
-		ContextMetadataInterceptor   *interceptor.ContextMetadataInterceptor `optional:"true"`
-		AdditionalInterceptors       []grpc.UnaryServerInterceptor           `optional:"true"`
-		AdditionalStreamInterceptors []grpc.StreamServerInterceptor          `optional:"true"`
+		Logger                        log.Logger
+		RPCFactory                    common.RPCFactory
+		RetryableInterceptor          *interceptor.RetryableInterceptor
+		TelemetryInterceptor          *interceptor.TelemetryInterceptor
+		NamespaceRateLimitInterceptor interceptor.NamespaceRateLimitInterceptor `optional:"true"`
+		RateLimitInterceptor          *interceptor.RateLimitInterceptor
+		TracingStatsHandler           telemetry.ServerStatsHandler
+		MetricsStatsHandler           metrics.ServerStatsHandler
+		ContextMetadataInterceptor    *interceptor.ContextMetadataInterceptor `optional:"true"`
+		AdditionalInterceptors        []grpc.UnaryServerInterceptor           `optional:"true"`
+		AdditionalStreamInterceptors  []grpc.StreamServerInterceptor          `optional:"true"`
 	}
 )
 
@@ -57,10 +58,10 @@ var PersistenceLazyLoadedServiceResolverModule = fx.Options(
 			Value: &atomic.Value{},
 		}
 	}),
-	fx.Invoke(initPersistenceLazyLoadedServiceResolver),
+	fx.Invoke(initLazyLoadedServiceResolver),
 )
 
-func initPersistenceLazyLoadedServiceResolver(
+func initLazyLoadedServiceResolver(
 	serviceName primitives.ServiceName,
 	logger log.SnTaggedLogger,
 	serviceResolver membership.ServiceResolver,
@@ -163,6 +164,10 @@ func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInte
 	}
 
 	interceptors = append(interceptors, params.AdditionalInterceptors...)
+
+	if params.NamespaceRateLimitInterceptor != nil {
+		interceptors = append(interceptors, params.NamespaceRateLimitInterceptor.Intercept)
+	}
 
 	interceptors = append(interceptors, params.RateLimitInterceptor.Intercept)
 

@@ -1,7 +1,6 @@
 package configs
 
 import (
-	"math"
 	"time"
 
 	"go.temporal.io/server/common/dynamicconfig"
@@ -9,11 +8,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/quotas/calculator"
-)
-
-const (
-	// OperatorPriority is used to give precedence to calls coming from web UI or tctl
-	OperatorPriority = 0
 )
 
 const (
@@ -255,62 +249,6 @@ var (
 	}
 )
 
-type (
-	NamespaceRateBurstImpl struct {
-		namespaceName string
-		rateFn        quotas.NamespaceRateFn
-		burstFn       dynamicconfig.IntPropertyFnWithNamespaceFilter
-	}
-
-	operatorRateBurstImpl struct {
-		operatorRateRatio dynamicconfig.FloatPropertyFn
-		baseRateBurstFn   quotas.RateBurst
-	}
-)
-
-var _ quotas.RateBurst = (*NamespaceRateBurstImpl)(nil)
-var _ quotas.RateBurst = (*operatorRateBurstImpl)(nil)
-
-func NewNamespaceRateBurst(
-	namespaceName string,
-	rateFn quotas.NamespaceRateFn,
-	burstRatioFn dynamicconfig.FloatPropertyFnWithNamespaceFilter,
-) *NamespaceRateBurstImpl {
-	return &NamespaceRateBurstImpl{
-		namespaceName: namespaceName,
-		rateFn:        rateFn,
-		burstFn: func(namespace string) int {
-			return max(1, int(math.Ceil(rateFn(namespace)*burstRatioFn(namespace))))
-		},
-	}
-}
-
-func (c *NamespaceRateBurstImpl) Rate() float64 {
-	return c.rateFn(c.namespaceName)
-}
-
-func (c *NamespaceRateBurstImpl) Burst() int {
-	return c.burstFn(c.namespaceName)
-}
-
-func newOperatorRateBurst(
-	baseRateBurstFn quotas.RateBurst,
-	operatorRateRatio dynamicconfig.FloatPropertyFn,
-) *operatorRateBurstImpl {
-	return &operatorRateBurstImpl{
-		operatorRateRatio: operatorRateRatio,
-		baseRateBurstFn:   baseRateBurstFn,
-	}
-}
-
-func (c *operatorRateBurstImpl) Rate() float64 {
-	return c.operatorRateRatio() * c.baseRateBurstFn.Rate()
-}
-
-func (c *operatorRateBurstImpl) Burst() int {
-	return c.baseRateBurstFn.Burst()
-}
-
 func NewRequestToRateLimiter(
 	executionRateBurstFn quotas.RateBurst,
 	visibilityRateBurstFn quotas.RateBurst,
@@ -340,69 +278,60 @@ func NewExecutionPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RequestRateLimiter)
-	for priority := range ExecutionAPIPrioritiesOrdered {
-		if priority == OperatorPriority {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(newOperatorRateBurst(rateBurstFn, operatorRPSRatio), time.Minute))
-		} else {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
-		}
-	}
-	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
-		if req.CallerType == headers.CallerTypeOperator {
-			return OperatorPriority
-		}
-		if priority, ok := APIToPriority[req.API]; ok {
-			return priority
-		}
-		return ExecutionAPIPrioritiesOrdered[len(ExecutionAPIPrioritiesOrdered)-1]
-	}, rateLimiters)
+	return quotas.NewPriorityRateLimiterHelper(
+		rateBurstFn,
+		operatorRPSRatio,
+		func(req quotas.Request) int {
+			if req.CallerType == headers.CallerTypeOperator {
+				return quotas.OperatorPriority
+			}
+			if priority, ok := APIToPriority[req.API]; ok {
+				return priority
+			}
+			return ExecutionAPIPrioritiesOrdered[len(ExecutionAPIPrioritiesOrdered)-1]
+		},
+		ExecutionAPIPrioritiesOrdered,
+	)
 }
 
 func NewVisibilityPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RequestRateLimiter)
-	for priority := range VisibilityAPIPrioritiesOrdered {
-		if priority == OperatorPriority {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(newOperatorRateBurst(rateBurstFn, operatorRPSRatio), time.Minute))
-		} else {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
-		}
-	}
-	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
-		if req.CallerType == headers.CallerTypeOperator {
-			return OperatorPriority
-		}
-		if priority, ok := VisibilityAPIToPriority[req.API]; ok {
-			return priority
-		}
-		return VisibilityAPIPrioritiesOrdered[len(VisibilityAPIPrioritiesOrdered)-1]
-	}, rateLimiters)
+	return quotas.NewPriorityRateLimiterHelper(
+		rateBurstFn,
+		operatorRPSRatio,
+		func(req quotas.Request) int {
+			if req.CallerType == headers.CallerTypeOperator {
+				return quotas.OperatorPriority
+			}
+			if priority, ok := VisibilityAPIToPriority[req.API]; ok {
+				return priority
+			}
+			return VisibilityAPIPrioritiesOrdered[len(VisibilityAPIPrioritiesOrdered)-1]
+		},
+		VisibilityAPIPrioritiesOrdered,
+	)
 }
 
 func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RequestRateLimiter)
-	for priority := range NamespaceReplicationInducingAPIPrioritiesOrdered {
-		if priority == OperatorPriority {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(newOperatorRateBurst(rateBurstFn, operatorRPSRatio), time.Minute))
-		} else {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
-		}
-	}
-	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
-		if req.CallerType == headers.CallerTypeOperator {
-			return OperatorPriority
-		}
-		if priority, ok := NamespaceReplicationInducingAPIToPriority[req.API]; ok {
-			return priority
-		}
-		return NamespaceReplicationInducingAPIPrioritiesOrdered[len(NamespaceReplicationInducingAPIPrioritiesOrdered)-1]
-	}, rateLimiters)
+	return quotas.NewPriorityRateLimiterHelper(
+		rateBurstFn,
+		operatorRPSRatio,
+		func(req quotas.Request) int {
+			if req.CallerType == headers.CallerTypeOperator {
+				return quotas.OperatorPriority
+			}
+			if priority, ok := NamespaceReplicationInducingAPIToPriority[req.API]; ok {
+				return priority
+			}
+			return NamespaceReplicationInducingAPIPrioritiesOrdered[len(NamespaceReplicationInducingAPIPrioritiesOrdered)-1]
+		},
+		NamespaceReplicationInducingAPIPrioritiesOrdered,
+	)
 }
 
 // NewGlobalNamespaceRateLimiter creates a namespace-aware rate limiter that uses

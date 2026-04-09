@@ -67,6 +67,7 @@ var Module = fx.Options(
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
+	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
 	fx.Provide(HealthCheckInterceptorProvider),
@@ -263,6 +264,34 @@ func HistoryAdditionalInterceptorsProvider(
 	}
 }
 
+func NamespaceRateLimitInterceptorProvider(
+	serviceConfig *configs.Config,
+	namespaceRegistry namespace.Registry,
+	metricsHandler metrics.Handler,
+	logger log.SnTaggedLogger,
+) interceptor.NamespaceRateLimitInterceptor {
+
+	namespaceRateFn := func(namespace string) float64 {
+		if namespaceRPS := serviceConfig.NamespaceRPS(namespace); namespaceRPS > 0 {
+			return float64(namespaceRPS)
+		}
+		// This fallback to host level rps limit when NamespaceRPS is not configured (i.e. 0)
+		return float64(serviceConfig.RPS())
+	}
+
+	return interceptor.NewNamespaceRateLimitInterceptor(
+		namespaceRegistry,
+		configs.NewNamespapceRateLimiter(
+			namespaceRateFn,
+			serviceConfig.OperatorRPSRatio,
+		),
+		map[string]int{},      // no token overrides
+		map[string]struct{}{}, // no long poll methods
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // no long poll methods
+		metricsHandler,
+	)
+}
+
 func RateLimitInterceptorProvider(
 	serviceConfig *configs.Config,
 ) *interceptor.RateLimitInterceptor {
@@ -290,14 +319,14 @@ func ESProcessorConfigProvider(
 
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *configs.Config,
-	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
+	lazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
 	ownershipBasedQuotaScaler shard.LazyLoadedOwnershipBasedQuotaScaler,
 	logger log.SnTaggedLogger,
 ) service.PersistenceRateLimitingParams {
 	hostCalculator := calculator.NewLoggedCalculator(
 		shard.NewOwnershipAwareQuotaCalculator(
 			ownershipBasedQuotaScaler,
-			persistenceLazyLoadedServiceResolver,
+			lazyLoadedServiceResolver,
 			serviceConfig.PersistenceMaxQPS,
 			serviceConfig.PersistenceGlobalMaxQPS,
 		),
@@ -306,7 +335,7 @@ func PersistenceRateLimitingParamsProvider(
 	namespaceCalculator := calculator.NewLoggedNamespaceCalculator(
 		shard.NewOwnershipAwareNamespaceQuotaCalculator(
 			ownershipBasedQuotaScaler,
-			persistenceLazyLoadedServiceResolver,
+			lazyLoadedServiceResolver,
 			serviceConfig.PersistenceNamespaceMaxQPS,
 			serviceConfig.PersistenceGlobalNamespaceMaxQPS,
 		),
