@@ -79,6 +79,7 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestCreatesWorkflowSentinel", func(t *testing.T) { testCreatesWorkflowSentinel(t, newContext) })
 	t.Run("TestUpdateScheduleMemo", func(t *testing.T) { testUpdateScheduleMemo(t, newContext) })
 	t.Run("TestUpdateScheduleMemoOnly", func(t *testing.T) { testUpdateScheduleMemoOnly(t, newContext) })
+	t.Run("TestUnpauseResumesProcessing", func(t *testing.T) { testCHASMUnpauseResumesProcessing(t, newContext) })
 }
 
 func TestScheduleV1(t *testing.T) {
@@ -2606,4 +2607,82 @@ func testUpdateScheduleMemoOnly(t *testing.T, newContext contextFactory) {
 	require.NotNil(t, describeResp.Schedule.Spec, "schedule spec should not be nil")
 	require.NotEmpty(t, describeResp.Schedule.Spec.Interval, "schedule spec intervals should be preserved")
 	require.NotNil(t, describeResp.Schedule.Action, "schedule action should be preserved")
+}
+
+func testCHASMUnpauseResumesProcessing(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+
+	sid := "sched-test-unpause-resumes"
+	wid := "sched-test-unpause-resumes-wf"
+	wt := "sched-test-unpause-resumes-wt"
+
+	var runs int32
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error {
+			workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+				atomic.AddInt32(&runs, 1)
+				return 0
+			})
+			return nil
+		},
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	_, err := s.FrontendClient().CreateSchedule(newContext(s.Context()), &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Second)}},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   wid,
+						WorkflowType: &commonpb.WorkflowType{Name: wt},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Wait for the schedule to fire at least once, confirming it's running.
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs) >= 1 }, 15*time.Second, 500*time.Millisecond)
+
+	// Pause.
+	_, err = s.FrontendClient().PatchSchedule(newContext(s.Context()), &workflowservice.PatchScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Patch:      &schedulepb.SchedulePatch{Pause: "pausing for test"},
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Wait for the already-queued generator task to fire and find the schedule paused,
+	// after which it will not schedule another task and the generator goes dormant.
+	time.Sleep(3 * time.Second) //nolint:forbidigo
+	runsBeforeUnpause := atomic.LoadInt32(&runs)
+
+	// Unpause.
+	_, err = s.FrontendClient().PatchSchedule(newContext(s.Context()), &workflowservice.PatchScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Patch:      &schedulepb.SchedulePatch{Unpause: "resuming"},
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// The generator should be kicked immediately on unpause and new runs should follow.
+	s.Eventually(
+		func() bool { return atomic.LoadInt32(&runs) > runsBeforeUnpause },
+		15*time.Second,
+		500*time.Millisecond,
+		"schedule should resume processing after unpause",
+	)
 }

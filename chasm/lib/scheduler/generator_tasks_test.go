@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -152,4 +154,33 @@ func TestGeneratorTask_UpdateFutureActionTimes_SkipsBeforeUpdateTime(t *testing.
 	for _, futureTime := range generator.FutureActionTimes {
 		require.True(t, futureTime.AsTime().After(updateTime))
 	}
+}
+
+func TestUnpause_ResumesProcessing(t *testing.T) {
+	env := newTestEnv(t)
+
+	// Pause the schedule.
+	ctx := env.MutableContext()
+	env.Scheduler.Schedule.State.Paused = true
+	require.NoError(t, env.CloseTransaction())
+
+	// Clear tasks from setup, then unpause. UpdateTime is captured at T0.
+	env.NodeBackend.TasksByCategory = nil
+	ctx = env.MutableContext()
+	_, err := env.Scheduler.Patch(ctx, &schedulerpb.PatchScheduleRequest{
+		FrontendRequest: &workflowservice.PatchScheduleRequest{
+			Patch: &schedulepb.SchedulePatch{Unpause: "resuming"},
+		},
+	})
+	require.NoError(t, err)
+
+	// Advance time before closing so the generator has actions to process.
+	env.TimeSource.Update(env.TimeSource.Now().Add(defaultInterval * 3))
+	require.NoError(t, env.CloseTransaction())
+
+	// With the fix, Patch kicks an immediate generator task. During CloseTransaction
+	// it processes the elapsed interval, buffers starts, and the invoker schedules
+	// side-effect tasks to start workflows. Without the fix, nothing runs.
+	require.True(t, env.HasTask(&tasks.ChasmTask{}, chasm.TaskScheduledTimeImmediate),
+		"schedule should resume processing after unpause")
 }
