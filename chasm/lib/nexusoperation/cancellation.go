@@ -70,10 +70,8 @@ func cancellationAPIState(status nexusoperationpb.CancellationStatus) enumspb.Ne
 func (o *Cancellation) ToCancellationInfo(circuitBreakerOpen func(endpoint string) bool, endpoint string) *workflowpb.NexusOperationCancellationInfo {
 	state := cancellationAPIState(o.Status)
 	blockedReason := ""
-	switch {
-	case state == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED:
-		blockedReason = "The circuit breaker is open."
-	case state == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED && circuitBreakerOpen(endpoint):
+
+	if state == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED && circuitBreakerOpen(endpoint) {
 		state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
 		blockedReason = "The circuit breaker is open."
 	}

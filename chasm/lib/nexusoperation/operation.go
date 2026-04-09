@@ -1,7 +1,6 @@
 package nexusoperation
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -25,7 +24,8 @@ var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancel
 // ErrOperationAlreadyCompleted is returned when trying to cancel an operation that has already completed.
 var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation already completed")
 
-var errNexusOperationStateUnspecified = fmt.Errorf("nexus operation with UNSPECIFIED state")
+// errNexusOperationStateUnspecified is returned when converting an operation in an unspecified state for an api response.
+var errNexusOperationStateUnspecified = serviceerror.NewInternal("Nexus operation with UNSPECIFIED state")
 
 // InvocationData contains data needed to invoke a Nexus operation.
 type InvocationData struct {
