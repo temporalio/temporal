@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -21,8 +22,8 @@ func TestUserMetadataSuite(t *testing.T) {
 }
 
 func (s *UserMetadataSuite) TestUserMetadata() {
-	getDescribeWorkflowExecutionInfo := func(client workflowservice.WorkflowServiceClient, namespace string, workflowID string, runID string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-		return client.DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+	getDescribeWorkflowExecutionInfo := func(ctx context.Context, client workflowservice.WorkflowServiceClient, namespace string, workflowID string, runID string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+		return client.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -56,11 +57,11 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 			UserMetadata: metadata,
 		}
 
-		we, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		we, err := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
 		s.NoError(err)
 
 		// Verify that the UserMetadata associated with the start event is returned in the describe response.
-		describeInfo, err := getDescribeWorkflowExecutionInfo(env.FrontendClient(), env.Namespace().String(), tv.WorkflowID(), we.RunId)
+		describeInfo, err := getDescribeWorkflowExecutionInfo(env.Context(), env.FrontendClient(), env.Namespace().String(), tv.WorkflowID(), we.RunId)
 		s.NoError(err)
 		s.EqualExportedValues(metadata, describeInfo.ExecutionConfig.UserMetadata)
 	})
@@ -79,11 +80,11 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 			UserMetadata: metadata,
 		}
 
-		we, err := env.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), request)
+		we, err := env.FrontendClient().SignalWithStartWorkflowExecution(env.Context(), request)
 		s.NoError(err)
 
 		// Verify that the UserMetadata associated with the start event is returned in the describe response.
-		describeInfo, err := getDescribeWorkflowExecutionInfo(env.FrontendClient(), env.Namespace().String(), tv.WorkflowID(), we.RunId)
+		describeInfo, err := getDescribeWorkflowExecutionInfo(env.Context(), env.FrontendClient(), env.Namespace().String(), tv.WorkflowID(), we.RunId)
 		s.NoError(err)
 		s.EqualExportedValues(metadata, describeInfo.ExecutionConfig.UserMetadata)
 	})
@@ -124,11 +125,11 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 			},
 		}
 
-		_, err := env.FrontendClient().ExecuteMultiOperation(testcore.NewContext(), request)
+		_, err := env.FrontendClient().ExecuteMultiOperation(env.Context(), request)
 		s.NoError(err)
 
 		// Verify that the UserMetadata associated with the start event is returned in the describe response.
-		describeInfo, err := getDescribeWorkflowExecutionInfo(env.FrontendClient(), env.Namespace().String(), tv.WorkflowID(), "")
+		describeInfo, err := getDescribeWorkflowExecutionInfo(env.Context(), env.FrontendClient(), env.Namespace().String(), tv.WorkflowID(), "")
 		s.NoError(err)
 		s.EqualExportedValues(metadata, describeInfo.ExecutionConfig.UserMetadata)
 	})
