@@ -149,7 +149,8 @@ func validateSuiteStruct(structType reflect.Type) {
 	}
 }
 
-// applyTestifyMFilter filters methods by the -testify.m flag.
+// applyTestifyMFilter filters methods by the -testify.m flag. This is helpful
+// for editor integrations like VSCode that take this suite for a testify suite.
 //
 // The flag is registered by testify's suite package (imported above); we share
 // that registration via flag.Lookup rather than registering it a second time.
