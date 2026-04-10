@@ -75,10 +75,10 @@ func NewEngine(
 	return e
 }
 
-func (e *Engine) EngineContext() context.Context {
-	return chasm.NewEngineContext(context.Background(), e)
-}
-
+// Ref returns a ComponentRef for a subcomponent attached to this engine. For root components,
+// prefer constructing a ref directly with [chasm.NewComponentRef] using the execution key.
+// Subcomponent refs cannot be constructed externally (the component path is unexported), so
+// this method is needed when testing task handlers that operate on subcomponents.
 func (e *Engine) Ref(component chasm.Component) chasm.ComponentRef {
 	for _, execution := range e.executions {
 		ref, err := execution.node.Ref(component)
@@ -100,7 +100,7 @@ func (e *Engine) StartExecution(
 	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
 	_ ...chasm.TransitionOption,
 ) (chasm.StartExecutionResult, error) {
-	if _, ok := e.executionForKey(ref.ExecutionKey); ok {
+	if _, ok := e.executions[newExecutionKey(ref.ExecutionKey)]; ok {
 		return chasm.StartExecutionResult{}, chasm.NewExecutionAlreadyStartedErr("already exists", "", ref.RunID)
 	}
 
@@ -140,7 +140,7 @@ func (e *Engine) UpdateWithStartExecution(
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	_ ...chasm.TransitionOption,
 ) (chasm.EngineUpdateWithStartExecutionResult, error) {
-	if execution, ok := e.executionForKey(ref.ExecutionKey); ok {
+	if execution, ok := e.executions[newExecutionKey(ref.ExecutionKey)]; ok {
 		serializedRef, err := e.updateComponentInExecution(ctx, execution, ref, updateFn)
 		if err != nil {
 			return chasm.EngineUpdateWithStartExecutionResult{}, err
@@ -227,17 +227,23 @@ func (e *Engine) PollComponent(
 }
 
 func (e *Engine) DeleteExecution(
-	context.Context,
-	chasm.ComponentRef,
-	chasm.DeleteExecutionRequest,
+	_ context.Context,
+	ref chasm.ComponentRef,
+	_ chasm.DeleteExecutionRequest,
 ) error {
-	return serviceerror.NewUnimplemented("chasmtest.Engine.DeleteExecution")
+	key := newExecutionKey(ref.ExecutionKey)
+	if _, ok := e.executions[key]; !ok {
+		return serviceerror.NewNotFound(
+			fmt.Sprintf("execution not found: namespace=%q business_id=%q run_id=%q", ref.NamespaceID, ref.BusinessID, ref.RunID),
+		)
+	}
+	delete(e.executions, key)
+	return nil
 }
 
 func (e *Engine) NotifyExecution(chasm.ExecutionKey) {}
 
 func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
-	key = normalizeExecutionKey(key)
 	backend := &chasm.MockNodeBackend{
 		HandleNextTransitionCount: func() int64 { return 2 },
 		HandleGetCurrentVersion:   func() int64 { return 1 },
@@ -266,13 +272,8 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 	}
 }
 
-func (e *Engine) executionForKey(key chasm.ExecutionKey) (*execution, bool) {
-	execution, ok := e.executions[newExecutionKey(normalizeExecutionKey(key))]
-	return execution, ok
-}
-
 func (e *Engine) mustExecutionForRef(ref chasm.ComponentRef) (*execution, error) {
-	execution, ok := e.executionForKey(ref.ExecutionKey)
+	execution, ok := e.executions[newExecutionKey(ref.ExecutionKey)]
 	if !ok {
 		return nil, serviceerror.NewNotFound(
 			fmt.Sprintf("execution not found: namespace=%q business_id=%q run_id=%q", ref.NamespaceID, ref.BusinessID, ref.RunID),
@@ -310,14 +311,4 @@ func newExecutionKey(key chasm.ExecutionKey) executionKey {
 		namespaceID: key.NamespaceID,
 		businessID:  key.BusinessID,
 	}
-}
-
-func normalizeExecutionKey(key chasm.ExecutionKey) chasm.ExecutionKey {
-	if key.NamespaceID == "" {
-		key.NamespaceID = "test-namespace-id"
-	}
-	if key.BusinessID == "" {
-		key.BusinessID = "test-workflow-id"
-	}
-	return key
 }

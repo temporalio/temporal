@@ -80,26 +80,6 @@ func (l *mockNexusCompletionGetterLibrary) Components() []*chasm.RegistrableComp
 	}
 }
 
-func readCallbackFromEngine(
-	t *testing.T,
-	testEngine *chasmtest.Engine,
-	callback *Callback,
-) *Callback {
-	t.Helper()
-
-	var readCallback *Callback
-	_, err := chasm.ReadComponent[*Callback, chasm.ComponentRef, any, chasm.NoValue](
-		testEngine.EngineContext(),
-		testEngine.Ref(callback),
-		func(cb *Callback, _ chasm.Context, _ any) (chasm.NoValue, error) {
-			readCallback = cb
-			return nil, nil
-		},
-		nil,
-	)
-	require.NoError(t, err)
-	return readCallback
-}
 
 // Test the full executeInvocationTask flow with direct handler calls
 func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
@@ -239,14 +219,16 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			// Create completion
 			completion := nexusrpc.CompleteOperationOptions{}
 
+			executionKey := chasm.ExecutionKey{
+				NamespaceID: "namespace-id",
+				BusinessID:  "workflow-id",
+				RunID:       "run-id",
+			}
 			testEngine := chasmtest.NewEngine(t, chasmRegistry)
+			engineCtx := chasm.NewEngineContext(context.Background(), testEngine)
 			_, err = chasm.StartExecution[*mockNexusCompletionGetterComponent, struct{}](
-				testEngine.EngineContext(),
-				chasm.ExecutionKey{
-					NamespaceID: "namespace-id",
-					BusinessID:  "workflow-id",
-					RunID:       "run-id",
-				},
+				engineCtx,
+				executionKey,
 				func(ctx chasm.MutableContext, _ struct{}) (*mockNexusCompletionGetterComponent, error) {
 					return &mockNexusCompletionGetterComponent{
 						completion: completion,
@@ -257,15 +239,25 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			)
 			require.NoError(t, err)
 
+			callbackRef := testEngine.Ref(callback)
 			err = handler.Execute(
-				testEngine.EngineContext(),
-				testEngine.Ref(callback),
+				engineCtx,
+				callbackRef,
 				chasm.TaskAttributes{Destination: "http://localhost"},
 				&callbackspb.InvocationTask{Attempt: 0},
 			)
 
-			// Verify the outcome and tasks
-			tc.assertOutcome(t, readCallbackFromEngine(t, testEngine, callback), err)
+			// Verify outcome by reading component state directly
+			var resultCallback *Callback
+			require.NoError(t, testEngine.ReadComponent(
+				engineCtx,
+				callbackRef,
+				func(_ chasm.Context, c chasm.Component) error {
+					resultCallback = c.(*Callback)
+					return nil
+				},
+			))
+			tc.assertOutcome(t, resultCallback, err)
 		})
 	}
 }

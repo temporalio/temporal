@@ -1,6 +1,7 @@
 package scheduler_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -118,8 +119,9 @@ func TestHandler_CreateFromMigrationState_Sentinel(t *testing.T) {
 
 	h := scheduler.NewTestHandler(logger)
 	testEngine := chasmtest.NewEngine(t, registry)
+	engineCtx := chasm.NewEngineContext(context.Background(), testEngine)
 	_, err := chasm.StartExecution[*scheduler.Scheduler, struct{}](
-		testEngine.EngineContext(),
+		engineCtx,
 		chasm.ExecutionKey{
 			NamespaceID: namespaceID,
 			BusinessID:  scheduleID,
@@ -131,7 +133,6 @@ func TestHandler_CreateFromMigrationState_Sentinel(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	engineCtx := testEngine.EngineContext()
 	_, err = h.TestCreateFromMigrationState(engineCtx, &schedulerpb.CreateFromMigrationStateRequest{
 		NamespaceId: namespaceID,
 		State: &schedulerpb.SchedulerMigrationState{
@@ -156,8 +157,9 @@ func TestHandler_MigrateToWorkflow_Sentinel(t *testing.T) {
 
 	h := scheduler.NewTestHandler(logger)
 	testEngine := chasmtest.NewEngine(t, registry)
+	engineCtx := chasm.NewEngineContext(context.Background(), testEngine)
 	_, err := chasm.StartExecution[*scheduler.Scheduler, struct{}](
-		testEngine.EngineContext(),
+		engineCtx,
 		chasm.ExecutionKey{
 			NamespaceID: namespaceID,
 			BusinessID:  scheduleID,
@@ -169,7 +171,6 @@ func TestHandler_MigrateToWorkflow_Sentinel(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	engineCtx := testEngine.EngineContext()
 	_, err = h.TestMigrateToWorkflow(engineCtx, &schedulerpb.MigrateToWorkflowRequest{
 		NamespaceId: namespaceID,
 		ScheduleId:  scheduleID,

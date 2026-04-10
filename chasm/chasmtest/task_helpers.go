@@ -1,6 +1,7 @@
 package chasmtest
 
 import (
+	"context"
 	"fmt"
 
 	"go.temporal.io/server/chasm"
@@ -10,19 +11,23 @@ import (
 // It returns taskDropped=true if [chasm.PureTaskHandler.Validate] returns (false, nil),
 // indicating the task is no longer relevant and was not executed.
 //
+// For root components, construct ref with [chasm.NewComponentRef]. For subcomponents, use
+// [Engine.Ref] to look up the ref from the component instance.
+//
 // This helper ensures that Validate is always exercised alongside Execute, matching the real
-// engine's behavior. Use [MockMutableContext] directly when you need to inspect the typed
-// task payloads added to the context during execution.
+// engine's behavior. Use [chasm.MockMutableContext] directly when you need to inspect the
+// typed task payloads added to the context during execution.
 func ExecutePureTask[C chasm.Component, T any](
+	ctx context.Context,
 	e *Engine,
-	component C,
+	ref chasm.ComponentRef,
 	handler chasm.PureTaskHandler[C, T],
 	attrs chasm.TaskAttributes,
 	task T,
 ) (taskDropped bool, err error) {
-	ref := e.Ref(component)
+	engineCtx := chasm.NewEngineContext(ctx, e)
 	_, err = e.UpdateComponent(
-		e.EngineContext(),
+		engineCtx,
 		ref,
 		func(mutableCtx chasm.MutableContext, c chasm.Component) error {
 			typedC, ok := c.(C)
@@ -45,34 +50,39 @@ func ExecutePureTask[C chasm.Component, T any](
 }
 
 // ExecuteSideEffectTask validates and executes a side-effect task.
-// Validation runs via [Engine.ReadComponent] (read-only), and if valid, [chasm.SideEffectTaskHandler.Execute]
-// is called with the engine context so that [chasm.UpdateComponent] and [chasm.ReadComponent]
-// inside the handler route through the test engine.
+// Validation runs via [Engine.ReadComponent] (read-only), and if valid,
+// [chasm.SideEffectTaskHandler.Execute] is called with an engine context so that
+// [chasm.UpdateComponent] and [chasm.ReadComponent] inside the handler route through
+// the test engine.
 //
 // It returns taskDropped=true if [chasm.SideEffectTaskHandler.Validate] returns (false, nil),
 // indicating the task is no longer relevant and was not executed.
 //
-// Use [MockMutableContext] directly when you need to inspect typed task payloads added
+// For root components, construct ref with [chasm.NewComponentRef]. For subcomponents, use
+// [Engine.Ref] to look up the ref from the component instance.
+//
+// Use [chasm.MockMutableContext] directly when you need to inspect typed task payloads added
 // during execution, since the real engine serializes them into history-layer tasks.
 func ExecuteSideEffectTask[C chasm.Component, T any](
+	ctx context.Context,
 	e *Engine,
-	component C,
+	ref chasm.ComponentRef,
 	handler chasm.SideEffectTaskHandler[C, T],
 	attrs chasm.TaskAttributes,
 	task T,
 ) (taskDropped bool, err error) {
-	ref := e.Ref(component)
+	engineCtx := chasm.NewEngineContext(ctx, e)
 
 	var valid bool
 	if err = e.ReadComponent(
-		e.EngineContext(),
+		engineCtx,
 		ref,
-		func(ctx chasm.Context, c chasm.Component) error {
+		func(chasmCtx chasm.Context, c chasm.Component) error {
 			typedC, ok := c.(C)
 			if !ok {
 				return fmt.Errorf("component type mismatch: got %T", c)
 			}
-			valid, err = handler.Validate(ctx, typedC, attrs, task)
+			valid, err = handler.Validate(chasmCtx, typedC, attrs, task)
 			return err
 		},
 	); err != nil {
@@ -82,5 +92,5 @@ func ExecuteSideEffectTask[C chasm.Component, T any](
 		return true, nil
 	}
 
-	return false, handler.Execute(e.EngineContext(), ref, attrs, task)
+	return false, handler.Execute(engineCtx, ref, attrs, task)
 }
