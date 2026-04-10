@@ -261,6 +261,7 @@ type (
 		timeSource             clock.TimeSource
 		logger                 log.Logger
 		metricsHandler         metrics.Handler
+		endpointRegistry       chasm.EndpointRegistry
 		stateMachineNode       *hsm.Node
 		subStateMachineDeleted bool
 
@@ -352,13 +353,14 @@ func NewMutableState(
 
 		QueryRegistry: NewQueryRegistry(),
 
-		shard:           shard,
-		clusterMetadata: shard.GetClusterMetadata(),
-		eventsCache:     eventsCache,
-		config:          shard.GetConfig(),
-		timeSource:      shard.GetTimeSource(),
-		logger:          logger,
-		metricsHandler:  shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
+		shard:            shard,
+		clusterMetadata:  shard.GetClusterMetadata(),
+		eventsCache:      eventsCache,
+		config:           shard.GetConfig(),
+		timeSource:       shard.GetTimeSource(),
+		logger:           logger,
+		metricsHandler:   shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
+		endpointRegistry: shard.EndpointRegistry(),
 	}
 
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
@@ -686,7 +688,7 @@ func (ms *MutableStateImpl) ChasmWorkflowComponent(ctx context.Context) (*chasmw
 	return wf, chasmCtx, nil
 }
 
-func (ms *MutableStateImpl) ensureChasmWorkflowComponent(ctx context.Context) {
+func (ms *MutableStateImpl) EnsureChasmWorkflowComponent(ctx context.Context) {
 	// Initialize chasm tree once for new workflows.
 	// Using context.Background() because this is done outside an actual request context and the
 	// chasmworkflow.NewWorkflow does not actually use it currently.
@@ -715,6 +717,10 @@ func (ms *MutableStateImpl) ChasmWorkflowComponentReadOnly(ctx context.Context) 
 		return nil, nil, serviceerror.NewInternalf("expected workflow component, but got %T", rootComponent)
 	}
 	return wf, chasmCtx, nil
+}
+
+func (ms *MutableStateImpl) EndpointRegistry() chasm.EndpointRegistry {
+	return ms.endpointRegistry
 }
 
 // GetNexusCompletion converts a workflow completion event into a [nexus.OperationCompletion].
@@ -3137,7 +3143,7 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 		// Initialize chasm tree once for new workflows.
 		// Using context.Background() because this is done outside an actual request context and the
 		// chasmworkflow.NewWorkflow does not actually use it currently.
-		ms.ensureChasmWorkflowComponent(context.Background())
+		ms.EnsureChasmWorkflowComponent(context.Background())
 		return ms.addCompletionCallbacksChasm(event, requestID, completionCallbacks)
 	}
 
