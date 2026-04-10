@@ -2867,7 +2867,7 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_ChildDoesNotInhe
 				Execution: &commonpb.WorkflowExecution{WorkflowId: childID},
 			})
 			require.New(t).NoError(err)
-			assert.New(t).Equal(tv1.Deployment(), worker_versioning.DeploymentFromDeploymentVersion(
+			require.New(t).Equal(tv1.Deployment(), worker_versioning.DeploymentFromDeploymentVersion(
 				worker_versioning.DeploymentVersionFromDeployment(
 					worker_versioning.DeploymentFromExternalDeploymentVersion(
 						resp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion()))))
