@@ -817,6 +817,7 @@ func (s *Scheduler) Patch(
 		}
 		s.Schedule.State.Paused = false
 		s.Schedule.State.Notes = req.FrontendRequest.Patch.Unpause
+		s.Generator.Get(ctx).Generate(ctx)
 	}
 
 	if err := s.handlePatch(ctx, req.FrontendRequest.Patch); err != nil {
