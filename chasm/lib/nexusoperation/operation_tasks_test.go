@@ -1,6 +1,7 @@
 package nexusoperation
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"testing"
@@ -23,6 +24,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -30,6 +32,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -273,28 +276,29 @@ func TestInvocationTaskHandler_Execute(t *testing.T) {
 	handlerNexusLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	cases := []struct {
-		name                       string
-		header                     nexus.Header
-		checkStartOperationOptions func(t *testing.T, options nexus.StartOperationOptions)
-		onStartOperation           func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
-		expectedMetricOutcome      string
-		checkOutcome               func(t *testing.T, op *Operation, err error)
-		requestTimeout             time.Duration
-		schedToCloseTimeout        time.Duration
-		startToCloseTimeout        time.Duration
-		schedToStartTimeout        time.Duration
-		destinationDown            bool
-		endpointNotFound           bool
-		noUpdateComponent          bool // Set to true when the handler returns early without calling UpdateComponent.
+		name                  string
+		header                nexus.Header
+		onStartOperation      func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
+		expectedMetricOutcome string
+		checkOutcome          func(t *testing.T, op *Operation)
+		requestTimeout        time.Duration
+		schedToCloseTimeout   time.Duration
+		startToCloseTimeout   time.Duration
+		schedToStartTimeout   time.Duration
+		destinationDown       bool
+		endpointNotFound      bool
 	}{
 		{
-			name:           "async start",
-			requestTimeout: time.Hour,
-			checkStartOperationOptions: func(t *testing.T, options nexus.StartOperationOptions) {
-				require.Len(t, options.Links, 1)
+			name: "async start",
+			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+				if len(options.Links) != 1 {
+					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "expected 1 link, got %d", len(options.Links))
+				}
 				link, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(options.Links[0])
-				require.NoError(t, err)
-				protorequire.ProtoEqual(t, &commonpb.Link_WorkflowEvent{
+				if err != nil {
+					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to convert link: %v", err)
+				}
+				expectedLink := &commonpb.Link_WorkflowEvent{
 					Namespace:  "ns-name",
 					WorkflowId: "wf-id",
 					RunId:      "run-id",
@@ -304,24 +308,23 @@ func TestInvocationTaskHandler_Execute(t *testing.T) {
 							EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
 						},
 					},
-				}, link)
-			},
-			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+				}
+				if !proto.Equal(expectedLink, link) {
+					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "link mismatch: got %v, want %v", link, expectedLink)
+				}
 				nexus.AddHandlerLinks(ctx, handlerNexusLink)
 				return &nexus.HandlerStartOperationResultAsync{
 					OperationToken: "op-token",
 				}, nil
 			},
 			expectedMetricOutcome: "pending",
-			checkOutcome: func(t *testing.T, op *Operation, err error) {
-				require.NoError(t, err)
+			checkOutcome: func(t *testing.T, op *Operation) {
 				require.Equal(t, nexusoperationpb.OPERATION_STATUS_STARTED, op.Status)
 				require.Equal(t, "op-token", op.OperationToken)
 			},
 		},
 		{
 			name:                "sync start",
-			requestTimeout:      time.Hour,
 			schedToCloseTimeout: time.Hour,
 			// Pass a custom header to verify it is forwarded but the operation timeout is
 			// determined by ScheduleToCloseTimeout, not this header value.
@@ -349,14 +352,12 @@ func TestInvocationTaskHandler_Execute(t *testing.T) {
 				return &nexus.HandlerStartOperationResultSync[any]{Value: "result"}, nil
 			},
 			expectedMetricOutcome: "successful",
-			checkOutcome: func(t *testing.T, op *Operation, err error) {
-				require.NoError(t, err)
+			checkOutcome: func(t *testing.T, op *Operation) {
 				require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, op.Status)
 			},
 		},
 		{
-			name:           "sync failed",
-			requestTimeout: time.Hour,
+			name: "sync failed",
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return nil, &nexus.OperationError{
 					State:   nexus.OperationStateFailed,
@@ -367,24 +368,33 @@ func TestInvocationTaskHandler_Execute(t *testing.T) {
 				}
 			},
 			expectedMetricOutcome: "operation-unsuccessful:failed",
-			checkOutcome: func(t *testing.T, op *Operation, err error) {
-				require.NoError(t, err)
+			checkOutcome: func(t *testing.T, op *Operation) {
 				require.Equal(t, nexusoperationpb.OPERATION_STATUS_FAILED, op.Status)
-				failure := op.LastAttemptFailure
-				require.NotNil(t, failure)
-				require.Equal(t, "operation failed from handler", failure.Message)
-				require.NotNil(t, failure.GetApplicationFailureInfo())
-				require.Equal(t, "OperationError", failure.GetApplicationFailureInfo().GetType())
-				require.True(t, failure.GetApplicationFailureInfo().GetNonRetryable())
-				require.NotNil(t, failure.Cause)
-				require.Equal(t, "cause", failure.Cause.Message)
-				require.NotNil(t, failure.Cause.GetApplicationFailureInfo())
-				require.Equal(t, "NexusFailure", failure.Cause.GetApplicationFailureInfo().GetType())
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "operation failed from handler",
+					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+						ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+							Type:         "OperationError",
+							NonRetryable: true,
+						},
+					},
+					Cause: &failurepb.Failure{
+						Message: "cause",
+						FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+							ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+								Type: "NexusFailure",
+								Details: &commonpb.Payloads{Payloads: []*commonpb.Payload{{
+									Metadata: map[string][]byte{"encoding": []byte("json/plain")},
+									Data:     []byte(`{"metadata":{"encoding":"json/plain"},"details":"details"}`),
+								}}},
+							},
+						},
+					},
+				}, op.LastAttemptFailure)
 			},
 		},
 		{
-			name:           "sync canceled",
-			requestTimeout: time.Hour,
+			name: "sync canceled",
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return nil, &nexus.OperationError{
 					State:   nexus.OperationStateCanceled,
@@ -395,30 +405,36 @@ func TestInvocationTaskHandler_Execute(t *testing.T) {
 				}
 			},
 			expectedMetricOutcome: "operation-unsuccessful:canceled",
-			checkOutcome: func(t *testing.T, op *Operation, err error) {
-				require.NoError(t, err)
+			checkOutcome: func(t *testing.T, op *Operation) {
 				require.Equal(t, nexusoperationpb.OPERATION_STATUS_CANCELED, op.Status)
-				failure := op.LastAttemptFailure
-				require.NotNil(t, failure)
-				require.Equal(t, "operation canceled from handler", failure.Message)
-				require.NotNil(t, failure.GetCanceledFailureInfo())
-				require.NotNil(t, failure.Cause)
-				require.Equal(t, "cause", failure.Cause.Message)
-				require.NotNil(t, failure.Cause.GetApplicationFailureInfo())
-				require.Equal(t, "NexusFailure", failure.Cause.GetApplicationFailureInfo().GetType())
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "operation canceled from handler",
+					FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+						CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+					},
+					Cause: &failurepb.Failure{
+						Message: "cause",
+						FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+							ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+								Type: "NexusFailure",
+								Details: &commonpb.Payloads{Payloads: []*commonpb.Payload{{
+									Metadata: map[string][]byte{"encoding": []byte("json/plain")},
+									Data:     []byte(`{"metadata":{"encoding":"json/plain"},"details":"details"}`),
+								}}},
+							},
+						},
+					},
+				}, op.LastAttemptFailure)
 			},
 		},
 		{
 			name:            "transient error",
-			requestTimeout:  time.Hour,
 			destinationDown: true,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
 			},
 			expectedMetricOutcome: "handler-error:INTERNAL",
-			checkOutcome: func(t *testing.T, op *Operation, err error) {
-				var destinationDownErr *queueserrors.DestinationDownError
-				require.ErrorAs(t, err, &destinationDownErr)
+			checkOutcome: func(t *testing.T, op *Operation) {
 				require.Equal(t, nexusoperationpb.OPERATION_STATUS_BACKING_OFF, op.Status)
 				require.Equal(t, string(nexus.HandlerErrorTypeInternal), op.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
 				require.Equal(t, "internal server error", op.LastAttemptFailure.Message)
@@ -434,9 +450,7 @@ func TestInvocationTaskHandler_Execute(t *testing.T) {
 				time.Sleep(time.Millisecond * 100) //nolint:forbidigo
 				return &nexus.HandlerStartOperationResultAsync{OperationToken: "op-token"}, nil
 			},
-			checkOutcome: func(t *testing.T, op *Operation, err error) {
-				var destinationDownErr *queueserrors.DestinationDownError
-				require.ErrorAs(t, err, &destinationDownErr)
+			checkOutcome: func(t *testing.T, op *Operation) {
 				require.Equal(t, nexusoperationpb.OPERATION_STATUS_BACKING_OFF, op.Status)
 				require.NotNil(t, op.LastAttemptFailure.GetServerFailureInfo())
 				require.Equal(t, "request timed out", op.LastAttemptFailure.Message)
@@ -444,7 +458,6 @@ func TestInvocationTaskHandler_Execute(t *testing.T) {
 		},
 		{
 			name:                  "invocation timeout by ScheduleToCloseTimeout",
-			requestTimeout:        time.Hour,
 			schedToCloseTimeout:   10 * time.Millisecond,
 			destinationDown:       true,
 			expectedMetricOutcome: "request-timeout",
@@ -456,9 +469,7 @@ func TestInvocationTaskHandler_Execute(t *testing.T) {
 				time.Sleep(time.Millisecond * 100) //nolint:forbidigo
 				return &nexus.HandlerStartOperationResultAsync{OperationToken: "op-token"}, nil
 			},
-			checkOutcome: func(t *testing.T, op *Operation, err error) {
-				var destinationDownErr *queueserrors.DestinationDownError
-				require.ErrorAs(t, err, &destinationDownErr)
+			checkOutcome: func(t *testing.T, op *Operation) {
 				require.Equal(t, nexusoperationpb.OPERATION_STATUS_BACKING_OFF, op.Status)
 				require.NotNil(t, op.LastAttemptFailure.GetServerFailureInfo())
 				require.Equal(t, "request timed out", op.LastAttemptFailure.Message)
@@ -466,7 +477,6 @@ func TestInvocationTaskHandler_Execute(t *testing.T) {
 		},
 		{
 			name:                  "invocation timeout by ScheduleToStartTimeout",
-			requestTimeout:        time.Hour,
 			schedToStartTimeout:   10 * time.Millisecond,
 			destinationDown:       true,
 			expectedMetricOutcome: "request-timeout",
@@ -477,9 +487,7 @@ func TestInvocationTaskHandler_Execute(t *testing.T) {
 				time.Sleep(time.Millisecond * 100) //nolint:forbidigo
 				return &nexus.HandlerStartOperationResultAsync{OperationToken: "op-token"}, nil
 			},
-			checkOutcome: func(t *testing.T, op *Operation, err error) {
-				var destinationDownErr *queueserrors.DestinationDownError
-				require.ErrorAs(t, err, &destinationDownErr)
+			checkOutcome: func(t *testing.T, op *Operation) {
 				require.Equal(t, nexusoperationpb.OPERATION_STATUS_BACKING_OFF, op.Status)
 				require.NotNil(t, op.LastAttemptFailure.GetServerFailureInfo())
 				require.Equal(t, "request timed out", op.LastAttemptFailure.Message)
@@ -487,7 +495,6 @@ func TestInvocationTaskHandler_Execute(t *testing.T) {
 		},
 		{
 			name:                  "operation timeout header set by StartToCloseTimeout",
-			requestTimeout:        time.Hour,
 			startToCloseTimeout:   1 * time.Minute,
 			expectedMetricOutcome: "pending",
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
@@ -496,42 +503,37 @@ func TestInvocationTaskHandler_Execute(t *testing.T) {
 				}
 				return &nexus.HandlerStartOperationResultAsync{OperationToken: "op-token"}, nil
 			},
-			checkOutcome: func(t *testing.T, op *Operation, err error) {
-				require.NoError(t, err)
+			checkOutcome: func(t *testing.T, op *Operation) {
 				require.Equal(t, nexusoperationpb.OPERATION_STATUS_STARTED, op.Status)
 			},
 		},
 		{
 			name:                  "ScheduleToCloseTimeout less than MinRequestTimeout",
-			requestTimeout:        time.Hour,
 			schedToCloseTimeout:   time.Microsecond,
 			expectedMetricOutcome: "operation-timeout",
 			onStartOperation:      nil, // Should not be called.
-			checkOutcome: func(t *testing.T, op *Operation, err error) {
-				require.NoError(t, err)
+			checkOutcome: func(t *testing.T, op *Operation) {
 				require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, op.Status)
 			},
 		},
 		{
 			name:             "endpoint not found",
 			endpointNotFound: true,
-			requestTimeout:   time.Hour,
 			onStartOperation: nil, // Should not be called.
-			checkOutcome: func(t *testing.T, op *Operation, err error) {
-				require.NoError(t, err)
+			checkOutcome: func(t *testing.T, op *Operation) {
 				require.Equal(t, nexusoperationpb.OPERATION_STATUS_FAILED, op.Status)
 			},
 		},
 		{
-			name:           "token too long",
-			requestTimeout: time.Hour,
+			name: "token too long",
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return &nexus.HandlerStartOperationResultAsync{OperationToken: "12345678901"}, nil
 			},
 			expectedMetricOutcome: "invalid-operation-token",
-			checkOutcome: func(t *testing.T, op *Operation, err error) {
-				require.NoError(t, err)
+			checkOutcome: func(t *testing.T, op *Operation) {
 				require.Equal(t, nexusoperationpb.OPERATION_STATUS_FAILED, op.Status)
+				require.NotNil(t, op.LastAttemptFailure.GetServerFailureInfo())
+				require.True(t, op.LastAttemptFailure.GetServerFailureInfo().GetNonRetryable())
 			},
 		},
 	}
@@ -539,21 +541,10 @@ func TestInvocationTaskHandler_Execute(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			ctrl := gomock.NewController(t)
 			listenAddr := nexustest.AllocListenAddress()
 			h := nexustest.Handler{}
 			if tc.onStartOperation != nil {
-				h.OnStartOperation = func(
-					ctx context.Context,
-					service, operation string,
-					input *nexus.LazyValue,
-					options nexus.StartOperationOptions,
-				) (nexus.HandlerStartOperationResult[any], error) {
-					if tc.checkStartOperationOptions != nil {
-						tc.checkStartOperationOptions(t, options)
-					}
-					return tc.onStartOperation(ctx, service, operation, input, options)
-				}
+				h.OnStartOperation = tc.onStartOperation
 			}
 			nexustest.NewNexusServer(t, listenAddr, h)
 
@@ -587,29 +578,9 @@ func TestInvocationTaskHandler_Execute(t *testing.T) {
 				},
 			}
 
-			var metricsHandler metrics.Handler
-			if tc.expectedMetricOutcome != "" {
-				mockMetrics := metrics.NewMockHandler(ctrl)
-				counter := metrics.NewMockCounterIface(ctrl)
-				timer := metrics.NewMockTimerIface(ctrl)
-				mockMetrics.EXPECT().Counter(OutboundRequestCounter.Name()).Return(counter)
-				counter.EXPECT().Record(int64(1),
-					metrics.NamespaceTag("ns-name"),
-					metrics.DestinationTag("endpoint"),
-					metrics.NexusMethodTag("StartOperation"),
-					metrics.OutcomeTag(tc.expectedMetricOutcome),
-					metrics.FailureSourceTag("_unknown_"))
-				mockMetrics.EXPECT().Timer(OutboundRequestLatency.Name()).Return(timer)
-				timer.EXPECT().Record(gomock.Any(),
-					metrics.NamespaceTag("ns-name"),
-					metrics.DestinationTag("endpoint"),
-					metrics.NexusMethodTag("StartOperation"),
-					metrics.OutcomeTag(tc.expectedMetricOutcome),
-					metrics.FailureSourceTag("_unknown_"))
-				metricsHandler = mockMetrics
-			} else {
-				metricsHandler = metrics.NoopMetricsHandler
-			}
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
 
 			clientProvider := func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
 				return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
@@ -637,15 +608,35 @@ func TestInvocationTaskHandler_Execute(t *testing.T) {
 					Header:    tc.header,
 					NexusLink: callerLink,
 				},
-				endpointReg, clientProvider, metricsHandler, tc.requestTimeout)
+				endpointReg, clientProvider, metricsHandler, cmp.Or(tc.requestTimeout, time.Hour))
 
 			env.setupReadComponent()
-			if !tc.noUpdateComponent {
-				env.setupUpdateComponent()
-			}
+			env.setupUpdateComponent()
 
 			err := env.execute(&nexusoperationpb.InvocationTask{Attempt: 1})
-			tc.checkOutcome(t, op, err)
+			if tc.destinationDown {
+				var destinationDownErr *queueserrors.DestinationDownError
+				require.ErrorAs(t, err, &destinationDownErr)
+			} else {
+				require.NoError(t, err)
+			}
+			tc.checkOutcome(t, op)
+
+			if tc.expectedMetricOutcome != "" {
+				snap := capture.Snapshot()
+				counterRecordings := snap[OutboundRequestCounter.Name()]
+				require.Len(t, counterRecordings, 1)
+				require.Equal(t, int64(1), counterRecordings[0].Value)
+				require.Equal(t, "ns-name", counterRecordings[0].Tags["namespace"])
+				require.Equal(t, "endpoint", counterRecordings[0].Tags["destination"])
+				require.Equal(t, "StartOperation", counterRecordings[0].Tags["method"])
+				require.Equal(t, tc.expectedMetricOutcome, counterRecordings[0].Tags["outcome"])
+				require.Equal(t, "_unknown_", counterRecordings[0].Tags["failure_source"])
+
+				timerRecordings := snap[OutboundRequestLatency.Name()]
+				require.Len(t, timerRecordings, 1)
+				require.Equal(t, tc.expectedMetricOutcome, timerRecordings[0].Tags["outcome"])
+			}
 		})
 	}
 }
