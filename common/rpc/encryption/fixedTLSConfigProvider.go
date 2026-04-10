@@ -44,7 +44,7 @@ func (f *FixedTLSConfigProvider) GetRemoteClusterClientConfig(hostname string) (
 	if cfg, ok := f.RemoteClusterClientConfigs[hostname]; ok {
 		return cfg, nil
 	}
-	// Fall back to default/wildcard config
+	// Fall back to default config
 	return f.RemoteClusterClientConfigs[defaultRemoteCluster], nil
 }
 

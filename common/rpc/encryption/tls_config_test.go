@@ -257,6 +257,19 @@ func TestGetRemoteClusterClientConfig_NoConfig(t *testing.T) {
 	require.Nil(t, tlsCfg)
 }
 
+func TestGetRemoteClusterClientConfig_UnknownHostNoDefault(t *testing.T) {
+	cfg := config.RootTLS{
+		RemoteClusters: map[string]config.GroupTLS{
+			"cluster-a.example.com": {Client: config.ClientTLS{ForceTLS: true}},
+		},
+	}
+	provider := newTestTLSProvider(t, cfg)
+
+	tlsCfg, err := provider.GetRemoteClusterClientConfig("unknown-host.example.com")
+	require.NoError(t, err)
+	require.Nil(t, tlsCfg)
+}
+
 func TestGetRemoteClusterClientConfig_ExactMatch(t *testing.T) {
 	cfg := config.RootTLS{
 		RemoteClusters: map[string]config.GroupTLS{
@@ -291,20 +304,20 @@ func TestGetRemoteClusterClientConfig_DefaultFallback(t *testing.T) {
 func TestGetRemoteClusterClientConfig_ExactMatchTakesPriority(t *testing.T) {
 	cfg := config.RootTLS{
 		RemoteClusters: map[string]config.GroupTLS{
-			"cluster-a.example.com": {Client: config.ClientTLS{ForceTLS: true}},
+			"cluster-a.example.com": {Client: config.ClientTLS{ForceTLS: false}},
 			// Default has ForceTLS: false so IsClientEnabled() returns false → nil config
-			defaultRemoteCluster: {Client: config.ClientTLS{ForceTLS: false}},
+			defaultRemoteCluster: {Client: config.ClientTLS{ForceTLS: true}},
 		},
 	}
 	provider := newTestTLSProvider(t, cfg)
 
-	// Exact match → non-nil (ForceTLS: true)
+	// Exact match → nil (ForceTLS: false)
 	tlsCfg, err := provider.GetRemoteClusterClientConfig("cluster-a.example.com")
 	require.NoError(t, err)
-	require.NotNil(t, tlsCfg)
+	require.Nil(t, tlsCfg)
 
-	// Unknown host falls back to default (ForceTLS: false) → nil
+	// Unknown host falls back to default (ForceTLS: true) → non-nil
 	tlsCfg, err = provider.GetRemoteClusterClientConfig("unknown-host")
 	require.NoError(t, err)
-	require.Nil(t, tlsCfg)
+	require.NotNil(t, tlsCfg)
 }
