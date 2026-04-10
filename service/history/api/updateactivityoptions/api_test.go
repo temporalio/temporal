@@ -18,6 +18,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/activityoptions"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -35,173 +36,6 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
-
-func TestApplyActivityOptionsAcceptance(t *testing.T) {
-	updateOptions := &activitypb.ActivityOptions{
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: "task_queue_name"},
-		ScheduleToCloseTimeout: durationpb.New(time.Second),
-		StartToCloseTimeout:    durationpb.New(time.Second),
-		ScheduleToStartTimeout: durationpb.New(time.Second),
-		HeartbeatTimeout:       durationpb.New(time.Second),
-		Priority: &commonpb.Priority{
-			PriorityKey:    42,
-			FairnessKey:    "test_key",
-			FairnessWeight: 5.0,
-		},
-		RetryPolicy: &commonpb.RetryPolicy{
-			MaximumInterval:    durationpb.New(time.Second),
-			MaximumAttempts:    5,
-			BackoffCoefficient: 1.0,
-			InitialInterval:    durationpb.New(time.Second),
-		},
-	}
-
-	testCases := []struct {
-		name      string
-		mergeInto *activitypb.ActivityOptions
-		mergeFrom *activitypb.ActivityOptions
-		expected  *activitypb.ActivityOptions
-		mask      *fieldmaskpb.FieldMask
-	}{
-		{
-			name:      "Top-level fields with CamelCase",
-			mergeFrom: updateOptions,
-			mergeInto: &activitypb.ActivityOptions{},
-			expected:  updateOptions,
-			mask: &fieldmaskpb.FieldMask{
-				Paths: []string{
-					"TaskQueue.Name",
-					"ScheduleToCloseTimeout",
-					"ScheduleToStartTimeout",
-					"StartToCloseTimeout",
-					"HeartbeatTimeout",
-					"Priority",
-					"RetryPolicy",
-				},
-			},
-		},
-		{
-			name:      "Top-level fields with snake_case",
-			mergeFrom: updateOptions,
-			mergeInto: &activitypb.ActivityOptions{},
-			expected:  updateOptions,
-			mask: &fieldmaskpb.FieldMask{
-				Paths: []string{
-					"task_queue.name",
-					"schedule_to_close_timeout",
-					"schedule_to_start_timeout",
-					"start_to_close_timeout",
-					"heartbeat_timeout",
-					"priority",
-					"retry_policy",
-				},
-			},
-		},
-		{
-			name: "Sub-fields",
-			mergeFrom: &activitypb.ActivityOptions{
-				Priority: &commonpb.Priority{
-					PriorityKey:    99,
-					FairnessKey:    "newKey",
-					FairnessWeight: 7.5,
-				},
-				RetryPolicy: &commonpb.RetryPolicy{
-					MaximumInterval:    durationpb.New(time.Second),
-					MaximumAttempts:    5,
-					BackoffCoefficient: 1.0,
-					InitialInterval:    durationpb.New(time.Second),
-				},
-			},
-			mergeInto: &activitypb.ActivityOptions{
-				Priority: &commonpb.Priority{
-					PriorityKey:    10,
-					FairnessKey:    "oldKey",
-					FairnessWeight: 1.0,
-				},
-				RetryPolicy: &commonpb.RetryPolicy{},
-			},
-			expected: &activitypb.ActivityOptions{
-				Priority: &commonpb.Priority{
-					PriorityKey:    99,
-					FairnessKey:    "newKey",
-					FairnessWeight: 7.5,
-				},
-				RetryPolicy: &commonpb.RetryPolicy{
-					MaximumInterval:    durationpb.New(time.Second),
-					MaximumAttempts:    5,
-					BackoffCoefficient: 1.0,
-					InitialInterval:    durationpb.New(time.Second),
-				},
-			},
-			mask: &fieldmaskpb.FieldMask{
-				Paths: []string{
-					"priority.priority_key",
-					"priority.fairness_key",
-					"priority.fairness_weight",
-					"retry_policy.backoff_coefficient",
-					"retry_policy.initial_interval",
-					"retry_policy.maximum_interval",
-					"retry_policy.maximum_attempts",
-				},
-			},
-		},
-	}
-	for _, tc := range testCases {
-		updateFields := util.ParseFieldMask(tc.mask)
-
-		t.Run(tc.name, func(t *testing.T) {})
-		err := mergeActivityOptions(tc.mergeInto, tc.mergeFrom, updateFields)
-		assert.NoError(t, err)
-		assert.Equal(t, tc.mergeInto.RetryPolicy.InitialInterval, tc.expected.RetryPolicy.InitialInterval, "RetryInitialInterval")
-		assert.Equal(t, tc.mergeInto.RetryPolicy.MaximumInterval, tc.expected.RetryPolicy.MaximumInterval, "RetryMaximumInterval")
-		assert.Equal(t, tc.mergeInto.RetryPolicy.BackoffCoefficient, tc.expected.RetryPolicy.BackoffCoefficient, "RetryBackoffCoefficient")
-		assert.Equal(t, tc.mergeInto.RetryPolicy.MaximumAttempts, tc.expected.RetryPolicy.MaximumAttempts, "RetryMaximumAttempts")
-
-		assert.Equal(t, tc.mergeInto.TaskQueue, tc.expected.TaskQueue, "TaskQueue")
-
-		assert.Equal(t, tc.mergeInto.ScheduleToCloseTimeout, tc.expected.ScheduleToCloseTimeout, "ScheduleToCloseTimeout")
-		assert.Equal(t, tc.mergeInto.ScheduleToStartTimeout, tc.expected.ScheduleToStartTimeout, "ScheduleToStartTimeout")
-		assert.Equal(t, tc.mergeInto.StartToCloseTimeout, tc.expected.StartToCloseTimeout, "StartToCloseTimeout")
-		assert.Equal(t, tc.mergeInto.HeartbeatTimeout, tc.expected.HeartbeatTimeout, "HeartbeatTimeout")
-		assert.Equal(t, tc.mergeInto.Priority, tc.expected.Priority, "Priority")
-	}
-}
-
-func TestApplyActivityOptionsErrors(t *testing.T) {
-	var err error
-	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
-		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.maximum_interval"}}))
-	require.ErrorContains(t, err, "RetryPolicy is not provided")
-
-	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
-		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.maximum_attempts"}}))
-	require.ErrorContains(t, err, "RetryPolicy is not provided")
-
-	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
-		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.backoff_coefficient"}}))
-	require.ErrorContains(t, err, "RetryPolicy is not provided")
-
-	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
-		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}}))
-	require.ErrorContains(t, err, "RetryPolicy is not provided")
-
-	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
-		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"taskQueue.name"}}))
-	require.ErrorContains(t, err, "TaskQueue is not provided")
-
-	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
-		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"priority.priority_key"}}))
-	require.ErrorContains(t, err, "Priority is not provided")
-
-	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
-		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"priority.fairness_key"}}))
-	require.ErrorContains(t, err, "Priority is not provided")
-
-	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
-		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"priority.fairness_weight"}}))
-	require.ErrorContains(t, err, "Priority is not provided")
-
-}
 
 func TestApplyActivityOptionsReset(t *testing.T) {
 	options := &activitypb.ActivityOptions{
@@ -241,7 +75,7 @@ func TestApplyActivityOptionsReset(t *testing.T) {
 
 	updateFields := util.ParseFieldMask(fullMask)
 
-	err := mergeActivityOptions(options,
+	err := activityoptions.MergeActivityOptions(options,
 		&activitypb.ActivityOptions{
 			Priority: &commonpb.Priority{
 				PriorityKey: 10,

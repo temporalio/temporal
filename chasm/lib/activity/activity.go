@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/activityoptions"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -119,6 +120,9 @@ func NewStandaloneActivity(
 	)
 
 	activity := &Activity{
+		// Use common.CloneProto here because the values can change and these are all
+		// pointers to the request so changing the ActivityState will also change the 
+		// request values.
 		ActivityState: common.CloneProto(&activitypb.ActivityState{
 			ActivityType:           request.GetActivityType(),
 			TaskQueue:              request.GetTaskQueue(),
@@ -519,136 +523,41 @@ func (a *Activity) UpdateActivityExecutionOptions(
 
 // mergeActivityOptions applies the field mask from the request to the activity state.
 // The structure mirrors the field-mask logic in service/history/api/updateactivityoptions/api.go
-// for workflow-embedded activities; complexity is inherent to the per-field update pattern.
-//
-//nolint:revive // cyclomatic: field-mask application mirrors existing updateactivityoptions logic
 func (a *Activity) mergeActivityOptions(
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
 ) error {
-	opts := req.GetActivityOptions()
 	updateFields := util.ParseFieldMask(req.GetUpdateMask())
 
-	if _, ok := updateFields["taskQueue.name"]; ok {
-		if opts.GetTaskQueue() == nil {
-			return serviceerror.NewInvalidArgument("TaskQueue is not provided")
-		}
-		if a.TaskQueue == nil {
-			a.TaskQueue = opts.GetTaskQueue()
-		} else {
-			a.TaskQueue.Name = opts.GetTaskQueue().GetName()
-		}
+	// Build an ActivityOptions view of the current Activity state so we can use the shared merge function.
+	ao := &apiactivitypb.ActivityOptions{
+		TaskQueue:              a.TaskQueue,
+		ScheduleToCloseTimeout: a.ScheduleToCloseTimeout,
+		ScheduleToStartTimeout: a.ScheduleToStartTimeout,
+		StartToCloseTimeout:    a.StartToCloseTimeout,
+		HeartbeatTimeout:       a.HeartbeatTimeout,
+		Priority:               a.Priority,
+		RetryPolicy:            a.RetryPolicy,
 	}
 
-	if _, ok := updateFields["scheduleToCloseTimeout"]; ok {
-		a.ScheduleToCloseTimeout = opts.GetScheduleToCloseTimeout()
-	}
-
-	if _, ok := updateFields["scheduleToStartTimeout"]; ok {
-		a.ScheduleToStartTimeout = opts.GetScheduleToStartTimeout()
-	}
-
-	if _, ok := updateFields["startToCloseTimeout"]; ok {
-		a.StartToCloseTimeout = opts.GetStartToCloseTimeout()
-	}
-
-	if _, ok := updateFields["heartbeatTimeout"]; ok {
-		a.HeartbeatTimeout = opts.GetHeartbeatTimeout()
-	}
-
-	if _, ok := updateFields["priority"]; ok {
-		a.Priority = opts.GetPriority()
-	}
-
-	if _, ok := updateFields["priority.priorityKey"]; ok {
-		if opts.GetPriority() == nil {
-			return serviceerror.NewInvalidArgument("Priority is not provided")
-		}
-		if a.Priority == nil {
-			a.Priority = &commonpb.Priority{}
-		}
-		a.Priority.PriorityKey = opts.GetPriority().GetPriorityKey()
-	}
-
-	if _, ok := updateFields["priority.fairnessKey"]; ok {
-		if opts.GetPriority() == nil {
-			return serviceerror.NewInvalidArgument("Priority is not provided")
-		}
-		if a.Priority == nil {
-			a.Priority = &commonpb.Priority{}
-		}
-		a.Priority.FairnessKey = opts.GetPriority().GetFairnessKey()
-	}
-
-	if _, ok := updateFields["priority.fairnessWeight"]; ok {
-		if opts.GetPriority() == nil {
-			return serviceerror.NewInvalidArgument("Priority is not provided")
-		}
-		if a.Priority == nil {
-			a.Priority = &commonpb.Priority{}
-		}
-		a.Priority.FairnessWeight = opts.GetPriority().GetFairnessWeight()
-	}
-
-	if _, ok := updateFields["retryPolicy"]; ok {
-		a.RetryPolicy = opts.GetRetryPolicy()
-	}
-
-	if _, ok := updateFields["retryPolicy.initialInterval"]; ok {
-		if opts.GetRetryPolicy() == nil {
-			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
-		}
-		if a.RetryPolicy == nil {
-			a.RetryPolicy = &commonpb.RetryPolicy{}
-		}
-		a.RetryPolicy.InitialInterval = opts.GetRetryPolicy().GetInitialInterval()
-	}
-
-	if _, ok := updateFields["retryPolicy.backoffCoefficient"]; ok {
-		if opts.GetRetryPolicy() == nil {
-			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
-		}
-		if a.RetryPolicy == nil {
-			a.RetryPolicy = &commonpb.RetryPolicy{}
-		}
-		a.RetryPolicy.BackoffCoefficient = opts.GetRetryPolicy().GetBackoffCoefficient()
-	}
-
-	if _, ok := updateFields["retryPolicy.maximumInterval"]; ok {
-		if opts.GetRetryPolicy() == nil {
-			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
-		}
-		if a.RetryPolicy == nil {
-			a.RetryPolicy = &commonpb.RetryPolicy{}
-		}
-		a.RetryPolicy.MaximumInterval = opts.GetRetryPolicy().GetMaximumInterval()
-	}
-
-	if _, ok := updateFields["retryPolicy.maximumAttempts"]; ok {
-		if opts.GetRetryPolicy() == nil {
-			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
-		}
-		if a.RetryPolicy == nil {
-			a.RetryPolicy = &commonpb.RetryPolicy{}
-		}
-		a.RetryPolicy.MaximumAttempts = opts.GetRetryPolicy().GetMaximumAttempts()
+	if err := activityoptions.MergeActivityOptions(ao, req.GetActivityOptions(), updateFields); err != nil {
+		return err
 	}
 
 	// Re-normalize timeouts after the update so that relationships like
 	// start_to_close <= schedule_to_close and heartbeat <= start_to_close are preserved.
 	// This mirrors adjustActivityOptions for workflow-embedded activities.
-	updatedOpts := &apiactivitypb.ActivityOptions{
-		ScheduleToCloseTimeout: a.ScheduleToCloseTimeout,
-		ScheduleToStartTimeout: a.ScheduleToStartTimeout,
-		StartToCloseTimeout:    a.StartToCloseTimeout,
-		HeartbeatTimeout:       a.HeartbeatTimeout,
-	}
-	if err := normalizeAndValidateTimeouts(req.GetActivityId(), a.GetActivityType().GetName(), durationpb.New(0), updatedOpts); err != nil {
+	if err := normalizeAndValidateTimeouts(req.GetActivityId(), a.GetActivityType().GetName(), durationpb.New(0), ao); err != nil {
 		return err
 	}
-	a.ScheduleToCloseTimeout = updatedOpts.ScheduleToCloseTimeout
-	a.ScheduleToStartTimeout = updatedOpts.ScheduleToStartTimeout
-	a.StartToCloseTimeout = updatedOpts.StartToCloseTimeout
-	a.HeartbeatTimeout = updatedOpts.HeartbeatTimeout
+
+	// Write the merged and normalized options back to the Activity state fields.
+	a.TaskQueue = ao.TaskQueue
+	a.ScheduleToCloseTimeout = ao.ScheduleToCloseTimeout
+	a.ScheduleToStartTimeout = ao.ScheduleToStartTimeout
+	a.StartToCloseTimeout = ao.StartToCloseTimeout
+	a.HeartbeatTimeout = ao.HeartbeatTimeout
+	a.Priority = ao.Priority
+	a.RetryPolicy = ao.RetryPolicy
 
 	return nil
 }

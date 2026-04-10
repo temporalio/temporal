@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/activityoptions"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -194,7 +195,7 @@ func processActivityOptionsUpdate(
 	}
 
 	// update activity options
-	if err := mergeActivityOptions(mergeInto, mergeFrom, updateFields); err != nil {
+	if err := activityoptions.MergeActivityOptions(mergeInto, mergeFrom, updateFields); err != nil {
 		return nil, err
 	}
 
@@ -207,109 +208,6 @@ func processActivityOptionsUpdate(
 	return updateActivityOptions(mutableState, ai, adjustedOptions)
 }
 
-func mergeActivityOptions(
-	mergeInto *activitypb.ActivityOptions,
-	mergeFrom *activitypb.ActivityOptions,
-	updateFields map[string]struct{},
-) error {
-
-	if _, ok := updateFields["taskQueue.name"]; ok {
-		if mergeFrom.TaskQueue == nil {
-			return serviceerror.NewInvalidArgument("TaskQueue is not provided")
-		}
-		if mergeInto.TaskQueue == nil {
-			mergeInto.TaskQueue = mergeFrom.TaskQueue
-		}
-		mergeInto.TaskQueue.Name = mergeFrom.TaskQueue.Name
-	}
-
-	if _, ok := updateFields["scheduleToCloseTimeout"]; ok {
-		mergeInto.ScheduleToCloseTimeout = mergeFrom.ScheduleToCloseTimeout
-	}
-
-	if _, ok := updateFields["scheduleToStartTimeout"]; ok {
-		mergeInto.ScheduleToStartTimeout = mergeFrom.ScheduleToStartTimeout
-	}
-
-	if _, ok := updateFields["startToCloseTimeout"]; ok {
-		mergeInto.StartToCloseTimeout = mergeFrom.StartToCloseTimeout
-	}
-
-	if _, ok := updateFields["heartbeatTimeout"]; ok {
-		mergeInto.HeartbeatTimeout = mergeFrom.HeartbeatTimeout
-	}
-
-	if _, ok := updateFields["priority"]; ok {
-		mergeInto.Priority = mergeFrom.Priority
-	}
-
-	if _, ok := updateFields["priority.priorityKey"]; ok {
-		if mergeFrom.Priority == nil {
-			return serviceerror.NewInvalidArgument("Priority is not provided")
-		}
-		if mergeInto.Priority == nil {
-			mergeInto.Priority = &commonpb.Priority{}
-		}
-		mergeInto.Priority.PriorityKey = mergeFrom.Priority.PriorityKey
-	}
-
-	if _, ok := updateFields["priority.fairnessKey"]; ok {
-		if mergeFrom.Priority == nil {
-			return serviceerror.NewInvalidArgument("Priority is not provided")
-		}
-		if mergeInto.Priority == nil {
-			mergeInto.Priority = &commonpb.Priority{}
-		}
-		mergeInto.Priority.FairnessKey = mergeFrom.Priority.FairnessKey
-	}
-
-	if _, ok := updateFields["priority.fairnessWeight"]; ok {
-		if mergeFrom.Priority == nil {
-			return serviceerror.NewInvalidArgument("Priority is not provided")
-		}
-		if mergeInto.Priority == nil {
-			mergeInto.Priority = &commonpb.Priority{}
-		}
-		mergeInto.Priority.FairnessWeight = mergeFrom.Priority.FairnessWeight
-	}
-
-	if mergeInto.RetryPolicy == nil {
-		mergeInto.RetryPolicy = &commonpb.RetryPolicy{}
-	}
-
-	if _, ok := updateFields["retryPolicy"]; ok {
-		mergeInto.RetryPolicy = mergeFrom.RetryPolicy
-	}
-
-	if _, ok := updateFields["retryPolicy.initialInterval"]; ok {
-		if mergeFrom.RetryPolicy == nil {
-			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
-		}
-		mergeInto.RetryPolicy.InitialInterval = mergeFrom.RetryPolicy.InitialInterval
-	}
-
-	if _, ok := updateFields["retryPolicy.backoffCoefficient"]; ok {
-		if mergeFrom.RetryPolicy == nil {
-			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
-		}
-		mergeInto.RetryPolicy.BackoffCoefficient = mergeFrom.RetryPolicy.BackoffCoefficient
-	}
-
-	if _, ok := updateFields["retryPolicy.maximumInterval"]; ok {
-		if mergeFrom.RetryPolicy == nil {
-			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
-		}
-		mergeInto.RetryPolicy.MaximumInterval = mergeFrom.RetryPolicy.MaximumInterval
-	}
-	if _, ok := updateFields["retryPolicy.maximumAttempts"]; ok {
-		if mergeFrom.RetryPolicy == nil {
-			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
-		}
-		mergeInto.RetryPolicy.MaximumAttempts = mergeFrom.RetryPolicy.MaximumAttempts
-	}
-
-	return nil
-}
 
 func adjustActivityOptions(
 	validator *api.CommandAttrValidator,
