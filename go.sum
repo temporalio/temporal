@@ -440,8 +440,8 @@ go.opentelemetry.io/otel/trace v1.40.0 h1:WA4etStDttCSYuhwvEa8OP8I5EWu24lkOzp+ZY
 go.opentelemetry.io/otel/trace v1.40.0/go.mod h1:zeAhriXecNGP/s2SEG3+Y8X9ujcJOTqQ5RgdEJcawiA=
 go.opentelemetry.io/proto/otlp v1.7.1 h1:gTOMpGDb0WTBOP8JaO72iL3auEZhVmAQg4ipjOVAtj4=
 go.opentelemetry.io/proto/otlp v1.7.1/go.mod h1:b2rVh6rfI/s2pHWNlB7ILJcRALpcNDzKhACevjI+ZnE=
-go.temporal.io/api v1.62.8-0.20260407025816-369299531b06 h1:7JWnecOGX/ELls2d05t+6FiILy0n2RBXBNDtB2IVYgY=
-go.temporal.io/api v1.62.8-0.20260407025816-369299531b06/go.mod h1:iaxoP/9OXMJcQkETTECfwYq4cw/bj4nwov8b3ZLVnXM=
+go.temporal.io/api v1.62.8-0.20260410153341-012c442408ec h1:fz9tgwU+tZQcWvCj5INbV7WYwDgvV5H2uPOoSXPVZ3U=
+go.temporal.io/api v1.62.8-0.20260410153341-012c442408ec/go.mod h1:iaxoP/9OXMJcQkETTECfwYq4cw/bj4nwov8b3ZLVnXM=
 go.temporal.io/auto-scaled-workers v0.0.0-20260401235702-f2721a623799 h1:M+eqXvIdNCCf5wIX2no7lLuCjdhmqoIKlcPUZIo9aPg=
 go.temporal.io/auto-scaled-workers v0.0.0-20260401235702-f2721a623799/go.mod h1:gni0wHhtx7BbY/Hr41ea0JENWQAlWqQbxXqXQ7p2ONo=
 go.temporal.io/sdk v1.41.1 h1:yOpvsHyDD1lNuwlGBv/SUodCPhjv9nDeC9lLHW/fJUA=

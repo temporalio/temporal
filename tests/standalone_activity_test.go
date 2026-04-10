@@ -5021,7 +5021,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		require.Equal(t, callbackURL, cbInfo.GetCallback().GetNexus().GetUrl())
 		require.Equal(t, enumspb.CALLBACK_STATE_STANDBY, cbInfo.GetState())
 		require.NotNil(t, cbInfo.GetRegistrationTime())
-		require.NotNil(t, cbInfo.GetTrigger().GetWorkflowClosed())
+		require.NotNil(t, cbInfo.GetTrigger().GetActivityClosed())
 	})
 
 	t.Run("ExceedsMaxCallbacksLimit", func(t *testing.T) {

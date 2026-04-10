@@ -13,7 +13,6 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -877,12 +876,12 @@ func (a *Activity) buildDescribeActivityExecutionResponse(
 	}, nil
 }
 
-func (a *Activity) buildCallbackInfos(ctx chasm.Context) ([]*workflowpb.CallbackInfo, error) {
+func (a *Activity) buildCallbackInfos(ctx chasm.Context) ([]*apiactivitypb.CallbackInfo, error) {
 	if len(a.Callbacks) == 0 {
 		return nil, nil
 	}
 
-	cbInfos := make([]*workflowpb.CallbackInfo, 0, len(a.Callbacks))
+	cbInfos := make([]*apiactivitypb.CallbackInfo, 0, len(a.Callbacks))
 	for _, field := range a.Callbacks {
 		cb := field.Get(ctx)
 
@@ -909,10 +908,9 @@ func (a *Activity) buildCallbackInfos(ctx chasm.Context) ([]*workflowpb.Callback
 			return nil, serviceerror.NewInternalf("unknown callback state: %v", cb.Status)
 		}
 
-		cbInfos = append(cbInfos, &workflowpb.CallbackInfo{
-			Callback: cbSpec,
-			// WorkflowClosed is the only trigger variant in the proto.
-			Trigger:                 &workflowpb.CallbackInfo_Trigger{Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{}},
+		cbInfos = append(cbInfos, &apiactivitypb.CallbackInfo{
+			Callback:                cbSpec,
+			Trigger:                 &apiactivitypb.CallbackInfo_Trigger{Variant: &apiactivitypb.CallbackInfo_Trigger_ActivityClosed{}},
 			RegistrationTime:        cb.RegistrationTime,
 			State:                   state,
 			Attempt:                 cb.Attempt,
