@@ -2672,6 +2672,56 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 		"expected StartToCloseTimeout but is %s", describeResp3.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 }
 
+// TestStartToCloseTimeout_WhileCancelRequested verifies that an activity
+// times out due to start-to-close timeout, after a cancellation request has been accepted.
+func (s *standaloneActivityTestSuite) TestStartToCloseTimeout_WhileCancelRequested() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := testcore.RandomizeStr(t.Name())
+
+	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:           s.Namespace().String(),
+		ActivityId:          activityID,
+		ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+		StartToCloseTimeout: durationpb.New(2 * time.Second),
+		RetryPolicy:         &commonpb.RetryPolicy{MaximumAttempts: 1},
+	})
+	require.NoError(t, err)
+
+	// Worker accepts the task — activity is STARTED.
+	_, err = s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+	})
+	require.NoError(t, err)
+
+	// Request cancellation — activity moves to CANCEL_REQUESTED.
+	_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      startResp.RunId,
+		Identity:   "canceller",
+		RequestId:  "cancel-req-1",
+	})
+	require.NoError(t, err)
+
+	// Worker ignores cancellation and doesn't respond.
+	// The start-to-close timeout (2s) should still fire.
+	pollOutcome, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      startResp.RunId,
+	})
+	require.NoError(t, err)
+	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		pollOutcome.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+		"activity in CANCEL_REQUESTED should still time out via START_TO_CLOSE")
+}
+
 // TestScheduleToStartTimeout tests that a schedule-to-start timeout is recorded after the activity is
 // created but never started. It also verifies that DescribeActivityExecution can be used to long-poll for a TimedOut
 // state change caused by execution of a timer task.

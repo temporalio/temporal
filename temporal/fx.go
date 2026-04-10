@@ -555,7 +555,7 @@ func genericFrontendServiceProvider(
 			case primitives.FrontendService:
 				return params.ClaimMapper
 			case primitives.InternalFrontendService:
-				return authorization.NewNoopClaimMapper()
+				return authorization.NewInternalClaimMapper()
 			default:
 				panic("Unexpected frontend service name")
 			}
