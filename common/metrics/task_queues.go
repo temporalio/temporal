@@ -56,6 +56,9 @@ func GetPerTaskQueuePartitionIDScope(
 	} else if normalPartition, ok := partition.(*tqid.NormalPartition); ok && partitionIDBreakdown {
 		value = strconv.Itoa(normalPartition.PartitionId())
 	} else {
+		if _, ok := partition.(*tqid.WorkerCommandsPartition); ok {
+			taskQueueBreakdown = false
+		}
 		value = partition.MetricTag()
 	}
 
@@ -64,7 +67,7 @@ func GetPerTaskQueuePartitionIDScope(
 }
 
 // GetPerTaskQueuePartitionTypeScope returns GetPerTaskQueueScope scope plus a "partition" tag which
-// can be "__normal__", "__sticky__", or "_unknown_".
+// can be "__normal__", "__sticky__", "__worker_commands__", or "_unknown_".
 func GetPerTaskQueuePartitionTypeScope(
 	handler Handler,
 	namespaceName string,
@@ -76,6 +79,9 @@ func GetPerTaskQueuePartitionTypeScope(
 	if partition == nil {
 		value = unknownValue
 	} else {
+		if _, ok := partition.(*tqid.WorkerCommandsPartition); ok {
+			taskQueueBreakdown = false
+		}
 		value = partition.MetricTag()
 	}
 
