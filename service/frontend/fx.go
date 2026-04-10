@@ -555,14 +555,21 @@ func NamespaceCountLimitInterceptorProvider(
 	)
 }
 
+type NamespaceValidatorInterceptorParams struct {
+	fx.In
+	ServiceConfig                          *Config
+	NamespaceRegistry                      namespace.Registry
+	AdditionalAllowedMethodsDuringHandover []string `group:"additionalAllowedMethodsDuringHandover"`
+}
+
 func NamespaceValidatorInterceptorProvider(
-	serviceConfig *Config,
-	namespaceRegistry namespace.Registry,
+	params NamespaceValidatorInterceptorParams,
 ) *interceptor.NamespaceValidatorInterceptor {
 	return interceptor.NewNamespaceValidatorInterceptor(
-		namespaceRegistry,
-		serviceConfig.EnableTokenNamespaceEnforcement,
-		serviceConfig.MaxIDLengthLimit,
+		params.NamespaceRegistry,
+		params.ServiceConfig.EnableTokenNamespaceEnforcement,
+		params.ServiceConfig.MaxIDLengthLimit,
+		params.AdditionalAllowedMethodsDuringHandover,
 	)
 }
 

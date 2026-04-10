@@ -143,7 +143,6 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		engineFuture:       future.NewFuture[historyi.Engine](),
 		shardInfo:          config.ShardInfo,
 		remoteClusterInfos: make(map[string]*remoteClusterInfo),
-		handoverNamespaces: make(map[namespace.Name]*namespaceHandOverInfo),
 
 		clusterMetadata:         clusterMetadata,
 		timeSource:              t.TimeSource,
@@ -171,6 +170,14 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		},
 	)
 	ctx.taskKeyManager.setRangeID(config.ShardInfo.RangeId)
+	ctx.handoverTracker = NewDefaultHandoverTrackerFactory()(HandoverTrackerParams{
+		ClusterMetadata:         clusterMetadata,
+		GetMaxReplicationTaskID: ctx.getMaxReplicationTaskID,
+		ErrorByStateFn:          ctx.errorByState,
+		NotifyReplicationFn:     ctx.notifyReplicationQueueProcessor,
+		NamespaceRegistry:       registry,
+		Logger:                  ctx.contextTaggedLogger,
+	})
 	return ctx
 }
 

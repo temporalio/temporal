@@ -57,8 +57,9 @@ type (
 		TaskCategoryRegistry        tasks.TaskCategoryRegistry
 		EventsCache                 events.Cache
 
-		StateMachineRegistry *hsm.Registry
-		ChasmRegistry        *chasm.Registry
+		StateMachineRegistry   *hsm.Registry
+		ChasmRegistry          *chasm.Registry
+		HandoverTrackerFactory HandoverTrackerFactory
 	}
 
 	contextFactoryImpl struct {
@@ -101,6 +102,7 @@ func (c *contextFactoryImpl) CreateContext(
 		c.EventsCache,
 		c.StateMachineRegistry,
 		c.ChasmRegistry,
+		c.HandoverTrackerFactory,
 	)
 	if err != nil {
 		return nil, err

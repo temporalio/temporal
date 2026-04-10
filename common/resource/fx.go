@@ -86,6 +86,7 @@ var Module = fx.Options(
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
 	fx.Provide(NamespaceRegistryProvider),
+	fx.Provide(func() namespace.NamespaceStateChangedFn { return nsregistry.DefaultNamespaceStateChanged }),
 	nsregistry.RegistryLifetimeHooksModule,
 	fx.Provide(fx.Annotate(
 		func(p namespace.Registry) pingable.Pingable { return p },
@@ -215,23 +216,29 @@ func SearchAttributeValidatorProvider(
 	)
 }
 
-func NamespaceRegistryProvider(
-	logger log.SnTaggedLogger,
-	metricsHandler metrics.Handler,
-	clusterMetadata cluster.Metadata,
-	metadataManager persistence.MetadataManager,
-	dynamicCollection *dynamicconfig.Collection,
-	replicationResolverFactory namespace.ReplicationResolverFactory,
-) namespace.Registry {
+type NamespaceRegistryParams struct {
+	fx.In
+
+	Logger                     log.SnTaggedLogger
+	MetricsHandler             metrics.Handler
+	ClusterMetadata            cluster.Metadata
+	MetadataManager            persistence.MetadataManager
+	DynamicCollection          *dynamicconfig.Collection
+	ReplicationResolverFactory namespace.ReplicationResolverFactory
+	NamespaceStateChangedFn    namespace.NamespaceStateChangedFn
+}
+
+func NamespaceRegistryProvider(params NamespaceRegistryParams) namespace.Registry {
 	return nsregistry.NewRegistry(
-		metadataManager,
-		clusterMetadata.IsGlobalNamespaceEnabled(),
-		clusterMetadata.GetCurrentClusterName(),
-		dynamicconfig.NamespaceCacheRefreshInterval.Get(dynamicCollection),
-		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection),
-		metricsHandler,
-		logger,
-		replicationResolverFactory,
+		params.MetadataManager,
+		params.ClusterMetadata.IsGlobalNamespaceEnabled(),
+		params.ClusterMetadata.GetCurrentClusterName(),
+		dynamicconfig.NamespaceCacheRefreshInterval.Get(params.DynamicCollection),
+		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(params.DynamicCollection),
+		params.MetricsHandler,
+		params.Logger,
+		params.ReplicationResolverFactory,
+		params.NamespaceStateChangedFn,
 	)
 }
 

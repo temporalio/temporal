@@ -5,14 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"math"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -70,8 +68,6 @@ const (
 const (
 	// ShardUpdateQueueMetricsInterval is the minimum amount of time between updates to a shard's queue metrics
 	queueMetricUpdateInterval = 5 * time.Minute
-
-	pendingMaxReplicationTaskID = math.MaxInt64
 )
 
 var (
@@ -143,7 +139,7 @@ type (
 
 		// exist only in memory
 		remoteClusterInfos      map[string]*remoteClusterInfo
-		handoverNamespaces      map[namespace.Name]*namespaceHandOverInfo // keyed on namespace name
+		handoverTracker         HandoverTracker
 		acquireShardRetryPolicy backoff.RetryPolicy
 
 		stateMachineRegistry *hsm.Registry
@@ -469,50 +465,10 @@ func (s *ContextImpl) UpdateReplicatorDLQAckLevel(
 	return nil
 }
 
-func (s *ContextImpl) UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDb bool) {
-	nsName := ns.Name()
-	// NOTE: replication state field won't be replicated and currently we only update a namespace
-	// to handover state from active cluster, so the second condition will always be true. Adding
-	// it here to be more safe in case above assumption no longer holds in the future.
-	isHandoverNamespace := ns.IsGlobalNamespace() &&
-		ns.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) &&
-		ns.ReplicationState("") == enumspb.REPLICATION_STATE_HANDOVER
-
+func (s *ContextImpl) UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDB bool) {
 	s.wLock()
-	if deletedFromDb || !isHandoverNamespace {
-		delete(s.handoverNamespaces, ns.Name())
-		s.wUnlock()
-		return
-	}
-
-	maxReplicationTaskID := s.taskKeyManager.getExclusiveReaderHighWatermark(tasks.CategoryReplication).TaskID - 1
-	if s.errorByState() != nil {
-		// if shard state is not acquired, we don't know that's the max taskID
-		// as there might be in-flight requests
-		maxReplicationTaskID = pendingMaxReplicationTaskID
-	}
-
-	if handover, ok := s.handoverNamespaces[nsName]; ok {
-		if handover.NotificationVersion < ns.NotificationVersion() {
-			handover.NotificationVersion = ns.NotificationVersion()
-			handover.MaxReplicationTaskID = maxReplicationTaskID
-		}
-	} else {
-		s.handoverNamespaces[nsName] = &namespaceHandOverInfo{
-			NotificationVersion:  ns.NotificationVersion(),
-			MaxReplicationTaskID: maxReplicationTaskID,
-		}
-	}
-
+	s.handoverTracker.UpdateHandoverState(ns, deletedFromDB)
 	s.wUnlock()
-
-	if maxReplicationTaskID != pendingMaxReplicationTaskID {
-		// notification is for making sure replication queue is able to
-		// ack to the recorded taskID. If the taskID is pending, then
-		// don't notify. Otherwise, replication queue will think (for a period of time)
-		// that the max generated taskID is pendingMaxReplicationTaskID which is MaxInt64.
-		s.notifyReplicationQueueProcessor(maxReplicationTaskID)
-	}
 }
 
 func (s *ContextImpl) AddTasks(
@@ -598,7 +554,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 		return nil, err
 	}
 
-	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name()); err != nil {
+	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name(), request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId); err != nil {
 		s.wUnlock()
 		return nil, err
 	}
@@ -656,7 +612,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 		return nil, err
 	}
 
-	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name()); err != nil {
+	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name(), request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId); err != nil {
 		s.wUnlock()
 		return nil, err
 	}
@@ -734,7 +690,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 		return nil, err
 	}
 
-	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name()); err != nil {
+	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name(), request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId); err != nil {
 		s.wUnlock()
 		return nil, err
 	}
@@ -796,7 +752,7 @@ func (s *ContextImpl) SetWorkflowExecution(
 		return nil, err
 	}
 
-	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name()); err != nil {
+	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name(), request.SetWorkflowSnapshot.ExecutionInfo.WorkflowId); err != nil {
 		s.wUnlock()
 		return nil, err
 	}
@@ -878,7 +834,7 @@ func (s *ContextImpl) addTasksSemaphoreAcquired(
 		s.wUnlock()
 		return err
 	}
-	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name()); err != nil {
+	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name(), request.WorkflowID); err != nil {
 		s.wUnlock()
 		return err
 	}
@@ -1171,8 +1127,9 @@ func (s *ContextImpl) errorByState() error {
 
 func (s *ContextImpl) errorByNamespaceStateLocked(
 	namespaceName namespace.Name,
+	workflowID string,
 ) error {
-	if _, ok := s.handoverNamespaces[namespaceName]; ok {
+	if s.handoverTracker.IsInHandover(namespaceName, workflowID) {
 		return consts.ErrNamespaceHandover
 	}
 	return nil
@@ -1775,15 +1732,15 @@ func (s *ContextImpl) updateHandoverNamespacePendingTaskID() {
 		return
 	}
 
-	maxReplicationTaskID := s.taskKeyManager.getExclusiveReaderHighWatermark(tasks.CategoryReplication).TaskID - 1
-	for namespaceName, handoverInfo := range s.handoverNamespaces {
-		if handoverInfo.MaxReplicationTaskID == pendingMaxReplicationTaskID {
-			s.handoverNamespaces[namespaceName].MaxReplicationTaskID = maxReplicationTaskID
-		}
-	}
+	maxReplicationTaskID := s.getMaxReplicationTaskID()
+	s.handoverTracker.ResolvePendingTaskIDs(maxReplicationTaskID)
 	s.wUnlock()
 
 	s.notifyReplicationQueueProcessor(maxReplicationTaskID)
+}
+
+func (s *ContextImpl) getMaxReplicationTaskID() int64 {
+	return s.taskKeyManager.getExclusiveReaderHighWatermark(tasks.CategoryReplication).TaskID - 1
 }
 
 func (s *ContextImpl) notifyReplicationQueueProcessor(taskID int64) {
@@ -1883,7 +1840,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 
 func (s *ContextImpl) GetReplicationStatus(clusterNames []string) (map[string]*historyservice.ShardReplicationStatusPerCluster, map[string]*historyservice.HandoverNamespaceInfo, error) {
 	remoteClusters := make(map[string]*historyservice.ShardReplicationStatusPerCluster)
-	handoverNamespaces := make(map[string]*historyservice.HandoverNamespaceInfo)
+	var handoverNamespaces map[string]*historyservice.HandoverNamespaceInfo
 	clusterInfo := s.clusterMetadata.GetAllClusterInfo()
 	s.rLock()
 	defer s.rUnlock()
@@ -1927,11 +1884,7 @@ func (s *ContextImpl) GetReplicationStatus(clusterNames []string) (map[string]*h
 		}
 	}
 
-	for k, v := range s.handoverNamespaces {
-		handoverNamespaces[k.String()] = &historyservice.HandoverNamespaceInfo{
-			HandoverReplicationTaskId: v.MaxReplicationTaskID,
-		}
-	}
+	handoverNamespaces = s.handoverTracker.GetHandoverNamespaces()
 
 	return remoteClusters, handoverNamespaces, nil
 }
@@ -2096,6 +2049,7 @@ func newContext(
 	eventsCache events.Cache,
 	stateMachineRegistry *hsm.Registry,
 	chasmRegistry *chasm.Registry,
+	handoverTrackerFactory HandoverTrackerFactory,
 ) (*ContextImpl, error) {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 	sequenceID := atomic.AddInt64(&shardContextSequenceID, 1)
@@ -2137,7 +2091,6 @@ func newContext(
 		archivalMetadata:        archivalMetadata,
 		hostInfoProvider:        hostInfoProvider,
 		taskCategoryRegistry:    taskCategoryRegistry,
-		handoverNamespaces:      make(map[namespace.Name]*namespaceHandOverInfo),
 		lifecycleCtx:            lifecycleCtx,
 		lifecycleCancel:         lifecycleCancel,
 		engineFuture:            future.NewFuture[historyi.Engine](),
@@ -2155,6 +2108,14 @@ func newContext(
 			return shardContext.renewRangeLocked(false)
 		},
 	)
+	shardContext.handoverTracker = handoverTrackerFactory(HandoverTrackerParams{
+		ClusterMetadata:         clusterMetadata,
+		GetMaxReplicationTaskID: shardContext.getMaxReplicationTaskID,
+		ErrorByStateFn:          shardContext.errorByState,
+		NotifyReplicationFn:     shardContext.notifyReplicationQueueProcessor,
+		NamespaceRegistry:       namespaceRegistry,
+		Logger:                  taggedLogger,
+	})
 	if shardContext.GetConfig().EnableHostLevelEventsCache() {
 		shardContext.eventsCache = eventsCache
 	} else {

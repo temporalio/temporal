@@ -178,6 +178,7 @@ func (c *operationContext) interceptRequest(
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
+	// Nexus requests are not tied to a business ID, hence the empty string.
 	if err := c.namespaceValidationInterceptor.ValidateState(c.namespace, c.apiName, ""); err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("invalid_namespace_state"))
 		return commonnexus.ConvertGRPCError(err, false)
