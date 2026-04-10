@@ -2777,8 +2777,9 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_RetryInheritsIni
 }
 
 // TestPinnedCaN_UseRampingVersionOnCaN_ChildDoesNotInherit tests that a child workflow started
-// by the UseRampingVersion run does not inherit UseRampingVersion — it is routed normally
-// to the Target Version (current), not the ramping version.
+// by the UseRampingVersion run does not inherit UseRampingVersion — it is routed to the same version
+// as its parent based on InheritedAutoUpgradeInfo, and therefore starts on v2 also, but we confirm that
+// it does not inherit UseRampingVersion.
 func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_ChildDoesNotInherit() {
 	s.RunTestWithMatchingBehavior(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -2841,8 +2842,8 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_ChildDoesNotInhe
 			})
 		s.WaitForChannel(ctx, parentWFT1Done)
 
-		// Child's first WFT must land on v1 (current), NOT v2 (ramping).
-		// UseRampingVersion is not inherited by child workflows.
+		// Child's first WFT lands on v2 because of normal InheritedAutoUpgradeInfo propagation.
+		// Child workflows do NOT inherit UseRampingVersion.
 		childWFTDone := make(chan struct{})
 		s.pollWftAndHandle(tv1, false, childWFTDone,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -2860,17 +2861,33 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_ChildDoesNotInhe
 			})
 		s.WaitForChannel(ctx, parentWFT2Done)
 
-		// Verify the child ended on v1 (not v2)
+		// Verify the child ended on v2 because of normal InheritedAutoUpgradeInfo propagation,
+		// not because of UseRampingVersion.
 		s.EventuallyWithT(func(t *assert.CollectT) {
 			resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: s.Namespace().String(),
 				Execution: &commonpb.WorkflowExecution{WorkflowId: childID},
 			})
-			require.New(t).NoError(err)
-			require.New(t).Equal(tv1.Deployment(), worker_versioning.DeploymentFromDeploymentVersion(
-				worker_versioning.DeploymentVersionFromDeployment(
-					worker_versioning.DeploymentFromExternalDeploymentVersion(
-						resp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion()))))
+			s.NoError(err)
+			s.Equal(tv2.Deployment().GetBuildId(),
+				resp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
+			s.Equal(tv2.Deployment().GetSeriesName(),
+				resp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetDeploymentName())
+
+			resp2, err := s.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+				Namespace: s.Namespace().String(),
+				Execution: &commonpb.WorkflowExecution{WorkflowId: childID},
+			})
+			s.NoError(err)
+			foundStartedEvent := false
+			for _, e := range resp2.GetHistory().GetEvents() {
+				if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+					foundStartedEvent = true
+					s.Equal(enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED,
+						e.GetWorkflowExecutionStartedEventAttributes().GetInheritedAutoUpgradeInfo().GetContinueAsNewInitialVersioningBehavior())
+				}
+			}
+			s.True(foundStartedEvent)
 		}, 5*time.Second, 50*time.Millisecond)
 	})
 }
