@@ -82,7 +82,6 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestCreatesWorkflowSentinel", func(t *testing.T) { testCreatesWorkflowSentinel(t, newContext) })
 	t.Run("TestUpdateScheduleMemo", func(t *testing.T) { testUpdateScheduleMemo(t, newContext) })
 	t.Run("TestUpdateScheduleMemoOnly", func(t *testing.T) { testUpdateScheduleMemoOnly(t, newContext) })
-	t.Run("TestUnpauseResumesProcessing", func(t *testing.T) { testCHASMUnpauseResumesProcessing(t, newContext) })
 }
 
 func TestScheduleV1(t *testing.T) {
@@ -111,6 +110,7 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestCountSchedules", func(t *testing.T) { testCountSchedules(t, newContext) })
 	t.Run("TestSchedule_InternalTaskQueue", func(t *testing.T) { testScheduleInternalTaskQueue(t, newContext) })
 	t.Run("TestDeletedScheduleOperations", func(t *testing.T) { testDeletedScheduleOperations(t, newContext) })
+	t.Run("TestUnpauseResumesProcessing", func(t *testing.T) { testCHASMUnpauseResumesProcessing(t, newContext) })
 }
 
 func testDeletedScheduleOperations(t *testing.T, newContext contextFactory) {
