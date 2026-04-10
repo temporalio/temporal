@@ -5691,7 +5691,7 @@ func staticTrueChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfig
 	return dynamicconfig.StaticGradualChange(true), func() {}
 }
 
-func staticTrue(_, _ string, _ enumspb.TaskQueueType, _ func(bool)) (bool, func()) {
+func trueTaskQueueSub(_, _ string, _ enumspb.TaskQueueType, _ func(bool)) (bool, func()) {
 	return true, func() {}
 }
 
@@ -5834,7 +5834,6 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 // TestAutoEnableV2ConfigChange tests that switching autoEnable triggers unload when effective config changes
 func TestAutoEnableV2ConfigChange(t *testing.T) {
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
 
@@ -5931,18 +5930,12 @@ func TestAutoEnableV2ConfigChange(t *testing.T) {
 	}, 2*time.Second, 10*time.Millisecond, "autoEnable should be updated")
 
 	require.Eventually(t, func() bool {
-		select {
-		case <-pq.(*physicalTaskQueueManagerImpl).tqCtx.Done():
-			return true
-		default:
-			return false
-		}
+		return pq.(*physicalTaskQueueManagerImpl).tqCtx.Err() != nil
 	}, 2*time.Second, 10*time.Millisecond, "physical queue should be stopped when effective config changes")
 }
 
 func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testing.T) {
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
 

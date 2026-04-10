@@ -171,11 +171,12 @@ func (pm *taskQueuePartitionManagerImpl) computeEffectiveConfig(autoEnable, fair
 	effectiveEnableFairness = fairness && !isSticky
 	effectiveNewMatcher = newMatcher || fairness
 	if !autoEnable {
-		return effectiveNewMatcher, effectiveEnableFairness
+		return
 	}
 
 	switch pm.fairnessState {
 	case enumsspb.FAIRNESS_STATE_UNSPECIFIED:
+		// use values from config
 	case enumsspb.FAIRNESS_STATE_V0:
 		effectiveNewMatcher = false
 		effectiveEnableFairness = false
@@ -188,7 +189,7 @@ func (pm *taskQueuePartitionManagerImpl) computeEffectiveConfig(autoEnable, fair
 	default:
 		pm.logger.Error("unknown fairnessState in user data")
 	}
-	return effectiveNewMatcher, effectiveEnableFairness
+	return
 }
 
 func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
