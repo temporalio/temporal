@@ -599,7 +599,12 @@ func TestCancellationInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 			expectedMetricOutcome: "service-error:Unavailable",
 			checkOutcome: func(t *testing.T, c *Cancellation) {
 				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF, c.Status)
-				require.NotNil(t, c.LastAttemptFailure.GetServerFailureInfo())
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "Unavailable: unavailable",
+					FailureInfo: &failurepb.Failure_ServerFailureInfo{
+						ServerFailureInfo: &failurepb.ServerFailureInfo{},
+					},
+				}, c.LastAttemptFailure)
 			},
 		},
 		{
@@ -614,8 +619,14 @@ func TestCancellationInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 			expectedMetricOutcome: "service-error:InvalidArgument",
 			checkOutcome: func(t *testing.T, c *Cancellation) {
 				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_FAILED, c.Status)
-				require.NotNil(t, c.LastAttemptFailure.GetServerFailureInfo())
-				require.True(t, c.LastAttemptFailure.GetServerFailureInfo().GetNonRetryable())
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "InvalidArgument: invalid",
+					FailureInfo: &failurepb.Failure_ServerFailureInfo{
+						ServerFailureInfo: &failurepb.ServerFailureInfo{
+							NonRetryable: true,
+						},
+					},
+				}, c.LastAttemptFailure)
 			},
 		},
 		{
@@ -627,7 +638,14 @@ func TestCancellationInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 			expectedMetricOutcome: "operation-processor-failed",
 			checkOutcome: func(t *testing.T, c *Cancellation) {
 				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_FAILED, c.Status)
-				require.NotNil(t, c.LastAttemptFailure.GetNexusHandlerFailureInfo())
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: `service "service" not found`,
+					FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+						NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
+							Type: string(nexus.HandlerErrorTypeNotFound),
+						},
+					},
+				}, c.LastAttemptFailure)
 			},
 		},
 	}

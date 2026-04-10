@@ -1020,7 +1020,12 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 			expectedMetricOutcome: "operation-unsuccessful:failed",
 			checkOutcome: func(t *testing.T, op *Operation) {
 				require.Equal(t, nexusoperationpb.OPERATION_STATUS_FAILED, op.Status)
-				require.Equal(t, "operation failed", op.LastAttemptFailure.Message)
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "operation failed",
+					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+						ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{},
+					},
+				}, op.LastAttemptFailure)
 			},
 		},
 		{
@@ -1043,8 +1048,12 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 			expectedMetricOutcome: "service-error:Unavailable",
 			checkOutcome: func(t *testing.T, op *Operation) {
 				require.Equal(t, nexusoperationpb.OPERATION_STATUS_BACKING_OFF, op.Status)
-				require.NotNil(t, op.LastAttemptFailure.GetServerFailureInfo())
-				require.Contains(t, op.LastAttemptFailure.Message, "Unavailable")
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "Unavailable: service unavailable",
+					FailureInfo: &failurepb.Failure_ServerFailureInfo{
+						ServerFailureInfo: &failurepb.ServerFailureInfo{},
+					},
+				}, op.LastAttemptFailure)
 			},
 		},
 		{
@@ -1060,7 +1069,14 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 			expectedMetricOutcome: "operation-processor-failed",
 			checkOutcome: func(t *testing.T, op *Operation) {
 				require.Equal(t, nexusoperationpb.OPERATION_STATUS_FAILED, op.Status)
-				require.NotNil(t, op.LastAttemptFailure.GetNexusHandlerFailureInfo())
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: `service "service" not found`,
+					FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+						NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
+							Type: string(nexus.HandlerErrorTypeNotFound),
+						},
+					},
+				}, op.LastAttemptFailure)
 			},
 		},
 	}
