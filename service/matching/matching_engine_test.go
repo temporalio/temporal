@@ -5232,9 +5232,8 @@ func (*testTaskManager) CountTaskQueuesByBuildId(context.Context, *persistence.C
 	return 0, nil
 }
 
-// TestLoggerAndMetricsForPartition_BreakdownEnabled verifies partition and taskqueue tag values
-// with the default BreakdownMetricsByTaskQueue=true: normal and worker-commands queues show their
-// name, sticky queues show the base name, and each partition type gets its own partition tag.
+// TestLoggerAndMetricsForPartition_BreakdownEnabled verifies the taskqueue and partition metric
+// tags for each task queue kind with the default BreakdownMetricsByTaskQueue=true.
 func TestLoggerAndMetricsForPartition_BreakdownEnabled(t *testing.T) {
 	t.Parallel()
 
@@ -5252,7 +5251,7 @@ func TestLoggerAndMetricsForPartition_BreakdownEnabled(t *testing.T) {
 		expectPartitionTag string
 	}{
 		{
-			name:               "normal task queue uses actual queue name",
+			name:               "normal",
 			partition:          newRootPartition(ns.ID().String(), "my-task-queue", enumspb.TASK_QUEUE_TYPE_NEXUS),
 			expectTQValue:      "my-task-queue",
 			expectPartitionTag: "0",
@@ -5264,7 +5263,7 @@ func TestLoggerAndMetricsForPartition_BreakdownEnabled(t *testing.T) {
 			expectPartitionTag: "__worker_commands__",
 		},
 		{
-			name:               "sticky task queue uses base queue name",
+			name:               "sticky",
 			partition:          newTestTaskQueue(ns.ID().String(), "my-task-queue", enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(uuid.NewString()),
 			expectTQValue:      "my-task-queue",
 			expectPartitionTag: "__sticky__",
@@ -5292,8 +5291,8 @@ func TestLoggerAndMetricsForPartition_BreakdownEnabled(t *testing.T) {
 	}
 }
 
-// TestLoggerAndMetricsForPartition_BreakdownDisabled verifies behavior with BreakdownMetricsByTaskQueue=false:
-// all partition types get taskqueue=__omitted__, but each still gets its own partition tag.
+// TestLoggerAndMetricsForPartition_BreakdownDisabled verifies the taskqueue and partition metric
+// tags for each task queue kind with BreakdownMetricsByTaskQueue=false.
 func TestLoggerAndMetricsForPartition_BreakdownDisabled(t *testing.T) {
 	t.Parallel()
 
@@ -5315,22 +5314,22 @@ func TestLoggerAndMetricsForPartition_BreakdownDisabled(t *testing.T) {
 		expectPartitionTag string
 	}{
 		{
-			name:               "normal task queue is omitted when breakdown disabled",
+			name:               "normal",
 			partition:          newRootPartition(ns.ID().String(), "my-task-queue", enumspb.TASK_QUEUE_TYPE_NEXUS),
 			expectTQValue:      "__omitted__",
 			expectPartitionTag: "0",
 		},
 		{
-			name:               "worker-commands queue gets __worker_commands__ partition when breakdown disabled",
-			partition:          newTestTaskQueue(ns.ID().String(), "my-task-queue", enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition("/temporal-sys/worker-commands/ns/key"),
-			expectTQValue:      "__omitted__",
-			expectPartitionTag: "__worker_commands__",
-		},
-		{
-			name:               "sticky task queue is omitted when breakdown disabled",
+			name:               "sticky",
 			partition:          newTestTaskQueue(ns.ID().String(), "my-task-queue", enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(uuid.NewString()),
 			expectTQValue:      "__omitted__",
 			expectPartitionTag: "__sticky__",
+		},
+		{
+			name:               "worker-commands",
+			partition:          newTestTaskQueue(ns.ID().String(), "my-task-queue", enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition("/temporal-sys/worker-commands/ns/key"),
+			expectTQValue:      "__omitted__",
+			expectPartitionTag: "__worker_commands__",
 		},
 	}
 
