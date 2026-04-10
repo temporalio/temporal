@@ -13,6 +13,10 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+type hasRequestID interface {
+	GetRequestId() string
+}
+
 // TestRequestIdStableAcrossRetries verifies that a request ID is re-used
 // across retries, even if server-generated.
 func TestRequestIdStableAcrossRetries(t *testing.T) {
@@ -55,11 +59,43 @@ func TestRequestIdStableAcrossRetries(t *testing.T) {
 		require.Equal(t, clone1.RequestId, clone2.RequestId)
 	}
 
-	t.Run("server-generated", func(t *testing.T) {
+	// validateTwice calls validate twice and asserts the request ID is stable.
+	validateTwice := func(t *testing.T, req hasRequestID, validate func() error) {
+		t.Helper()
+		require.NoError(t, validate())
+		require.NotEmpty(t, req.GetRequestId())
+		firstID := req.GetRequestId()
+		require.NoError(t, validate())
+		require.Equal(t, firstID, req.GetRequestId())
+	}
+
+	t.Run("start/server-generated", func(t *testing.T) {
 		validateTwoAttempts(t, newReq(""))
 	})
 
-	t.Run("client-provided", func(t *testing.T) {
+	t.Run("start/client-provided", func(t *testing.T) {
 		validateTwoAttempts(t, newReq("my-request-id"))
+	})
+
+	t.Run("terminate/server-generated", func(t *testing.T) {
+		req := &workflowservice.TerminateActivityExecutionRequest{
+			Namespace:  "test-namespace",
+			ActivityId: "test-activity",
+		}
+		validateTwice(t, req, func() error {
+			return validateAndNormalizeTerminateRequest(
+				req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
+		})
+	})
+
+	t.Run("cancel/server-generated", func(t *testing.T) {
+		req := &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  "test-namespace",
+			ActivityId: "test-activity",
+		}
+		validateTwice(t, req, func() error {
+			return validateAndNormalizeCancelRequest(
+				req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
+		})
 	})
 }

@@ -55,13 +55,13 @@ func (m *mockNexusCompletionGetterComponent) LifecycleState(_ chasm.Context) cha
 	return chasm.LifecycleStateRunning
 }
 
-func (m *mockNexusCompletionGetterComponent) ContextMetadata(chasm.Context) map[string]string {
+func (m *mockNexusCompletionGetterComponent) ContextMetadata(_ chasm.Context) map[string]string {
 	return nil
 }
 
 func (m *mockNexusCompletionGetterComponent) Terminate(
-	chasm.MutableContext,
-	chasm.TerminateComponentRequest,
+	_ chasm.MutableContext,
+	_ chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
 	return chasm.TerminateComponentResponse{}, nil
 }

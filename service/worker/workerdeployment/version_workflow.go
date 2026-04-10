@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -387,12 +388,13 @@ func (d *VersionWorkflowRunner) handleUpdateVersionComputeConfig(ctx workflow.Co
 		BuildId:        d.VersionState.Version.BuildId,
 	}
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var computeConfigSummary *computepb.ComputeConfigSummary
 	err := workflow.ExecuteActivity(activityCtx, d.a.UpdateWorkerControllerInstance, &deploymentspb.UpdateWorkerControllerInstanceInput{
 		Version:             apiVersion,
 		Identity:            args.GetIdentity(),
 		UpsertScalingGroups: args.GetUpsertScalingGroups(),
 		RemoveScalingGroups: args.GetRemoveScalingGroups(),
-	}).Get(ctx, nil)
+	}).Get(ctx, &computeConfigSummary)
 	if err != nil {
 		var appErr *temporal.ApplicationError
 		if errors.As(err, &appErr) && appErr.Type() == errInvalidComputeConfig {
@@ -401,8 +403,10 @@ func (d *VersionWorkflowRunner) handleUpdateVersionComputeConfig(ctx workflow.Co
 		return nil, serviceerror.NewInternalf("update worker controller instance: %v", err)
 	}
 
+	d.VersionState.ComputeConfig = computeConfigSummary
 	d.VersionState.LastModifierIdentity = args.GetIdentity()
 	d.setStateChanged()
+	d.syncSummary(ctx)
 
 	return &deploymentspb.UpdateComputeConfigResponse{}, nil
 }
@@ -727,8 +731,13 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 
 func (d *VersionWorkflowRunner) reviveDeleted(ctx workflow.Context) {
 	// Resetting state to get rid of the info from the past life.
-	state := makeNewVersionState(d.VersionState.Version.DeploymentName, d.VersionState.Version.BuildId, workflow.Now(ctx), "",
-		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, d.VersionState.SyncBatchSize)
+	state := makeNewVersionState(d.VersionState.Version.DeploymentName,
+		d.VersionState.Version.BuildId,
+		workflow.Now(ctx),
+		"",
+		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+		nil,
+		d.VersionState.SyncBatchSize)
 	d.VersionState = state
 	d.deleteVersion = false
 }
@@ -1002,6 +1011,7 @@ func versionStateToSummary(s *deploymentspb.VersionLocalState) *deploymentspb.Wo
 		LastCurrentTime:      s.LastCurrentTime,
 		LastDeactivationTime: s.LastDeactivationTime,
 		Status:               s.Status,
+		ComputeConfig:        s.ComputeConfig,
 	}
 }
 
