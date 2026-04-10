@@ -624,7 +624,7 @@ func TestFindDeploymentVersionForWorkflowID(t *testing.T) {
 		},
 		// useRampingVersion=true: always routes to ramping version with 0% ramp percentage
 		{
-			name:              "useRampingVersion with partial ramp bypasses hash and returns ramping",
+			name:              "useRampingVersion with zero ramp bypasses hash and returns ramping",
 			current:           &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())},
 			ramping:           &deploymentspb.DeploymentVersionData{Version: v2, RampPercentage: 0, RoutingUpdateTime: timestamp.TimePtr(time.Now())},
 			UseRampingVersion: true,
