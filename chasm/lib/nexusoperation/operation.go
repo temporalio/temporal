@@ -170,15 +170,16 @@ func (o *Operation) loadStartArgs(
 	ctx chasm.Context,
 	_ chasm.NoValue,
 ) (startArgs, error) {
-	store, ok := o.Store.TryGet(ctx)
-	if !ok {
-		// TODO: For standalone operations, load invocation data from the operation state.
-		return startArgs{}, serviceerror.NewInternal("no store available to load invocation data")
+	var invocationData InvocationData
+
+	if store, ok := o.Store.TryGet(ctx); ok {
+		var err error
+		invocationData, err = store.NexusOperationInvocationData(ctx, o)
+		if err != nil {
+			return startArgs{}, err
+		}
 	}
-	invocationData, err := store.NexusOperationInvocationData(ctx, o)
-	if err != nil {
-		return startArgs{}, err
-	}
+	// TODO(stephan): for standalone, populate the invocationData fields.
 
 	serializedRef, err := ctx.Ref(o)
 	if err != nil {

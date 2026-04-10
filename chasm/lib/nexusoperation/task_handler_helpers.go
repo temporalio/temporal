@@ -191,6 +191,7 @@ func newInvocationResult(
 		},
 	}
 	if errors.Is(callErr, ErrResponseBodyTooLarge) || errors.Is(callErr, ErrInvalidOperationToken) {
+		failure.GetServerFailureInfo().NonRetryable = true
 		return invocationResultFail{failure: failure}, nil
 	}
 	return invocationResultRetry{failure: failure}, nil
