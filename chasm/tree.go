@@ -2332,8 +2332,10 @@ func (n *Node) applyUpdates(
 			newNode.resetTaskStatus()
 			if isSystemUpdates {
 				n.systemMutation.UpdatedNodes[encodedPath] = newNode.serializedNode
+				delete(n.systemMutation.DeletedNodes, encodedPath)
 			} else {
 				n.mutation.UpdatedNodes[encodedPath] = newNode.serializedNode
+				delete(n.mutation.DeletedNodes, encodedPath)
 			}
 			continue
 		}
@@ -2361,8 +2363,10 @@ func (n *Node) applyUpdates(
 
 			if isSystemUpdates {
 				n.systemMutation.UpdatedNodes[encodedPath] = updatedNode
+				delete(n.systemMutation.DeletedNodes, encodedPath)
 			} else {
 				n.mutation.UpdatedNodes[encodedPath] = updatedNode
+				delete(n.mutation.DeletedNodes, encodedPath)
 			}
 			node.setValue(nil)
 			node.setValueState(valueStateNeedDeserialize)
@@ -2482,6 +2486,16 @@ func (n *Node) delete(isSystemDelete bool) error {
 		return err
 	}
 
+	// TODO: consider remove entries from UpdatedNodes map as well
+	// if the same node is updated and then deleted in the same transaction.
+	//
+	// That's not a problem today though and DeletedNodes entries are always added
+	// before UpdatedNodes entires.
+	// - For active logic, DeletedNodes are added upon syncSubComponents(),
+	//   and UpdatedNodes are added when closing transaction and serializing nodes.
+	// - For standby replication logic, mutable state calls ApplyMutation() twice,
+	//   first with a deletion only mutation for tombstone nodes, and then an
+	//   update only mutation.
 	if isSystemDelete {
 		n.systemMutation.DeletedNodes[encodedPath] = struct{}{}
 	} else {
