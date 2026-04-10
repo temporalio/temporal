@@ -261,6 +261,7 @@ type (
 		timeSource             clock.TimeSource
 		logger                 log.Logger
 		metricsHandler         metrics.Handler
+		endpointRegistry       chasm.EndpointRegistry
 		stateMachineNode       *hsm.Node
 		subStateMachineDeleted bool
 
@@ -352,13 +353,14 @@ func NewMutableState(
 
 		QueryRegistry: NewQueryRegistry(),
 
-		shard:           shard,
-		clusterMetadata: shard.GetClusterMetadata(),
-		eventsCache:     eventsCache,
-		config:          shard.GetConfig(),
-		timeSource:      shard.GetTimeSource(),
-		logger:          logger,
-		metricsHandler:  shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
+		shard:            shard,
+		clusterMetadata:  shard.GetClusterMetadata(),
+		eventsCache:      eventsCache,
+		config:           shard.GetConfig(),
+		timeSource:       shard.GetTimeSource(),
+		logger:           logger,
+		metricsHandler:   shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
+		endpointRegistry: shard.EndpointRegistry(),
 	}
 
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
@@ -686,7 +688,7 @@ func (ms *MutableStateImpl) ChasmWorkflowComponent(ctx context.Context) (*chasmw
 	return wf, chasmCtx, nil
 }
 
-func (ms *MutableStateImpl) ensureChasmWorkflowComponent(ctx context.Context) {
+func (ms *MutableStateImpl) EnsureChasmWorkflowComponent(ctx context.Context) {
 	// Initialize chasm tree once for new workflows.
 	// Using context.Background() because this is done outside an actual request context and the
 	// chasmworkflow.NewWorkflow does not actually use it currently.
@@ -715,6 +717,10 @@ func (ms *MutableStateImpl) ChasmWorkflowComponentReadOnly(ctx context.Context) 
 		return nil, nil, serviceerror.NewInternalf("expected workflow component, but got %T", rootComponent)
 	}
 	return wf, chasmCtx, nil
+}
+
+func (ms *MutableStateImpl) EndpointRegistry() chasm.EndpointRegistry {
+	return ms.endpointRegistry
 }
 
 // GetNexusCompletion converts a workflow completion event into a [nexus.OperationCompletion].
@@ -2493,13 +2499,13 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// AutoUpgrade in the first task and then assume the SDK-sent behavior on first workflow task completion.
 	var inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion
 	if previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
-		command.GetInitialVersioningBehavior() != enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+		command.GetInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED {
 		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
 		newTQ := command.GetTaskQueue().GetName()
 		if newTQ != previousExecutionInfo.GetTaskQueue() {
 			newTQInPinnedVersion, err = IsWFTaskQueueInVersionDetector(ctx, ms.GetNamespaceEntry().ID().String(), newTQ, inheritedPinnedVersion)
 			if err != nil {
-				return nil, fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
+				return nil, fmt.Errorf("error determining continue-as-new task queue presence in inherited version: %w", err)
 			}
 			if !newTQInPinnedVersion {
 				inheritedPinnedVersion = nil
@@ -2525,9 +2531,10 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// after first workflow task completion.
 	var sourceDeploymentVersion *deploymentpb.WorkerDeploymentVersion
 	var sourceDeploymentRevisionNumber int64
-	if previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE ||
-		(previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
-			command.GetInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE) {
+	previousBehavior := previousExecutionState.GetEffectiveVersioningBehavior()
+	nonEmptyContinueAsNewInitialBehavior := command.GetInitialVersioningBehavior() != enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED
+	if previousBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE ||
+		(previousBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED && nonEmptyContinueAsNewInitialBehavior) {
 		sourceDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
 		sourceDeploymentRevisionNumber = previousExecutionState.GetVersioningRevisionNumber()
 
@@ -2620,6 +2627,12 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		req.InheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
 			SourceDeploymentVersion:        sourceDeploymentVersion,
 			SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
+			// ContinueAsNewInitialVersioningBehavior is taken from the command that triggered this CaN,
+			// not from the previous workflow's InheritedAutoUpgradeInfo. This ensures that each CaN hop
+			// carries only the behavior the user explicitly requested for that hop, and that a
+			// UseRampingVersion CaN run cannot accidentally propagate the behavior through a child
+			// workflow or a future CaN of its own.
+			ContinueAsNewInitialVersioningBehavior: command.GetInitialVersioningBehavior(),
 		}
 	}
 
@@ -2961,6 +2974,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.executionInfo.VersioningInfo.DeploymentVersion = event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentVersion()
 		// Assume AutoUpgrade behavior for the first workflow task.
 		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+		ms.executionInfo.VersioningInfo.ContinueAsNewInitialVersioningBehavior = event.GetInheritedAutoUpgradeInfo().GetContinueAsNewInitialVersioningBehavior()
 	}
 
 	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {
@@ -3129,7 +3143,7 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 		// Initialize chasm tree once for new workflows.
 		// Using context.Background() because this is done outside an actual request context and the
 		// chasmworkflow.NewWorkflow does not actually use it currently.
-		ms.ensureChasmWorkflowComponent(context.Background())
+		ms.EnsureChasmWorkflowComponent(context.Background())
 		return ms.addCompletionCallbacksChasm(event, requestID, completionCallbacks)
 	}
 
@@ -9114,6 +9128,24 @@ func (ms *MutableStateImpl) SetVersioningRevisionNumber(revisionNumber int64) {
 		ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
 	}
 	ms.GetExecutionInfo().GetVersioningInfo().RevisionNumber = revisionNumber
+}
+
+func (ms *MutableStateImpl) GetShouldUseRampingVersion() bool {
+	execInfo := ms.GetExecutionInfo()
+	versioningInfo := execInfo.GetVersioningInfo()
+
+	hasNoCompletedWorkflowTask := execInfo.GetLastCompletedWorkflowTaskStartedEventId() == common.EmptyEventID
+
+	// Backward-compat note: history events written before ContinueAsNewInitialVersioningBehavior existed
+	// carry UNSPECIFIED, which does not match USE_RAMPING_VERSION, so those runs correctly fall through
+	// and return false — the same as AUTO_UPGRADE behavior.
+	hasInitialBehaviorUseRampingVersion := versioningInfo.GetContinueAsNewInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_USE_RAMPING_VERSION
+
+	// ContinueAsNewInitialVersioningBehavior is only populated (in ApplyWorkflowExecutionStartedEvent)
+	// from InheritedAutoUpgradeInfo, which always sets Behavior to AUTO_UPGRADE. So there is no world
+	// in which ContinueAsNewInitialVersioningBehavior is set without Behavior also being AUTO_UPGRADE.
+	// We could also check if the behavior is AUTO_UPGRADE, but that's redundant.
+	return hasNoCompletedWorkflowTask && hasInitialBehaviorUseRampingVersion
 }
 
 // reschedulePendingActivities reschedules all the activities that are not started, so they are

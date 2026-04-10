@@ -929,6 +929,7 @@ var (
 	WorkflowExecutionUpdateRegistrySize              = NewBytesHistogramDef("workflow_update_registry_size")
 	WorkflowExecutionUpdateRegistrySizeLimited       = NewCounterDef("workflow_update_registry_size_limited")
 	WorkflowExecutionUpdateRequestRateLimited        = NewCounterDef("workflow_update_request_rate_limited")
+	BusinessIDReuseRateLimited                       = NewCounterDef("business_id_reuse_rate_limited")
 	WorkflowExecutionUpdateTooMany                   = NewCounterDef("workflow_update_request_too_many")
 	WorkflowExecutionUpdateAborted                   = NewCounterDef("workflow_update_aborted")
 	WorkflowExecutionUpdateSentToWorker              = NewCounterDef("workflow_update_sent_to_worker")

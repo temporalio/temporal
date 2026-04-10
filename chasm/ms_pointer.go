@@ -1,6 +1,10 @@
 package chasm
 
 import (
+	"time"
+
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 )
 
@@ -17,6 +21,26 @@ func NewMSPointer(backend NodeBackend) MSPointer {
 	return MSPointer{
 		backend: backend,
 	}
+}
+
+// WorkflowRunTimeout returns the workflow run timeout duration. Returns 0 if no timeout is set.
+func (m MSPointer) WorkflowRunTimeout() time.Duration {
+	return m.backend.GetExecutionInfo().GetWorkflowRunTimeout().AsDuration()
+}
+
+// AddHistoryEvent adds a history event via the underlying mutable state.
+func (m MSPointer) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
+	return m.backend.AddHistoryEvent(t, setAttributes)
+}
+
+// HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
+func (m MSPointer) HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool) bool {
+	return m.backend.HasAnyBufferedEvent(filter)
+}
+
+// LoadHistoryEvent loads a history event from the underlying mutable state using the given token.
+func (m MSPointer) LoadHistoryEvent(ctx Context, token []byte) (*historypb.HistoryEvent, error) {
+	return m.backend.LoadHistoryEvent(ctx.goContext(), token)
 }
 
 // GetNexusCompletion retrieves the Nexus operation completion data for the given request ID from the underlying mutable state.

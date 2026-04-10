@@ -157,10 +157,11 @@ func NewSentinel(
 		},
 		cacheConflictToken: scheduler.InitialConflictToken,
 	}
-	s.Info.CreateTime = timestamppb.New(ctx.Now(s))
+	now := ctx.Now(s)
+	s.Info.CreateTime = timestamppb.New(now)
 
 	ctx.AddTask(s, chasm.TaskAttributes{
-		ScheduledTime: ctx.Now(s).Add(SentinelIdleTime),
+		ScheduledTime: now.Add(SentinelIdleTime),
 	}, &schedulerpb.SchedulerIdleTask{
 		IdleTimeTotal: durationpb.New(SentinelIdleTime),
 	})
@@ -835,6 +836,7 @@ func (s *Scheduler) Patch(
 		}
 		s.Schedule.State.Paused = false
 		s.Schedule.State.Notes = req.FrontendRequest.Patch.Unpause
+		s.Generator.Get(ctx).Generate(ctx)
 	}
 
 	if err := s.handlePatch(ctx, req.FrontendRequest.Patch); err != nil {
