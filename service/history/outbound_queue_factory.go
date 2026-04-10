@@ -230,7 +230,6 @@ func (f *outboundQueueFactory) CreateQueue(
 		metricsHandler,
 		f.ChasmEngine,
 		f.MatchingRawClient,
-		shardContext.GetConfig(),
 	)
 
 	standbyExecutor := newOutboundQueueStandbyTaskExecutor(

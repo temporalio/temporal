@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -39,7 +38,6 @@ func newOutboundQueueActiveTaskExecutor(
 	metricsHandler metrics.Handler,
 	chasmEngine chasm.Engine,
 	matchingRawClient resource.MatchingRawClient,
-	config *configs.Config,
 ) *outboundQueueActiveTaskExecutor {
 	scopedMetricsHandler := metricsHandler.WithTags(
 		metrics.OperationTag(metrics.OperationOutboundQueueProcessorScope),
@@ -54,7 +52,7 @@ func newOutboundQueueActiveTaskExecutor(
 		chasmEngine: chasmEngine,
 		workerCommandsTaskDispatcher: newWorkerCommandsTaskDispatcher(
 			matchingRawClient,
-			config,
+			shardCtx.GetConfig(),
 			scopedMetricsHandler,
 			logger,
 		),

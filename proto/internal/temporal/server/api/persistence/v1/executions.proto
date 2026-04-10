@@ -655,6 +655,9 @@ message ActivityInfo {
     // is to store the full serialized task token (~150-300 bytes), which avoids
     // reconstruction entirely and is immune to token format changes. We chose the
     // clock approach to keep the per-activity memory footprint minimal (~24 bytes).
+    //
+    // Replication: This field is part of ActivityInfo and is automatically replicated
+    // via state-based replication. No special handling is needed.
     temporal.server.api.clock.v1.VectorClock started_clock = 52;
 }
 

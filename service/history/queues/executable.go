@@ -716,6 +716,9 @@ func (e *executableImpl) State() ctasks.State {
 }
 
 func (e *executableImpl) Attempt() int {
+	e.Lock()
+	defer e.Unlock()
+
 	return e.attempt
 }
 
