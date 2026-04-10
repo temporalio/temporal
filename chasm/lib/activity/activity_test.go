@@ -5,9 +5,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
@@ -16,6 +19,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -248,4 +252,191 @@ func TestActivityTerminate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestApplyActivityOptionsAcceptance(t *testing.T) {
+	updateOptions := &apiactivitypb.ActivityOptions{
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: "task_queue_name"},
+		ScheduleToCloseTimeout: durationpb.New(time.Second),
+		StartToCloseTimeout:    durationpb.New(time.Second),
+		ScheduleToStartTimeout: durationpb.New(time.Second),
+		HeartbeatTimeout:       durationpb.New(time.Second),
+		Priority: &commonpb.Priority{
+			PriorityKey:    42,
+			FairnessKey:    "test_key",
+			FairnessWeight: 5.0,
+		},
+		RetryPolicy: &commonpb.RetryPolicy{
+			MaximumInterval:    durationpb.New(time.Second),
+			MaximumAttempts:    5,
+			BackoffCoefficient: 1.0,
+			InitialInterval:    durationpb.New(time.Second),
+		},
+	}
+
+	testCases := []struct {
+		name       string
+		updateOpts *apiactivitypb.ActivityOptions
+		expected   *apiactivitypb.ActivityOptions
+		mask       *fieldmaskpb.FieldMask
+	}{
+		{
+			name:       "Top-level fields with CamelCase",
+			updateOpts: updateOptions,
+			expected:   updateOptions,
+			mask: &fieldmaskpb.FieldMask{
+				Paths: []string{
+					"TaskQueue.Name",
+					"ScheduleToCloseTimeout",
+					"ScheduleToStartTimeout",
+					"StartToCloseTimeout",
+					"HeartbeatTimeout",
+					"Priority",
+					"RetryPolicy",
+				},
+			},
+		},
+		{
+			name:       "Top-level fields with snake_case",
+			updateOpts: updateOptions,
+			expected:   updateOptions,
+			mask: &fieldmaskpb.FieldMask{
+				Paths: []string{
+					"task_queue.name",
+					"schedule_to_close_timeout",
+					"schedule_to_start_timeout",
+					"start_to_close_timeout",
+					"heartbeat_timeout",
+					"priority",
+					"retry_policy",
+				},
+			},
+		},
+		{
+			name: "Sub-fields",
+			updateOpts: &apiactivitypb.ActivityOptions{
+				Priority: &commonpb.Priority{
+					PriorityKey:    99,
+					FairnessKey:    "newKey",
+					FairnessWeight: 7.5,
+				},
+				RetryPolicy: &commonpb.RetryPolicy{
+					MaximumInterval:    durationpb.New(time.Second),
+					MaximumAttempts:    5,
+					BackoffCoefficient: 1.0,
+					InitialInterval:    durationpb.New(time.Second),
+				},
+			},
+			expected: &apiactivitypb.ActivityOptions{
+				// Timeouts unchanged from the initial Activity state (all set to 30 minutes below).
+				ScheduleToCloseTimeout: durationpb.New(30 * time.Minute),
+				ScheduleToStartTimeout: durationpb.New(30 * time.Minute),
+				StartToCloseTimeout:    durationpb.New(30 * time.Minute),
+				HeartbeatTimeout:       durationpb.New(30 * time.Minute),
+				Priority: &commonpb.Priority{
+					PriorityKey:    99,
+					FairnessKey:    "newKey",
+					FairnessWeight: 7.5,
+				},
+				RetryPolicy: &commonpb.RetryPolicy{
+					MaximumInterval:    durationpb.New(time.Second),
+					MaximumAttempts:    5,
+					BackoffCoefficient: 1.0,
+					InitialInterval:    durationpb.New(time.Second),
+				},
+			},
+			mask: &fieldmaskpb.FieldMask{
+				Paths: []string{
+					"priority.priority_key",
+					"priority.fairness_key",
+					"priority.fairness_weight",
+					"retry_policy.backoff_coefficient",
+					"retry_policy.initial_interval",
+					"retry_policy.maximum_interval",
+					"retry_policy.maximum_attempts",
+				},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			activity := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+					ScheduleToCloseTimeout: durationpb.New(30 * time.Minute),
+					ScheduleToStartTimeout: durationpb.New(30 * time.Minute),
+					StartToCloseTimeout:    durationpb.New(30 * time.Minute),
+					HeartbeatTimeout:       durationpb.New(30 * time.Minute),
+					Priority: &commonpb.Priority{
+						PriorityKey:    10,
+						FairnessKey:    "oldKey",
+						FairnessWeight: 1.0,
+					},
+					RetryPolicy: &commonpb.RetryPolicy{},
+				},
+			}
+
+			req := &workflowservice.UpdateActivityExecutionOptionsRequest{
+				ActivityId:      "test-activity-id",
+				ActivityOptions: tc.updateOpts,
+				UpdateMask:      tc.mask,
+			}
+
+			err := activity.mergeActivityOptions(req)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expected.RetryPolicy.GetInitialInterval(), activity.RetryPolicy.GetInitialInterval(), "RetryInitialInterval")
+			assert.Equal(t, tc.expected.RetryPolicy.GetMaximumInterval(), activity.RetryPolicy.GetMaximumInterval(), "RetryMaximumInterval")
+			assert.Equal(t, tc.expected.RetryPolicy.GetBackoffCoefficient(), activity.RetryPolicy.GetBackoffCoefficient(), "RetryBackoffCoefficient")
+			assert.Equal(t, tc.expected.RetryPolicy.GetMaximumAttempts(), activity.RetryPolicy.GetMaximumAttempts(), "RetryMaximumAttempts")
+			assert.Equal(t, tc.expected.TaskQueue, activity.TaskQueue, "TaskQueue")
+			assert.Equal(t, tc.expected.ScheduleToCloseTimeout, activity.ScheduleToCloseTimeout, "ScheduleToCloseTimeout")
+			assert.Equal(t, tc.expected.ScheduleToStartTimeout, activity.ScheduleToStartTimeout, "ScheduleToStartTimeout")
+			assert.Equal(t, tc.expected.StartToCloseTimeout, activity.StartToCloseTimeout, "StartToCloseTimeout")
+			assert.Equal(t, tc.expected.HeartbeatTimeout, activity.HeartbeatTimeout, "HeartbeatTimeout")
+			assert.Equal(t, tc.expected.Priority, activity.Priority, "Priority")
+		})
+	}
+}
+
+func TestApplyActivityOptionsErrors(t *testing.T) {
+	makeActivity := func() *Activity {
+		return &Activity{
+			ActivityState: &activitypb.ActivityState{
+				ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
+			},
+		}
+	}
+	makeReq := func(opts *apiactivitypb.ActivityOptions, paths ...string) *workflowservice.UpdateActivityExecutionOptionsRequest {
+		return &workflowservice.UpdateActivityExecutionOptionsRequest{
+			ActivityId:      "test-id",
+			ActivityOptions: opts,
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: paths},
+		}
+	}
+	emptyOpts := &apiactivitypb.ActivityOptions{}
+
+	var err error
+	err = makeActivity().mergeActivityOptions(makeReq(emptyOpts, "retry_policy.maximum_interval"))
+	require.ErrorContains(t, err, "RetryPolicy is not provided")
+
+	err = makeActivity().mergeActivityOptions(makeReq(emptyOpts, "retry_policy.maximum_attempts"))
+	require.ErrorContains(t, err, "RetryPolicy is not provided")
+
+	err = makeActivity().mergeActivityOptions(makeReq(emptyOpts, "retry_policy.backoff_coefficient"))
+	require.ErrorContains(t, err, "RetryPolicy is not provided")
+
+	err = makeActivity().mergeActivityOptions(makeReq(emptyOpts, "retry_policy.initial_interval"))
+	require.ErrorContains(t, err, "RetryPolicy is not provided")
+
+	err = makeActivity().mergeActivityOptions(makeReq(emptyOpts, "taskQueue.name"))
+	require.ErrorContains(t, err, "TaskQueue is not provided")
+
+	err = makeActivity().mergeActivityOptions(makeReq(emptyOpts, "priority.priority_key"))
+	require.ErrorContains(t, err, "Priority is not provided")
+
+	err = makeActivity().mergeActivityOptions(makeReq(emptyOpts, "priority.fairness_key"))
+	require.ErrorContains(t, err, "Priority is not provided")
+
+	err = makeActivity().mergeActivityOptions(makeReq(emptyOpts, "priority.fairness_weight"))
+	require.ErrorContains(t, err, "Priority is not provided")
 }

@@ -119,15 +119,15 @@ func NewStandaloneActivity(
 	)
 
 	activity := &Activity{
-		ActivityState: &activitypb.ActivityState{
-			ActivityType:           request.ActivityType,
+		ActivityState: common.CloneProto(&activitypb.ActivityState{
+			ActivityType:           request.GetActivityType(),
 			TaskQueue:              request.GetTaskQueue(),
 			ScheduleToCloseTimeout: request.GetScheduleToCloseTimeout(),
 			ScheduleToStartTimeout: request.GetScheduleToStartTimeout(),
 			StartToCloseTimeout:    request.GetStartToCloseTimeout(),
 			HeartbeatTimeout:       request.GetHeartbeatTimeout(),
 			RetryPolicy:            request.GetRetryPolicy(),
-			Priority:               request.Priority,
+			Priority:               request.GetPriority(),
 			OriginalOptions: &apiactivitypb.ActivityOptions{
 				TaskQueue:              request.GetTaskQueue(),
 				ScheduleToCloseTimeout: request.GetScheduleToCloseTimeout(),
@@ -137,13 +137,13 @@ func NewStandaloneActivity(
 				RetryPolicy:            request.GetRetryPolicy(),
 				Priority:               request.GetPriority(),
 			},
-		},
-		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
-		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
-			Input:        request.Input,
-			Header:       request.Header,
-			UserMetadata: request.UserMetadata,
 		}),
+		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
+		RequestData: chasm.NewDataField(ctx, common.CloneProto(&activitypb.ActivityRequestData{
+			Input:        request.GetInput(),
+			Header:       request.GetHeader(),
+			UserMetadata: request.GetUserMetadata(),
+		})),
 		Outcome:    chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
 		Visibility: chasm.NewComponentField(ctx, visibility),
 	}
@@ -395,8 +395,9 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
-		return nil, serviceerror.NewInvalidArgumentf("Cannot update options for activity in state %s", a.Status.String())
+		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+		activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED:
+		return nil, serviceerror.NewFailedPreconditionf("Cannot update options for activity in state %s", a.Status.String())
 	default:
 	}
 
@@ -429,18 +430,18 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	// Add a new ScheduleToCloseTimeoutTask at the (possibly updated) deadline.
 	// Increment the stamp so the previous task is invalidated by the Validate check.
 	if timeout := a.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
-		a.ScheduleToCloseStamp++
+		a.Stamp++
 		deadline := a.GetScheduleTime().AsTime().Add(timeout)
 		ctx.AddTask(
 			a,
 			chasm.TaskAttributes{ScheduledTime: deadline},
-			&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetScheduleToCloseStamp()},
+			&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetStamp()},
 		)
 	}
 
 	attempt.Stamp++
 
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED {
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED || a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
 		// Re-create the start-to-close timeout task with the new stamp and (possibly updated) timeout.
 		// The old task was invalidated by the stamp increment above.
 		if timeout := a.GetStartToCloseTimeout().AsDuration(); timeout > 0 {

@@ -190,9 +190,9 @@ type ActivityState struct {
 	// Incremented each time a new ScheduleToCloseTimeoutTask is scheduled (at activity creation
 	// and on each options update that re-schedules the task). Unlike attempt.stamp, this counter
 	// is NOT reset on retries, because schedule-to-close spans the full activity lifetime.
-	ScheduleToCloseStamp int32 `protobuf:"varint,14,opt,name=schedule_to_close_stamp,json=scheduleToCloseStamp,proto3" json:"schedule_to_close_stamp,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	Stamp         int32 `protobuf:"varint,14,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ActivityState) Reset() {
@@ -316,9 +316,9 @@ func (x *ActivityState) GetOriginalOptions() *v12.ActivityOptions {
 	return nil
 }
 
-func (x *ActivityState) GetScheduleToCloseStamp() int32 {
+func (x *ActivityState) GetStamp() int32 {
 	if x != nil {
-		return x.ScheduleToCloseStamp
+		return x.Stamp
 	}
 	return 0
 }
@@ -914,7 +914,7 @@ var File_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto protor
 
 const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDesc = "" +
 	"\n" +
-	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/activity/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\xe8\b\n" +
+	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/activity/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\xc7\b\n" +
 	"\rActivityState\x12I\n" +
 	"\ractivity_type\x18\x01 \x01(\v2$.temporal.api.common.v1.ActivityTypeR\factivityType\x12C\n" +
 	"\n" +
@@ -930,8 +930,8 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12c\n" +
 	"\fcancel_state\x18\v \x01(\v2@.temporal.server.chasm.lib.activity.proto.v1.ActivityCancelStateR\vcancelState\x12l\n" +
 	"\x0fterminate_state\x18\f \x01(\v2C.temporal.server.chasm.lib.activity.proto.v1.ActivityTerminateStateR\x0eterminateState\x12T\n" +
-	"\x10original_options\x18\r \x01(\v2).temporal.api.activity.v1.ActivityOptionsR\x0foriginalOptions\x125\n" +
-	"\x17schedule_to_close_stamp\x18\x0e \x01(\x05R\x14scheduleToCloseStamp\"\xa7\x01\n" +
+	"\x10original_options\x18\r \x01(\v2).temporal.api.activity.v1.ActivityOptionsR\x0foriginalOptions\x12\x14\n" +
+	"\x05stamp\x18\x0e \x01(\x05R\x05stamp\"\xa7\x01\n" +
 	"\x13ActivityCancelState\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12=\n" +

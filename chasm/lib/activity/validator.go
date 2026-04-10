@@ -369,6 +369,9 @@ func validateUpdateActivityExecutionOptionsRequest(
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
 	maxIDLengthLimit int,
 ) error {
+	if err := priorities.Validate(req.GetActivityOptions().GetPriority()); err != nil {
+		return err
+	}
 	if req.GetActivityId() == "" {
 		return serviceerror.NewInvalidArgument("activity ID is required")
 	}
