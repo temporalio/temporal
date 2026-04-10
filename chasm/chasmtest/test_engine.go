@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
@@ -17,6 +16,15 @@ import (
 	"go.temporal.io/server/common/testing/testlogger"
 )
 
+// WithTimeSource overrides the engine's default real-time clock with the provided time source.
+// Pass a *clock.EventTimeSource when tests need to control what ctx.Now() returns inside handlers.
+// The caller holds the reference and calls ts.Update(...) directly to advance time.
+func WithTimeSource(ts clock.TimeSource) EngineOption {
+	return func(e *Engine) {
+		e.timeSource = ts
+	}
+}
+
 type (
 	EngineOption func(*Engine)
 
@@ -25,18 +33,18 @@ type (
 		registry   *chasm.Registry
 		logger     log.Logger
 		metrics    metrics.Handler
-		executions map[executionLookupKey]*execution
+		timeSource clock.TimeSource
+		executions map[executionKey]*execution
 	}
 
 	execution struct {
-		key        chasm.ExecutionKey
-		node       *chasm.Node
-		backend    *chasm.MockNodeBackend
-		timeSource *clock.EventTimeSource
-		root       chasm.RootComponent
+		key     chasm.ExecutionKey
+		node    *chasm.Node
+		backend *chasm.MockNodeBackend
+		root    chasm.RootComponent
 	}
 
-	executionLookupKey struct {
+	executionKey struct {
 		namespaceID string
 		businessID  string
 	}
@@ -56,7 +64,8 @@ func NewEngine(
 		registry:   registry,
 		logger:     testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly),
 		metrics:    metrics.NoopMetricsHandler,
-		executions: make(map[executionLookupKey]*execution),
+		timeSource: clock.NewRealTimeSource(),
+		executions: make(map[executionKey]*execution),
 	}
 
 	for _, opt := range opts {
@@ -110,7 +119,7 @@ func (e *Engine) StartExecution(
 	}
 
 	execution.root = root
-	e.executions[newExecutionLookupKey(execution.key)] = execution
+	e.executions[newExecutionKey(execution.key)] = execution
 
 	serializedRef, err := execution.node.Ref(root)
 	if err != nil {
@@ -161,7 +170,7 @@ func (e *Engine) UpdateWithStartExecution(
 	}
 
 	execution.root = root
-	e.executions[newExecutionLookupKey(execution.key)] = execution
+	e.executions[newExecutionKey(execution.key)] = execution
 
 	serializedRef, err := execution.node.Ref(root)
 	if err != nil {
@@ -229,8 +238,6 @@ func (e *Engine) NotifyExecution(chasm.ExecutionKey) {}
 
 func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 	key = normalizeExecutionKey(key)
-	timeSource := clock.NewEventTimeSource()
-	timeSource.Update(time.Now())
 	backend := &chasm.MockNodeBackend{
 		HandleNextTransitionCount: func() int64 { return 2 },
 		HandleGetCurrentVersion:   func() int64 { return 1 },
@@ -246,12 +253,11 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 		},
 	}
 	return &execution{
-		key:        key,
-		backend:    backend,
-		timeSource: timeSource,
+		key:     key,
+		backend: backend,
 		node: chasm.NewEmptyTree(
 			e.registry,
-			timeSource,
+			e.timeSource,
 			backend,
 			chasm.DefaultPathEncoder,
 			e.logger,
@@ -261,7 +267,7 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 }
 
 func (e *Engine) executionForKey(key chasm.ExecutionKey) (*execution, bool) {
-	execution, ok := e.executions[newExecutionLookupKey(normalizeExecutionKey(key))]
+	execution, ok := e.executions[newExecutionKey(normalizeExecutionKey(key))]
 	return execution, ok
 }
 
@@ -299,8 +305,8 @@ func (e *Engine) updateComponentInExecution(
 	return mutableCtx.Ref(component)
 }
 
-func newExecutionLookupKey(key chasm.ExecutionKey) executionLookupKey {
-	return executionLookupKey{
+func newExecutionKey(key chasm.ExecutionKey) executionKey {
+	return executionKey{
 		namespaceID: key.NamespaceID,
 		businessID:  key.BusinessID,
 	}
