@@ -283,6 +283,9 @@ func recordActivityTaskStarted(
 			if ws, ok := wsInfos[wsID]; ok {
 				response.WorkspaceInfo = ws
 				response.WorkspaceInfo.AccessMode = ai.GetWorkspaceAccessMode()
+				if wsOpt := ai.GetWorkspaceOptions(); wsOpt != nil {
+					response.WorkspaceInfo.DiskLimitMb = wsOpt.GetDiskLimitMb()
+				}
 			}
 		}
 	}

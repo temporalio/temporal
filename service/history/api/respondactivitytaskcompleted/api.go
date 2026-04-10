@@ -119,7 +119,7 @@ func Invoke(
 			// atomically with the activity completion (same DB transaction).
 			// Read-only activities must not send a workspace commit.
 			if wc := request.GetWorkspaceCommit(); wc != nil {
-				if ai.WorkspaceAccessMode == enumspb.WORKSPACE_ACCESS_MODE_READ_ONLY {
+				if ai.GetWorkspaceAccessMode() == enumspb.WORKSPACE_ACCESS_MODE_READ_ONLY {
 					return nil, serviceerror.NewInvalidArgument("read-only activity cannot commit workspace changes")
 				}
 				if err := applyWorkspaceCommit(mutableState, wc); err != nil {
@@ -128,7 +128,7 @@ func Invoke(
 			}
 
 			// Release workspace lock.
-			workspaceworkflow.ReleaseWorkspaceAccess(mutableState, ai.WorkspaceId, scheduledEventID)
+			workspaceworkflow.ReleaseWorkspaceAccess(mutableState, ai.GetWorkspaceId(), scheduledEventID)
 
 			if !fabricateStartedEvent {
 				// leave it zero if the event is fabricated so the latency metrics are not emitted

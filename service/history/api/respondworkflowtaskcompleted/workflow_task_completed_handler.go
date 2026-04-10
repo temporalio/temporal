@@ -711,7 +711,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 			if err != nil {
 				return nil, err
 			}
-			workspaceworkflow.ReleaseWorkspaceAccess(handler.mutableState, ai.WorkspaceId, ai.ScheduledEventId)
+			workspaceworkflow.ReleaseWorkspaceAccess(handler.mutableState, ai.GetWorkspaceId(), ai.ScheduledEventId)
 			handler.activityNotStartedCancelled = true
 		}
 	}

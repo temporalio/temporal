@@ -3965,8 +3965,7 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 	event := ms.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command, wsInfo, ms.namespaceEntry.Name())
 	ai, err := ms.ApplyActivityTaskScheduledEvent(workflowTaskCompletedEventID, event)
 	if err == nil && command.GetWorkspaceOptions() != nil {
-		ai.WorkspaceId = command.GetWorkspaceOptions().GetWorkspaceId()
-		ai.WorkspaceAccessMode = command.GetWorkspaceOptions().GetAccessMode()
+		ai.WorkspaceOptions = command.GetWorkspaceOptions()
 	}
 	if command.GetSandboxOptions() != nil {
 		ai.SandboxOptions = command.GetSandboxOptions()

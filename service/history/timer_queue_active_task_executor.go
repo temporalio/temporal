@@ -355,7 +355,7 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 	); err != nil {
 		return result, err
 	}
-	workspaceworkflow.ReleaseWorkspaceAccess(mutableState, ai.WorkspaceId, ai.ScheduledEventId)
+	workspaceworkflow.ReleaseWorkspaceAccess(mutableState, ai.GetWorkspaceId(), ai.ScheduledEventId)
 
 	result.shouldUpdateMutableState = true
 	result.shouldScheduleWorkflowTask = true

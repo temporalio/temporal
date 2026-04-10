@@ -97,7 +97,7 @@ func Invoke(
 				// Unable to add ActivityTaskCanceled event to history
 				return nil, err
 			}
-			workspaceworkflow.ReleaseWorkspaceAccess(mutableState, ai.WorkspaceId, scheduledEventID)
+			workspaceworkflow.ReleaseWorkspaceAccess(mutableState, ai.GetWorkspaceId(), scheduledEventID)
 
 			attemptStartedTime = timestamp.TimeValue(ai.StartedTime)
 			firstScheduledTime = timestamp.TimeValue(ai.FirstScheduledTime)

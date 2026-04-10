@@ -663,12 +663,11 @@ message ActivityInfo {
 
   int64 start_version = 50;
 
-  // If set, this activity uses the specified durable workspace.
-  string workspace_id = 51;
-  // The access mode for the workspace (READ_WRITE or READ_ONLY).
-  temporal.api.enums.v1.WorkspaceAccessMode workspace_access_mode = 52;
   // Sandbox configuration for this activity, passed through to the worker.
-  temporal.api.sandbox.v1.SandboxOptions sandbox_options = 53;
+  temporal.api.sandbox.v1.SandboxOptions sandbox_options = 51;
+  // Workspace configuration for this activity, including workspace_id,
+  // access_mode, and disk_limit_mb. Passed through to the worker.
+  temporal.api.workspace.v1.ActivityWorkspaceOptions workspace_options = 52;
 }
 
 // timer_map column

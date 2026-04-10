@@ -115,7 +115,7 @@ func Invoke(
 					// Unable to add ActivityTaskFailed event to history
 					return nil, err
 				}
-				workspaceworkflow.ReleaseWorkspaceAccess(mutableState, ai.WorkspaceId, scheduledEventID)
+				workspaceworkflow.ReleaseWorkspaceAccess(mutableState, ai.GetWorkspaceId(), scheduledEventID)
 				postActions.CreateWorkflowTask = true
 				closed = true
 			} else {
