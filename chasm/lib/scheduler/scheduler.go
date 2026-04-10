@@ -156,10 +156,11 @@ func NewSentinel(
 		},
 		cacheConflictToken: scheduler.InitialConflictToken,
 	}
-	s.Info.CreateTime = timestamppb.New(ctx.Now(s))
+	now := ctx.Now(s)
+	s.Info.CreateTime = timestamppb.New(now)
 
 	ctx.AddTask(s, chasm.TaskAttributes{
-		ScheduledTime: ctx.Now(s).Add(SentinelIdleTime),
+		ScheduledTime: now.Add(SentinelIdleTime),
 	}, &schedulerpb.SchedulerIdleTask{
 		IdleTimeTotal: durationpb.New(SentinelIdleTime),
 	})
