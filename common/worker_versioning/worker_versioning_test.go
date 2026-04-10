@@ -606,7 +606,7 @@ func TestFindDeploymentVersionForWorkflowID(t *testing.T) {
 		name              string
 		current           *deploymentspb.DeploymentVersionData
 		ramping           *deploymentspb.DeploymentVersionData
-		UseRampingVersion bool
+		useRampingVersion bool
 		want              *deploymentspb.WorkerDeploymentVersion
 	}{
 		{name: "nil current and ramping info", want: nil},
@@ -619,7 +619,7 @@ func TestFindDeploymentVersionForWorkflowID(t *testing.T) {
 			name:              "useRampingVersion with partial ramp bypasses hash and returns ramping",
 			current:           &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())},
 			ramping:           &deploymentspb.DeploymentVersionData{Version: v2, RampPercentage: 30, RoutingUpdateTime: timestamp.TimePtr(time.Now())},
-			UseRampingVersion: true,
+			useRampingVersion: true,
 			want:              v2,
 		},
 		// useRampingVersion=true: always routes to ramping version with 0% ramp percentage
@@ -627,26 +627,26 @@ func TestFindDeploymentVersionForWorkflowID(t *testing.T) {
 			name:              "useRampingVersion with zero ramp bypasses hash and returns ramping",
 			current:           &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())},
 			ramping:           &deploymentspb.DeploymentVersionData{Version: v2, RampPercentage: 0, RoutingUpdateTime: timestamp.TimePtr(time.Now())},
-			UseRampingVersion: true,
+			useRampingVersion: true,
 			want:              v2,
 		},
 		{
 			// When useRampingVersion is set but there is no ramping version, falls back to current.
 			name:              "useRampingVersion with no ramping version falls back to current",
 			current:           &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())},
-			UseRampingVersion: true,
+			useRampingVersion: true,
 			want:              v1,
 		},
 		{
 			// When useRampingVersion is set but both current and ramping are nil (unversioned task queue), returns nil.
 			name:              "useRampingVersion with no current and no ramping returns nil",
-			UseRampingVersion: true,
+			useRampingVersion: true,
 			want:              nil,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(tt.current.GetVersion(), 0, tt.ramping.GetVersion(), tt.ramping.GetRampPercentage(), 0, "my-wf-id", tt.UseRampingVersion); !got.Equal(tt.want) {
+			if got, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(tt.current.GetVersion(), 0, tt.ramping.GetVersion(), tt.ramping.GetRampPercentage(), 0, "my-wf-id", tt.useRampingVersion); !got.Equal(tt.want) {
 				t.Errorf("FindTargetDeploymentVersionAndRevisionNumberForWorkflowID() = %v, want %v", got, tt.want)
 			}
 		})

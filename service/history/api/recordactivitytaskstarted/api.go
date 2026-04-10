@@ -316,7 +316,15 @@ func getDeploymentVersionAndRevisionNumberForWorkflowID(
 
 	// Apply workflow-specific routing logic
 	// Note: Passing false useRampingVersionForInitialTask because activity is never the initial task.
-	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(routingInfo.Current, routingInfo.CurrentRevisionNumber, routingInfo.Ramping, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber, workflowId, false)
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
+		routingInfo.Current,
+		routingInfo.CurrentRevisionNumber,
+		routingInfo.Ramping,
+		routingInfo.RampPercentage,
+		routingInfo.RampingRevisionNumber,
+		workflowId,
+		false,
+	)
 
 	return targetDeploymentVersion, targetDeploymentRevisionNumber, nil
 }

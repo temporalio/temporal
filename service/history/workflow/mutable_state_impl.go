@@ -2525,10 +2525,10 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// after first workflow task completion.
 	var sourceDeploymentVersion *deploymentpb.WorkerDeploymentVersion
 	var sourceDeploymentRevisionNumber int64
-	if previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE ||
-		(previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
-			(command.GetInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE ||
-				command.GetInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_USE_RAMPING_VERSION)) {
+	previousBehavior := previousExecutionState.GetEffectiveVersioningBehavior()
+	nonEmptyContinueAsNewInitialBehavior := command.GetInitialVersioningBehavior() != enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED
+	if previousBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE ||
+		(previousBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED && nonEmptyContinueAsNewInitialBehavior) {
 		sourceDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
 		sourceDeploymentRevisionNumber = previousExecutionState.GetVersioningRevisionNumber()
 
@@ -9122,15 +9122,21 @@ func (ms *MutableStateImpl) SetVersioningRevisionNumber(revisionNumber int64) {
 }
 
 func (ms *MutableStateImpl) GetShouldUseRampingVersion() bool {
-	return ms.GetExecutionInfo().GetLastCompletedWorkflowTaskStartedEventId() == common.EmptyEventID &&
-		// ContinueAsNewInitialVersioningBehavior is only populated (in ApplyWorkflowExecutionStartedEvent)
-		// from InheritedAutoUpgradeInfo, which always sets Behavior to AUTO_UPGRADE. So there is no world
-		// in which ContinueAsNewInitialVersioningBehavior is set without Behavior also being AUTO_UPGRADE.
-		//
-		// Backward-compat note: history events written before this field existed carry UNSPECIFIED, which
-		// does not match USE_RAMPING_VERSION, so those runs correctly fall through and return false — the
-		// same as AUTO_UPGRADE behavior.
-		ms.GetExecutionInfo().GetVersioningInfo().GetContinueAsNewInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_USE_RAMPING_VERSION
+	execInfo := ms.GetExecutionInfo()
+	versioningInfo := execInfo.GetVersioningInfo()
+
+	hasNoCompletedWorkflowTask := execInfo.GetLastCompletedWorkflowTaskStartedEventId() == common.EmptyEventID
+
+	// Backward-compat note: history events written before ContinueAsNewInitialVersioningBehavior existed
+	// carry UNSPECIFIED, which does not match USE_RAMPING_VERSION, so those runs correctly fall through
+	// and return false — the same as AUTO_UPGRADE behavior.
+	hasInitialBehaviorUseRampingVersion := versioningInfo.GetContinueAsNewInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_USE_RAMPING_VERSION
+
+	// ContinueAsNewInitialVersioningBehavior is only populated (in ApplyWorkflowExecutionStartedEvent)
+	// from InheritedAutoUpgradeInfo, which always sets Behavior to AUTO_UPGRADE. So there is no world
+	// in which ContinueAsNewInitialVersioningBehavior is set without Behavior also being AUTO_UPGRADE.
+	// We could also check if the behavior is AUTO_UPGRADE, but that's redundant.
+	return hasNoCompletedWorkflowTask && hasInitialBehaviorUseRampingVersion
 }
 
 // reschedulePendingActivities reschedules all the activities that are not started, so they are

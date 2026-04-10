@@ -262,16 +262,17 @@ func SetupNewWorkflowForRetryOrCron(
 		} else if prevEffectiveVersioningBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
 			sourceDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousMutableState.GetEffectiveDeployment())
 			sourceDeploymentRevisionNumber := previousMutableState.GetVersioningRevisionNumber()
-			// Carry forward ContinueAsNewInitialVersioningBehavior so that the first task of each
-			// retry run also receives the same InitialVersioningBehavior. Per the API spec, this
-			// behavior is scoped to the initial task of this run and of any retries.
-			// Note: GetShouldUseRampingVersion() gates the policy on LastCompletedWorkflowTaskStartedEventId
-			// == EmptyEventID, so subsequent tasks of the retry run are unaffected even though the
-			// field remains stored in VersioningInfo for the lifetime of that run.
-			sourceCaNInitialVersioningBehavior := previousMutableState.GetExecutionInfo().GetVersioningInfo().GetContinueAsNewInitialVersioningBehavior()
 
 			// Only set inherited auto upgrade info if source deployment version and revision number are not nil.
 			if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
+				// Carry forward ContinueAsNewInitialVersioningBehavior so that the first task of each
+				// retry run also receives the same InitialVersioningBehavior. Per the API spec, this
+				// behavior is scoped to the initial task of this run and of any retries.
+				// Note: GetShouldUseRampingVersion() gates the policy on LastCompletedWorkflowTaskStartedEventId
+				// == EmptyEventID, so subsequent tasks of the retry run are unaffected even though the
+				// field remains stored in VersioningInfo for the lifetime of that run.
+				sourceCaNInitialVersioningBehavior := previousMutableState.GetExecutionInfo().GetVersioningInfo().GetContinueAsNewInitialVersioningBehavior()
+
 				inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
 					SourceDeploymentVersion:                sourceDeploymentVersion,
 					SourceDeploymentRevisionNumber:         sourceDeploymentRevisionNumber,
