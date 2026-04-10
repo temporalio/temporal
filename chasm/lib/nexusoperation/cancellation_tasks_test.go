@@ -78,8 +78,8 @@ func newCancellationTaskTestEnv(
 	// Wire mock parent pointers so Cancellation.loadArgs can traverse the tree.
 	mockStore := &mockStoreComponent{invocationData: invocationData}
 	op.Store = chasm.NewMockParentPtr[OperationStore](mockStore)
-	cancellation.Operation = chasm.NewMockParentPtr[*Operation](op)
-	op.Cancellation = chasm.NewComponentField[*Cancellation](nil, cancellation)
+	cancellation.Operation = chasm.NewMockParentPtr(op)
+	op.Cancellation = chasm.NewComponentField(nil, cancellation)
 
 	mockEngine := chasm.NewMockEngine(ctrl)
 
@@ -242,7 +242,7 @@ func TestCancellationBackoffTaskHandler_Execute(t *testing.T) {
 		Status:  nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF,
 		Attempt: 2,
 	})
-	cancellation.Operation = chasm.NewMockParentPtr[*Operation](op)
+	cancellation.Operation = chasm.NewMockParentPtr(op)
 
 	ctx := &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
