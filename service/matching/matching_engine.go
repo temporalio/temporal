@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/stream_batcher"
 	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tasktoken"
@@ -67,7 +68,7 @@ import (
 )
 
 const (
-	// If sticky poller is not seem in last 10s, we treat it as sticky worker unavailable
+	// If sticky poller is not seen in last 10s, we treat it as sticky worker unavailable.
 	// This seems aggressive, but the default sticky schedule_to_start timeout is 5s, so 10s seems reasonable.
 	stickyPollerUnavailableWindow = 10 * time.Second
 
@@ -570,13 +571,16 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	if err != nil {
 		return "", false, err
 	}
+	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY, //nolint:forbidigo
+		"AddWorkflowTask called with unexpected partition kind") {
+		return "", false, serviceerror.NewInternal("AddWorkflowTask called with unexpected partition kind")
+	}
 
-	ephemeral := partition.IsEphemeral()
 	// do not load ephemeral task queue if it is not already loaded, which means it has no poller.
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !ephemeral, loadCauseTask)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !partition.IsEphemeral(), loadCauseTask)
 	if err != nil {
 		return "", false, err
-	} else if ephemeral && !stickyWorkerAvailable(pm) {
+	} else if partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && !stickyWorkerAvailable(pm) {
 		return "", false, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
@@ -1089,12 +1093,15 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	if err != nil {
 		return nil, err
 	}
-	ephemeral := partition.IsEphemeral()
+	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY, //nolint:forbidigo
+		"QueryWorkflow called with unexpected partition kind") {
+		return nil, serviceerror.NewInternal("QueryWorkflow called with unexpected partition kind")
+	}
 	// do not load ephemeral task queue if it is not already loaded, which means it has no poller.
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !ephemeral, loadCauseQuery)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !partition.IsEphemeral(), loadCauseQuery)
 	if err != nil {
 		return nil, err
-	} else if ephemeral && !stickyWorkerAvailable(pm) {
+	} else if partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && !stickyWorkerAvailable(pm) {
 		return nil, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
