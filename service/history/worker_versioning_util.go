@@ -216,12 +216,12 @@ func MakeDirectiveForActivityTask(mutableState historyi.MutableState, activityIn
 		return &taskqueuespb.TaskVersionDirective{Behavior: behavior,
 			DeploymentVersion: worker_versioning.DeploymentVersionFromDeployment(d),
 			RevisionNumber:    mutableState.GetVersioningRevisionNumber(),
-			// Don't pass UseRampingVersionInitialTask for activity tasks, because it only applies to
+			// Don't pass UseRampingVersion for activity tasks, because it only applies to
 			// the first workflow task of a CaN run. Activities are always scheduled by a WFT completion,
 			// so by the time an activity task is dispatched the first WFT has already completed and
 			// GetShouldUseRampingVersion() would return false anyway. Passing nil explicitly to make it very
-			// explicit that UseRampingVersionInitialTask is not used for activities.
-			UseRampingVersionInitialTask: false,
+			// explicit that UseRampingVersion is not used for activities.
+			UseRampingVersion: false,
 		}
 	}
 	if !activityInfo.UseCompatibleVersion && activityInfo.GetUseWorkflowBuildIdInfo() == nil {

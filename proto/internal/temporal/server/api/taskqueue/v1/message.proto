@@ -43,7 +43,7 @@ message TaskVersionDirective {
   int64 revision_number = 6;
   // True if the workflow should use the Ramping Version of its Task Queue regardless of f(workflow_id, ramp_percentage).
   // If there is no Ramping Version at the time of task dispatch, the Current Version will be used instead.
-  bool use_ramping_version_initial_task = 7;
+  bool use_ramping_version = 7;
 }
 
 message FairLevel {

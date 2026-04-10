@@ -54,9 +54,9 @@ type TaskVersionDirective struct {
 	RevisionNumber int64 `protobuf:"varint,6,opt,name=revision_number,json=revisionNumber,proto3" json:"revision_number,omitempty"`
 	// True if the workflow should use the Ramping Version of its Task Queue regardless of f(workflow_id, ramp_percentage).
 	// If there is no Ramping Version at the time of task dispatch, the Current Version will be used instead.
-	UseRampingVersionInitialTask bool `protobuf:"varint,7,opt,name=use_ramping_version_initial_task,json=useRampingVersionInitialTask,proto3" json:"use_ramping_version_initial_task,omitempty"`
-	unknownFields                protoimpl.UnknownFields
-	sizeCache                    protoimpl.SizeCache
+	UseRampingVersion bool `protobuf:"varint,7,opt,name=use_ramping_version,json=useRampingVersion,proto3" json:"use_ramping_version,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *TaskVersionDirective) Reset() {
@@ -142,9 +142,9 @@ func (x *TaskVersionDirective) GetRevisionNumber() int64 {
 	return 0
 }
 
-func (x *TaskVersionDirective) GetUseRampingVersionInitialTask() bool {
+func (x *TaskVersionDirective) GetUseRampingVersion() bool {
 	if x != nil {
-		return x.UseRampingVersionInitialTask
+		return x.UseRampingVersion
 	}
 	return false
 }
@@ -941,7 +941,7 @@ var File_temporal_server_api_taskqueue_v1_message_proto protoreflect.FileDescrip
 
 const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"\n" +
-	".temporal/server/api/taskqueue/v1/message.proto\x12 temporal.server.api.taskqueue.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a(temporal/api/deployment/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a/temporal/server/api/deployment/v1/message.proto\x1a'temporal/server/api/enums/v1/task.proto\"\x87\x04\n" +
+	".temporal/server/api/taskqueue/v1/message.proto\x12 temporal.server.api.taskqueue.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a(temporal/api/deployment/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a/temporal/server/api/deployment/v1/message.proto\x1a'temporal/server/api/enums/v1/task.proto\"\xef\x03\n" +
 	"\x14TaskVersionDirective\x12J\n" +
 	"\x14use_assignment_rules\x18\x01 \x01(\v2\x16.google.protobuf.EmptyH\x00R\x12useAssignmentRules\x12,\n" +
 	"\x11assigned_build_id\x18\x02 \x01(\tH\x00R\x0fassignedBuildId\x12E\n" +
@@ -950,8 +950,8 @@ const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"deployment\x18\x04 \x01(\v2&.temporal.api.deployment.v1.DeploymentR\n" +
 	"deployment\x12i\n" +
 	"\x12deployment_version\x18\x05 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\x11deploymentVersion\x12'\n" +
-	"\x0frevision_number\x18\x06 \x01(\x03R\x0erevisionNumber\x12F\n" +
-	" use_ramping_version_initial_task\x18\a \x01(\bR\x1cuseRampingVersionInitialTaskB\n" +
+	"\x0frevision_number\x18\x06 \x01(\x03R\x0erevisionNumber\x12.\n" +
+	"\x13use_ramping_version\x18\a \x01(\bR\x11useRampingVersionB\n" +
 	"\n" +
 	"\bbuild_id\"A\n" +
 	"\tFairLevel\x12\x1b\n" +
