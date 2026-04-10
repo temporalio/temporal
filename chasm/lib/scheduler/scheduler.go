@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -156,10 +157,11 @@ func NewSentinel(
 		},
 		cacheConflictToken: scheduler.InitialConflictToken,
 	}
-	s.Info.CreateTime = timestamppb.New(ctx.Now(s))
+	now := ctx.Now(s)
+	s.Info.CreateTime = timestamppb.New(now)
 
 	ctx.AddTask(s, chasm.TaskAttributes{
-		ScheduledTime: ctx.Now(s).Add(SentinelIdleTime),
+		ScheduledTime: now.Add(SentinelIdleTime),
 	}, &schedulerpb.SchedulerIdleTask{
 		IdleTimeTotal: durationpb.New(SentinelIdleTime),
 	})
@@ -289,8 +291,17 @@ func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 }
 
 func (s *Scheduler) ContextMetadata(_ chasm.Context) map[string]string {
-	// TODO: Export scheduler context metadata.
-	return nil
+	md := make(map[string]string, 2)
+	if wfType := s.Schedule.GetAction().GetStartWorkflow().GetWorkflowType().GetName(); wfType != "" {
+		md[contextutil.MetadataKeyWorkflowType] = wfType
+	}
+	if tq := s.Schedule.GetAction().GetStartWorkflow().GetTaskQueue().GetName(); tq != "" {
+		md[contextutil.MetadataKeyWorkflowTaskQueue] = tq
+	}
+	if len(md) == 0 {
+		return nil
+	}
+	return md
 }
 
 // Terminate implements the chasm.RootComponent interface.

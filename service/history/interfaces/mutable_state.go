@@ -379,6 +379,7 @@ type (
 		StartDeploymentTransition(deployment *deploymentpb.Deployment, revisionNumber int64) error
 		GetVersioningRevisionNumber() int64
 		SetVersioningRevisionNumber(revisionNumber int64)
+		GetShouldUseRampingVersion() bool
 
 		AddReapplyCandidateEvent(event *historypb.HistoryEvent)
 		GetReapplyCandidateEvents() []*historypb.HistoryEvent
