@@ -598,6 +598,13 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, errRequestNotSet
 	}
 
+	// Apply defaults before validation; must be first for idempotency on internal retries.
+	enums.SetDefaultWorkflowIDPolicies(
+		&request.WorkflowIdReusePolicy,
+		&request.WorkflowIdConflictPolicy,
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+	)
+
 	if err := wh.validateWorkflowID(request.GetWorkflowId()); err != nil {
 		return nil, err
 	}
@@ -641,9 +648,6 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		request.WorkflowIdConflictPolicy); err != nil {
 		return nil, err
 	}
-
-	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
-	enums.SetDefaultWorkflowIdConflictPolicy(&request.WorkflowIdConflictPolicy, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
 
 	if err := wh.validateOnConflictOptions(request.OnConflictOptions); err != nil {
 		return nil, err
@@ -2269,6 +2273,13 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, errRequestNotSet
 	}
 
+	// Apply defaults before validation; must be first for idempotency on internal retries.
+	enums.SetDefaultWorkflowIDPolicies(
+		&request.WorkflowIdReusePolicy,
+		&request.WorkflowIdConflictPolicy,
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+	)
+
 	if err := wh.validateWorkflowID(request.GetWorkflowId()); err != nil {
 		return nil, err
 	}
@@ -2323,9 +2334,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		name := enumspb.WorkflowIdConflictPolicy_name[int32(request.WorkflowIdConflictPolicy.Number())]
 		return nil, serviceerror.NewInvalidArgumentf(errUnsupportedIDConflictPolicy, name)
 	}
-
-	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
-	enums.SetDefaultWorkflowIdConflictPolicy(&request.WorkflowIdConflictPolicy, enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)
 
 	if err := backoff.ValidateSchedule(request.GetCronSchedule()); err != nil {
 		return nil, err
@@ -3473,7 +3481,8 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 			return nil, checkErr
 		}
 		if isReal {
-			return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", request.ScheduleId)
+			return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
+				fmt.Sprintf("schedule %q is already registered", request.ScheduleId), "", "")
 		}
 	}
 
@@ -3485,11 +3494,17 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 	if err != nil {
 		// The CHASM handler returns NotFound when the key is occupied by a
 		// sentinel (written by a V1-path node that raced us). Translate to
-		// AlreadyExists so the caller gets a sensible error.
+		// WorkflowExecutionAlreadyStarted so the SDK can map it to
+		// ErrScheduleAlreadyRunning.
 		if isSchedulerErrorLegacyRoutable(err) {
 			wh.logger.Warn("CreateSchedule race detected: sentinel found at CHASM key",
 				tag.ScheduleID(request.ScheduleId))
-			return nil, serviceerror.NewAlreadyExistsf("schedule %q: concurrent creation detected", request.ScheduleId)
+			return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
+				fmt.Sprintf("schedule %q: concurrent creation detected", request.ScheduleId), "", "")
+		}
+		var alreadyExistsErr *serviceerror.AlreadyExists
+		if errors.As(err, &alreadyExistsErr) {
+			return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(alreadyExistsErr.Message, "", "")
 		}
 		return nil, err
 	}
@@ -3517,6 +3532,12 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 	// fleet, so it is stable for usage here.
 	if wh.config.EnableChasm(namespaceName.String()) {
 		if err := wh.writeSchedulerCHASMSentinel(ctx, namespaceID.String(), namespaceName.String(), request.ScheduleId); err != nil {
+			// Translate AlreadyExists (from CHASM handler) to
+			// WorkflowExecutionAlreadyStarted for SDK compatibility.
+			var alreadyExistsErr *serviceerror.AlreadyExists
+			if errors.As(err, &alreadyExistsErr) {
+				return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(alreadyExistsErr.Message, "", "")
+			}
 			// Ignore unimplemented to avoid issues with mixed brain testing.
 			//
 			// We wouldn't hit this condition in prod, as we wouldn't migrate with the fleet
@@ -3602,9 +3623,11 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 				// A dummy workflow exists — a CHASM-path node raced us.
 				wh.logger.Warn("CreateSchedule race detected: sentinel found at V1 key",
 					tag.ScheduleID(request.ScheduleId))
-				return nil, serviceerror.NewAlreadyExistsf("schedule %q: concurrent creation detected", request.ScheduleId)
+				return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
+					fmt.Sprintf("schedule %q: concurrent creation detected", request.ScheduleId), "", "")
 			}
-			return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", request.ScheduleId)
+			return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
+				fmt.Sprintf("schedule %q is already registered", request.ScheduleId), "", "")
 		}
 		return nil, err
 	}
@@ -4533,6 +4556,11 @@ func (wh *WorkflowHandler) UpdateSchedule(
 		}
 	}
 
+	// Reject memo updates for V1 schedules.
+	if request.GetMemo() != nil {
+		return nil, serviceerror.NewFailedPrecondition("memo updates are not supported on workflow-backed schedules")
+	}
+
 	return wh.updateScheduleWorkflow(ctx, request)
 }
 
@@ -4663,8 +4691,6 @@ func (wh *WorkflowHandler) PatchSchedule(
 		return nil, err
 	}
 
-	// TODO - when V2 supports updating the scheduler memo, make sure to add that to
-	// the size validation here (like in CreateSchedule).
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
 	if err := common.CheckEventBlobSizeLimit(

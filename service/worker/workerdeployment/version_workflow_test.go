@@ -2271,7 +2271,10 @@ func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_Success() {
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	s.env.RegisterActivity(a.UpdateWorkerControllerInstance)
-	s.env.OnActivity(a.UpdateWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Once()
+	s.env.OnActivity(a.UpdateWorkerControllerInstance, mock.Anything, mock.Anything).Return((*computepb.ComputeConfigSummary)(nil), nil).Once()
+
+	// Mock external signal to deployment workflow
+	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
 		args := &deploymentspb.UpdateComputeConfigArgs{
@@ -2377,6 +2380,7 @@ func (s *VersionWorkflowSuite) Test_UpdateComputeConfig_UpdateInstanceFailure_Do
 
 	s.env.RegisterActivity(a.UpdateWorkerControllerInstance)
 	s.env.OnActivity(a.UpdateWorkerControllerInstance, mock.Anything, mock.Anything).Return(
+		(*computepb.ComputeConfigSummary)(nil),
 		temporal.NewNonRetryableApplicationError("invalid config", errInvalidComputeConfig, nil),
 	).Maybe()
 

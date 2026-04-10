@@ -156,11 +156,12 @@ func SearchAttributeMapperProviderProvider(
 	searchAttributeProvider searchattribute.Provider,
 	persistenceConfig *config.Persistence,
 ) searchattribute.MapperProvider {
+	primaryVisibilityStoreConfig := persistenceConfig.GetVisibilityStoreConfig()
 	return searchattribute.NewMapperProvider(
 		saMapper,
 		namespaceRegistry,
 		searchAttributeProvider,
-		persistenceConfig.IsSQLVisibilityStore() || persistenceConfig.IsCustomVisibilityStore(),
+		primaryVisibilityStoreConfig.GetIndexName(),
 	)
 }
 
@@ -225,6 +226,7 @@ func NamespaceRegistryProvider(
 	return nsregistry.NewRegistry(
 		metadataManager,
 		clusterMetadata.IsGlobalNamespaceEnabled(),
+		clusterMetadata.GetCurrentClusterName(),
 		dynamicconfig.NamespaceCacheRefreshInterval.Get(dynamicCollection),
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection),
 		metricsHandler,
