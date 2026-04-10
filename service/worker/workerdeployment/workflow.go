@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
+	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -118,7 +119,7 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 		defer func() { d.signalHandler.processingSignals-- }()
 		var summary *deploymentspb.WorkerDeploymentVersionSummary
 		c.Receive(ctx, &summary)
-		d.syncVersionSummaryFromVersionWorkflow(summary)
+		d.syncVersionSummaryFromVersionWorkflow(ctx, summary)
 		d.setStateChanged()
 	})
 	d.signalHandler.signalSelector.AddReceive(propagationCompleteChannel, func(c workflow.ReceiveChannel, more bool) {
@@ -138,7 +139,7 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 
 // syncVersionSummary ensures the version summary in the deployment workflow stays consistent
 // with the version workflow. This helps prevent discrepancies if they ever fall out of sync.
-func (d *WorkflowRunner) syncVersionSummaryFromVersionWorkflow(summary *deploymentspb.WorkerDeploymentVersionSummary) {
+func (d *WorkflowRunner) syncVersionSummaryFromVersionWorkflow(ctx workflow.Context, summary *deploymentspb.WorkerDeploymentVersionSummary) {
 	existing, ok := d.State.Versions[summary.GetVersion()]
 	if !ok {
 		d.logger.Error("received summary for a non-existing version, ignoring it", "version", summary.GetVersion())
@@ -148,6 +149,11 @@ func (d *WorkflowRunner) syncVersionSummaryFromVersionWorkflow(summary *deployme
 	// Preserve create_request_id since the version workflow doesn't know about it.
 	summary.CreateRequestId = existing.GetCreateRequestId()
 	d.State.Versions[summary.GetVersion()] = summary
+	if workflow.GetVersion(ctx, "update-memo-with-summary", workflow.DefaultVersion, 0) != workflow.DefaultVersion {
+		if err := d.updateMemo(ctx); err != nil {
+			d.logger.Error("failed to update memo", "error", err)
+		}
+	}
 }
 
 // handlePropagationComplete handles the propagation complete signal from version workflows
@@ -555,13 +561,14 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 
 	// Create or update the Worker Controller Instance for this version.
 	computeConfig := args.GetComputeConfig()
+	var computeConfigSummary *computepb.ComputeConfigSummary
 	if computeConfig != nil {
 		updateCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 		err = workflow.ExecuteActivity(updateCtx, d.a.UpdateWorkerControllerInstanceFromDeployment, &deploymentspb.UpdateWorkerControllerInstanceInput{
 			Version:             worker_versioning.ExternalWorkerDeploymentVersionFromVersion(versionObj),
 			Identity:            args.GetIdentity(),
 			UpsertScalingGroups: scalingGroupsToUpsertUpdates(computeConfig.GetScalingGroups()),
-		}).Get(ctx, nil)
+		}).Get(ctx, &computeConfigSummary)
 		if err != nil {
 			var appErr *temporal.ApplicationError
 			if errors.As(err, &appErr) && appErr.Type() == errInvalidComputeConfig {
@@ -578,6 +585,7 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 		BuildId:        versionObj.BuildId,
 		RequestId:      args.GetRequestId(),
 		Identity:       args.GetIdentity(),
+		ComputeConfig:  computeConfigSummary,
 	}).Get(ctx, nil)
 	if err != nil {
 		if computeConfig != nil {
@@ -599,6 +607,7 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 		CreateTime:      timestamppb.New(workflow.Now(ctx)),
 		Status:          enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED,
 		CreateRequestId: args.GetRequestId(),
+		ComputeConfig:   computeConfigSummary,
 	}
 	d.metrics.Counter(metrics.WorkerDeploymentVersionCreated.Name()).Inc(1)
 
@@ -1743,5 +1752,6 @@ func (d *WorkflowRunner) getWorkerDeploymentInfoVersionSummary(versionSummary *d
 		FirstActivationTime:  versionSummary.GetFirstActivationTime(),
 		LastCurrentTime:      versionSummary.GetLastCurrentTime(),
 		LastDeactivationTime: versionSummary.GetLastDeactivationTime(),
+		ComputeConfig:        versionSummary.GetComputeConfig(),
 	}
 }

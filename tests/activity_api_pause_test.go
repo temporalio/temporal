@@ -115,7 +115,7 @@ func (s *ActivityAPIPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// unblock the activity
-	activityPausedCn <- struct{}{}
+	env.SendToChannel(ctx, activityPausedCn)
 	// make sure activity is paused on server and completed on the worker
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
@@ -264,7 +264,7 @@ func (s *ActivityAPIPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsO
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// End the activity
-	activityPausedCn <- struct{}{}
+	env.SendToChannel(ctx, activityPausedCn)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
@@ -632,7 +632,7 @@ func (s *ActivityAPIPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let activity finish
-	activityCompleteCn <- struct{}{}
+	env.SendToChannel(ctx, activityCompleteCn)
 
 	// wait for workflow to finish
 	var out string
