@@ -122,6 +122,7 @@ func TestGetDeploymentVersionForWorkflowID_CacheHit(t *testing.T) {
 		mockCache.cachedData.RampPercentage,
 		mockCache.cachedData.RampingRevisionNumber,
 		workflowID,
+		false,
 	)
 	assert.Equal(t, expectedVersion, targetVersion)
 	assert.Equal(t, expectedRevNum, targetRevNum)

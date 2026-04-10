@@ -233,7 +233,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Unblock the activity to complete the workflow.
-	s.activityCompletedCh <- struct{}{}
+	s.SendToChannel(ctx, s.activityCompletedCh)
 
 	// assert that the workflow completes now.
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -591,7 +591,7 @@ func (s *PauseWorkflowExecutionSuite) TestQueryWorkflowWhenPaused() {
 	s.NotNil(unpauseResp)
 
 	// Unblock the activity and send the signal to complete the workflow.
-	s.activityCompletedCh <- struct{}{}
+	s.SendToChannel(ctx, s.activityCompletedCh)
 	err = s.SdkClient().SignalWorkflow(ctx, workflowID, runID, s.testEndSignal, "test end signal")
 	s.NoError(err)
 
@@ -818,7 +818,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() 
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Unblock the activity and send the signal to complete the workflow.
-	s.activityCompletedCh <- struct{}{}
+	s.SendToChannel(ctx, s.activityCompletedCh)
 	err = s.SdkClient().SignalWorkflow(ctx, workflowID, runID, s.testEndSignal, "test end signal")
 	s.NoError(err)
 

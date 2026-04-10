@@ -178,7 +178,7 @@ func (c *operationContext) interceptRequest(
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
-	if err := c.namespaceValidationInterceptor.ValidateState(c.namespace, c.apiName); err != nil {
+	if err := c.namespaceValidationInterceptor.ValidateState(c.namespace, c.apiName, ""); err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("invalid_namespace_state"))
 		return commonnexus.ConvertGRPCError(err, false)
 	}

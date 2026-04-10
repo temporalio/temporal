@@ -73,6 +73,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	configVersion := int64(0)
 	failoverVersion := int64(59)
 	clusters := []string{clusterActive, clusterStandby}
+	replicationState := enumspb.REPLICATION_STATE_NORMAL
 
 	namespaceOperation := enumsspb.NAMESPACE_OPERATION_CREATE
 	info := &persistencespb.NamespaceInfo{
@@ -94,6 +95,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	replicationConfig := &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
+		State:             replicationState,
 	}
 	isGlobalNamespace := true
 
@@ -121,6 +123,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 					ActiveClusterName: clusterActive,
 					Clusters:          convertClusterReplicationConfigToProto(clusters),
+					State:             replicationState,
 				},
 				ConfigVersion:   configVersion,
 				FailoverVersion: failoverVersion,
@@ -141,7 +144,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		nil,
 		false, // forceReplicate
 	)
-	s.Nil(err)
+	s.Require().NoError(err)
 }
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask_NotGlobalNamespace() {
@@ -197,7 +200,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		nil,
 		false, // forceReplicate
 	)
-	s.Nil(err)
+	s.Require().NoError(err)
 }
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_IsGlobalNamespace() {
@@ -286,7 +289,98 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 		nil,
 		false, // forceReplicate
 	)
-	s.Nil(err)
+	s.Require().NoError(err)
+}
+
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_StateNotReplicated() {
+	taskType := enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
+	id := primitives.NewUUID().String()
+	name := "some random namespace test name"
+	state := enumspb.NAMESPACE_STATE_REGISTERED
+	description := "some random test description"
+	ownerEmail := "some random test owner"
+	data := map[string]string{"k": "v"}
+	retention := 10 * time.Hour * 24
+	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	historyArchivalURI := "some random history archival uri"
+	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	visibilityArchivalURI := "some random visibility archival uri"
+	clusterActive := "some random active cluster name"
+	clusterStandby := "some random standby cluster name"
+	configVersion := int64(0)
+	failoverVersion := int64(59)
+	clusters := []string{clusterActive, clusterStandby}
+
+	namespaceOperation := enumsspb.NAMESPACE_OPERATION_UPDATE
+	info := &persistencespb.NamespaceInfo{
+		Id:          id,
+		Name:        name,
+		State:       state,
+		Description: description,
+		Owner:       ownerEmail,
+		Data:        data,
+	}
+	config := &persistencespb.NamespaceConfig{
+		Retention:               durationpb.New(retention),
+		HistoryArchivalState:    historyArchivalState,
+		HistoryArchivalUri:      historyArchivalURI,
+		VisibilityArchivalState: visibilityArchivalState,
+		VisibilityArchivalUri:   visibilityArchivalURI,
+		BadBinaries:             &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+	}
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: clusterActive,
+		Clusters:          clusters,
+		State:             enumspb.REPLICATION_STATE_NORMAL,
+	}
+	isGlobalNamespace := true
+
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), &replicationspb.ReplicationTask{
+		TaskType: taskType,
+		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
+			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
+				NamespaceOperation: namespaceOperation,
+				Id:                 id,
+				Info: &namespacepb.NamespaceInfo{
+					Name:        name,
+					State:       state,
+					Description: description,
+					OwnerEmail:  ownerEmail,
+					Data:        data,
+				},
+				Config: &namespacepb.NamespaceConfig{
+					WorkflowExecutionRetentionTtl: durationpb.New(retention),
+					HistoryArchivalState:          historyArchivalState,
+					HistoryArchivalUri:            historyArchivalURI,
+					VisibilityArchivalState:       visibilityArchivalState,
+					VisibilityArchivalUri:         visibilityArchivalURI,
+					BadBinaries:                   &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+				},
+				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+					ActiveClusterName: clusterActive,
+					Clusters:          convertClusterReplicationConfigToProto(clusters),
+					// State must not be set on UPDATE even when source state is NORMAL
+				},
+				ConfigVersion:   configVersion,
+				FailoverVersion: failoverVersion,
+			},
+		},
+	}).Return(nil)
+
+	err := s.namespaceReplicator.HandleTransmissionTask(
+		context.Background(),
+		namespaceOperation,
+		info,
+		config,
+		replicationConfig,
+		true,
+		configVersion,
+		failoverVersion,
+		isGlobalNamespace,
+		nil,
+		false, // forceReplicate
+	)
+	s.Require().NoError(err)
 }
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_NotGlobalNamespace() {
@@ -341,7 +435,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 		nil,
 		false, // forceReplicate
 	)
-	s.Nil(err)
+	s.Require().NoError(err)
 }
 
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_ReplicationClusterListUpdated() {
@@ -430,7 +524,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 		nil,
 		false, // forceReplicate
 	)
-	s.Nil(err)
+	s.Require().NoError(err)
 
 	err = s.namespaceReplicator.HandleTransmissionTask(
 		context.Background(),
@@ -445,5 +539,5 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 		nil,
 		false, // forceReplicate
 	)
-	s.Nil(err)
+	s.Require().NoError(err)
 }
