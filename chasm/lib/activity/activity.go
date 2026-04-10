@@ -271,7 +271,7 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx ch
 	if err := applyFn(ctx); err != nil {
 		return err
 	}
-	return a.processCloseCallbacks(ctx)
+	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
 }
 
 func (a *Activity) addCompletionCallbacks(
@@ -315,24 +315,12 @@ func (a *Activity) addCompletionCallbacks(
 			return serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", variant)
 		}
 
+		// requestID (unique per API call) + idx (position within the request) ensures unique,idempotent callback IDs.
+		// Unlike HSM callbacks, CHASM replicates entire trees rather than replaying events, so deterministic
+		// cross-cluster IDs based on event version are not needed.
 		id := fmt.Sprintf("%s-%d", requestID, idx)
 		callbackObj := callback.NewCallback(requestID, registrationTime, &callbackspb.CallbackState{}, chasmCB)
 		a.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
-	}
-	return nil
-}
-
-// processCloseCallbacks triggers all STANDBY completion callbacks by transitioning them
-// to SCHEDULED state, which causes the callback library to invoke them.
-func (a *Activity) processCloseCallbacks(ctx chasm.MutableContext) error {
-	for _, field := range a.Callbacks {
-		cb := field.Get(ctx)
-		if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
-			continue
-		}
-		if err := callback.TransitionScheduled.Apply(cb, ctx, callback.EventScheduled{}); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -346,8 +334,10 @@ func (a *Activity) GetNexusCompletion(ctx chasm.Context, _ string) (nexusrpc.Com
 
 	attempt := a.LastAttempt.Get(ctx)
 	opts := nexusrpc.CompleteOperationOptions{
-		StartTime: attempt.GetStartedTime().AsTime(),
-		CloseTime: attempt.GetCompleteTime().AsTime(),
+		CloseTime: ctx.ExecutionInfo().CloseTime,
+	}
+	if startedTime := attempt.GetStartedTime(); startedTime != nil {
+		opts.StartTime = startedTime.AsTime()
 	}
 
 	outcome := a.Outcome.Get(ctx)
@@ -361,16 +351,7 @@ func (a *Activity) GetNexusCompletion(ctx chasm.Context, _ string) (nexusrpc.Com
 		return opts, nil
 	}
 
-	var failure *failurepb.Failure
-	if f := outcome.GetFailed(); f != nil {
-		failure = f.GetFailure()
-	}
-	if failure == nil {
-		if details := attempt.GetLastFailureDetails(); details != nil {
-			failure = details.GetFailure()
-		}
-	}
-
+	failure := a.terminalFailure(ctx)
 	if failure != nil {
 		state := nexus.OperationStateFailed
 		message := "operation failed"
@@ -393,9 +374,10 @@ func (a *Activity) GetNexusCompletion(ctx chasm.Context, _ string) (nexusrpc.Com
 			return nexusrpc.CompleteOperationOptions{}, err
 		}
 		opts.Error = opErr
+		return opts, nil
 	}
 
-	return opts, nil
+	return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternalf("activity in status %v has no outcome", a.Status)
 }
 
 // HandleCompleted updates the activity on activity completion.
@@ -945,15 +927,23 @@ func (a *Activity) outcome(ctx chasm.Context) *apiactivitypb.ActivityExecutionOu
 			Value: &apiactivitypb.ActivityExecutionOutcome_Result{Result: successful.GetOutput()},
 		}
 	}
-	if failure := activityOutcome.GetFailed().GetFailure(); failure != nil {
+	if failure := a.terminalFailure(ctx); failure != nil {
 		return &apiactivitypb.ActivityExecutionOutcome{
 			Value: &apiactivitypb.ActivityExecutionOutcome_Failure{Failure: failure},
 		}
 	}
+	return nil
+}
+
+// terminalFailure returns the failure for a closed activity. The failure may be stored in Outcome.Failed
+// (terminated, canceled, timed out) or in LastAttempt.LastFailureDetails (failed after exhausting retries).
+// Returns nil if no failure is found.
+func (a *Activity) terminalFailure(ctx chasm.Context) *failurepb.Failure {
+	if f := a.Outcome.Get(ctx).GetFailed(); f != nil {
+		return f.GetFailure()
+	}
 	if details := a.LastAttempt.Get(ctx).GetLastFailureDetails(); details != nil {
-		return &apiactivitypb.ActivityExecutionOutcome{
-			Value: &apiactivitypb.ActivityExecutionOutcome_Failure{Failure: details.GetFailure()},
-		}
+		return details.GetFailure()
 	}
 	return nil
 }

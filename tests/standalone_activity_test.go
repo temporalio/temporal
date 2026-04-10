@@ -5105,6 +5105,8 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		select {
 		case completion := <-ch.requestCh:
 			require.Equal(t, nexus.OperationStateSucceeded, completion.State)
+			require.False(t, completion.StartTime.IsZero())
+			require.False(t, completion.CloseTime.IsZero())
 			body, readErr := io.ReadAll(completion.HTTPRequest.Body)
 			_ = completion.HTTPRequest.Body.Close()
 			require.NoError(t, readErr)
@@ -5174,6 +5176,8 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		select {
 		case completion := <-ch.requestCh:
 			require.Equal(t, nexus.OperationStateFailed, completion.State)
+			require.False(t, completion.StartTime.IsZero())
+			require.False(t, completion.CloseTime.IsZero())
 			var failureErr *nexus.FailureError
 			require.ErrorAs(t, completion.Error.Cause, &failureErr)
 			require.Equal(t, defaultFailure.Message, failureErr.Failure.Message)
@@ -5245,6 +5249,8 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		select {
 		case completion := <-ch.requestCh:
 			require.Equal(t, nexus.OperationStateFailed, completion.State)
+			require.False(t, completion.StartTime.IsZero())
+			require.False(t, completion.CloseTime.IsZero())
 			var failureErr *nexus.FailureError
 			require.ErrorAs(t, completion.Error.Cause, &failureErr)
 			require.Equal(t, reason, failureErr.Failure.Message)
@@ -5319,6 +5325,8 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		select {
 		case completion := <-ch.requestCh:
 			require.Equal(t, nexus.OperationStateCanceled, completion.State)
+			require.False(t, completion.StartTime.IsZero())
+			require.False(t, completion.CloseTime.IsZero())
 			var failureErr *nexus.FailureError
 			require.ErrorAs(t, completion.Error.Cause, &failureErr)
 			require.Equal(t, "Activity canceled", failureErr.Failure.Message)
@@ -5333,5 +5341,248 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, descResp.GetInfo().GetStatus())
+	})
+
+	t.Run("ScheduleToStartTimeoutWithCallbacks", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		ch := &completionHandler{
+			requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
+			requestCompleteCh: make(chan error, 1),
+		}
+		defer func() {
+			close(ch.requestCh)
+			close(ch.requestCompleteCh)
+		}()
+		callbackAddress := s.runNexusCompletionHTTPServer(t, ch)
+
+		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Identity:     s.tv.WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout:    durationpb.New(1 * time.Minute),
+			ScheduleToStartTimeout: durationpb.New(1 * time.Second),
+			RequestId:              s.tv.Any().String(),
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress}},
+			}},
+		})
+		require.NoError(t, err)
+
+		// No worker polls — activity will time out waiting to be started.
+
+		// Verify the callback is delivered with failure state and non-zero CloseTime.
+		select {
+		case completion := <-ch.requestCh:
+			require.Equal(t, nexus.OperationStateFailed, completion.State)
+			var failureErr *nexus.FailureError
+			require.ErrorAs(t, completion.Error.Cause, &failureErr)
+			require.Contains(t, failureErr.Failure.Message, "ScheduleToStart")
+			require.True(t, completion.StartTime.IsZero(), "StartTime must be zero for a timed-out activity that was never started")
+			require.False(t, completion.CloseTime.IsZero(), "CloseTime must not be zero for a timed-out activity")
+			ch.requestCompleteCh <- nil
+		case <-ctx.Done():
+			require.Fail(t, "timed out waiting for completion callback")
+		}
+
+		// Verify the activity is in timed-out state.
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
+	})
+
+	t.Run("ScheduleToCloseTimeoutWithCallbacks", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		ch := &completionHandler{
+			requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
+			requestCompleteCh: make(chan error, 1),
+		}
+		defer func() {
+			close(ch.requestCh)
+			close(ch.requestCompleteCh)
+		}()
+		callbackAddress := s.runNexusCompletionHTTPServer(t, ch)
+
+		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Identity:     s.tv.WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
+			StartToCloseTimeout:    durationpb.New(1 * time.Minute),
+			RequestId:              s.tv.Any().String(),
+			RetryPolicy:            &commonpb.RetryPolicy{MaximumAttempts: 1},
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress}},
+			}},
+		})
+		require.NoError(t, err)
+
+		// Poll to start the activity, then let schedule-to-close fire
+		// (start-to-close is much longer so it won't fire first).
+		_, err = s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		select {
+		case completion := <-ch.requestCh:
+			require.Equal(t, nexus.OperationStateFailed, completion.State)
+			require.False(t, completion.StartTime.IsZero())
+			require.False(t, completion.CloseTime.IsZero())
+			var failureErr *nexus.FailureError
+			require.ErrorAs(t, completion.Error.Cause, &failureErr)
+			require.Contains(t, failureErr.Failure.Message, "ScheduleToClose")
+			ch.requestCompleteCh <- nil
+		case <-ctx.Done():
+			require.Fail(t, "timed out waiting for completion callback")
+		}
+
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
+	})
+
+	t.Run("StartToCloseTimeoutWithCallbacks", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		ch := &completionHandler{
+			requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
+			requestCompleteCh: make(chan error, 1),
+		}
+		defer func() {
+			close(ch.requestCh)
+			close(ch.requestCompleteCh)
+		}()
+		callbackAddress := s.runNexusCompletionHTTPServer(t, ch)
+
+		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Identity:     s.tv.WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(1 * time.Second),
+			RequestId:           s.tv.Any().String(),
+			RetryPolicy:         &commonpb.RetryPolicy{MaximumAttempts: 1},
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress}},
+			}},
+		})
+		require.NoError(t, err)
+
+		// Poll to start the activity, then let it time out.
+		_, err = s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		select {
+		case completion := <-ch.requestCh:
+			require.Equal(t, nexus.OperationStateFailed, completion.State)
+			require.False(t, completion.StartTime.IsZero())
+			require.False(t, completion.CloseTime.IsZero())
+			var failureErr *nexus.FailureError
+			require.ErrorAs(t, completion.Error.Cause, &failureErr)
+			require.Contains(t, failureErr.Failure.Message, "StartToClose")
+			ch.requestCompleteCh <- nil
+		case <-ctx.Done():
+			require.Fail(t, "timed out waiting for completion callback")
+		}
+
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
+	})
+
+	t.Run("HeartbeatTimeoutWithCallbacks", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		ch := &completionHandler{
+			requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
+			requestCompleteCh: make(chan error, 1),
+		}
+		defer func() {
+			close(ch.requestCh)
+			close(ch.requestCompleteCh)
+		}()
+		callbackAddress := s.runNexusCompletionHTTPServer(t, ch)
+
+		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Identity:     s.tv.WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+			HeartbeatTimeout:    durationpb.New(1 * time.Second),
+			RequestId:           s.tv.Any().String(),
+			RetryPolicy:         &commonpb.RetryPolicy{MaximumAttempts: 1},
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress}},
+			}},
+		})
+		require.NoError(t, err)
+
+		// Poll to start the activity, then never heartbeat.
+		_, err = s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		select {
+		case completion := <-ch.requestCh:
+			require.Equal(t, nexus.OperationStateFailed, completion.State)
+			require.False(t, completion.StartTime.IsZero())
+			require.False(t, completion.CloseTime.IsZero())
+			var failureErr *nexus.FailureError
+			require.ErrorAs(t, completion.Error.Cause, &failureErr)
+			require.Contains(t, failureErr.Failure.Message, "Heartbeat")
+			ch.requestCompleteCh <- nil
+		case <-ctx.Done():
+			require.Fail(t, "timed out waiting for completion callback")
+		}
+
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
 	})
 }

@@ -54,19 +54,7 @@ func (w *Workflow) ContextMetadata(_ chasm.Context) map[string]string {
 // ProcessCloseCallbacks triggers "WorkflowClosed" callbacks using the CHASM implementation.
 // It iterates through all callbacks and schedules WorkflowClosed ones that are in STANDBY state.
 func (w *Workflow) ProcessCloseCallbacks(ctx chasm.MutableContext) error {
-	// Iterate through all callbacks and schedule WorkflowClosed ones
-	for _, field := range w.Callbacks {
-		cb := field.Get(ctx)
-		// Only process callbacks in STANDBY state (not already triggered)
-		if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
-			continue
-		}
-		// Trigger the callback by transitioning to SCHEDULED state
-		if err := callback.TransitionScheduled.Apply(cb, ctx, callback.EventScheduled{}); err != nil {
-			return err
-		}
-	}
-	return nil
+	return callback.ScheduleStandbyCallbacks(ctx, w.Callbacks)
 }
 
 // AddCompletionCallbacks creates completion callbacks using the CHASM implementation.
@@ -110,6 +98,9 @@ func (w *Workflow) AddCompletionCallbacks(
 			return fmt.Errorf("unsupported callback variant: %T", variant)
 		}
 
+		// requestID (unique per API call) + idx (position within the request) ensures unique, idempotent callback IDs.
+		// Unlike HSM callbacks, CHASM replicates entire trees rather than replaying events, so deterministic
+		// cross-cluster IDs based on event version are not needed.
 		id := fmt.Sprintf("%s-%d", requestID, idx)
 
 		// Create and add callback
