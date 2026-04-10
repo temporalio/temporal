@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -369,9 +370,6 @@ func validateUpdateActivityExecutionOptionsRequest(
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
 	maxIDLengthLimit int,
 ) error {
-	if err := priorities.Validate(req.GetActivityOptions().GetPriority()); err != nil {
-		return err
-	}
 	if req.GetActivityId() == "" {
 		return serviceerror.NewInvalidArgument("activity ID is required")
 	}
@@ -396,12 +394,97 @@ func validateUpdateActivityExecutionOptionsRequest(
 	if len(req.GetUpdateMask().GetPaths()) > 0 && req.GetRestoreOriginal() {
 		return serviceerror.NewInvalidArgument("Both UpdateMask and RestoreOriginal are provided")
 	}
-	if !req.GetRestoreOriginal() {
-		if req.GetActivityOptions() == nil {
-			return serviceerror.NewInvalidArgument("ActivityOptions are not provided")
+
+	if req.GetRestoreOriginal() {
+		return nil
+	}
+
+	if req.GetActivityOptions() == nil {
+		return serviceerror.NewInvalidArgument("ActivityOptions are not provided")
+	}
+	if req.GetUpdateMask() == nil {
+		return serviceerror.NewInvalidArgument("UpdateMask is not provided")
+	}
+
+	opts := req.GetActivityOptions()
+	updateFields := util.ParseFieldMask(req.GetUpdateMask())
+
+	// TaskQueue: enforce user-defined task queue to prevent scheduling on reserved queues
+	// (e.g. the internal per-namespace-worker task queue).
+	if _, ok := updateFields["taskQueue.name"]; ok {
+		if err := tqid.NormalizeAndValidateUserDefined(opts.GetTaskQueue(), "", "", maxIDLengthLimit); err != nil {
+			return err
 		}
-		if req.GetUpdateMask() == nil {
-			return serviceerror.NewInvalidArgument("UpdateMask is not provided")
+	}
+
+	// Timeouts: validate each timeout value that is being updated.
+	if _, ok := updateFields["scheduleToCloseTimeout"]; ok {
+		if err := timestamp.ValidateAndCapProtoDuration(opts.GetScheduleToCloseTimeout()); err != nil {
+			return serviceerror.NewInvalidArgumentf("invalid ScheduleToCloseTimeout: %v", err)
+		}
+	}
+	if _, ok := updateFields["scheduleToStartTimeout"]; ok {
+		if err := timestamp.ValidateAndCapProtoDuration(opts.GetScheduleToStartTimeout()); err != nil {
+			return serviceerror.NewInvalidArgumentf("invalid ScheduleToStartTimeout: %v", err)
+		}
+	}
+	if _, ok := updateFields["startToCloseTimeout"]; ok {
+		if err := timestamp.ValidateAndCapProtoDuration(opts.GetStartToCloseTimeout()); err != nil {
+			return serviceerror.NewInvalidArgumentf("invalid StartToCloseTimeout: %v", err)
+		}
+	}
+	if _, ok := updateFields["heartbeatTimeout"]; ok {
+		if err := timestamp.ValidateAndCapProtoDuration(opts.GetHeartbeatTimeout()); err != nil {
+			return serviceerror.NewInvalidArgumentf("invalid HeartbeatTimeout: %v", err)
+		}
+	}
+
+	// Priority: validate the full priority when replacing it, or validate individual sub-fields.
+	if _, ok := updateFields["priority"]; ok {
+		if err := priorities.Validate(opts.GetPriority()); err != nil {
+			return err
+		}
+	}
+	if _, ok := updateFields["priority.priorityKey"]; ok {
+		if opts.GetPriority().GetPriorityKey() < 0 {
+			return priorities.ErrInvalidPriority
+		}
+	}
+	if _, ok := updateFields["priority.fairnessKey"]; ok {
+		if err := priorities.ValidateFairnessKey(opts.GetPriority().GetFairnessKey()); err != nil {
+			return err
+		}
+	}
+	if _, ok := updateFields["priority.fairnessWeight"]; ok {
+		if opts.GetPriority().GetFairnessWeight() < 0 {
+			return priorities.ErrInvalidFairnessWeight
+		}
+	}
+
+	// RetryPolicy: validate the full policy when replacing it, or validate individual sub-fields.
+	if _, ok := updateFields["retryPolicy"]; ok {
+		if err := retrypolicy.Validate(opts.GetRetryPolicy()); err != nil {
+			return err
+		}
+	}
+	if _, ok := updateFields["retryPolicy.initialInterval"]; ok {
+		if err := timestamp.ValidateAndCapProtoDuration(opts.GetRetryPolicy().GetInitialInterval()); err != nil {
+			return serviceerror.NewInvalidArgumentf("invalid InitialInterval set on retry policy: %v", err)
+		}
+	}
+	if _, ok := updateFields["retryPolicy.backoffCoefficient"]; ok {
+		if opts.GetRetryPolicy().GetBackoffCoefficient() < 1 {
+			return serviceerror.NewInvalidArgument("BackoffCoefficient cannot be less than 1 on retry policy.")
+		}
+	}
+	if _, ok := updateFields["retryPolicy.maximumInterval"]; ok {
+		if err := timestamp.ValidateAndCapProtoDuration(opts.GetRetryPolicy().GetMaximumInterval()); err != nil {
+			return serviceerror.NewInvalidArgumentf("invalid MaximumInterval set on retry policy: %v", err)
+		}
+	}
+	if _, ok := updateFields["retryPolicy.maximumAttempts"]; ok {
+		if opts.GetRetryPolicy().GetMaximumAttempts() < 0 {
+			return serviceerror.NewInvalidArgument("MaximumAttempts cannot be negative on retry policy.")
 		}
 	}
 
