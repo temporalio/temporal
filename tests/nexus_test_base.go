@@ -47,6 +47,13 @@ func (env *NexusTestEnv) createNexusEndpoint(t *testing.T, name string, taskQueu
 		},
 	})
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		// Delete the endpoint so the cluster can be safely reused by subsequent tests.
+		_, _ = env.OperatorClient().DeleteNexusEndpoint(testcore.NewContext(), &operatorservice.DeleteNexusEndpointRequest{
+			Id:      resp.Endpoint.Id,
+			Version: resp.Endpoint.Version,
+		})
+	})
 	return resp.Endpoint
 }
 

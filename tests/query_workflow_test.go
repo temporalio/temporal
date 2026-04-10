@@ -344,15 +344,15 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted(
 // GetWorkflowExecutionHistory. Fails with "Invalid NextPageToken" if matching service
 // returns a RawHistoryContinuation token instead.
 //
-// Uses a dedicated cluster with SendRawHistoryBetweenInternalServices=false so that the
-// history service paginates through response.Response (external path) instead of returning
-// all events at once via response.History (internal path). Without this, NextPageToken is
-// always nil and the test can't verify the token type.
+// Uses a dedicated cluster with MatchingHistoryMaxPageSize=2. With the default
+// SendRawHistoryBetweenInternalServices=true, the raw blob path paginates at the blob
+// level: ReadFullPageRawEvents stops after 2 blobs, leaving a non-empty PersistenceToken
+// even when all events fit in a single Cassandra logical page. This ensures NextPageToken
+// is non-empty, which is what we need to verify it's a valid HistoryContinuation token.
 func TestQueryWorkflow_NonStickyMultiPageHistory(t *testing.T) {
 	t.Parallel()
 	env := testcore.NewEnv(t,
 		testcore.WithDedicatedCluster(),
-		testcore.WithDynamicConfig(dynamicconfig.SendRawHistoryBetweenInternalServices, false),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingHistoryMaxPageSize, 2),
 	)
 
