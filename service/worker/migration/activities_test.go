@@ -132,16 +132,16 @@ func (s *activitiesSuite) SetupTest() {
 	s.NoError(err)
 
 	s.a = &activities{
-		namespaceRegistry:                s.mockNamespaceRegistry,
+		NamespaceRegistry:                s.mockNamespaceRegistry,
 		namespaceReplicationQueue:        s.mockNamespaceReplicationQueue,
 		clientFactory:                    s.mockClientFactory,
 		clientBean:                       s.mockClientBean,
 		taskManager:                      s.mockTaskManager,
 		frontendClient:                   s.mockFrontendClient,
 		adminClient:                      s.mockAdminClient,
-		historyClient:                    s.mockHistoryClient,
-		logger:                           s.logger,
-		metricsHandler:                   s.mockMetricsHandler,
+		HistoryClient:                    s.mockHistoryClient,
+		Logger:                           s.logger,
+		MetricsHandler:                   s.mockMetricsHandler,
 		forceReplicationMetricsHandler:   s.mockMetricsHandler,
 		generateMigrationTaskViaFrontend: dynamicconfig.GetBoolPropertyFn(false),
 		enableHistoryRateLimiter:         dynamicconfig.GetBoolPropertyFn(false),

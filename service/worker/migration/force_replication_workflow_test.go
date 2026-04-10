@@ -644,7 +644,7 @@ func TestSeedReplicationQueueWithUserDataEntries_Heartbeats(t *testing.T) {
 		namespaceReplicationQueue: mockNamespaceReplicationQueue,
 		taskManager:               mockTaskManager,
 		frontendClient:            mockFrontendClient,
-		logger:                    log.NewCLILogger(),
+		Logger:                    log.NewCLILogger(),
 	}
 
 	// Once per attempt
