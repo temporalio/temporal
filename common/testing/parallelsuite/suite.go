@@ -1,8 +1,10 @@
 package parallelsuite
 
 import (
+	"flag"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -79,7 +81,7 @@ func (s *Suite[T]) Run(name string, fn func(T)) bool {
 func Run[T testingSuite](t *testing.T, s T, args ...any) {
 	t.Helper()
 
-	typ := reflect.TypeOf(s)
+	typ := reflect.TypeFor[T]()
 	if typ.Kind() != reflect.Ptr || typ.Elem().Kind() != reflect.Struct {
 		panic(fmt.Sprintf("parallelsuite.Run: suite must be a pointer to a struct, got %v", typ))
 	}
@@ -90,6 +92,11 @@ func Run[T testingSuite](t *testing.T, s T, args ...any) {
 	methods := discoverTestMethods(typ, structType, args)
 	if len(methods) == 0 {
 		panic(fmt.Sprintf("parallelsuite.Run: suite %s has no Test* methods", structType.Name()))
+	}
+
+	methods = applyTestifyMFilter(methods)
+	if len(methods) == 0 {
+		return // all methods filtered by -testify.m; nothing to run
 	}
 
 	argVals := make([]reflect.Value, len(args))
@@ -114,9 +121,9 @@ var inheritedMethods map[string]bool
 
 func init() {
 	type ds struct{ Suite[*ds] }
-	ptrType := reflect.TypeOf(&ds{})
+	ptrType := reflect.TypeFor[*ds]()
 	inheritedMethods = make(map[string]bool, ptrType.NumMethod())
-	for i := 0; i < ptrType.NumMethod(); i++ {
+	for i := range ptrType.NumMethod() {
 		inheritedMethods[ptrType.Method(i).Name] = true
 	}
 }
@@ -142,10 +149,36 @@ func validateSuiteStruct(structType reflect.Type) {
 	}
 }
 
+// applyTestifyMFilter filters methods by the -testify.m flag.
+//
+// The flag is registered by testify's suite package (imported above); we share
+// that registration via flag.Lookup rather than registering it a second time.
+func applyTestifyMFilter(methods []reflect.Method) []reflect.Method {
+	f := flag.Lookup("testify.m")
+	if f == nil {
+		return methods
+	}
+	pattern := f.Value.String()
+	if pattern == "" {
+		return methods
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		panic(fmt.Sprintf("parallelsuite: invalid regexp for -testify.m: %s", err))
+	}
+	var filtered []reflect.Method
+	for _, m := range methods {
+		if re.MatchString(m.Name) {
+			filtered = append(filtered, m)
+		}
+	}
+	return filtered
+}
+
 func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect.Method {
 	expectedNumIn := 1 + len(args)
 
-	for i := 0; i < ptrType.NumMethod(); i++ {
+	for i := range ptrType.NumMethod() {
 		name := ptrType.Method(i).Name
 		if !strings.HasPrefix(name, "Test") && !inheritedMethods[name] {
 			panic(fmt.Sprintf(
@@ -157,7 +190,7 @@ func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect
 	}
 
 	var methods []reflect.Method
-	for i := 0; i < ptrType.NumMethod(); i++ {
+	for i := range ptrType.NumMethod() {
 		method := ptrType.Method(i)
 		if !strings.HasPrefix(method.Name, "Test") {
 			continue
