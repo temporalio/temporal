@@ -476,7 +476,7 @@ func (s *ContextImpl) UpdateHandoverNamespace(ns *namespace.Namespace, deletedFr
 	// it here to be more safe in case above assumption no longer holds in the future.
 	isHandoverNamespace := ns.IsGlobalNamespace() &&
 		ns.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) &&
-		ns.ReplicationState() == enumspb.REPLICATION_STATE_HANDOVER
+		ns.ReplicationState("") == enumspb.REPLICATION_STATE_HANDOVER
 
 	s.wLock()
 	if deletedFromDb || !isHandoverNamespace {
@@ -1028,8 +1028,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 				}
 				// Piggyback delete execution replication task on the same write to save a DB operation.
 				if s.config.EnableDeleteWorkflowExecutionReplication() &&
-					!stage.IsProcessed(tasks.DeleteWorkflowExecutionStageReplication) &&
-					archetypeID == chasm.WorkflowArchetypeID {
+					!stage.IsProcessed(tasks.DeleteWorkflowExecutionStageReplication) {
 					if nsEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(
 						namespace.ID(key.NamespaceID),
 					); err == nil &&
