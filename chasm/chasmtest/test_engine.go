@@ -18,18 +18,14 @@ import (
 )
 
 type (
-	Option[T chasm.RootComponent] func(*Engine[T])
+	EngineOption func(*Engine)
 
-	Engine[T chasm.RootComponent] struct {
-		t        *testing.T
-		registry *chasm.Registry
-		logger   log.Logger
-		metrics  metrics.Handler
-
-		rootExecutionKey chasm.ExecutionKey
-		root             T
-		rootExecution    *execution
-		executions       map[executionLookupKey]*execution
+	Engine struct {
+		t          *testing.T
+		registry   *chasm.Registry
+		logger     log.Logger
+		metrics    metrics.Handler
+		executions map[executionLookupKey]*execution
 	}
 
 	execution struct {
@@ -46,23 +42,20 @@ type (
 	}
 )
 
-func NewEngine[T chasm.RootComponent](
+var _ chasm.Engine = (*Engine)(nil)
+
+func NewEngine(
 	t *testing.T,
 	registry *chasm.Registry,
-	opts ...Option[T],
-) *Engine[T] {
+	opts ...EngineOption,
+) *Engine {
 	t.Helper()
 
-	e := &Engine[T]{
-		t:        t,
-		registry: registry,
-		logger:   testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly),
-		metrics:  metrics.NoopMetricsHandler,
-		rootExecutionKey: chasm.ExecutionKey{
-			NamespaceID: "test-namespace-id",
-			BusinessID:  "test-workflow-id",
-			RunID:       "test-run-id",
-		},
+	e := &Engine{
+		t:          t,
+		registry:   registry,
+		logger:     testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly),
+		metrics:    metrics.NoopMetricsHandler,
 		executions: make(map[executionLookupKey]*execution),
 	}
 
@@ -73,38 +66,11 @@ func NewEngine[T chasm.RootComponent](
 	return e
 }
 
-func WithRoot[T chasm.RootComponent](
-	factory func(chasm.MutableContext) T,
-) Option[T] {
-	return func(e *Engine[T]) {
-		execution := e.newExecution(e.rootExecutionKey)
-		ctx := chasm.NewMutableContext(context.Background(), execution.node)
-		root := factory(ctx)
-		require.NoError(e.t, execution.node.SetRootComponent(root))
-		_, err := execution.node.CloseTransaction()
-		require.NoError(e.t, err)
-		e.root = root
-		execution.root = root
-		e.rootExecution = execution
-		e.executions[newExecutionLookupKey(execution.key)] = execution
-	}
-}
-
-func WithExecutionKey[T chasm.RootComponent](key chasm.ExecutionKey) Option[T] {
-	return func(e *Engine[T]) {
-		e.rootExecutionKey = key
-	}
-}
-
-func (e *Engine[T]) Root() T {
-	return e.root
-}
-
-func (e *Engine[T]) EngineContext() context.Context {
+func (e *Engine) EngineContext() context.Context {
 	return chasm.NewEngineContext(context.Background(), e)
 }
 
-func (e *Engine[T]) Ref(component chasm.Component) chasm.ComponentRef {
+func (e *Engine) Ref(component chasm.Component) chasm.ComponentRef {
 	for _, execution := range e.executions {
 		ref, err := execution.node.Ref(component)
 		if err != nil {
@@ -119,7 +85,7 @@ func (e *Engine[T]) Ref(component chasm.Component) chasm.ComponentRef {
 	return chasm.ComponentRef{}
 }
 
-func (e *Engine[T]) StartExecution(
+func (e *Engine) StartExecution(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
@@ -158,7 +124,7 @@ func (e *Engine[T]) StartExecution(
 	}, nil
 }
 
-func (e *Engine[T]) UpdateWithStartExecution(
+func (e *Engine) UpdateWithStartExecution(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
@@ -209,7 +175,7 @@ func (e *Engine[T]) UpdateWithStartExecution(
 	}, nil
 }
 
-func (e *Engine[T]) UpdateComponent(
+func (e *Engine) UpdateComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
@@ -222,7 +188,7 @@ func (e *Engine[T]) UpdateComponent(
 	return e.updateComponentInExecution(ctx, execution, ref, updateFn)
 }
 
-func (e *Engine[T]) ReadComponent(
+func (e *Engine) ReadComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	readFn func(chasm.Context, chasm.Component) error,
@@ -242,7 +208,7 @@ func (e *Engine[T]) ReadComponent(
 	return readFn(readCtx, component)
 }
 
-func (e *Engine[T]) PollComponent(
+func (e *Engine) PollComponent(
 	context.Context,
 	chasm.ComponentRef,
 	func(chasm.Context, chasm.Component) (bool, error),
@@ -251,7 +217,7 @@ func (e *Engine[T]) PollComponent(
 	return nil, serviceerror.NewUnimplemented("chasmtest.Engine.PollComponent")
 }
 
-func (e *Engine[T]) DeleteExecution(
+func (e *Engine) DeleteExecution(
 	context.Context,
 	chasm.ComponentRef,
 	chasm.DeleteExecutionRequest,
@@ -259,9 +225,9 @@ func (e *Engine[T]) DeleteExecution(
 	return serviceerror.NewUnimplemented("chasmtest.Engine.DeleteExecution")
 }
 
-func (e *Engine[T]) NotifyExecution(chasm.ExecutionKey) {}
+func (e *Engine) NotifyExecution(chasm.ExecutionKey) {}
 
-func (e *Engine[T]) newExecution(key chasm.ExecutionKey) *execution {
+func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 	key = normalizeExecutionKey(key)
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(time.Now())
@@ -294,12 +260,12 @@ func (e *Engine[T]) newExecution(key chasm.ExecutionKey) *execution {
 	}
 }
 
-func (e *Engine[T]) executionForKey(key chasm.ExecutionKey) (*execution, bool) {
+func (e *Engine) executionForKey(key chasm.ExecutionKey) (*execution, bool) {
 	execution, ok := e.executions[newExecutionLookupKey(normalizeExecutionKey(key))]
 	return execution, ok
 }
 
-func (e *Engine[T]) mustExecutionForRef(ref chasm.ComponentRef) (*execution, error) {
+func (e *Engine) mustExecutionForRef(ref chasm.ComponentRef) (*execution, error) {
 	execution, ok := e.executionForKey(ref.ExecutionKey)
 	if !ok {
 		return nil, serviceerror.NewNotFound(
@@ -309,7 +275,7 @@ func (e *Engine[T]) mustExecutionForRef(ref chasm.ComponentRef) (*execution, err
 	return execution, nil
 }
 
-func (e *Engine[T]) updateComponentInExecution(
+func (e *Engine) updateComponentInExecution(
 	ctx context.Context,
 	execution *execution,
 	ref chasm.ComponentRef,

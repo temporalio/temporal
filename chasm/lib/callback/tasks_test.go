@@ -82,22 +82,23 @@ func (l *mockNexusCompletionGetterLibrary) Components() []*chasm.RegistrableComp
 
 func readCallbackFromEngine(
 	t *testing.T,
-	testEngine *chasmtest.Engine[*mockNexusCompletionGetterComponent],
+	testEngine *chasmtest.Engine,
+	callback *Callback,
 ) *Callback {
 	t.Helper()
 
-	var callback *Callback
-	_, err := chasm.ReadComponent[*mockNexusCompletionGetterComponent, chasm.ComponentRef, any, chasm.NoValue](
+	var readCallback *Callback
+	_, err := chasm.ReadComponent[*Callback, chasm.ComponentRef, any, chasm.NoValue](
 		testEngine.EngineContext(),
-		testEngine.Ref(testEngine.Root()),
-		func(root *mockNexusCompletionGetterComponent, ctx chasm.Context, _ any) (chasm.NoValue, error) {
-			callback = root.Callback.Get(ctx)
+		testEngine.Ref(callback),
+		func(cb *Callback, _ chasm.Context, _ any) (chasm.NoValue, error) {
+			readCallback = cb
 			return nil, nil
 		},
 		nil,
 	)
 	require.NoError(t, err)
-	return callback
+	return readCallback
 }
 
 // Test the full executeInvocationTask flow with direct handler calls
@@ -238,21 +239,23 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			// Create completion
 			completion := nexusrpc.CompleteOperationOptions{}
 
-			testEngine := chasmtest.NewEngine(
-				t,
-				chasmRegistry,
-				chasmtest.WithExecutionKey[*mockNexusCompletionGetterComponent](chasm.ExecutionKey{
+			testEngine := chasmtest.NewEngine(t, chasmRegistry)
+			_, err = chasm.StartExecution[*mockNexusCompletionGetterComponent, struct{}](
+				testEngine.EngineContext(),
+				chasm.ExecutionKey{
 					NamespaceID: "namespace-id",
 					BusinessID:  "workflow-id",
 					RunID:       "run-id",
-				}),
-				chasmtest.WithRoot(func(ctx chasm.MutableContext) *mockNexusCompletionGetterComponent {
+				},
+				func(ctx chasm.MutableContext, _ struct{}) (*mockNexusCompletionGetterComponent, error) {
 					return &mockNexusCompletionGetterComponent{
 						completion: completion,
 						Callback:   chasm.NewComponentField(ctx, callback),
-					}
-				}),
+					}, nil
+				},
+				struct{}{},
 			)
+			require.NoError(t, err)
 
 			err = handler.Execute(
 				testEngine.EngineContext(),
@@ -262,7 +265,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			)
 
 			// Verify the outcome and tasks
-			tc.assertOutcome(t, readCallbackFromEngine(t, testEngine), err)
+			tc.assertOutcome(t, readCallbackFromEngine(t, testEngine, callback), err)
 		})
 	}
 }

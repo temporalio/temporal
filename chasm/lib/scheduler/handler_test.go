@@ -117,20 +117,22 @@ func TestHandler_CreateFromMigrationState_Sentinel(t *testing.T) {
 	require.NoError(t, registry.Register(newTestLibrary(logger, newRealSpecProcessor(ctrl, logger))))
 
 	h := scheduler.NewTestHandler(logger)
-	testEngine := chasmtest.NewEngine(
-		t,
-		registry,
-		chasmtest.WithExecutionKey[*scheduler.Scheduler](chasm.ExecutionKey{
+	testEngine := chasmtest.NewEngine(t, registry)
+	_, err := chasm.StartExecution[*scheduler.Scheduler, struct{}](
+		testEngine.EngineContext(),
+		chasm.ExecutionKey{
 			NamespaceID: namespaceID,
 			BusinessID:  scheduleID,
-		}),
-		chasmtest.WithRoot(func(ctx chasm.MutableContext) *scheduler.Scheduler {
-			return scheduler.NewSentinel(ctx, namespace, namespaceID, scheduleID)
-		}),
+		},
+		func(ctx chasm.MutableContext, _ struct{}) (*scheduler.Scheduler, error) {
+			return scheduler.NewSentinel(ctx, namespace, namespaceID, scheduleID), nil
+		},
+		struct{}{},
 	)
+	require.NoError(t, err)
 
 	engineCtx := testEngine.EngineContext()
-	_, err := h.TestCreateFromMigrationState(engineCtx, &schedulerpb.CreateFromMigrationStateRequest{
+	_, err = h.TestCreateFromMigrationState(engineCtx, &schedulerpb.CreateFromMigrationStateRequest{
 		NamespaceId: namespaceID,
 		State: &schedulerpb.SchedulerMigrationState{
 			SchedulerState: &schedulerpb.SchedulerState{
@@ -153,20 +155,22 @@ func TestHandler_MigrateToWorkflow_Sentinel(t *testing.T) {
 	require.NoError(t, registry.Register(newTestLibrary(logger, newRealSpecProcessor(ctrl, logger))))
 
 	h := scheduler.NewTestHandler(logger)
-	testEngine := chasmtest.NewEngine(
-		t,
-		registry,
-		chasmtest.WithExecutionKey[*scheduler.Scheduler](chasm.ExecutionKey{
+	testEngine := chasmtest.NewEngine(t, registry)
+	_, err := chasm.StartExecution[*scheduler.Scheduler, struct{}](
+		testEngine.EngineContext(),
+		chasm.ExecutionKey{
 			NamespaceID: namespaceID,
 			BusinessID:  scheduleID,
-		}),
-		chasmtest.WithRoot(func(ctx chasm.MutableContext) *scheduler.Scheduler {
-			return scheduler.NewSentinel(ctx, namespace, namespaceID, scheduleID)
-		}),
+		},
+		func(ctx chasm.MutableContext, _ struct{}) (*scheduler.Scheduler, error) {
+			return scheduler.NewSentinel(ctx, namespace, namespaceID, scheduleID), nil
+		},
+		struct{}{},
 	)
+	require.NoError(t, err)
 
 	engineCtx := testEngine.EngineContext()
-	_, err := h.TestMigrateToWorkflow(engineCtx, &schedulerpb.MigrateToWorkflowRequest{
+	_, err = h.TestMigrateToWorkflow(engineCtx, &schedulerpb.MigrateToWorkflowRequest{
 		NamespaceId: namespaceID,
 		ScheduleId:  scheduleID,
 	})
