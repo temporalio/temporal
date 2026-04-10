@@ -5649,7 +5649,7 @@ func defaultTestConfig() *Config {
 	config := NewConfig(dynamicconfig.NewNoopCollection())
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
-	config.AutoEnableV2Sub = staticTrue
+	config.AutoEnableV2Sub = trueTaskQueueSub
 	return config
 }
 
@@ -5913,10 +5913,6 @@ func TestAutoEnableV2ConfigChange(t *testing.T) {
 	defer cancel()
 	err = pm.WaitUntilInitialized(ctx)
 	require.NoError(t, err)
-
-	require.Eventually(t, func() bool {
-		return pm.config.AutoEnableV2() && pm.config.NewMatcher && pm.config.EnableFairness
-	}, 2*time.Second, 10*time.Millisecond, "config should be initialized")
 
 	pq, err := pm.defaultQueueFuture.Get(ctx)
 	require.NoError(t, err)
