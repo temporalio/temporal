@@ -2,13 +2,11 @@ package matching
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"slices"
 	"sync"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -208,8 +206,8 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 
 		// If we are the draining one, then assume the other has tasks, so we can migrate
 		// backwards safely. Also assume other has tasks if the config allows for migration
-		// (and we're not sticky) since we may have just turned on fairness and need to migrate.
-		canMigrate := (db.config.NewMatcher || db.config.EnableFairness) && db.queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY
+		// (and we're not ephemeral) since we may have just turned on fairness and need to migrate.
+		canMigrate := (db.config.NewMatcher || db.config.EnableFairness) && !db.queue.Partition().IsEphemeral()
 		db.otherHasTasks = canMigrate || db.isDraining
 
 		if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
@@ -733,14 +731,10 @@ func (db *taskQueueDB) AllocateSubqueue(
 }
 
 func (db *taskQueueDB) expiryTime() *timestamppb.Timestamp {
-	switch db.queue.Partition().Kind() {
-	case enumspb.TASK_QUEUE_KIND_NORMAL:
-		return nil
-	case enumspb.TASK_QUEUE_KIND_STICKY:
+	if db.queue.Partition().IsEphemeral() {
 		return timestamppb.New(time.Now().Add(stickyTaskQueueTTL))
-	default:
-		panic(fmt.Sprintf("taskQueueDB encountered unknown task kind: %v", db.queue.Partition().Kind()))
 	}
+	return nil
 }
 
 func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {

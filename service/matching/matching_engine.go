@@ -571,12 +571,12 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return "", false, err
 	}
 
-	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
-	// do not load sticky task queue if it is not already loaded, which means it has no poller.
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
+	ephemeral := partition.IsEphemeral()
+	// do not load ephemeral task queue if it is not already loaded, which means it has no poller.
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !ephemeral, loadCauseTask)
 	if err != nil {
 		return "", false, err
-	} else if sticky && !stickyWorkerAvailable(pm) {
+	} else if ephemeral && !stickyWorkerAvailable(pm) {
 		return "", false, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
@@ -1089,12 +1089,12 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	if err != nil {
 		return nil, err
 	}
-	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
-	// do not load sticky task queue if it is not already loaded, which means it has no poller.
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseQuery)
+	ephemeral := partition.IsEphemeral()
+	// do not load ephemeral task queue if it is not already loaded, which means it has no poller.
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !ephemeral, loadCauseQuery)
 	if err != nil {
 		return nil, err
-	} else if sticky && !stickyWorkerAvailable(pm) {
+	} else if ephemeral && !stickyWorkerAvailable(pm) {
 		return nil, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
@@ -1244,7 +1244,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			return nil, err
 		}
 		tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, namespace.Name(req.Namespace))
-		if !rootPartition.IsRoot() || rootPartition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+		if !rootPartition.IsRoot() || rootPartition.IsEphemeral() || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue must be called on the root partition of workflow task queue if api mode is DESCRIBE_TASK_QUEUE_MODE_ENHANCED")
 		}
 		userData, err := e.getUserDataClone(ctx, rootPartition, loadCauseDescribe)

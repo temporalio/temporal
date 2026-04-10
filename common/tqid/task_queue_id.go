@@ -46,6 +46,10 @@ type (
 		IsRoot() bool
 		Kind() enumspb.TaskQueueKind
 		IsChild() bool
+		// IsEphemeral returns true for partition types that are transient and per-worker/process
+		// (e.g. sticky, worker-commands). Ephemeral partitions have TTL-based expiry, no
+		// multi-partition fan-out, no fairness, and no worker versioning.
+		IsEphemeral() bool
 
 		// RpcName returns the mangled name of the task queue partition, to be used in RPCs.
 		//
@@ -271,6 +275,10 @@ func (s *StickyPartition) IsChild() bool {
 	return false
 }
 
+func (s *StickyPartition) IsEphemeral() bool {
+	return true
+}
+
 func (s *StickyPartition) RpcName() string {
 	return s.stickyName
 }
@@ -302,6 +310,10 @@ func (p *NormalPartition) IsRoot() bool {
 
 func (p *NormalPartition) IsChild() bool {
 	return !p.IsRoot()
+}
+
+func (p *NormalPartition) IsEphemeral() bool {
+	return false
 }
 
 func (p *NormalPartition) Kind() enumspb.TaskQueueKind {
