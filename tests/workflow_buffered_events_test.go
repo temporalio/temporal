@@ -52,7 +52,7 @@ func (s *WorkflowBufferedEventsSuite) TestRateLimitBufferedEvents() {
 		Identity:            identity,
 	}
 
-	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
 	s.NoError(err0)
 
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -152,7 +152,7 @@ func (s *WorkflowBufferedEventsSuite) TestBufferedEvents() {
 		Identity:            identity,
 	}
 
-	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
 	s.NoError(err0)
 
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -168,7 +168,7 @@ func (s *WorkflowBufferedEventsSuite) TestBufferedEvents() {
 			signalSent = true
 
 			// this will create new event when there is in-flight workflow task, and the new event will be buffered
-			_, err := env.FrontendClient().SignalWorkflowExecution(testcore.NewContext(),
+			_, err := env.FrontendClient().SignalWorkflowExecution(env.Context(),
 				&workflowservice.SignalWorkflowExecutionRequest{
 					Namespace: env.Namespace().String(),
 					WorkflowExecution: &commonpb.WorkflowExecution{
@@ -220,7 +220,7 @@ func (s *WorkflowBufferedEventsSuite) TestBufferedEvents() {
 					AttachRequestId: true,
 				},
 			}
-			resp, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), newRequest)
+			resp, err := env.FrontendClient().StartWorkflowExecution(env.Context(), newRequest)
 			s.NoError(err)
 			s.False(resp.Started)
 
@@ -231,7 +231,7 @@ func (s *WorkflowBufferedEventsSuite) TestBufferedEvents() {
 					WorkflowId: id,
 				},
 			}
-			descResp, err := env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
+			descResp, err := env.FrontendClient().DescribeWorkflowExecution(env.Context(), descRequest)
 			s.NoError(err)
 			requestIDInfos := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()
 			s.NotNil(requestIDInfos)
@@ -354,7 +354,7 @@ func (s *WorkflowBufferedEventsSuite) TestBufferedEvents() {
 			WorkflowId: id,
 		},
 	}
-	descResp, err := env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
+	descResp, err := env.FrontendClient().DescribeWorkflowExecution(env.Context(), descRequest)
 	s.NoError(err)
 	requestIDInfos := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()
 	s.NotNil(requestIDInfos)
@@ -390,7 +390,7 @@ func (s *WorkflowBufferedEventsSuite) TestBufferedEventsOutOfOrder() {
 		Identity:            identity,
 	}
 
-	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
 	s.NoError(err0)
 
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
