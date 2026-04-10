@@ -52,8 +52,16 @@ type TaskVersionDirective struct {
 	// Counter copied from the workflow execution's WorkflowExecutionVersioningInfo
 	// during enqueue time.
 	RevisionNumber int64 `protobuf:"varint,6,opt,name=revision_number,json=revisionNumber,proto3" json:"revision_number,omitempty"`
-	// True if the workflow should use the Ramping Version of its Task Queue regardless of f(workflow_id, ramp_percentage).
+	// If behavior is AutoUpgrade and use_ramping_version is true, then this task should use the
+	// Ramping Version of its Task Queue regardless of workflow_id and ramp_percentage.
 	// If there is no Ramping Version at the time of task dispatch, the Current Version will be used instead.
+	//
+	// If use_ramping_version is false, the Target Version is chosen with the default formula:
+	//
+	//	if calcRampThreshold(workflow_id) <= ramp_percentage:
+	//	  target=ramping_version
+	//	else:
+	//	  target=current_version
 	UseRampingVersion bool `protobuf:"varint,7,opt,name=use_ramping_version,json=useRampingVersion,proto3" json:"use_ramping_version,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
