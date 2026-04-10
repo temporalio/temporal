@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"text/template"
 	"time"
@@ -13,7 +14,10 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
@@ -27,9 +31,11 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protorequire"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -175,7 +181,7 @@ func (e *invocationTaskTestEnv) execute(task *nexusoperationpb.InvocationTask) e
 	return e.handler.Execute(engineCtx, ref, chasm.TaskAttributes{Destination: "endpoint"}, task)
 }
 
-func TestInvocationTaskHandler_Execute(t *testing.T) {
+func TestInvocationTaskHandler_HTTP(t *testing.T) {
 	handlerLink := &commonpb.Link_WorkflowEvent{
 		Namespace:  "handler-ns",
 		WorkflowId: "handler-wf-id",
@@ -859,4 +865,277 @@ func TestScheduleToCloseTimeoutTaskHandler_Execute(t *testing.T) {
 
 	require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, op.Status)
 	require.Empty(t, ctx.Tasks)
+}
+
+// testStartProcessor implements chasm.NexusOperationProcessor[string] for system endpoint start tests.
+type testStartProcessor struct{}
+
+func (p *testStartProcessor) ProcessInput(
+	_ chasm.NexusOperationProcessorContext,
+	_ string,
+) (*chasm.NexusOperationProcessorResult, error) {
+	return &chasm.NexusOperationProcessorResult{
+		RoutingKey: chasm.NexusOperationRoutingKeyRandom{},
+	}, nil
+}
+
+// testStartProcessorWithInput implements chasm.NexusOperationProcessor[*testProcessorInput]
+// for system endpoint tests that verify input re-serialization.
+type testProcessorInput struct {
+	Value string
+}
+
+type testStartProcessorWithInput struct{}
+
+func (p *testStartProcessorWithInput) ProcessInput(
+	_ chasm.NexusOperationProcessorContext,
+	input *testProcessorInput,
+) (*chasm.NexusOperationProcessorResult, error) {
+	input.Value = "processed:" + input.Value
+	return &chasm.NexusOperationProcessorResult{
+		RoutingKey: chasm.NexusOperationRoutingKeyRandom{},
+	}, nil
+}
+
+func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
+	handlerLink := &commonpb.Link_WorkflowEvent{
+		Namespace:  "handler-ns",
+		WorkflowId: "handler-wf-id",
+		RunId:      "handler-run-id",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+		},
+	}
+
+	cases := []struct {
+		name                  string
+		setupHistoryClient    func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient
+		setupChasmRegistry    func() *chasm.Registry
+		input                 *commonpb.Payload
+		expectedMetricOutcome string
+		checkOutcome          func(t *testing.T, op *Operation)
+	}{
+		{
+			name: "async start",
+			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().StartNexusOperation(gomock.Any(), gomock.Any(), gomock.Any()).Return(
+					&historyservice.StartNexusOperationResponse{
+						Response: &nexuspb.StartOperationResponse{
+							Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
+								AsyncSuccess: &nexuspb.StartOperationResponse_Async{
+									OperationToken: "system-op-token",
+									Links: commonnexus.ConvertLinksToProto([]nexus.Link{
+										commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink),
+									}),
+								},
+							},
+						},
+					}, nil,
+				)
+				return client
+			},
+			setupChasmRegistry: func() *chasm.Registry {
+				reg := chasm.NewRegistry(log.NewNoopLogger())
+				serviceProc := chasm.NewNexusServiceProcessor("service")
+				serviceProc.MustRegisterOperation("operation",
+					chasm.NewRegisterableNexusOperationProcessor(&testStartProcessor{}))
+				reg.NexusEndpointProcessor.MustRegisterServiceProcessor(serviceProc)
+				return reg
+			},
+			expectedMetricOutcome: "pending",
+			checkOutcome: func(t *testing.T, op *Operation) {
+				require.Equal(t, nexusoperationpb.OPERATION_STATUS_STARTED, op.Status)
+				require.Equal(t, "system-op-token", op.OperationToken)
+			},
+		},
+		{
+			name: "sync start",
+			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().StartNexusOperation(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *historyservice.StartNexusOperationRequest, opts ...grpc.CallOption) (*historyservice.StartNexusOperationResponse, error) {
+					var input testProcessorInput
+					if err := payloads.Decode(&commonpb.Payloads{Payloads: []*commonpb.Payload{request.Request.Payload}}, &input); err != nil {
+						return nil, err
+					}
+					if input.Value != "processed:test" {
+						return nil, fmt.Errorf("unexpected input: %v", input.Value)
+					}
+					return &historyservice.StartNexusOperationResponse{
+						Response: &nexuspb.StartOperationResponse{
+							Variant: &nexuspb.StartOperationResponse_SyncSuccess{
+								SyncSuccess: &nexuspb.StartOperationResponse_Sync{
+									Payload: mustToPayload(t, "result"),
+								},
+							},
+						},
+					}, nil
+				})
+				return client
+			},
+			setupChasmRegistry: func() *chasm.Registry {
+				reg := chasm.NewRegistry(log.NewNoopLogger())
+				serviceProc := chasm.NewNexusServiceProcessor("service")
+				serviceProc.MustRegisterOperation("operation",
+					chasm.NewRegisterableNexusOperationProcessor(&testStartProcessorWithInput{}))
+				reg.NexusEndpointProcessor.MustRegisterServiceProcessor(serviceProc)
+				return reg
+			},
+			input:                 mustToPayload(t, testProcessorInput{"test"}),
+			expectedMetricOutcome: "successful",
+			checkOutcome: func(t *testing.T, op *Operation) {
+				require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, op.Status)
+			},
+		},
+		{
+			name: "operation error",
+			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().StartNexusOperation(gomock.Any(), gomock.Any(), gomock.Any()).Return(
+					&historyservice.StartNexusOperationResponse{
+						Response: &nexuspb.StartOperationResponse{
+							Variant: &nexuspb.StartOperationResponse_Failure{
+								Failure: &failurepb.Failure{
+									Message: "operation failed",
+									FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+										ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{},
+									},
+								},
+							},
+						},
+					}, nil,
+				)
+				return client
+			},
+			setupChasmRegistry: func() *chasm.Registry {
+				reg := chasm.NewRegistry(log.NewNoopLogger())
+				serviceProc := chasm.NewNexusServiceProcessor("service")
+				serviceProc.MustRegisterOperation("operation",
+					chasm.NewRegisterableNexusOperationProcessor(&testStartProcessor{}))
+				reg.NexusEndpointProcessor.MustRegisterServiceProcessor(serviceProc)
+				return reg
+			},
+			expectedMetricOutcome: "operation-unsuccessful:failed",
+			checkOutcome: func(t *testing.T, op *Operation) {
+				require.Equal(t, nexusoperationpb.OPERATION_STATUS_FAILED, op.Status)
+				require.Equal(t, "operation failed", op.LastAttemptFailure.Message)
+			},
+		},
+		{
+			name: "history service error - retryable",
+			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().StartNexusOperation(gomock.Any(), gomock.Any(), gomock.Any()).Return(
+					nil, serviceerror.NewUnavailable("service unavailable"),
+				)
+				return client
+			},
+			setupChasmRegistry: func() *chasm.Registry {
+				reg := chasm.NewRegistry(log.NewNoopLogger())
+				serviceProc := chasm.NewNexusServiceProcessor("service")
+				serviceProc.MustRegisterOperation("operation",
+					chasm.NewRegisterableNexusOperationProcessor(&testStartProcessor{}))
+				reg.NexusEndpointProcessor.MustRegisterServiceProcessor(serviceProc)
+				return reg
+			},
+			expectedMetricOutcome: "service-error:Unavailable",
+			checkOutcome: func(t *testing.T, op *Operation) {
+				require.Equal(t, nexusoperationpb.OPERATION_STATUS_BACKING_OFF, op.Status)
+				require.NotNil(t, op.LastAttemptFailure.GetServerFailureInfo())
+				require.Contains(t, op.LastAttemptFailure.Message, "Unavailable")
+			},
+		},
+		{
+			name: "chasm processor error",
+			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				// Should not be called if processor fails.
+				return historyservicemock.NewMockHistoryServiceClient(ctrl)
+			},
+			setupChasmRegistry: func() *chasm.Registry {
+				// Don't register a processor so ProcessInput fails.
+				return chasm.NewRegistry(log.NewNoopLogger())
+			},
+			expectedMetricOutcome: "operation-processor-failed",
+			checkOutcome: func(t *testing.T, op *Operation) {
+				require.Equal(t, nexusoperationpb.OPERATION_STATUS_FAILED, op.Status)
+				require.NotNil(t, op.LastAttemptFailure.GetNexusHandlerFailureInfo())
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			op := &Operation{
+				OperationState: &nexusoperationpb.OperationState{
+					Status:                 nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+					Endpoint:               commonnexus.SystemEndpoint,
+					Service:                "service",
+					Operation:              "operation",
+					ScheduledTime:          timestamppb.Now(),
+					ScheduleToCloseTimeout: durationpb.New(time.Hour),
+					RequestId:              "request-id",
+					Attempt:                1,
+				},
+			}
+
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+
+			input := tc.input
+			if input == nil {
+				input = mustToPayload(t, "test")
+			}
+
+			callerLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+				Namespace:  "ns-name",
+				WorkflowId: "wf-id",
+				RunId:      "run-id",
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventId:   1,
+						EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+					},
+				},
+			})
+
+			env := newInvocationTaskTestEnv(t, op,
+				InvocationData{Input: input, NexusLink: callerLink},
+				nexustest.FakeEndpointRegistry{}, nil, metricsHandler, time.Hour)
+
+			// Set up system endpoint dependencies.
+			historyClient := tc.setupHistoryClient(env.ctrl)
+			env.handler.historyClient = historyClient
+			env.handler.config.NumHistoryShards = 4
+			env.handler.config.MaxOperationTokenLength = dynamicconfig.GetIntPropertyFnFilteredByNamespace(1000)
+			env.handler.chasmRegistry = tc.setupChasmRegistry()
+
+			env.setupReadComponent()
+			env.setupUpdateComponent()
+
+			err := env.execute(&nexusoperationpb.InvocationTask{Attempt: 1})
+			var destinationDownErr *queueserrors.DestinationDownError
+			require.NotErrorAs(t, err, &destinationDownErr)
+			require.NoError(t, err)
+
+			tc.checkOutcome(t, op)
+
+			snap := capture.Snapshot()
+			counterRecordings := snap[OutboundRequestCounter.Name()]
+			require.Len(t, counterRecordings, 1)
+			require.Equal(t, int64(1), counterRecordings[0].Value)
+			require.Equal(t, "ns-name", counterRecordings[0].Tags["namespace"])
+			require.Equal(t, commonnexus.SystemEndpoint, counterRecordings[0].Tags["destination"])
+			require.Equal(t, "StartOperation", counterRecordings[0].Tags["method"])
+			require.Equal(t, tc.expectedMetricOutcome, counterRecordings[0].Tags["outcome"])
+
+			timerRecordings := snap[OutboundRequestLatency.Name()]
+			require.Len(t, timerRecordings, 1)
+			require.Equal(t, tc.expectedMetricOutcome, timerRecordings[0].Tags["outcome"])
+		})
+	}
 }
