@@ -1,13 +1,18 @@
 package nexusoperation
 
 import (
+	"cmp"
 	"context"
 	"testing"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
@@ -16,10 +21,12 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/testing/protorequire"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -261,13 +268,13 @@ func TestCancellationBackoffTaskHandler_Execute(t *testing.T) {
 	require.True(t, ok, "expected CancellationTask")
 }
 
-func TestCancellationInvocationTaskHandler_Execute(t *testing.T) {
+func TestCancellationInvocationTaskHandler_HTTP(t *testing.T) {
 	cases := []struct {
 		name                  string
 		header                map[string]string
 		onCancelOperation     func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error
 		expectedMetricOutcome string
-		checkOutcome          func(t *testing.T, c *Cancellation, err error)
+		checkOutcome          func(t *testing.T, c *Cancellation)
 		requestTimeout        time.Duration
 		schedToCloseTimeout   time.Duration
 		startToCloseTimeout   time.Duration
@@ -275,9 +282,7 @@ func TestCancellationInvocationTaskHandler_Execute(t *testing.T) {
 		endpointNotFound      bool
 	}{
 		{
-			name:            "failure",
-			requestTimeout:  time.Hour,
-			destinationDown: false,
+			name: "failure",
 			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 				return &nexus.HandlerError{
 					Type:          nexus.HandlerErrorTypeInternal,
@@ -286,32 +291,33 @@ func TestCancellationInvocationTaskHandler_Execute(t *testing.T) {
 				}
 			},
 			expectedMetricOutcome: "handler-error:INTERNAL",
-			checkOutcome: func(t *testing.T, c *Cancellation, err error) {
-				require.NoError(t, err)
+			checkOutcome: func(t *testing.T, c *Cancellation) {
 				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_FAILED, c.Status)
-				require.Equal(t, string(nexus.HandlerErrorTypeInternal), c.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
-				require.Equal(t, "operation not found", c.LastAttemptFailure.Message)
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "operation not found",
+					FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+						NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
+							Type:          string(nexus.HandlerErrorTypeInternal),
+							RetryBehavior: enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE,
+						},
+					},
+				}, c.LastAttemptFailure)
 			},
 		},
 		{
-			name:            "success",
-			requestTimeout:  time.Hour,
-			destinationDown: false,
+			name: "success",
 			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 				return nil
 			},
 			expectedMetricOutcome: "successful",
-			checkOutcome: func(t *testing.T, c *Cancellation, err error) {
-				require.NoError(t, err)
+			checkOutcome: func(t *testing.T, c *Cancellation) {
 				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_SUCCEEDED, c.Status)
 				require.Nil(t, c.LastAttemptFailure)
 			},
 		},
 		{
-			name:            "success with headers",
-			requestTimeout:  time.Hour,
-			destinationDown: false,
-			header:          map[string]string{"key": "value"},
+			name:   "success with headers",
+			header: map[string]string{"key": "value"},
 			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 				if options.Header["key"] != "value" {
 					return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, `"key" header is not equal to "value"`)
@@ -319,84 +325,136 @@ func TestCancellationInvocationTaskHandler_Execute(t *testing.T) {
 				return nil
 			},
 			expectedMetricOutcome: "successful",
-			checkOutcome: func(t *testing.T, c *Cancellation, err error) {
-				require.NoError(t, err)
+			checkOutcome: func(t *testing.T, c *Cancellation) {
 				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_SUCCEEDED, c.Status)
 				require.Nil(t, c.LastAttemptFailure)
 			},
 		},
 		{
 			name:            "transient error",
-			requestTimeout:  time.Hour,
 			destinationDown: true,
 			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 				return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
 			},
 			expectedMetricOutcome: "handler-error:INTERNAL",
-			checkOutcome: func(t *testing.T, c *Cancellation, err error) {
-				var destinationDownErr *queueserrors.DestinationDownError
-				require.ErrorAs(t, err, &destinationDownErr)
+			checkOutcome: func(t *testing.T, c *Cancellation) {
 				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF, c.Status)
-				require.NotNil(t, c.LastAttemptFailure.GetNexusHandlerFailureInfo())
-				require.Equal(t, "internal server error", c.LastAttemptFailure.Message)
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "internal server error",
+					FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+						NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
+							Type: string(nexus.HandlerErrorTypeInternal),
+						},
+					},
+				}, c.LastAttemptFailure)
 			},
 		},
 		{
-			name:            "invocation timeout",
-			requestTimeout:  10 * time.Millisecond,
+			name:            "invocation timeout by request timeout",
+			requestTimeout:  2 * time.Millisecond,
 			destinationDown: true,
 			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 				time.Sleep(time.Millisecond * 100) //nolint:forbidigo
 				return nil
 			},
 			expectedMetricOutcome: "request-timeout",
-			checkOutcome: func(t *testing.T, c *Cancellation, err error) {
-				var destinationDownErr *queueserrors.DestinationDownError
-				require.ErrorAs(t, err, &destinationDownErr)
+			checkOutcome: func(t *testing.T, c *Cancellation) {
 				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF, c.Status)
-				require.NotNil(t, c.LastAttemptFailure.GetServerFailureInfo())
-				require.Equal(t, "request timed out", c.LastAttemptFailure.Message)
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "request timed out",
+					FailureInfo: &failurepb.Failure_ServerFailureInfo{
+						ServerFailureInfo: &failurepb.ServerFailureInfo{},
+					},
+				}, c.LastAttemptFailure)
+			},
+		},
+		{
+			name:                "invocation timeout by ScheduleToCloseTimeout",
+			schedToCloseTimeout: 10 * time.Millisecond,
+			destinationDown:     true,
+			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+				time.Sleep(time.Millisecond * 100) //nolint:forbidigo
+				return nil
+			},
+			expectedMetricOutcome: "request-timeout",
+			checkOutcome: func(t *testing.T, c *Cancellation) {
+				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF, c.Status)
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "request timed out",
+					FailureInfo: &failurepb.Failure_ServerFailureInfo{
+						ServerFailureInfo: &failurepb.ServerFailureInfo{},
+					},
+				}, c.LastAttemptFailure)
+			},
+		},
+		{
+			name:                "invocation timeout by StartToCloseTimeout",
+			startToCloseTimeout: 10 * time.Millisecond,
+			destinationDown:     true,
+			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+				time.Sleep(time.Millisecond * 100) //nolint:forbidigo
+				return nil
+			},
+			expectedMetricOutcome: "request-timeout",
+			checkOutcome: func(t *testing.T, c *Cancellation) {
+				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF, c.Status)
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "request timed out",
+					FailureInfo: &failurepb.Failure_ServerFailureInfo{
+						ServerFailureInfo: &failurepb.ServerFailureInfo{},
+					},
+				}, c.LastAttemptFailure)
 			},
 		},
 		{
 			name:                  "operation timeout by ScheduleToCloseTimeout",
-			requestTimeout:        time.Hour,
 			schedToCloseTimeout:   time.Microsecond,
-			destinationDown:       false,
 			onCancelOperation:     nil, // Should not be called if the operation has timed out.
 			expectedMetricOutcome: "operation-timeout",
-			checkOutcome: func(t *testing.T, c *Cancellation, err error) {
-				require.NoError(t, err)
+			checkOutcome: func(t *testing.T, c *Cancellation) {
 				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_FAILED, c.Status)
-				require.NotNil(t, c.LastAttemptFailure.GetTimeoutFailureInfo())
-				require.Contains(t, c.LastAttemptFailure.Message, "operation timed out")
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "operation timed out before cancellation could be delivered",
+					FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+						TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+							TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+						},
+					},
+				}, c.LastAttemptFailure)
 			},
 		},
 		{
 			name:                  "operation timeout by StartToCloseTimeout",
-			requestTimeout:        time.Hour,
 			startToCloseTimeout:   time.Microsecond,
-			destinationDown:       false,
 			onCancelOperation:     nil, // Should not be called if the operation has timed out.
 			expectedMetricOutcome: "operation-timeout",
-			checkOutcome: func(t *testing.T, c *Cancellation, err error) {
-				require.NoError(t, err)
+			checkOutcome: func(t *testing.T, c *Cancellation) {
 				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_FAILED, c.Status)
-				require.NotNil(t, c.LastAttemptFailure.GetTimeoutFailureInfo())
-				require.Contains(t, c.LastAttemptFailure.Message, "operation timed out")
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "operation timed out before cancellation could be delivered",
+					FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+						TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+							TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+						},
+					},
+				}, c.LastAttemptFailure)
 			},
 		},
 		{
 			name:              "endpoint not found",
 			endpointNotFound:  true,
 			requestTimeout:    time.Hour,
-			destinationDown:   false,
 			onCancelOperation: nil, // Should not be called if the endpoint is not found.
-			checkOutcome: func(t *testing.T, c *Cancellation, err error) {
-				require.NoError(t, err)
+			checkOutcome: func(t *testing.T, c *Cancellation) {
 				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_FAILED, c.Status)
-				require.Equal(t, string(nexus.HandlerErrorTypeNotFound), c.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
-				require.Equal(t, "endpoint not registered", c.LastAttemptFailure.Message)
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "endpoint not registered",
+					FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+						NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
+							Type: string(nexus.HandlerErrorTypeNotFound),
+						},
+					},
+				}, c.LastAttemptFailure)
 			},
 		},
 	}
@@ -404,7 +462,6 @@ func TestCancellationInvocationTaskHandler_Execute(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			ctrl := gomock.NewController(t)
 			listenAddr := nexustest.AllocListenAddress()
 			h := nexustest.Handler{}
 			h.OnCancelOperation = tc.onCancelOperation
@@ -446,29 +503,9 @@ func TestCancellationInvocationTaskHandler_Execute(t *testing.T) {
 				},
 			}
 
-			var metricsHandler metrics.Handler
-			if tc.expectedMetricOutcome != "" {
-				mockMetrics := metrics.NewMockHandler(ctrl)
-				counter := metrics.NewMockCounterIface(ctrl)
-				timer := metrics.NewMockTimerIface(ctrl)
-				mockMetrics.EXPECT().Counter(OutboundRequestCounter.Name()).Return(counter)
-				counter.EXPECT().Record(int64(1),
-					metrics.NamespaceTag("ns-name"),
-					metrics.DestinationTag("endpoint"),
-					metrics.NexusMethodTag("CancelOperation"),
-					metrics.OutcomeTag(tc.expectedMetricOutcome),
-					metrics.FailureSourceTag("_unknown_"))
-				mockMetrics.EXPECT().Timer(OutboundRequestLatency.Name()).Return(timer)
-				timer.EXPECT().Record(gomock.Any(),
-					metrics.NamespaceTag("ns-name"),
-					metrics.DestinationTag("endpoint"),
-					metrics.NexusMethodTag("CancelOperation"),
-					metrics.OutcomeTag(tc.expectedMetricOutcome),
-					metrics.FailureSourceTag("_unknown_"))
-				metricsHandler = mockMetrics
-			} else {
-				metricsHandler = metrics.NoopMetricsHandler
-			}
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
 
 			clientProvider := func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
 				return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
@@ -482,13 +519,183 @@ func TestCancellationInvocationTaskHandler_Execute(t *testing.T) {
 				InvocationData{
 					Header: tc.header,
 				},
-				endpointReg, clientProvider, metricsHandler, tc.requestTimeout)
+				endpointReg, clientProvider, metricsHandler, cmp.Or(tc.requestTimeout, time.Hour))
 
 			env.setupReadComponent()
 			env.setupUpdateComponent()
 
 			err := env.execute(&nexusoperationpb.CancellationTask{Attempt: 1})
-			tc.checkOutcome(t, cancellation, err)
+			if tc.destinationDown {
+				var destinationDownErr *queueserrors.DestinationDownError
+				require.ErrorAs(t, err, &destinationDownErr)
+			} else {
+				require.NoError(t, err)
+			}
+			tc.checkOutcome(t, cancellation)
+
+			if tc.expectedMetricOutcome != "" {
+				snap := capture.Snapshot()
+				counterRecordings := snap[OutboundRequestCounter.Name()]
+				require.Len(t, counterRecordings, 1)
+				require.Equal(t, int64(1), counterRecordings[0].Value)
+				require.Equal(t, "ns-name", counterRecordings[0].Tags["namespace"])
+				require.Equal(t, "endpoint", counterRecordings[0].Tags["destination"])
+				require.Equal(t, "CancelOperation", counterRecordings[0].Tags["method"])
+				require.Equal(t, tc.expectedMetricOutcome, counterRecordings[0].Tags["outcome"])
+				require.Equal(t, "_unknown_", counterRecordings[0].Tags["failure_source"])
+
+				timerRecordings := snap[OutboundRequestLatency.Name()]
+				require.Len(t, timerRecordings, 1)
+				require.Equal(t, tc.expectedMetricOutcome, timerRecordings[0].Tags["outcome"])
+			}
+		})
+	}
+}
+
+// testCancelProcessor implements chasm.NexusOperationProcessor[string] for system endpoint tests.
+type testCancelProcessor struct{}
+
+func (p *testCancelProcessor) ProcessInput(
+	_ chasm.NexusOperationProcessorContext,
+	_ string,
+) (*chasm.NexusOperationProcessorResult, error) {
+	return &chasm.NexusOperationProcessorResult{
+		RoutingKey: chasm.NexusOperationRoutingKeyRandom{},
+	}, nil
+}
+
+func TestCancellationInvocationTaskHandler_SystemEndpoint(t *testing.T) {
+	cases := []struct {
+		name                  string
+		setupHistoryClient    func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient
+		registerProcessor     bool
+		expectedMetricOutcome string
+		checkOutcome          func(t *testing.T, c *Cancellation)
+	}{
+		{
+			name:              "success",
+			registerProcessor: true,
+			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CancelNexusOperation(gomock.Any(), gomock.Any()).
+					Return(&historyservice.CancelNexusOperationResponse{}, nil)
+				return client
+			},
+			expectedMetricOutcome: "successful",
+			checkOutcome: func(t *testing.T, c *Cancellation) {
+				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_SUCCEEDED, c.Status)
+				require.Nil(t, c.LastAttemptFailure)
+			},
+		},
+		{
+			name:              "history service error - retryable",
+			registerProcessor: true,
+			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CancelNexusOperation(gomock.Any(), gomock.Any()).
+					Return(nil, serviceerror.NewUnavailable("unavailable"))
+				return client
+			},
+			expectedMetricOutcome: "service-error:Unavailable",
+			checkOutcome: func(t *testing.T, c *Cancellation) {
+				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF, c.Status)
+				require.NotNil(t, c.LastAttemptFailure.GetServerFailureInfo())
+			},
+		},
+		{
+			name:              "history service error - InvalidArgument",
+			registerProcessor: true,
+			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CancelNexusOperation(gomock.Any(), gomock.Any()).
+					Return(nil, serviceerror.NewInvalidArgument("invalid"))
+				return client
+			},
+			expectedMetricOutcome: "service-error:InvalidArgument",
+			checkOutcome: func(t *testing.T, c *Cancellation) {
+				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_FAILED, c.Status)
+				require.NotNil(t, c.LastAttemptFailure.GetServerFailureInfo())
+				require.True(t, c.LastAttemptFailure.GetServerFailureInfo().GetNonRetryable())
+			},
+		},
+		{
+			name:              "chasm processor error",
+			registerProcessor: false,
+			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				return historyservicemock.NewMockHistoryServiceClient(ctrl)
+			},
+			expectedMetricOutcome: "operation-processor-failed",
+			checkOutcome: func(t *testing.T, c *Cancellation) {
+				require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_FAILED, c.Status)
+				require.NotNil(t, c.LastAttemptFailure.GetNexusHandlerFailureInfo())
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			op := &Operation{
+				OperationState: &nexusoperationpb.OperationState{
+					Status:         nexusoperationpb.OPERATION_STATUS_STARTED,
+					Endpoint:       commonnexus.SystemEndpoint,
+					Service:        "service",
+					Operation:      "operation",
+					ScheduledTime:  timestamppb.Now(),
+					StartedTime:    timestamppb.Now(),
+					RequestId:      "request-id",
+					OperationToken: "op-token",
+					Attempt:        1,
+				},
+			}
+			cancellation := newCancellation(&nexusoperationpb.CancellationState{
+				Status:  nexusoperationpb.CANCELLATION_STATUS_SCHEDULED,
+				Attempt: 1,
+			})
+
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+
+			env := newCancellationTaskTestEnv(t, op, cancellation,
+				InvocationData{Input: mustToPayload(t, "test")},
+				nexustest.FakeEndpointRegistry{}, nil, metricsHandler, time.Hour)
+
+			// Set up system endpoint dependencies.
+			historyClient := tc.setupHistoryClient(env.ctrl)
+			env.handler.historyClient = historyClient
+			env.handler.config.NumHistoryShards = 4
+
+			reg := chasm.NewRegistry(log.NewNoopLogger())
+			if tc.registerProcessor {
+				serviceProc := chasm.NewNexusServiceProcessor("service")
+				serviceProc.MustRegisterOperation("operation",
+					chasm.NewRegisterableNexusOperationProcessor(&testCancelProcessor{}))
+				reg.NexusEndpointProcessor.MustRegisterServiceProcessor(serviceProc)
+			}
+			env.handler.chasmRegistry = reg
+
+			env.setupReadComponent()
+			env.setupUpdateComponent()
+
+			err := env.execute(&nexusoperationpb.CancellationTask{Attempt: 1})
+			require.NoError(t, err)
+
+			tc.checkOutcome(t, cancellation)
+
+			snap := capture.Snapshot()
+			counterRecordings := snap[OutboundRequestCounter.Name()]
+			require.Len(t, counterRecordings, 1)
+			require.Equal(t, int64(1), counterRecordings[0].Value)
+			require.Equal(t, "ns-name", counterRecordings[0].Tags["namespace"])
+			require.Equal(t, commonnexus.SystemEndpoint, counterRecordings[0].Tags["destination"])
+			require.Equal(t, "CancelOperation", counterRecordings[0].Tags["method"])
+			require.Equal(t, tc.expectedMetricOutcome, counterRecordings[0].Tags["outcome"])
+
+			timerRecordings := snap[OutboundRequestLatency.Name()]
+			require.Len(t, timerRecordings, 1)
+			require.Equal(t, tc.expectedMetricOutcome, timerRecordings[0].Tags["outcome"])
 		})
 	}
 }

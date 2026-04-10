@@ -69,41 +69,6 @@ type cancelArgs struct {
 	payload                *commonpb.Payload
 }
 
-// loadArgs is a ReadComponent callback that loads the cancel arguments from the cancellation
-// and its parent operation.
-func (c *Cancellation) loadArgs(
-	ctx chasm.Context,
-	_ chasm.NoValue,
-) (cancelArgs, error) {
-	op := c.Operation.Get(ctx)
-
-	store, ok := op.Store.TryGet(ctx)
-	if !ok {
-		// TODO: For standalone operations, load invocation data from the operation state.
-		return cancelArgs{}, serviceerror.NewInternal("no store available to load invocation data")
-	}
-	invocationData, err := store.NexusOperationInvocationData(ctx, op)
-	if err != nil {
-		return cancelArgs{}, err
-	}
-
-	return cancelArgs{
-		service:                op.GetService(),
-		operation:              op.GetOperation(),
-		token:                  op.GetOperationToken(),
-		requestID:              op.GetRequestId(),
-		endpointName:           op.GetEndpoint(),
-		endpointID:             op.GetEndpointId(),
-		currentTime:            ctx.Now(c),
-		scheduledTime:          op.GetScheduledTime().AsTime(),
-		startedTime:            op.GetStartedTime().AsTime(),
-		scheduleToCloseTimeout: op.GetScheduleToCloseTimeout().AsDuration(),
-		startToCloseTimeout:    op.GetStartToCloseTimeout().AsDuration(),
-		headers:                invocationData.Header,
-		payload:                invocationData.Input,
-	}, nil
-}
-
 func (c *Cancellation) onCompleted(ctx chasm.MutableContext) error {
 	op := c.Operation.Get(ctx)
 	if store, ok := op.Store.TryGet(ctx); ok {
@@ -120,6 +85,40 @@ func (c *Cancellation) onFailed(ctx chasm.MutableContext, failure *failurepb.Fai
 	return TransitionCancellationFailed.Apply(c, ctx, EventCancellationFailed{
 		Failure: failure,
 	})
+}
+
+// loadArgs loads the cancel arguments from the cancellation and its parent operation.
+func (c *Cancellation) loadArgs(
+	ctx chasm.Context,
+	_ chasm.NoValue,
+) (cancelArgs, error) {
+	op := c.Operation.Get(ctx)
+
+	var invocationData InvocationData
+	if store, ok := op.Store.TryGet(ctx); ok {
+		var err error
+		invocationData, err = store.NexusOperationInvocationData(ctx, op)
+		if err != nil {
+			return cancelArgs{}, err
+		}
+	}
+	// TODO: For standalone operations, load invocation data from the operation state.
+
+	return cancelArgs{
+		service:                op.GetService(),
+		operation:              op.GetOperation(),
+		token:                  op.GetOperationToken(),
+		requestID:              op.GetRequestId(),
+		endpointName:           op.GetEndpoint(),
+		endpointID:             op.GetEndpointId(),
+		currentTime:            ctx.Now(c),
+		scheduledTime:          op.GetScheduledTime().AsTime(),
+		startedTime:            op.GetStartedTime().AsTime(),
+		scheduleToCloseTimeout: op.GetScheduleToCloseTimeout().AsDuration(),
+		startToCloseTimeout:    op.GetStartToCloseTimeout().AsDuration(),
+		headers:                invocationData.Header,
+		payload:                invocationData.Input,
+	}, nil
 }
 
 // saveCancellationResultInput is the input to the Cancellation.saveResult method.
