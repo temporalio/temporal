@@ -7,10 +7,8 @@ import (
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 )
 
-var (
-	_ chasm.Component                                         = (*Cancellation)(nil)
-	_ chasm.StateMachine[nexusoperationpb.CancellationStatus] = (*Cancellation)(nil)
-)
+var _ chasm.Component = (*Cancellation)(nil)
+var _ chasm.StateMachine[nexusoperationpb.CancellationStatus] = (*Cancellation)(nil)
 
 // Cancellation is a CHASM component that represents a pending cancellation of a Nexus operation.
 type Cancellation struct {
