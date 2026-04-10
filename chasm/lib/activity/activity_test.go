@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
@@ -383,17 +382,17 @@ func TestApplyActivityOptionsAcceptance(t *testing.T) {
 			}
 
 			err := activity.mergeActivityOptions(req)
-			assert.NoError(t, err)
-			assert.Equal(t, tc.expected.RetryPolicy.GetInitialInterval(), activity.RetryPolicy.GetInitialInterval(), "RetryInitialInterval")
-			assert.Equal(t, tc.expected.RetryPolicy.GetMaximumInterval(), activity.RetryPolicy.GetMaximumInterval(), "RetryMaximumInterval")
-			assert.Equal(t, tc.expected.RetryPolicy.GetBackoffCoefficient(), activity.RetryPolicy.GetBackoffCoefficient(), "RetryBackoffCoefficient")
-			assert.Equal(t, tc.expected.RetryPolicy.GetMaximumAttempts(), activity.RetryPolicy.GetMaximumAttempts(), "RetryMaximumAttempts")
-			assert.Equal(t, tc.expected.TaskQueue, activity.TaskQueue, "TaskQueue")
-			assert.Equal(t, tc.expected.ScheduleToCloseTimeout, activity.ScheduleToCloseTimeout, "ScheduleToCloseTimeout")
-			assert.Equal(t, tc.expected.ScheduleToStartTimeout, activity.ScheduleToStartTimeout, "ScheduleToStartTimeout")
-			assert.Equal(t, tc.expected.StartToCloseTimeout, activity.StartToCloseTimeout, "StartToCloseTimeout")
-			assert.Equal(t, tc.expected.HeartbeatTimeout, activity.HeartbeatTimeout, "HeartbeatTimeout")
-			assert.Equal(t, tc.expected.Priority, activity.Priority, "Priority")
+			require.NoError(t, err)
+			require.Equal(t, tc.expected.RetryPolicy.GetInitialInterval(), activity.RetryPolicy.GetInitialInterval(), "RetryInitialInterval")
+			require.Equal(t, tc.expected.RetryPolicy.GetMaximumInterval(), activity.RetryPolicy.GetMaximumInterval(), "RetryMaximumInterval")
+			require.InDelta(t, tc.expected.RetryPolicy.GetBackoffCoefficient(), activity.RetryPolicy.GetBackoffCoefficient(), 0.001, "RetryBackoffCoefficient")
+			require.Equal(t, tc.expected.RetryPolicy.GetMaximumAttempts(), activity.RetryPolicy.GetMaximumAttempts(), "RetryMaximumAttempts")
+			require.Equal(t, tc.expected.TaskQueue, activity.TaskQueue, "TaskQueue")
+			require.Equal(t, tc.expected.ScheduleToCloseTimeout, activity.ScheduleToCloseTimeout, "ScheduleToCloseTimeout")
+			require.Equal(t, tc.expected.ScheduleToStartTimeout, activity.ScheduleToStartTimeout, "ScheduleToStartTimeout")
+			require.Equal(t, tc.expected.StartToCloseTimeout, activity.StartToCloseTimeout, "StartToCloseTimeout")
+			require.Equal(t, tc.expected.HeartbeatTimeout, activity.HeartbeatTimeout, "HeartbeatTimeout")
+			require.Equal(t, tc.expected.Priority, activity.Priority, "Priority")
 		})
 	}
 }
