@@ -5233,9 +5233,8 @@ func (*testTaskManager) CountTaskQueuesByBuildId(context.Context, *persistence.C
 }
 
 // TestLoggerAndMetricsForPartition_BreakdownEnabled verifies partition and taskqueue tag values
-// with the default BreakdownMetricsByTaskQueue=true: normal queues show their name, sticky queues
-// show the base name, and worker-commands queues get partition=__worker_commands__ with
-// taskqueue=__omitted__.
+// with the default BreakdownMetricsByTaskQueue=true: normal and worker-commands queues show their
+// name, sticky queues show the base name, and each partition type gets its own partition tag.
 func TestLoggerAndMetricsForPartition_BreakdownEnabled(t *testing.T) {
 	t.Parallel()
 
@@ -5294,8 +5293,7 @@ func TestLoggerAndMetricsForPartition_BreakdownEnabled(t *testing.T) {
 }
 
 // TestLoggerAndMetricsForPartition_BreakdownDisabled verifies behavior with BreakdownMetricsByTaskQueue=false:
-// normal and sticky queues get taskqueue=__omitted__, and worker-commands queues also get __omitted__
-// with partition=__worker_commands__.
+// all partition types get taskqueue=__omitted__, but each still gets its own partition tag.
 func TestLoggerAndMetricsForPartition_BreakdownDisabled(t *testing.T) {
 	t.Parallel()
 
