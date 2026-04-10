@@ -575,10 +575,12 @@ func (t *visibilityQueueTaskExecutor) getClosedVisibilityRequest(
 	if t.externalPayloadsEnabled(namespaceEntry.Name().String()) {
 		externalPayloadCount := executionInfo.GetExecutionStats().GetExternalPayloadCount()
 		externalPayloadSizeBytes := executionInfo.GetExecutionStats().GetExternalPayloadSize()
-		externalPayloadCountPayload, _ := payload.Encode(externalPayloadCount)
-		externalPayloadSizeBytesPayload, _ := payload.Encode(externalPayloadSizeBytes)
-		base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadCount] = externalPayloadCountPayload
-		base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadSizeBytes] = externalPayloadSizeBytesPayload
+		if externalPayloadCount > 0 {
+			externalPayloadCountPayload, _ := payload.Encode(externalPayloadCount)
+			externalPayloadSizeBytesPayload, _ := payload.Encode(externalPayloadSizeBytes)
+			base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadCount] = externalPayloadCountPayload
+			base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadSizeBytes] = externalPayloadSizeBytesPayload
+		}
 	}
 
 	return &manager.RecordWorkflowExecutionClosedRequest{
