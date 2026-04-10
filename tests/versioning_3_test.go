@@ -2776,11 +2776,11 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_RetryInheritsIni
 	})
 }
 
-// TestPinnedCaN_UseRampingVersionOnCaN_ChildDoesNotInherit tests that a child workflow started
+// TestPinnedCaN_UseRampingVersionOnCaN_ChildDoesNotInheritUseRampingVersion tests that a child workflow started
 // by the UseRampingVersion run does not inherit UseRampingVersion — it is routed to the same version
 // as its parent based on InheritedAutoUpgradeInfo, and therefore starts on v2 also, but we confirm that
 // it does not inherit UseRampingVersion.
-func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_ChildDoesNotInherit() {
+func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_ChildDoesNotInheritUseRampingVersion() {
 	s.RunTestWithMatchingBehavior(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
