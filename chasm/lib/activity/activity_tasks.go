@@ -176,7 +176,8 @@ func (h *startToCloseTimeoutTaskHandler) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.StartToCloseTimeoutTask,
 ) (bool, error) {
-	valid := (activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
+	valid := ((activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
+		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED) &&
 		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp())
 	return valid, nil
 }
