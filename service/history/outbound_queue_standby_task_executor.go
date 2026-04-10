@@ -66,6 +66,7 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 	namespaceTag, _ := getNamespaceTagAndReplicationStateByID(
 		e.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
+		executable.GetWorkflowID(),
 	)
 	respond := func(err error) queues.ExecuteResponse {
 		metricsTags := []metrics.Tag{

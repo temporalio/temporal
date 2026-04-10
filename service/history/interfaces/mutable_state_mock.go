@@ -2594,6 +2594,20 @@ func (mr *MockMutableStateMockRecorder) GetRetryBackoffDuration(arg0 any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRetryBackoffDuration", reflect.TypeOf((*MockMutableState)(nil).GetRetryBackoffDuration), arg0)
 }
 
+// GetShouldUseRampingVersion mocks base method.
+func (m *MockMutableState) GetShouldUseRampingVersion() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetShouldUseRampingVersion")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// GetShouldUseRampingVersion indicates an expected call of GetShouldUseRampingVersion.
+func (mr *MockMutableStateMockRecorder) GetShouldUseRampingVersion() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShouldUseRampingVersion", reflect.TypeOf((*MockMutableState)(nil).GetShouldUseRampingVersion))
+}
+
 // GetSignalExternalInitiatedEvent mocks base method.
 func (m *MockMutableState) GetSignalExternalInitiatedEvent(arg0 context.Context, arg1 int64) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()

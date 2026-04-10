@@ -318,6 +318,8 @@ func (t *serializerImpl) DeserializeReplicationTask(replicationTask *persistence
 		return replicationSyncHSMTaskFromProto(replicationTask), nil
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION:
 		return replicationSyncVersionedTransitionTaskFromProto(replicationTask, t)
+	case enumsspb.TASK_TYPE_REPLICATION_DELETE_EXECUTION:
+		return replicationDeleteExecutionTaskFromProto(replicationTask), nil
 	default:
 		return nil, serviceerror.NewInternalf("Unknown replication task type: %v", replicationTask.TaskType)
 	}
@@ -335,6 +337,8 @@ func (t *serializerImpl) SerializeReplicationTask(task tasks.Task) (*persistence
 		return replicationSyncHSMTaskToProto(task), nil
 	case *tasks.SyncVersionedTransitionTask:
 		return replicationSyncVersionedTransitionTaskToProto(task, t)
+	case *tasks.DeleteExecutionReplicationTask:
+		return replicationDeleteExecutionTaskToProto(task), nil
 	default:
 		return nil, serviceerror.NewInternalf("Unknown repication task type: %v", task)
 	}
@@ -1490,5 +1494,38 @@ func deserializeOutboundTask(
 		}, nil
 	default:
 		return nil, serviceerror.NewInternalf("unknown outbound task type while deserializing: %v", info)
+	}
+}
+
+func replicationDeleteExecutionTaskToProto(
+	task *tasks.DeleteExecutionReplicationTask,
+) *persistencespb.ReplicationTaskInfo {
+	return &persistencespb.ReplicationTaskInfo{
+		NamespaceId:    task.NamespaceID,
+		WorkflowId:     task.WorkflowID,
+		RunId:          task.RunID,
+		TaskType:       enumsspb.TASK_TYPE_REPLICATION_DELETE_EXECUTION,
+		TaskId:         task.TaskID,
+		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
+		ArchetypeId:    task.ArchetypeID,
+	}
+}
+
+func replicationDeleteExecutionTaskFromProto(
+	info *persistencespb.ReplicationTaskInfo,
+) *tasks.DeleteExecutionReplicationTask {
+	visibilityTimestamp := time.Unix(0, 0)
+	if info.VisibilityTime != nil {
+		visibilityTimestamp = info.VisibilityTime.AsTime()
+	}
+	return &tasks.DeleteExecutionReplicationTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			info.NamespaceId,
+			info.WorkflowId,
+			info.RunId,
+		),
+		VisibilityTimestamp: visibilityTimestamp,
+		TaskID:              info.TaskId,
+		ArchetypeID:         info.ArchetypeId,
 	}
 }
