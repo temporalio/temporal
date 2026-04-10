@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
 	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -44,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
@@ -150,6 +153,8 @@ type (
 
 		chasmRegistry    *chasm.Registry
 		endpointRegistry chasm.EndpointRegistry
+
+		businessIDRateLimiters cache.Cache
 	}
 
 	remoteClusterInfo struct {
@@ -2148,6 +2153,10 @@ func newContext(
 		stateMachineRegistry:    stateMachineRegistry,
 		chasmRegistry:           chasmRegistry,
 		endpointRegistry:        endpointRegistry,
+		businessIDRateLimiters: cache.New(
+			historyConfig.BusinessIDReuseLimiterCacheSize(),
+			&cache.Options{TTL: historyConfig.BusinessIDReuseLimiterCacheTTL()},
+		),
 	}
 	shardContext.taskKeyManager = newTaskKeyManager(
 		shardContext.taskCategoryRegistry,
@@ -2256,6 +2265,29 @@ func (s *ContextImpl) ChasmRegistry() *chasm.Registry {
 
 func (s *ContextImpl) EndpointRegistry() chasm.EndpointRegistry {
 	return s.endpointRegistry
+}
+
+func (s *ContextImpl) BusinessIDReuseRateLimiter(namespaceID namespace.ID, businessID string, archetypeID chasm.ArchetypeID) quotas.RateLimiter {
+	rps := s.config.BusinessIDReuseRate(namespaceID.String())
+	if rps <= 0 {
+		return nil
+	}
+	burst := max(1, int(float64(rps)*s.config.BusinessIDReuseBurstRatio(namespaceID.String())))
+	key := namespaceID.String() + "/" + businessID + "/" + strconv.Itoa(int(archetypeID))
+	existing := s.businessIDRateLimiters.Get(key)
+	if existing == nil {
+		rl := quotas.NewRateLimiter(float64(rps), burst)
+		existing, _ = s.businessIDRateLimiters.PutIfNotExist(key, rl)
+	}
+	rl, ok := existing.(*quotas.RateLimiterImpl)
+	if !ok {
+		// Should never happen; cache only stores *RateLimiterImpl.
+		return nil
+	}
+	if float64(rps) != rl.Rate() || burst != rl.Burst() {
+		rl.SetRateBurst(float64(rps), burst)
+	}
+	return rl
 }
 
 func (s *ContextImpl) GetCachedWorkflowContext(
