@@ -474,3 +474,88 @@ func (s *PollerScalingIntegSuite) TestPollerScalingLightlyUsedQueueScalesDown() 
 	s.Require().NotNil(poll.resp.PollerScalingDecision)
 	s.Require().Equal(int32(-1), poll.resp.PollerScalingDecision.PollRequestDeltaSuggestion)
 }
+
+// TestPollerScalingFIFODispatchPreventsScaleDown documents the current FIFO
+// poller dispatch behavior that makes autoscaling scale-down less effective
+// (see https://github.com/temporalio/temporal/issues/8447).
+//
+// With FIFO, the oldest waiting poller always gets the next task. This means
+// all pollers stay warm and none times out, even when fewer pollers would
+// suffice. With LIFO dispatch, the most-recently-connected poller would get
+// the task, letting older excess pollers time out and trigger scale-down.
+//
+// This test asserts the FIFO behavior: with two pollers, the OLDER one
+// receives the task. When the matching engine switches to LIFO dispatch,
+// this test should fail — update it to assert the NEWER poller gets the task.
+func (s *PollerScalingIntegSuite) TestPollerScalingFIFODispatchPreventsScaleDown() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	tq := testcore.RandomizeStr(s.T().Name())
+
+	type pollResult struct {
+		resp *workflowservice.PollWorkflowTaskQueueResponse
+		err  error
+	}
+
+	// Start the first (older) poller.
+	olderCh := make(chan pollResult, 1)
+	go func() {
+		resp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		olderCh <- pollResult{resp: resp, err: err}
+	}()
+
+	// Wait until the first poller is registered.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.Pollers, 1, "first poller not yet registered")
+	}, 10*time.Second, 50*time.Millisecond)
+
+	// Start the second (newer) poller.
+	newerCh := make(chan pollResult, 1)
+	go func() {
+		resp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		newerCh <- pollResult{resp: resp, err: err}
+	}()
+
+	// Wait until both pollers are registered.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.Pollers, 2, "second poller not yet registered")
+	}, 10*time.Second, 50*time.Millisecond)
+
+	// Start a single workflow — exactly one poller should receive the task.
+	_, err := s.SdkClient().ExecuteWorkflow(
+		ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.Require().NoError(err)
+
+	// FIFO: the older poller should get the task, not the newer one.
+	// When matching switches to LIFO, this assertion should flip.
+	select {
+	case poll := <-olderCh:
+		s.Require().NoError(poll.err)
+		s.Require().NotEmpty(poll.resp.TaskToken, "older poller should receive the task (FIFO)")
+	case poll := <-newerCh:
+		// If this branch fires, LIFO dispatch may have been implemented — update this test.
+		s.Failf("newer poller got the task",
+			"expected FIFO dispatch (older poller wins), but newer poller received task token %x", poll.resp.TaskToken)
+	case <-time.After(10 * time.Second): //nolint:forbidigo
+		s.Fail("neither poller received the task within 10s")
+	}
+}
