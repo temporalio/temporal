@@ -669,7 +669,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 				return nil, err
 			}
 			handler.activityNotStartedCancelled = true
-		} else if ai.StartedEventId != common.EmptyEventID && ai.WorkerControlTaskQueue != "" {
+		} else if ai.WorkerControlTaskQueue != "" {
 			if ai.StartedClock == nil {
 				// StartedClock may be nil for activities started before this feature was deployed.
 				// Skip cancel command; the activity will time out normally.
