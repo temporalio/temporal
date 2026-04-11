@@ -14,7 +14,6 @@ import "temporal/api/failure/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/worker/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
-
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/nexus.proto";
@@ -518,7 +517,7 @@ message OutboundTaskInfo {
 
 // WorkerCommandsTask contains worker commands to dispatch via Nexus.
 message WorkerCommandsTask {
-    repeated temporal.api.worker.v1.WorkerCommand commands = 1;
+  repeated temporal.api.worker.v1.WorkerCommand commands = 1;
 }
 
 message NexusInvocationTaskInfo {
