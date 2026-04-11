@@ -6,9 +6,11 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -20,14 +22,19 @@ type MockNodeBackend struct {
 	// Optional function overrides. If nil, methods return zero-values.
 	HandleGetExecutionState           func() *persistencespb.WorkflowExecutionState
 	HandleGetExecutionInfo            func() *persistencespb.WorkflowExecutionInfo
-	HandleGetApproximatePersistedSize func() int
 	HandleGetCurrentVersion           func() int64
 	HandleNextTransitionCount         func() int64
+	HandleGetApproximatePersistedSize func() int
 	HandleCurrentVersionedTransition  func() *persistencespb.VersionedTransition
 	HandleGetWorkflowKey              func() definition.WorkflowKey
 	HandleUpdateWorkflowStateStatus   func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error)
 	HandleIsWorkflow                  func() bool
 	HandleGetNexusCompletion          func(ctx context.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
+	HandleAddHistoryEvent             func(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
+	HandleLoadHistoryEvent            func(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
+	HandleHasAnyBufferedEvent         func(filter func(*historypb.HistoryEvent) bool) bool
+	HandleGetNamespaceEntry           func() *namespace.Namespace
+	HandleEndpointRegistry            func() EndpointRegistry
 
 	// Recorded calls (protected by mu).
 	mu                  sync.Mutex
@@ -177,6 +184,41 @@ func (m *MockNodeBackend) GetNexusCompletion(
 		return m.HandleGetNexusCompletion(ctx, requestID)
 	}
 	return nexusrpc.CompleteOperationOptions{}, nil
+}
+
+func (m *MockNodeBackend) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
+	if m.HandleAddHistoryEvent != nil {
+		return m.HandleAddHistoryEvent(t, setAttributes)
+	}
+	return nil
+}
+
+func (m *MockNodeBackend) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
+	if m.HandleLoadHistoryEvent != nil {
+		return m.HandleLoadHistoryEvent(ctx, token)
+	}
+	return nil, nil
+}
+
+func (m *MockNodeBackend) HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool) bool {
+	if m.HandleHasAnyBufferedEvent != nil {
+		return m.HandleHasAnyBufferedEvent(filter)
+	}
+	return false
+}
+
+func (m *MockNodeBackend) GetNamespaceEntry() *namespace.Namespace {
+	if m.HandleGetNamespaceEntry != nil {
+		return m.HandleGetNamespaceEntry()
+	}
+	return nil
+}
+
+func (m *MockNodeBackend) EndpointRegistry() EndpointRegistry {
+	if m.HandleEndpointRegistry != nil {
+		return m.HandleEndpointRegistry()
+	}
+	return nil
 }
 
 func (m *MockNodeBackend) NumTasksAdded() int {

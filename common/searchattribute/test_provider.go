@@ -145,6 +145,9 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 }
 
 func NewTestMapperProvider(customMapper Mapper) MapperProvider {
+	if customMapper == nil {
+		customMapper = &NoopMapper{}
+	}
 	return &testMapperProvider{mapper: customMapper}
 }
 

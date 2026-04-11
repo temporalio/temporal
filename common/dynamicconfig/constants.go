@@ -150,6 +150,11 @@ for signal / start / signal with start API if namespace is not active`,
 		false,
 		`EnableCrossNamespaceCommands is the key to enable commands for external namespaces`,
 	)
+	DisableStreamingAuthorizer = NewGlobalBoolSetting(
+		"system.disableStreamingAuthorizer",
+		false,
+		`DisableStreamingAuthorizer is the key to disable the auth on streaming endpoint`,
+	)
 	ClusterMetadataRefreshInterval = NewGlobalDurationSetting(
 		"system.clusterMetadataRefreshInterval",
 		time.Minute,
@@ -2796,6 +2801,30 @@ that task will be sent to DLQ.`,
 		"history.enableWorkflowIdReuseStartTimeValidation",
 		false,
 		`If true, validate the start time of the old workflow is older than WorkflowIdReuseMinimalInterval when reusing workflow ID.`,
+	)
+	BusinessIDReuseRate = NewNamespaceIntSetting(
+		"history.businessIDReuseRate",
+		0,
+		`BusinessIDReuseRate limits the rate of new execution creation per
+(namespace, businessID, archetype) tuple on a single history host. 0 = disabled (default).`,
+	)
+	BusinessIDReuseBurstRatio = NewNamespaceFloatSetting(
+		"history.businessIDReuseBurstRatio",
+		1.0,
+		`BusinessIDReuseBurstRatio is the burst-to-rate ratio for the per-(namespace, businessID, archetype)
+start rate limiter. Burst = max(1, int(rps * ratio)). Default 1.0 (no burst above rate).`,
+	)
+	BusinessIDReuseLimiterCacheSize = NewGlobalIntSetting(
+		"history.businessIDReuseLimiterCacheSize",
+		10000,
+		`BusinessIDReuseLimiterCacheSize is the max number of per-(namespace, businessID, archetype) rate limiters
+cached on a single history shard. Requires service restart to take effect.`,
+	)
+	BusinessIDReuseLimiterCacheTTL = NewGlobalDurationSetting(
+		"history.businessIDReuseLimiterCacheTTL",
+		60*time.Second,
+		`BusinessIDReuseLimiterCacheTTL is the TTL for per-(namespace, businessID, archetype) rate limiter cache entries.
+Requires service restart to take effect.`,
 	)
 	HealthPersistenceLatencyFailure = NewGlobalFloatSetting(
 		"history.healthPersistenceLatencyFailure",

@@ -2,6 +2,7 @@ package respondworkflowtaskcompleted
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -18,6 +19,8 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -42,9 +45,10 @@ func TestCommandProtocolMessage(t *testing.T) {
 	t.Parallel()
 
 	type testconf struct {
-		ms      *historyi.MockMutableState
-		updates update.Registry
-		handler *workflowTaskCompletedHandler
+		ms                    *historyi.MockMutableState
+		updates               update.Registry
+		handler               *workflowTaskCompletedHandler
+		chasmWorkflowRegistry *chasmworkflow.Registry
 	}
 
 	const defaultBlobSizeLimit = 1 * 1024 * 1024
@@ -60,20 +64,39 @@ func TestCommandProtocolMessage(t *testing.T) {
 		}
 	}
 
-	setup := func(t *testing.T, out *testconf, blobSizeLimit int) {
-		shardCtx := historyi.NewMockShardContext(gomock.NewController(t))
+	type setupOpts struct {
+		blobSizeLimit int
+		chasmEnabled  bool
+	}
+
+	setup := func(t *testing.T, out *testconf, opts setupOpts) {
+		ctrl := gomock.NewController(t)
+		shardCtx := historyi.NewMockShardContext(ctrl)
 		logger := log.NewNoopLogger()
 		metricsHandler := metrics.NoopMetricsHandler
-		out.ms = historyi.NewMockMutableState(gomock.NewController(t))
-		out.ms.EXPECT().VisitUpdates(gomock.Any())
-		out.ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
-		out.ms.EXPECT().GetCurrentVersion().Return(tests.LocalNamespaceEntry.FailoverVersion(tests.WorkflowID))
+		out.ms = historyi.NewMockMutableState(ctrl)
+		out.ms.EXPECT().VisitUpdates(gomock.Any()).AnyTimes()
+		out.ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+		out.ms.EXPECT().GetCurrentVersion().Return(tests.LocalNamespaceEntry.FailoverVersion(tests.WorkflowID)).AnyTimes()
+
+		dcClient := dynamicconfig.StaticClient(nil)
+		if opts.chasmEnabled {
+			out.chasmWorkflowRegistry = chasmworkflow.NewRegistry()
+			mockCtx := &chasm.MockMutableContext{}
+			wf := chasmworkflow.NewWorkflow(mockCtx, chasm.MSPointer{})
+			out.ms.EXPECT().ChasmEnabled().Return(true).AnyTimes()
+			out.ms.EXPECT().EnsureChasmWorkflowComponent(gomock.Any()).AnyTimes()
+			out.ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(wf, mockCtx, nil)
+			dcClient = dynamicconfig.StaticClient(map[dynamicconfig.Key]any{
+				dynamicconfig.EnableChasm.Key(): true,
+			})
+		}
 
 		out.updates = update.NewRegistry(out.ms)
 		var effects effect.Buffer
-		col := dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), logger)
+		col := dynamicconfig.NewCollection(dcClient, logger)
 		config := configs.NewConfig(col, 1)
-		mockMeta := persistence.NewMockMetadataManager(gomock.NewController(t))
+		mockMeta := persistence.NewMockMetadataManager(ctrl)
 		nsReg := nsregistry.NewRegistry(
 			mockMeta,
 			true,
@@ -84,7 +107,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			logger,
 			namespace.NewDefaultReplicationResolverFactory(),
 		)
-		out.handler = newWorkflowTaskCompletedHandler( // 😲
+		out.handler = newWorkflowTaskCompletedHandler(
 			t.Name(), // identity
 			"",       // workerControlTaskQueue
 			123,      // workflowTaskCompletedID
@@ -97,7 +120,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 				nil, // searchAttributesValidator
 			),
 			newWorkflowSizeChecker(
-				workflowSizeLimits{blobSizeLimitError: blobSizeLimit},
+				workflowSizeLimits{blobSizeLimitError: opts.blobSizeLimit},
 				out.ms,
 				nil, // searchAttributesValidator
 				metricsHandler,
@@ -110,7 +133,8 @@ func TestCommandProtocolMessage(t *testing.T) {
 			shardCtx,
 			nil, // searchattribute.MapperProvider
 			false,
-			nil, // TODO: test usage of commandHandlerRegistry?
+			nil,
+			out.chasmWorkflowRegistry,
 			nil,
 			nil,
 		)
@@ -118,7 +142,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 	t.Run("missing message ID", func(t *testing.T) {
 		var tc testconf
-		setup(t, &tc, defaultBlobSizeLimit)
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
 		var (
 			command = msgCommand("") // blank is invalid
 		)
@@ -136,7 +160,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 	// Verifies that if user metadata is present in the command then it is passed through to the newly created event.
 	t.Run("Attach user metadata", func(t *testing.T) {
 		var tc testconf
-		setup(t, &tc, defaultBlobSizeLimit)
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
 		msgID := t.Name() + "-message-id"
 		command := msgCommand(msgID)
 		startTimerCommandAttributes := &commandpb.StartTimerCommandAttributes{
@@ -172,7 +196,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 	// Verifies that the error is properly handled when event creation fails.
 	t.Run("Event creation failure", func(t *testing.T) {
 		var tc testconf
-		setup(t, &tc, defaultBlobSizeLimit)
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
 		command := msgCommand(t.Name() + "-message-id")
 		completeWorkflowExecutionCommandAttributes := &commandpb.CompleteWorkflowExecutionCommandAttributes{
 			Result: &commonpb.Payloads{
@@ -206,7 +230,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 	t.Run("message not found", func(t *testing.T) {
 		var tc testconf
-		setup(t, &tc, defaultBlobSizeLimit)
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
 		var (
 			command = msgCommand("valid_but_not_found_msg_id")
 		)
@@ -224,7 +248,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 	t.Run("message too large", func(t *testing.T) {
 		var tc testconf
 		t.Log("setting max blob size to zero")
-		setup(t, &tc, 0)
+		setup(t, &tc, setupOpts{blobSizeLimit: 0})
 		var (
 			msgID   = t.Name() + "-message-id"
 			command = msgCommand(msgID) // blank is invalid
@@ -249,7 +273,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 	t.Run("message for unsupported protocol", func(t *testing.T) {
 		var tc testconf
-		setup(t, &tc, defaultBlobSizeLimit)
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
 		var (
 			msgID   = t.Name() + "-message-id"
 			command = msgCommand(msgID) // blank is invalid
@@ -276,7 +300,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 	t.Run("update not found", func(t *testing.T) {
 		var tc testconf
-		setup(t, &tc, defaultBlobSizeLimit)
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
 		var (
 			msgID   = t.Name() + "-message-id"
 			command = msgCommand(msgID) // blank is invalid
@@ -303,7 +327,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 	t.Run("deliver message failure", func(t *testing.T) {
 		var tc testconf
-		setup(t, &tc, defaultBlobSizeLimit)
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
 		var (
 			updateID = t.Name() + "-update-id"
 			msgID    = t.Name() + "-message-id"
@@ -336,7 +360,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 	t.Run("deliver message success", func(t *testing.T) {
 		var tc testconf
-		setup(t, &tc, defaultBlobSizeLimit)
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
 		var (
 			updateID = t.Name() + "-update-id"
 			msgID    = updateID + "/request"
@@ -374,6 +398,36 @@ func TestCommandProtocolMessage(t *testing.T) {
 			"delivering a acceptance message to an update in the sent state should succeed")
 		require.Nil(t, tc.handler.workflowTaskFailedCause)
 	})
+
+	t.Run("CHASM command handler is invoked", func(t *testing.T) {
+		var tc testconf
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit, chasmEnabled: true})
+
+		// Register a test handler that returns a sentinel error
+		sentinelErr := errors.New("sentinel: CHASM handler invoked")
+		err := tc.chasmWorkflowRegistry.Register(testWorkflowLibrary{
+			commandHandlers: map[enumspb.CommandType]chasmworkflow.CommandHandler{
+				enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION: func(chasm.MutableContext, *chasmworkflow.Workflow, chasmworkflow.Validator, *commandpb.Command, chasmworkflow.CommandHandlerOptions) error {
+					return sentinelErr
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		command := &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  "test-endpoint",
+					Service:   "test-service",
+					Operation: "test-operation",
+				},
+			},
+		}
+
+		_, err = tc.handler.handleCommand(context.Background(), command, newMsgList())
+		require.ErrorIs(t, err, sentinelErr)
+	})
 }
 
 func newMsgList(msgs ...*protocolpb.Message) *collection.IndexedTakeList[string, *protocolpb.Message] {
@@ -385,6 +439,18 @@ func mustMarshalAny(t *testing.T, pb proto.Message) *anypb.Any {
 	var a anypb.Any
 	require.NoError(t, a.MarshalFrom(pb))
 	return &a
+}
+
+type testWorkflowLibrary struct {
+	commandHandlers map[enumspb.CommandType]chasmworkflow.CommandHandler
+}
+
+func (l testWorkflowLibrary) CommandHandlers() map[enumspb.CommandType]chasmworkflow.CommandHandler {
+	return l.commandHandlers
+}
+
+func (l testWorkflowLibrary) EventDefinitions() []chasmworkflow.EventDefinition {
+	return nil
 }
 
 func TestFlushWorkerCommandsTasks(t *testing.T) {

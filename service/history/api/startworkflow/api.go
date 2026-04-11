@@ -309,6 +309,7 @@ func (s *Starter) createBrandNew(ctx context.Context, creationParams *creationPa
 		creationParams.workflowLease.GetMutableState(),
 		creationParams.workflowSnapshot,
 		creationParams.workflowEventBatches,
+		historyi.TransactionPolicyActive,
 	)
 }
 
@@ -384,6 +385,7 @@ func (s *Starter) createAsCurrent(
 		creationParams.workflowLease.GetMutableState(),
 		creationParams.workflowSnapshot,
 		creationParams.workflowEventBatches,
+		historyi.TransactionPolicyActive,
 	)
 }
 
