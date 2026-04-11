@@ -597,3 +597,92 @@ func (s *PollerScalingIntegSuite) TestPollerScalingNoDecisionOnIdleQueue() {
 		"server currently cannot send scaling decisions on empty poll responses; "+
 			"if this fails, the limitation may have been fixed — update this test")
 }
+
+// TestPollerScalingScaleUpIgnoresRateLimit documents a limitation in the
+// scale-up rate limiter: the effective rate scales linearly with the number
+// of pollers (rate = PollerScalingDecisionsPerSecond * numPollers) instead
+// of being an absolute cap. This creates a positive feedback loop: more
+// pollers → more +1 decisions → even more pollers.
+//
+// This test sets PollerScalingDecisionsPerSecond to 1 (intending at most
+// 1 scale-up decision per second), then shows that two near-simultaneous
+// polls BOTH receive +1 decisions because the per-poller scaling doubles
+// the effective rate.
+//
+// When the rate limiter is fixed to use an absolute cap, the second poll
+// should return a nil decision (rate-limited). Update this test then.
+func (s *PollerScalingIntegSuite) TestPollerScalingScaleUpIgnoresRateLimit() {
+	// Set rate to 1 decision/sec — should mean at most 1 scale-up per second.
+	s.OverrideDynamicConfig(dynamicconfig.MatchingPollerScalingDecisionsPerSecond, 1.0)
+	// Set wait time very high so no scale-down decisions interfere.
+	s.OverrideDynamicConfig(dynamicconfig.MatchingPollerScalingWaitTime, 1*time.Minute)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	tq := testcore.RandomizeStr(s.T().Name())
+
+	// Create a backlog of workflows.
+	for range 5 {
+		_, err := s.SdkClient().ExecuteWorkflow(
+			ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+		s.Require().NoError(err)
+	}
+
+	// Wait for backlog age to exceed the scale-up threshold (50ms, set in suite setup).
+	tqtyp := enumspb.TASK_QUEUE_TYPE_WORKFLOW
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		res, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:      s.Namespace().String(),
+			TaskQueue:      &taskqueuepb.TaskQueue{Name: tq},
+			ApiMode:        enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+			TaskQueueTypes: []enumspb.TaskQueueType{tqtyp},
+			ReportStats:    true,
+		})
+		require.NoError(t, err)
+		stats := res.GetVersionsInfo()[""].TypesInfo[int32(tqtyp)].Stats
+		require.GreaterOrEqual(t, stats.ApproximateBacklogAge.AsDuration(), 200*time.Millisecond)
+	}, 10*time.Second, 50*time.Millisecond)
+
+	type pollResult struct {
+		resp *workflowservice.PollWorkflowTaskQueueResponse
+		err  error
+	}
+
+	// Launch two polls simultaneously — both will grab a backlogged task.
+	ch1 := make(chan pollResult, 1)
+	ch2 := make(chan pollResult, 1)
+	go func() {
+		resp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		ch1 <- pollResult{resp: resp, err: err}
+	}()
+	go func() {
+		resp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		ch2 <- pollResult{resp: resp, err: err}
+	}()
+
+	poll1 := <-ch1
+	poll2 := <-ch2
+	s.Require().NoError(poll1.err)
+	s.Require().NoError(poll2.err)
+	s.Require().NotEmpty(poll1.resp.TaskToken)
+	s.Require().NotEmpty(poll2.resp.TaskToken)
+
+	// Both polls get scale-up decisions even though rate is configured to 1/sec,
+	// because the effective rate = PollerScalingDecisionsPerSecond * numPollers.
+	// When the rate limiter is fixed to be an absolute cap, one of these should
+	// be nil. Update this test then.
+	s.Require().NotNil(poll1.resp.PollerScalingDecision,
+		"expected +1 decision on first poll (backlog exists)")
+	s.Require().Equal(int32(1), poll1.resp.PollerScalingDecision.PollRequestDeltaSuggestion)
+	s.Require().NotNil(poll2.resp.PollerScalingDecision,
+		"current behavior: second poll also gets +1 despite 1/sec rate limit; "+
+			"if this fails, the rate limiter may have been fixed — update this test")
+	s.Require().Equal(int32(1), poll2.resp.PollerScalingDecision.PollRequestDeltaSuggestion)
+}
