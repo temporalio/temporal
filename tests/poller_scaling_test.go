@@ -559,3 +559,41 @@ func (s *PollerScalingIntegSuite) TestPollerScalingFIFODispatchPreventsScaleDown
 		s.Fail("neither poller received the task within 10s")
 	}
 }
+
+// TestPollerScalingNoDecisionOnIdleQueue documents a limitation: the server
+// only attaches PollerScalingDecision to poll responses that carry a task.
+// On an idle queue (no tasks), polls return empty and never include a
+// scale-down decision — the SDK must infer scale-down from the namespace
+// PollerAutoscaling capability + empty response.
+//
+// This matters for high-task-queue-count environments where most queues are
+// idle: the server can't proactively tell pollers to go away.
+//
+// When the server is enhanced to attach decisions to empty poll responses,
+// this test should fail — update the assertion to expect a non-nil decision.
+func (s *PollerScalingIntegSuite) TestPollerScalingNoDecisionOnIdleQueue() {
+	// Use a short wait time so the poller easily exceeds it.
+	s.OverrideDynamicConfig(dynamicconfig.MatchingPollerScalingWaitTime, 100*time.Millisecond)
+
+	tq := testcore.RandomizeStr(s.T().Name())
+
+	// Poll with a short deadline on an idle queue (no workflows started).
+	// The poll will time out and return empty.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+	})
+	s.Require().NoError(err)
+	s.Require().Empty(resp.TaskToken, "expected empty response on idle queue")
+
+	// The poller waited well past PollerScalingWaitTime, but the server can't
+	// send a scale-down decision because decisions are only attached to task
+	// responses. This is the limitation: PollerScalingDecision is nil even
+	// though a scale-down would be appropriate.
+	s.Require().Nil(resp.PollerScalingDecision,
+		"server currently cannot send scaling decisions on empty poll responses; "+
+			"if this fails, the limitation may have been fixed — update this test")
+}
