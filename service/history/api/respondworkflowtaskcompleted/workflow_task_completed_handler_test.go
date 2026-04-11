@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -457,7 +456,6 @@ func (l testWorkflowLibrary) EventDefinitions() []chasmworkflow.EventDefinition 
 	return nil
 }
 
-
 func TestFlushWorkerCommandsTasks(t *testing.T) {
 	t.Parallel()
 
@@ -650,7 +648,7 @@ func TestHandleCommandRequestCancelActivity_WorkerCommands(t *testing.T) {
 			},
 		)
 		require.NoError(t, err)
-		assert.Equal(t, cancelReqEvent, event)
-		assert.Empty(t, handler.pendingWorkerCommandsByControlQueue)
+		require.Equal(t, cancelReqEvent, event)
+		require.Empty(t, handler.pendingWorkerCommandsByControlQueue)
 	})
 }

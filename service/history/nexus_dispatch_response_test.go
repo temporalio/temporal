@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
@@ -60,7 +59,7 @@ func TestDispatchResponseToError_RequestTimeout(t *testing.T) {
 
 	var handlerErr *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerErr)
-	assert.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, handlerErr.Type)
+	require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, handlerErr.Type)
 }
 
 func TestDispatchResponseToError_FailureWithHandlerErrorInfo(t *testing.T) {
@@ -81,7 +80,7 @@ func TestDispatchResponseToError_FailureWithHandlerErrorInfo(t *testing.T) {
 
 	var handlerErr *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerErr)
-	assert.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
+	require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
 }
 
 func TestDispatchResponseToError_FailureVariant_OperationFailure(t *testing.T) {
@@ -110,7 +109,7 @@ func TestDispatchResponseToError_FailureVariant_OperationFailure(t *testing.T) {
 
 	var opErr *nexus.OperationError
 	require.ErrorAs(t, err, &opErr)
-	assert.Equal(t, nexus.OperationStateFailed, opErr.State)
+	require.Equal(t, nexus.OperationStateFailed, opErr.State)
 }
 
 func TestDispatchResponseToError_FailureVariant_CanceledFailure(t *testing.T) {
@@ -137,7 +136,7 @@ func TestDispatchResponseToError_FailureVariant_CanceledFailure(t *testing.T) {
 
 	var opErr *nexus.OperationError
 	require.ErrorAs(t, err, &opErr)
-	assert.Equal(t, nexus.OperationStateCanceled, opErr.State)
+	require.Equal(t, nexus.OperationStateCanceled, opErr.State)
 }
 
 func TestDispatchResponseToError_EmptyOutcome(t *testing.T) {
@@ -147,7 +146,7 @@ func TestDispatchResponseToError_EmptyOutcome(t *testing.T) {
 
 	var handlerErr *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerErr)
-	assert.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+	require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
 }
 
 func TestStartOperationResponseToError_EmptyVariant(t *testing.T) {
@@ -157,5 +156,5 @@ func TestStartOperationResponseToError_EmptyVariant(t *testing.T) {
 
 	var handlerErr *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerErr)
-	assert.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+	require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
 }

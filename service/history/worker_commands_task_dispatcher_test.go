@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	workerpb "go.temporal.io/api/worker/v1"
@@ -37,7 +36,7 @@ func requireMetricValue(t *testing.T, snap map[string][]*metricstest.CapturedRec
 	t.Helper()
 	recordings := snap[metrics.WorkerCommandsSent.Name()]
 	require.Len(t, recordings, 1, "expected exactly 1 dispatch metric recording")
-	assert.Equal(t, expectedOutcome, recordings[0].Tags["outcome"])
+	require.Equal(t, expectedOutcome, recordings[0].Tags["outcome"])
 }
 
 func TestExecute_FeatureFlagOff_DropsTask(t *testing.T) {
@@ -185,7 +184,7 @@ func TestExecute_DispatchRPCError(t *testing.T) {
 	task := testWorkerCommandsTask()
 	err := d.execute(context.Background(), task, 1 /* attempt */)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "connection refused")
+	require.Contains(t, err.Error(), "connection refused")
 
 	requireMetricValue(t, capture.Snapshot(), "rpc_error")
 }
@@ -219,7 +218,7 @@ func TestExecute_UpstreamTimeout(t *testing.T) {
 
 	var he *nexus.HandlerError
 	require.ErrorAs(t, err, &he)
-	assert.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, he.Type)
+	require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, he.Type)
 
 	requireMetricValue(t, capture.Snapshot(), "no_poller")
 }
@@ -262,7 +261,7 @@ func TestHandleError_UpstreamTimeout_ReturnRetryable(t *testing.T) {
 
 	var he *nexus.HandlerError
 	require.ErrorAs(t, err, &he)
-	assert.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, he.Type)
+	require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, he.Type)
 
 	requireMetricValue(t, capture.Snapshot(), "no_poller")
 }
