@@ -239,6 +239,16 @@ func (c *clientImpl) GetTaskQueueTasks(
 	return c.client.GetTaskQueueTasks(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetTaskQueueUserData(
+	ctx context.Context,
+	request *adminservice.GetTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetTaskQueueUserDataResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetTaskQueueUserData(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetWorkflowExecutionRawHistory(
 	ctx context.Context,
 	request *adminservice.GetWorkflowExecutionRawHistoryRequest,
@@ -327,16 +337,6 @@ func (c *clientImpl) MergeDLQTasks(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.MergeDLQTasks(ctx, request, opts...)
-}
-
-func (c *clientImpl) GetTaskQueueUserData(
-	ctx context.Context,
-	request *adminservice.GetTaskQueueUserDataRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetTaskQueueUserDataResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.GetTaskQueueUserData(ctx, request, opts...)
 }
 
 func (c *clientImpl) MigrateSchedule(
