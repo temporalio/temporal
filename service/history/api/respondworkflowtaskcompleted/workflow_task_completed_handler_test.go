@@ -27,11 +27,11 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -623,21 +623,21 @@ func TestHandleCommandRequestCancelActivity_WorkerCommands(t *testing.T) {
 		ms := historyi.NewMockMutableState(ctrl)
 
 		ai := &persistencespb.ActivityInfo{
-			ScheduledEventId:      scheduledEventID,
-			StartedEventId:        7,
-			ActivityId:            "act-1",
+			ScheduledEventId:       scheduledEventID,
+			StartedEventId:         7,
+			ActivityId:             "act-1",
 			WorkerControlTaskQueue: "", // worker doesn't support control tasks
-			StartedClock:          &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 100},
+			StartedClock:           &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 100},
 		}
 
 		ms.EXPECT().AddActivityTaskCancelRequestedEvent(int64(123), scheduledEventID, "test-identity").
 			Return(cancelReqEvent, ai, nil)
 
 		handler := &workflowTaskCompletedHandler{
-			identity:                    "test-identity",
-			workflowTaskCompletedID:     123,
-			mutableState:                ms,
-			logger:                      log.NewNoopLogger(),
+			identity:                "test-identity",
+			workflowTaskCompletedID: 123,
+			mutableState:            ms,
+			logger:                  log.NewNoopLogger(),
 		}
 
 		event, err := handler.handleCommandRequestCancelActivity(
