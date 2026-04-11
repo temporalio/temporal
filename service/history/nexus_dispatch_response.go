@@ -13,16 +13,16 @@ import (
 
 // convertTemporalFailure converts a Temporal API Failure proto into a Go error
 // via the Nexus SDK failure converter.
-func convertTemporalFailure(failure *failurepb.Failure) (converted error, err error) {
+func convertTemporalFailure(failure *failurepb.Failure) (nexusErr error, err error) {
 	nexusFailure, err := commonnexus.TemporalFailureToNexusFailure(failure)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert Temporal failure: %w", err)
 	}
-	converted, err := nexusrpc.DefaultFailureConverter().FailureToError(nexusFailure)
+	nexusErr, err = nexusrpc.DefaultFailureConverter().FailureToError(nexusFailure)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert Nexus failure to error: %w", err)
 	}
-	return converted, nil
+	return nexusErr, nil
 }
 
 // dispatchResponseToError converts a DispatchNexusTaskResponse proto into a Nexus SDK error.
