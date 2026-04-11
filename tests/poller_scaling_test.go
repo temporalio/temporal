@@ -474,8 +474,21 @@ func (s *PollerScalingIntegSuite) TestPollerScalingLightlyUsedQueueScalesDown() 
 		pollResultCh <- pollResult{resp: pollResp, err: pollErr}
 	}()
 
-	// Let the poller sit idle well past the 200ms wait-time threshold.
-	time.Sleep(1 * time.Second) //nolint:forbidigo
+	// Wait until the poller is registered in the matching engine before starting
+	// the workflow. Without this, the workflow task could be queued before the
+	// poller registers, giving a near-zero wait time and no scale-down decision.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Pollers, "poller not yet registered")
+	}, 10*time.Second, 50*time.Millisecond)
+
+	// Now let the poller sit idle past the 200ms wait-time threshold.
+	time.Sleep(500 * time.Millisecond) //nolint:forbidigo
 
 	_, err := s.SdkClient().ExecuteWorkflow(
 		ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
