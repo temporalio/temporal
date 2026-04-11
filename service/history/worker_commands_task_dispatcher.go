@@ -26,6 +26,13 @@ import (
 const (
 	workerCommandsTaskTimeout    = time.Second * 10 * debug.TimeoutMultiplier
 	workerCommandsMaxTaskAttempt = 3
+
+	// Nexus service and operation names for worker commands.
+	// TODO: Replace with workerservicepb.WorkerService.ServiceName and
+	// workerservicepb.WorkerService.ExecuteCommands.Name() once the Nexus service
+	// descriptor is published in go.temporal.io/api.
+	workerCommandsServiceName   = "temporal.api.nexusservices.workerservice.v1.WorkerService"
+	workerCommandsOperationName = "ExecuteCommands"
 )
 
 // workerCommandsTaskDispatcher dispatches worker commands to workers via Nexus.
@@ -129,8 +136,8 @@ func (d *workerCommandsTaskDispatcher) dispatchToWorker(
 		Header: map[string]string{},
 		Variant: &nexuspb.Request_StartOperation{
 			StartOperation: &nexuspb.StartOperationRequest{
-				Service:   workerservicepb.WorkerService.ServiceName,
-				Operation: workerservicepb.WorkerService.ExecuteCommands.Name(),
+				Service:   workerCommandsServiceName,
+				Operation: workerCommandsOperationName,
 				Payload:   requestPayload,
 			},
 		},

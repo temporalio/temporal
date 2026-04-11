@@ -144,8 +144,8 @@ func TestDispatchCancelToWorker(t *testing.T) {
 
 	startOp := nexusPollResp.Request.GetStartOperation()
 	env.NotNil(startOp, "Expected StartOperation in Nexus request")
-	env.Equal(workerservicepb.WorkerService.ServiceName, startOp.Service, "Expected WorkerService")
-	env.Equal(workerservicepb.WorkerService.ExecuteCommands.Name(), startOp.Operation, "Expected ExecuteCommands operation")
+	env.Equal("temporal.api.nexusservices.workerservice.v1.WorkerService", startOp.Service, "Expected WorkerService")
+	env.Equal("ExecuteCommands", startOp.Operation, "Expected ExecuteCommands operation")
 
 	// Verify the payload contains the expected CancelActivity command with a task token
 	// that matches the one sent to the worker when the activity started.
