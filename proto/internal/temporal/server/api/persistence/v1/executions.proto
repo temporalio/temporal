@@ -655,6 +655,10 @@ message ActivityInfo {
   bool reset_heartbeats = 48;
 
   int64 start_version = 50;
+
+  // A dedicated per-worker Nexus task queue on which the server sends control
+  // tasks (e.g. activity cancellation) to this specific worker instance.
+  string worker_control_task_queue = 51;
 }
 
 // timer_map column

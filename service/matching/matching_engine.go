@@ -105,6 +105,7 @@ type (
 		forwardedFrom             string
 		localPollStartTime        time.Time
 		workerInstanceKey         string
+		workerControlTaskQueue    string
 	}
 
 	userDataUpdate struct {
@@ -686,6 +687,7 @@ pollLoop:
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
+			workerControlTaskQueue:    request.WorkerControlTaskQueue,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -958,6 +960,7 @@ pollLoop:
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
+			workerControlTaskQueue:    request.WorkerControlTaskQueue,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
