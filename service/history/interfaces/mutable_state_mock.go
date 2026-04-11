@@ -22,6 +22,7 @@ import (
 	history "go.temporal.io/api/history/v1"
 	taskqueue "go.temporal.io/api/taskqueue/v1"
 	update "go.temporal.io/api/update/v1"
+	worker "go.temporal.io/api/worker/v1"
 	workflow "go.temporal.io/api/workflow/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
 	clock "go.temporal.io/server/api/clock/v1"
@@ -630,6 +631,20 @@ func (m *MockMutableState) AddUpsertWorkflowSearchAttributesEvent(arg0 int64, ar
 func (mr *MockMutableStateMockRecorder) AddUpsertWorkflowSearchAttributesEvent(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddUpsertWorkflowSearchAttributesEvent", reflect.TypeOf((*MockMutableState)(nil).AddUpsertWorkflowSearchAttributesEvent), arg0, arg1)
+}
+
+// AddWorkerCommandsTasks mocks base method.
+func (m *MockMutableState) AddWorkerCommandsTasks(commands []*worker.WorkerCommand, controlQueue string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddWorkerCommandsTasks", commands, controlQueue)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddWorkerCommandsTasks indicates an expected call of AddWorkerCommandsTasks.
+func (mr *MockMutableStateMockRecorder) AddWorkerCommandsTasks(commands, controlQueue any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkerCommandsTasks", reflect.TypeOf((*MockMutableState)(nil).AddWorkerCommandsTasks), commands, controlQueue)
 }
 
 // AddWorkflowExecutionCancelRequestedEvent mocks base method.

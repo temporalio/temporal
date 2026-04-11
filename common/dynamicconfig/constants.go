@@ -200,6 +200,11 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 		false,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
 	)
+	EnableCancelActivityWorkerCommand = NewGlobalBoolSetting(
+		"system.enableCancelActivityWorkerCommand",
+		false,
+		`EnableCancelActivityWorkerCommand enables pushing activity cancellation to workers via Nexus worker commands`,
+	)
 	NamespaceMinRetentionGlobal = NewGlobalDurationSetting(
 		"system.namespaceMinRetentionGlobal",
 		24*time.Hour,

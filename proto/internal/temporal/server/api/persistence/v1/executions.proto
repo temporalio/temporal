@@ -12,6 +12,7 @@ import "temporal/api/enums/v1/failed_cause.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
+import "temporal/api/worker/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
@@ -508,7 +509,15 @@ message OutboundTaskInfo {
 
     // If the task addresses a CHASM component, this field will be set.
     ChasmTaskInfo chasm_task_info = 9;
+
+    // If the task is a worker commands task.
+    WorkerCommandsTask worker_commands_task = 10;
   }
+}
+
+// WorkerCommandsTask contains worker commands to dispatch via Nexus.
+message WorkerCommandsTask {
+  repeated temporal.api.worker.v1.WorkerCommand commands = 1;
 }
 
 message NexusInvocationTaskInfo {

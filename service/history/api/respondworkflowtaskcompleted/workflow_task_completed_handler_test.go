@@ -17,6 +17,7 @@ import (
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
@@ -450,4 +451,89 @@ func (l testWorkflowLibrary) CommandHandlers() map[enumspb.CommandType]chasmwork
 
 func (l testWorkflowLibrary) EventDefinitions() []chasmworkflow.EventDefinition {
 	return nil
+}
+
+func TestFlushWorkerCommandsTasks(t *testing.T) {
+	t.Parallel()
+
+	token1 := []byte("token1")
+	token2 := []byte("token2")
+	token3 := []byte("token3")
+	token4 := []byte("token4")
+
+	makeCommands := func(tokens ...[]byte) []*workerpb.WorkerCommand {
+		commands := make([]*workerpb.WorkerCommand, 0, len(tokens))
+		for _, token := range tokens {
+			commands = append(commands, &workerpb.WorkerCommand{
+				Type: &workerpb.WorkerCommand_CancelActivity{
+					CancelActivity: &workerpb.CancelActivityCommand{
+						TaskToken: token,
+					},
+				},
+			})
+		}
+		return commands
+	}
+
+	t.Run("batches commands by control queue", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		expectedCommands := makeCommands(token1, token2, token3)
+		ms.EXPECT().AddWorkerCommandsTasks(
+			expectedCommands,
+			"control-queue-1",
+		).Return(nil).Times(1)
+
+		handler := &workflowTaskCompletedHandler{
+			mutableState: ms,
+			pendingWorkerCommandsByControlQueue: map[string][]*workerpb.WorkerCommand{
+				"control-queue-1": expectedCommands,
+			},
+		}
+
+		err := handler.flushWorkerCommandsTasks()
+		require.NoError(t, err)
+	})
+
+	t.Run("creates separate tasks for different control queues", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		calls := make(map[string][]*workerpb.WorkerCommand)
+		ms.EXPECT().AddWorkerCommandsTasks(
+			gomock.Any(),
+			gomock.Any(),
+		).DoAndReturn(func(commands []*workerpb.WorkerCommand, queue string) error {
+			calls[queue] = commands
+			return nil
+		}).Times(2)
+
+		handler := &workflowTaskCompletedHandler{
+			mutableState: ms,
+			pendingWorkerCommandsByControlQueue: map[string][]*workerpb.WorkerCommand{
+				"control-queue-1": makeCommands(token1, token2),
+				"control-queue-2": makeCommands(token3, token4),
+			},
+		}
+
+		err := handler.flushWorkerCommandsTasks()
+		require.NoError(t, err)
+
+		require.Len(t, calls["control-queue-1"], 2)
+		require.Len(t, calls["control-queue-2"], 2)
+	})
+
+	t.Run("does nothing when no pending commands", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		handler := &workflowTaskCompletedHandler{
+			mutableState:                        ms,
+			pendingWorkerCommandsByControlQueue: nil,
+		}
+
+		err := handler.flushWorkerCommandsTasks()
+		require.NoError(t, err)
+	})
 }

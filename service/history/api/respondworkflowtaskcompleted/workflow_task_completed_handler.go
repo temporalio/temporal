@@ -17,6 +17,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -58,15 +59,16 @@ type (
 		workflowTaskCompletedID int64
 
 		// internal state
-		hasBufferedEventsOrMessages     bool
-		workflowTaskFailedCause         *workflowTaskFailedCause
-		activityNotStartedCancelled     bool
-		newMutableState                 historyi.MutableState
-		stopProcessing                  bool // should stop processing any more commands
-		mutableState                    historyi.MutableState
-		effects                         effect.Controller
-		initiatedChildExecutionsInBatch map[string]struct{} // Set of initiated child executions in the workflow task
-		updateRegistry                  update.Registry
+		hasBufferedEventsOrMessages         bool
+		workflowTaskFailedCause             *workflowTaskFailedCause
+		activityNotStartedCancelled         bool
+		newMutableState                     historyi.MutableState
+		stopProcessing                      bool // should stop processing any more commands
+		mutableState                        historyi.MutableState
+		effects                             effect.Controller
+		initiatedChildExecutionsInBatch     map[string]struct{} // Set of initiated child executions in the workflow task
+		updateRegistry                      update.Registry
+		pendingWorkerCommandsByControlQueue map[string][]*workerpb.WorkerCommand // Batched worker commands by control queue
 
 		// validation
 		attrValidator                  *api.CommandAttrValidator
@@ -212,6 +214,10 @@ func (handler *workflowTaskCompletedHandler) handleCommands(
 		if mutation != nil {
 			mutations = append(mutations, mutation)
 		}
+	}
+
+	if err := handler.flushWorkerCommandsTasks(); err != nil {
+		return nil, err
 	}
 
 	return mutations, nil
@@ -691,9 +697,54 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 				return nil, err
 			}
 			handler.activityNotStartedCancelled = true
+		} else if ai.StartedEventId != common.EmptyEventID && ai.WorkerControlTaskQueue != "" {
+			// Activity has started and worker supports Nexus control tasks - collect for batched dispatch.
+			taskToken, err := handler.tokenSerializer.Serialize(tasktoken.NewActivityTaskToken(
+				handler.mutableState.GetNamespaceEntry().ID().String(),
+				handler.mutableState.GetWorkflowKey().WorkflowID,
+				handler.mutableState.GetWorkflowKey().RunID,
+				ai.ScheduledEventId,
+				ai.ActivityId,
+				ai.ActivityType.GetName(),
+				ai.Attempt,
+				nil, // Clock not needed for cancel
+				ai.Version,
+				ai.StartVersion,
+				nil,
+			))
+			if err != nil {
+				return nil, err
+			}
+			if handler.pendingWorkerCommandsByControlQueue == nil {
+				handler.pendingWorkerCommandsByControlQueue = make(map[string][]*workerpb.WorkerCommand)
+			}
+			handler.pendingWorkerCommandsByControlQueue[ai.WorkerControlTaskQueue] = append(
+				handler.pendingWorkerCommandsByControlQueue[ai.WorkerControlTaskQueue],
+				&workerpb.WorkerCommand{
+					Type: &workerpb.WorkerCommand_CancelActivity{
+						CancelActivity: &workerpb.CancelActivityCommand{
+							TaskToken: taskToken,
+						},
+					},
+				},
+			)
 		}
 	}
 	return actCancelReqEvent, nil
+}
+
+// flushWorkerCommandsTasks creates WorkerCommandsTasks for all collected worker commands,
+// batched by control queue.
+func (handler *workflowTaskCompletedHandler) flushWorkerCommandsTasks() error {
+	for controlQueue, commands := range handler.pendingWorkerCommandsByControlQueue {
+		if err := handler.mutableState.AddWorkerCommandsTasks(
+			commands,
+			controlQueue,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (handler *workflowTaskCompletedHandler) handleCommandStartTimer(
