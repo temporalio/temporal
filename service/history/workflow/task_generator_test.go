@@ -1164,9 +1164,9 @@ func TestGenerateWorkerCommandsTasks(t *testing.T) {
 				require.Len(t, capturedTasks, 1)
 				commandTask, ok := capturedTasks[0].(*tasks.WorkerCommandsTask)
 				require.True(t, ok)
-				assert.Equal(t, tc.commands, commandTask.Commands)
-				assert.Equal(t, tc.controlQueue, commandTask.Destination)
-				assert.Equal(t, tests.NamespaceID.String(), commandTask.NamespaceID)
+				require.Equal(t, tc.commands, commandTask.Commands)
+				require.Equal(t, tc.controlQueue, commandTask.Destination)
+				require.Equal(t, tests.NamespaceID.String(), commandTask.NamespaceID)
 			}
 		})
 	}
