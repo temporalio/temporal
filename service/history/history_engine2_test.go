@@ -1322,7 +1322,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWorkflow_Excee
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.Namespace).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
 
 	var commands []*commandpb.Command
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		commands = append(
 			commands,
 			&commandpb.Command{
@@ -1630,18 +1630,6 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_UseExisting() {
 	s.Equal(s.tv.RunID(), resp.GetRunId())
 }
 
-func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Running() {
-	s.setupStartWorkflowExecutionForTerminate()
-
-	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING, enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED)
-
-	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
-
-	s.NoError(err)
-	s.True(resp.Started)
-	s.NotEqual(s.tv.RunID(), resp.GetRunId())
-}
-
 func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Existing() {
 	s.setupStartWorkflowExecutionForTerminate()
 
@@ -1745,21 +1733,6 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 				resp, err := s.historyEngine.StartWorkflowExecution(
 					metrics.AddMetricsContext(context.Background()),
 					makeStartRequest(enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL))
-
-				s.NoError(err)
-				s.True(resp.Started)
-				s.NotEqual(prevRunID, resp.GetRunId())
-			})
-
-			s.Run("and id reuse policy is TERMINATE_IF_RUNNING", func() {
-				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).
-					Return(nil, makeCurrentWorkflowConditionFailedError(prevRequestID))
-				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), updateExecutionRequest).
-					Return(tests.CreateWorkflowExecutionResponse, nil)
-
-				resp, err := s.historyEngine.StartWorkflowExecution(
-					metrics.AddMetricsContext(context.Background()),
-					makeStartRequest(enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL))
 
 				s.NoError(err)
 				s.True(resp.Started)
@@ -2851,7 +2824,7 @@ func newCreateWorkflowExecutionRequestMatcher(f func(request *persistence.Create
 	}
 }
 
-func (m *createWorkflowExecutionRequestMatcher) Matches(x interface{}) bool {
+func (m *createWorkflowExecutionRequestMatcher) Matches(x any) bool {
 	request, ok := x.(*persistence.CreateWorkflowExecutionRequest)
 	if !ok {
 		return false

@@ -172,7 +172,7 @@ func RepeatSlice[T any](xs []T, n int) []T {
 		return nil
 	}
 	ys := make([]T, n*len(xs))
-	for i := 0; i < n; i++ {
+	for i := range n {
 		copy(ys[i*len(xs):], xs)
 	}
 	return ys

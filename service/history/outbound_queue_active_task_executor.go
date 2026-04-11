@@ -67,6 +67,7 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		e.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
+		executable.GetWorkflowID(),
 	)
 	taskType := queues.GetOutboundTaskTypeTagValue(task, true, e.shardContext.ChasmRegistry())
 	respond := func(err error) queues.ExecuteResponse {
@@ -136,7 +137,6 @@ func (e *outboundQueueActiveTaskExecutor) executeChasmSideEffectTask(
 	err = executeChasmSideEffectTask(
 		ctx,
 		e.chasmEngine,
-		e.shardContext.ChasmRegistry(),
 		tree,
 		task,
 	)

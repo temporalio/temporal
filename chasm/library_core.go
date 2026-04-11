@@ -20,7 +20,6 @@ func (b *CoreLibrary) Tasks() []*RegistrableTask {
 		NewRegistrableSideEffectTask(
 			"visTask",
 			defaultVisibilityTaskHandler,
-			defaultVisibilityTaskHandler,
 		),
 	}
 }

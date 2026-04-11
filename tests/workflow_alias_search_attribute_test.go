@@ -36,7 +36,7 @@ func TestWorkflowAliasSearchAttributeTestSuite(t *testing.T) {
 func (s *WorkflowAliasSearchAttributeTestSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
 
-	s.Worker().RegisterWorkflow(s.workflowFunc)
+	s.SdkWorker().RegisterWorkflow(s.workflowFunc)
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) workflowFunc(ctx workflow.Context) (string, error) {
@@ -104,7 +104,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
 		WorkflowType:       tv.WorkflowType(),
 		TaskQueue:          tv.TaskQueue(),
 		Identity:           tv.WorkerIdentity(),
-		VersioningOverride: tv.VersioningOverridePinned(true),
+		VersioningOverride: tv.VersioningOverridePinned(),
 		SearchAttributes:   sa,
 	}
 	return s.FrontendClient().StartWorkflowExecution(ctx, request)

@@ -232,7 +232,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 
 	// Start few workflow executions.
 	var executions []*commonpb.WorkflowExecution
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		wid := "wf_id_" + strconv.Itoa(i)
 		resp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.NewString(),
@@ -316,7 +316,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 	// Start few workflow executions.
 
 	var executions []*commonpb.WorkflowExecution
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wid := "wf_id_" + strconv.Itoa(i)
 		resp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.NewString(),

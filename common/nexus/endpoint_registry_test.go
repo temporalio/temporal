@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -50,7 +49,7 @@ func TestGet(t *testing.T) {
 		PageSize:              int32(100),
 		LastKnownTableVersion: int64(1),
 		Wait:                  true,
-	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
+	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...any) (*matchingservice.ListNexusEndpointsResponse, error) {
 		time.Sleep(20 * time.Millisecond)
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
 	}).AnyTimes()
@@ -90,7 +89,7 @@ func TestGetNotFound(t *testing.T) {
 		PageSize:              int32(100),
 		LastKnownTableVersion: int64(1),
 		Wait:                  true,
-	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
+	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...any) (*matchingservice.ListNexusEndpointsResponse, error) {
 		time.Sleep(20 * time.Millisecond)
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
 	}).AnyTimes()
@@ -156,85 +155,6 @@ func TestInitializationFallback(t *testing.T) {
 	assert.Equal(t, int64(1), reg.tableVersion)
 }
 
-func TestEnableDisableEnable(t *testing.T) {
-	t.Parallel()
-
-	testEntry := newEndpointEntry(t.Name())
-	mocks := newTestMocks(t)
-
-	mocks.config.refreshMinWait = dynamicconfig.GetDurationPropertyFn(time.Millisecond)
-	var callback func(bool) // capture callback to call later
-	mocks.config.refreshEnabled = func(cb func(bool)) (bool, func()) {
-		callback = cb
-		return false, func() {}
-	}
-
-	// start disabled
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
-	reg.StartLifecycle()
-	defer reg.StopLifecycle()
-
-	// check waitUntilInitialized
-	quickCtx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
-	defer cancel()
-	require.ErrorIs(t, reg.waitUntilInitialized(quickCtx), ErrNexusDisabled)
-
-	// mocks for initial load
-	inLongPoll := make(chan struct{})
-	closeOnce := sync.OnceFunc(func() { close(inLongPoll) })
-	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&matchingservice.ListNexusEndpointsResponse{
-		Entries:       []*persistencespb.NexusEndpointEntry{testEntry},
-		TableVersion:  1,
-		NextPageToken: nil,
-	}, nil)
-	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
-		PageSize:              int32(100),
-		LastKnownTableVersion: int64(1),
-		Wait:                  true,
-	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
-		closeOnce()
-		time.Sleep(100 * time.Millisecond)
-		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
-	})
-
-	// enable
-	callback(true)
-	<-inLongPoll
-
-	// check waitUntilInitialized
-	quickCtx, cancel = context.WithTimeout(context.Background(), time.Millisecond)
-	defer cancel()
-	require.NoError(t, reg.waitUntilInitialized(quickCtx))
-
-	// now disable
-	callback(false)
-
-	quickCtx, cancel = context.WithTimeout(context.Background(), time.Millisecond)
-	defer cancel()
-	require.ErrorIs(t, reg.waitUntilInitialized(quickCtx), ErrNexusDisabled)
-
-	// enable again, should not crash
-
-	inLongPoll = make(chan struct{})
-	closeOnce = sync.OnceFunc(func() { close(inLongPoll) })
-	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&matchingservice.ListNexusEndpointsResponse{
-		Entries:       []*persistencespb.NexusEndpointEntry{testEntry},
-		TableVersion:  1,
-		NextPageToken: nil,
-	}, nil)
-	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
-		PageSize:              int32(100),
-		LastKnownTableVersion: int64(1),
-		Wait:                  true,
-	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
-		closeOnce()
-		time.Sleep(100 * time.Millisecond)
-		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
-	})
-	callback(true)
-	<-inLongPoll
-}
-
 func TestTableVersionErrorResetsMatchingPagination(t *testing.T) {
 	t.Parallel()
 
@@ -291,7 +211,7 @@ func TestTableVersionErrorResetsMatchingPagination(t *testing.T) {
 		PageSize:              int32(1),
 		LastKnownTableVersion: int64(3),
 		Wait:                  true,
-	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
+	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...any) (*matchingservice.ListNexusEndpointsResponse, error) {
 		time.Sleep(20 * time.Millisecond)
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
 	}).MaxTimes(1)
@@ -383,9 +303,6 @@ func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
 func newTestMocks(t *testing.T) *testMocks {
 	ctrl := gomock.NewController(t)
 	testConfig := NewEndpointRegistryConfig(dynamicconfig.NewNoopCollection())
-	testConfig.refreshEnabled = func(func(bool)) (bool, func()) {
-		return true, func() {}
-	}
 	return &testMocks{
 		config:         testConfig,
 		matchingClient: matchingservicemock.NewMockMatchingServiceClient(ctrl),

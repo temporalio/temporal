@@ -39,6 +39,10 @@ const (
 
 const maxFastUserDataFetches = 5
 
+// noEphemeralDataVersion as a value for LastKnownEphemeralDataVersion means
+// the caller does not want to receive ephemeral data.
+const noEphemeralDataVersion = -1
+
 type (
 	userDataManager interface {
 		Start()
@@ -594,9 +598,10 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 			return nil, err
 		}
 		newUserData := userData.GetVersion() > lastVersion
-		newEphData := ephData.GetVersion() > lastEphVersion
+		// noEphemeralDataVersion means the caller does not want ephemeral data
+		newEphData := lastEphVersion != noEphemeralDataVersion && ephData.GetVersion() > lastEphVersion
 		if newUserData || newEphData {
-			m.logger.Info("returning user data",
+			m.logger.Debug("returning user data",
 				tag.Bool("long-poll", req.WaitNewData),
 				tag.Int64("request-known-version", lastVersion),
 				tag.UserDataVersion(userData.GetVersion()),
@@ -709,7 +714,7 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 	for i := 1; i < wfPartitions; i++ {
 		go check(i, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	}
-	for i := 0; i < actPartitions; i++ {
+	for i := range actPartitions {
 		go check(i, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	}
 
@@ -721,6 +726,7 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 	}
 }
 
+// LocalBacklogPriorityChanged can be called on any normal partition.
 func (m *userDataManagerImpl) LocalBacklogPriorityChanged(backlogPriority map[PhysicalTaskQueueVersion]int64) {
 	// TODO: later, we'll send this data to the root to propagate instead of just keeping it
 	// locally and merging.
@@ -738,30 +744,49 @@ func (m *userDataManagerImpl) LocalBacklogPriorityChanged(backlogPriority map[Ph
 		})
 	}
 
-	newEph := &taskqueuespb.VersionedEphemeralData{
-		Data: &taskqueuespb.EphemeralData{
-			Partition: []*taskqueuespb.EphemeralData_ByPartition{
-				&taskqueuespb.EphemeralData_ByPartition{
-					Partition: int32(normal.PartitionId()),
-					Version:   byVersion,
-				},
-			},
+	newPartition := []*taskqueuespb.EphemeralData_ByPartition{
+		&taskqueuespb.EphemeralData_ByPartition{
+			Partition: int32(normal.PartitionId()),
+			Version:   byVersion,
 		},
-		Version: time.Now().UnixNano(),
+	}
+
+	m.updateEphemeralData(func(newData *taskqueuespb.EphemeralData) {
+		newData.Partition = newPartition
+	})
+}
+
+func (m *userDataManagerImpl) gotIncomingEphemeralData(eph *taskqueuespb.VersionedEphemeralData) {
+	if m.partition.IsRoot() {
+		// Root activity/nexus partition should not get ephemeral data from its fetch source
+		// (root workflow partition). This is done by setting LastKnownEphemeralDataVersion to
+		// -1 on root non-wf partitions and having HandleGetUserDataRequest not send ephemeral
+		// data in that case. But if we do get it (e.g. during deployment), ignore it.
+		return
 	}
 
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	m.myEphemeralData = newEph
+	m.incomingEphemeralData = eph
 	m.mergeEphemeralDataLocked()
 }
 
-func (m *userDataManagerImpl) gotIncomingEphemeralData(eph *taskqueuespb.VersionedEphemeralData) {
+// updateEphemeralData updates the ephemeral data owned by this partition. The update function
+// will be given a non-nil clone of the current data, which it should mutate.
+func (m *userDataManagerImpl) updateEphemeralData(update func(*taskqueuespb.EphemeralData)) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	m.incomingEphemeralData = eph
+	newData := common.CloneProto(m.myEphemeralData.GetData())
+	if newData == nil {
+		newData = &taskqueuespb.EphemeralData{}
+	}
+	update(newData)
+	m.myEphemeralData = &taskqueuespb.VersionedEphemeralData{
+		Data:    newData,
+		Version: time.Now().UnixNano(),
+	}
 	m.mergeEphemeralDataLocked()
 }
 
@@ -773,6 +798,12 @@ func (m *userDataManagerImpl) getMergedEphemeralData() (*taskqueuespb.VersionedE
 }
 
 func (m *userDataManagerImpl) getIncomingEphemeralDataVersion() int64 {
+	if m.partition.IsRoot() {
+		// The root activity/nexus partition should not fetch ephemeral data from the root
+		// workflow partition.
+		return noEphemeralDataVersion
+	}
+
 	m.lock.Lock()
 	defer m.lock.Unlock()
 

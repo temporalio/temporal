@@ -7,6 +7,7 @@ import (
 	"maps"
 	"math"
 	"math/rand"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	testutil "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -41,6 +43,9 @@ type BacklogManagerTestSuite struct {
 	cancelCtx  context.CancelFunc
 	taskMgr    *testTaskManager
 	ptqMgr     *MockphysicalTaskQueueManager
+
+	capturedTasksLock  sync.Mutex
+	capturedTasksSlice []*internalTask
 }
 
 func TestBacklogManager_Classic_Suite(t *testing.T) {
@@ -121,6 +126,27 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 			metrics.NoopMetricsHandler,
 		)
 	}
+}
+
+func (s *BacklogManagerTestSuite) setupToCaptureTasks() {
+	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).DoAndReturn(func(t *internalTask) error {
+		s.capturedTasksLock.Lock()
+		defer s.capturedTasksLock.Unlock()
+		s.capturedTasksSlice = append(s.capturedTasksSlice, t)
+		return nil
+	}).AnyTimes()
+}
+
+func (s *BacklogManagerTestSuite) capturedTasksLen() int {
+	s.capturedTasksLock.Lock()
+	defer s.capturedTasksLock.Unlock()
+	return len(s.capturedTasksSlice)
+}
+
+func (s *BacklogManagerTestSuite) capturedTasks() []*internalTask {
+	s.capturedTasksLock.Lock()
+	defer s.capturedTasksLock.Unlock()
+	return slices.Clone(s.capturedTasksSlice)
 }
 
 func (s *BacklogManagerTestSuite) TestReadLevelForAllExpiredTasksInBatch() {
@@ -291,7 +317,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpool
 
 	taskCount := 10
 	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).AnyTimes()
-	for i := 0; i < taskCount; i++ {
+	for range taskCount {
 		s.NoError(s.blm.SpoolTask(&persistencespb.TaskInfo{
 			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 			CreateTime: timestamp.TimeNowPtrUtc(),
@@ -318,7 +344,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpool
 
 	taskCount := 10
 	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).AnyTimes()
-	for i := 0; i < taskCount; i++ {
+	for range taskCount {
 		s.Error(s.blm.SpoolTask(&persistencespb.TaskInfo{
 			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 			CreateTime: timestamp.TimeNowPtrUtc(),
@@ -355,11 +381,222 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_NotIncrementedBySp
 		"backlog count should not be incremented")
 }
 
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
+	if !s.newMatcher || s.fairness {
+		s.T().Skip("only for priority backlog manager")
+	}
+
+	blm := s.blm.(*priBacklogManagerImpl)
+	db := blm.db
+
+	s.setupToCaptureTasks()
+
+	s.blm.Start()
+	defer s.blm.Stop()
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
+
+	// Spool 3 tasks through the real writer path.
+	for range 3 {
+		s.Require().NoError(s.blm.SpoolTask(&persistencespb.TaskInfo{
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			CreateTime: timestamp.TimeNowPtrUtc(),
+		}))
+	}
+
+	// Wait for all tasks to reach the matcher via signalNewTasks/direct-add.
+	s.Eventually(func() bool { return s.capturedTasksLen() == 3 }, 5*time.Second, 10*time.Millisecond)
+
+	s.EqualValues(3, totalApproximateBacklogCount(s.blm))
+
+	// Inject backlog count divergence (simulating accumulated drift).
+	db.updateBacklogStats(2, time.Time{})
+	s.EqualValues(5, totalApproximateBacklogCount(s.blm))
+
+	// Advance maxReadLevel past all task IDs to simulate a range renewal.
+	// After direct-add, readLevel == old maxReadLevel == last task ID.
+	maxRL := db.GetMaxReadLevel(subqueueZero) + 100
+	db.setMaxReadLevelForTesting(subqueueZero, maxRL)
+
+	// Signal the reader pump to scan through the empty range up to the
+	// new maxReadLevel, advancing readLevel.
+	blm.subqueues[subqueueZero].SignalTaskLoading()
+
+	// Wait for the reader pump to scan through the gap.
+	s.Eventually(func() bool {
+		rl, _ := blm.subqueues[subqueueZero].getLevels()
+		return rl >= maxRL
+	}, 5*time.Second, 10*time.Millisecond)
+
+	// Complete all tasks. On the last completion:
+	// - outstandingTasks is empty
+	// - readLevel >= maxReadLevel (pump already scanned)
+	// - isDrainedLocked() returns true
+	// - ackLevel gets set to maxReadLevel
+	// - backlog counts reset to 0
+	for _, t := range s.capturedTasks() {
+		t.finish(nil, true)
+	}
+
+	_, ackLevel := blm.subqueues[subqueueZero].getLevels()
+	s.Equal(ackLevel, maxRL)
+
+	s.Zero(totalApproximateBacklogCount(s.blm))
+}
+
+func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_AllExpiredThenValid() {
+	s.testSkipExpiredTasks(10, 0, 33, 3)
+}
+
+func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_ValidExpiredValid() {
+	s.testSkipExpiredTasks(10, 3, 33, 3)
+}
+
+// testSkipExpiredTasks verifies that the task reader correctly skips over expired tasks
+// in the DB and advances the ack level past them.
+// expiredPattern is: # valid, # expired, # valid, # expired, ...
+func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, numValidExpired ...int) {
+	if !s.newMatcher {
+		s.T().Skip("not compatible with classic backlog manager")
+	}
+
+	s.cfgcli.OverrideValue(dynamicconfig.MatchingGetTasksBatchSize.Key(), batchSize)
+
+	// expand 1, 3, 2 -> {false, true, true, true, false, false}
+	var expiredPattern []bool
+	var isExpired bool
+	for _, num := range numValidExpired {
+		expiredPattern = append(expiredPattern, slices.Repeat([]bool{isExpired}, num)...)
+		isExpired = !isExpired
+	}
+
+	// Pre-populate the DB with tasks before starting the backlog manager.
+	// This simulates tasks that were written and then expired before reading.
+	ctx := context.Background()
+	queue := s.ptqMgr.QueueKey()
+	queueInfo := &persistencespb.TaskQueueInfo{
+		NamespaceId: queue.NamespaceId(),
+		Name:        queue.PersistenceName(),
+		TaskType:    queue.TaskType(),
+		// start with ack level at zero
+	}
+	_, err := s.taskMgr.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
+		RangeID:       1,
+		TaskQueueInfo: queueInfo,
+	})
+	s.Require().NoError(err)
+
+	var dbTasks []*persistencespb.AllocatedTaskInfo
+	numValid := 0
+	for i, expired := range expiredPattern {
+		id := int64(i + 1)
+		task := &persistencespb.AllocatedTaskInfo{
+			TaskId: id,
+			Data: &persistencespb.TaskInfo{
+				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-3600),
+			},
+		}
+		if expired {
+			task.Data.ExpiryTime = timestamp.TimeNowPtrUtcAddSeconds(-60)
+		} else {
+			task.Data.ExpiryTime = timestamp.TimeNowPtrUtcAddSeconds(3600)
+			numValid++
+		}
+		if s.fairness {
+			task.TaskPass = id * 1000 // spread out pass numbers
+		}
+		dbTasks = append(dbTasks, task)
+	}
+	_, err = s.taskMgr.CreateTasks(ctx, &persistence.CreateTasksRequest{
+		TaskQueueInfo: &persistence.PersistedTaskQueueInfo{Data: queueInfo, RangeID: 1},
+		Tasks:         dbTasks,
+	})
+	s.Require().NoError(err)
+
+	s.setupToCaptureTasks()
+
+	// Start backlog manager.
+	s.blm.Start()
+	defer s.blm.Stop()
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
+
+	// Wait for all valid tasks to be delivered.
+	s.Require().Eventually(func() bool {
+		return s.capturedTasksLen() >= numValid
+	}, 2*time.Second, 10*time.Millisecond, "timed out waiting for valid tasks to be delivered")
+
+	// Complete the delivered tasks.
+	for _, t := range s.capturedTasks() {
+		t.finish(nil, true)
+	}
+
+	// Verify the ack level advances past all tasks (expired + valid).
+	lastID := int64(len(expiredPattern))
+	s.Eventually(func() bool {
+		db := s.blm.getDB()
+		db.Lock()
+		defer db.Unlock()
+		if s.fairness {
+			ackLevel := fairLevelFromProto(db.subqueues[subqueueZero].FairAckLevel)
+			return !ackLevel.less(fairLevel{pass: lastID * 1000, id: lastID})
+		}
+		return db.subqueues[subqueueZero].AckLevel >= lastID
+	}, 2*time.Second, 10*time.Millisecond, "ack level did not advance past all tasks")
+}
+
 func totalApproximateBacklogCount(c backlogManager) (total int64) {
 	for _, stats := range c.BacklogStatsByPriority() {
 		total += stats.ApproximateBacklogCount
 	}
 	return total
+}
+
+func (s *BacklogManagerTestSuite) TestBypassReader() {
+	if !s.newMatcher {
+		s.T().Skip("bypass only applies to pri/fair")
+	}
+
+	s.setupToCaptureTasks()
+
+	// set up initial qkey in db so that we always read one range on load
+	qkey := s.ptqMgr.QueueKey()
+	_, err := s.taskMgr.CreateTaskQueue(context.Background(), &persistence.CreateTaskQueueRequest{
+		RangeID: 1,
+		TaskQueueInfo: &persistencespb.TaskQueueInfo{
+			NamespaceId: qkey.NamespaceId(),
+			Name:        qkey.PersistenceName(),
+			TaskType:    qkey.TaskType(),
+		},
+	})
+	s.Require().NoError(err)
+
+	s.blm.Start()
+	defer s.blm.Stop()
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
+
+	// wait for the initial read to complete so we're at the end
+	s.Eventually(func() bool {
+		return s.taskMgr.getGetTasksCount(qkey) == 1
+	}, 5*time.Second, 10*time.Millisecond)
+
+	for range 3 {
+		prevCreateCount := s.taskMgr.getCreateTaskCount(qkey)
+		prevCaptureCount := s.capturedTasksLen()
+
+		// write a task
+		s.Require().NoError(s.blm.SpoolTask(&persistencespb.TaskInfo{
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			CreateTime: timestamp.TimeNowPtrUtc(),
+		}))
+
+		// we have written one batch of tasks
+		s.Equal(prevCreateCount+1, s.taskMgr.getCreateTaskCount(qkey))
+
+		// wait for the task to arrive at the matcher bypassing the read path
+		s.Eventually(func() bool { return s.capturedTasksLen() == prevCaptureCount+1 }, 5*time.Second, 10*time.Millisecond)
+
+		// we should have passed the task in memory without any more GetTasks calls
+		s.Equal(1, s.taskMgr.getGetTasksCount(qkey))
+	}
 }
 
 type standingBacklogParams struct {
@@ -598,6 +835,8 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 		})
 	}
 
+	qkey := s.ptqMgr.QueueKey()
+	s.T().Logf("reads %d, writes %d", s.taskMgr.getGetTasksCount(qkey), s.taskMgr.getCreateTaskBatchCount(qkey))
 	elapsed := time.Since(start)
 	s.T().Logf("processed %d tasks, %.3f/s", processed.Load(), float64(processed.Load())/elapsed.Seconds())
 }

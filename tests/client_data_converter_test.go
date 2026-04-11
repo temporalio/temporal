@@ -153,12 +153,12 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverter() {
 	}
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
 	defer cancel()
-	s.Worker().RegisterWorkflow(testDataConverterWorkflow)
-	s.Worker().RegisterActivity(testActivity)
+	s.SdkWorker().RegisterWorkflow(testDataConverterWorkflow)
+	s.SdkWorker().RegisterActivity(testActivity)
 	we, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	s.NoError(err)
 	s.NotNil(we)
-	s.True(we.GetRunID() != "")
+	s.NotEmpty(we.GetRunID())
 
 	var res string
 	err = we.Get(ctx, &res)
@@ -189,12 +189,12 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverterFailed() {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
 	defer cancel()
 
-	s.Worker().RegisterWorkflow(testDataConverterWorkflow)
-	s.Worker().RegisterActivity(testActivity)
+	s.SdkWorker().RegisterWorkflow(testDataConverterWorkflow)
+	s.SdkWorker().RegisterActivity(testActivity)
 	we, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	s.NoError(err)
 	s.NotNil(we)
-	s.True(we.GetRunID() != "")
+	s.NotEmpty(we.GetRunID())
 
 	var res string
 	err = we.Get(ctx, &res)
@@ -237,13 +237,13 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverterWithChild() {
 	}
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
 	defer cancel()
-	s.Worker().RegisterWorkflow(testParentWorkflow)
-	s.Worker().RegisterWorkflow(testChildWorkflow)
+	s.SdkWorker().RegisterWorkflow(testParentWorkflow)
+	s.SdkWorker().RegisterWorkflow(testChildWorkflow)
 
 	we, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testParentWorkflow)
 	s.NoError(err)
 	s.NotNil(we)
-	s.True(we.GetRunID() != "")
+	s.NotEmpty(we.GetRunID())
 
 	var res string
 	err = we.Get(ctx, &res)

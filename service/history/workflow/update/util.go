@@ -14,9 +14,10 @@ import (
 
 type (
 	instrumentation struct {
-		log     log.Logger
-		metrics metrics.Handler
-		tracer  trace.Tracer
+		log       log.Logger
+		metrics   metrics.Handler
+		tracer    trace.Tracer
+		namespace string
 	}
 )
 
@@ -50,11 +51,12 @@ func (i *instrumentation) countRateLimited() {
 
 func (i *instrumentation) countRegistrySizeLimited(updateCount, registrySize, payloadSize int) {
 	i.oneOf(metrics.WorkflowExecutionUpdateRegistrySizeLimited.Name())
-	// TODO: remove log once limit is enforced everywhere
 	i.log.Warn("update registry size limit reached",
 		tag.Int("registry-size", registrySize),
 		tag.Int("payload-size", payloadSize),
-		tag.Int("update-count", updateCount))
+		tag.Int("update-count", updateCount),
+		tag.String("namespace", i.namespace),
+	)
 }
 
 func (i *instrumentation) countTooMany() {
@@ -79,7 +81,6 @@ func (i *instrumentation) countSentAgain() {
 }
 
 func (i *instrumentation) invalidStateTransition(updateID string, msg proto.Message, state state) {
-	i.oneOf(metrics.InvalidStateTransitionWorkflowExecutionUpdateCounter.Name())
 	softassert.Fail(
 		i.log,
 		"invalid state transition attempted",
@@ -87,6 +88,7 @@ func (i *instrumentation) invalidStateTransition(updateID string, msg proto.Mess
 		tag.String("update-id", updateID),
 		tag.String("message", fmt.Sprintf("%T", msg)),
 		tag.Stringer("state", state),
+		tag.String("namespace", i.namespace),
 	)
 }
 

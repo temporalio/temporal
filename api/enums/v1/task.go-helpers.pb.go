@@ -57,7 +57,8 @@ var (
 		"ReplicationSyncVersionedTransition": 31,
 		"ChasmPure":                          32,
 		"Chasm":                              33,
-		"WorkerCommands":                     34,
+		"ReplicationDeleteExecution":         34,
+		"WorkerCommands":                     35,
 	}
 )
 

@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/migration"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
@@ -74,10 +75,11 @@ const (
 	// id, used for validation in the frontend.
 	AppendedTimestampForValidation = "-2009-11-10T23:00:00Z"
 
-	SignalNameUpdate   = "update"
-	SignalNamePatch    = "patch"
-	SignalNameRefresh  = "refresh"
-	SignalNameForceCAN = "force-continue-as-new"
+	SignalNameUpdate         = "update"
+	SignalNamePatch          = "patch"
+	SignalNameRefresh        = "refresh"
+	SignalNameForceCAN       = "force-continue-as-new"
+	SignalNameMigrateToChasm = "migrate-to-chasm"
 
 	QueryNameDescribe          = "describe"
 	QueryNameListMatchingTimes = "listMatchingTimes"
@@ -110,8 +112,9 @@ type (
 		// SpecBuilder is technically a non-deterministic dependency, but it's safe as
 		// long as we only call methods on cspec inside of SideEffect (or in a query
 		// without modifying state).
-		specBuilder *SpecBuilder
-		cspec       *CompiledSpec
+		specBuilder          *SpecBuilder
+		cspec                *CompiledSpec
+		enableCHASMMigration bool
 
 		tweakables TweakablePolicies
 
@@ -156,6 +159,8 @@ type (
 		Version                           SchedulerWorkflowVersion // Used to keep track of schedules version to release new features and for backward compatibility
 		// version 0 corresponds to the schedule version that comes before introducing the Version parameter
 
+		EnableCHASMMigration bool // Whether to automatically migrate this schedule to CHASM (V2)
+
 		// When introducing a new field with new workflow logic, consider generating a new
 		// history for TestReplays using generate_history.sh.
 	}
@@ -169,8 +174,8 @@ type (
 	}
 )
 
-var (
-	defaultLocalActivityOptions = workflow.LocalActivityOptions{
+func defaultLocalActivityOptions() workflow.LocalActivityOptions {
+	return workflow.LocalActivityOptions{
 		// This applies to watch, cancel, and terminate. Start workflow overrides this.
 		ScheduleToCloseTimeout: 1 * time.Hour,
 		// Each local activity is one or a few local RPCs.
@@ -181,7 +186,9 @@ var (
 			MaximumInterval: 60 * time.Second,
 		},
 	}
+}
 
+var (
 	// CurrentTweakablePolicies is  a handful of options in a static value and use it as a MutableSideEffect within
 	// the workflow so that we can change them without breaking existing executions or having
 	// to use versioning.
@@ -217,10 +224,10 @@ var (
 )
 
 func SchedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder())
+	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), false)
 }
 
-func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder) error {
+func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder, enableCHASMMigration bool) error {
 	scheduler := &scheduler{
 		StartScheduleArgs: args,
 		ctx:               ctx,
@@ -230,7 +237,8 @@ func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.St
 			"namespace":                args.State.Namespace,
 			metrics.ScheduleBackendTag: metrics.ScheduleBackendLegacy,
 		}),
-		specBuilder: specBuilder,
+		specBuilder:          specBuilder,
+		enableCHASMMigration: enableCHASMMigration,
 	}
 	return scheduler.run()
 }
@@ -270,7 +278,10 @@ func (s *scheduler) run() error {
 		info := workflow.GetInfo(s.ctx)
 		suggestContinueAsNew := info.GetCurrentHistoryLength() >= impossibleHistorySize
 		if s.tweakables.IterationsBeforeContinueAsNew > 0 {
-			suggestContinueAsNew = suggestContinueAsNew || iters <= 0
+			// forceCAN must be checked here too, not just in the else branch,
+			// so that the force-continue-as-new signal is honored regardless
+			// of whether IterationsBeforeContinueAsNew is set.
+			suggestContinueAsNew = suggestContinueAsNew || iters <= 0 || s.forceCAN
 			iters--
 		} else {
 			suggestContinueAsNew = suggestContinueAsNew || info.GetContinueAsNewSuggested() || s.forceCAN
@@ -310,6 +321,32 @@ func (s *scheduler) run() error {
 				nil,
 			)
 		}
+
+		if s.tweakables.EnableCHASMMigration {
+			s.State.PendingMigration = true
+		}
+		if s.State.PendingMigration {
+			err := s.executeMigration()
+			if err == nil {
+				s.logger.Info("Migration to CHASM succeeded, closing V1 workflow",
+					"namespace", s.State.Namespace,
+					"schedule-id", s.State.ScheduleId,
+				)
+				s.metrics.WithTags(map[string]string{
+					metrics.ScheduleMigrationDirectionTag: metrics.ScheduleMigrationDirectionToChasm,
+				}).Counter(metrics.ScheduleMigrationCompleted.Name()).Inc(1)
+				return nil
+			}
+			s.logger.Error("Migration to CHASM failed, continuing V1 workflow",
+				"namespace", s.State.Namespace,
+				"schedule-id", s.State.ScheduleId,
+				"error", err,
+			)
+			s.metrics.WithTags(map[string]string{
+				metrics.ScheduleMigrationDirectionTag: metrics.ScheduleMigrationDirectionToChasm,
+			}).Counter(metrics.ScheduleMigrationFailed.Name()).Inc(1)
+		}
+
 		// process backfills if we have any too
 		s.processBackfills()
 		// try starting workflows in the buffer
@@ -477,7 +514,7 @@ func (s *scheduler) getNextTimeV1(after time.Time) GetNextTimeResult {
 	s.nextTimeCacheV1 = nil
 	// Run this logic in a SideEffect so that we can fix bugs there without breaking
 	// existing schedule workflows.
-	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) any {
 		results := make(map[time.Time]GetNextTimeResult)
 		for t := after; !t.IsZero() && len(results) < nextTimeCacheV1Size; {
 			next := s.cspec.GetNextTime(s.jitterSeed(), t)
@@ -549,7 +586,7 @@ func (s *scheduler) fillNextTimeCacheV2(start time.Time) {
 	s.nextTimeCacheV2 = nil
 	// Run this logic in a SideEffect so that we can fix bugs there without breaking
 	// existing schedule workflows.
-	val := workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+	val := workflow.SideEffect(s.ctx, func(ctx workflow.Context) any {
 		cache := &schedulespb.NextTimeCache{
 			Version:      int64(s.tweakables.Version),
 			StartTime:    timestamppb.New(start),
@@ -607,7 +644,7 @@ func (s *scheduler) getNextTime(after time.Time) GetNextTimeResult {
 	// Run this logic in a SideEffect so that we can fix bugs there without breaking
 	// existing schedule workflows.
 	var next GetNextTimeResult
-	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) any {
 		return s.cspec.GetNextTime(s.jitterSeed(), after)
 	}).Get(&next))
 	return next
@@ -713,6 +750,9 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 
 	forceCAN := workflow.GetSignalChannel(s.ctx, SignalNameForceCAN)
 	sel.AddReceive(forceCAN, s.handleForceCANSignal)
+
+	migrateCh := workflow.GetSignalChannel(s.ctx, SignalNameMigrateToChasm)
+	sel.AddReceive(migrateCh, s.handleMigrateSignal)
 
 	if s.hasMoreAllowAllBackfills() {
 		// if we have more allow-all backfills to do, do a short sleep and continue
@@ -957,6 +997,49 @@ func (s *scheduler) handleForceCANSignal(ch workflow.ReceiveChannel, _ bool) {
 	s.forceCAN = true
 }
 
+func (s *scheduler) handleMigrateSignal(ch workflow.ReceiveChannel, _ bool) {
+	ch.Receive(s.ctx, nil)
+	s.logger.Debug("Received migrate signal",
+		"namespace", s.State.Namespace,
+		"schedule-id", s.State.ScheduleId,
+	)
+	s.State.PendingMigration = true
+}
+
+func (s *scheduler) executeMigration() error {
+	s.logger.Info("Starting migration to CHASM",
+		"namespace", s.State.Namespace,
+		"schedule-id", s.State.ScheduleId,
+	)
+	s.metrics.WithTags(map[string]string{
+		metrics.ScheduleMigrationDirectionTag: metrics.ScheduleMigrationDirectionToChasm,
+	}).Counter(metrics.ScheduleMigrationStarted.Name()).Inc(1)
+
+	workflowInfo := workflow.GetInfo(s.ctx)
+
+	//nolint:staticcheck // SA1019 Migration needs raw proto format, not typed search attributes.
+	req := migration.LegacyToCreateFromMigrationStateRequest(
+		s.Schedule,
+		s.Info,
+		s.State,
+		workflowInfo.SearchAttributes,
+		workflowInfo.Memo,
+		s.now(),
+	)
+	migrateOptions := workflow.LocalActivityOptions{
+		ScheduleToCloseTimeout: 10 * time.Minute,
+		StartToCloseTimeout:    5 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 1,
+		},
+	}
+	return workflow.ExecuteLocalActivity(
+		workflow.WithLocalActivityOptions(s.ctx, migrateOptions),
+		s.a.MigrateScheduleToChasm,
+		req).
+		Get(s.ctx, nil)
+}
+
 func (s *scheduler) processSignals() bool {
 	scheduleChanged := false
 	if s.pendingPatch != nil {
@@ -1043,7 +1126,7 @@ func (s *scheduler) handleListMatchingTimesQuery(req *workflowservice.ListSchedu
 
 	var out []*timestamppb.Timestamp
 	t1 := timestamp.TimeValue(req.StartTime)
-	for i := 0; i < maxListMatchingTimesCount; i++ {
+	for range maxListMatchingTimesCount {
 		// don't need to call GetNextTime in SideEffect because this is just a query
 		t1 = s.cspec.GetNextTime(s.jitterSeed(), t1).Next
 		if t1.IsZero() || t1.After(timestamp.TimeValue(req.EndTime)) {
@@ -1149,7 +1232,7 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 		// marshal manually to get proto encoding (default dataconverter will use json)
 		newInfoBytes, err := newInfo.Marshal()
 		if err == nil {
-			err = workflow.UpsertMemo(s.ctx, map[string]interface{}{
+			err = workflow.UpsertMemo(s.ctx, map[string]any{
 				MemoFieldInfo: newInfoBytes,
 			})
 		}
@@ -1164,7 +1247,7 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 	if currentPausedPayload == nil ||
 		payload.Decode(currentPausedPayload, &currentPaused) != nil ||
 		currentPaused != s.Schedule.State.Paused {
-		err := workflow.UpsertSearchAttributes(s.ctx, map[string]interface{}{
+		err := workflow.UpsertSearchAttributes(s.ctx, map[string]any{ //nolint:staticcheck // SA1019: untyped search attributes required here
 			sadefs.TemporalSchedulePaused: s.Schedule.State.Paused,
 		})
 		if err != nil {
@@ -1182,8 +1265,13 @@ func (s *scheduler) checkConflict(token int64) error {
 
 func (s *scheduler) updateTweakables() {
 	// Use MutableSideEffect so that we can change the defaults without breaking determinism.
-	get := func(ctx workflow.Context) interface{} { return CurrentTweakablePolicies }
-	eq := func(a, b interface{}) bool { return a.(TweakablePolicies) == b.(TweakablePolicies) }
+	enableCHASMMigration := s.enableCHASMMigration
+	get := func(ctx workflow.Context) any {
+		p := CurrentTweakablePolicies
+		p.EnableCHASMMigration = enableCHASMMigration
+		return p
+	}
+	eq := func(a, b any) bool { return a.(TweakablePolicies) == b.(TweakablePolicies) }
 	if err := workflow.MutableSideEffect(s.ctx, "tweakables", get, eq).Get(&s.tweakables); err != nil {
 		panic("can't decode TweakablePolicies:" + err.Error())
 	}
@@ -1336,7 +1424,7 @@ func (s *scheduler) startWorkflow(
 	// Set scheduleToCloseTimeout based on catchup window, which is the latest time that it's
 	// acceptable to start this workflow. For manual starts (trigger immediately or backfill),
 	// catch up window doesn't apply, so just use 60s.
-	options := defaultLocalActivityOptions
+	options := defaultLocalActivityOptions()
 	if start.Manual {
 		options.ScheduleToCloseTimeout = 60 * time.Second
 	} else {
@@ -1452,7 +1540,7 @@ func (s *scheduler) addSearchAttributes(
 }
 
 func (s *scheduler) refreshWorkflows(executions []*commonpb.WorkflowExecution) {
-	ctx := workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions)
+	ctx := workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions())
 	futures := make([]workflow.Future, len(executions))
 	for i, ex := range executions {
 		req := &schedulespb.WatchWorkflowRequest{
@@ -1493,7 +1581,7 @@ func (s *scheduler) startLongPollWatcher(ex *commonpb.WorkflowExecution) {
 }
 
 func (s *scheduler) cancelWorkflow(ex *commonpb.WorkflowExecution) {
-	ctx := workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions)
+	ctx := workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions())
 	areq := &schedulespb.CancelWorkflowRequest{
 		RequestId: s.newUUIDString(),
 		Identity:  s.identity(),
@@ -1511,7 +1599,7 @@ func (s *scheduler) cancelWorkflow(ex *commonpb.WorkflowExecution) {
 }
 
 func (s *scheduler) terminateWorkflow(ex *commonpb.WorkflowExecution) {
-	ctx := workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions)
+	ctx := workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions())
 	areq := &schedulespb.TerminateWorkflowRequest{
 		RequestId: s.newUUIDString(),
 		Identity:  s.identity(),
@@ -1558,7 +1646,7 @@ func (s *scheduler) getLastEvent() time.Time {
 
 func (s *scheduler) newUUIDString() string {
 	if len(s.uuidBatch) == 0 {
-		panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+		panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) any {
 			out := make([]string, 10)
 			for i := range out {
 				out[i] = uuid.NewString()

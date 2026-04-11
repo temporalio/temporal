@@ -158,7 +158,7 @@ func (c *operationContext) interceptRequest(
 	request *matchingservice.DispatchNexusTaskRequest,
 	header nexus.Header,
 ) error {
-	err := c.auth.Authorize(ctx, c.claims, &authorization.CallTarget{
+	_, err := c.auth.Authorize(ctx, c.claims, &authorization.CallTarget{
 		APIName:           c.apiName,
 		Namespace:         c.namespaceName,
 		NexusEndpointName: c.endpointName,
@@ -178,7 +178,7 @@ func (c *operationContext) interceptRequest(
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
-	if err := c.namespaceValidationInterceptor.ValidateState(c.namespace, c.apiName); err != nil {
+	if err := c.namespaceValidationInterceptor.ValidateState(c.namespace, c.apiName, ""); err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("invalid_namespace_state"))
 		return commonnexus.ConvertGRPCError(err, false)
 	}

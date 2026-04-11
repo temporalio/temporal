@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
 	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -44,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
@@ -148,7 +151,10 @@ type (
 
 		stateMachineRegistry *hsm.Registry
 
-		chasmRegistry *chasm.Registry
+		chasmRegistry    *chasm.Registry
+		endpointRegistry chasm.EndpointRegistry
+
+		businessIDRateLimiters cache.Cache
 	}
 
 	remoteClusterInfo struct {
@@ -163,7 +169,7 @@ type (
 	}
 
 	// These are the requests that can be passed to transition to change state:
-	contextRequest interface{}
+	contextRequest any
 
 	contextRequestAcquire    struct{}
 	contextRequestAcquired   struct{ engine historyi.Engine }
@@ -329,7 +335,7 @@ func (s *ContextImpl) GenerateTaskIDs(number int) ([]int64, error) {
 	defer s.wUnlock()
 
 	result := []int64{}
-	for i := 0; i < number; i++ {
+	for range number {
 		id, err := s.generateTaskIDLocked()
 		if err != nil {
 			return nil, err
@@ -476,7 +482,7 @@ func (s *ContextImpl) UpdateHandoverNamespace(ns *namespace.Namespace, deletedFr
 	// it here to be more safe in case above assumption no longer holds in the future.
 	isHandoverNamespace := ns.IsGlobalNamespace() &&
 		ns.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) &&
-		ns.ReplicationState() == enumspb.REPLICATION_STATE_HANDOVER
+		ns.ReplicationState("") == enumspb.REPLICATION_STATE_HANDOVER
 
 	s.wLock()
 	if deletedFromDb || !isHandoverNamespace {
@@ -695,7 +701,8 @@ func (s *ContextImpl) updateCloseTaskIDs(executionInfo *persistencespb.WorkflowE
 		}
 	}
 	for _, t := range tasksByCategory[tasks.CategoryVisibility] {
-		if t.GetType() == enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION {
+		if t.GetType() == enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION ||
+			t.GetType() == enumsspb.TASK_TYPE_CHASM {
 			executionInfo.CloseVisibilityTaskId = t.GetTaskID()
 			break
 		}
@@ -947,7 +954,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) (retErr error) {
 	// DeleteWorkflowExecution is a 4 stages process (order is very important and should not be changed):
-	// 1. Add visibility delete task, i.e. schedule visibility record delete,
+	// 1. Add visibility delete task, i.e. schedule visibility record delete, and execution replication delete task,
 	// 2. Delete current workflow execution pointer,
 	// 3. Delete workflow mutable state,
 	// 4. Delete history branch.
@@ -999,6 +1006,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	// Don't acquire shard lock or io semaphore if all stages that require lock are already processed.
 	if !stage.IsProcessed(
 		tasks.DeleteWorkflowExecutionStageVisibility |
+			tasks.DeleteWorkflowExecutionStageReplication |
 			tasks.DeleteWorkflowExecutionStageCurrent |
 			tasks.DeleteWorkflowExecutionStageMutableState) {
 
@@ -1010,11 +1018,11 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 			}
 			defer s.ioSemaphoreRelease()
 
-			// Stage 1. Delete visibility.
-			if deleteVisibilityRecord && !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageVisibility) {
-				// TODO: move to existing task generator logic
-				newTasks := map[tasks.Category][]tasks.Task{
-					tasks.CategoryVisibility: {
+			// Stage 1. Add visibility delete task and delete execution replication task.
+			if !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageVisibility) {
+				newTasks := make(map[tasks.Category][]tasks.Task)
+				if deleteVisibilityRecord {
+					newTasks[tasks.CategoryVisibility] = []tasks.Task{
 						&tasks.DeleteExecutionVisibilityTask{
 							// TaskID is set by addTasks
 							WorkflowKey:                    key,
@@ -1022,25 +1030,43 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 							CloseExecutionVisibilityTaskID: closeVisibilityTaskId,
 							CloseTime:                      workflowCloseTime,
 						},
-					},
+					}
 				}
-				addTasksRequest := &persistence.AddHistoryTasksRequest{
-					ShardID:     s.shardID,
-					NamespaceID: key.NamespaceID,
-					WorkflowID:  key.WorkflowID,
-					ArchetypeID: archetypeID,
-
-					Tasks: newTasks,
+				// Piggyback delete execution replication task on the same write to save a DB operation.
+				if s.config.EnableDeleteWorkflowExecutionReplication() &&
+					!stage.IsProcessed(tasks.DeleteWorkflowExecutionStageReplication) {
+					if nsEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(
+						namespace.ID(key.NamespaceID),
+					); err == nil &&
+						nsEntry.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) &&
+						nsEntry.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster {
+						newTasks[tasks.CategoryReplication] = []tasks.Task{
+							&tasks.DeleteExecutionReplicationTask{
+								WorkflowKey: key,
+								ArchetypeID: archetypeID,
+							},
+						}
+					}
 				}
-				err := s.addTasksSemaphoreAcquired(ctx, addTasksRequest)
-				if persistence.OperationPossiblySucceeded(err) {
-					engine.NotifyNewTasks(newTasks)
-				}
-				if err != nil {
-					return err
+				if len(newTasks) > 0 {
+					addTasksRequest := &persistence.AddHistoryTasksRequest{
+						ShardID:     s.shardID,
+						NamespaceID: key.NamespaceID,
+						WorkflowID:  key.WorkflowID,
+						ArchetypeID: archetypeID,
+						Tasks:       newTasks,
+					}
+					err := s.addTasksSemaphoreAcquired(ctx, addTasksRequest)
+					if persistence.OperationPossiblySucceeded(err) {
+						engine.NotifyNewTasks(newTasks)
+					}
+					if err != nil {
+						return err
+					}
 				}
 			}
 			stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageVisibility)
+			stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageReplication)
 
 			// Stage 2. Delete current workflow execution pointer.
 			if !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageCurrent) {
@@ -2076,6 +2102,7 @@ func newContext(
 	eventsCache events.Cache,
 	stateMachineRegistry *hsm.Registry,
 	chasmRegistry *chasm.Registry,
+	endpointRegistry chasm.EndpointRegistry,
 ) (*ContextImpl, error) {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 	sequenceID := atomic.AddInt64(&shardContextSequenceID, 1)
@@ -2125,6 +2152,11 @@ func newContext(
 		ioSemaphore:             locks.NewPrioritySemaphore(ioConcurrency),
 		stateMachineRegistry:    stateMachineRegistry,
 		chasmRegistry:           chasmRegistry,
+		endpointRegistry:        endpointRegistry,
+		businessIDRateLimiters: cache.New(
+			historyConfig.BusinessIDReuseLimiterCacheSize(),
+			&cache.Options{TTL: historyConfig.BusinessIDReuseLimiterCacheTTL()},
+		),
 	}
 	shardContext.taskKeyManager = newTaskKeyManager(
 		shardContext.taskCategoryRegistry,
@@ -2229,6 +2261,33 @@ func (s *ContextImpl) StateMachineRegistry() *hsm.Registry {
 
 func (s *ContextImpl) ChasmRegistry() *chasm.Registry {
 	return s.chasmRegistry
+}
+
+func (s *ContextImpl) EndpointRegistry() chasm.EndpointRegistry {
+	return s.endpointRegistry
+}
+
+func (s *ContextImpl) BusinessIDReuseRateLimiter(namespaceID namespace.ID, businessID string, archetypeID chasm.ArchetypeID) quotas.RateLimiter {
+	rps := s.config.BusinessIDReuseRate(namespaceID.String())
+	if rps <= 0 {
+		return nil
+	}
+	burst := max(1, int(float64(rps)*s.config.BusinessIDReuseBurstRatio(namespaceID.String())))
+	key := namespaceID.String() + "/" + businessID + "/" + strconv.Itoa(int(archetypeID))
+	existing := s.businessIDRateLimiters.Get(key)
+	if existing == nil {
+		rl := quotas.NewRateLimiter(float64(rps), burst)
+		existing, _ = s.businessIDRateLimiters.PutIfNotExist(key, rl)
+	}
+	rl, ok := existing.(*quotas.RateLimiterImpl)
+	if !ok {
+		// Should never happen; cache only stores *RateLimiterImpl.
+		return nil
+	}
+	if float64(rps) != rl.Rate() || burst != rl.Burst() {
+		rl.SetRateBurst(float64(rps), burst)
+	}
+	return rl
 }
 
 func (s *ContextImpl) GetCachedWorkflowContext(

@@ -93,7 +93,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWorkflow() {
 			previousRunID = currentRunID
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
@@ -134,7 +134,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWorkflow() {
 		T:                   s.T(),
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		_, err := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err, strconv.Itoa(i))
@@ -208,7 +208,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunTimeout() {
 		if continueAsNewCounter < continueAsNewCount {
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
@@ -256,7 +256,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunTimeout() {
 	time.Sleep(1 * time.Second) // wait 1 second for timeout
 
 	var historyEvents []*historypb.HistoryEvent
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		})
@@ -439,18 +439,18 @@ func (s *ContinueAsNewTestSuite) TestWorkflowContinueAsNewTaskID() {
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events := s.GetHistory(s.Namespace().String(), executions[0])
-	s.True(len(events) != 0)
+	s.NotEmpty(events)
 	for _, event := range events {
-		s.True(event.GetTaskId() > minTaskID)
+		s.Greater(event.GetTaskId(), minTaskID)
 		minTaskID = event.GetTaskId()
 	}
 
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events = s.GetHistory(s.Namespace().String(), executions[1])
-	s.True(len(events) != 0)
+	s.NotEmpty(events)
 	for _, event := range events {
-		s.True(event.GetTaskId() > minTaskID)
+		s.Greater(event.GetTaskId(), minTaskID)
 		minTaskID = event.GetTaskId()
 	}
 }
@@ -521,7 +521,7 @@ func (w *ParentWithChildContinueAsNew) workflow(task *workflowservice.PollWorkfl
 		if w.continueAsNewCounter < w.continueAsNewCount {
 			w.continueAsNewCounter++
 			buf := new(bytes.Buffer)
-			w.suite.Nil(binary.Write(buf, binary.LittleEndian, w.continueAsNewCounter))
+			w.suite.NoError(binary.Write(buf, binary.LittleEndian, w.continueAsNewCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
@@ -550,7 +550,7 @@ func (w *ParentWithChildContinueAsNew) workflow(task *workflowservice.PollWorkfl
 			w.suite.Logger.Info("Starting child execution")
 			w.childExecutionStarted = true
 			buf := new(bytes.Buffer)
-			w.suite.Nil(binary.Write(buf, binary.LittleEndian, w.childData))
+			w.suite.NoError(binary.Write(buf, binary.LittleEndian, w.childData))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
@@ -641,7 +641,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNew() {
 	s.True(definition.childExecutionStarted)
 
 	// Process ChildExecution Started event and all generations of child executions
-	for i := 0; i < 11; i++ {
+	for i := range 11 {
 		s.Logger.Info("workflow task", tag.Counter(i))
 		_, err = poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
@@ -755,7 +755,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNewParentTermina
 	s.True(definition.childExecutionStarted)
 
 	// Process ChildExecution Started event and all generations of child executions
-	for i := 0; i < 11; i++ {
+	for i := range 11 {
 		s.Logger.Info("workflow task", tag.Counter(i))
 		_, err = poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
@@ -793,7 +793,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNewParentTermina
 
 	var childDescribeResp *workflowservice.DescribeWorkflowExecutionResponse
 	// Retry 10 times to wait for child to be terminated due to transfer task processing to enforce parent close policy
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		childDescribeResp, err = s.FrontendClient().DescribeWorkflowExecution(
 			testcore.NewContext(),
 			&workflowservice.DescribeWorkflowExecutionRequest{
@@ -904,7 +904,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithInternalTaskQueue_Blocked(
 	s.Error(err, "Expected error when continuing as new on internal task queue")
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)
-	s.Contains(err.Error(), "internal per namespace task queue")
+	s.Contains(err.Error(), "internal per-namespace task queue")
 
 	// Wait a bit for the workflow task failed event to be written to history
 	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
@@ -921,7 +921,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithInternalTaskQueue_Blocked(
 			foundTaskFailed = true
 			attrs := event.GetWorkflowTaskFailedEventAttributes()
 			s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, attrs.GetCause())
-			s.Contains(attrs.GetFailure().GetMessage(), "internal per namespace task queue")
+			s.Contains(attrs.GetFailure().GetMessage(), "internal per-namespace task queue")
 			break
 		}
 	}

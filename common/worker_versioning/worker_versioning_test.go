@@ -603,20 +603,50 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 
 func TestFindDeploymentVersionForWorkflowID(t *testing.T) {
 	tests := []struct {
-		name    string
-		current *deploymentspb.DeploymentVersionData
-		ramping *deploymentspb.DeploymentVersionData
-		want    *deploymentspb.WorkerDeploymentVersion
+		name              string
+		current           *deploymentspb.DeploymentVersionData
+		ramping           *deploymentspb.DeploymentVersionData
+		useRampingVersion bool
+		want              *deploymentspb.WorkerDeploymentVersion
 	}{
 		{name: "nil current and ramping info", want: nil},
 		{name: "with current version", current: &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, want: v1},
 		{name: "with full ramp", current: &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, ramping: &deploymentspb.DeploymentVersionData{Version: v2, RampPercentage: 100, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, want: v2},
 		{name: "with full ramp to unversioned", current: &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, ramping: &deploymentspb.DeploymentVersionData{RampPercentage: 100, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, want: nil},
 		{name: "with full ramp from unversioned", ramping: &deploymentspb.DeploymentVersionData{Version: v1, RampPercentage: 100, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, want: v1},
+		// useRampingVersion=true: always routes to ramping version regardless of ramp percentage
+		{
+			name:              "useRampingVersion with partial ramp bypasses hash and returns ramping",
+			current:           &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())},
+			ramping:           &deploymentspb.DeploymentVersionData{Version: v2, RampPercentage: 30, RoutingUpdateTime: timestamp.TimePtr(time.Now())},
+			useRampingVersion: true,
+			want:              v2,
+		},
+		// useRampingVersion=true: always routes to ramping version with 0% ramp percentage
+		{
+			name:              "useRampingVersion with zero ramp bypasses hash and returns ramping",
+			current:           &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())},
+			ramping:           &deploymentspb.DeploymentVersionData{Version: v2, RampPercentage: 0, RoutingUpdateTime: timestamp.TimePtr(time.Now())},
+			useRampingVersion: true,
+			want:              v2,
+		},
+		{
+			// When useRampingVersion is set but there is no ramping version, falls back to current.
+			name:              "useRampingVersion with no ramping version falls back to current",
+			current:           &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())},
+			useRampingVersion: true,
+			want:              v1,
+		},
+		{
+			// When useRampingVersion is set but both current and ramping are nil (unversioned task queue), returns nil.
+			name:              "useRampingVersion with no current and no ramping returns nil",
+			useRampingVersion: true,
+			want:              nil,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(tt.current.GetVersion(), 0, tt.ramping.GetVersion(), tt.ramping.GetRampPercentage(), 0, "my-wf-id"); !got.Equal(tt.want) {
+			if got, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(tt.current.GetVersion(), 0, tt.ramping.GetVersion(), tt.ramping.GetRampPercentage(), 0, "my-wf-id", tt.useRampingVersion); !got.Equal(tt.want) {
 				t.Errorf("FindTargetDeploymentVersionAndRevisionNumberForWorkflowID() = %v, want %v", got, tt.want)
 			}
 		})
@@ -650,8 +680,8 @@ func TestFindDeploymentVersionForWorkflowID_PartialRamp(t *testing.T) {
 			}
 			histogram := make(map[string]int)
 			runs := 1000000
-			for i := 0; i < runs; i++ {
-				v, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current.GetVersion(), 0, ramping.GetVersion(), ramping.GetRampPercentage(), 0, "wf-"+strconv.Itoa(i))
+			for i := range runs {
+				v, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current.GetVersion(), 0, ramping.GetVersion(), ramping.GetRampPercentage(), 0, "wf-"+strconv.Itoa(i), false)
 				histogram[v.GetBuildId()]++
 			}
 

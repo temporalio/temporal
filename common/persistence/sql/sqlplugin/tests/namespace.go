@@ -280,7 +280,7 @@ func (s *namespaceSuite) TestInsertSelect_Pagination() {
 	numNamespace := 2
 	numNamespacePerPage := 1
 
-	for i := 0; i < numNamespace; i++ {
+	for range numNamespace {
 		id := primitives.NewUUID()
 		name := shuffle.String(testNamespaceName)
 		notificationVersion := int64(1)

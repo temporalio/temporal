@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -96,8 +97,8 @@ func Invoke(
 				return nil, err
 			}
 
-			attemptStartedTime = ai.StartedTime.AsTime()
-			firstScheduledTime = ai.FirstScheduledTime.AsTime()
+			attemptStartedTime = timestamp.TimeValue(ai.StartedTime)
+			firstScheduledTime = timestamp.TimeValue(ai.FirstScheduledTime)
 			taskQueue = ai.TaskQueue
 			versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
 			return &api.UpdateWorkflowAction{

@@ -3,6 +3,7 @@ package history
 import (
 	"fmt"
 
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -31,6 +32,7 @@ type outboundQueueFactoryParams struct {
 	fx.In
 
 	QueueFactoryBaseParams
+	ClientBean         client.Bean
 	CircuitBreakerPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool
 	MatchingRawClient  resource.MatchingRawClient
 }
@@ -239,6 +241,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		logger,
 		metricsHandler,
 		f.ChasmEngine,
+		f.ClientBean,
 	)
 
 	executor := queues.NewActiveStandbyExecutor(

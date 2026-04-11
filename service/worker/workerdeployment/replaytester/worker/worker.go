@@ -85,7 +85,7 @@ func main() {
 	_, err = dHandle.UpdateVersionMetadata(context.Background(), client.WorkerDeploymentUpdateVersionMetadataOptions{
 		Version: v1,
 		MetadataUpdate: client.WorkerDeploymentMetadataUpdate{
-			UpsertEntries: map[string]interface{}{
+			UpsertEntries: map[string]any{
 				"key": "value",
 			},
 		},

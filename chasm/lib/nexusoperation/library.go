@@ -2,23 +2,40 @@ package nexusoperation
 
 import (
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"google.golang.org/grpc"
 )
 
 type Library struct {
 	chasm.UnimplementedLibrary
 
-	OperationInvocationTaskExecutor *OperationInvocationTaskExecutor
-	OperationBackoffTaskExecutor    *OperationBackoffTaskExecutor
-	OperationTimeoutTaskExecutor    *OperationTimeoutTaskExecutor
+	operationBackoffTaskHandler                *operationBackoffTaskHandler
+	operationInvocationTaskHandler             *operationInvocationTaskHandler
+	operationScheduleToCloseTimeoutTaskHandler *operationScheduleToCloseTimeoutTaskHandler
+	operationScheduleToStartTimeoutTaskHandler *operationScheduleToStartTimeoutTaskHandler
+	operationStartToCloseTimeoutTaskHandler    *operationStartToCloseTimeoutTaskHandler
 
-	CancellationTaskExecutor        *CancellationTaskExecutor
-	CancellationBackoffTaskExecutor *CancellationBackoffTaskExecutor
+	cancellationTaskHandler        *cancellationTaskHandler
+	cancellationBackoffTaskHandler *cancellationBackoffTaskHandler
 }
 
-func newLibrary() *Library {
-	return &Library{}
+func newLibrary(
+	operationBackoffTaskHandler *operationBackoffTaskHandler,
+	operationInvocationTaskHandler *operationInvocationTaskHandler,
+	operationScheduleToCloseTimeoutTaskHandler *operationScheduleToCloseTimeoutTaskHandler,
+	operationScheduleToStartTimeoutTaskHandler *operationScheduleToStartTimeoutTaskHandler,
+	operationStartToCloseTimeoutTaskHandler *operationStartToCloseTimeoutTaskHandler,
+	cancellationTaskHandler *cancellationTaskHandler,
+	cancellationBackoffTaskHandler *cancellationBackoffTaskHandler,
+) *Library {
+	return &Library{
+		operationBackoffTaskHandler:                operationBackoffTaskHandler,
+		operationInvocationTaskHandler:             operationInvocationTaskHandler,
+		operationScheduleToCloseTimeoutTaskHandler: operationScheduleToCloseTimeoutTaskHandler,
+		operationScheduleToStartTimeoutTaskHandler: operationScheduleToStartTimeoutTaskHandler,
+		operationStartToCloseTimeoutTaskHandler:    operationStartToCloseTimeoutTaskHandler,
+		cancellationTaskHandler:                    cancellationTaskHandler,
+		cancellationBackoffTaskHandler:             cancellationBackoffTaskHandler,
+	}
 }
 
 func (l *Library) Name() string {
@@ -28,17 +45,19 @@ func (l *Library) Name() string {
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*Operation]("operation"),
-		chasm.NewRegistrableComponent[*Operation]("cancellation"),
+		chasm.NewRegistrableComponent[*Cancellation]("cancellation"),
 	}
 }
 
 func (l *Library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
-		chasm.NewRegistrableSideEffectTask[*Operation, *nexusoperationpb.InvocationTask]("invocation", l.OperationInvocationTaskExecutor, l.OperationInvocationTaskExecutor),
-		chasm.NewRegistrablePureTask[*Operation, *nexusoperationpb.InvocationBackoffTask]("invocationBackoff", l.OperationBackoffTaskExecutor, l.OperationBackoffTaskExecutor),
-		chasm.NewRegistrablePureTask[*Operation, *nexusoperationpb.InvocationTimeoutTask]("scheduleToCloseTimeout", l.OperationTimeoutTaskExecutor, l.OperationTimeoutTaskExecutor),
-		chasm.NewRegistrableSideEffectTask[*Cancellation, *nexusoperationpb.CancellationTask]("cancellation", l.CancellationTaskExecutor, l.CancellationTaskExecutor),
-		chasm.NewRegistrablePureTask[*Cancellation, *nexusoperationpb.CancellationBackoffTask]("cancellationBackoff", l.CancellationBackoffTaskExecutor, l.CancellationBackoffTaskExecutor),
+		chasm.NewRegistrableSideEffectTask("invocation", l.operationInvocationTaskHandler),
+		chasm.NewRegistrablePureTask("invocationBackoff", l.operationBackoffTaskHandler),
+		chasm.NewRegistrablePureTask("scheduleToStartTimeout", l.operationScheduleToStartTimeoutTaskHandler),
+		chasm.NewRegistrablePureTask("startToCloseTimeout", l.operationStartToCloseTimeoutTaskHandler),
+		chasm.NewRegistrablePureTask("scheduleToCloseTimeout", l.operationScheduleToCloseTimeoutTaskHandler),
+		chasm.NewRegistrableSideEffectTask("cancellation", l.cancellationTaskHandler),
+		chasm.NewRegistrablePureTask("cancellationBackoff", l.cancellationBackoffTaskHandler),
 	}
 }
 

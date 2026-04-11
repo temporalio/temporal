@@ -25,13 +25,22 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.CreateScheduleResponse:
 		return nil
+	case *workflowservice.CreateWorkerDeploymentRequest:
+		return nil
+	case *workflowservice.CreateWorkerDeploymentResponse:
+		return nil
+	case *workflowservice.CreateWorkerDeploymentVersionRequest:
+		return nil
+	case *workflowservice.CreateWorkerDeploymentVersionResponse:
+		return nil
 	case *workflowservice.CreateWorkflowRuleRequest:
 		return nil
 	case *workflowservice.CreateWorkflowRuleResponse:
 		return nil
 	case *workflowservice.DeleteActivityExecutionRequest:
 		return []tag.Tag{
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.ActivityID(r.GetActivityId()),
+			tag.ChasmRunID(r.GetRunId()),
 		}
 	case *workflowservice.DeleteActivityExecutionResponse:
 		return nil
@@ -64,7 +73,8 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.DescribeActivityExecutionRequest:
 		return []tag.Tag{
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.ActivityID(r.GetActivityId()),
+			tag.ChasmRunID(r.GetRunId()),
 		}
 	case *workflowservice.DescribeActivityExecutionResponse:
 		return []tag.Tag{
@@ -243,7 +253,8 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.PollActivityExecutionRequest:
 		return []tag.Tag{
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.ActivityID(r.GetActivityId()),
+			tag.ChasmRunID(r.GetRunId()),
 		}
 	case *workflowservice.PollActivityExecutionResponse:
 		return []tag.Tag{
@@ -291,6 +302,7 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.RecordActivityTaskHeartbeatByIdRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowId()),
+			tag.ActivityID(r.GetActivityId()),
 			tag.WorkflowRunID(r.GetRunId()),
 		}
 	case *workflowservice.RecordActivityTaskHeartbeatByIdResponse:
@@ -305,7 +317,8 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.RequestCancelActivityExecutionRequest:
 		return []tag.Tag{
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.ActivityID(r.GetActivityId()),
+			tag.ChasmRunID(r.GetRunId()),
 		}
 	case *workflowservice.RequestCancelActivityExecutionResponse:
 		return nil
@@ -346,6 +359,7 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.RespondActivityTaskCanceledByIdRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowId()),
+			tag.ActivityID(r.GetActivityId()),
 			tag.WorkflowRunID(r.GetRunId()),
 		}
 	case *workflowservice.RespondActivityTaskCanceledByIdResponse:
@@ -357,6 +371,7 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.RespondActivityTaskCompletedByIdRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowId()),
+			tag.ActivityID(r.GetActivityId()),
 			tag.WorkflowRunID(r.GetRunId()),
 		}
 	case *workflowservice.RespondActivityTaskCompletedByIdResponse:
@@ -368,6 +383,7 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.RespondActivityTaskFailedByIdRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowId()),
+			tag.ActivityID(r.GetActivityId()),
 			tag.WorkflowRunID(r.GetRunId()),
 		}
 	case *workflowservice.RespondActivityTaskFailedByIdResponse:
@@ -432,7 +448,9 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.SignalWorkflowExecutionResponse:
 		return nil
 	case *workflowservice.StartActivityExecutionRequest:
-		return nil
+		return []tag.Tag{
+			tag.ActivityID(r.GetActivityId()),
+		}
 	case *workflowservice.StartActivityExecutionResponse:
 		return []tag.Tag{
 			tag.WorkflowRunID(r.GetRunId()),
@@ -455,7 +473,8 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.TerminateActivityExecutionRequest:
 		return []tag.Tag{
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.ActivityID(r.GetActivityId()),
+			tag.ChasmRunID(r.GetRunId()),
 		}
 	case *workflowservice.TerminateActivityExecutionResponse:
 		return nil
@@ -514,6 +533,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.UpdateWorkerConfigResponse:
 		return nil
+	case *workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest:
+		return nil
+	case *workflowservice.UpdateWorkerDeploymentVersionComputeConfigResponse:
+		return nil
 	case *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest:
 		return nil
 	case *workflowservice.UpdateWorkerDeploymentVersionMetadataResponse:
@@ -538,6 +561,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
 		}
 	case *workflowservice.UpdateWorkflowExecutionOptionsResponse:
+		return nil
+	case *workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest:
+		return nil
+	case *workflowservice.ValidateWorkerDeploymentVersionComputeConfigResponse:
 		return nil
 	default:
 		return nil

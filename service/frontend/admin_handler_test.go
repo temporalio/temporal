@@ -32,6 +32,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	clientmocks "go.temporal.io/server/client"
 	historyclient "go.temporal.io/server/client/history"
@@ -41,6 +42,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -149,7 +151,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	}
 
 	chasmRegistry := chasm.NewRegistry(s.mockResource.GetLogger())
-	err := chasmRegistry.Register(chasmworkflow.NewLibrary())
+	err := chasmRegistry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry()))
 	s.NoError(err)
 
 	args := NewAdminHandlerArgs{
@@ -180,13 +182,23 @@ func (s *adminHandlerSuite) SetupTest() {
 		serialization.NewSerializer(),
 		clock.NewRealTimeSource(),
 		chasmRegistry,
+		nsreplication.NewNoopDataMerger(),
+		nil, // schedulerClient - not needed for most admin handler tests
 		tasks.NewDefaultTaskCategoryRegistry(),
 		s.mockResource.GetMatchingClient(),
 	}
 	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.NewString()).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{"mock-vis-store"})
-	s.handler = NewAdminHandler(args)
+
+	namespaceDLQHandler := NamespaceDLQHandlerProvider(
+		s.mockMetadata,
+		s.mockResource.GetMetadataManager(),
+		nsreplication.NewNoopDataMerger(),
+		s.mockResource.GetNamespaceReplicationQueue(),
+		s.mockResource.GetLogger(),
+	)
+	s.handler = NewAdminHandler(args, namespaceDLQHandler)
 	s.handler.Start()
 }
 
@@ -1462,7 +1474,7 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 				dlq.QueryTypeProgress,
 			)
 			mockValue := mocksdk.NewMockEncodedValue(s.controller)
-			mockValue.EXPECT().Get(gomock.Any()).Do(func(result interface{}) {
+			mockValue.EXPECT().Get(gomock.Any()).Do(func(result any) {
 				*(result.(*dlq.ProgressQueryResponse)) = tc.progressQueryResponse
 			})
 			queryExpectation.Return(mockValue, nil)
@@ -2093,4 +2105,87 @@ func (s *adminHandlerSuite) validatePhysicalTaskQueueInfo(expectedPhysicalTaskQu
 	s.Equal(expectedPhysicalTaskQueueInfo.GetPollers(), responsePhysicalTaskQueueInfo.GetPollers())
 	s.Equal(expectedPhysicalTaskQueueInfo.GetTaskQueueStats(), responsePhysicalTaskQueueInfo.GetTaskQueueStats())
 	s.Equal(expectedPhysicalTaskQueueInfo.GetInternalTaskQueueStatus(), responsePhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
+}
+
+// fakeSchedulerClient is a minimal test double for SchedulerServiceClient.
+// Only MigrateToWorkflow is implemented; other methods panic if called.
+type fakeSchedulerClient struct {
+	migrateToWorkflowFn func(context.Context, *schedulerpb.MigrateToWorkflowRequest) (*schedulerpb.MigrateToWorkflowResponse, error)
+}
+
+func (f *fakeSchedulerClient) CreateSchedule(context.Context, *schedulerpb.CreateScheduleRequest, ...grpc.CallOption) (*schedulerpb.CreateScheduleResponse, error) {
+	panic("not implemented")
+}
+func (f *fakeSchedulerClient) UpdateSchedule(context.Context, *schedulerpb.UpdateScheduleRequest, ...grpc.CallOption) (*schedulerpb.UpdateScheduleResponse, error) {
+	panic("not implemented")
+}
+func (f *fakeSchedulerClient) PatchSchedule(context.Context, *schedulerpb.PatchScheduleRequest, ...grpc.CallOption) (*schedulerpb.PatchScheduleResponse, error) {
+	panic("not implemented")
+}
+func (f *fakeSchedulerClient) DeleteSchedule(context.Context, *schedulerpb.DeleteScheduleRequest, ...grpc.CallOption) (*schedulerpb.DeleteScheduleResponse, error) {
+	panic("not implemented")
+}
+func (f *fakeSchedulerClient) DescribeSchedule(context.Context, *schedulerpb.DescribeScheduleRequest, ...grpc.CallOption) (*schedulerpb.DescribeScheduleResponse, error) {
+	panic("not implemented")
+}
+func (f *fakeSchedulerClient) ListScheduleMatchingTimes(context.Context, *schedulerpb.ListScheduleMatchingTimesRequest, ...grpc.CallOption) (*schedulerpb.ListScheduleMatchingTimesResponse, error) {
+	panic("not implemented")
+}
+func (f *fakeSchedulerClient) CreateFromMigrationState(_ context.Context, _ *schedulerpb.CreateFromMigrationStateRequest, _ ...grpc.CallOption) (*schedulerpb.CreateFromMigrationStateResponse, error) {
+	panic("not implemented")
+}
+func (f *fakeSchedulerClient) CreateSentinel(context.Context, *schedulerpb.CreateSentinelRequest, ...grpc.CallOption) (*schedulerpb.CreateSentinelResponse, error) {
+	panic("not implemented")
+}
+func (f *fakeSchedulerClient) MigrateToWorkflow(ctx context.Context, req *schedulerpb.MigrateToWorkflowRequest, _ ...grpc.CallOption) (*schedulerpb.MigrateToWorkflowResponse, error) {
+	return f.migrateToWorkflowFn(ctx, req)
+}
+
+func (s *adminHandlerSuite) TestMigrateScheduleToWorkflow() {
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+
+	var capturedReq *schedulerpb.MigrateToWorkflowRequest
+	fake := &fakeSchedulerClient{
+		migrateToWorkflowFn: func(_ context.Context, req *schedulerpb.MigrateToWorkflowRequest) (*schedulerpb.MigrateToWorkflowResponse, error) {
+			capturedReq = req
+			return &schedulerpb.MigrateToWorkflowResponse{}, nil
+		},
+	}
+	s.handler.schedulerClient = fake
+
+	resp, err := s.handler.MigrateSchedule(context.Background(), &adminservice.MigrateScheduleRequest{
+		Namespace:  s.namespace.String(),
+		ScheduleId: "test-schedule",
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+		Identity:   "test-identity",
+		RequestId:  "test-request-id",
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Equal(s.namespaceID.String(), capturedReq.NamespaceId)
+	s.Equal("test-schedule", capturedReq.ScheduleId)
+	s.Equal("test-identity", capturedReq.Identity)
+	s.Equal("test-request-id", capturedReq.RequestId)
+}
+
+func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowError() {
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+
+	fake := &fakeSchedulerClient{
+		migrateToWorkflowFn: func(_ context.Context, _ *schedulerpb.MigrateToWorkflowRequest) (*schedulerpb.MigrateToWorkflowResponse, error) {
+			return nil, serviceerror.NewNotFound("schedule not found")
+		},
+	}
+	s.handler.schedulerClient = fake
+
+	_, err := s.handler.MigrateSchedule(context.Background(), &adminservice.MigrateScheduleRequest{
+		Namespace:  s.namespace.String(),
+		ScheduleId: "nonexistent",
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+		Identity:   "test-identity",
+		RequestId:  "test-request-id",
+	})
+	s.Error(err)
+	var notFoundErr *serviceerror.NotFound
+	s.ErrorAs(err, &notFoundErr)
 }
