@@ -212,11 +212,15 @@ func (h *operationInvocationTaskHandler) Execute(
 	// Adjust timeout based on remaining operation timeouts.
 	// ScheduleToStart takes precedence over ScheduleToClose since it is already capped by it.
 	if args.scheduleToStartTimeout > 0 {
-		callTimeout = min(callTimeout, args.scheduleToStartTimeout-elapsed)
-		timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START
+		if t := args.scheduleToStartTimeout - elapsed; t < callTimeout {
+			callTimeout = t
+			timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START
+		}
 	} else if args.scheduleToCloseTimeout > 0 {
-		callTimeout = min(callTimeout, args.scheduleToCloseTimeout-elapsed)
-		timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+		if t := args.scheduleToCloseTimeout - elapsed; t < callTimeout {
+			callTimeout = t
+			timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+		}
 	}
 
 	// Inform the handler of the operation timeout via header.

@@ -143,6 +143,6 @@ func (c *Cancellation) saveResult(
 			RetryPolicy: input.retryPolicy(),
 		})
 	default:
-		return nil, serviceerror.NewInternalf("cannot save invocation result of type %T", r)
+		return nil, serviceerror.NewInternalf("cannot save cancellation result of type %T", r)
 	}
 }

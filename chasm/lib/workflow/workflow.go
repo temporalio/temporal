@@ -333,7 +333,6 @@ func (w *Workflow) OnNexusOperationCancellationCompleted(ctx chasm.MutableContex
 		e.WorkerMayIgnore = true // For compatibility with older SDKs.
 	})
 	return err
-
 }
 
 func (w *Workflow) OnNexusOperationCancellationFailed(ctx chasm.MutableContext, op *nexusoperation.Operation, failure *failurepb.Failure) error {
@@ -359,7 +358,6 @@ func (w *Workflow) OnNexusOperationCancellationFailed(ctx chasm.MutableContext, 
 		e.WorkerMayIgnore = true // For compatibility with older SDKs.
 	})
 	return err
-
 }
 
 // createNexusOperationFailure creates a NexusOperationExecutionFailure wrapping the given cause.

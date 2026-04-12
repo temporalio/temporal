@@ -142,19 +142,16 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 		if errors.Is(callErr, errOpProcessorFailed) {
 			return "operation-processor-failed"
 		}
-		var opTimeoutBelowMinErr *operationTimeoutBelowMinError
-		if errors.As(callErr, &opTimeoutBelowMinErr) {
+		if _, ok := errors.AsType[*operationTimeoutBelowMinError](callErr); ok {
 			return "operation-timeout"
 		}
 		if callCtx.Err() != nil {
 			return "request-timeout"
 		}
-		var handlerErr *nexus.HandlerError
-		if errors.As(callErr, &handlerErr) {
+		if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok {
 			return "handler-error:" + string(handlerErr.Type)
 		}
-		var serviceErr serviceerror.ServiceError
-		if errors.As(callErr, &serviceErr) {
+		if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
 			return "service-error:" + strings.Replace(fmt.Sprintf("%T", serviceErr), "*serviceerror.", "", 1)
 		}
 		return "unknown-error"

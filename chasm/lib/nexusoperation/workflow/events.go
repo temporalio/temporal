@@ -148,7 +148,9 @@ func (d CancelRequestFailedEventDefinition) Apply(ctx chasm.MutableContext, wf *
 	}
 	// Cancellation must be present to deliver a cancel request.
 	cancellation := field.Get(ctx).Cancellation.Get(ctx)
-	return nexusoperation.TransitionCancellationFailed.Apply(cancellation, ctx, nexusoperation.EventCancellationFailed{})
+	return nexusoperation.TransitionCancellationFailed.Apply(cancellation, ctx, nexusoperation.EventCancellationFailed{
+		Failure: attrs.GetFailure(),
+	})
 }
 
 func (d CancelRequestFailedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {

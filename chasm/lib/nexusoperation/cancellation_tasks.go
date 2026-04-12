@@ -124,12 +124,16 @@ func (h *cancellationInvocationTaskHandler) Execute(
 	callTimeout := h.config.RequestTimeout(ns.Name().String(), attrs.Destination)
 	var timeoutType enumspb.TimeoutType
 	if args.startToCloseTimeout > 0 {
-		callTimeout = min(callTimeout, args.startToCloseTimeout-args.currentTime.Sub(args.startedTime))
-		timeoutType = enumspb.TIMEOUT_TYPE_START_TO_CLOSE
+		if t := args.startToCloseTimeout - args.currentTime.Sub(args.startedTime); t < callTimeout {
+			callTimeout = t
+			timeoutType = enumspb.TIMEOUT_TYPE_START_TO_CLOSE
+		}
 	}
 	if args.scheduleToCloseTimeout > 0 {
-		callTimeout = min(callTimeout, args.scheduleToCloseTimeout-args.currentTime.Sub(args.scheduledTime))
-		timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+		if t := args.scheduleToCloseTimeout - args.currentTime.Sub(args.scheduledTime); t < callTimeout {
+			callTimeout = t
+			timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+		}
 	}
 
 	callCtx, cancel := h.setupCallContext(ctx, callTimeout)
@@ -153,7 +157,7 @@ func (h *cancellationInvocationTaskHandler) Execute(
 	if err != nil {
 		return fmt.Errorf("failed to construct invocation: %w", err)
 	}
-	startTime := args.currentTime
+	startTime := time.Now() // nolint:forbidigo // Time can be used for timing metrics.
 	callErr := inv.Cancel(callCtx, args, nexus.CancelOperationOptions{Header: nexus.Header(args.headers)})
 	failureSource := failureSourceFromContext(callCtx)
 
