@@ -630,18 +630,15 @@ func (s *PollerScalingIntegSuite) TestPollerScalingScaleUpIgnoresRateLimit() {
 	}
 
 	// Wait for backlog age to exceed the scale-up threshold (50ms, set in suite setup).
-	tqtyp := enumspb.TASK_QUEUE_TYPE_WORKFLOW
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		res, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-			Namespace:      s.Namespace().String(),
-			TaskQueue:      &taskqueuepb.TaskQueue{Name: tq},
-			ApiMode:        enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
-			TaskQueueTypes: []enumspb.TaskQueueType{tqtyp},
-			ReportStats:    true,
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			ReportStats:   true,
 		})
 		require.NoError(t, err)
-		stats := res.GetVersionsInfo()[""].TypesInfo[int32(tqtyp)].Stats
-		require.GreaterOrEqual(t, stats.ApproximateBacklogAge.AsDuration(), 200*time.Millisecond)
+		require.GreaterOrEqual(t, res.GetStats().ApproximateBacklogAge.AsDuration(), 200*time.Millisecond)
 	}, 10*time.Second, 50*time.Millisecond)
 
 	type pollResult struct {
