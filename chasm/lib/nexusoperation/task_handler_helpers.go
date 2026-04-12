@@ -161,7 +161,7 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 
 // callErrorToFailure converts a Nexus call error to a Temporal failure with retryability.
 // Always returns a non-nil failure.
-func callErrorToFailure(callErr error) (failure *failurepb.Failure, retryable bool, err error) {
+func callErrorToFailure(callErr error) (*failurepb.Failure, bool, error) {
 	if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
 		retryable := common.IsRetryableRPCError(callErr)
 		failure := &failurepb.Failure{
@@ -180,6 +180,7 @@ func callErrorToFailure(callErr error) (failure *failurepb.Failure, retryable bo
 		if handlerErr.OriginalFailure != nil {
 			nf = *handlerErr.OriginalFailure
 		} else {
+			var err error
 			nf, err = nexusrpc.DefaultFailureConverter().ErrorToFailure(handlerErr)
 			if err != nil {
 				return nil, false, err
@@ -198,14 +199,14 @@ func callErrorToFailure(callErr error) (failure *failurepb.Failure, retryable bo
 	}
 
 	// Fallback to server failure.
-	failure = &failurepb.Failure{
+	retryable := !errors.Is(callErr, ErrResponseBodyTooLarge) && !errors.Is(callErr, ErrInvalidOperationToken)
+	failure := &failurepb.Failure{
 		Message: callErr.Error(),
 		FailureInfo: &failurepb.Failure_ServerFailureInfo{
-			ServerFailureInfo: &failurepb.ServerFailureInfo{},
+			ServerFailureInfo: &failurepb.ServerFailureInfo{
+				NonRetryable: !retryable,
+			},
 		},
 	}
-	if errors.Is(callErr, ErrResponseBodyTooLarge) || errors.Is(callErr, ErrInvalidOperationToken) {
-		return failure, false, nil
-	}
-	return failure, true, nil
+	return failure, retryable, nil
 }

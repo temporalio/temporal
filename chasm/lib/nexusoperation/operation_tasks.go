@@ -134,7 +134,7 @@ func operationErrorToFailure(opErr *nexus.OperationError) (*failurepb.Failure, e
 type operationInvocationTaskHandlerOptions struct {
 	fx.In
 
-	invocationTaskHandlerOptions
+	InvocationTaskHandlerOptions
 	CallbackTokenGenerator *commonnexus.CallbackTokenGenerator
 }
 

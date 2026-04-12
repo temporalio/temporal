@@ -36,9 +36,11 @@ type commonTaskHandlerOptions struct {
 	Logger         log.Logger
 }
 
-// invocationTaskHandlerOptions groups the common dependencies shared by the invocation and cancellation task
-// handlers. It does not include fx.In — concrete fx option structs embed this and add fx.In themselves.
-type invocationTaskHandlerOptions struct {
+// InvocationTaskHandlerOptions groups the common dependencies shared by the invocation and cancellation task
+// handlers. It embeds fx.In so that dig can flatten its fields when embedded in other dig.In structs.
+type InvocationTaskHandlerOptions struct {
+	fx.In
+
 	Config            *Config
 	NamespaceRegistry namespace.Registry
 	MetricsHandler    metrics.Handler
@@ -50,7 +52,7 @@ type invocationTaskHandlerOptions struct {
 	ChasmRegistry     *chasm.Registry
 }
 
-func (o invocationTaskHandlerOptions) toBase() nexusTaskHandlerBase {
+func (o InvocationTaskHandlerOptions) toBase() nexusTaskHandlerBase {
 	return nexusTaskHandlerBase{
 		config:            o.Config,
 		namespaceRegistry: o.NamespaceRegistry,

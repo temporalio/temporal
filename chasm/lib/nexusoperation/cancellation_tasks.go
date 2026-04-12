@@ -70,7 +70,7 @@ func newCancellationResult(callErr error) (cancellationResult, error) {
 type cancellationInvocationTaskHandlerOptions struct {
 	fx.In
 
-	invocationTaskHandlerOptions
+	InvocationTaskHandlerOptions
 }
 
 type cancellationInvocationTaskHandler struct {
