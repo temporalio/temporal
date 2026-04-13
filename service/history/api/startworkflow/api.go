@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -119,15 +118,6 @@ func NewStarter(
 // prepare applies request overrides, validates the request, and records eager execution metrics.
 func (s *Starter) prepare(ctx context.Context) error {
 	request := s.request.StartRequest
-
-	// TODO: remove this call in 1.25
-	enums.SetDefaultWorkflowIdConflictPolicy(
-		&request.WorkflowIdConflictPolicy,
-		enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
-
-	api.MigrateWorkflowIdReusePolicyForRunningWorkflow(
-		&request.WorkflowIdReusePolicy,
-		&request.WorkflowIdConflictPolicy)
 
 	api.OverrideStartWorkflowExecutionRequest(
 		request,
@@ -319,6 +309,7 @@ func (s *Starter) createBrandNew(ctx context.Context, creationParams *creationPa
 		creationParams.workflowLease.GetMutableState(),
 		creationParams.workflowSnapshot,
 		creationParams.workflowEventBatches,
+		historyi.TransactionPolicyActive,
 	)
 }
 
@@ -394,6 +385,7 @@ func (s *Starter) createAsCurrent(
 		creationParams.workflowLease.GetMutableState(),
 		creationParams.workflowSnapshot,
 		creationParams.workflowEventBatches,
+		historyi.TransactionPolicyActive,
 	)
 }
 

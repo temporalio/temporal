@@ -555,7 +555,7 @@ func genericFrontendServiceProvider(
 			case primitives.FrontendService:
 				return params.ClaimMapper
 			case primitives.InternalFrontendService:
-				return authorization.NewNoopClaimMapper()
+				return authorization.NewInternalClaimMapper()
 			default:
 				panic("Unexpected frontend service name")
 			}
@@ -664,9 +664,7 @@ func ApplyClusterMetadataConfigProvider(
 	}
 	indexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
 	for _, ds := range visDataStores {
-		if ds.SQL != nil || ds.CustomDataStoreConfig != nil {
-			indexSearchAttributes[ds.GetIndexName()] = sadefs.GetDBIndexSearchAttributes(visCSAOverride)
-		}
+		indexSearchAttributes[ds.GetIndexName()] = sadefs.GetDBIndexSearchAttributes(visCSAOverride)
 	}
 
 	clusterMetadata := svc.ClusterMetadata

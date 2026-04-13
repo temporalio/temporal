@@ -58,6 +58,25 @@ func (*noopClaimMapper) AuthInfoRequired() bool {
 	return false
 }
 
+// internalClaimMapper is used by the internal frontend to identify requests as
+// coming from the Temporal server itself.
+type internalClaimMapper struct{}
+
+var _ ClaimMapper = (*internalClaimMapper)(nil)
+var _ ClaimMapperWithAuthInfoRequired = (*internalClaimMapper)(nil)
+
+func NewInternalClaimMapper() ClaimMapper {
+	return &internalClaimMapper{}
+}
+
+func (*internalClaimMapper) GetClaims(_ *AuthInfo) (*Claims, error) {
+	return &Claims{System: RoleAdmin, AuthType: "temporal", Subject: "internal"}, nil
+}
+
+func (*internalClaimMapper) AuthInfoRequired() bool {
+	return false
+}
+
 func GetClaimMapperFromConfig(config *config.Authorization, logger log.Logger) (ClaimMapper, error) {
 
 	switch strings.ToLower(config.ClaimMapper) {

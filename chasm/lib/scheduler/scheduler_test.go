@@ -9,6 +9,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
@@ -272,4 +274,41 @@ func TestCreateSchedulerFromMigration_EmptyState(t *testing.T) {
 	require.NoError(t, node.SetRootComponent(sched))
 	_, err = node.CloseTransaction()
 	require.NoError(t, err)
+}
+
+func TestContextMetadata(t *testing.T) {
+	t.Run("returns workflow type and task queue", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		sched.Schedule.Action = &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowType: &commonpb.WorkflowType{Name: "my-workflow"},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: "my-task-queue"},
+				},
+			},
+		}
+
+		md := sched.ContextMetadata(ctx)
+		require.Equal(t, map[string]string{
+			"workflow-type":       "my-workflow",
+			"workflow-task-queue": "my-task-queue",
+		}, md)
+	})
+
+	t.Run("returns only workflow type when task queue is empty", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		// defaultSchedule sets WorkflowType but no TaskQueue
+		md := sched.ContextMetadata(ctx)
+		require.Equal(t, map[string]string{
+			"workflow-type": "scheduled-wf-type",
+		}, md)
+	})
+
+	t.Run("returns nil when action is empty", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		sched.Schedule.Action = nil
+
+		md := sched.ContextMetadata(ctx)
+		require.Nil(t, md)
+	})
 }
