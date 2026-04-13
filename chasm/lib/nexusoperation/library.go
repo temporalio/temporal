@@ -14,8 +14,8 @@ type Library struct {
 	operationScheduleToStartTimeoutTaskHandler *operationScheduleToStartTimeoutTaskHandler
 	operationStartToCloseTimeoutTaskHandler    *operationStartToCloseTimeoutTaskHandler
 
-	cancellationTaskHandler        *cancellationTaskHandler
-	cancellationBackoffTaskHandler *cancellationBackoffTaskHandler
+	cancellationInvocationTaskHandler *cancellationInvocationTaskHandler
+	cancellationBackoffTaskHandler    *cancellationBackoffTaskHandler
 }
 
 func newLibrary(
@@ -24,7 +24,7 @@ func newLibrary(
 	operationScheduleToCloseTimeoutTaskHandler *operationScheduleToCloseTimeoutTaskHandler,
 	operationScheduleToStartTimeoutTaskHandler *operationScheduleToStartTimeoutTaskHandler,
 	operationStartToCloseTimeoutTaskHandler *operationStartToCloseTimeoutTaskHandler,
-	cancellationTaskHandler *cancellationTaskHandler,
+	cancellationInvocationTaskHandler *cancellationInvocationTaskHandler,
 	cancellationBackoffTaskHandler *cancellationBackoffTaskHandler,
 ) *Library {
 	return &Library{
@@ -33,7 +33,7 @@ func newLibrary(
 		operationScheduleToCloseTimeoutTaskHandler: operationScheduleToCloseTimeoutTaskHandler,
 		operationScheduleToStartTimeoutTaskHandler: operationScheduleToStartTimeoutTaskHandler,
 		operationStartToCloseTimeoutTaskHandler:    operationStartToCloseTimeoutTaskHandler,
-		cancellationTaskHandler:                    cancellationTaskHandler,
+		cancellationInvocationTaskHandler:          cancellationInvocationTaskHandler,
 		cancellationBackoffTaskHandler:             cancellationBackoffTaskHandler,
 	}
 }
@@ -56,7 +56,7 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 		chasm.NewRegistrablePureTask("scheduleToStartTimeout", l.operationScheduleToStartTimeoutTaskHandler),
 		chasm.NewRegistrablePureTask("startToCloseTimeout", l.operationStartToCloseTimeoutTaskHandler),
 		chasm.NewRegistrablePureTask("scheduleToCloseTimeout", l.operationScheduleToCloseTimeoutTaskHandler),
-		chasm.NewRegistrableSideEffectTask("cancellation", l.cancellationTaskHandler),
+		chasm.NewRegistrableSideEffectTask("cancellation", l.cancellationInvocationTaskHandler),
 		chasm.NewRegistrablePureTask("cancellationBackoff", l.cancellationBackoffTaskHandler),
 	}
 }
