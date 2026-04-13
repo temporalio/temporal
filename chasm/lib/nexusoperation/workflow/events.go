@@ -181,9 +181,6 @@ func (d StartedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflo
 		return serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId())
 	}
 	op := field.Get(ctx)
-
-	// TODO: Store event.Links on the Operation for standalone mode, where links won't be available via history.
-
 	return nexusoperation.TransitionStarted.Apply(op, ctx, nexusoperation.EventStarted{
 		OperationToken: attrs.GetOperationToken(),
 	})

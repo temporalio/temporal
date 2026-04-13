@@ -26,7 +26,8 @@ const (
 type StartNexusOperationRequest struct {
 	state           protoimpl.MessageState                  `protogen:"open.v1"`
 	NamespaceId     string                                  `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FrontendRequest *v1.StartNexusOperationExecutionRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
+	EndpointId      string                                  `protobuf:"bytes,2,opt,name=endpoint_id,json=endpointId,proto3" json:"endpoint_id,omitempty"`
+	FrontendRequest *v1.StartNexusOperationExecutionRequest `protobuf:"bytes,3,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -64,6 +65,13 @@ func (*StartNexusOperationRequest) Descriptor() ([]byte, []int) {
 func (x *StartNexusOperationRequest) GetNamespaceId() string {
 	if x != nil {
 		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *StartNexusOperationRequest) GetEndpointId() string {
+	if x != nil {
+		return x.EndpointId
 	}
 	return ""
 }
@@ -579,10 +587,12 @@ var File_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_prot
 
 const file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"Htemporal/server/chasm/lib/nexusoperation/proto/v1/request_response.proto\x121temporal.server.chasm.lib.nexusoperation.proto.v1\x1a6temporal/api/workflowservice/v1/request_response.proto\"\xb0\x01\n" +
+	"Htemporal/server/chasm/lib/nexusoperation/proto/v1/request_response.proto\x121temporal.server.chasm.lib.nexusoperation.proto.v1\x1a6temporal/api/workflowservice/v1/request_response.proto\"\xd1\x01\n" +
 	"\x1aStartNexusOperationRequest\x12!\n" +
-	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12o\n" +
-	"\x10frontend_request\x18\x02 \x01(\v2D.temporal.api.workflowservice.v1.StartNexusOperationExecutionRequestR\x0ffrontendRequest\"\x91\x01\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
+	"\vendpoint_id\x18\x02 \x01(\tR\n" +
+	"endpointId\x12o\n" +
+	"\x10frontend_request\x18\x03 \x01(\v2D.temporal.api.workflowservice.v1.StartNexusOperationExecutionRequestR\x0ffrontendRequest\"\x91\x01\n" +
 	"\x1bStartNexusOperationResponse\x12r\n" +
 	"\x11frontend_response\x18\x01 \x01(\v2E.temporal.api.workflowservice.v1.StartNexusOperationExecutionResponseR\x10frontendResponse\"\xb6\x01\n" +
 	"\x1dDescribeNexusOperationRequest\x12!\n" +

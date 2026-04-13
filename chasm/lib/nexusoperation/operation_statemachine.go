@@ -3,6 +3,7 @@ package nexusoperation
 import (
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
@@ -160,7 +161,7 @@ type EventSucceeded struct {
 	// If not nil, uses the provided time instead of the current component time.
 	// Used when a completion comes in before start is recorded (rare race).
 	CompleteTime *time.Time
-	// TODO(stephan): Store result
+	Result       *commonpb.Payload
 }
 
 var TransitionSucceeded = chasm.NewTransition(
@@ -179,6 +180,15 @@ var TransitionSucceeded = chasm.NewTransition(
 		}
 		o.NextAttemptScheduleTime = nil
 		o.ClosedTime = timestamppb.New(closeTime)
+
+		// Result is set by standalone operations. Workflow-attached operations store
+		// the result in the history event and remove the operation after this transition.
+		if event.Result != nil {
+			o.outcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Successful_{
+				Successful: &nexusoperationpb.OperationOutcome_Successful{Result: event.Result},
+			}
+		}
+
 		// Terminal state - no tasks to emit.
 		return nil
 	},
@@ -252,8 +262,7 @@ var TransitionTerminated = chasm.NewTransition(
 		}
 		o.ClosedTime = timestamppb.New(ctx.Now(o))
 		o.NextAttemptScheduleTime = nil
-		outcome := o.Outcome.Get(ctx)
-		outcome.Variant = &nexusoperationpb.OperationOutcome_Failed_{
+		o.outcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
 			Failed: &nexusoperationpb.OperationOutcome_Failed{
 				Failure: &failurepb.Failure{
 					Message: event.Reason,

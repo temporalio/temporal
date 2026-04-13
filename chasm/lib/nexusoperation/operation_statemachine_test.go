@@ -22,7 +22,6 @@ var (
 )
 
 func newTestOperation() *Operation {
-	ctx := &chasm.MockMutableContext{}
 	op := &Operation{
 		OperationState: &nexusoperationpb.OperationState{
 			Status:                 nexusoperationpb.OPERATION_STATUS_UNSPECIFIED,
@@ -36,7 +35,6 @@ func newTestOperation() *Operation {
 			Attempt:                0,
 		},
 	}
-	op.Outcome = chasm.NewDataField(ctx, &nexusoperationpb.OperationOutcome{})
 	return op
 }
 

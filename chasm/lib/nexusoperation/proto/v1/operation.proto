@@ -56,6 +56,8 @@ message OperationState {
   string operation_token = 18;
   // Explicit terminate request state for standalone operations.
   NexusOperationTerminateState terminate_state = 19;
+  // Links are only populated for standalone operations. Workflow-backed operations derive links from history events.
+  repeated temporal.api.common.v1.Link links = 20;
 }
 
 message NexusOperationTerminateState {

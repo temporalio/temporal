@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/softassert"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -76,6 +77,7 @@ func newStandaloneOperation(
 ) (*Operation, error) {
 	frontendReq := req.GetFrontendRequest()
 	op := NewOperation(&nexusoperationpb.OperationState{
+		EndpointId:             req.GetEndpointId(),
 		Endpoint:               frontendReq.GetEndpoint(),
 		Service:                frontendReq.GetService(),
 		Operation:              frontendReq.GetOperation(),
@@ -158,6 +160,7 @@ func (o *Operation) onStarted(ctx chasm.MutableContext, operationToken string, l
 	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationStarted(ctx, o, operationToken, links)
 	}
+	o.Links = append(o.Links, links...)
 	return TransitionStarted.Apply(o, ctx, EventStarted{OperationToken: operationToken})
 }
 
@@ -165,21 +168,13 @@ func (o *Operation) onCompleted(ctx chasm.MutableContext, result *commonpb.Paylo
 	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationCompleted(ctx, o, result, links)
 	}
-	outcome := o.outcome(ctx)
-	outcome.Variant = &nexusoperationpb.OperationOutcome_Successful_{
-		Successful: &nexusoperationpb.OperationOutcome_Successful{Result: result},
-	}
-	return TransitionSucceeded.Apply(o, ctx, EventSucceeded{})
+	o.Links = append(o.Links, links...)
+	return TransitionSucceeded.Apply(o, ctx, EventSucceeded{Result: result})
 }
 
 func (o *Operation) onFailed(ctx chasm.MutableContext, cause *failurepb.Failure) error {
 	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationFailed(ctx, o, cause)
-	}
-	if cause != nil {
-		o.outcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
-			Failed: &nexusoperationpb.OperationOutcome_Failed{Failure: cause},
-		}
 	}
 	return TransitionFailed.Apply(o, ctx, EventFailed{Failure: cause})
 }
@@ -187,11 +182,6 @@ func (o *Operation) onFailed(ctx chasm.MutableContext, cause *failurepb.Failure)
 func (o *Operation) onCanceled(ctx chasm.MutableContext, cause *failurepb.Failure) error {
 	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationCanceled(ctx, o, cause)
-	}
-	if cause != nil {
-		o.outcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
-			Failed: &nexusoperationpb.OperationOutcome_Failed{Failure: cause},
-		}
 	}
 	return TransitionCanceled.Apply(o, ctx, EventCanceled{Failure: cause})
 }
@@ -410,14 +400,25 @@ func (o *Operation) buildPollResponse(
 }
 
 func (o *Operation) describeOutcome(ctx chasm.Context) (*commonpb.Payload, *failurepb.Failure) {
-	outcome := o.Outcome.Get(ctx)
-	if successful := outcome.GetSuccessful(); successful != nil {
-		return successful.GetResult(), nil
+	outcome, hasOutcome := o.Outcome.TryGet(ctx)
+
+	switch {
+	case !hasOutcome:
+		return nil, o.LastAttemptFailure
+	case outcome.GetSuccessful() != nil:
+		return outcome.GetSuccessful().GetResult(), nil
+	case outcome.GetFailed() != nil:
+		// Timeouts often close after one or more retryable attempt failures. For describe/poll, prefer the
+		// last concrete attempt failure over the generic timeout wrapper because it is more actionable.
+		// Note that LastAttemptFailure may be nil if the operation timed out before any attempt.
+		if o.Status == nexusoperationpb.OPERATION_STATUS_TIMED_OUT && o.LastAttemptFailure != nil {
+			return nil, o.LastAttemptFailure
+		}
+		return nil, outcome.GetFailed().GetFailure()
+	default:
+		softassert.Fail(ctx.Logger(), "operation outcome has no variant set")
+		return nil, nil
 	}
-	if failure := outcome.GetFailed().GetFailure(); failure != nil {
-		return nil, failure
-	}
-	return nil, o.LastAttemptFailure
 }
 
 func (o *Operation) isWaitStageReached(_ chasm.Context, waitStage enumspb.NexusOperationWaitStage) bool {
@@ -462,6 +463,7 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 		},
 		NexusHeader:  requestData.GetNexusHeader(),
 		UserMetadata: requestData.GetUserMetadata(),
+		Links:        o.Links,
 		Identity:     requestData.GetIdentity(),
 	}
 

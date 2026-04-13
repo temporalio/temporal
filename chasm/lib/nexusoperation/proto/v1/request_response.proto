@@ -8,8 +8,9 @@ option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusope
 
 message StartNexusOperationRequest {
   string namespace_id = 1;
+  string endpoint_id = 2;
 
-  temporal.api.workflowservice.v1.StartNexusOperationExecutionRequest frontend_request = 2;
+  temporal.api.workflowservice.v1.StartNexusOperationExecutionRequest frontend_request = 3;
 }
 
 message StartNexusOperationResponse {
