@@ -2,6 +2,7 @@ package activity
 
 import (
 	"fmt"
+	"math/rand"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -249,6 +250,7 @@ var TransitionTerminated = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
 	func(a *Activity, ctx chasm.MutableContext, event terminateEvent) error {
@@ -281,6 +283,7 @@ var TransitionCancelRequested = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	func(a *Activity, ctx chasm.MutableContext, req *workflowservice.RequestCancelActivityExecutionRequest) error {
@@ -343,6 +346,7 @@ var TransitionTimedOut = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 	func(a *Activity, ctx chasm.MutableContext, event timeoutEvent) error {
@@ -371,5 +375,74 @@ var TransitionTimedOut = chasm.NewTransition(
 
 			return nil
 		})
+	},
+)
+
+type pauseEvent struct {
+	req            *workflowservice.PauseActivityExecutionRequest
+	metricsHandler metrics.Handler
+}
+
+// TransitionPaused transitions a SCHEDULED activity to PAUSED status. The stamp is bumped to
+// invalidate any pending dispatch task so the activity is not dispatched while paused.
+//
+// Note: STARTED activities are NOT paused via this transition. Pausing a STARTED activity is a
+// flag-only operation (PauseState is set, status stays STARTED) so the worker's token remains
+// valid and the worker is notified via ActivityPaused=true on its next heartbeat. See
+// handlePauseRequested for the full hybrid logic.
+var TransitionPaused = chasm.NewTransition(
+	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+	},
+	activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+	func(a *Activity, ctx chasm.MutableContext, event pauseEvent) error {
+		attempt := a.LastAttempt.Get(ctx)
+		attempt.Stamp++
+		a.PauseState = &activitypb.ActivityPauseState{
+			PauseTime: timestamppb.New(ctx.Now(a)),
+			Identity:  event.req.GetIdentity(),
+			Reason:    event.req.GetReason(),
+		}
+		a.emitOnPausedMetrics(ctx, event.metricsHandler)
+		return nil
+	},
+)
+
+type unpauseEvent struct {
+	req            *workflowservice.UnpauseActivityExecutionRequest
+	metricsHandler metrics.Handler
+}
+
+var TransitionUnpaused = chasm.NewTransition(
+	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+	},
+	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+	func(a *Activity, ctx chasm.MutableContext, event unpauseEvent) error {
+		a.PauseState = nil
+		attempt := a.LastAttempt.Get(ctx)
+		if event.req.GetResetAttempts() {
+			attempt.Count = 1
+		}
+		if event.req.GetResetHeartbeat() {
+			a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{})
+		}
+		attempt.Stamp++
+		scheduleTime := ctx.Now(a)
+		if jitter := event.req.GetJitter().AsDuration(); jitter > 0 {
+			scheduleTime = scheduleTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
+		}
+		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+			ctx.AddTask(
+				a,
+				chasm.TaskAttributes{ScheduledTime: scheduleTime.Add(timeout)},
+				&activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()})
+		}
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{ScheduledTime: scheduleTime},
+			&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()})
+		a.emitOnUnpausedMetrics(ctx, event.metricsHandler)
+		return nil
 	},
 )

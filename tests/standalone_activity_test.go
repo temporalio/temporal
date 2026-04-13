@@ -5591,6 +5591,16 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
+		// DescribeActivityExecution should reflect PAUSE_REQUESTED run state: the activity is still
+		// STARTED (worker token valid) but a pause has been requested via the flag.
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED, descResp.GetInfo().GetRunState())
+
 		// Heartbeat should report ActivityPaused=true.
 		heartbeatResp, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: s.Namespace().String(),
@@ -5599,8 +5609,8 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		require.NoError(t, err)
 		require.True(t, heartbeatResp.GetActivityPaused(), "expected ActivityPaused=true after pause")
 
-		// DescribeActivityExecution should reflect PAUSE_REQUESTED run state.
-		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		// DescribeActivityExecution should still reflect PAUSE_REQUESTED.
+		descResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
@@ -5767,7 +5777,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		require.NoError(t, err)
 		require.True(t, heartbeatResp.GetActivityPaused())
 
-		// Describe should show PAUSE_REQUESTED (STARTED + paused).
+		// Describe should show PAUSE_REQUESTED: status is STARTED with PauseState set.
 		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
@@ -5862,7 +5872,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Describe should show PAUSE_REQUESTED.
+		// Describe should show PAUSE_REQUESTED: status is STARTED with PauseState set.
 		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
@@ -6168,12 +6178,16 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		heartbeatResp, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
-			Namespace: s.Namespace().String(),
-			TaskToken: pollResp.TaskToken,
+		// After unpause of a STARTED+PauseState activity, the status stays STARTED (the worker's
+		// token is still valid — no stamp bump). Verify via describe that the activity is no longer paused.
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
 		})
 		require.NoError(t, err)
-		require.False(t, heartbeatResp.GetActivityPaused(), "expected ActivityPaused=false after unpause")
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, descResp.GetInfo().GetRunState(),
+			"expected activity to be STARTED after unpause")
 	})
 
 	t.Run("UnpauseIdempotent", func(t *testing.T) {

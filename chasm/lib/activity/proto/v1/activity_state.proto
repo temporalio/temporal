@@ -41,6 +41,16 @@ enum ActivityExecutionStatus {
     // Additionally, after all retries are exhausted for start-to-close or heartbeat timeouts, the activity will also
     // transition to timed out status.
     ACTIVITY_EXECUTION_STATUS_TIMED_OUT = 8;
+    // The activity has been paused while in the SCHEDULED state. No worker will be dispatched until
+    // the activity is unpaused. The activity's pause_state field is populated with the identity,
+    // reason, and time of the pause request.
+    //
+    // Note: pausing a STARTED activity does not transition to this status. Instead, the pause is
+    // delivered as a flag (pause_state is set, status stays STARTED) and the worker is notified
+    // via ActivityPaused=true on its next heartbeat. The external run state in that case is
+    // PAUSE_REQUESTED. If the worker fails and retries while the flag is set, the retry lands in
+    // SCHEDULED with pause_state still populated and the dispatch task is blocked until unpause.
+    ACTIVITY_EXECUTION_STATUS_PAUSED = 9;
 }
 
 message ActivityState {
