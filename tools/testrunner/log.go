@@ -9,6 +9,10 @@ import (
 	"github.com/maruel/panicparse/v2/stack"
 )
 
+// noFailureDetails is returned by parseFailureDetails when no recognisable
+// failure block is found.
+const noFailureDetails = "(error details not found)"
+
 // parseTestTimeouts parses the stdout of a test run and returns the stacktrace and names of tests that timed out.
 func parseTestTimeouts(stdout string) (stacktrace string, timedoutTests []string) {
 	lines := strings.Split(strings.ReplaceAll(stdout, "\r\n", "\n"), "\n")
@@ -350,4 +354,72 @@ func parseFailedTestsFromOutput(stdout string) []string {
 		}
 	}
 	return failed
+}
+
+// parseFailureDetails extracts the actionable part of a JUnit failure Data block.
+func parseFailureDetails(data string) string {
+	lines := normalizedFailureLines(data)
+
+	if start, end, ok := findTestifyFailureBlock(lines); ok {
+		return strings.Join(lines[start:end], "\n")
+	}
+	if start, end, ok := findLastFailureBlock(lines); ok {
+		return strings.Join(lines[start:end], "\n")
+	}
+	return noFailureDetails
+}
+
+func normalizedFailureLines(data string) []string {
+	lines := strings.Split(strings.ReplaceAll(data, "\r\n", "\n"), "\n")
+	for len(lines) > 0 {
+		t := strings.TrimSpace(lines[len(lines)-1])
+		if t != "" && t != "FAIL" {
+			break
+		}
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+func findTestifyFailureBlock(lines []string) (start, end int, ok bool) {
+	for i, line := range lines {
+		if !strings.Contains(line, "Error Trace:") {
+			continue
+		}
+		start = i
+		if i > 0 {
+			start = i - 1
+		}
+		return start, endOfFailureBlock(lines, start+1), true
+	}
+	return 0, 0, false
+}
+
+func findLastFailureBlock(lines []string) (start, end int, ok bool) {
+	lastStart := -1
+	for i, line := range lines {
+		if isTestOutputLine(line) {
+			lastStart = i
+		}
+	}
+	if lastStart < 0 {
+		return 0, 0, false
+	}
+	return lastStart, endOfFailureBlock(lines, lastStart+1), true
+}
+
+func endOfFailureBlock(lines []string, start int) int {
+	end := start
+	for end < len(lines) && !isTestOutputLine(lines[end]) && lines[end] != "" {
+		end++
+	}
+	return end
+}
+
+// isTestOutputLine reports whether line is a Go test-framework output line,
+// i.e. "    file.go:N: …" — exactly 4 spaces then a non-whitespace character.
+// Testify assertion content is indented further (8+ spaces or tabs), so this
+// distinguishes log entries from assertion block content.
+func isTestOutputLine(line string) bool {
+	return len(line) > 4 && line[:4] == "    " && line[4] != ' ' && line[4] != '\t'
 }

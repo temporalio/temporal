@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/jstemmer/go-junit-report/v2/junit"
@@ -12,8 +13,7 @@ import (
 )
 
 func TestReadJUnitReport(t *testing.T) {
-	j := &junitReport{path: "testdata/junit-attempt-1.xml"}
-	require.NoError(t, j.read())
+	j := mustReadReportFixture(t, "testdata/junit-attempt-1.xml")
 	require.Len(t, j.Suites, 1)
 	require.Equal(t, 2, j.Failures)
 	require.Equal(t, []string{"TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument"}, j.collectTestCaseFailures())
@@ -28,7 +28,7 @@ func TestGenerateJUnitReportForTimedoutTests(t *testing.T) {
 		"TestCallbacksSuite/TestWorkflowCallbacks_1",
 		"TestCallbacksSuite/TestWorkflowCallbacks_2",
 	}
-	j := generateStatic(testNames, "timeout", "Timeout")
+	j := generateStatic(testNames, "timeout", failureKindTimeout)
 	j.path = out.Name()
 	require.NoError(t, j.write())
 	requireReportEquals(t, "testdata/junit-timeout-output.xml", out.Name())
@@ -58,9 +58,49 @@ func TestNode(t *testing.T) {
 	require.Equal(t, []string{"a", "a/b", "b"}, paths)
 }
 
+func TestAppendAlertsSuite(t *testing.T) {
+	j := &junitReport{}
+	alerts := []alert{
+		{Kind: alertKindDataRace, Summary: "Data race detected", Details: "WARNING: DATA RACE\n...", Tests: []string{"go.temporal.io/server/tools/testrunner.TestShowPanic"}},
+		{Kind: alertKindPanic, Summary: "This is a panic", Details: "panic: This is a panic\n...", Tests: []string{"TestPanicExample"}},
+	}
+	j.appendAlertsSuite(alerts)
+
+	// Write the report to a temporary file for comparison
+	out, err := os.CreateTemp("", "junit-alerts-*.xml")
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, os.Remove(out.Name()))
+	}()
+
+	j.path = out.Name()
+	require.NoError(t, j.write())
+
+	// Compare against the expected output file
+	requireReportEquals(t, "testdata/junit-alerts-output.xml", out.Name())
+}
+
+func TestAppendAlertsSuite_TruncatesLargeDetails(t *testing.T) {
+	j := &junitReport{}
+	details := "panic: large panic\n" + strings.Repeat("x", junitAlertDetailsMaxBytes) + "\ntrailing sentinel"
+	j.appendAlertsSuite([]alert{{
+		Kind:    alertKindPanic,
+		Summary: "large panic",
+		Details: details,
+		Tests:   []string{"TestLargePanic"},
+	}})
+
+	require.Len(t, j.Suites, 1)
+	require.Len(t, j.Suites[0].Testcases, 1)
+	got := j.Suites[0].Testcases[0].Failure.Data
+	require.Contains(t, got, "... (truncated) ...")
+	require.Contains(t, got, "panic: large panic")
+	require.NotContains(t, got, "trailing sentinel")
+	require.LessOrEqual(t, len(got), junitAlertDetailsMaxBytes+len("\nDetected in tests:\n\tTestLargePanic"))
+}
+
 func TestMergeReports_SingleReport(t *testing.T) {
-	j1 := &junitReport{path: "testdata/junit-attempt-1.xml"}
-	require.NoError(t, j1.read())
+	j1 := mustReadReportFixture(t, "testdata/junit-attempt-1.xml")
 
 	report, err := mergeReports([]*junitReport{j1})
 	require.NoError(t, err)
@@ -73,13 +113,29 @@ func TestMergeReports_SingleReport(t *testing.T) {
 	require.Len(t, testNames, 5)
 	require.NotContains(t, testNames, "TestCallbacksSuite")
 	require.NotContains(t, testNames, "TestCallbacksSuite/TestWorkflowNexusCallbacks_CarriedOver")
+	var failureData string
+	for _, tc := range suites[0].Testcases {
+		if tc.Name == "TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument" {
+			require.NotNil(t, tc.Failure)
+			failureData = tc.Failure.Data
+			break
+		}
+	}
+	require.NotEmpty(t, failureData)
+	require.Contains(t, failureData, "Error Trace:")
+	require.Contains(t, failureData, "expected: 1")
+	require.NotContains(t, failureData, "=== RUN")
+	require.NotContains(t, failureData, "--- FAIL:")
+	for _, tc := range suites[0].Testcases {
+		if tc.Failure != nil {
+			require.Equal(t, failureKindFailed, tc.Failure.Type)
+		}
+	}
 }
 
 func TestMergeReports_MultipleReports(t *testing.T) {
-	j1 := &junitReport{path: "testdata/junit-attempt-1.xml"}
-	require.NoError(t, j1.read())
-	j2 := &junitReport{path: "testdata/junit-attempt-2.xml"}
-	require.NoError(t, j2.read())
+	j1 := mustReadReportFixture(t, "testdata/junit-attempt-1.xml")
+	j2 := mustReadReportFixture(t, "testdata/junit-attempt-2.xml")
 
 	report, err := mergeReports([]*junitReport{j1, j2})
 	require.NoError(t, err)
@@ -103,8 +159,7 @@ func TestMergeReports_IterationSuffixPreserved(t *testing.T) {
 	// Tests with #XX suffixes (iteration markers) should NOT be discarded as parent tests.
 	// Previously, TestDatanodeSuite/TestLineageFork was incorrectly discarded because
 	// TestDatanodeSuite/TestLineageFork#01 has it as a prefix (without the "/" check).
-	j := &junitReport{path: "testdata/junit-iteration-suffix.xml"}
-	require.NoError(t, j.read())
+	j := mustReadReportFixture(t, "testdata/junit-iteration-suffix.xml")
 
 	report, err := mergeReports([]*junitReport{j})
 	require.NoError(t, err)
@@ -126,14 +181,10 @@ func TestMergeReports_IterationSuffixPreserved(t *testing.T) {
 }
 
 func TestMergeReports_MissingRerun(t *testing.T) {
-	j1 := &junitReport{path: "testdata/junit-attempt-1.xml"}
-	require.NoError(t, j1.read())
-	j2 := &junitReport{path: "testdata/junit-empty.xml"}
-	require.NoError(t, j2.read())
-	j3 := &junitReport{path: "testdata/junit-attempt-2.xml"}
-	require.NoError(t, j3.read())
-	j4 := &junitReport{path: "testdata/junit-empty.xml"}
-	require.NoError(t, j4.read())
+	j1 := mustReadReportFixture(t, "testdata/junit-attempt-1.xml")
+	j2 := mustReadReportFixture(t, "testdata/junit-empty.xml")
+	j3 := mustReadReportFixture(t, "testdata/junit-attempt-2.xml")
+	j4 := mustReadReportFixture(t, "testdata/junit-empty.xml")
 
 	report, err := mergeReports([]*junitReport{j1, j2, j3, j4})
 	require.NoError(t, err)
@@ -142,26 +193,25 @@ func TestMergeReports_MissingRerun(t *testing.T) {
 	require.Equal(t, errors.New("expected rerun of all failures from previous attempt, missing: [TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument]"), report.reportingErrs[1])
 }
 
-func TestAppendAlertsSuite(t *testing.T) {
-	j := &junitReport{}
-	alerts := []alert{
-		{Kind: alertKindDataRace, Summary: "Data race detected", Details: "WARNING: DATA RACE\n...", Tests: []string{"go.temporal.io/server/tools/testrunner.TestShowPanic"}},
-		{Kind: alertKindPanic, Summary: "This is a panic", Details: "panic: This is a panic\n...", Tests: []string{"TestPanicExample"}},
-	}
-	j.appendAlertsSuite(alerts)
+func TestMergeReports_PreservesAlertFailureMessage(t *testing.T) {
+	report := mustReadReportFixture(t, "testdata/junit-alert-panic.xml")
 
-	// Write the report to a temporary file for comparison
-	out, err := os.CreateTemp("", "junit-alerts-*.xml")
+	merged, err := mergeReports([]*junitReport{report})
 	require.NoError(t, err)
-	defer func() {
-		require.NoError(t, os.Remove(out.Name()))
-	}()
+	require.Len(t, merged.Suites, 1)
+	require.Len(t, merged.Suites[0].Testcases, 1)
+	require.NotNil(t, merged.Suites[0].Testcases[0].Failure)
+	require.Equal(t, "PANIC", merged.Suites[0].Testcases[0].Failure.Type)
+}
 
-	j.path = out.Name()
-	require.NoError(t, j.write())
+func TestMergeReports_PreservesOriginalFailureDataWhenExtractionFindsNothing(t *testing.T) {
+	report := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
 
-	// Compare against the expected output file
-	requireReportEquals(t, "testdata/junit-alerts-output.xml", out.Name())
+	merged, err := mergeReports([]*junitReport{report})
+	require.NoError(t, err)
+	require.Len(t, merged.Suites, 1)
+	require.Len(t, merged.Suites[0].Testcases, 1)
+	require.Equal(t, "plain failure output with no recognizable block", merged.Suites[0].Testcases[0].Failure.Data)
 }
 
 func collectTestNames(suites []junit.Testsuite) []string {
@@ -180,7 +230,7 @@ func requireReportEquals(t *testing.T, expectedFile, actualFile string) {
 
 	actualReport, err := os.ReadFile(actualFile)
 	require.NoError(t, err)
-	require.Equal(t, string(expectedReport), string(actualReport))
+	require.Equal(t, strings.TrimSuffix(string(expectedReport), "\n"), string(actualReport))
 }
 
 func TestJUnitXMLWellFormed(t *testing.T) {
@@ -272,4 +322,11 @@ func TestJUnitXMLWellFormed(t *testing.T) {
 			require.Greater(t, len(parsed.Suites), 0, "Should have at least one test suite")
 		})
 	}
+}
+
+func mustReadReportFixture(t *testing.T, path string) *junitReport {
+	t.Helper()
+	report := &junitReport{path: path}
+	require.NoError(t, report.read())
+	return report
 }

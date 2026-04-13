@@ -13,6 +13,18 @@ import (
 	"github.com/jstemmer/go-junit-report/v2/junit"
 )
 
+// alertsSuiteName is the JUnit suite name used for structural alerts (data
+// races, panics, fatal errors).
+const alertsSuiteName = "ALERTS"
+
+const junitAlertDetailsMaxBytes = 64 * 1024
+
+const (
+	failureKindFailed  = "Failed"
+	failureKindTimeout = "TIMEOUT"
+	failureKindCrash   = "CRASH"
+)
+
 type junitReport struct {
 	junit.Testsuites
 	path          string
@@ -33,12 +45,15 @@ func (j *junitReport) read() error {
 	return nil
 }
 
+// generateStatic creates synthetic failures for non-JUnit failure modes such as
+// timeouts and crashes. Failure.Type is the canonical failure kind for these
+// synthetic rows (for example TIMEOUT or CRASH), and Failure.Data is left empty.
 func generateStatic(names []string, suffix string, message string) *junitReport {
 	var testcases []junit.Testcase
 	for _, name := range names {
 		testcases = append(testcases, junit.Testcase{
 			Name:    fmt.Sprintf("%s (%s)", name, suffix),
-			Failure: &junit.Result{Message: message},
+			Failure: newSyntheticFailure(message, ""),
 		})
 	}
 	return &junitReport{
@@ -50,6 +65,14 @@ func generateStatic(names []string, suffix string, message string) *junitReport 
 				},
 			},
 		},
+	}
+}
+
+func newSyntheticFailure(kind, data string) *junit.Result {
+	return &junit.Result{
+		Message: kind,
+		Type:    kind,
+		Data:    data,
 	}
 }
 
@@ -77,25 +100,32 @@ func (j *junitReport) appendAlertsSuite(alerts []alert) {
 	if len(alerts) == 0 {
 		return
 	}
+
+	// Convert alerts to JUnit test cases.
 	var cases []junit.Testcase
 	for _, a := range alerts {
 		name := fmt.Sprintf("%s: %s", a.Kind, a.Summary)
 		if p := primaryTestName(a.Tests); p != "" {
 			name = fmt.Sprintf("%s — in %s", name, p)
 		}
-		// Include only test names for context, not the full log details to avoid XML malformation
-		var details string
-		if len(a.Tests) > 0 {
-			details = fmt.Sprintf("Detected in tests:\n\t%s", strings.Join(a.Tests, "\n\t"))
+		var sb strings.Builder
+		if a.Details != "" {
+			sb.WriteString(truncateAlertDetails(sanitizeXML(a.Details)))
+			sb.WriteByte('\n')
 		}
-		r := &junit.Result{Message: string(a.Kind), Data: details}
+		if len(a.Tests) > 0 {
+			fmt.Fprintf(&sb, "Detected in tests:\n\t%s", strings.Join(a.Tests, "\n\t"))
+		}
+		r := newSyntheticFailure(string(a.Kind), strings.TrimRight(sb.String(), "\n"))
 		cases = append(cases, junit.Testcase{
 			Name:    name,
 			Failure: r,
 		})
 	}
+
+	// Append the alerts suite to the report.
 	suite := junit.Testsuite{
-		Name:      "ALERTS",
+		Name:      alertsSuiteName,
 		Failures:  len(cases),
 		Tests:     len(cases),
 		Testcases: cases,
@@ -103,6 +133,30 @@ func (j *junitReport) appendAlertsSuite(alerts []alert) {
 	j.Suites = append(j.Suites, suite)
 	j.Failures += suite.Failures
 	j.Tests += suite.Tests
+}
+
+// sanitizeXML removes characters that are invalid in XML 1.0. Go's xml.Encoder
+// escapes <, >, & etc., but control characters other than \t, \n, \r are not
+// legal XML and cause parsers to reject the document.
+func sanitizeXML(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\t' || r == '\n' || r == '\r' {
+			return r
+		}
+		if r < 0x20 || r == 0xFFFE || r == 0xFFFF {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// truncateAlertDetails keeps alert payloads from bloating the JUnit artifact.
+func truncateAlertDetails(s string) string {
+	if len(s) <= junitAlertDetailsMaxBytes {
+		return s
+	}
+	const marker = "\n... (truncated) ...\n"
+	return s[:junitAlertDetailsMaxBytes-len(marker)] + marker
 }
 
 // dedupeAlerts removes duplicate alerts (e.g., repeated across retries) based
@@ -223,6 +277,24 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 				if j != len(suite.Testcases)-1 && strings.HasPrefix(suite.Testcases[j+1].Name, testCase.Name+"/") {
 					// Discard test case parents since they provide no value.
 					continue
+				}
+
+				// Parse failure details from Failure.Data, if present.
+				if testCase.Failure != nil && testCase.Failure.Data != "" {
+					if details := parseFailureDetails(testCase.Failure.Data); details != noFailureDetails {
+						testCase.Failure.Data = details
+					}
+				}
+
+				// Failure.Type carries the canonical kind in merged JUnit.
+				if testCase.Failure != nil {
+					if suite.Name == alertsSuiteName {
+						if testCase.Failure.Type == "" {
+							testCase.Failure.Type = testCase.Failure.Message
+						}
+					} else {
+						testCase.Failure.Type = failureKindFailed
+					}
 				}
 				testCase.Name += suffix
 				newSuite.Testcases = append(newSuite.Testcases, testCase)
