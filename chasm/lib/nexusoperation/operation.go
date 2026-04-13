@@ -49,7 +49,6 @@ type OperationStore interface {
 	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation, result *commonpb.Payload, links []*commonpb.Link) error
 	OnNexusOperationCancellationCompleted(ctx chasm.MutableContext, operation *Operation) error
 	OnNexusOperationCancellationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
-	// NexusOperationInvocationData loads invocation data (Input, Header, NexusLink) from the scheduled history event.
 	NexusOperationInvocationData(ctx chasm.Context, operation *Operation) (InvocationData, error)
 }
 
