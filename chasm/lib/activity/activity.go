@@ -908,76 +908,54 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 		return &activitypb.ResetActivityExecutionResponse{}, nil
 
 	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
-		// Activity is SCHEDULED (possibly in retry backoff). Reset immediately.
-		attempt := a.LastAttempt.Get(ctx)
-		attempt.Count = 1
-		attempt.Stamp++
-
-		if resetHeartbeats {
-			if hb, ok := a.LastHeartbeat.TryGet(ctx); ok {
-				hb.Details = nil
-				hb.RecordedTime = nil
-			}
-		}
-
+		// Activity is SCHEDULED (possibly in retry backoff). Reset immediately via TransitionReset.
 		scheduleTime := ctx.Now(a)
 		if jitter := frontendReq.GetJitter().AsDuration(); jitter > 0 {
-			randomOffset := time.Duration(rand.Int63n(int64(jitter))) //nolint:gosec
-			scheduleTime = scheduleTime.Add(randomOffset)
+			scheduleTime = scheduleTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
 		}
-
-		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
-			ctx.AddTask(a, chasm.TaskAttributes{
-				ScheduledTime: scheduleTime.Add(timeout),
-			}, &activitypb.ScheduleToStartTimeoutTask{
-				Stamp: attempt.GetStamp(),
-			})
+		if err := TransitionReset.Apply(a, ctx, resetEvent{
+			scheduleTime:    scheduleTime,
+			resetHeartbeats: resetHeartbeats,
+		}); err != nil {
+			return nil, err
 		}
-
-		ctx.AddTask(a, chasm.TaskAttributes{
-			ScheduledTime: scheduleTime,
-		}, &activitypb.ActivityDispatchTask{
-			Stamp: attempt.GetStamp(),
-		})
-
 		return &activitypb.ResetActivityExecutionResponse{}, nil
 
 	// TODO(saa-preview): Handle paused activities when PauseActivityExecution is implemented for SAA.
-	// Paused activities are still active and should be resetable. The behavior should mirror the
-	// workflow activity reset (service/history/workflow/activity.go:ResetActivity):
-	//
-	// A paused activity may be in one of two sub-states:
-	//   - Paused+SCHEDULED (no running worker): Count can be reset immediately.
-	//   - Paused+STARTED  (worker still running, i.e. pause-requested): must defer via ActivityReset.
+	// PR #9851 introduces two pause sub-states:
+	//   - Real PAUSED status (TransitionPaused: SCHEDULED→PAUSED): no running worker.
+	//   - Flag-based: STARTED+PauseState (worker running, notified on heartbeat).
+	//   - Flag-based: SCHEDULED+PauseState (retry landed while pause flag was set).
 	//
 	// case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
-	//     attempt := a.LastAttempt.Get(ctx)
-	//     attempt.Count = 1
-	//     attempt.Stamp++
-	//     if resetHeartbeats {
-	//         if hb, ok := a.LastHeartbeat.TryGet(ctx); ok {
-	//             hb.Details = nil
-	//             hb.RecordedTime = nil
-	//         }
-	//     }
-	//     if keepPaused {
-	//         // Remain paused at attempt 1 — no dispatch task added.
-	//         return &activitypb.ResetActivityExecutionResponse{}, nil
-	//     }
-	//     // keepPaused=false: unpause and re-dispatch immediately.
-	//     a.Paused = false  // clear pause state (exact field TBD)
+	//     // Real PAUSED (no running worker) — Count can be reset immediately.
 	//     scheduleTime := ctx.Now(a)
 	//     if jitter := frontendReq.GetJitter().AsDuration(); jitter > 0 {
-	//         randomOffset := time.Duration(rand.Int63n(int64(jitter))) //nolint:gosec
-	//         scheduleTime = scheduleTime.Add(randomOffset)
+	//         scheduleTime = scheduleTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
 	//     }
-	//     if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
-	//         ctx.AddTask(a, chasm.TaskAttributes{ScheduledTime: scheduleTime.Add(timeout)},
-	//             &activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()})
+	//     if keepPaused {
+	//         // Stay paused at attempt 1; stamp bump invalidates any stale tasks.
+	//         attempt := a.LastAttempt.Get(ctx)
+	//         attempt.Count = 1
+	//         attempt.Stamp++
+	//         if resetHeartbeats { /* clear heartbeat */ }
+	//         return &activitypb.ResetActivityExecutionResponse{}, nil
 	//     }
-	//     ctx.AddTask(a, chasm.TaskAttributes{ScheduledTime: scheduleTime},
-	//         &activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()})
+	//     // keepPaused=false: clear PauseState then use TransitionReset to re-dispatch.
+	//     a.PauseState = nil
+	//     if err := TransitionReset.Apply(a, ctx, resetEvent{scheduleTime: scheduleTime, resetHeartbeats: resetHeartbeats}); err != nil {
+	//         return nil, err
+	//     }
 	//     return &activitypb.ResetActivityExecutionResponse{}, nil
+	//
+	// For STARTED+PauseState (flag-based pause, worker running): the STARTED case above handles
+	// deferral via ActivityReset=true. Also:
+	//   - keepPaused=false: clear a.PauseState so the retry starts unpaused.
+	//   - keepPaused=true: leave a.PauseState intact.
+	//
+	// For SCHEDULED+PauseState (retry while flag-paused): the SCHEDULED case calls TransitionReset
+	// which enqueues a dispatch task. ActivityDispatchTask.Validate blocks it while PauseState!=nil.
+	// If keepPaused=false: clear a.PauseState before calling TransitionReset so the task fires.
 
 	default:
 		// Terminal or unspecified state.

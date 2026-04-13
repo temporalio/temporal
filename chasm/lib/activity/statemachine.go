@@ -444,3 +444,42 @@ var TransitionUnpaused = chasm.NewTransition(
 		return nil
 	},
 )
+
+type resetEvent struct {
+	scheduleTime    time.Time
+	resetHeartbeats bool
+}
+
+// TransitionReset resets a SCHEDULED activity back to attempt 1. The stamp is bumped to invalidate
+// any pending dispatch task, then a new dispatch task is added at the given schedule time.
+// For STARTED/CANCEL_REQUESTED activities the reset is deferred — see Activity.ActivityReset flag.
+var TransitionReset = chasm.NewTransition(
+	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+	},
+	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+	func(a *Activity, ctx chasm.MutableContext, event resetEvent) error {
+		attempt := a.LastAttempt.Get(ctx)
+		attempt.Count = 1
+		attempt.Stamp++
+		if event.resetHeartbeats {
+			if hb, ok := a.LastHeartbeat.TryGet(ctx); ok {
+				hb.Details = nil
+				hb.RecordedTime = nil
+			}
+		}
+		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+			ctx.AddTask(
+				a,
+				chasm.TaskAttributes{ScheduledTime: event.scheduleTime.Add(timeout)},
+				&activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()},
+			)
+		}
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{ScheduledTime: event.scheduleTime},
+			&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()},
+		)
+		return nil
+	},
+)
