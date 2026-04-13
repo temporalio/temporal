@@ -679,6 +679,7 @@ func (s *FunctionalTestBase) GetNamespaceID(namespace string) string {
 func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 	for _, behavior := range AllMatchingBehaviors() {
 		s.Run(behavior.Name(), func() {
+			s.OverrideDynamicConfig(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 3)
 			if behavior.ForceTaskForward || behavior.ForcePollForward {
 				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
 				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)

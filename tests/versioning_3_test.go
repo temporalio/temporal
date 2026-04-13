@@ -88,8 +88,7 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 
 func (s *Versioning3Suite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.MatchingDeploymentWorkflowVersion.Key():   int(s.deploymentWorkflowVersion),
-		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key(): partitionTreeDegree,
+		dynamicconfig.MatchingDeploymentWorkflowVersion.Key(): int(s.deploymentWorkflowVersion),
 
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key():                1000,
