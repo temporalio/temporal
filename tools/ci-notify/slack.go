@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const maxRenderedCIBreakers = 5
+
 // SlackMessage represents a Slack Block Kit message
 type SlackMessage struct {
 	Text   string       `json:"text"`
@@ -76,8 +78,7 @@ func BuildFailureMessage(report *FailureReport) *SlackMessage {
 	// List of failed jobs
 	var failedJobNames []string
 	for _, job := range report.FailedJobs {
-		failedJobNames = append(failedJobNames,
-			fmt.Sprintf("• <%s|%s>", job.URL, job.Name))
+		failedJobNames = append(failedJobNames, formatFailedJob(job))
 	}
 
 	jobsBlock := SlackBlock{
@@ -120,9 +121,21 @@ func FormatMessageForDebug(report *FailureReport) string {
 	fmt.Fprintf(&sb, "Failed Jobs: %d of %d total jobs\n\n", len(report.FailedJobs), report.TotalJobs)
 	fmt.Fprintln(&sb, "Failed Jobs:")
 	for _, job := range report.FailedJobs {
-		fmt.Fprintf(&sb, "  • %s\n    %s\n", job.Name, job.URL)
+		fmt.Fprintln(&sb, formatFailedJob(job))
 	}
 	fmt.Fprintf(&sb, "\nView Full Workflow Run: %s\n", report.Workflow.URL)
+	return sb.String()
+}
+
+func formatFailedJob(job Job) string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "• <%s|%s>", job.URL, job.Name)
+	if len(job.CIBreakers) > maxRenderedCIBreakers {
+		return sb.String()
+	}
+	for _, ciBreaker := range job.CIBreakers {
+		fmt.Fprintf(&sb, "\n    ◦ `%s`", ciBreaker)
+	}
 	return sb.String()
 }
 

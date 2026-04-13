@@ -28,11 +28,13 @@ func TestBuildFailureMessage(t *testing.T) {
 				Name:       "test-job-1",
 				Conclusion: "failure",
 				URL:        "https://github.com/temporalio/temporal/actions/runs/123456/job/1",
+				CIBreakers: []string{"TestSuite/TestCaseA"},
 			},
 			{
 				Name:       "test-job-2",
 				Conclusion: "failure",
 				URL:        "https://github.com/temporalio/temporal/actions/runs/123456/job/2",
+				CIBreakers: []string{"TestSuite/TestCaseB"},
 			},
 		},
 		TotalJobs: 5,
@@ -63,7 +65,12 @@ func TestFormatMessageForDebug(t *testing.T) {
 			Author:   "Test Author",
 		},
 		FailedJobs: []Job{
-			{Name: "test-job-1", Conclusion: "failure"},
+			{
+				Name:       "test-job-1",
+				Conclusion: "failure",
+				URL:        "https://github.com/temporalio/temporal/actions/runs/123456/job/1",
+				CIBreakers: []string{"TestSuite/TestCaseA"},
+			},
 		},
 		TotalJobs: 5,
 	}
@@ -75,6 +82,7 @@ func TestFormatMessageForDebug(t *testing.T) {
 	assert.Contains(t, output, "abc1234")
 	assert.Contains(t, output, "Test Author")
 	assert.Contains(t, output, "test-job-1")
+	assert.Contains(t, output, "◦ `TestSuite/TestCaseA`")
 }
 
 func TestShortSHA(t *testing.T) {
@@ -140,6 +148,95 @@ func TestSlackMessageStructure(t *testing.T) {
 	// Verify the info block has 4 fields
 	infoBlock := msg.Blocks[1]
 	assert.Len(t, infoBlock.Fields, 4)
+}
+
+func TestBuildFailureMessageIncludesCIBreakers(t *testing.T) {
+	report := &FailureReport{
+		Workflow: WorkflowRun{
+			Name:       "All Tests",
+			HeadBranch: "main",
+			HeadSHA:    "abc1234567890",
+			URL:        "https://github.com/temporalio/temporal/actions/runs/123",
+		},
+		Commit: CommitInfo{
+			SHA:      "abc1234567890",
+			ShortSHA: "abc1234",
+			Author:   "Test",
+		},
+		FailedJobs: []Job{
+			{
+				Name:       "job1",
+				URL:        "http://example.com/job1",
+				CIBreakers: []string{"TestSuite/TestCaseA", "TestSuite/TestCaseB"},
+			},
+		},
+		TotalJobs: 3,
+	}
+
+	msg := BuildFailureMessage(report)
+
+	require.NotNil(t, msg)
+	require.NotNil(t, msg.Blocks[3].Text)
+	assert.Contains(t, msg.Blocks[3].Text.Text, "◦ `TestSuite/TestCaseA`")
+	assert.Contains(t, msg.Blocks[3].Text.Text, "◦ `TestSuite/TestCaseB`")
+}
+
+func TestBuildFailureMessageSkipsCIBreakersWhenTooManyForJob(t *testing.T) {
+	report := &FailureReport{
+		Workflow: WorkflowRun{
+			Name:       "All Tests",
+			HeadBranch: "main",
+			HeadSHA:    "abc1234567890",
+			URL:        "https://github.com/temporalio/temporal/actions/runs/123",
+		},
+		Commit: CommitInfo{
+			SHA:      "abc1234567890",
+			ShortSHA: "abc1234",
+			Author:   "Test",
+		},
+		FailedJobs: []Job{
+			{
+				Name: "job1",
+				URL:  "http://example.com/job1",
+				CIBreakers: []string{
+					"TestSuite/TestCase1",
+					"TestSuite/TestCase2",
+					"TestSuite/TestCase3",
+					"TestSuite/TestCase4",
+					"TestSuite/TestCase5",
+					"TestSuite/TestCase6",
+				},
+			},
+		},
+		TotalJobs: 3,
+	}
+
+	msg := BuildFailureMessage(report)
+
+	require.NotNil(t, msg)
+	require.NotNil(t, msg.Blocks[3].Text)
+	assert.Contains(t, msg.Blocks[3].Text.Text, "• <http://example.com/job1|job1>")
+	assert.NotContains(t, msg.Blocks[3].Text.Text, "◦ `TestSuite/TestCase1`")
+}
+
+func TestExtractCIBreakers(t *testing.T) {
+	logOutput := `
+some unrelated line
+- TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument (retry 1) (final)
+go.temporal.io/server/tests.TestQueryWorkflow_NonStickyMultiPageHistory (retry 2) (final)
+  * TestOtherSuite/TestSomething (final)
+duplicate TestOtherSuite/TestSomething (final)
+not a test line (final)
+`
+
+	assert.Equal(t,
+		[]string{
+			"TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument",
+			"go.temporal.io/server/tests.TestQueryWorkflow_NonStickyMultiPageHistory",
+			"TestOtherSuite/TestSomething",
+		},
+		extractCIBreakers(logOutput),
+	)
 }
 
 func TestFilterCompleted(t *testing.T) {
