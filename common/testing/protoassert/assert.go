@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/api/temporalproto"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/testing/protocmp"
 )
 
@@ -30,18 +29,6 @@ func ProtoEqual(t assert.TestingT, a proto.Message, b proto.Message) bool {
 		th.Helper()
 	}
 	if diff := cmp.Diff(a, b, protocmp.Transform()); diff != "" {
-		return assert.Fail(t, fmt.Sprintf("Proto mismatch (-want +got):\n%v", diff))
-	}
-	return true
-}
-
-// ProtoEqualIgnoreFields compares two proto messages for equality, ignoring the specified fields
-// on the given message type. Fields are specified by their proto name (snake_case).
-func ProtoEqualIgnoreFields(t assert.TestingT, a proto.Message, b proto.Message, msgType proto.Message, fields ...protoreflect.Name) bool {
-	if th, ok := t.(helper); ok {
-		th.Helper()
-	}
-	if diff := cmp.Diff(a, b, protocmp.Transform(), protocmp.IgnoreFields(msgType, fields...)); diff != "" {
 		return assert.Fail(t, fmt.Sprintf("Proto mismatch (-want +got):\n%v", diff))
 	}
 	return true
@@ -132,13 +119,4 @@ func (x ProtoAssertions) ProtoElementsMatch(a any, b any) bool {
 	}
 
 	return ProtoElementsMatch(x.t, a, b)
-}
-
-// ProtoEqualIgnoreFields compares two proto messages for equality, ignoring the specified fields
-// on the given message type. Fields are specified by their proto name (snake_case).
-func (x ProtoAssertions) ProtoEqualIgnoreFields(a proto.Message, b proto.Message, msgType proto.Message, fields ...protoreflect.Name) bool {
-	if th, ok := x.t.(helper); ok {
-		th.Helper()
-	}
-	return ProtoEqualIgnoreFields(x.t, a, b, msgType, fields...)
 }

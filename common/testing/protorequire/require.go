@@ -1,10 +1,14 @@
 package protorequire
 
 import (
+	"fmt"
+
+	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/testing/protoassert"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 type helper interface {
@@ -28,14 +32,14 @@ func ProtoEqual(t require.TestingT, a proto.Message, b proto.Message) {
 	}
 }
 
-// ProtoEqualIgnoreFields compares two proto messages for equality, ignoring the specified fields
-// on the given message type. Calls FailNow on mismatch.
+// ProtoEqualIgnoreFields compares two proto messages for equality, ignoring the specified fields on the given message
+// type. Fields are specified by their proto name (snake_case).
 func ProtoEqualIgnoreFields(t require.TestingT, a proto.Message, b proto.Message, msgType proto.Message, fields ...protoreflect.Name) {
 	if th, ok := t.(helper); ok {
 		th.Helper()
 	}
-	if !protoassert.ProtoEqualIgnoreFields(t, a, b, msgType, fields...) {
-		t.FailNow()
+	if diff := cmp.Diff(a, b, protocmp.Transform(), protocmp.IgnoreFields(msgType, fields...)); diff != "" {
+		require.Fail(t, fmt.Sprintf("Proto mismatch (-want +got):\n%v", diff))
 	}
 }
 
@@ -100,7 +104,5 @@ func (x ProtoAssertions) ProtoEqualIgnoreFields(a proto.Message, b proto.Message
 	if th, ok := x.t.(helper); ok {
 		th.Helper()
 	}
-	if !protoassert.ProtoEqualIgnoreFields(x.t, a, b, msgType, fields...) {
-		x.t.FailNow()
-	}
+	ProtoEqualIgnoreFields(x.t, a, b, msgType, fields...)
 }

@@ -21,61 +21,6 @@ type canHazProto struct {
 	B *commonpb.WorkflowExecution
 }
 
-func TestProtoEqualIgnoreFields(t *testing.T) {
-	a := &workflowpb.WorkflowExecutionInfo{
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: "wf-1",
-			RunId:      myUUID,
-		},
-		Status: 1,
-	}
-	b := &workflowpb.WorkflowExecutionInfo{
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: "wf-1",
-			RunId:      myUUID,
-		},
-		Status: 2, // different — will be ignored
-	}
-
-	result := protoassert.ProtoEqualIgnoreFields(
-		t,
-		a,
-		b,
-		&workflowpb.WorkflowExecutionInfo{},
-		"status",
-	)
-	if !result {
-		t.Error("expected equality when ignoring 'status' field")
-	}
-}
-
-func TestProtoEqualIgnoreFields_FailsWhenNonIgnoredFieldDiffers(t *testing.T) {
-	a := &workflowpb.WorkflowExecutionInfo{
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: "wf-1",
-			RunId:      myUUID,
-		},
-	}
-	b := &workflowpb.WorkflowExecutionInfo{
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: "wf-DIFFERENT",
-			RunId:      myUUID,
-		},
-	}
-
-	mockT := &testing.T{}
-	result := protoassert.ProtoEqualIgnoreFields(
-		mockT,
-		a,
-		b,
-		&workflowpb.WorkflowExecutionInfo{},
-		"status",
-	)
-	if result {
-		t.Error("expected failure when non-ignored field differs")
-	}
-}
-
 func TestProtoElementsMatch(t *testing.T) {
 	assert := protoassert.New(t)
 	for _, tc := range []struct {
