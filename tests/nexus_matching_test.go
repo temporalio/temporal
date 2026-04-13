@@ -154,15 +154,8 @@ func dispatchAndCompleteNexusTask(t *testing.T, s *testcore.TestEnv, expectTaskF
 	verifyForwardingMetrics(t, capture, expectTaskForwarded, expectPollForwarded)
 }
 
-func verifyForwardingMetrics(
-	t *testing.T,
-	capture *metricstest.Capture,
-	expectTaskForwarded bool,
-	expectPollForwarded bool,
-) {
-	snap := capture.Snapshot()
-
-	dispatchRecordings := snap["forwarded"]
+func verifyForwardingMetrics(t *testing.T, capture *testcore.NamespaceMetricCapture, expectTaskForwarded bool, expectPollForwarded bool) {
+	dispatchRecordings := capture.Metric("forwarded")
 	foundExpectedTaskForward := false
 	for _, rec := range dispatchRecordings {
 		if rec.Tags["operation"] == "MatchingDispatchNexusTask" {
@@ -173,7 +166,7 @@ func verifyForwardingMetrics(
 	require.Equal(t, expectTaskForwarded, foundExpectedTaskForward,
 		"expected task forward mismatch, expected: %v, actual: %v", expectTaskForwarded, foundExpectedTaskForward)
 
-	pollRecordings := snap["poll_latency"]
+	pollRecordings := capture.Metric("poll_latency")
 	require.NotEmpty(t, pollRecordings, "expected poll_latency metric to be recorded")
 	foundExpectedPollForward := false
 	for _, rec := range pollRecordings {
