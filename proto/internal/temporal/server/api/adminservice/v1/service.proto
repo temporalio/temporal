@@ -218,4 +218,5 @@ service AdminService {
   }
 
     rpc GetDynamicConfigurations(GetDynamicConfigurationsRequest) returns (GetDynamicConfigurationsResponse) {}
+    rpc GetDynamicConfigurations(GetDynamicConfigurationsRequest) returns (GetDynamicConfigurationsResponse) {}
 }
