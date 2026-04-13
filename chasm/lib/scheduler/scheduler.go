@@ -846,11 +846,6 @@ func (s *Scheduler) Patch(
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
 
-	if req.FrontendRequest.Patch.Unpause != "" {
-		generator := s.Generator.Get(ctx)
-		generator.Generate(ctx)
-	}
-
 	return &schedulerpb.PatchScheduleResponse{
 		FrontendResponse: &workflowservice.PatchScheduleResponse{},
 	}, nil
