@@ -6,6 +6,7 @@ option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;act
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
+import "temporal/api/activity/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
@@ -90,6 +91,15 @@ message ActivityState {
 
     // Set if the activity was terminated
     ActivityTerminateState terminate_state = 12;
+
+    // Options for the first scheduled attempt to support `restore_original`
+    temporal.api.activity.v1.ActivityOptions original_options = 13;
+
+    // An incremental version number used to validate ScheduleToCloseTimeoutTask tasks.
+    // Incremented each time a new ScheduleToCloseTimeoutTask is scheduled (at activity creation
+    // and on each options update that re-schedules the task). Unlike attempt.stamp, this counter
+    // is NOT incremented on retries, because schedule-to-close spans the full activity lifetime.
+    int32 stamp = 14;
 }
 
 message ActivityCancelState {
@@ -136,10 +146,13 @@ message ActivityAttemptState {
     // will not reset it.
     LastFailureDetails last_failure_details = 5;
 
-    // An incremental version number used to validate tasks.
-    // Initially this only verifies that a task belong to the current attempt.
-    // Later on this stamp will be used to also invalidate tasks when the activity is paused, reset, or has its options
-    // updated.
+    // An incremental version number used to validate attempt-scoped tasks
+    // (ActivityDispatchTask, ScheduleToStartTimeoutTask, StartToCloseTimeoutTask, HeartbeatTimeoutTask).
+    // Incremented on each new attempt and on options updates, so that in-flight tasks from the
+    // previous attempt or pre-update state are discarded.
+    // Note: ScheduleToCloseTimeoutTask uses a separate ActivityState.schedule_to_close_stamp because
+    // it spans the full activity lifetime and must not be invalidated on retry.
+    // TODO: also invalidate on pause and reset when those are supported.
     int32 stamp = 6;
 
     string last_worker_identity = 7;
