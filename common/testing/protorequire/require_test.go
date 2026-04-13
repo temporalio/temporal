@@ -16,19 +16,22 @@ func TestProtoEqualIgnoreFields(t *testing.T) {
 			WorkflowId: "wf-1",
 			RunId:      myUUID,
 		},
-		Status: 1,
+		Status:    1,
+		TaskQueue: "queue-a",
 	}
 	b := &workflowpb.WorkflowExecutionInfo{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "wf-1",
 			RunId:      myUUID,
 		},
-		Status: 2, // different — will be ignored
+		Status:    2,
+		TaskQueue: "queue-b",
 	}
 
-	// Should pass: "status" is ignored
+	// Should pass: both differing fields are ignored
 	protorequire.ProtoEqualIgnoreFields(t, a, b,
 		&workflowpb.WorkflowExecutionInfo{},
 		"status",
+		"task_queue",
 	)
 }
