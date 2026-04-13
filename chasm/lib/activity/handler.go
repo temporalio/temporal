@@ -440,5 +440,20 @@ func (h *handler) UpdateActivityExecutionOptions(ctx context.Context, req *activ
 			},
 		}, nil
 	}
-	return nil, serviceerror.NewUnimplemented("UpdateActivityExecutionOptions for standalone activities is not yet implemented")
+
+	ref := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  req.GetFrontendRequest().GetActivityId(),
+		RunID:       req.GetFrontendRequest().GetRunId(),
+	})
+	response, _, err := chasm.UpdateComponent(
+		ctx,
+		ref,
+		(*Activity).UpdateActivityExecutionOptions,
+		req,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
 }

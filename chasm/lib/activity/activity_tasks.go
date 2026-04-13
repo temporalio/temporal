@@ -127,9 +127,22 @@ func (h *scheduleToCloseTimeoutTaskHandler) Validate(
 	_ chasm.Context,
 	activity *Activity,
 	_ chasm.TaskAttributes,
-	_ *activitypb.ScheduleToCloseTimeoutTask,
+	task *activitypb.ScheduleToCloseTimeoutTask,
 ) (bool, error) {
-	return TransitionTimedOut.Possible(activity), nil
+	if !TransitionTimedOut.Possible(activity) {
+		return false, nil
+	}
+	// If schedule-to-close was disabled via an options update, discard this task.
+	if activity.GetScheduleToCloseTimeout().AsDuration() <= 0 {
+		return false, nil
+	}
+	// Stamp check: discard tasks from before the most recent ScheduleToCloseTimeoutTask was
+	// scheduled (e.g. after a schedule-to-close extension or a disable+re-enable cycle).
+	// Tasks without a stamp (stamp=0) predate this field and are not validated by stamp.
+	if task.GetStamp() != 0 && task.GetStamp() != activity.GetStamp() {
+		return false, nil
+	}
+	return true, nil
 }
 
 func (h *scheduleToCloseTimeoutTaskHandler) Execute(

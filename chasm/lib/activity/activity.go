@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/activityoptions"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/metrics"
@@ -32,6 +33,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -144,23 +146,34 @@ func NewStandaloneActivity(
 	)
 
 	activity := &Activity{
-		ActivityState: &activitypb.ActivityState{
-			ActivityType:           request.ActivityType,
+		// Use common.CloneProto here because the values can change and these are all
+		// pointers to the request so changing the ActivityState will also change the
+		// request values.
+		ActivityState: common.CloneProto(&activitypb.ActivityState{
+			ActivityType:           request.GetActivityType(),
 			TaskQueue:              request.GetTaskQueue(),
 			ScheduleToCloseTimeout: request.GetScheduleToCloseTimeout(),
 			ScheduleToStartTimeout: request.GetScheduleToStartTimeout(),
 			StartToCloseTimeout:    request.GetStartToCloseTimeout(),
 			HeartbeatTimeout:       request.GetHeartbeatTimeout(),
 			RetryPolicy:            request.GetRetryPolicy(),
-			Priority:               request.Priority,
-			StartDelay:             request.GetStartDelay(),
-		},
-		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
-		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
-			Input:        request.Input,
-			Header:       request.Header,
-			UserMetadata: request.UserMetadata,
+			Priority:               request.GetPriority(),
+			OriginalOptions: &apiactivitypb.ActivityOptions{
+				TaskQueue:              request.GetTaskQueue(),
+				ScheduleToCloseTimeout: request.GetScheduleToCloseTimeout(),
+				ScheduleToStartTimeout: request.GetScheduleToStartTimeout(),
+				StartToCloseTimeout:    request.GetStartToCloseTimeout(),
+				HeartbeatTimeout:       request.GetHeartbeatTimeout(),
+				RetryPolicy:            request.GetRetryPolicy(),
+				Priority:               request.GetPriority(),
+			},
 		}),
+		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
+		RequestData: chasm.NewDataField(ctx, common.CloneProto(&activitypb.ActivityRequestData{
+			Input:        request.GetInput(),
+			Header:       request.GetHeader(),
+			UserMetadata: request.GetUserMetadata(),
+		})),
 		Outcome:    chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
 		Visibility: chasm.NewComponentField(ctx, visibility),
 	}
@@ -511,6 +524,178 @@ func (a *Activity) Terminate(
 	})
 }
 
+func (a *Activity) UpdateActivityExecutionOptions(
+	ctx chasm.MutableContext,
+	req *activitypb.UpdateActivityExecutionOptionsRequest,
+) (*activitypb.UpdateActivityExecutionOptionsResponse, error) {
+	switch a.Status {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+		activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED:
+		return nil, serviceerror.NewFailedPreconditionf("Cannot update options for activity in state %s", a.Status.String())
+	default:
+	}
+
+	frontendReq := req.GetFrontendRequest()
+
+	if frontendReq.GetRestoreOriginal() {
+		ogOptions := a.GetOriginalOptions()
+		a.TaskQueue = common.CloneProto(ogOptions.GetTaskQueue())
+		a.ScheduleToCloseTimeout = common.CloneProto(ogOptions.GetScheduleToCloseTimeout())
+		a.ScheduleToStartTimeout = common.CloneProto(ogOptions.GetScheduleToStartTimeout())
+		a.StartToCloseTimeout = common.CloneProto(ogOptions.GetStartToCloseTimeout())
+		a.HeartbeatTimeout = common.CloneProto(ogOptions.GetHeartbeatTimeout())
+		a.RetryPolicy = common.CloneProto(ogOptions.GetRetryPolicy())
+		a.Priority = common.CloneProto(ogOptions.GetPriority())
+	} else {
+		if err := a.mergeActivityOptions(frontendReq); err != nil {
+			return nil, err
+		}
+	}
+
+	attempt := a.LastAttempt.Get(ctx)
+
+	// Recalculate the current retry interval based on the (possibly updated) retry policy.
+	// This ensures a shortened retry interval takes effect immediately on re-dispatch.
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED && attempt.GetCurrentRetryInterval() != nil {
+		newInterval := backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.GetCount()-1)
+		attempt.CurrentRetryInterval = durationpb.New(newInterval)
+	}
+
+	// Add a new ScheduleToCloseTimeoutTask at the (possibly updated) deadline.
+	// Increment the stamp so the previous task is invalidated by the Validate check.
+	if timeout := a.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
+		a.Stamp++
+		deadline := a.GetScheduleTime().AsTime().Add(timeout)
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{ScheduledTime: deadline},
+			&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetStamp()},
+		)
+	}
+
+	attempt.Stamp++
+
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED || a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		// Re-create the start-to-close timeout task with the new stamp and (possibly updated) timeout.
+		// The old task was invalidated by the stamp increment above.
+		if timeout := a.GetStartToCloseTimeout().AsDuration(); timeout > 0 {
+			deadline := attempt.GetStartedTime().AsTime().Add(timeout)
+			ctx.AddTask(
+				a,
+				chasm.TaskAttributes{ScheduledTime: deadline},
+				&activitypb.StartToCloseTimeoutTask{Stamp: attempt.GetStamp()},
+			)
+		}
+
+		if hbTimeout := a.GetHeartbeatTimeout().AsDuration(); hbTimeout > 0 {
+			// The next heartbeat time is the max of (the last heartbeats recorded time and
+			// the current attempts started time) plus the heartbeat timeout
+			lastHb, _ := a.LastHeartbeat.TryGet(ctx)
+			lastHbTime := util.MaxTime(
+				lastHb.GetRecordedTime().AsTime(),
+				attempt.GetStartedTime().AsTime(),
+			).Add(hbTimeout)
+			ctx.AddTask(
+				a,
+				chasm.TaskAttributes{
+					ScheduledTime: lastHbTime,
+				},
+				&activitypb.HeartbeatTimeoutTask{
+					Stamp: attempt.GetStamp(),
+				},
+			)
+		}
+	}
+
+	// TODO(saa-ga): need to handle the StartDelay timer
+
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
+		// Re dispatch this activity
+		retryTime := attemptScheduleTimeForRetry(attempt)
+		var dispatchAttrs chasm.TaskAttributes
+		if retryTime != nil {
+			// in backoff, future retry time
+			dispatchAttrs.ScheduledTime = retryTime.AsTime()
+		}
+		ctx.AddTask(
+			a,
+			dispatchAttrs,
+			&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()},
+		)
+
+		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+			schedToStart := ctx.Now(a).Add(timeout)
+			if retryTime != nil {
+				schedToStart = retryTime.AsTime().Add(timeout)
+			}
+			ctx.AddTask(
+				a,
+				chasm.TaskAttributes{ScheduledTime: schedToStart},
+				&activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()},
+			)
+		}
+	}
+
+	return &activitypb.UpdateActivityExecutionOptionsResponse{
+		FrontendResponse: &workflowservice.UpdateActivityExecutionOptionsResponse{
+			ActivityOptions: &apiactivitypb.ActivityOptions{
+				TaskQueue:              a.GetTaskQueue(),
+				ScheduleToCloseTimeout: a.GetScheduleToCloseTimeout(),
+				ScheduleToStartTimeout: a.GetScheduleToStartTimeout(),
+				StartToCloseTimeout:    a.GetStartToCloseTimeout(),
+				HeartbeatTimeout:       a.GetHeartbeatTimeout(),
+				RetryPolicy:            a.GetRetryPolicy(),
+				Priority:               a.GetPriority(),
+			},
+		},
+	}, nil
+}
+
+// mergeActivityOptions applies the field mask from the request to the activity state.
+// The structure mirrors the field-mask logic in service/history/api/updateactivityoptions/api.go
+func (a *Activity) mergeActivityOptions(
+	req *workflowservice.UpdateActivityExecutionOptionsRequest,
+) error {
+	updateFields := util.ParseFieldMask(req.GetUpdateMask())
+
+	// Build an ActivityOptions view of the current Activity state so we can use the shared merge function.
+	ao := &apiactivitypb.ActivityOptions{
+		TaskQueue:              a.TaskQueue,
+		ScheduleToCloseTimeout: a.ScheduleToCloseTimeout,
+		ScheduleToStartTimeout: a.ScheduleToStartTimeout,
+		StartToCloseTimeout:    a.StartToCloseTimeout,
+		HeartbeatTimeout:       a.HeartbeatTimeout,
+		Priority:               a.Priority,
+		RetryPolicy:            a.RetryPolicy,
+	}
+
+	if err := activityoptions.MergeActivityOptions(ao, req.GetActivityOptions(), updateFields); err != nil {
+		return err
+	}
+
+	// Re-normalize timeouts after the update so that relationships like
+	// start_to_close <= schedule_to_close and heartbeat <= start_to_close are preserved.
+	// This mirrors adjustActivityOptions for workflow-embedded activities.
+	if err := normalizeAndValidateTimeouts(req.GetActivityId(), a.GetActivityType().GetName(), durationpb.New(0), ao); err != nil {
+		return err
+	}
+
+	// Write the merged and normalized options back to the Activity state fields.
+	a.TaskQueue = ao.TaskQueue
+	a.ScheduleToCloseTimeout = ao.ScheduleToCloseTimeout
+	a.ScheduleToStartTimeout = ao.ScheduleToStartTimeout
+	a.StartToCloseTimeout = ao.StartToCloseTimeout
+	a.HeartbeatTimeout = ao.HeartbeatTimeout
+	a.Priority = ao.Priority
+	a.RetryPolicy = ao.RetryPolicy
+
+	return nil
+}
+
 // getOrCreateLastHeartbeat retrieves the last heartbeat state, initializing it if not present. The heartbeat is lazily created
 // to avoid unnecessary writes when heartbeats are not used.
 func (a *Activity) getOrCreateLastHeartbeat(ctx chasm.MutableContext) *activitypb.ActivityHeartbeatState {
@@ -713,11 +898,9 @@ func (a *Activity) RecordHeartbeat(
 	if err != nil {
 		return nil, err
 	}
-	prevHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{
-		RecordedTime:        timestamppb.New(ctx.Now(a)),
-		Details:             input.Request.GetHeartbeatRequest().GetDetails(),
-		TotalHeartbeatCount: prevHeartbeat.GetTotalHeartbeatCount() + 1,
+		RecordedTime: timestamppb.New(ctx.Now(a)),
+		Details:      input.Request.GetHeartbeatRequest().GetDetails(),
 	})
 	if heartbeatTimeout := a.GetHeartbeatTimeout().AsDuration(); heartbeatTimeout > 0 {
 		ctx.AddTask(
@@ -819,7 +1002,6 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		Header:                  requestData.GetHeader(),
 		HeartbeatDetails:        heartbeat.GetDetails(),
 		HeartbeatTimeout:        a.GetHeartbeatTimeout(),
-		TotalHeartbeatCount:     heartbeat.GetTotalHeartbeatCount(),
 		LastAttemptCompleteTime: attempt.GetCompleteTime(),
 		LastFailure:             attempt.GetLastFailureDetails().GetFailure(),
 		LastHeartbeatTime:       heartbeat.GetRecordedTime(),

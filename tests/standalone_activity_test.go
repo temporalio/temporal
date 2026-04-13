@@ -2665,6 +2665,56 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 		"expected StartToCloseTimeout but is %s", describeResp3.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 }
 
+// TestStartToCloseTimeout_WhileCancelRequested verifies that an activity
+// times out due to start-to-close timeout, after a cancellation request has been accepted.
+func (s *standaloneActivityTestSuite) TestStartToCloseTimeout_WhileCancelRequested() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := testcore.RandomizeStr(t.Name())
+
+	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:           s.Namespace().String(),
+		ActivityId:          activityID,
+		ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+		StartToCloseTimeout: durationpb.New(2 * time.Second),
+		RetryPolicy:         &commonpb.RetryPolicy{MaximumAttempts: 1},
+	})
+	require.NoError(t, err)
+
+	// Worker accepts the task — activity is STARTED.
+	_, err = s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+	})
+	require.NoError(t, err)
+
+	// Request cancellation — activity moves to CANCEL_REQUESTED.
+	_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      startResp.RunId,
+		Identity:   "canceller",
+		RequestId:  "cancel-req-1",
+	})
+	require.NoError(t, err)
+
+	// Worker ignores cancellation and doesn't respond.
+	// The start-to-close timeout (2s) should still fire.
+	pollOutcome, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      startResp.RunId,
+	})
+	require.NoError(t, err)
+	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		pollOutcome.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+		"activity in CANCEL_REQUESTED should still time out via START_TO_CLOSE")
+}
+
 // TestScheduleToStartTimeout tests that a schedule-to-start timeout is recorded after the activity is
 // created but never started. It also verifies that DescribeActivityExecution can be used to long-poll for a TimedOut
 // state change caused by execution of a timer task.
@@ -5107,6 +5157,649 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 	})
 }
 
+func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
+	t := s.T()
+
+	t.Run("InvalidArgument", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+		})
+		require.NoError(t, err)
+		runID := startResp.RunId
+		ns := s.Namespace().String()
+
+		validOptions := &activitypb.ActivityOptions{
+			StartToCloseTimeout: durationpb.New(2 * time.Minute),
+		}
+		validMask := &fieldmaskpb.FieldMask{Paths: []string{"start_to_close_timeout"}}
+
+		testCases := []struct {
+			name        string
+			req         *workflowservice.UpdateActivityExecutionOptionsRequest
+			expectedErr string
+		}{
+			{
+				name: "EmptyActivityID",
+				req: &workflowservice.UpdateActivityExecutionOptionsRequest{
+					Namespace:       ns,
+					RunId:           runID,
+					ActivityOptions: validOptions,
+					UpdateMask:      validMask,
+				},
+				expectedErr: "activity ID is required",
+			},
+			{
+				name: "ActivityIDTooLong",
+				req: &workflowservice.UpdateActivityExecutionOptionsRequest{
+					Namespace:       ns,
+					ActivityId:      string(make([]byte, defaultMaxIDLengthLimit+1)),
+					RunId:           runID,
+					ActivityOptions: validOptions,
+					UpdateMask:      validMask,
+				},
+				expectedErr: "activity ID exceeds length limit",
+			},
+			{
+				name: "IdentityTooLong",
+				req: &workflowservice.UpdateActivityExecutionOptionsRequest{
+					Namespace:       ns,
+					ActivityId:      activityID,
+					RunId:           runID,
+					Identity:        string(make([]byte, defaultMaxIDLengthLimit+1)),
+					ActivityOptions: validOptions,
+					UpdateMask:      validMask,
+				},
+				expectedErr: "identity exceeds length limit",
+			},
+			{
+				name: "InvalidRunID",
+				req: &workflowservice.UpdateActivityExecutionOptionsRequest{
+					Namespace:       ns,
+					ActivityId:      activityID,
+					RunId:           "not-a-valid-uuid",
+					ActivityOptions: validOptions,
+					UpdateMask:      validMask,
+				},
+				expectedErr: "invalid run id",
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				_, err := s.FrontendClient().UpdateActivityExecutionOptions(ctx, tc.req)
+				var invalidArgErr *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgErr)
+				require.Contains(t, invalidArgErr.Message, tc.expectedErr)
+			})
+		}
+	})
+
+	t.Run("ChangeRetryInterval", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		// Start with a long retry interval to keep the activity in backoff after failure.
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(30 * time.Minute),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval: durationpb.New(10 * time.Minute),
+				MaximumAttempts: 5,
+			},
+		})
+		require.NoError(t, err)
+
+		// Poll and fail with a retryable failure — activity enters long backoff.
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		// Shorten the retry interval so the activity retries immediately.
+		updateResp, err := s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval: durationpb.New(1 * time.Millisecond),
+				},
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, updateResp)
+
+		// Activity should now be available to poll for attempt 2.
+		pollResp2, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 2, pollResp2.Attempt)
+	})
+
+	t.Run("ChangeRetryInterval_WhileStarted", func(t *testing.T) {
+		// Update retry_policy.initial_interval while the activity is STARTED (running).
+		// In this state CurrentRetryInterval is not recalculated at update time — the new
+		// policy takes effect when the attempt fails and a fresh interval is computed.
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(30 * time.Minute),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval: durationpb.New(10 * time.Minute),
+				MaximumAttempts: 5,
+			},
+		})
+		require.NoError(t, err)
+
+		// Poll attempt 1 — activity is now STARTED.
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+
+		// Shorten the retry interval while the activity is running.
+		_, err = s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval: durationpb.New(1 * time.Millisecond),
+				},
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}},
+		})
+		require.NoError(t, err)
+
+		// Fail attempt 1 — next retry should dispatch immediately with the new 1ms interval.
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		// Attempt 2 should be available immediately.
+		pollResp2, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 2, pollResp2.Attempt)
+	})
+
+	t.Run("ChangeScheduleToClose", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              s.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout:    durationpb.New(30 * time.Minute),
+			ScheduleToCloseTimeout: durationpb.New(30 * time.Minute),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts: 0,                                // unlimited retries
+				InitialInterval: durationpb.New(10 * time.Minute), // long backoff keeps activity in SCHEDULED state
+			},
+		})
+		require.NoError(t, err)
+
+		// Start and fail the activity once — it enters backoff (SCHEDULED state).
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		// Shorten schedule-to-close — activity should time out immediately.
+		_, err = s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				ScheduleToCloseTimeout: durationpb.New(1 * time.Second),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout"}},
+		})
+		require.NoError(t, err)
+
+		// Long-poll until the activity times out.
+		pollOutcome, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t,
+			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			pollOutcome.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+		)
+	})
+
+	t.Run("ChangeScheduleToClose_WhileStarted", func(t *testing.T) {
+		// Poll the activity (STARTED), then shorten schedule-to-close timeout via update.
+		// Since no response is sent, the activity should time out with SCHEDULE_TO_CLOSE.
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              s.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout:    durationpb.New(30 * time.Minute),
+			ScheduleToCloseTimeout: durationpb.New(30 * time.Minute),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts: 1, // no retry so TIMED_OUT is terminal
+			},
+		})
+		require.NoError(t, err)
+
+		// Poll attempt 1 — activity is now STARTED.
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+
+		// Shorten schedule-to-close — the new task fires almost immediately.
+		_, err = s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				ScheduleToCloseTimeout: durationpb.New(1 * time.Millisecond),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout"}},
+		})
+		require.NoError(t, err)
+
+		// Long-poll until the activity times out (no response sent to the task queue).
+		pollOutcome, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t,
+			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			pollOutcome.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+		)
+	})
+
+	t.Run("ChangeScheduleToCloseAndRetry", func(t *testing.T) {
+		// Start with a short schedule-to-close (8s) and a long retry interval (5s) so
+		// the activity would time out before its second attempt under the original options.
+		// Update both: longer schedule-to-close and shorter retry interval.
+		// The activity should retry quickly and succeed.
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		originalStartToClose := 8 * time.Second
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              s.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout:    durationpb.New(originalStartToClose),
+			ScheduleToCloseTimeout: durationpb.New(8 * time.Second),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval: durationpb.New(5 * time.Second),
+				MaximumAttempts: 5,
+			},
+		})
+		require.NoError(t, err)
+
+		// Fail attempt 1.
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		// Update: extend schedule-to-close, shorten retry interval.
+		newScheduleToClose := 30 * time.Second
+		updateResp, err := s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				ScheduleToCloseTimeout: durationpb.New(newScheduleToClose),
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval: durationpb.New(1 * time.Millisecond),
+				},
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout", "retry_policy.initial_interval"}},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, updateResp)
+		require.Equal(t, int64(newScheduleToClose.Seconds()), updateResp.GetActivityOptions().GetScheduleToCloseTimeout().GetSeconds())
+		// Verify that the unmodified start_to_close_timeout is preserved in the response.
+		require.Equal(t, int64(originalStartToClose.Seconds()), updateResp.GetActivityOptions().GetStartToCloseTimeout().GetSeconds())
+
+		// Attempt 2 should be available immediately.
+		pollResp2, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 2, pollResp2.Attempt)
+	})
+
+	t.Run("ResetDefaultOptions", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		originalMaxAttempts := int32(10)
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(30 * time.Minute),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval: durationpb.New(1 * time.Millisecond),
+				MaximumAttempts: originalMaxAttempts,
+			},
+		})
+		require.NoError(t, err)
+
+		// Update maximum attempts to a large value.
+		_, err = s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				RetryPolicy: &commonpb.RetryPolicy{MaximumAttempts: 1000},
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.maximum_attempts"}},
+		})
+		require.NoError(t, err)
+
+		// Verify the update was applied.
+		describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1000, describeResp.GetInfo().GetRetryPolicy().GetMaximumAttempts())
+
+		// Reset to original options.
+		_, err = s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       s.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.RunId,
+			RestoreOriginal: true,
+		})
+		require.NoError(t, err)
+
+		// Verify original maximum attempts are restored.
+		describeResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t, originalMaxAttempts, describeResp.GetInfo().GetRetryPolicy().GetMaximumAttempts())
+
+		// Verify the activity still executes after reset — poll attempt 1 and complete it.
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Result:    payloads.EncodeString("done"),
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("ChangeScheduleToStart", func(t *testing.T) {
+		// Start activity with a long schedule-to-start timeout and no workers polling the task
+		// queue. Shorten the timeout via update — activity should time out with SCHEDULE_TO_START.
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              s.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout:    durationpb.New(30 * time.Minute),
+			ScheduleToStartTimeout: durationpb.New(30 * time.Minute),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts: 1, // no retry so we observe TIMED_OUT
+			},
+		})
+		require.NoError(t, err)
+
+		// Shorten schedule-to-start — no workers are polling so it should fire immediately.
+		_, err = s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				ScheduleToStartTimeout: durationpb.New(1 * time.Millisecond),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_start_timeout"}},
+		})
+		require.NoError(t, err)
+
+		// Long-poll until the activity times out.
+		pollOutcome, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t,
+			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+			pollOutcome.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+		)
+	})
+
+	t.Run("ChangeStartToClose", func(t *testing.T) {
+		// Poll the activity (STARTED), then shorten start-to-close timeout via update.
+		// Since no response is sent, the activity should time out with START_TO_CLOSE.
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(30 * time.Minute),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts: 1, // no retry so TIMED_OUT is terminal
+			},
+		})
+		require.NoError(t, err)
+
+		// Poll attempt 1 — activity is now STARTED.
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+
+		// Shorten start-to-close — the new task fires almost immediately.
+		_, err = s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				StartToCloseTimeout: durationpb.New(1 * time.Millisecond),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"start_to_close_timeout"}},
+		})
+		require.NoError(t, err)
+
+		// Long-poll until the activity times out (no response sent to the task queue).
+		pollOutcome, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t,
+			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			pollOutcome.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+		)
+	})
+
+	t.Run("ChangeHeartbeatTimeout", func(t *testing.T) {
+		// Poll the activity (STARTED), then shorten heartbeat timeout via update.
+		// The update re-creates the HeartbeatTimeoutTask with the new timeout, so no further
+		// heartbeats are needed — the activity should time out with HEARTBEAT.
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(30 * time.Minute),
+			HeartbeatTimeout:    durationpb.New(30 * time.Minute),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts: 1, // no retry so TIMED_OUT is terminal
+			},
+		})
+		require.NoError(t, err)
+
+		// Poll attempt 1 — activity is now STARTED.
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+
+		// Shorten heartbeat timeout.
+		_, err = s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				HeartbeatTimeout: durationpb.New(2 * time.Second),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"heartbeat_timeout"}},
+		})
+		require.NoError(t, err)
+
+		// Long-poll until the activity times out (no further heartbeats sent).
+		pollOutcome, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t,
+			enumspb.TIMEOUT_TYPE_HEARTBEAT,
+			pollOutcome.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+		)
+	})
+}
+
 func (s *standaloneActivityTestSuite) pollActivityTaskQueue(ctx context.Context, taskQueue string) (*workflowservice.PollActivityTaskQueueResponse, error) {
 	return s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: s.Namespace().String(),
@@ -5351,29 +6044,6 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 			Namespace:  s.Namespace().String(),
 			ActivityId: testcore.RandomizeStr(t.Name()),
 			Identity:   "test-identity",
-		})
-		require.Error(t, err)
-		var unimplementedErr *serviceerror.Unimplemented
-		require.ErrorAs(t, err, &unimplementedErr)
-	})
-}
-
-func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
-	t := s.T()
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
-
-	t.Run("StandaloneActivityReturnsError", func(t *testing.T) {
-		_, err := s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
-			Namespace:  s.Namespace().String(),
-			ActivityId: testcore.RandomizeStr(t.Name()),
-			Identity:   "test-identity",
-			ActivityOptions: &activitypb.ActivityOptions{
-				RetryPolicy: &commonpb.RetryPolicy{
-					InitialInterval: durationpb.New(time.Second),
-				},
-			},
-			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}},
 		})
 		require.Error(t, err)
 		var unimplementedErr *serviceerror.Unimplemented
