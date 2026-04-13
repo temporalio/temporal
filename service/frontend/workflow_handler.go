@@ -722,9 +722,9 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 					namespace.MinTimeSkippingDuration,
 				)
 			}
-		// todo: validation for max target time will need to check current virtual time for updateOptions scenario
+		// todo: will need to check current virtual time in updateOptions scenario
 		case *workflowpb.TimeSkippingConfig_MaxTargetTime:
-			if bound.MaxTargetTime.AsTime().Before(time.Now().Add(namespace.MinTimeSkippingDuration)) {
+			if bound.MaxTargetTime.AsTime().Before(wh.namespaceHandler.timeSource.Now().Add(namespace.MinTimeSkippingDuration)) {
 				return serviceerror.NewUnimplementedf(
 					"Max target time must be at least %s from current time of the workflow",
 					namespace.MinTimeSkippingDuration,

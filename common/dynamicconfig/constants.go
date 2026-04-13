@@ -3262,6 +3262,6 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 	TimeSkippingEnabled = NewNamespaceBoolSetting(
 		"frontend.TimeSkippingEnabled",
 		false,
-		`TimeSkippingEnabled is a "feature enable" flag. When enabled it allows clients to skip time in workflows.`,
+		`TimeSkippingEnabled is a "feature enable" flag. When enabled it allows clients to skip time in executions.`,
 	)
 )
