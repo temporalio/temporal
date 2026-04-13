@@ -56,6 +56,7 @@ func httpCallerProviderProvider(
 var Module = fx.Module(
 	"chasm.lib.callback",
 	fx.Provide(configProvider),
+	fx.Provide(validatorProvider),
 	fx.Provide(httpCallerProviderProvider),
 	fx.Provide(newInvocationTaskHandler),
 	fx.Provide(newBackoffTaskHandler),

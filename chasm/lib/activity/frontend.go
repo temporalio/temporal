@@ -11,14 +11,12 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/components/callbacks"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -40,6 +38,7 @@ var ErrStandaloneActivityDisabled = serviceerror.NewUnimplemented("Standalone ac
 
 type frontendHandler struct {
 	FrontendHandler
+	callbackValidator *callback.Validator
 	client            activitypb.ActivityServiceClient
 	config            *Config
 	logger            log.Logger
@@ -51,6 +50,7 @@ type frontendHandler struct {
 
 // NewFrontendHandler creates a new FrontendHandler instance for processing activity frontend requests.
 func NewFrontendHandler(
+	callbackValidator *callback.Validator,
 	client activitypb.ActivityServiceClient,
 	config *Config,
 	logger log.Logger,
@@ -60,6 +60,7 @@ func NewFrontendHandler(
 	saValidator *searchattribute.Validator,
 ) FrontendHandler {
 	return &frontendHandler{
+		callbackValidator: callbackValidator,
 		client:            client,
 		config:            config,
 		logger:            logger,
@@ -430,18 +431,8 @@ func (h *frontendHandler) validateAndNormalizeStartActivityExecutionRequest(
 	}
 
 	if cbs := req.GetCompletionCallbacks(); len(cbs) > 0 {
-		if err := callbacks.ValidateCallbacks(
-			cbs,
-			h.config.MaxCallbacksPerExecution(req.GetNamespace()),
-			h.config.CallbackURLMaxLength(req.GetNamespace()),
-			h.config.CallbackHeaderMaxSize(req.GetNamespace()),
-			h.config.CallbackEndpointConfigs(req.GetNamespace()),
-			"an activity",
-		); err != nil {
-			if status.Code(err) == codes.Unimplemented {
-				return serviceerror.NewUnimplemented(err.Error())
-			}
-			return serviceerror.NewInvalidArgument(err.Error())
+		if err := h.callbackValidator.Validate(req.GetNamespace(), cbs); err != nil {
+			return err
 		}
 	}
 

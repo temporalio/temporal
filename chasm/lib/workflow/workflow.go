@@ -51,12 +51,6 @@ func (w *Workflow) ContextMetadata(_ chasm.Context) map[string]string {
 	return nil
 }
 
-// ProcessCloseCallbacks triggers "WorkflowClosed" callbacks using the CHASM implementation.
-// It iterates through all callbacks and schedules WorkflowClosed ones that are in STANDBY state.
-func (w *Workflow) ProcessCloseCallbacks(ctx chasm.MutableContext) error {
-	return callback.ScheduleStandbyCallbacks(ctx, w.Callbacks)
-}
-
 // AddCompletionCallbacks creates completion callbacks using the CHASM implementation.
 // maxCallbacksPerWorkflow is the configured maximum number of callbacks allowed per workflow.
 func (w *Workflow) AddCompletionCallbacks(

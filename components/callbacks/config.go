@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -51,60 +50,6 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 			)
 		},
 	}
-}
-
-// ValidateCallbacks validates completion callbacks: count, URL length, endpoint allowlist, header size, and normalizes
-// header keys to lowercase.
-func ValidateCallbacks(
-	cbs []*commonpb.Callback,
-	maxCallbacks int,
-	urlMaxLength int,
-	headerMaxSize int,
-	endpointRules AddressMatchRules,
-	entityDescription string,
-) error {
-	if len(cbs) > maxCallbacks {
-		return status.Errorf(
-			codes.InvalidArgument,
-			"cannot attach more than %d callbacks to %s", maxCallbacks, entityDescription,
-		)
-	}
-
-	for _, cb := range cbs {
-		switch variant := cb.GetVariant().(type) {
-		case *commonpb.Callback_Nexus_:
-			rawURL := variant.Nexus.GetUrl()
-			if len(rawURL) > urlMaxLength {
-				return status.Errorf(
-					codes.InvalidArgument,
-					"invalid url: url length longer than max length allowed of %d", urlMaxLength,
-				)
-			}
-			if err := endpointRules.validate(rawURL); err != nil {
-				return err
-			}
-
-			headerSize := 0
-			lowerCaseHeaders := make(map[string]string, len(variant.Nexus.GetHeader()))
-			for k, v := range variant.Nexus.GetHeader() {
-				headerSize += len(k) + len(v)
-				lowerCaseHeaders[strings.ToLower(k)] = v
-			}
-			if headerSize > headerMaxSize {
-				return status.Errorf(
-					codes.InvalidArgument,
-					"invalid header: header size longer than max allowed size of %d", headerMaxSize,
-				)
-			}
-			variant.Nexus.Header = lowerCaseHeaders
-		case *commonpb.Callback_Internal_:
-			// Nothing to validate for internal callbacks.
-			continue
-		default:
-			return status.Errorf(codes.Unimplemented, "unknown callback variant: %T", variant)
-		}
-	}
-	return nil
 }
 
 var AllowedAddresses = dynamicconfig.NewNamespaceTypedSettingWithConverter(

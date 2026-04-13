@@ -36,6 +36,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/callback"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client/frontend"
@@ -76,7 +77,6 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/dummy"
@@ -116,6 +116,7 @@ type (
 
 		status int32
 
+		callbackValidator               *callback.Validator
 		tokenSerializer                 *tasktoken.Serializer
 		config                          *Config
 		versionChecker                  headers.VersionChecker
@@ -294,6 +295,7 @@ func (wh *WorkflowHandler) ValidateWorkerDeploymentVersionComputeConfig(
 
 // NewWorkflowHandler creates a gRPC handler for workflowservice
 func NewWorkflowHandler(
+	callbackValidator *callback.Validator,
 	config *Config,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
@@ -324,11 +326,12 @@ func NewWorkflowHandler(
 	workerDeploymentReadRateLimiter quotas.RequestRateLimiter,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
-		FrontendHandler: activityHandler,
-		status:          common.DaemonStatusInitialized,
-		config:          config,
-		tokenSerializer: tasktoken.NewSerializer(),
-		versionChecker:  headers.NewDefaultVersionChecker(),
+		FrontendHandler:   activityHandler,
+		status:            common.DaemonStatusInitialized,
+		callbackValidator: callbackValidator,
+		config:            config,
+		tokenSerializer:   tasktoken.NewSerializer(),
+		versionChecker:    headers.NewDefaultVersionChecker(),
 		namespaceHandler: newNamespaceHandler(
 			logger,
 			persistenceMetadataManager,
@@ -664,14 +667,7 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	}
 
 	if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
-		if err := callbacks.ValidateCallbacks(
-			cbs,
-			wh.config.MaxCallbacksPerWorkflow(namespaceName.String()),
-			wh.config.CallbackURLMaxLength(namespaceName.String()),
-			wh.config.CallbackHeaderMaxSize(namespaceName.String()),
-			wh.config.CallbackEndpointConfigs(namespaceName.String()),
-			"a workflow",
-		); err != nil {
+		if err := wh.callbackValidator.Validate(namespaceName.String(), cbs); err != nil {
 			return nil, err
 		}
 	}

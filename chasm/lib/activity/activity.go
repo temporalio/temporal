@@ -316,8 +316,6 @@ func (a *Activity) addCompletionCallbacks(
 		}
 
 		// requestID (unique per API call) + idx (position within the request) ensures unique,idempotent callback IDs.
-		// Unlike HSM callbacks, CHASM replicates entire trees rather than replaying events, so deterministic
-		// cross-cluster IDs based on event version are not needed.
 		id := fmt.Sprintf("%s-%d", requestID, idx)
 		callbackObj := callback.NewCallback(requestID, registrationTime, &callbackspb.CallbackState{}, chasmCB)
 		a.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
@@ -329,15 +327,12 @@ func (a *Activity) addCompletionCallbacks(
 // Implements callback.CompletionSource.
 func (a *Activity) GetNexusCompletion(ctx chasm.Context, _ string) (nexusrpc.CompleteOperationOptions, error) {
 	if !a.LifecycleState(ctx).IsClosed() {
-		return nexusrpc.CompleteOperationOptions{}, serviceerror.NewFailedPrecondition("activity has not completed yet")
+		return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternal("activity has not completed yet")
 	}
 
-	attempt := a.LastAttempt.Get(ctx)
 	opts := nexusrpc.CompleteOperationOptions{
+		StartTime: a.GetScheduleTime().AsTime(),
 		CloseTime: ctx.ExecutionInfo().CloseTime,
-	}
-	if startedTime := attempt.GetStartedTime(); startedTime != nil {
-		opts.StartTime = startedTime.AsTime()
 	}
 
 	outcome := a.Outcome.Get(ctx)

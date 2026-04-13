@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -167,7 +168,20 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
 	healthInterceptor := interceptor.NewHealthInterceptor()
 	healthInterceptor.SetHealthy(true)
+	cbValidator := callback.NewValidator(
+		config.MaxCallbacksPerWorkflow,
+		config.CallbackURLMaxLength,
+		config.CallbackHeaderMaxSize,
+		func(string) callback.AddressMatchRules {
+			return callback.AddressMatchRules{
+				Rules: []callback.AddressMatchRule{
+					{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
+				},
+			}
+		},
+	)
 	return NewWorkflowHandler(
+		cbValidator,
 		config,
 		s.mockProducer,
 		s.mockResource.GetVisibilityManager(),
