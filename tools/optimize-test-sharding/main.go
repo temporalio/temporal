@@ -2,7 +2,6 @@ package optimizetestsharding
 
 import (
 	"encoding/json"
-	"encoding/xml"
 	"errors"
 	"flag"
 	"fmt"
@@ -17,7 +16,8 @@ import (
 	"strings"
 
 	"github.com/dgryski/go-farm"
-	"github.com/jstemmer/go-junit-report/v2/junit"
+	reportjunit "github.com/jstemmer/go-junit-report/v2/junit"
+	tooljunit "go.temporal.io/server/tools/shared/junit"
 )
 
 const (
@@ -206,30 +206,22 @@ func loadTestData(dir string) (map[string][]float64, error) {
 }
 
 func processJUnitReport(filename string, tmap map[string][]float64) error {
-	file, err := os.Open(filename)
+	suites, err := tooljunit.ParseFile(filename)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = file.Close() }()
 
-	var testsuites junit.Testsuites
-	if err := xml.NewDecoder(file).Decode(&testsuites); err != nil {
-		return err
-	}
-
-	for _, suite := range testsuites.Suites {
-		for _, tc := range suite.Testcases {
-			duration, err := strconv.ParseFloat(tc.Time, 64)
-			if err != nil {
-				continue
-			}
-			name := tc.Name
-			if m := testNameRe.FindStringSubmatch(name); m != nil {
-				name = m[1]
-			}
-			tmap[name] = append(tmap[name], duration)
+	tooljunit.WalkTestcases(suites, func(tc reportjunit.Testcase) {
+		duration, err := strconv.ParseFloat(tc.Time, 64)
+		if err != nil {
+			return
 		}
-	}
+		name := tc.Name
+		if m := testNameRe.FindStringSubmatch(name); m != nil {
+			name = m[1]
+		}
+		tmap[name] = append(tmap[name], duration)
+	})
 
 	return nil
 }

@@ -1,16 +1,14 @@
 package flakereport
 
 import (
-	"archive/zip"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
+
+	sharedgithub "go.temporal.io/server/tools/shared/github"
 )
 
 // fetchWorkflowRuns retrieves all completed workflow runs within a date range.
@@ -73,126 +71,21 @@ func fetchWorkflowRuns(ctx context.Context, repo string, workflowID int64, branc
 
 // fetchRunArtifacts retrieves all artifacts for a specific workflow run
 func fetchRunArtifacts(ctx context.Context, repo string, runID int64) ([]WorkflowArtifact, error) {
-	ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctxTimeout, "gh", "api",
-		fmt.Sprintf("/repos/%s/actions/runs/%d/artifacts?per_page=100", repo, runID),
-	)
-
-	output, err := cmd.Output()
+	artifacts, err := sharedgithub.ListRunArtifacts(ctx, repo, runID)
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("gh api failed for run %d: %w\nstderr: %s", runID, err, string(exitErr.Stderr))
-		}
-		return nil, fmt.Errorf("failed to execute gh command for run %d: %w", runID, err)
+		return nil, err
 	}
 
-	var response ArtifactsResponse
-	if err := json.Unmarshal(output, &response); err != nil {
-		return nil, fmt.Errorf("failed to parse artifacts response for run %d: %w", runID, err)
-	}
-
-	// Filter for JUnit/test artifacts
 	var testArtifacts []WorkflowArtifact
-	for _, artifact := range response.Artifacts {
-		if artifact.Expired {
-			continue
-		}
-		name := strings.ToLower(artifact.Name)
-		if strings.Contains(name, "junit") {
-			testArtifacts = append(testArtifacts, artifact)
-		}
+	for _, artifact := range sharedgithub.FilterArtifactsContaining(artifacts, "junit") {
+		testArtifacts = append(testArtifacts, WorkflowArtifact{
+			ID:      artifact.ID,
+			Name:    artifact.Name,
+			Expired: artifact.Expired,
+		})
 	}
 
 	return testArtifacts, nil
-}
-
-// downloadArtifact downloads a single artifact zip file
-func downloadArtifact(ctx context.Context, repo string, artifactID int64, outputDir string) (string, error) {
-	ctxTimeout, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-
-	zipPath := filepath.Join(outputDir, fmt.Sprintf("artifact-%d.zip", artifactID))
-
-	cmd := exec.CommandContext(ctxTimeout, "gh", "api",
-		fmt.Sprintf("/repos/%s/actions/artifacts/%d/zip", repo, artifactID),
-	)
-
-	output, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return "", fmt.Errorf("failed to download artifact %d: %w\nstderr: %s", artifactID, err, string(exitErr.Stderr))
-		}
-		return "", fmt.Errorf("failed to download artifact %d: %w", artifactID, err)
-	}
-
-	if err := os.WriteFile(zipPath, output, 0644); err != nil {
-		return "", fmt.Errorf("failed to write artifact zip %d: %w", artifactID, err)
-	}
-
-	return zipPath, nil
-}
-
-// extractArtifactZip extracts zip file and returns paths to JUnit XML files
-func extractArtifactZip(zipPath, outputDir string) ([]string, error) {
-	r, err := zip.OpenReader(zipPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open zip file %s: %w", zipPath, err)
-	}
-	defer func() {
-		if err := r.Close(); err != nil {
-			fmt.Printf("Warning: Failed to close zip reader: %v\n", err)
-		}
-	}()
-
-	var xmlFiles []string
-
-	for _, f := range r.File {
-		// Skip directories
-		if f.FileInfo().IsDir() {
-			continue
-		}
-
-		// Only extract XML files
-		if !strings.HasSuffix(strings.ToLower(f.Name), ".xml") {
-			continue
-		}
-
-		// Create extraction path
-		extractPath := filepath.Join(outputDir, filepath.Base(f.Name))
-
-		// Open file from zip
-		rc, err := f.Open()
-		if err != nil {
-			return nil, fmt.Errorf("failed to open file %s in zip: %w", f.Name, err)
-		}
-
-		// Create output file
-		outFile, err := os.Create(extractPath)
-		if err != nil {
-			_ = rc.Close()
-			return nil, fmt.Errorf("failed to create output file %s: %w", extractPath, err)
-		}
-
-		// Copy content
-		_, err = io.Copy(outFile, rc)
-		if closeErr := rc.Close(); closeErr != nil {
-			_ = outFile.Close()
-			return nil, fmt.Errorf("failed to close zip file reader: %w", closeErr)
-		}
-		if closeErr := outFile.Close(); closeErr != nil {
-			return nil, fmt.Errorf("failed to close output file: %w", closeErr)
-		}
-
-		if err != nil {
-			return nil, fmt.Errorf("failed to extract file %s: %w", f.Name, err)
-		}
-
-		xmlFiles = append(xmlFiles, extractPath)
-	}
-
-	return xmlFiles, nil
 }
 
 // parseArtifactName extracts run_id, job_id, and matrix_name from artifact name.

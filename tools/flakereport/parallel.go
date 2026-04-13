@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	tooljunit "go.temporal.io/server/tools/shared/junit"
 )
 
 // ArtifactJob represents a job to download and process an artifact
@@ -103,18 +105,10 @@ func processArtifactJob(ctx context.Context, job ArtifactJob, totalArtifacts int
 		job.ArtifactNum, totalArtifacts, job.RunNumber, job.TotalRuns,
 		job.Artifact.Name, job.Artifact.ID)
 
-	// Download artifact
-	zipPath, err := downloadArtifact(ctx, job.Repo, job.Artifact.ID, job.TempDir)
+	// Download and extract XML files
+	xmlFiles, err := tooljunit.DownloadAndExtractXMLFiles(ctx, job.Repo, job.Artifact.ID, job.TempDir)
 	if err != nil {
-		result.Error = fmt.Errorf("failed to download artifact %d: %w", job.Artifact.ID, err)
-		fmt.Printf("  Warning: %v\n", result.Error)
-		return result
-	}
-
-	// Extract XML files
-	xmlFiles, err := extractArtifactZip(zipPath, job.TempDir)
-	if err != nil {
-		result.Error = fmt.Errorf("failed to extract artifact %d: %w", job.Artifact.ID, err)
+		result.Error = fmt.Errorf("failed to fetch XML files from artifact %d: %w", job.Artifact.ID, err)
 		fmt.Printf("  Warning: %v\n", result.Error)
 		return result
 	}

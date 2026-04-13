@@ -1,9 +1,7 @@
 package flakereport
 
 import (
-	"encoding/xml"
 	"fmt"
-	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -11,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jstemmer/go-junit-report/v2/junit"
+	tooljunit "go.temporal.io/server/tools/shared/junit"
 )
 
 var finalRegex = regexp.MustCompile(`\s*\(final\)$`)
@@ -18,32 +17,7 @@ var trailingSuffixRegex = regexp.MustCompile(`\s*\([^)]+\)$`)
 
 // parseJUnitFile reads and parses a single JUnit XML file
 func parseJUnitFile(filePath string) (*junit.Testsuites, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open file %s: %w", filePath, err)
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			fmt.Printf("Warning: Failed to close file %s: %v\n", filePath, err)
-		}
-	}()
-
-	var testsuites junit.Testsuites
-	decoder := xml.NewDecoder(file)
-	if err := decoder.Decode(&testsuites); err != nil {
-		// Try parsing as a single testsuite
-		if _, seekErr := file.Seek(0, 0); seekErr != nil {
-			return nil, fmt.Errorf("failed to seek file %s: %w", filePath, seekErr)
-		}
-		var testsuite junit.Testsuite
-		decoder = xml.NewDecoder(file)
-		if err := decoder.Decode(&testsuite); err != nil {
-			return nil, fmt.Errorf("failed to parse JUnit XML %s: %w", filePath, err)
-		}
-		testsuites.Suites = []junit.Testsuite{testsuite}
-	}
-
-	return &testsuites, nil
+	return tooljunit.ParseFile(filePath)
 }
 
 // topLevelTestName extracts the suite/top-level test name from a test name.
@@ -71,24 +45,22 @@ func extractFailures(suites *junit.Testsuites, artifactName string, runID int64,
 	// Parse artifact name for run_id, job_id, and matrix_name
 	_, jobID, matrixName := parseArtifactName(artifactName)
 
-	for _, suite := range suites.Suites {
-		for _, testcase := range suite.Testcases {
-			// Filter: failure present AND not skipped
-			if testcase.Failure != nil && testcase.Skipped == nil {
-				failure := TestFailure{
-					ClassName:  testcase.Classname,
-					Name:       testcase.Name,
-					SuiteName:  topLevelTestName(testcase.Name),
-					ArtifactID: artifactName,
-					RunID:      runID,
-					JobID:      jobID,
-					MatrixName: matrixName,
-					Timestamp:  timestamp,
-				}
-				failures = append(failures, failure)
+	tooljunit.WalkTestcases(suites, func(testcase junit.Testcase) {
+		// Filter: failure present AND not skipped
+		if testcase.Failure != nil && testcase.Skipped == nil {
+			failure := TestFailure{
+				ClassName:  testcase.Classname,
+				Name:       testcase.Name,
+				SuiteName:  topLevelTestName(testcase.Name),
+				ArtifactID: artifactName,
+				RunID:      runID,
+				JobID:      jobID,
+				MatrixName: matrixName,
+				Timestamp:  timestamp,
 			}
+			failures = append(failures, failure)
 		}
-	}
+	})
 
 	return failures
 }
@@ -98,20 +70,18 @@ func extractFailures(suites *junit.Testsuites, artifactName string, runID int64,
 func extractAllTestRuns(suites *junit.Testsuites, runID int64, jobID, matrixName string) []TestRun {
 	var runs []TestRun
 
-	for _, suite := range suites.Suites {
-		for _, testcase := range suite.Testcases {
-			run := TestRun{
-				SuiteName:  topLevelTestName(testcase.Name),
-				Name:       testcase.Name,
-				Failed:     testcase.Failure != nil,
-				Skipped:    testcase.Skipped != nil,
-				RunID:      runID,
-				JobID:      jobID,
-				MatrixName: matrixName,
-			}
-			runs = append(runs, run)
+	tooljunit.WalkTestcases(suites, func(testcase junit.Testcase) {
+		run := TestRun{
+			SuiteName:  topLevelTestName(testcase.Name),
+			Name:       testcase.Name,
+			Failed:     testcase.Failure != nil,
+			Skipped:    testcase.Skipped != nil,
+			RunID:      runID,
+			JobID:      jobID,
+			MatrixName: matrixName,
 		}
-	}
+		runs = append(runs, run)
+	})
 
 	return runs
 }

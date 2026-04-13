@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/jstemmer/go-junit-report/v2/junit"
+	tooljunit "go.temporal.io/server/tools/shared/junit"
 )
 
 type junitReport struct {
@@ -20,16 +21,11 @@ type junitReport struct {
 }
 
 func (j *junitReport) read() error {
-	f, err := os.Open(j.path)
+	suites, err := tooljunit.ParseFile(j.path)
 	if err != nil {
-		return fmt.Errorf("failed to open junit report file: %w", err)
-	}
-	defer f.Close()
-
-	decoder := xml.NewDecoder(f)
-	if err = decoder.Decode(&j.Testsuites); err != nil {
 		return fmt.Errorf("failed to read junit report file: %w", err)
 	}
+	j.Testsuites = *suites
 	return nil
 }
 
