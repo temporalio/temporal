@@ -8,6 +8,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
+	apicallbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -886,14 +887,18 @@ func (a *Activity) buildCallbackInfos(ctx chasm.Context) ([]*apiactivitypb.Callb
 		}
 
 		cbInfos = append(cbInfos, &apiactivitypb.CallbackInfo{
-			Callback:                cbSpec,
-			Trigger:                 &apiactivitypb.CallbackInfo_Trigger{Variant: &apiactivitypb.CallbackInfo_Trigger_ActivityClosed{}},
-			RegistrationTime:        cb.RegistrationTime,
-			State:                   state,
-			Attempt:                 cb.Attempt,
-			LastAttemptCompleteTime: cb.LastAttemptCompleteTime,
-			LastAttemptFailure:      cb.LastAttemptFailure,
-			NextAttemptScheduleTime: cb.NextAttemptScheduleTime,
+			Trigger: &apiactivitypb.CallbackInfo_Trigger{
+				Variant: &apiactivitypb.CallbackInfo_Trigger_ActivityClosed{},
+			},
+			Info: &apicallbackpb.CallbackInfo{
+				Callback:                cbSpec,
+				RegistrationTime:        cb.RegistrationTime,
+				State:                   state,
+				Attempt:                 cb.Attempt,
+				LastAttemptCompleteTime: cb.LastAttemptCompleteTime,
+				LastAttemptFailure:      cb.LastAttemptFailure,
+				NextAttemptScheduleTime: cb.NextAttemptScheduleTime,
+			},
 		})
 	}
 	return cbInfos, nil

@@ -5088,10 +5088,10 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 
 		require.Len(t, describeResp.Callbacks, 1)
 		cbInfo := describeResp.Callbacks[0]
-		require.Equal(t, callbackURL, cbInfo.GetCallback().GetNexus().GetUrl())
-		require.Equal(t, enumspb.CALLBACK_STATE_STANDBY, cbInfo.GetState())
-		require.NotNil(t, cbInfo.GetRegistrationTime())
 		require.NotNil(t, cbInfo.GetTrigger().GetActivityClosed())
+		require.Equal(t, callbackURL, cbInfo.GetInfo().GetCallback().GetNexus().GetUrl())
+		require.Equal(t, enumspb.CALLBACK_STATE_STANDBY, cbInfo.GetInfo().GetState())
+		require.NotNil(t, cbInfo.GetInfo().GetRegistrationTime())
 	})
 
 	t.Run("ExceedsMaxCallbacksLimit", func(t *testing.T) {
