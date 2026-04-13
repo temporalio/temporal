@@ -4467,7 +4467,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 				}
 			}
 		}
-		a.Len(remaining, 0)
+		a.Empty(remaining)
 	}, 30*time.Second, 100*time.Millisecond)
 }
 
