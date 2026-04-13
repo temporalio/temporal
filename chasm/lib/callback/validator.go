@@ -7,6 +7,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/dynamicconfig"
+	"google.golang.org/grpc/status"
 )
 
 // Validator validates completion callbacks attached to executions (workflows and standalone activities).
@@ -50,6 +51,9 @@ func (v *Validator) Validate(namespaceName string, cbs []*commonpb.Callback) err
 				)
 			}
 			if err := v.endpointRules(namespaceName).Validate(rawURL); err != nil {
+				if s, ok := status.FromError(err); ok {
+					return serviceerror.NewInvalidArgument(s.Message())
+				}
 				return serviceerror.NewInvalidArgument(err.Error())
 			}
 

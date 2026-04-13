@@ -106,7 +106,7 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 		{
 			name:    "too many callbacks",
 			urls:    []string{"http://url-1", "http://url-2", "http://url-3"},
-			message: "cannot attach more than 2 callbacks to a workflow",
+			message: "cannot attach more than 2 callbacks to an execution",
 		},
 		{
 			name:    "url not configured",
