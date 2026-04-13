@@ -228,7 +228,7 @@ jobs:
 
       - name: Restore dependencies
         id: restore-deps
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ~/go/pkg/mod
           key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
@@ -236,14 +236,14 @@ jobs:
       - run: make pre-build-functional-test-coverage
 
       - name: Save dependencies
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         if: ${{ steps.restore-deps.outputs.cache-hit != 'true' }}
         with:
           path: ~/go/pkg/mod
           key: ${{ steps.restore-deps.outputs.cache-primary-key }}
 
       - name: Save build outputs
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
@@ -266,13 +266,13 @@ jobs:
           cache: false # do our own caching
 
       - name: Restore dependencies
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ~/go/pkg/mod
           key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
@@ -303,13 +303,13 @@ jobs:
           cache: false # do our own caching
 
       - name: Restore dependencies
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ~/go/pkg/mod
           key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
@@ -329,8 +329,8 @@ jobs:
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
-        uses: mikepenz/action-junit-report@v5.0.0-rc01
-        if: failure()
+        uses: mikepenz/action-junit-report@v6
+        if: ${{ !cancelled() }}
         with:
           report_paths: ./.testoutput/junit.*.xml
           detailed_summary: true
@@ -354,12 +354,19 @@ jobs:
           flags: unit-test
           report_type: test_results
 
+      - name: Get job ID
+        id: get_job_id
+        uses: ./.github/actions/get-job-id
+        with:
+          job_name: Unit test
+          run_id: ${{ github.run_id }}
+
       - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
-        uses: actions/upload-artifact@v4.4.3
+        uses: actions/upload-artifact@v6
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--unit-test
+          name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--unit-test
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
@@ -390,13 +397,13 @@ jobs:
           cache: false # do our own caching
 
       - name: Restore dependencies
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ~/go/pkg/mod
           key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
@@ -422,8 +429,8 @@ jobs:
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
-        uses: mikepenz/action-junit-report@v5.0.0-rc01
-        if: failure()
+        uses: mikepenz/action-junit-report@v6
+        if: ${{ !cancelled() }}
         with:
           report_paths: ./.testoutput/junit.*.xml
           detailed_summary: true
@@ -447,12 +454,19 @@ jobs:
           flags: integration-test
           report_type: test_results
 
+      - name: Get job ID
+        id: get_job_id
+        uses: ./.github/actions/get-job-id
+        with:
+          job_name: Integration test
+          run_id: ${{ github.run_id }}
+
       - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
-        uses: actions/upload-artifact@v4.4.3
+        uses: actions/upload-artifact@v6
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--integration-test
+          name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--integration-test
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
@@ -501,13 +515,13 @@ jobs:
           cache: false # do our own caching
 
       - name: Restore dependencies
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ~/go/pkg/mod
           key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
@@ -536,6 +550,8 @@ jobs:
           TEST_TOTAL_SHARDS: ${{ matrix.total_shards }}
           TEST_SHARD_INDEX: ${{ matrix.total_shards && matrix.shard_index }} # guard with total_shards to avoid falsy eval of shard_index=0
           TEST_ARGS: "${{ matrix.test_args }}"
+          TEMPORAL_TEST_LOG_FILE: ${{ github.workspace }}/.testoutput/debug.log
+          TEMPORAL_TEST_LOG_LEVEL: info
 
       - name: Dump container logs
         if: ${{ failure() && toJson(matrix.containers) != '[]' }}
@@ -552,8 +568,8 @@ jobs:
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
-        uses: mikepenz/action-junit-report@v5.0.0-rc01
-        if: failure()
+        uses: mikepenz/action-junit-report@v6
+        if: ${{ !cancelled() }}
         with:
           report_paths: ./.testoutput/junit.*.xml
           detailed_summary: true
@@ -579,13 +595,22 @@ jobs:
 
       - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
-        uses: actions/upload-artifact@v4.4.3
+        uses: actions/upload-artifact@v6
         if: ${{ !cancelled() }}
         with:
           name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ matrix.name }}--${{ matrix.display_name }}--functional-test
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
+
+      - name: Upload debug logs
+        uses: actions/upload-artifact@v6
+        if: ${{ !cancelled() }}
+        with:
+          name: debug-logs--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ matrix.name }}--${{ matrix.display_name }}--functional-test
+          path: ${{ github.workspace }}/.testoutput/debug.log
+          if-no-files-found: ignore
+          retention-days: 14
 
   mixed-brain-test:
     name: Mixed brain test
@@ -610,13 +635,13 @@ jobs:
           cache: false
 
       - name: Restore dependencies
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ~/go/pkg/mod
           key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
@@ -680,10 +705,10 @@ jobs:
       actions: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
           cache: true

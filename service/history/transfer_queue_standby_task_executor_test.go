@@ -90,6 +90,7 @@ type (
 		localVerificationDuration time.Duration
 		fetchHistoryDuration      time.Duration
 		discardDuration           time.Duration
+		chasmDiscardDuration      time.Duration
 
 		transferQueueStandbyTaskExecutor *transferQueueStandbyTaskExecutor
 		mockSearchAttributesProvider     *searchattribute.MockProvider
@@ -119,6 +120,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.localVerificationDuration = time.Minute * 10
 	s.fetchHistoryDuration = time.Minute * 12
 	s.discardDuration = time.Minute * 30
+	s.chasmDiscardDuration = config.ChasmStandbyTaskDiscardDelay("")
 
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = shard.NewTestContextWithTimeSource(
@@ -1336,6 +1338,98 @@ func (s *transferQueueStandbyTaskExecutorSuite) newTaskExecutable(
 		metrics.NoopMetricsHandler,
 		telemetry.NoopTracer,
 	)
+}
+
+func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransferTask_Discard() {
+	setupDiscard := func(lib chasm.Library, taskName string, treeMockFn func(*historyi.MockChasmTree)) (*transferQueueStandbyTaskExecutor, *tasks.ChasmTask) {
+		execution := &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowKey.WorkflowID,
+			RunId:      tests.WorkflowKey.RunID,
+		}
+
+		registry := chasm.NewRegistry(s.logger)
+		s.NoError(registry.Register(lib))
+		s.mockShard.SetChasmRegistry(registry)
+		typeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(lib.Name(), taskName))
+
+		chasmTree := historyi.NewMockChasmTree(s.controller)
+		chasmTree.EXPECT().ValidateSideEffectTask(gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+		treeMockFn(chasmTree)
+
+		ms := historyi.NewMockMutableState(s.controller)
+		ms.EXPECT().GetCurrentVersion().Return(int64(2)).AnyTimes()
+		ms.EXPECT().NextTransitionCount().Return(int64(0)).AnyTimes()
+		ms.EXPECT().GetNextEventID().Return(int64(2)).AnyTimes()
+		ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
+		ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+		ms.EXPECT().GetExecutionState().Return(
+			&persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
+		).AnyTimes()
+		ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
+
+		transferTask := &tasks.ChasmTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				s.namespaceID.String(),
+				execution.GetWorkflowId(),
+				execution.GetRunId(),
+			),
+			VisibilityTimestamp: s.now,
+			TaskID:              s.mustGenerateTaskID(),
+			Info: &persistencespb.ChasmTaskInfo{
+				ArchetypeId: tests.ArchetypeID,
+				TypeId:      typeID,
+			},
+		}
+
+		wfCtx := historyi.NewMockWorkflowContext(s.controller)
+		wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil).AnyTimes()
+
+		mockCache := wcache.NewMockCache(s.controller)
+		mockCache.EXPECT().GetOrCreateChasmExecution(
+			gomock.Any(), s.mockShard, gomock.Any(), execution, tests.ArchetypeID, gomock.Any(),
+		).Return(wfCtx, wcache.NoopReleaseFn, nil).AnyTimes()
+
+		//nolint:revive // unchecked-type-assertion
+		executor := newTransferQueueStandbyTaskExecutor(
+			s.mockShard,
+			mockCache,
+			s.logger,
+			metrics.NoopMetricsHandler,
+			s.clusterName,
+			s.mockShard.Resource.HistoryClient,
+			s.mockShard.Resource.MatchingClient,
+			s.mockVisibilityManager,
+			s.mockChasmEngine,
+			s.clientBean,
+		).(*transferQueueStandbyTaskExecutor)
+
+		// Advance the standby cluster's time past the CHASM discard delay.
+		s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.chasmDiscardDuration+time.Second))
+
+		return executor, transferTask
+	}
+
+	s.Run("WithHandler", func() {
+		executor, task := setupDiscard(&discardableTaskTestLibrary{}, "discard_task", func(tree *historyi.MockChasmTree) {
+			tree.EXPECT().ExecuteSideEffectDiscardTask(
+				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+			).Return(nil).Times(1)
+		})
+		resp := executor.Execute(context.Background(), s.newTaskExecutable(task))
+		s.NotNil(resp)
+		s.NoError(resp.ExecutionErr)
+	})
+
+	s.Run("WithoutHandler", func() {
+		executor, task := setupDiscard(&nonDiscardableTaskTestLibrary{}, "non_discard_task", func(tree *historyi.MockChasmTree) {
+			tree.EXPECT().ExecuteSideEffectDiscardTask(
+				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+			).Return(chasm.ErrTaskDiscarded).Times(1)
+		})
+		resp := executor.Execute(context.Background(), s.newTaskExecutable(task))
+		s.NotNil(resp)
+		s.ErrorIs(resp.ExecutionErr, consts.ErrTaskDiscarded)
+	})
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) mustGenerateTaskID() int64 {

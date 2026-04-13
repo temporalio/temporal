@@ -87,12 +87,18 @@ func assertContextValue(chasmContext chasm.Context) error {
 func (s *PayloadStore) Describe(
 	chasmContext chasm.Context,
 	_ DescribePayloadStoreRequest,
-) (*testspb.TestPayloadStore, error) {
+) (DescribePayloadStoreResponse, error) {
 	if err := assertContextValue(chasmContext); err != nil {
-		return nil, err
+		return DescribePayloadStoreResponse{}, err
 	}
 
-	return common.CloneProto(s.State), nil
+	state := common.CloneProto(s.State)
+	executionInfo := chasmContext.ExecutionInfo()
+
+	return DescribePayloadStoreResponse{
+		State:                state,
+		ApproximateStateSize: executionInfo.ApproximateStateSize,
+	}, nil
 }
 
 func (s *PayloadStore) Close(
@@ -105,6 +111,20 @@ func (s *PayloadStore) Close(
 
 	s.State.Closed = true
 	return ClosePayloadStoreResponse{}, nil
+}
+
+func (s *PayloadStore) Cancel(
+	_ chasm.MutableContext,
+	_ CancelPayloadStoreRequest,
+) (CancelPayloadStoreResponse, error) {
+	s.State.Canceled = true
+	return CancelPayloadStoreResponse{}, nil
+}
+
+func (s *PayloadStore) ContextMetadata(_ chasm.Context) map[string]string {
+	return map[string]string{
+		string(componentCtxKey): componentCtxVal,
+	}
 }
 
 func (s *PayloadStore) AddPayload(
@@ -142,7 +162,7 @@ func (s *PayloadStore) AddPayload(
 		)
 	}
 
-	return s.Describe(mutableContext, DescribePayloadStoreRequest{})
+	return common.CloneProto(s.State), nil
 }
 
 func (s *PayloadStore) GetPayload(
@@ -178,7 +198,7 @@ func (s *PayloadStore) RemovePayload(
 	delete(s.Payloads, key)
 	delete(s.State.ExpirationTimes, key)
 
-	return s.Describe(mutableContext, DescribePayloadStoreRequest{})
+	return common.CloneProto(s.State), nil
 }
 
 func (s *PayloadStore) LifecycleState(
@@ -189,6 +209,9 @@ func (s *PayloadStore) LifecycleState(
 		panic("registered component key value pair not available in context")
 	}
 
+	if s.State.Canceled {
+		return chasm.LifecycleStateFailed
+	}
 	if s.State.Closed {
 		return chasm.LifecycleStateCompleted
 	}
@@ -218,10 +241,15 @@ func (s *PayloadStore) SearchAttributes(
 		panic("registered component key value pair not available in context")
 	}
 
+	status := s.LifecycleState(chasmContext).String()
+	if s.State.Canceled {
+		status = "Canceled"
+	}
+
 	return []chasm.SearchAttributeKeyValue{
 		PayloadTotalCountSearchAttribute.Value(s.State.TotalCount),
 		PayloadTotalSizeSearchAttribute.Value(s.State.TotalSize),
-		ExecutionStatusSearchAttribute.Value(s.LifecycleState(chasmContext).String()),
+		ExecutionStatusSearchAttribute.Value(status),
 		chasm.SearchAttributeTemporalScheduledByID.Value(TestScheduleID),
 		chasm.SearchAttributeTaskQueue.Value(DefaultPayloadStoreTaskQueue),
 	}

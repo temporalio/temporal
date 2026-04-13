@@ -175,13 +175,7 @@ func (h *frontendHandler) ListActivityExecutions(
 		pageSize = maxPageSize
 	}
 
-	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
 	resp, err := chasm.ListExecutions[*Activity, *emptypb.Empty](ctx, &chasm.ListExecutionsRequest{
-		NamespaceID:   namespaceID.String(),
 		NamespaceName: req.GetNamespace(),
 		PageSize:      int(pageSize),
 		NextPageToken: req.GetNextPageToken(),
@@ -233,13 +227,7 @@ func (h *frontendHandler) CountActivityExecutions(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
 	resp, err := chasm.CountExecutions[*Activity](ctx, &chasm.CountExecutionsRequest{
-		NamespaceID:   namespaceID.String(),
 		NamespaceName: req.GetNamespace(),
 		Query:         req.GetQuery(),
 	})
@@ -261,6 +249,35 @@ func (h *frontendHandler) CountActivityExecutions(
 	}, nil
 }
 
+// DeleteActivityExecution terminates and schedules a standalone activity execution for deletion.
+func (h *frontendHandler) DeleteActivityExecution(
+	ctx context.Context,
+	req *workflowservice.DeleteActivityExecutionRequest,
+) (*workflowservice.DeleteActivityExecutionResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityDisabled
+	}
+
+	if err := validateAndNormalizeDeleteRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.DeleteActivityExecution(ctx, &activitypb.DeleteActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DeleteActivityExecutionResponse{}, nil
+}
+
 // TerminateActivityExecution terminates a standalone activity execution
 func (h *frontendHandler) TerminateActivityExecution(
 	ctx context.Context,
@@ -276,13 +293,7 @@ func (h *frontendHandler) TerminateActivityExecution(
 		return nil, err
 	}
 
-	if req.GetRequestId() == "" {
-		// Since this mutates the request, we clone it first so that any retries use the original request.
-		req = common.CloneProto(req)
-		req.RequestId = uuid.NewString()
-	}
-
-	if err := validateTerminateActivityExecutionRequest(
+	if err := validateAndNormalizeTerminateRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 		h.config.BlobSizeLimitError,
@@ -315,13 +326,7 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 		return nil, err
 	}
 
-	if req.GetRequestId() == "" {
-		// Since this mutates the request, we clone it first so that any retries use the original request.
-		req = common.CloneProto(req)
-		req.RequestId = uuid.NewString()
-	}
-
-	if err := validateRequestCancelActivityExecutionRequest(
+	if err := validateAndNormalizeCancelRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 		h.config.BlobSizeLimitError,
@@ -345,7 +350,12 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	req *workflowservice.StartActivityExecutionRequest,
 	namespaceID namespace.ID,
 ) (*workflowservice.StartActivityExecutionRequest, error) {
-	// Since validation includes mutation of the request, we clone it first so that any retries use the original request.
+	// Since validation mutates the request, clone it first so that retries use the original
+	// request. However if the client did not set a request ID then set that before cloning so that
+	// retries use the same request ID.
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	}
 	req = common.CloneProto(req)
 	activityType := req.ActivityType.GetName()
 
@@ -354,7 +364,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 
 	opts := activityOptionsFromStartRequest(req)
-	err := ValidateAndNormalizeActivityAttributes(
+	err := ValidateAndNormalizeStandaloneActivity(
 		req.ActivityId,
 		activityType,
 		h.config.DefaultActivityRetryPolicy,
@@ -369,61 +379,20 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 	applyActivityOptionsToStartRequest(opts, req)
 
-	err = h.validateAndNormalizeStartActivityExecutionRequest(req)
+	err = validateAndNormalizeStartRequest(
+		req,
+		h.config.MaxIDLengthLimit(),
+		h.config.BlobSizeLimitError,
+		h.config.BlobSizeLimitWarn,
+		h.logger,
+		h.saMapperProvider,
+		h.saValidator,
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	return req, nil
-}
-
-// validateAndNormalizeStartActivityExecutionRequest validates and normalizes the standalone
-// activity specific attributes. Note that this method mutates the input params; the caller must
-// clone the request if necessary (e.g. if it may be retried).
-func (h *frontendHandler) validateAndNormalizeStartActivityExecutionRequest(
-	req *workflowservice.StartActivityExecutionRequest,
-) error {
-	if req.GetRequestId() == "" {
-		req.RequestId = uuid.NewString()
-	}
-
-	maxIDLengthLimit := h.config.MaxIDLengthLimit()
-
-	if len(req.GetRequestId()) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
-			len(req.GetRequestId()), maxIDLengthLimit)
-	}
-
-	if len(req.GetIdentity()) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
-			len(req.GetIdentity()), maxIDLengthLimit)
-	}
-
-	if err := normalizeAndValidateIDPolicy(req); err != nil {
-		return err
-	}
-
-	if err := validateBlobSize(
-		req.GetActivityId(),
-		"StartActivityExecution",
-		h.config.BlobSizeLimitError,
-		h.config.BlobSizeLimitWarn,
-		req.Input.Size(),
-		h.logger,
-		req.GetNamespace()); err != nil {
-		return serviceerror.NewInvalidArgument("input exceeds length limit")
-	}
-
-	if req.GetSearchAttributes() != nil {
-		if err := validateAndNormalizeSearchAttributes(
-			req,
-			h.saMapperProvider,
-			h.saValidator); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // activityOptionsFromStartRequest builds an ActivityOptions from the inlined fields

@@ -1,22 +1,17 @@
 name: Manual Docker Build
+# Dispatch this workflow from the branch you want to build from.
 
 on:
   workflow_dispatch:
     inputs:
-      ref:
-        description: "Git ref (branch, tag, or SHA) to build from"
-        required: true
-        default: "main"
       cli-version:
-        description: "Temporal CLI version to include in images"
-        required: true
-        default: "1.5.1"
+        description: "Optional Temporal CLI version override (leave empty to use default)"
+        default: ""
       alpine-tag:
-        description: "Alpine base image tag (e.g., 3.23.3)"
-        required: true
-        default: "3.23.3"
+        description: "Optional Alpine base image tag override (leave empty to use default from docker-bake.hcl)"
+        default: ""
       push:
-        description: "Push images to Docker Hub"
+        description: "Push images to Docker Hub (temporaliotest/server and temporaliotest/admin-tools)"
         required: true
         type: boolean
         default: false
@@ -25,15 +20,6 @@ on:
         required: true
         type: boolean
         default: false
-      platform:
-        description: "Platform to build (leave empty for multi-arch, or specify linux/amd64 or linux/arm64)"
-        required: false
-        default: ""
-      snapshot:
-        description: "Build in snapshot mode (for non-release builds)"
-        required: true
-        type: boolean
-        default: true
 
 permissions:
   contents: read
@@ -45,61 +31,59 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.ref }}
           fetch-depth: 0
-
-      - name: Determine single-arch parameter
-        id: arch-param
-        run: |
-          if [ -n "${{ inputs.platform }}" ]; then
-            # Extract arch from platform (e.g., linux/amd64 -> amd64)
-            ARCH=$(echo "${{ inputs.platform }}" | cut -d'/' -f2)
-            echo "single-arch=${ARCH}" >> "$GITHUB_OUTPUT"
-          else
-            echo "single-arch=" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Build binaries
         uses: ./.github/actions/build-binaries
         with:
-          snapshot: ${{ inputs.snapshot }}
-          single-arch: ${{ steps.arch-param.outputs.single-arch }}
+          snapshot: true
 
       - name: Build Docker images
+        id: build-docker
         if: ${{ !inputs.push }}
         uses: ./.github/actions/build-docker-images
         with:
           push: false
           tag-latest: ${{ inputs.tag-latest }}
-          platform: ${{ inputs.platform }}
-          cli-version: ${{ inputs.cli-version }}
           alpine-tag: ${{ inputs.alpine-tag }}
-          load: ${{ inputs.platform == 'linux/amd64' || inputs.platform == '' }}
+          cli-version: ${{ inputs.cli-version }}
 
       - name: Build and push Docker images
+        id: push-docker
         if: ${{ inputs.push }}
         uses: ./.github/actions/build-docker-images
         with:
           push: true
           tag-latest: ${{ inputs.tag-latest }}
-          platform: ${{ inputs.platform }}
-          cli-version: ${{ inputs.cli-version }}
           alpine-tag: ${{ inputs.alpine-tag }}
+          cli-version: ${{ inputs.cli-version }}
           dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Output image tags
+        env:
+          SHA_TAG: ${{ steps.build-docker.outputs.sha-tag || steps.push-docker.outputs.sha-tag }}
+          SHA_FULL_TAG: ${{ steps.build-docker.outputs.sha-full-tag || steps.push-docker.outputs.sha-full-tag }}
+          BRANCH_TAG: ${{ steps.build-docker.outputs.branch-tag || steps.push-docker.outputs.branch-tag }}
+          PUSHED: ${{ inputs.push }}
+          TAG_LATEST: ${{ inputs.tag-latest }}
         run: |
           {
             echo "### Docker Images Built"
             echo ""
-            echo "**Git Ref:** ${{ inputs.ref }}"
-            echo "**CLI Version:** ${{ inputs.cli-version }}"
-            echo "**Platform:** ${{ inputs.platform || 'linux/amd64,linux/arm64' }}"
-            echo "**Pushed to Docker Hub:** ${{ inputs.push }}"
-            echo "**Tagged as latest:** ${{ inputs.tag-latest }}"
+            echo "**Branch:** ${GITHUB_REF_NAME}"
+            echo "**Short SHA Tag:** ${SHA_TAG}"
+            echo "**Full SHA Tag:** ${SHA_FULL_TAG}"
+            echo "**Branch Tag:** ${BRANCH_TAG}"
+            echo "**Platform:** linux/amd64,linux/arm64"
+            echo "**Pushed to Docker Hub:** ${PUSHED}"
+            echo "**Tagged as latest:** ${TAG_LATEST}"
             echo ""
             echo "**Image Tags:**"
-            echo "- temporaliotest/server:sha-${GITHUB_SHA:0:7}"
-            echo "- temporaliotest/admin-tools:sha-${GITHUB_SHA:0:7}"
+            echo "- temporaliotest/server:${SHA_TAG}"
+            echo "- temporaliotest/admin-tools:${SHA_TAG}"
+            echo "- temporaliotest/server:${SHA_FULL_TAG}"
+            echo "- temporaliotest/admin-tools:${SHA_FULL_TAG}"
+            echo "- temporaliotest/server:${BRANCH_TAG}"
+            echo "- temporaliotest/admin-tools:${BRANCH_TAG}"
           } >> "$GITHUB_STEP_SUMMARY"

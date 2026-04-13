@@ -10,16 +10,19 @@ type TestFailure struct {
 	ArtifactID string    // Artifact identifier from GitHub
 	RunID      int64     // GitHub Actions run ID
 	JobID      string    // GitHub Actions job ID (or "unknown")
+	MatrixName string    // DB config name from artifact name (e.g. "sqlite", "cassandra")
 	Timestamp  time.Time // When the workflow run was created
 }
 
 // TestRun represents a test execution (success or failure)
 type TestRun struct {
-	SuiteName string // Top-level test suite name
-	Name      string // Test name
-	Failed    bool   // Whether the test failed
-	Skipped   bool   // Whether the test was skipped
-	RunID     int64  // Workflow run ID
+	SuiteName  string // Top-level test suite name
+	Name       string // Test name
+	Failed     bool   // Whether the test failed
+	Skipped    bool   // Whether the test was skipped
+	RunID      int64  // Workflow run ID
+	JobID      string // GitHub Actions job ID (unique per matrix job/shard)
+	MatrixName string // DB config name from artifact name (e.g. "sqlite", "cassandra")
 }
 
 // TestReport represents aggregated failures for a single test
@@ -27,7 +30,6 @@ type TestReport struct {
 	TestName     string    // Normalized test name (retry suffix stripped)
 	FailureCount int       // Total number of failures
 	TotalRuns    int       // Total number of times this test ran (including successes)
-	CIRunsBroken int       // Number of CI runs this test broke (for CI breakers only)
 	GitHubURLs   []string  // Up to max_links failure URLs
 	LastFailure  time.Time // Timestamp of the most recent failure
 }
@@ -35,9 +37,9 @@ type TestReport struct {
 // SuiteReport represents aggregated flake data for a test suite
 type SuiteReport struct {
 	SuiteName   string    // Test suite name from JUnit XML
-	FlakeRate   float64   // Percentage of runs with at least one non-retry failure
-	FailedRuns  int       // Number of runs with at least one non-retry failure
-	TotalRuns   int       // Total number of workflow runs where this suite appeared
+	FlakeRate   float64   // Percentage of job executions with at least one non-retry failure
+	FailedRuns  int       // Number of job executions with at least one non-retry failure
+	TotalRuns   int       // Total number of job executions where this suite appeared
 	LastFailure time.Time // Timestamp of the most recent failure
 }
 
@@ -73,6 +75,7 @@ type WorkflowRun struct {
 	Status     string    `json:"status"`
 	Conclusion string    `json:"conclusion"`
 	HeadBranch string    `json:"head_branch"`
+	HeadSHA    string    `json:"head_sha"`
 }
 
 // WorkflowArtifact represents a downloadable artifact
@@ -87,4 +90,56 @@ type WorkflowArtifact struct {
 type ArtifactsResponse struct {
 	TotalCount int                `json:"total_count"`
 	Artifacts  []WorkflowArtifact `json:"artifacts"`
+}
+
+// CommitObservation holds aggregated pass/fail data for a single (test, commit) pair.
+type CommitObservation struct {
+	CommitSHA     string
+	CommitIdx     int     // chronological index (0 = oldest)
+	Prior         float64 // prior weight (1.0 = uniform; adjusted by heuristics)
+	HeuristicNote string  // reason for prior adjustment, if any
+	Passes        int
+	Fails         int
+}
+
+// BisectResult is one candidate culprit commit with its posterior probability.
+type BisectResult struct {
+	CommitSHA     string
+	CommitIdx     int
+	Probability   float64 // posterior P(this commit introduced the flakiness)
+	PassesBefore  int
+	FailsBefore   int
+	PassesAfter   int
+	FailsAfter    int
+	CommitTitle   string
+	CommitAuthor  string
+	CommitDate    string // formatted date of the commit, e.g. "2024-01-15"
+	HeuristicNote string // e.g. "only touches .github/ — deprioritized"
+}
+
+// TestBisectReport is the full bisect output for a single test.
+type TestBisectReport struct {
+	TestName    string
+	TopSuspects []BisectResult // sorted by Probability descending
+	TotalObs    int            // total observations (pass + fail) used
+	Skipped     bool           // true if below signal or confidence threshold
+}
+
+// CommitMeta holds changed-file info fetched from the GitHub API.
+// GET /repos/{owner}/{repo}/commits/{sha}
+type CommitMeta struct {
+	SHA         string
+	Title       string
+	Author      string
+	CommittedAt time.Time
+	Files       []string // relative paths of changed files
+}
+
+// BisectConfig holds configuration for a bisect analysis run.
+type BisectConfig struct {
+	Repo           string
+	TopN           int // max tests to analyze; 0 = all qualifying tests
+	MinFailures    int
+	MinRuns        int
+	MinProbability float64 // only report tests whose top suspect exceeds this (0–1); 0 = report all
 }

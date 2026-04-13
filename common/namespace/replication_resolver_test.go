@@ -26,7 +26,7 @@ func TestNewDefaultReplicationResolverFactory(t *testing.T) {
 	require.NotNil(t, resolver)
 	assert.Equal(t, "active-cluster", resolver.ActiveClusterName(namespace.EmptyBusinessID))
 	assert.Equal(t, []string{"cluster1", "cluster2", "cluster3"}, resolver.ClusterNames(namespace.EmptyBusinessID))
-	assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.ReplicationState())
+	assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.ReplicationState(""))
 }
 
 func TestDefaultReplicationResolver_ActiveClusterName(t *testing.T) {
@@ -171,7 +171,7 @@ func TestDefaultReplicationResolver_ReplicationState(t *testing.T) {
 			}
 			resolver := factory(detail)
 
-			got := resolver.ReplicationState()
+			got := resolver.ReplicationState("")
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -193,7 +193,7 @@ func TestDefaultReplicationResolver_MultipleCalls(t *testing.T) {
 	for range 5 {
 		assert.Equal(t, "primary", resolver.ActiveClusterName(namespace.EmptyBusinessID))
 		assert.Equal(t, []string{"primary", "secondary", "tertiary"}, resolver.ClusterNames(namespace.EmptyBusinessID))
-		assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.ReplicationState())
+		assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.ReplicationState(""))
 	}
 }
 
@@ -402,7 +402,7 @@ func TestDefaultReplicationResolver_Clone(t *testing.T) {
 	assert.Equal(t, resolver.IsGlobalNamespace(), cloned.IsGlobalNamespace())
 	assert.Equal(t, resolver.FailoverVersion(namespace.EmptyBusinessID), cloned.FailoverVersion(namespace.EmptyBusinessID))
 	assert.Equal(t, resolver.FailoverNotificationVersion(), cloned.FailoverNotificationVersion())
-	assert.Equal(t, resolver.ReplicationState(), cloned.ReplicationState())
+	assert.Equal(t, resolver.ReplicationState(""), cloned.ReplicationState(""))
 
 	// Verify that modifying the cloned resolver doesn't affect the original
 	cloned.SetActiveCluster("cluster-tertiary")

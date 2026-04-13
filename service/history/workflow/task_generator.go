@@ -9,11 +9,11 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	workerpb "go.temporal.io/api/worker/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
@@ -63,6 +63,7 @@ type (
 			activityScheduledEventID int64,
 		) error
 		GenerateActivityRetryTasks(activityInfo *persistencespb.ActivityInfo) error
+		GenerateWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error
 		GenerateChildWorkflowTasks(
 			childInitiatedEventId int64,
 		) error
@@ -276,11 +277,6 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 // This method returns an error when the GetNamespaceByID call fails with anything other than
 // serviceerror.NamespaceNotFound.
 func (r *TaskGeneratorImpl) getRetention() (time.Duration, error) {
-	// For standalone activities, use 1 day retention
-	if r.mutableState.ChasmTree().ArchetypeID() == activity.ArchetypeID {
-		return 24 * time.Hour, nil
-	}
-
 	retention := defaultWorkflowRetention
 	executionInfo := r.mutableState.GetExecutionInfo()
 	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
@@ -583,6 +579,23 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistence
 	return nil
 }
 
+func (r *TaskGeneratorImpl) GenerateWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error {
+	if !r.config.EnableCancelActivityWorkerCommand() {
+		return nil
+	}
+
+	if len(commands) == 0 || controlQueue == "" {
+		return nil
+	}
+
+	r.mutableState.AddTasks(&tasks.WorkerCommandsTask{
+		WorkflowKey: r.mutableState.GetWorkflowKey(),
+		Commands:    commands,
+		Destination: controlQueue,
+	})
+	return nil
+}
+
 func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
 	childInitiatedEventId int64,
 ) error {
@@ -842,13 +855,11 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 			activityIDs,
 			targetClusters,
 		)...)
-		if r.config.EnableNexus() {
-			taskEquivalents = append(taskEquivalents, &tasks.SyncHSMTask{
-				WorkflowKey: workflowKey,
-				// TaskID and VisibilityTimestamp are set by shard
-				TargetClusters: targetClusters,
-			})
-		}
+		taskEquivalents = append(taskEquivalents, &tasks.SyncHSMTask{
+			WorkflowKey: workflowKey,
+			// TaskID and VisibilityTimestamp are set by shard
+			TargetClusters: targetClusters,
+		})
 	}
 
 	if r.mutableState.IsTransitionHistoryEnabled() &&

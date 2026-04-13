@@ -2,7 +2,15 @@
 
 This README explains how to add new Archiver implementations.
 
-## Steps
+There are two approaches:
+
+1. **Built-in implementation** — add the archiver directly to this repository (e.g., `filestore`, `gcloud`, `s3store`). **We are not currently accepting contributions for new built-in archiver implementations.** Maintaining a growing set of built-in implementations places an ongoing maintenance burden on the team, so new implementations should use Option 2 instead.
+
+2. **Custom implementation via server option** — implement the archiver in an external package and inject it into the server at startup using `WithCustomHistoryArchiverFactory` / `WithCustomVisibilityArchiverFactory`. This is the recommended approach for all new archiver implementations.
+
+---
+
+## Option 1: Built-in implementation (in-repo)
 
 **Step 1: Create a new package for your implementation**
 
@@ -73,6 +81,120 @@ Modify the `./provider/provider.go` file so that the `ArchiverProvider` knows ho
 Also, add configs for you archiver to static yaml config files and modify the `HistoryArchiverProvider`
 and `VisibilityArchiverProvider` struct in the `../common/service/config.go` accordingly.
 
+---
+
+## Option 2: Custom implementation via server option (external package)
+
+This approach lets you define archiver implementations in your own codebase and inject them into the Temporal server at startup, without modifying the server source.
+
+**Step 1: Implement the HistoryArchiver and VisibilityArchiver interfaces**
+
+Same interfaces as Steps 2 and 3 above.
+
+**Step 2: Implement CustomHistoryArchiverFactory and/or CustomVisibilityArchiverFactory**
+
+```go
+// CustomHistoryArchiverFactory constructs a history archiver for a given URI scheme.
+// Return provider.ErrUnknownScheme to fall back to the built-in implementation for that scheme.
+// If a non-nil archiver is returned, it takes precedence over built-in archiver implementations.
+type CustomHistoryArchiverFactory interface {
+    NewCustomHistoryArchiver(provider.NewCustomHistoryArchiverParams) (archiver.HistoryArchiver, error)
+}
+
+// CustomVisibilityArchiverFactory constructs a visibility archiver for a given URI scheme.
+// Return provider.ErrUnknownScheme to fall back to the built-in implementation for that scheme.
+// If a non-nil archiver is returned, it takes precedence over built-in archiver implementations.
+type CustomVisibilityArchiverFactory interface {
+    NewCustomVisibilityArchiver(provider.NewCustomVisibilityArchiverParams) (archiver.VisibilityArchiver, error)
+}
+```
+
+The params structs provide everything your factory needs to construct an archiver:
+
+```go
+type NewCustomHistoryArchiverParams struct {
+    Scheme           string
+    ExecutionManager persistence.ExecutionManager
+    Logger           log.Logger
+    MetricsHandler   metrics.Handler
+    Configs          map[string]any  // from archival.history.provider.customStores.<scheme> in config yaml
+}
+
+type NewCustomVisibilityArchiverParams struct {
+    Scheme         string
+    Logger         log.Logger
+    MetricsHandler metrics.Handler
+    Configs        map[string]any  // from archival.visibility.provider.customStores.<scheme> in config yaml
+}
+```
+
+Example factory implementation using the functional adapter types:
+
+```go
+historyFactory := provider.CustomHistoryArchiverFactoryFunc(func(params provider.NewCustomHistoryArchiverParams) (archiver.HistoryArchiver, error) {
+    if params.Scheme != "myscheme" {
+        return nil, provider.ErrUnknownScheme
+    }
+    return mypackage.NewHistoryArchiver(params.ExecutionManager, params.Logger, params.MetricsHandler, params.Configs)
+})
+
+visibilityFactory := provider.CustomVisibilityArchiverFactoryFunc(func(params provider.NewCustomVisibilityArchiverParams) (archiver.VisibilityArchiver, error) {
+    if params.Scheme != "myscheme" {
+        return nil, provider.ErrUnknownScheme
+    }
+    return mypackage.NewVisibilityArchiver(params.Logger, params.MetricsHandler, params.Configs)
+})
+```
+
+**Step 3: Register the factories with the server**
+
+Pass the factories as server options when constructing the Temporal server:
+
+```go
+s, err := temporal.NewServer(
+    temporal.WithConfig(cfg),
+    temporal.WithCustomHistoryArchiverFactory(historyFactory),
+    temporal.WithCustomVisibilityArchiverFactory(visibilityFactory),
+    // ... other options
+)
+```
+
+**Step 4: Configure archival in your YAML config**
+
+Enable archival and configure the URI scheme for your implementation. Use `customStores` to pass arbitrary config key-values to your factory:
+
+```yaml
+archival:
+  history:
+    state: "enabled"
+    enableRead: true
+    provider:
+      customStores:
+        myscheme:              # must match the scheme in your URIs
+          endpoint: "https://my-storage.example.com"
+          bucketName: "temporal-history"
+  visibility:
+    state: "enabled"
+    enableRead: true
+    provider:
+      customStores:
+        myscheme:
+          endpoint: "https://my-storage.example.com"
+          bucketName: "temporal-visibility"
+
+namespaceDefaults:
+  archival:
+    history:
+      state: "enabled"
+      URI: "myscheme://temporal-history"
+    visibility:
+      state: "enabled"
+      URI: "myscheme://temporal-visibility"
+```
+
+The `customStores.<scheme>` map is passed as `Configs` in the params to your factory. Built-in schemes (`filestore`, `gstorage`, `s3store`) continue to use their own config sections unless your factory handles them (see FAQ below).
+
+---
 
 ## FAQ
 **If my Archive method can automatically be retried by caller how can I record and access progress between retries?**
@@ -133,6 +255,12 @@ The `archiver` package provides a utility class called `HistoryIterator` which i
 Its usage is simpler than `ExecutionManager`, so archiver implementations can choose to use it when reading workflow histories.
 See the `historyIterator.go` file for more details.
 Sample usage can be found in the filestore historyArchiver implementation.
+
+**Can a custom factory override a built-in scheme like `filestore`?**
+
+Yes. The custom factory is always consulted first. If your factory returns a non-nil archiver for a scheme that is also built-in (e.g., `filestore`), your implementation takes precedence and the built-in one is never used. Only return `ErrUnknownScheme` for schemes you want to delegate to the built-in implementations.
+
+Note that when overriding a built-in scheme, the `Configs` field in the params is populated from `customStores.<scheme>` — not from the built-in config section (e.g., `filestore:`). If you need those config values, read them from `customStores` instead.
 
 **Should my archiver define all its own error types?**
 
