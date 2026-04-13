@@ -43,15 +43,14 @@ func TestDispatchNexusTaskOnNonRootPartitionNoForwarding(t *testing.T) {
 	dispatchAndCompleteNexusTask(t, s, false, false)
 }
 
-func dispatchAndCompleteNexusTask(t *testing.T, s testcore.Env, expectTaskForwarded, expectPollForwarded bool) {
+func dispatchAndCompleteNexusTask(t *testing.T, s *testcore.TestEnv, expectTaskForwarded, expectPollForwarded bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	taskQueue := testcore.RandomizeStr("test-nexus-tq")
 	matchingClient := s.GetTestCluster().MatchingClient()
 
-	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+	capture := s.StartNamespaceMetricCapture()
 
 	nexusRequest := &nexuspb.Request{
 		Header: map[string]string{
