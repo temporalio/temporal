@@ -6100,8 +6100,9 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		require.EqualValues(t, 2, poll2Resp.Attempt)
 	})
 
-	// PauseWhileCancelRequested: once cancellation has been requested the activity is committed to
-	// cancelling. A subsequent pause request must return FailedPrecondition.
+	// PauseWhileCancelRequested: mirrors workflow activity behavior — both flags can coexist.
+	// A pause request on a CANCEL_REQUESTED activity succeeds; the cancel takes precedence and
+	// the activity will be cancelled when the worker responds.
 	t.Run("PauseWhileCancelRequested", func(t *testing.T) {
 		ctx := testcore.NewContext()
 		activityID := testcore.RandomizeStr(t.Name())
@@ -6111,7 +6112,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		runID := startResp.RunId
 
 		// Poll so the activity is STARTED.
-		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+		pollResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
 		// Request cancellation — activity transitions to CANCEL_REQUESTED.
 		_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
@@ -6124,7 +6125,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Attempting to pause a CANCEL_REQUESTED activity must fail.
+		// Pause should succeed — both flags coexist, matching workflow activity behavior.
 		_, err = s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
@@ -6132,13 +6133,20 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 			Identity:   "test-identity",
 			Reason:     "test-pause",
 		})
-		require.Error(t, err)
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
+		require.NoError(t, err)
+
+		// Heartbeat should report both CancelRequested=true and ActivityPaused=true.
+		hbResp, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+		})
+		require.NoError(t, err)
+		require.True(t, hbResp.GetCancelRequested(), "expected CancelRequested=true")
+		require.True(t, hbResp.GetActivityPaused(), "expected ActivityPaused=true")
 	})
 
-	// CancelWhilePaused: pausing an activity (SCHEDULED → PAUSED) then attempting to cancel it
-	// must return FailedPrecondition. The caller must unpause first.
+	// CancelWhilePaused: mirrors workflow activity behavior — cancelling a PAUSED activity
+	// succeeds and takes effect immediately (no worker token is active).
 	t.Run("CancelWhilePaused", func(t *testing.T) {
 		ctx := testcore.NewContext()
 		activityID := testcore.RandomizeStr(t.Name())
@@ -6147,7 +6155,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		// Pause while SCHEDULED.
+		// Pause while SCHEDULED → activity becomes PAUSED.
 		_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
@@ -6157,7 +6165,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Attempting to cancel a PAUSED activity must fail.
+		// Cancel should succeed and take effect immediately (no worker to notify).
 		_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
@@ -6166,9 +6174,18 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 			Reason:     "test-cancel",
 			RequestId:  s.tv.RequestID(),
 		})
-		require.Error(t, err)
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
+		require.NoError(t, err)
+
+		// Activity should be CANCELED immediately.
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			dr, dErr := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      runID,
+			})
+			assert.NoError(c, dErr)
+			assert.Equal(c, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, dr.GetInfo().GetStatus())
+		}, 10*time.Second, 200*time.Millisecond)
 	})
 }
 

@@ -594,11 +594,6 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 	newReqID := req.GetRequestId()
 	existingReqID := a.GetCancelState().GetRequestId()
 
-	// A paused activity cannot be cancelled; unpause it first.
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED {
-		return nil, serviceerror.NewFailedPrecondition("cannot cancel a paused activity; unpause it first")
-	}
-
 	// If already in cancel requested state, fail if request ID is different, else no-op
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
 		if existingReqID != newReqID {
@@ -609,10 +604,11 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 		return &activitypb.RequestCancelActivityExecutionResponse{}, nil
 	}
 
-	// If in scheduled state, cancel immediately — no worker token is active so no worker
-	// response is expected. STARTED and CANCEL_REQUESTED activities wait for the worker.
+	// SCHEDULED and PAUSED activities have no active worker token so cancel immediately.
+	// STARTED and CANCEL_REQUESTED activities wait for the worker to respond.
 	originalStatus := a.GetStatus()
-	isCancelImmediately := originalStatus == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
+	isCancelImmediately := originalStatus == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED ||
+		originalStatus == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED
 
 	if err := TransitionCancelRequested.Apply(a, ctx, req); err != nil {
 		return nil, err
@@ -647,9 +643,6 @@ func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activityp
 ) {
 	if a.isTerminal() {
 		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
-	}
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
-		return nil, serviceerror.NewFailedPrecondition("activity cancellation is already in progress")
 	}
 	// Idempotent: already paused (real status or flag).
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED || a.PauseState != nil {

@@ -278,12 +278,14 @@ var TransitionTerminated = chasm.NewTransition(
 )
 
 // TransitionCancelRequested transitions to CancelRequested status.
-// Note: PAUSED activities cannot be cancelled directly — the caller must unpause first.
+// PAUSED activities (real status, no worker) are cancelled immediately in handleCancellationRequested
+// rather than waiting for a worker response.
 var TransitionCancelRequested = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	func(a *Activity, ctx chasm.MutableContext, req *workflowservice.RequestCancelActivityExecutionRequest) error {
