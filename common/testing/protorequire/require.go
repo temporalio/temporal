@@ -4,6 +4,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/testing/protoassert"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 type helper interface {
@@ -23,6 +24,17 @@ func ProtoEqual(t require.TestingT, a proto.Message, b proto.Message) {
 		th.Helper()
 	}
 	if !protoassert.ProtoEqual(t, a, b) {
+		t.FailNow()
+	}
+}
+
+// ProtoEqualIgnoreFields compares two proto messages for equality, ignoring the specified fields
+// on the given message type. Calls FailNow on mismatch.
+func ProtoEqualIgnoreFields(t require.TestingT, a proto.Message, b proto.Message, msgType proto.Message, fields ...protoreflect.Name) {
+	if th, ok := t.(helper); ok {
+		th.Helper()
+	}
+	if !protoassert.ProtoEqualIgnoreFields(t, a, b, msgType, fields...) {
 		t.FailNow()
 	}
 }
@@ -82,4 +94,13 @@ func (x ProtoAssertions) ProtoElementsMatch(a any, b any) bool {
 	}
 
 	return protoassert.ProtoElementsMatch(x.t, a, b)
+}
+
+func (x ProtoAssertions) ProtoEqualIgnoreFields(a proto.Message, b proto.Message, msgType proto.Message, fields ...protoreflect.Name) {
+	if th, ok := x.t.(helper); ok {
+		th.Helper()
+	}
+	if !protoassert.ProtoEqualIgnoreFields(x.t, a, b, msgType, fields...) {
+		x.t.FailNow()
+	}
 }
