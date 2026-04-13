@@ -22,12 +22,7 @@ import (
 
 func TestDispatchNexusTaskWithMatchingBehaviors(t *testing.T) {
 	t.Parallel()
-	baseOpts := []testcore.TestOption{
-		testcore.WithDynamicConfig(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 3),
-		testcore.WithDynamicConfig(dynamicconfig.MatchingEmitTaskDispatchLatencyAtPoll, true),
-	}
-
-	runWithMatchingBehaviors(t, baseOpts, func(s *testcore.TestEnv, b testcore.MatchingBehavior) {
+	runWithMatchingBehaviors(t, nil, func(s *testcore.TestEnv, b testcore.MatchingBehavior) {
 		dispatchAndCompleteNexusTask(t, s, b.ForceTaskForward, b.ForcePollForward)
 	})
 }

@@ -962,12 +962,7 @@ func (s *TaskQueueSuite) TestTaskDispatchLatencyMetric_Nexus() {
 }
 
 func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(s *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, forwardDelay time.Duration)) {
-	baseOpts := []testcore.TestOption{
-		testcore.WithDynamicConfig(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 3),
-		testcore.WithDynamicConfig(dynamicconfig.MatchingEmitTaskDispatchLatencyAtPoll, true),
-	}
-
-	runWithMatchingBehaviors(s.T(), baseOpts, func(s *testcore.TestEnv, b testcore.MatchingBehavior) {
+	runWithMatchingBehaviors(s.T(), nil, func(s *testcore.TestEnv, b testcore.MatchingBehavior) {
 
 		// When task forwarding is forced, inject a delay so we can verify
 		// the latency metric captures forwarding time.
