@@ -687,6 +687,11 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 			Usage: "Get per-type user data stored for a task queue",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
+					Name:     FlagNamespace,
+					Usage:    "Namespace name",
+					Required: true,
+				},
+				&cli.StringFlag{
 					Name:     FlagTaskQueue,
 					Usage:    "Task Queue name",
 					Required: true,
