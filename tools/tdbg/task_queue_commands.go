@@ -218,11 +218,11 @@ func AdminGetTaskQueueUserData(c *cli.Context, clientFactory ClientFactory) erro
 
 	ctx, cancel := newContext(c)
 	defer cancel()
-	if response, e := client.GetTaskQueueUserData(ctx, req); e != nil {
+	response, e := client.GetTaskQueueUserData(ctx, req)
+	if e != nil {
 		return fmt.Errorf("unable to get Task Queue User Data: %w", e)
-	} else {
-		prettyPrintJSONObject(c, response)
 	}
+	prettyPrintJSONObject(c, response)
 	return nil
 }
 
