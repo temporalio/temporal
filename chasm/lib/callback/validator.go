@@ -31,15 +31,6 @@ func NewValidator(
 	}
 }
 
-func validatorProvider(dc *dynamicconfig.Collection) *Validator {
-	return NewValidator(
-		dynamicconfig.MaxCHASMCallbacksPerWorkflow.Get(dc),
-		dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
-		dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
-		AllowedAddresses.Get(dc),
-	)
-}
-
 // Validate validates completion callbacks: count, URL length, endpoint allowlist, header size, and normalizes header
 // keys to lowercase.
 func (v *Validator) Validate(namespaceName string, cbs []*commonpb.Callback) error {

@@ -24,7 +24,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/chasm/lib/activity"
-	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -34,6 +33,7 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -5000,7 +5000,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 	defer cancel()
 
 	s.OverrideDynamicConfig(
-		callback.AllowedAddresses,
+		callbacks.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	)
 
