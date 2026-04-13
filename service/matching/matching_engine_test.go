@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -4826,11 +4825,12 @@ type testQueueData struct {
 }
 
 type testQueuePersistenceStats struct {
-	createTaskCount  int
-	getTasksCount    int
-	getUserDataCount int
-	createCount      int
-	updateCount      int
+	createTaskCount      int
+	createTaskBatchCount int
+	getTasksCount        int
+	getUserDataCount     int
+	createCount          int
+	updateCount          int
 }
 
 func newTestQueueData() *testQueueData {
@@ -5070,6 +5070,7 @@ func (m *testTaskManager) CreateTasks(
 		tlm.tasks.Put(fairLevelFromAllocatedTask(task), common.CloneProto(task))
 		tlm.createTaskCount++
 	}
+	tlm.createTaskBatchCount++
 
 	resp := &persistence.CreateTasksResponse{}
 	if m.updateMetadataOnCreateTasks {
@@ -5132,12 +5133,20 @@ func (m *testTaskManager) getTaskCount(q *PhysicalTaskQueueKey) int {
 	return tlm.tasks.Size()
 }
 
-// getCreateTaskCount returns how many times CreateTask was called
+// getCreateTaskCount returns how many tasks were added
 func (m *testTaskManager) getCreateTaskCount(q *PhysicalTaskQueueKey) int {
 	tlm := m.getQueueDataByKey(q)
 	tlm.Lock()
 	defer tlm.Unlock()
 	return tlm.createTaskCount
+}
+
+// getCreateTaskBatchCount returns how many times CreateTask was called
+func (m *testTaskManager) getCreateTaskBatchCount(q *PhysicalTaskQueueKey) int {
+	tlm := m.getQueueDataByKey(q)
+	tlm.Lock()
+	defer tlm.Unlock()
+	return tlm.createTaskBatchCount
 }
 
 // getGetTasksCount returns how many times GetTasks was called
@@ -5454,26 +5463,22 @@ func TestGetHistoryForQueryTask(t *testing.T) {
 	runID := "test-run-id"
 
 	tests := []struct {
-		name                                 string
-		isStickyEnabled                      bool
-		sendRawHistoryBytesToMatchingService bool
-		setupMocks                           func(*historyservicemock.MockHistoryServiceClient, *namespace.MockRegistry)
-		expectHistory                        bool
-		expectRawHistoryBytes                bool
-		expectNextPageToken                  bool
-		expectError                          bool
+		name                string
+		isStickyEnabled     bool
+		setupMocks          func(*historyservicemock.MockHistoryServiceClient, *namespace.MockRegistry)
+		expectHistory       bool
+		expectNextPageToken bool
+		expectError         bool
 	}{
 		{
-			name:                                 "sticky enabled returns empty history",
-			isStickyEnabled:                      true,
-			sendRawHistoryBytesToMatchingService: false,
-			setupMocks:                           func(_ *historyservicemock.MockHistoryServiceClient, _ *namespace.MockRegistry) {},
-			expectHistory:                        true, // empty history
+			name:            "sticky enabled returns empty history",
+			isStickyEnabled: true,
+			setupMocks:      func(_ *historyservicemock.MockHistoryServiceClient, _ *namespace.MockRegistry) {},
+			expectHistory:   true, // empty history
 		},
 		{
-			name:                                 "SendRawHistoryBytesToMatchingService disabled uses GetWorkflowExecutionHistory",
-			isStickyEnabled:                      false,
-			sendRawHistoryBytesToMatchingService: false,
+			name:            "non-sticky uses GetWorkflowExecutionHistory",
+			isStickyEnabled: false,
 			setupMocks: func(mockHistoryClient *historyservicemock.MockHistoryServiceClient, mockNsRegistry *namespace.MockRegistry) {
 				mockNsRegistry.EXPECT().GetNamespaceName(nsID).Return(nsName, nil).Times(1)
 				mockHistoryClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any()).Return(
@@ -5492,38 +5497,8 @@ func TestGetHistoryForQueryTask(t *testing.T) {
 			expectNextPageToken: true,
 		},
 		{
-			name:                                 "SendRawHistoryBytesToMatchingService enabled uses GetWorkflowExecutionRawHistory",
-			isStickyEnabled:                      false,
-			sendRawHistoryBytesToMatchingService: true,
-			setupMocks: func(mockHistoryClient *historyservicemock.MockHistoryServiceClient, _ *namespace.MockRegistry) {
-				mockHistoryClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), gomock.Any()).Return(
-					&historyservice.GetWorkflowExecutionRawHistoryResponse{
-						Response: &adminservice.GetWorkflowExecutionRawHistoryResponse{
-							HistoryBatches: []*commonpb.DataBlob{
-								{Data: []byte("raw-history-batch-1")},
-								{Data: []byte("raw-history-batch-2")},
-							},
-							NextPageToken: []byte("raw-next-token"),
-						},
-					}, nil).Times(1)
-			},
-			expectRawHistoryBytes: true,
-			expectNextPageToken:   true,
-		},
-		{
-			name:                                 "GetWorkflowExecutionRawHistory error is propagated",
-			isStickyEnabled:                      false,
-			sendRawHistoryBytesToMatchingService: true,
-			setupMocks: func(mockHistoryClient *historyservicemock.MockHistoryServiceClient, _ *namespace.MockRegistry) {
-				mockHistoryClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), gomock.Any()).Return(
-					nil, errors.New("history service error")).Times(1)
-			},
-			expectError: true,
-		},
-		{
-			name:                                 "GetWorkflowExecutionHistory error is propagated",
-			isStickyEnabled:                      false,
-			sendRawHistoryBytesToMatchingService: false,
+			name:            "GetWorkflowExecutionHistory error is propagated",
+			isStickyEnabled: false,
 			setupMocks: func(mockHistoryClient *historyservicemock.MockHistoryServiceClient, _ *namespace.MockRegistry) {
 				mockHistoryClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any()).Return(
 					nil, errors.New("history service error")).Times(1)
@@ -5545,12 +5520,10 @@ func TestGetHistoryForQueryTask(t *testing.T) {
 			mockSAMapperProvider := searchattribute.NewMockMapperProvider(ctrl)
 			mockVisibilityManager := manager.NewMockVisibilityManager(ctrl)
 
-			// Set up config
 			config := defaultTestConfig()
-			config.SendRawHistoryBytesToMatchingService = dynamicconfig.GetBoolPropertyFn(tc.sendRawHistoryBytesToMatchingService)
 
-			// Set up mock expectations for ProcessInternalRawHistory when using old path
-			if !tc.isStickyEnabled && !tc.sendRawHistoryBytesToMatchingService && !tc.expectError {
+			// Set up mock expectations for ProcessInternalRawHistory
+			if !tc.isStickyEnabled && !tc.expectError {
 				mockVisibilityManager.EXPECT().GetIndexName().Return("test-index").AnyTimes()
 				mockSAProvider.EXPECT().GetSearchAttributes("test-index", false).Return(searchattribute.NameTypeMap{}, nil).AnyTimes()
 				mockSAMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
@@ -5582,7 +5555,7 @@ func TestGetHistoryForQueryTask(t *testing.T) {
 				},
 			}
 
-			hist, rawHistoryBytes, nextPageToken, err := engine.getHistoryForQueryTask(
+			hist, nextPageToken, err := engine.getHistoryForQueryTask(
 				context.Background(),
 				nsID,
 				task,
@@ -5597,25 +5570,14 @@ func TestGetHistoryForQueryTask(t *testing.T) {
 			require.NoError(t, err)
 
 			if tc.isStickyEnabled {
-				// Sticky enabled should return empty history
 				assert.NotNil(t, hist)
 				assert.Empty(t, hist.Events)
-				assert.Nil(t, rawHistoryBytes)
 				assert.Nil(t, nextPageToken)
 				return
 			}
 
-			if tc.expectRawHistoryBytes {
-				assert.Nil(t, hist)
-				assert.NotNil(t, rawHistoryBytes)
-				assert.Len(t, rawHistoryBytes, 2)
-				assert.Equal(t, []byte("raw-history-batch-1"), rawHistoryBytes[0])
-				assert.Equal(t, []byte("raw-history-batch-2"), rawHistoryBytes[1])
-			}
-
 			if tc.expectHistory {
 				assert.NotNil(t, hist)
-				assert.Nil(t, rawHistoryBytes)
 			}
 
 			if tc.expectNextPageToken {
@@ -5639,7 +5601,7 @@ func defaultTestConfig() *Config {
 	config := NewConfig(dynamicconfig.NewNoopCollection())
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
-	config.AutoEnableV2 = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
+	config.AutoEnableV2Sub = trueTaskQueueSub
 	return config
 }
 
@@ -5679,6 +5641,10 @@ func useFairness(config *Config) {
 
 func staticTrueChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
 	return dynamicconfig.StaticGradualChange(true), func() {}
+}
+
+func trueTaskQueueSub(_, _ string, _ enumspb.TaskQueueType, _ func(bool)) (bool, func()) {
+	return true, func() {}
 }
 
 func staticFalseChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
@@ -5815,4 +5781,210 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 0, engine.shutdownWorkers.Size())
 	})
+}
+
+// TestAutoEnableV2ConfigChange tests that switching autoEnable triggers unload when effective config changes
+func TestAutoEnableV2ConfigChange(t *testing.T) {
+	controller := gomock.NewController(t)
+
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+
+	dcClient := dynamicconfig.NewMemoryClient()
+	dcCollection := dynamicconfig.NewCollection(dcClient, logger)
+	dcCollection.Start()
+	defer dcCollection.Stop()
+
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+	matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
+
+	_, registry := createMockNamespaceCache(controller, namespace.Name(namespaceName))
+
+	config := NewConfig(dcCollection)
+	config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
+	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
+	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
+
+	engine := createTestMatchingEngine(logger, controller, config, matchingClient, registry)
+	engine.Start()
+	defer engine.Stop()
+
+	// autoEnable ON, base configs OFF -> with V2 fairnessState, effective config is NewMatcher=true, EnableFairness=true
+	cleanupAutoEnable := dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, true)
+	cleanupFairness := dcClient.OverrideSetting(dynamicconfig.MatchingEnableFairness, false)
+	cleanupNewMatcher := dcClient.OverrideSetting(dynamicconfig.MatchingUseNewMatcher, false)
+	defer cleanupAutoEnable()
+	defer cleanupFairness()
+	defer cleanupNewMatcher()
+
+	testNamespaceID := uuid.NewString()
+	testTaskQueueName := "test-tq-" + uuid.NewString()
+
+	ns := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace", Id: testNamespaceID},
+		nil,
+		"",
+	)
+
+	f, err := tqid.NewTaskQueueFamily(testNamespaceID, testTaskQueueName)
+	require.NoError(t, err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
+
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
+
+	userData := &mockUserDataManager{
+		data: &persistencespb.VersionedTaskQueueUserData{
+			Data: &persistencespb.TaskQueueUserData{
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+						FairnessState: enumsspb.FAIRNESS_STATE_V2,
+					},
+				},
+			},
+		},
+	}
+
+	pm, err := newTaskQueuePartitionManager(
+		engine,
+		ns,
+		partition,
+		tqConfig,
+		logger,
+		logger,
+		metrics.NoopMetricsHandler,
+		userData,
+	)
+	require.NoError(t, err)
+
+	engine.partitions[partition.Key()] = pm
+
+	pm.Start()
+	defer pm.Stop(unloadCauseIdle)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	err = pm.WaitUntilInitialized(ctx)
+	require.NoError(t, err)
+
+	pq, err := pm.defaultQueueFuture.Get(ctx)
+	require.NoError(t, err)
+
+	// Turn autoEnable OFF -> effective config changes to NewMatcher=false, EnableFairness=false
+	cleanupAutoEnable()
+	_ = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, false)
+
+	require.Eventually(t, func() bool {
+		return !pm.config.AutoEnableV2()
+	}, 2*time.Second, 10*time.Millisecond, "autoEnable should be updated")
+
+	require.Eventually(t, func() bool {
+		return pq.(*physicalTaskQueueManagerImpl).tqCtx.Err() != nil
+	}, 2*time.Second, 10*time.Millisecond, "physical queue should be stopped when effective config changes")
+}
+
+func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testing.T) {
+	controller := gomock.NewController(t)
+
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+
+	dcClient := dynamicconfig.NewMemoryClient()
+	dcCollection := dynamicconfig.NewCollection(dcClient, logger)
+	dcCollection.Start()
+	defer dcCollection.Stop()
+
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+	matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
+
+	_, registry := createMockNamespaceCache(controller, namespace.Name(namespaceName))
+
+	config := NewConfig(dcCollection)
+	config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
+	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
+	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
+
+	engine := createTestMatchingEngine(logger, controller, config, matchingClient, registry)
+	engine.Start()
+	defer engine.Stop()
+
+	// autoEnable OFF, base configs ON -> with V2 fairnessState, effective config is NewMatcher=true, EnableFairness=true
+	cleanupAutoEnable := dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, false)
+	cleanupFairness := dcClient.OverrideSetting(dynamicconfig.MatchingEnableFairness, true)
+	cleanupNewMatcher := dcClient.OverrideSetting(dynamicconfig.MatchingUseNewMatcher, true)
+	defer cleanupAutoEnable()
+	defer cleanupFairness()
+	defer cleanupNewMatcher()
+
+	testNamespaceID := uuid.NewString()
+	testTaskQueueName := "test-tq-" + uuid.NewString()
+
+	ns := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace", Id: testNamespaceID},
+		nil,
+		"",
+	)
+
+	f, err := tqid.NewTaskQueueFamily(testNamespaceID, testTaskQueueName)
+	require.NoError(t, err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
+
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
+
+	userData := &mockUserDataManager{
+		data: &persistencespb.VersionedTaskQueueUserData{
+			Data: &persistencespb.TaskQueueUserData{
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+						FairnessState: enumsspb.FAIRNESS_STATE_V2,
+					},
+				},
+			},
+		},
+	}
+
+	pm, err := newTaskQueuePartitionManager(
+		engine,
+		ns,
+		partition,
+		tqConfig,
+		logger,
+		logger,
+		metrics.NoopMetricsHandler,
+		userData,
+	)
+	require.NoError(t, err)
+
+	engine.partitions[partition.Key()] = pm
+
+	pm.Start()
+	defer pm.Stop(unloadCauseIdle)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	err = pm.WaitUntilInitialized(ctx)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		return !pm.config.AutoEnableV2() && pm.config.NewMatcher && pm.config.EnableFairness
+	}, 2*time.Second, 10*time.Millisecond, "config should be initialized")
+
+	pq, err := pm.defaultQueueFuture.Get(ctx)
+	require.NoError(t, err)
+
+	// Turn autoEnable ON -> effective config stays NewMatcher=true, EnableFairness=true (same as before)
+	cleanupAutoEnable()
+	_ = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, true)
+
+	require.Eventually(t, func() bool {
+		return pm.config.AutoEnableV2()
+	}, 2*time.Second, 10*time.Millisecond, "autoEnable should be updated")
+
+	require.Never(t, func() bool {
+		select {
+		case <-pq.(*physicalTaskQueueManagerImpl).tqCtx.Done():
+			return true
+		default:
+			return false
+		}
+	}, 100*time.Millisecond, 10*time.Millisecond, "physical queue should NOT be stopped when effective config does not change")
 }

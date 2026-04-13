@@ -112,6 +112,10 @@ func (c *ContextImpl) Clear() {
 	}
 }
 
+func (c *ContextImpl) GetArchetypeID() chasm.ArchetypeID {
+	return c.archetypeID
+}
+
 func (c *ContextImpl) GetWorkflowKey() definition.WorkflowKey {
 	return c.workflowKey
 }
@@ -243,7 +247,25 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	newMutableState historyi.MutableState,
 	newWorkflow *persistence.WorkflowSnapshot,
 	newWorkflowEvents []*persistence.WorkflowEvents,
+	transactionPolicy historyi.TransactionPolicy,
 ) (retError error) {
+
+	if transactionPolicy == historyi.TransactionPolicyActive {
+		if rl := shardContext.BusinessIDReuseRateLimiter(
+			namespace.ID(c.workflowKey.NamespaceID),
+			c.workflowKey.WorkflowID,
+			c.archetypeID,
+		); rl != nil && !rl.Allow() {
+			archetypeName, _ := shardContext.ChasmRegistry().ArchetypeDisplayName(c.archetypeID)
+			metrics.BusinessIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
+				1,
+				metrics.ResourceExhaustedCauseTag(consts.ErrBusinessIDRateLimitExceeded.Cause),
+				metrics.ResourceExhaustedScopeTag(consts.ErrBusinessIDRateLimitExceeded.Scope),
+				metrics.StringTag("archetype", archetypeName),
+			)
+			return consts.ErrBusinessIDRateLimitExceeded
+		}
+	}
 
 	defer func() {
 		if retError != nil {
@@ -536,6 +558,24 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	}()
 
 	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
+		if *newWorkflowTransactionPolicy == historyi.TransactionPolicyActive {
+			execInfo := newMutableState.GetExecutionInfo()
+			newArchetypeID := newContext.GetArchetypeID()
+			if rl := shardContext.BusinessIDReuseRateLimiter(
+				namespace.ID(execInfo.NamespaceId),
+				execInfo.WorkflowId,
+				newArchetypeID,
+			); rl != nil && !rl.Allow() {
+				archetypeName, _ := shardContext.ChasmRegistry().ArchetypeDisplayName(newArchetypeID)
+				metrics.BusinessIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
+					1,
+					metrics.ResourceExhaustedCauseTag(consts.ErrBusinessIDRateLimitExceeded.Cause),
+					metrics.ResourceExhaustedScopeTag(consts.ErrBusinessIDRateLimitExceeded.Scope),
+					metrics.StringTag("archetype", archetypeName),
+				)
+				return consts.ErrBusinessIDRateLimitExceeded
+			}
+		}
 		c.MutableState.SetSuccessorRunID(newMutableState.GetExecutionState().RunId)
 	}
 

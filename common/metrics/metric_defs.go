@@ -558,6 +558,8 @@ const (
 	UnknownTaskScope = "UnknownTask"
 	// ParentClosePolicyProcessorScope is scope used by all metrics emitted by worker.ParentClosePolicyProcessor
 	ParentClosePolicyProcessorScope = "ParentClosePolicyProcessor"
+	// DeleteExecutionReplicationTaskScope is the scope used by delete execution replication task processing
+	DeleteExecutionReplicationTaskScope = "DeleteExecutionReplicationTask"
 )
 
 // History task type
@@ -927,6 +929,7 @@ var (
 	WorkflowExecutionUpdateRegistrySize              = NewBytesHistogramDef("workflow_update_registry_size")
 	WorkflowExecutionUpdateRegistrySizeLimited       = NewCounterDef("workflow_update_registry_size_limited")
 	WorkflowExecutionUpdateRequestRateLimited        = NewCounterDef("workflow_update_request_rate_limited")
+	BusinessIDReuseRateLimited                       = NewCounterDef("business_id_reuse_rate_limited")
 	WorkflowExecutionUpdateTooMany                   = NewCounterDef("workflow_update_request_too_many")
 	WorkflowExecutionUpdateAborted                   = NewCounterDef("workflow_update_aborted")
 	WorkflowExecutionUpdateSentToWorker              = NewCounterDef("workflow_update_sent_to_worker")
@@ -1047,7 +1050,8 @@ var (
 	ReplicationOrphanedHistoryBranch = NewCounterDef("replication_orphaned_history_branch")
 	// ReplicationTasksLag is a heuristic for how far behind the remote DC is for a given cluster. It measures the
 	// difference between task IDs so its unit should be "tasks".
-	ReplicationTasksLag = NewDimensionlessHistogramDef("replication_tasks_lag")
+	ReplicationTasksLag                             = NewDimensionlessHistogramDef("replication_tasks_lag")
+	ReplicationDeleteExecutionTaskGenerationFailure = NewCounterDef("replication_delete_execution_task_generation_failure")
 	// ReplicationTasksFetched records the number of tasks fetched by the poller.
 	ReplicationTasksFetched                        = NewDimensionlessHistogramDef("replication_tasks_fetched")
 	ReplicationLatency                             = NewTimerDef("replication_latency")
@@ -1144,20 +1148,24 @@ var (
 	NamespaceRegistryRefreshLatency     = NewTimerDef("namespace_registry_refresh_latency")
 
 	// Matching
-	MatchingClientForwardedCounter                    = NewCounterDef("forwarded")
-	MatchingClientInvalidTaskQueueName                = NewCounterDef("invalid_task_queue_name")
-	MatchingClientInvalidTaskQueuePartition           = NewCounterDef("invalid_task_queue_partition")
-	SyncMatchLatencyPerTaskQueue                      = NewTimerDef("syncmatch_latency")
-	AsyncMatchLatencyPerTaskQueue                     = NewTimerDef("asyncmatch_latency")
-	PollSuccessPerTaskQueueCounter                    = NewCounterDef("poll_success")
-	PollTimeoutPerTaskQueueCounter                    = NewCounterDef("poll_timeouts")
-	PollSuccessWithSyncPerTaskQueueCounter            = NewCounterDef("poll_success_sync")
-	PollLatencyPerTaskQueue                           = NewTimerDef("poll_latency")
-	LeaseRequestPerTaskQueueCounter                   = NewCounterDef("lease_requests")
-	LeaseFailurePerTaskQueueCounter                   = NewCounterDef("lease_failures")
-	ConditionFailedErrorPerTaskQueueCounter           = NewCounterDef("condition_failed_errors")
-	RespondQueryTaskFailedPerTaskQueueCounter         = NewCounterDef("respond_query_failed")
-	RespondNexusTaskFailedPerTaskQueueCounter         = NewCounterDef("respond_nexus_failed")
+	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
+	MatchingClientInvalidTaskQueueName        = NewCounterDef("invalid_task_queue_name")
+	MatchingClientInvalidTaskQueuePartition   = NewCounterDef("invalid_task_queue_partition")
+	SyncMatchLatencyPerTaskQueue              = NewTimerDef("syncmatch_latency")
+	AsyncMatchLatencyPerTaskQueue             = NewTimerDef("asyncmatch_latency")
+	PollSuccessPerTaskQueueCounter            = NewCounterDef("poll_success")
+	PollTimeoutPerTaskQueueCounter            = NewCounterDef("poll_timeouts")
+	PollSuccessWithSyncPerTaskQueueCounter    = NewCounterDef("poll_success_sync")
+	PollLatencyPerTaskQueue                   = NewTimerDef("poll_latency")
+	LeaseRequestPerTaskQueueCounter           = NewCounterDef("lease_requests")
+	LeaseFailurePerTaskQueueCounter           = NewCounterDef("lease_failures")
+	ConditionFailedErrorPerTaskQueueCounter   = NewCounterDef("condition_failed_errors")
+	RespondQueryTaskFailedPerTaskQueueCounter = NewCounterDef("respond_query_failed")
+	RespondNexusTaskFailedPerTaskQueueCounter = NewCounterDef("respond_nexus_failed")
+	NexusTaskRequests                         = NewCounterDef(
+		"nexus_task_requests",
+		WithDescription("The number of Nexus task poll and respond requests received by the matching service, broken down by namespace, operation, client_name, and is_internal."),
+	)
 	SyncThrottlePerTaskQueueCounter                   = NewCounterDef("sync_throttle_count")
 	BufferThrottlePerTaskQueueCounter                 = NewCounterDef("buffer_throttle_count")
 	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired")

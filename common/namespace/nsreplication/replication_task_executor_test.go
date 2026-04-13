@@ -163,6 +163,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	clusterStandby := "some random standby cluster name"
 	configVersion := int64(0)
 	failoverVersion := int64(59)
+	replicationState := enumspb.REPLICATION_STATE_NORMAL
 	clusters := []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: clusterActive,
@@ -202,6 +203,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
+			State:             replicationState,
 		},
 		ConfigVersion:   configVersion,
 		FailoverVersion: failoverVersion,
@@ -230,6 +232,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: task.ReplicationConfig.ActiveClusterName,
 				Clusters:          []string{clusterActive, clusterStandby},
+				State:             replicationState,
 				FailoverHistory: []*persistencespb.FailoverStatus{
 					{
 						FailoverTime:    timestamppb.New(time.Date(2025, 9, 15, 14, 30, 0, 0, time.UTC)),
