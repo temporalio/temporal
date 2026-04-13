@@ -190,7 +190,7 @@ func (e *Engine) UpdateComponent(
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	_ ...chasm.TransitionOption,
 ) ([]byte, error) {
-	execution, err := e.mustExecutionForRef(ref)
+	execution, err := e.executionForRef(ref)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func (e *Engine) ReadComponent(
 	readFn func(chasm.Context, chasm.Component) error,
 	_ ...chasm.TransitionOption,
 ) error {
-	execution, err := e.mustExecutionForRef(ref)
+	execution, err := e.executionForRef(ref)
 	if err != nil {
 		return err
 	}
@@ -272,7 +272,7 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 	}
 }
 
-func (e *Engine) mustExecutionForRef(ref chasm.ComponentRef) (*execution, error) {
+func (e *Engine) executionForRef(ref chasm.ComponentRef) (*execution, error) {
 	execution, ok := e.executions[newExecutionKey(ref.ExecutionKey)]
 	if !ok {
 		return nil, serviceerror.NewNotFound(

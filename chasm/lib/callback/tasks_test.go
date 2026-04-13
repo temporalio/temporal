@@ -80,7 +80,6 @@ func (l *mockNexusCompletionGetterLibrary) Components() []*chasm.RegistrableComp
 	}
 }
 
-
 // Test the full executeInvocationTask flow with direct handler calls
 func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 	cases := []struct {
