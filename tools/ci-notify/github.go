@@ -5,10 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
 )
+
+var ciBreakerLinePattern = regexp.MustCompile(`Test[[:graph:][:space:]]*\(final\)`)
+var trailingTestSuffixPattern = regexp.MustCompile(`\s*\([^)]+\)$`)
 
 // GetWorkflowRun fetches workflow run details using gh CLI
 func GetWorkflowRun(runID string) (*WorkflowRun, error) {
@@ -76,10 +80,16 @@ func BuildFailureReport(runID string) (*FailureReport, error) {
 		Message:  run.DisplayTitle,
 	}
 
+	ciBreakersByJob, err := getCIBreakersByJob(runID, run.Jobs)
+	if err != nil {
+		return nil, err
+	}
+
 	// Identify failed jobs
 	var failedJobs []Job
 	for _, job := range run.Jobs {
 		if job.Conclusion == ConclusionFailure {
+			job.CIBreakers = ciBreakersByJob[job.ID]
 			failedJobs = append(failedJobs, job)
 		}
 	}
@@ -90,6 +100,65 @@ func BuildFailureReport(runID string) (*FailureReport, error) {
 		FailedJobs: failedJobs,
 		TotalJobs:  len(run.Jobs),
 	}, nil
+}
+
+func getCIBreakersByJob(runID string, jobs []Job) (map[int64][]string, error) {
+	ciBreakersByJob := make(map[int64][]string)
+	for _, job := range jobs {
+		if job.Conclusion != ConclusionFailure || job.ID == 0 {
+			continue
+		}
+
+		logOutput, err := getJobLog(runID, job.ID)
+		if err != nil {
+			return nil, err
+		}
+		ciBreakersByJob[job.ID] = extractCIBreakers(logOutput)
+	}
+	return ciBreakersByJob, nil
+}
+
+func getJobLog(runID string, jobID int64) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "gh", "run", "view", runID, "--job", fmt.Sprintf("%d", jobID), "--log-failed")
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return "", fmt.Errorf("failed to get failed log for job %d: %w (stderr: %s)", jobID, err, string(exitErr.Stderr))
+		}
+		return "", fmt.Errorf("failed to get failed log for job %d: %w", jobID, err)
+	}
+	return string(output), nil
+}
+
+func extractCIBreakers(logOutput string) []string {
+	lines := strings.Split(logOutput, "\n")
+	seen := make(map[string]struct{})
+	var ciBreakers []string
+
+	for _, line := range lines {
+		match := ciBreakerLinePattern.FindString(line)
+		if match == "" {
+			continue
+		}
+		match = strings.TrimSpace(strings.TrimLeft(match, "-*+ "))
+		for {
+			stripped := trailingTestSuffixPattern.ReplaceAllString(match, "")
+			if stripped == match {
+				break
+			}
+			match = stripped
+		}
+		if _, ok := seen[match]; ok {
+			continue
+		}
+		seen[match] = struct{}{}
+		ciBreakers = append(ciBreakers, match)
+	}
+
+	return ciBreakers
 }
 
 // filterCompleted removes workflow runs that are not completed

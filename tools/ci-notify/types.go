@@ -31,6 +31,8 @@ type Job struct {
 	StartedAt   string     `json:"startedAt"`
 	CompletedAt string     `json:"completedAt"`
 	URL         string     `json:"url"`
+	ID          int64      `json:"databaseId"`
+	CIBreakers  []string   `json:"-"`
 }
 
 // CommitInfo represents commit metadata
