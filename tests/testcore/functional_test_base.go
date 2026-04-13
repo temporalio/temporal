@@ -633,7 +633,7 @@ func (s *FunctionalTestBase) DurationNear(value, target, tolerance time.Duration
 }
 
 func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
-	return s.testCluster.host.overrideDynamicConfig(s.T(), setting.Key(), value)
+	return s.testCluster.host.overrideDynamicConfigForTest(s.T(), setting.Key(), value)
 }
 
 // InjectHook sets a test hook inside the cluster.
