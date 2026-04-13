@@ -189,7 +189,7 @@ type ActivityState struct {
 	// An incremental version number used to validate ScheduleToCloseTimeoutTask tasks.
 	// Incremented each time a new ScheduleToCloseTimeoutTask is scheduled (at activity creation
 	// and on each options update that re-schedules the task). Unlike attempt.stamp, this counter
-	// is NOT reset on retries, because schedule-to-close spans the full activity lifetime.
+	// is NOT incremented on retries, because schedule-to-close spans the full activity lifetime.
 	Stamp         int32 `protobuf:"varint,14,opt,name=stamp,proto3" json:"stamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
