@@ -730,6 +730,8 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 					namespace.MinTimeSkippingDuration,
 				)
 			}
+		default:
+			return serviceerror.NewInvalidArgumentf("unsupported time skipping bound type: %T", bound)
 		}
 	}
 	return nil
