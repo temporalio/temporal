@@ -103,6 +103,14 @@ func newNamespaceMetricCapture(capture *metricstest.Capture, namespace string) *
 	}
 }
 
+// ForNamespace returns a view of the same capture filtered to the given namespace.
+func (c *NamespaceMetricCapture) ForNamespace(namespace string) *NamespaceMetricCapture {
+	return &NamespaceMetricCapture{
+		capture:   c.capture,
+		namespace: namespace,
+	}
+}
+
 func (c *NamespaceMetricCapture) Metric(name string) []*metricstest.CapturedRecording {
 	return c.collectMetric(name, nil)
 }
