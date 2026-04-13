@@ -106,6 +106,7 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
+		executable.GetWorkflowID(),
 	)
 	metricsTags := []metrics.Tag{
 		namespaceTag,
@@ -190,7 +191,6 @@ func (t *transferQueueActiveTaskExecutor) executeChasmSideEffectTransferTask(
 	return executeChasmSideEffectTask(
 		ctx,
 		t.chasmEngine,
-		t.shardContext.ChasmRegistry(),
 		tree,
 		task,
 	)
@@ -955,8 +955,9 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
 		if effectiveVersioningBehavior := mutableState.GetEffectiveVersioningBehavior(); effectiveVersioningBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
 			inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
-				SourceDeploymentVersion:        sourceDeploymentVersion,
-				SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
+				SourceDeploymentVersion:                sourceDeploymentVersion,
+				SourceDeploymentRevisionNumber:         sourceDeploymentRevisionNumber,
+				ContinueAsNewInitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED, // don't pass to child
 			}
 
 			newTQ := attributes.GetTaskQueue().GetName()
@@ -1739,7 +1740,6 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		baseRebuildLastEventVersion,
 		baseNextEventID,
 		resetRunID,
-		uuid.NewString(),
 		baseWorkflow,
 		ndc.NewWorkflow(
 			t.shardContext.GetClusterMetadata(),

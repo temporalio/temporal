@@ -89,8 +89,8 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringBackoff
 		return "done!", err
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFunction)
 
 	wfId := "functional-test-gethistoryreverse"
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -159,8 +159,8 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringActivit
 		return "done!", err
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFunction)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        s.T().Name(),
@@ -298,8 +298,8 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 		return nil
 	}
 
-	s.Worker().RegisterActivity(activityFn)
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 "functional-test-activity-timeouts",
@@ -908,6 +908,8 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 }
 
 func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
+	ctx := testcore.NewContext()
+
 	id := "functional-activity-cancellation-test"
 	wt := "functional-activity-cancellation-test-type"
 	tl := "functional-activity-cancellation-test-taskqueue"
@@ -930,7 +932,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(ctx, request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution: response", tag.WorkflowRunID(we.GetRunId()))
@@ -1045,7 +1047,12 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
 	s.Logger.Info("Waiting for cancel to complete.", tag.WorkflowRunID(we.RunId))
-	<-cancelCh
+	select {
+	case <-cancelCh:
+	case <-ctx.Done():
+		s.Fail("Test timed out for activity cancellation", ctx.Err())
+		return
+	}
 	s.True(activityCanceled, "Activity was not cancelled.")
 	s.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.RunId))
 }
@@ -1231,8 +1238,8 @@ func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
 		return nil
 	}
 
-	s.Worker().RegisterActivity(activityFn)
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	wfId := "functional-test-heartbeat-details-during-retry"
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -1525,8 +1532,8 @@ func (s *ActivityClientTestSuite) TestActivity_AttemptsExceeded() {
 		return err
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFunction)
 
 	wfID := testcore.RandomizeStr(s.T().Name())
 	workflowOptions := sdkclient.StartWorkflowOptions{

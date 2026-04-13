@@ -1975,7 +1975,6 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask_
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
-		gomock.Any(),
 	).Times(1).Return(nil)
 
 	// Mock mutable state.
@@ -2045,7 +2044,11 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 	}
 
 	// Mock the CHASM tree and execute interface.
-	mockEach := &chasm.MockNodePureTask{}
+	mockEach := &chasm.MockNodePureTask{
+		HandleExecutePureTask: func(_ context.Context, _ chasm.TaskAttributes, _ any) (bool, error) {
+			return true, nil
+		},
+	}
 	chasmTree := historyi.NewMockChasmTree(s.controller)
 	chasmTree.EXPECT().EachPureTask(gomock.Any(), gomock.Any()).
 		Times(1).Do(

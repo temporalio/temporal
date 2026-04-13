@@ -31,7 +31,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
@@ -2070,34 +2070,34 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 	s.WaitForChannel(ctx, startedWf)
 	rule2 := s.addRedirectRule(ctx, tq, v1, v11)
 	s.waitForRedirectRulePropagation(ctx, tq, rule2)
-	proceedWf <- struct{}{}
+	s.SendToChannel(ctx, proceedWf)
 
 	s.WaitForChannel(ctx, started11)
 	// wf assigned build ID should be updated by activity redirect
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v11, true, v1, "", []string{v1})
 	// let activity finish
-	proceed11 <- struct{}{}
+	s.SendToChannel(ctx, proceed11)
 
 	// wf replays on 1.1 so need to unblock it an extra time
 	s.WaitForChannel(ctx, startedWf)
-	proceedWf <- struct{}{}
+	s.SendToChannel(ctx, proceedWf)
 
 	s.WaitForChannel(ctx, startedWf)
 	rule2 = s.addRedirectRule(ctx, tq, v11, v12)
 	s.waitForRedirectRulePropagation(ctx, tq, rule2)
-	proceedWf <- struct{}{}
+	s.SendToChannel(ctx, proceedWf)
 
 	s.WaitForChannel(ctx, started12)
 	// wf assigned build ID should not be updated by independent activity redirect
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v11, true, v11, "", []string{v1})
 	// let activity finish
-	proceed12 <- struct{}{}
+	s.SendToChannel(ctx, proceed12)
 
 	// wf replays on 1.2 so need to unblock it two extra times
 	s.WaitForChannel(ctx, startedWf)
-	proceedWf <- struct{}{}
+	s.SendToChannel(ctx, proceedWf)
 	s.WaitForChannel(ctx, startedWf)
-	proceedWf <- struct{}{}
+	s.SendToChannel(ctx, proceedWf)
 
 	var out string
 	s.NoError(run.Get(ctx, &out))
@@ -5023,7 +5023,7 @@ func (s *VersioningIntegSuite) validateWorkflowBuildIds(
 	dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfId, runId)
 	s.NoError(err)
 	saPayload := dw.GetWorkflowExecutionInfo().GetSearchAttributes().GetIndexedFields()["BuildIds"]
-	searchAttrAny, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	searchAttrAny, err := sadefs.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
 	var searchAttr []string
 	if searchAttrAny != nil {
 		searchAttr = searchAttrAny.([]string)

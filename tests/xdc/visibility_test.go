@@ -12,7 +12,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
-	namespacepb "go.temporal.io/api/namespace/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -67,23 +66,7 @@ func (s *VisibilityTestSuite) TearDownSuite() {
 
 func (s *VisibilityTestSuite) TestSearchAttributes() {
 	ns := s.createGlobalNamespace()
-	if testcore.UseSQLVisibility() {
-		// When Elasticsearch is enabled, the search attribute aliases are not used.
-		updateNamespaceConfig(s.Assertions, ns,
-			func() *namespacepb.NamespaceConfig {
-				return &namespacepb.NamespaceConfig{
-					CustomSearchAttributeAliases: map[string]string{
-						"Bool01":     "CustomBoolField",
-						"Datetime01": "CustomDatetimeField",
-						"Double01":   "CustomDoubleField",
-						"Int01":      "CustomIntField",
-						"Keyword01":  "CustomKeywordField",
-						"Text01":     "CustomTextField",
-					},
-				}
-			},
-			s.clusters, 0)
-	}
+	s.registerTestSearchAttributes(ns)
 
 	client0 := s.clusters[0].FrontendClient() // active
 	client1 := s.clusters[1].FrontendClient() // standby

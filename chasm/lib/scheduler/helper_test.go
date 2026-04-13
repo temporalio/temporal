@@ -81,7 +81,7 @@ func defaultConfig() *scheduler.Config {
 func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *scheduler.Library {
 	config := defaultConfig()
 	specBuilder := legacyscheduler.NewSpecBuilder()
-	invokerOpts := scheduler.InvokerTaskExecutorOptions{
+	invokerOpts := scheduler.InvokerTaskHandlerOptions{
 		Config:         config,
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     logger,
@@ -89,23 +89,31 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 	}
 	return scheduler.NewLibrary(
 		nil,
-		scheduler.NewSchedulerIdleTaskExecutor(scheduler.SchedulerIdleTaskExecutorOptions{
+		scheduler.NewSchedulerIdleTaskHandler(scheduler.SchedulerIdleTaskHandlerOptions{
 			Config: config,
 		}),
-		scheduler.NewGeneratorTaskExecutor(scheduler.GeneratorTaskExecutorOptions{
+		scheduler.NewSchedulerCallbacksTaskHandler(scheduler.SchedulerCallbacksTaskHandlerOptions{
+			Config: config,
+		}),
+		scheduler.NewGeneratorTaskHandler(scheduler.GeneratorTaskHandlerOptions{
 			Config:         config,
 			MetricsHandler: metrics.NoopMetricsHandler,
 			BaseLogger:     logger,
 			SpecProcessor:  specProcessor,
 			SpecBuilder:    specBuilder,
 		}),
-		scheduler.NewInvokerExecuteTaskExecutor(invokerOpts),
-		scheduler.NewInvokerProcessBufferTaskExecutor(invokerOpts),
-		scheduler.NewBackfillerTaskExecutor(scheduler.BackfillerTaskExecutorOptions{
+		scheduler.NewInvokerExecuteTaskHandler(invokerOpts),
+		scheduler.NewInvokerProcessBufferTaskHandler(invokerOpts),
+		scheduler.NewBackfillerTaskHandler(scheduler.BackfillerTaskHandlerOptions{
 			Config:         config,
 			MetricsHandler: metrics.NoopMetricsHandler,
 			BaseLogger:     logger,
 			SpecProcessor:  specProcessor,
+		}),
+		scheduler.NewSchedulerMigrateToWorkflowTaskHandler(scheduler.SchedulerMigrateToWorkflowTaskHandlerOptions{
+			Config:         config,
+			MetricsHandler: metrics.NoopMetricsHandler,
+			BaseLogger:     logger,
 		}),
 	)
 }
@@ -291,8 +299,8 @@ func (e *testEnv) ExpectReadComponent(ctx chasm.Context, returnedComponent chasm
 		e.t.Fatal("ExpectReadComponent requires withMockEngine() option")
 	}
 	e.MockEngine.EXPECT().ReadComponent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, readFn func(chasm.Context, chasm.Component, *chasm.Registry) error, _ ...chasm.TransitionOption) error {
-			return readFn(ctx, returnedComponent, e.Registry)
+		DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, readFn func(chasm.Context, chasm.Component) error, _ ...chasm.TransitionOption) error {
+			return readFn(ctx, returnedComponent)
 		}).Times(1)
 }
 
@@ -302,8 +310,8 @@ func (e *testEnv) ExpectUpdateComponent(ctx chasm.MutableContext, componentToUpd
 		e.t.Fatal("ExpectUpdateComponent requires withMockEngine() option")
 	}
 	e.MockEngine.EXPECT().UpdateComponent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error, _ ...chasm.TransitionOption) ([]byte, error) {
-			err := updateFn(ctx, componentToUpdate, e.Registry)
+		DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, _ ...chasm.TransitionOption) ([]byte, error) {
+			err := updateFn(ctx, componentToUpdate)
 			return nil, err
 		}).Times(1)
 }

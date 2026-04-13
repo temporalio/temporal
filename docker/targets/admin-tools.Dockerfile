@@ -1,9 +1,4 @@
-# IMPORTANT: When updating ALPINE_TAG, also update the default value in:
-# - docker/docker-bake.hcl (variable "ALPINE_TAG")
-# - docker/targets/server.Dockerfile (ARG ALPINE_TAG)
-# NOTE: We use just the tag without a digest pin because digest-pinned manifest lists
-# cause platform resolution issues in multi-arch buildx builds (InvalidBaseImagePlatform warnings).
-ARG ALPINE_TAG=3.23.3
+ARG ALPINE_TAG
 
 FROM alpine:${ALPINE_TAG}
 
@@ -11,7 +6,9 @@ ARG TARGETARCH
 
 RUN apk add --no-cache \
     ca-certificates \
-    tzdata && addgroup -g 1000 temporal && \
+    tzdata && \
+    apk upgrade --no-cache zlib && \
+    addgroup -g 1000 temporal && \
     adduser -u 1000 -G temporal -D temporal
 
 # Copy all admin tool binaries:

@@ -1,0 +1,20 @@
+# https://d2lang.com
+# Generate SVG by running `make` inside of `docs/`.
+
+vars: {
+  d2-config: {
+    layout-engine: dagre
+  }
+}
+
+direction: down
+
+*.style.bold: true
+
+drop.shape: circle
+done.shape: circle
+
+Task -> "Task Handler".Validator
+"Task Handler".Validator -> drop: "false"
+"Task Handler".Validator -> "Task Handler".Executor: "true"
+"Task Handler".Executor -> done: "success"

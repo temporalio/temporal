@@ -359,3 +359,89 @@ func (c *SchedulerServiceLayeredClient) CreateFromMigrationState(
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }
+func (c *SchedulerServiceLayeredClient) callCreateSentinelNoRetry(
+	ctx context.Context,
+	request *CreateSentinelRequest,
+	opts ...grpc.CallOption,
+) (*CreateSentinelResponse, error) {
+	var response *CreateSentinelResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("SchedulerService.CreateSentinel"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetScheduleId(), c.numShards)
+	op := func(ctx context.Context, client SchedulerServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.CreateSentinel(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *SchedulerServiceLayeredClient) CreateSentinel(
+	ctx context.Context,
+	request *CreateSentinelRequest,
+	opts ...grpc.CallOption,
+) (*CreateSentinelResponse, error) {
+	call := func(ctx context.Context) (*CreateSentinelResponse, error) {
+		return c.callCreateSentinelNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
+func (c *SchedulerServiceLayeredClient) callMigrateToWorkflowNoRetry(
+	ctx context.Context,
+	request *MigrateToWorkflowRequest,
+	opts ...grpc.CallOption,
+) (*MigrateToWorkflowResponse, error) {
+	var response *MigrateToWorkflowResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("SchedulerService.MigrateToWorkflow"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetScheduleId(), c.numShards)
+	op := func(ctx context.Context, client SchedulerServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.MigrateToWorkflow(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *SchedulerServiceLayeredClient) MigrateToWorkflow(
+	ctx context.Context,
+	request *MigrateToWorkflowRequest,
+	opts ...grpc.CallOption,
+) (*MigrateToWorkflowResponse, error) {
+	call := func(ctx context.Context) (*MigrateToWorkflowResponse, error) {
+		return c.callMigrateToWorkflowNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}

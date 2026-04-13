@@ -59,6 +59,7 @@ type Config struct {
 	MaxNamespaceBurstRatioPerInstance                                 dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	MaxConcurrentLongRunningRequestsPerInstance                       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxGlobalConcurrentLongRunningRequests                            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PollWaitForNamespaceRateLimitToken                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityRPSPerInstance                              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityBurstRatioPerInstance                       dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance        dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -164,8 +165,12 @@ type Config struct {
 	// Enable schedule-related RPCs
 	EnableSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
+	// Enable CHASM tree infrastructure
+	EnableChasm dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Enable creation of new schedules on CHASM (V2) engine
 	EnableCHASMSchedulerCreation dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	// Enable CHASM-first routing for schedule RPCs other than CreateSchedule
+	EnableCHASMSchedulerRouting dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Enable deployment RPCs
 	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -220,7 +225,6 @@ type Config struct {
 	WorkerHeartbeatsEnabled           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCancelWorkerPollsOnShutdown dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NumTaskQueueReadPartitions        dynamicconfig.IntPropertyFnWithTaskQueueFilter
-	ListWorkersEnabled                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkerCommandsEnabled             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkflowPauseEnabled              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -281,6 +285,7 @@ func NewConfig(
 		MaxNamespaceBurstRatioPerInstance:                                 dynamicconfig.FrontendMaxNamespaceBurstRatioPerInstance.Get(dc),
 		MaxConcurrentLongRunningRequestsPerInstance:                       dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance.Get(dc),
 		MaxGlobalConcurrentLongRunningRequests:                            dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests.Get(dc),
+		PollWaitForNamespaceRateLimitToken:                                dynamicconfig.FrontendPollWaitForNamespaceRateLimitToken.Get(dc),
 		MaxNamespaceVisibilityRPSPerInstance:                              dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Get(dc),
 		MaxNamespaceVisibilityBurstRatioPerInstance:                       dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Get(dc),
 		MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance.Get(dc),
@@ -341,7 +346,9 @@ func NewConfig(
 		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 
 		EnableSchedules:              dynamicconfig.FrontendEnableSchedules.Get(dc),
+		EnableChasm:                  dynamicconfig.EnableChasm.Get(dc),
 		EnableCHASMSchedulerCreation: dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
+		EnableCHASMSchedulerRouting:  dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
 
 		// [cleanup-wv-pre-release]
 		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),
@@ -385,7 +392,6 @@ func NewConfig(
 		WorkerHeartbeatsEnabled:           dynamicconfig.WorkerHeartbeatsEnabled.Get(dc),
 		EnableCancelWorkerPollsOnShutdown: dynamicconfig.EnableCancelWorkerPollsOnShutdown.Get(dc),
 		NumTaskQueueReadPartitions:        dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
-		ListWorkersEnabled:                dynamicconfig.ListWorkersEnabled.Get(dc),
 		WorkerCommandsEnabled:             dynamicconfig.WorkerCommandsEnabled.Get(dc),
 		WorkflowPauseEnabled:              dynamicconfig.WorkflowPauseEnabled.Get(dc),
 

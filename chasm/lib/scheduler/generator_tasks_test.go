@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -17,8 +19,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func newGeneratorExecutor(env *testEnv) *scheduler.GeneratorTaskExecutor {
-	return scheduler.NewGeneratorTaskExecutor(scheduler.GeneratorTaskExecutorOptions{
+func newGeneratorHandler(env *testEnv) *scheduler.GeneratorTaskHandler {
+	return scheduler.NewGeneratorTaskHandler(scheduler.GeneratorTaskHandlerOptions{
 		Config:         defaultConfig(),
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     env.Logger,
@@ -52,13 +54,13 @@ func TestGeneratorTask_Execute_ProcessTimeRangeFails(t *testing.T) {
 	}, nil).AnyTimes()
 
 	env := newTestEnv(t, withSpecProcessor(specProcessor))
-	executor := newGeneratorExecutor(env)
+	handler := newGeneratorHandler(env)
 
 	ctx := env.MutableContext()
 	generator := env.Scheduler.Generator.Get(ctx)
 
 	// If ProcessTimeRange fails, we should fail the task as an internal error.
-	err := executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	err := handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
 	var target *queueerrors.UnprocessableTaskError
 	require.ErrorAs(t, err, &target)
 	require.Equal(t, "failed to process a time range: processTimeRange bug", target.Message)
@@ -66,7 +68,7 @@ func TestGeneratorTask_Execute_ProcessTimeRangeFails(t *testing.T) {
 
 func TestGeneratorTask_ExecuteBufferTask_Basic(t *testing.T) {
 	env := newTestEnv(t)
-	executor := newGeneratorExecutor(env)
+	handler := newGeneratorHandler(env)
 
 	ctx := env.MutableContext()
 	sched := env.Scheduler
@@ -78,7 +80,7 @@ func TestGeneratorTask_ExecuteBufferTask_Basic(t *testing.T) {
 	generator.LastProcessedTime = timestamppb.New(highWatermark)
 
 	// Execute the generate task.
-	err := executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	err := handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
 	require.NoError(t, err)
 
 	// We expect 5 buffered starts.
@@ -103,12 +105,12 @@ func TestGeneratorTask_ExecuteBufferTask_Basic(t *testing.T) {
 
 func TestGeneratorTask_UpdateFutureActionTimes_UnlimitedActions(t *testing.T) {
 	env := newTestEnv(t)
-	executor := newGeneratorExecutor(env)
+	handler := newGeneratorHandler(env)
 
 	ctx := env.MutableContext()
 	generator := env.Scheduler.Generator.Get(ctx)
 
-	err := executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	err := handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
 	require.NoError(t, err)
 
 	require.NotEmpty(t, generator.FutureActionTimes)
@@ -117,7 +119,7 @@ func TestGeneratorTask_UpdateFutureActionTimes_UnlimitedActions(t *testing.T) {
 
 func TestGeneratorTask_UpdateFutureActionTimes_LimitedActions(t *testing.T) {
 	env := newTestEnv(t)
-	executor := newGeneratorExecutor(env)
+	handler := newGeneratorHandler(env)
 
 	ctx := env.MutableContext()
 	sched := env.Scheduler
@@ -126,7 +128,7 @@ func TestGeneratorTask_UpdateFutureActionTimes_LimitedActions(t *testing.T) {
 	sched.Schedule.State.LimitedActions = true
 	sched.Schedule.State.RemainingActions = 2
 
-	err := executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	err := handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
 	require.NoError(t, err)
 
 	require.Len(t, generator.FutureActionTimes, 2)
@@ -134,7 +136,7 @@ func TestGeneratorTask_UpdateFutureActionTimes_LimitedActions(t *testing.T) {
 
 func TestGeneratorTask_UpdateFutureActionTimes_SkipsBeforeUpdateTime(t *testing.T) {
 	env := newTestEnv(t)
-	executor := newGeneratorExecutor(env)
+	handler := newGeneratorHandler(env)
 
 	ctx := env.MutableContext()
 	sched := env.Scheduler
@@ -145,11 +147,39 @@ func TestGeneratorTask_UpdateFutureActionTimes_SkipsBeforeUpdateTime(t *testing.
 	updateTime := baseTime.Add(defaultInterval / 2)
 	sched.Info.UpdateTime = timestamppb.New(updateTime)
 
-	err := executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	err := handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
 	require.NoError(t, err)
 
 	require.NotEmpty(t, generator.FutureActionTimes)
 	for _, futureTime := range generator.FutureActionTimes {
 		require.True(t, futureTime.AsTime().After(updateTime))
 	}
+}
+
+func TestUnpause_ResumesProcessing(t *testing.T) {
+	env := newTestEnv(t)
+
+	// Pause the schedule.
+	env.Scheduler.Schedule.State.Paused = true
+	require.NoError(t, env.CloseTransaction())
+
+	// Clear tasks from setup, then unpause. UpdateTime is captured at T0.
+	env.NodeBackend.TasksByCategory = nil
+	ctx := env.MutableContext()
+	_, err := env.Scheduler.Patch(ctx, &schedulerpb.PatchScheduleRequest{
+		FrontendRequest: &workflowservice.PatchScheduleRequest{
+			Patch: &schedulepb.SchedulePatch{Unpause: "resuming"},
+		},
+	})
+	require.NoError(t, err)
+
+	// Advance time before closing so the generator has actions to process.
+	env.TimeSource.Update(env.TimeSource.Now().Add(defaultInterval * 3))
+	require.NoError(t, env.CloseTransaction())
+
+	// With the fix, Patch kicks an immediate generator task. During CloseTransaction
+	// it processes the elapsed interval, buffers starts, and the invoker schedules
+	// side-effect tasks to start workflows. Without the fix, nothing runs.
+	require.True(t, env.HasTask(&tasks.ChasmTask{}, chasm.TaskScheduledTimeImmediate),
+		"schedule should resume processing after unpause")
 }

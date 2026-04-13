@@ -1917,7 +1917,7 @@ func TestQueryConverter_ResolveSearchAttributeAlias(t *testing.T) {
 			)
 
 			if tc.useNoopMapper {
-				queryConverter.saMapper = searchattribute.NewNoopMapper()
+				queryConverter.saMapper = &searchattribute.NoopMapper{}
 			}
 
 			fn, ft, err := queryConverter.resolveSearchAttributeAlias(tc.in)

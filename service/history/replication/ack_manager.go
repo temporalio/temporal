@@ -444,6 +444,8 @@ func (p *ackMgrImpl) ConvertTask(
 			task,
 			p.workflowCache,
 		)
+	case *tasks.DeleteExecutionReplicationTask:
+		return convertDeleteExecutionReplicationTask(task)
 	default:
 		return nil, errUnknownReplicationTask
 	}

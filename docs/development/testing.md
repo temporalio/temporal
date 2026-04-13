@@ -11,8 +11,11 @@ This document describes the project's testing setup, utilities and best practice
 
 ### Environment variables
 - `CGO_ENABLED`: Set to `0` to disable CGO, which can significantly speed up compilation time.
-- `TEMPORAL_TEST_LOG_FORMAT`: Controls the output format for test logs. Available options: `json` or `console`
-- `TEMPORAL_TEST_LOG_LEVEL`:  Sets the verbosity level for test logging. Available levels: `debug`, `info`, `warn`, `error`, `fatal`
+- `TEMPORAL_TEST_LOG_FORMAT`: Controls the console output format for test logs. Available options: `json` or `console` (default)
+- `TEMPORAL_TEST_LOG_LEVEL`: Sets the minimum verbosity level written to console output. Available levels: `debug` (default), `info`, `warn`, `error`, `fatal`
+- `TEMPORAL_TEST_LOG_FILE`: Path to a file that receives a separate copy of test logs. When unset (default), file logging is disabled. Useful in CI to route debug-level logs to a downloadable artifact without flooding the job log.
+- `TEMPORAL_TEST_LOG_FILE_FORMAT`: Output format for the log file. Available options: `json` (default) or `console`
+- `TEMPORAL_TEST_LOG_FILE_LEVEL`: Minimum verbosity level written to the log file. Available levels: `debug` (default), `info`, `warn`, `error`, `fatal`
 - `TEMPORAL_TEST_OTEL_OUTPUT`: Enables OpenTelemetry (OTEL) trace output for failed tests to the provided file path.
 - `TEMPORAL_TEST_SHARED_CLUSTERS`: Number of shared clusters in the pool. Each can be used by multiple tests simultaneously.
 - `TEMPORAL_TEST_DEDICATED_CLUSTERS`: Number of dedicated clusters in the pool. Each can be used by one test only at a time.
@@ -32,6 +35,12 @@ To pass in the required build tags, add them to the "Go tool arguments" field in
 
 ## Best Practices
 
+### Use `require` instead of `assert`
+
+Always use `require.X` (and `protorequire.X`) instead of `assert.X` (and `protoassert.X`).
+`assert` records a failure but lets the test continue, which often leads to confusing
+cascading errors.
+
 ### Parallelization
 
 All tests (and subtests!) should use `t.Parallel()` to be run concurrently;
@@ -40,12 +49,16 @@ unless there is a reason not to.
 `make parallelize-tests` can be used to automatically add `t.Parallel()`.
 Use `//parallelize:ignore` to opt your test out of it.
 
-Functional tests in `tests/` using `testcore.NewEnv(t)` will always use `t.Parallel()`;
-unless the `MustRunSequential` option is passed.
-
 ## Test helpers
 
 Test helpers can be found in the [common/testing](../../common/testing) package.
+
+### parallelsuite package
+
+Use `parallelsuite.Suite` to ensure your test suite is fast and safe: it runs all test methods and sub-tests in parallel by default;
+and provides assertion helpers and safety mechanisms.
+
+It replaces all use of `testify`'s `Suite`.
 
 ### testvars package
 
@@ -71,7 +84,7 @@ func TestFoo(t *testing.T) {
 Later you can assert on the generated values. `testvars` guarantees to provide the same value every time you call the same method. 
 
 ```go
-assert.Equal(t, tv.WorkflowID(), startedWorkflow.WorkflowId)
+require.Equal(t, tv.WorkflowID(), startedWorkflow.WorkflowId)
 ```
 
 If you need more than one value for the same entity in one test, you can use `WithEntityNumber()` method to
@@ -152,11 +165,10 @@ will ultimately fail the test.
 Use `testcore.NewEnv(t)` to create a test environment with access to a Temporal cluster for end-to-end testing.
 
 ```go
-func TestMyFeatureSuite(t *testing.T) {
-    t.Run("scenario one", func(t *testing.T) {
-        s := testcore.NewEnv(t)
-        // ...
-    })}
+func (s* TestMyFeatureSuite) func TestXYZ(t *testing.T) {
+    s := testcore.NewEnv(t)
+    // ...
+}
 ```
 
 Note that each test has its own namespace (`s.Namespace()`) for isolation.

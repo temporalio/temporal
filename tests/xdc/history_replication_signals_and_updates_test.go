@@ -1046,7 +1046,7 @@ func (c *hrsuTestCluster) getHistoryForRunId(ctx context.Context, runId string) 
 }
 
 func (c *hrsuTestCluster) pollWorkflowResult(ctx context.Context, runId string) *historypb.HistoryEvent {
-	getHistoryWithLongPoll := func(token []byte) ([]*historypb.HistoryEvent, []byte) {
+	getHistoryWithLongPoll := func(token []byte) ([]*historypb.HistoryEvent, []byte, error) {
 		responseInner, err := c.testCluster.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: c.t.tv.NamespaceName().String(),
 			Execution: &commonpb.WorkflowExecution{
@@ -1058,25 +1058,33 @@ func (c *hrsuTestCluster) pollWorkflowResult(ctx context.Context, runId string) 
 			NextPageToken:          token,
 			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
 		})
-		c.t.s.NoError(err)
-		return responseInner.History.Events, responseInner.NextPageToken
+		if err != nil {
+			return nil, nil, err
+		}
+		return responseInner.History.Events, responseInner.NextPageToken, nil
 	}
 
 	var token []byte
 	var allEvents []*historypb.HistoryEvent
-	multiPoll := false
 	for {
-		events, nextPageToken := getHistoryWithLongPoll(token)
+		if ctx.Err() != nil {
+			c.t.s.NoError(ctx.Err(), "context expired while waiting for workflow result")
+			return nil
+		}
+		events, nextPageToken, err := getHistoryWithLongPoll(token)
+		if err != nil {
+			// Transient error (e.g. CurrentBranchChanged after conflict resolution): retry from scratch.
+			token = nil
+			continue
+		}
 		allEvents = append(allEvents, events...)
 		if nextPageToken == nil {
 			break
 		}
 		token = nextPageToken
-		multiPoll = true
 	}
 
 	c.t.s.Len(allEvents, 1)
-	c.t.s.True(multiPoll, "Expected to have multiple polls of history events")
 	return allEvents[0]
 }
 

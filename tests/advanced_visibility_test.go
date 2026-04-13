@@ -963,11 +963,11 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow() {
 	s.Equal(int64(numWorkflows), resp.GetCount())
 	s.Len(resp.Groups, 2)
 
-	runningStatusPayload, _ := searchattribute.EncodeValue(
+	runningStatusPayload, _ := sadefs.EncodeValue(
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
-	terminatedStatusPayload, _ := searchattribute.EncodeValue(
+	terminatedStatusPayload, _ := sadefs.EncodeValue(
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED.String(),
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
@@ -1635,23 +1635,13 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 		WorkflowId: id,
 		RunId:      we.RunId,
 	})
-	if !testcore.UseSQLVisibility() {
-		s.ErrorContains(err, "BadSearchAttributes: search attribute INVALIDKEY is not defined")
-		s.EqualHistoryEvents(`
-  1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: search attribute INVALIDKEY is not defined"}}
-  5 WorkflowTaskScheduled`, historyEvents)
-	} else {
-		s.ErrorContains(err, fmt.Sprintf("BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY", s.Namespace().String()))
-		s.EqualHistoryEvents(fmt.Sprintf(`
+	s.ErrorContains(err, fmt.Sprintf("BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY", s.Namespace().String()))
+	s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY"}}
   5 WorkflowTaskScheduled`, s.Namespace().String()), historyEvents)
-	}
 }
 
 func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
@@ -1675,8 +1665,8 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 			Get(ctx, nil)
 	}
 
-	s.Worker().RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: wfType})
-	s.Worker().RegisterWorkflowWithOptions(childWf, workflow.RegisterOptions{Name: childWfType})
+	s.SdkWorker().RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: wfType})
+	s.SdkWorker().RegisterWorkflowWithOptions(childWf, workflow.RegisterOptions{Name: childWfType})
 
 	startOptions := sdkclient.StartWorkflowOptions{
 		ID:        wfID,

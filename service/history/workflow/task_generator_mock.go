@@ -14,6 +14,7 @@ import (
 	time "time"
 
 	history "go.temporal.io/api/history/v1"
+	worker "go.temporal.io/api/worker/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	hsm "go.temporal.io/server/service/history/hsm"
 	interfaces "go.temporal.io/server/service/history/interfaces"
@@ -299,6 +300,20 @@ func (m *MockTaskGenerator) GenerateUserTimerTasks() error {
 func (mr *MockTaskGeneratorMockRecorder) GenerateUserTimerTasks() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateUserTimerTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateUserTimerTasks))
+}
+
+// GenerateWorkerCommandsTasks mocks base method.
+func (m *MockTaskGenerator) GenerateWorkerCommandsTasks(commands []*worker.WorkerCommand, controlQueue string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateWorkerCommandsTasks", commands, controlQueue)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateWorkerCommandsTasks indicates an expected call of GenerateWorkerCommandsTasks.
+func (mr *MockTaskGeneratorMockRecorder) GenerateWorkerCommandsTasks(commands, controlQueue any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateWorkerCommandsTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateWorkerCommandsTasks), commands, controlQueue)
 }
 
 // GenerateWorkflowCloseTasks mocks base method.
