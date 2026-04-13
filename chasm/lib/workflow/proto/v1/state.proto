@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.workflow.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpb";
+
+// NexusOperationParentData contains workflow-specific data stored in a nexus operation's
+// parent_data field when the operation is embedded in a workflow.
+message NexusOperationParentData {
+  // Event ID of the NEXUS_OPERATION_SCHEDULED event.
+  int64 scheduled_event_id = 1;
+  // Batch ID of the NEXUS_OPERATION_SCHEDULED event.
+  int64 scheduled_event_batch_id = 2;
+}
+
+// NexusCancellationParentData contains workflow-specific data stored in a nexus cancellation's
+// parent_data field when the operation is embedded in a workflow.
+message NexusCancellationParentData {
+  // Event ID of the NEXUS_OPERATION_CANCEL_REQUESTED event.
+  int64 requested_event_id = 1;
+}
