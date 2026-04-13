@@ -594,6 +594,11 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 	newReqID := req.GetRequestId()
 	existingReqID := a.GetCancelState().GetRequestId()
 
+	// A paused activity cannot be cancelled; unpause it first.
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED {
+		return nil, serviceerror.NewFailedPrecondition("cannot cancel a paused activity; unpause it first")
+	}
+
 	// If already in cancel requested state, fail if request ID is different, else no-op
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
 		if existingReqID != newReqID {
@@ -604,11 +609,10 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 		return &activitypb.RequestCancelActivityExecutionResponse{}, nil
 	}
 
-	// If in scheduled or paused state, cancel immediately right after marking cancel requested.
-	// Paused activities have no active worker token so no worker response is expected.
+	// If in scheduled state, cancel immediately — no worker token is active so no worker
+	// response is expected. STARTED and CANCEL_REQUESTED activities wait for the worker.
 	originalStatus := a.GetStatus()
-	isCancelImmediately := originalStatus == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED ||
-		originalStatus == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED
+	isCancelImmediately := originalStatus == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
 
 	if err := TransitionCancelRequested.Apply(a, ctx, req); err != nil {
 		return nil, err

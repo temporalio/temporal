@@ -6099,6 +6099,77 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		require.Equal(t, activityID, poll2Resp.GetActivityId())
 		require.EqualValues(t, 2, poll2Resp.Attempt)
 	})
+
+	// PauseWhileCancelRequested: once cancellation has been requested the activity is committed to
+	// cancelling. A subsequent pause request must return FailedPrecondition.
+	t.Run("PauseWhileCancelRequested", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		// Poll so the activity is STARTED.
+		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+		// Request cancellation — activity transitions to CANCEL_REQUESTED.
+		_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-cancel",
+			RequestId:  s.tv.RequestID(),
+		})
+		require.NoError(t, err)
+
+		// Attempting to pause a CANCEL_REQUESTED activity must fail.
+		_, err = s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.Error(t, err)
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
+	})
+
+	// CancelWhilePaused: pausing an activity (SCHEDULED → PAUSED) then attempting to cancel it
+	// must return FailedPrecondition. The caller must unpause first.
+	t.Run("CancelWhilePaused", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		// Pause while SCHEDULED.
+		_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		// Attempting to cancel a PAUSED activity must fail.
+		_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-cancel",
+			RequestId:  s.tv.RequestID(),
+		})
+		require.Error(t, err)
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
+	})
 }
 
 func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
