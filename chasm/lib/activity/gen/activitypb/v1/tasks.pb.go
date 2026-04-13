@@ -114,7 +114,7 @@ func (x *ScheduleToStartTimeoutTask) GetStamp() int32 {
 
 type ScheduleToCloseTimeoutTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The current schedule-to-close stamp for this activity. Used for task validation.
+	// The schedule-to-close stamp for this task. Used for task validation.
 	// See also [ActivityState.schedule_to_close_stamp].
 	// Tasks without a stamp (stamp=0) predate this field and are not validated by stamp.
 	Stamp         int32 `protobuf:"varint,1,opt,name=stamp,proto3" json:"stamp,omitempty"`
