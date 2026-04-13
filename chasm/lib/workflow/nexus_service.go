@@ -21,43 +21,48 @@ type workflowServiceNexusHandler struct {
 }
 
 // SignalWithStartWorkflowExecution implements the SignalWithStartWorkflowExecution Nexus operation.
-func (h *workflowServiceNexusHandler) SignalWithStartWorkflowExecution(name string) nexus.Operation[*workflowservice.SignalWithStartWorkflowExecutionRequest, *workflowservice.SignalWithStartWorkflowExecutionResponse] {
-	return nexus.NewSyncOperation(name, func(ctx context.Context, req *workflowservice.SignalWithStartWorkflowExecutionRequest, options nexus.StartOperationOptions) (*workflowservice.SignalWithStartWorkflowExecutionResponse, error) {
-		nsID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
-		if err != nil {
-			return nil, serviceerror.NewInvalidArgumentf("Invalid namespace %q: %v", req.GetNamespace(), err)
-		}
-		res, err := h.historyHandler.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
-			NamespaceId:            nsID.String(),
-			SignalWithStartRequest: req,
-		})
-		if err != nil {
-			return nil, err
-		}
-		link := commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
-			Namespace:  req.GetNamespace(),
-			WorkflowId: req.GetWorkflowId(),
-			RunId:      res.GetRunId(),
-			Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-				RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-					RequestId: req.GetRequestId(),
-				},
-			},
-		})
-		nexus.AddHandlerLinks(ctx, link)
-
-		return &workflowservice.SignalWithStartWorkflowExecutionResponse{
-			RunId:   res.GetRunId(),
-			Started: res.GetStarted(),
-		}, nil
+func (h *workflowServiceNexusHandler) signalWithStartWorkflowExecution(
+	ctx context.Context,
+	req *workflowservice.SignalWithStartWorkflowExecutionRequest,
+	options nexus.StartOperationOptions,
+) (*workflowservice.SignalWithStartWorkflowExecutionResponse, error) {
+	nsID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("Invalid namespace %q: %v", req.GetNamespace(), err)
+	}
+	res, err := h.historyHandler.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
+		NamespaceId:            nsID.String(),
+		SignalWithStartRequest: req,
 	})
+	if err != nil {
+		return nil, err
+	}
+	link := commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+		Namespace:  req.GetNamespace(),
+		WorkflowId: req.GetWorkflowId(),
+		RunId:      res.GetRunId(),
+		Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+				RequestId: req.GetRequestId(),
+			},
+		},
+	})
+	nexus.AddHandlerLinks(ctx, link)
+
+	return &workflowservice.SignalWithStartWorkflowExecutionResponse{
+		RunId:   res.GetRunId(),
+		Started: res.GetStarted(),
+	}, nil
 }
 
 func mustNewWorkflowServiceNexusHandler(
 	handler *workflowServiceNexusHandler,
 ) *nexus.Service {
 	svc := nexus.NewService(workflowservicenexus.WorkflowService.ServiceName)
-	svc.MustRegister(handler.SignalWithStartWorkflowExecution(workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name()))
+	svc.MustRegister(nexus.NewSyncOperation(
+		workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name(),
+		handler.signalWithStartWorkflowExecution,
+	))
 	return svc
 }
 

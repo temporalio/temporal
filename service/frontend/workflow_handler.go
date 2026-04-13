@@ -1450,7 +1450,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	var componentRef []byte
 	if workflowID == "" {
 		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
-			return nil, workflow.ErrWorkflowIDNotSet
+			return nil, errWorkflowIDNotSet
 		}
 
 		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
@@ -1645,7 +1645,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	var componentRef []byte
 	if workflowID == "" {
 		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
-			return nil, workflow.ErrWorkflowIDNotSet
+			return nil, errWorkflowIDNotSet
 		}
 
 		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
@@ -1853,7 +1853,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	var componentRef []byte
 	if workflowID == "" {
 		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
-			return nil, workflow.ErrWorkflowIDNotSet
+			return nil, errWorkflowIDNotSet
 		}
 
 		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
@@ -2053,7 +2053,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 	var componentRef []byte
 	if workflowID == "" {
 		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
-			return nil, workflow.ErrWorkflowIDNotSet
+			return nil, errWorkflowIDNotSet
 		}
 
 		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
@@ -6545,7 +6545,7 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 		return nil, errRequestNotSet
 	}
 	if request.GetWorkflowExecution().GetWorkflowId() == "" {
-		return nil, workflow.ErrWorkflowIDNotSet
+		return nil, errWorkflowIDNotSet
 	}
 	if request.GetUpdateMask() == nil {
 		return nil, serviceerror.NewInvalidArgument("UpdateMask is required")
@@ -6590,7 +6590,7 @@ func (wh *WorkflowHandler) UpdateActivityOptions(
 		return nil, errRequestNotSet
 	}
 	if request.GetExecution().GetWorkflowId() == "" {
-		return nil, workflow.ErrWorkflowIDNotSet
+		return nil, errWorkflowIDNotSet
 	}
 	if request.GetActivity() == nil {
 		return nil, errActivityIDOrTypeNotSet
@@ -6628,7 +6628,7 @@ func (wh *WorkflowHandler) PauseActivity(
 		return nil, errRequestNotSet
 	}
 	if request.GetExecution().GetWorkflowId() == "" {
-		return nil, workflow.ErrWorkflowIDNotSet
+		return nil, errWorkflowIDNotSet
 	}
 	if request.GetActivity() == nil {
 		return nil, errActivityIDOrTypeNotSet
@@ -6660,7 +6660,7 @@ func (wh *WorkflowHandler) UnpauseActivity(
 		return nil, errRequestNotSet
 	}
 	if request.GetExecution().GetWorkflowId() == "" {
-		return nil, workflow.ErrWorkflowIDNotSet
+		return nil, errWorkflowIDNotSet
 	}
 	if request.GetActivity() == nil {
 		return nil, errActivityIDOrTypeNotSet
@@ -6692,7 +6692,7 @@ func (wh *WorkflowHandler) ResetActivity(
 		return nil, errRequestNotSet
 	}
 	if request.GetExecution().GetWorkflowId() == "" {
-		return nil, workflow.ErrWorkflowIDNotSet
+		return nil, errWorkflowIDNotSet
 	}
 	if request.GetActivity() == nil {
 		return nil, errActivityIDOrTypeNotSet

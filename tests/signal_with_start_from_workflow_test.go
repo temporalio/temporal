@@ -301,11 +301,11 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestSignalExistingWorkflow() {
 		TaskQueue:    &taskqueuepb.TaskQueue{Name: targetTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		RequestId:    uuid.NewString(),
 	})
+	s.T().Cleanup(func() {
+		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, startResp.RunId, "test cleanup")
+	})
 	s.NoError(err)
 	originalRunID := startResp.RunId
-	defer func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, originalRunID, "test cleanup")
-	}()
 
 	resp, failure := s.scheduleAndGetSWSResult(ctx, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		WorkflowId:            targetWorkflowID,
@@ -334,13 +334,13 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestStartNewWorkflow() {
 		WorkflowType: &commonpb.WorkflowType{Name: "target-workflow"},
 		TaskQueue:    &taskqueuepb.TaskQueue{Name: targetTaskQueue},
 	})
+	s.T().Cleanup(func() {
+		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
+	})
 
 	s.Nil(failure)
 	s.True(resp.Started, "expected Started=true when starting a new workflow")
 	s.NotEmpty(resp.RunId)
-	defer func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
-	}()
 }
 
 // TestSignalTerminatedWorkflow verifies that SWS starts a fresh run when the target workflow
@@ -375,9 +375,6 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestSignalTerminatedWorkflow() {
 	s.Nil(failure)
 	s.True(resp.Started, "expected Started=true when target was terminated")
 	s.NotEqual(originalRunID, resp.RunId, "expected a new RunId after termination")
-	defer func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
-	}()
 }
 
 // TestIDReusePolicy_RejectDuplicate verifies that SWS fails with WorkflowExecutionAlreadyStarted
@@ -423,13 +420,13 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDReusePolicy_AllowDuplicate(
 		TaskQueue:             &taskqueuepb.TaskQueue{Name: targetTaskQueue},
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	})
+	s.T().Cleanup(func() {
+		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
+	})
 
 	s.Nil(failure)
 	s.True(resp.Started, "expected Started=true with ALLOW_DUPLICATE after completion")
 	s.NotEmpty(resp.RunId)
-	defer func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
-	}()
 }
 
 // TestIDReusePolicy_AllowDuplicateFailedOnly covers two sub-cases for ALLOW_DUPLICATE_FAILED_ONLY:
@@ -481,11 +478,11 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDReusePolicy_AllowDuplicateF
 			WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
 		},
 	)
+	s.T().Cleanup(func() {
+		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
+	})
 	s.Nil(failure)
 	s.True(resp.Started, "expected Started=true after terminated workflow + ALLOW_DUPLICATE_FAILED_ONLY")
-	defer func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
-	}()
 }
 
 // TestIDConflictPolicy_TerminateExisting verifies that SWS terminates a running workflow and
@@ -508,19 +505,19 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_TerminateExi
 	originalRunID := startResp.RunId
 
 	resp, failure := s.scheduleAndGetSWSResult(ctx, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
-		WorkflowId:              targetWorkflowID,
-		SignalName:              "test-signal",
-		WorkflowType:            &commonpb.WorkflowType{Name: "target-workflow"},
-		TaskQueue:               &taskqueuepb.TaskQueue{Name: targetTaskQueue},
+		WorkflowId:               targetWorkflowID,
+		SignalName:               "test-signal",
+		WorkflowType:             &commonpb.WorkflowType{Name: "target-workflow"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: targetTaskQueue},
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
+	})
+	s.T().Cleanup(func() {
+		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
 	})
 
 	s.Nil(failure)
 	s.True(resp.Started, "expected Started=true with TERMINATE_EXISTING")
 	s.NotEqual(originalRunID, resp.RunId, "expected a new RunId")
-	defer func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
-	}()
 
 	// Verify the original run was terminated.
 	desc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
@@ -547,20 +544,22 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_UseExisting(
 		TaskQueue:    &taskqueuepb.TaskQueue{Name: targetTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		RequestId:    uuid.NewString(),
 	})
+	s.T().Cleanup(func() {
+		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, startResp.RunId, "test cleanup")
+	})
 	s.NoError(err)
 	originalRunID := startResp.RunId
-	defer func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, originalRunID, "test cleanup")
-	}()
 
 	resp, failure := s.scheduleAndGetSWSResult(ctx, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
-		WorkflowId:              targetWorkflowID,
-		SignalName:              "test-signal",
-		WorkflowType:            &commonpb.WorkflowType{Name: "target-workflow"},
-		TaskQueue:               &taskqueuepb.TaskQueue{Name: targetTaskQueue},
+		WorkflowId:               targetWorkflowID,
+		SignalName:               "test-signal",
+		WorkflowType:             &commonpb.WorkflowType{Name: "target-workflow"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: targetTaskQueue},
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 	})
-
+	s.T().Cleanup(func() {
+		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
+	})
 	s.Nil(failure)
 	s.False(resp.Started, "expected Started=false with USE_EXISTING")
 	s.Equal(originalRunID, resp.RunId)
@@ -581,19 +580,18 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_Fail() {
 		TaskQueue:    &taskqueuepb.TaskQueue{Name: targetTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		RequestId:    uuid.NewString(),
 	})
-	s.NoError(err)
-	defer func() {
+	s.T().Cleanup(func() {
 		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, startResp.RunId, "test cleanup")
-	}()
+	})
+	s.NoError(err)
 
 	_, failure := s.scheduleAndGetSWSResult(ctx, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
-		WorkflowId:              targetWorkflowID,
-		SignalName:              "test-signal",
-		WorkflowType:            &commonpb.WorkflowType{Name: "target-workflow"},
-		TaskQueue:               &taskqueuepb.TaskQueue{Name: targetTaskQueue},
+		WorkflowId:               targetWorkflowID,
+		SignalName:               "test-signal",
+		WorkflowType:             &commonpb.WorkflowType{Name: "target-workflow"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: targetTaskQueue},
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 	})
-
 	s.NotNil(failure, "expected the Nexus operation to fail with CONFLICT_POLICY_FAIL")
 	s.Contains(failure.GetCause().GetMessage()+failure.GetMessage(), "already started")
 }
@@ -615,13 +613,12 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestStartDelay() {
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: targetTaskQueue},
 		WorkflowStartDelay: durationpb.New(startDelay),
 	})
-
+	s.T().Cleanup(func() {
+		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
+	})
 	s.Nil(failure)
 	s.True(resp.Started, "expected Started=true with WorkflowStartDelay")
 	s.NotEmpty(resp.RunId)
-	defer func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
-	}()
 
 	// Verify the workflow eventually becomes running after the delay.
 	s.Eventually(func() bool {

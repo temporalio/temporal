@@ -5,7 +5,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/priorities"
 )
 
@@ -18,7 +17,7 @@ func validateExecution(w *commonpb.WorkflowExecution) error {
 		return errExecutionNotSet
 	}
 	if w.GetWorkflowId() == "" {
-		return workflow.ErrWorkflowIDNotSet
+		return errWorkflowIDNotSet
 	}
 	if w.GetRunId() != "" {
 		if err := uuid.Validate(w.GetRunId()); err != nil {

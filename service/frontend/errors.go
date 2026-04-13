@@ -7,6 +7,7 @@ import (
 var (
 	errInvalidTaskToken                                   = serviceerror.NewInvalidArgument("Invalid TaskToken.")
 	errDeserializingToken                                 = serviceerror.NewInvalidArgument("Error deserializing task token.")
+	errWorkflowIDNotSet                                   = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
 	errExecutionNotSet                                    = serviceerror.NewInvalidArgument("Execution is not set on request.")
 	errActivityIDNotSet                                   = serviceerror.NewInvalidArgument("ActivityId is not set on request.")
 	errActivityIDOrTypeNotSet                             = serviceerror.NewInvalidArgument("Either Activity.Id or Activity.Type should be set on request.")
