@@ -693,14 +693,44 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 	timeSkippingConfig *workflowpb.TimeSkippingConfig,
 	namespaceName namespace.Name,
 ) error {
+
 	if timeSkippingConfig == nil {
 		return nil
 	}
+
+	// if this feature is not enabled, we don't allow setting any related config
 	if !wh.config.TimeSkippingEnabled(namespaceName.String()) {
-		return serviceerror.NewInvalidArgumentf(
-			"Time skipping is not enabled for namespace %s",
+		return serviceerror.NewUnimplementedf(
+			"The Time-Skipping feature is not enabled for namespace %s",
 			namespaceName,
 		)
+	}
+
+	if timeSkippingConfig.GetBound() != nil {
+		switch bound := timeSkippingConfig.GetBound().(type) {
+		case *workflowpb.TimeSkippingConfig_MaxSkippedDuration:
+			if bound.MaxSkippedDuration.AsDuration() < namespace.MinTimeSkippingDuration {
+				return serviceerror.NewUnimplementedf(
+					"Max skipped duration must be at least %s",
+					namespace.MinTimeSkippingDuration,
+				)
+			}
+		case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
+			if bound.MaxElapsedDuration.AsDuration() < namespace.MinTimeSkippingDuration {
+				return serviceerror.NewUnimplementedf(
+					"Max elapsed duration must be at least %s",
+					namespace.MinTimeSkippingDuration,
+				)
+			}
+		// todo: validation for max target time will need to check current virtual time for updateOptions scenario
+		case *workflowpb.TimeSkippingConfig_MaxTargetTime:
+			if bound.MaxTargetTime.AsTime().Before(time.Now().Add(namespace.MinTimeSkippingDuration)) {
+				return serviceerror.NewUnimplementedf(
+					"Max target time must be at least %s from current time of the workflow",
+					namespace.MinTimeSkippingDuration,
+				)
+			}
+		}
 	}
 	return nil
 }

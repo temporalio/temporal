@@ -3243,6 +3243,43 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 
 	// config with enabled=true and dynamic config enabled is valid
 	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+
+	// MaxSkippedDuration below 1 minute is rejected
+	halfMinDuration := time.Duration(0.5 * float64(namespace.MinTimeSkippingDuration))
+	s.Error(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(halfMinDuration)},
+	}, s.testNamespace))
+
+	// MaxSkippedDuration exactly 1 minute is valid
+	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(namespace.MinTimeSkippingDuration)},
+	}, s.testNamespace))
+
+	// MaxElapsedDuration below 1 minute is rejected
+	s.Error(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(halfMinDuration)},
+	}, s.testNamespace))
+
+	// MaxElapsedDuration exactly 1 minute is valid
+	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(namespace.MinTimeSkippingDuration)},
+	}, s.testNamespace))
+
+	// MaxTargetTime less than 1 minute from now is rejected
+	s.Error(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxTargetTime{MaxTargetTime: timestamppb.New(time.Now().Add(halfMinDuration))},
+	}, s.testNamespace))
+
+	// MaxTargetTime more than 1 minute from now is valid
+	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxTargetTime{MaxTargetTime: timestamppb.New(time.Now().Add(namespace.MinTimeSkippingDuration))},
+	}, s.testNamespace))
 }
 
 // TestExecuteMultiOperation_TimeSkipping_DCDisabled verifies that when the DC gate is off,
