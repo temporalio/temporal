@@ -22,72 +22,14 @@ import (
 
 func TestDispatchNexusTaskWithMatchingBehaviors(t *testing.T) {
 	t.Parallel()
-
-	type testCase struct {
-		name             string
-		forcePollForward bool
-		forceTaskForward bool
-		forceAsync       bool
+	baseOpts := []testcore.TestOption{
+		testcore.WithDynamicConfig(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 3),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingEmitTaskDispatchLatencyAtPoll, true),
 	}
 
-	var cases []testCase
-	for _, forcePollForward := range []bool{false, true} {
-		for _, forceTaskForward := range []bool{false, true} {
-			for _, forceAsync := range []bool{false, true} {
-				name := "NoTaskForward"
-				if forceTaskForward {
-					name = "ForceTaskForward"
-				}
-				if forcePollForward {
-					name += "ForcePollForward"
-				} else {
-					name += "NoPollForward"
-				}
-				if forceAsync {
-					name += "ForceAsync"
-				} else {
-					name += "AllowSync"
-				}
-				cases = append(cases, testCase{
-					name:             name,
-					forcePollForward: forcePollForward,
-					forceTaskForward: forceTaskForward,
-					forceAsync:       forceAsync,
-				})
-			}
-		}
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			// TODO: probably a new cluster is not needed once we can validate the forwarding behavior
-			// by task queue name match. for that task_dispatch_latency metric needs to be fixed first.
-			s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
-
-			if tc.forceTaskForward || tc.forcePollForward {
-				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
-				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
-			} else {
-				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-			}
-
-			writePartition := 0
-			if tc.forceTaskForward {
-				writePartition = 11
-			}
-			s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, writePartition))
-
-			readPartition := 0
-			if tc.forcePollForward {
-				readPartition = 5
-			}
-			s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, readPartition))
-			s.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, tc.forceAsync))
-
-			dispatchAndCompleteNexusTask(t, s, tc.forceTaskForward, tc.forcePollForward)
-		})
-	}
+	runWithMatchingBehaviors(t, baseOpts, func(s *testcore.TestEnv, b testcore.MatchingBehavior) {
+		dispatchAndCompleteNexusTask(t, s, b.ForceTaskForward, b.ForcePollForward)
+	})
 }
 
 func TestDispatchNexusTaskOnNonRootPartitionNoForwarding(t *testing.T) {
@@ -107,8 +49,6 @@ func TestDispatchNexusTaskOnNonRootPartitionNoForwarding(t *testing.T) {
 }
 
 func dispatchAndCompleteNexusTask(t *testing.T, s testcore.Env, expectTaskForwarded, expectPollForwarded bool) {
-	t.Helper()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
