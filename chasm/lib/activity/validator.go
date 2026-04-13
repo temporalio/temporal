@@ -366,6 +366,7 @@ func validateRequestCancelActivityExecutionRequest(
 	return nil
 }
 
+//nolint:revive // cyclomatic: per-field validation of a field-mask update requires explicit handling of each field
 func validateUpdateActivityExecutionOptionsRequest(
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
 	maxIDLengthLimit int,

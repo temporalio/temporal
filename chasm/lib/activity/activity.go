@@ -121,7 +121,7 @@ func NewStandaloneActivity(
 
 	activity := &Activity{
 		// Use common.CloneProto here because the values can change and these are all
-		// pointers to the request so changing the ActivityState will also change the 
+		// pointers to the request so changing the ActivityState will also change the
 		// request values.
 		ActivityState: common.CloneProto(&activitypb.ActivityState{
 			ActivityType:           request.GetActivityType(),

@@ -208,7 +208,6 @@ func processActivityOptionsUpdate(
 	return updateActivityOptions(mutableState, ai, adjustedOptions)
 }
 
-
 func adjustActivityOptions(
 	validator *api.CommandAttrValidator,
 	namespaceID string,

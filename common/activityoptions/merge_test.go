@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -129,17 +128,17 @@ func TestMergeActivityOptionsAcceptance(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			updateFields := util.ParseFieldMask(tc.mask)
 			err := MergeActivityOptions(tc.mergeInto, tc.mergeFrom, updateFields)
-			assert.NoError(t, err)
-			assert.Equal(t, tc.expected.RetryPolicy.GetInitialInterval(), tc.mergeInto.RetryPolicy.GetInitialInterval(), "RetryInitialInterval")
-			assert.Equal(t, tc.expected.RetryPolicy.GetMaximumInterval(), tc.mergeInto.RetryPolicy.GetMaximumInterval(), "RetryMaximumInterval")
-			assert.Equal(t, tc.expected.RetryPolicy.GetBackoffCoefficient(), tc.mergeInto.RetryPolicy.GetBackoffCoefficient(), "RetryBackoffCoefficient")
-			assert.Equal(t, tc.expected.RetryPolicy.GetMaximumAttempts(), tc.mergeInto.RetryPolicy.GetMaximumAttempts(), "RetryMaximumAttempts")
-			assert.Equal(t, tc.expected.TaskQueue, tc.mergeInto.TaskQueue, "TaskQueue")
-			assert.Equal(t, tc.expected.ScheduleToCloseTimeout, tc.mergeInto.ScheduleToCloseTimeout, "ScheduleToCloseTimeout")
-			assert.Equal(t, tc.expected.ScheduleToStartTimeout, tc.mergeInto.ScheduleToStartTimeout, "ScheduleToStartTimeout")
-			assert.Equal(t, tc.expected.StartToCloseTimeout, tc.mergeInto.StartToCloseTimeout, "StartToCloseTimeout")
-			assert.Equal(t, tc.expected.HeartbeatTimeout, tc.mergeInto.HeartbeatTimeout, "HeartbeatTimeout")
-			assert.Equal(t, tc.expected.Priority, tc.mergeInto.Priority, "Priority")
+			require.NoError(t, err)
+			require.Equal(t, tc.expected.RetryPolicy.GetInitialInterval(), tc.mergeInto.RetryPolicy.GetInitialInterval(), "RetryInitialInterval")
+			require.Equal(t, tc.expected.RetryPolicy.GetMaximumInterval(), tc.mergeInto.RetryPolicy.GetMaximumInterval(), "RetryMaximumInterval")
+			require.Equal(t, tc.expected.RetryPolicy.GetBackoffCoefficient(), tc.mergeInto.RetryPolicy.GetBackoffCoefficient(), "RetryBackoffCoefficient")
+			require.Equal(t, tc.expected.RetryPolicy.GetMaximumAttempts(), tc.mergeInto.RetryPolicy.GetMaximumAttempts(), "RetryMaximumAttempts")
+			require.Equal(t, tc.expected.TaskQueue, tc.mergeInto.TaskQueue, "TaskQueue")
+			require.Equal(t, tc.expected.ScheduleToCloseTimeout, tc.mergeInto.ScheduleToCloseTimeout, "ScheduleToCloseTimeout")
+			require.Equal(t, tc.expected.ScheduleToStartTimeout, tc.mergeInto.ScheduleToStartTimeout, "ScheduleToStartTimeout")
+			require.Equal(t, tc.expected.StartToCloseTimeout, tc.mergeInto.StartToCloseTimeout, "StartToCloseTimeout")
+			require.Equal(t, tc.expected.HeartbeatTimeout, tc.mergeInto.HeartbeatTimeout, "HeartbeatTimeout")
+			require.Equal(t, tc.expected.Priority, tc.mergeInto.Priority, "Priority")
 		})
 	}
 }

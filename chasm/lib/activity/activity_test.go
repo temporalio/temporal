@@ -249,4 +249,3 @@ func TestActivityTerminate(t *testing.T) {
 		})
 	}
 }
-
