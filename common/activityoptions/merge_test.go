@@ -131,7 +131,7 @@ func TestMergeActivityOptionsAcceptance(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.expected.RetryPolicy.GetInitialInterval(), tc.mergeInto.RetryPolicy.GetInitialInterval(), "RetryInitialInterval")
 			require.Equal(t, tc.expected.RetryPolicy.GetMaximumInterval(), tc.mergeInto.RetryPolicy.GetMaximumInterval(), "RetryMaximumInterval")
-			require.Equal(t, tc.expected.RetryPolicy.GetBackoffCoefficient(), tc.mergeInto.RetryPolicy.GetBackoffCoefficient(), "RetryBackoffCoefficient")
+			require.InEpsilon(t, tc.expected.RetryPolicy.GetBackoffCoefficient(), tc.mergeInto.RetryPolicy.GetBackoffCoefficient(), 0.001, "RetryBackoffCoefficient")
 			require.Equal(t, tc.expected.RetryPolicy.GetMaximumAttempts(), tc.mergeInto.RetryPolicy.GetMaximumAttempts(), "RetryMaximumAttempts")
 			require.Equal(t, tc.expected.TaskQueue, tc.mergeInto.TaskQueue, "TaskQueue")
 			require.Equal(t, tc.expected.ScheduleToCloseTimeout, tc.mergeInto.ScheduleToCloseTimeout, "ScheduleToCloseTimeout")
