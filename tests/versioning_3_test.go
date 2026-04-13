@@ -4403,7 +4403,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 	}
 	f, err := tqid.NewTaskQueueFamily(s.NamespaceID().String(), tv.TaskQueue().GetName())
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
+		a := require.New(t)
 		for pt := range remaining {
 			a.NoError(err)
 			partition := f.TaskQueue(pt.tp).NormalPartition(pt.part)
