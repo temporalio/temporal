@@ -8,7 +8,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
-	apicallbackpb "go.temporal.io/api/callback/v1"
+	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -890,7 +890,7 @@ func (a *Activity) buildCallbackInfos(ctx chasm.Context) ([]*apiactivitypb.Callb
 			Trigger: &apiactivitypb.CallbackInfo_Trigger{
 				Variant: &apiactivitypb.CallbackInfo_Trigger_ActivityClosed{},
 			},
-			Info: &apicallbackpb.CallbackInfo{
+			Info: &callbackpb.CallbackInfo{
 				Callback:                cbSpec,
 				RegistrationTime:        cb.RegistrationTime,
 				State:                   state,
