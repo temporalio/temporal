@@ -74,6 +74,7 @@ var (
 	FlagAllActive                  = "select-all-active"
 	FlagFair                       = "fair"
 	FlagMinPass                    = "min-pass"
+	FlagFairnessState              = "fairness-state"
 	FlagVisibilityQuery            = "query"
 	FlagJobID                      = "job-id"
 	FlagDecode                     = "decode"

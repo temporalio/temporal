@@ -12,6 +12,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tools/tdbg"
@@ -377,6 +378,10 @@ func (f fakeClientFactory) WorkflowClient(*cli.Context) workflowservice.Workflow
 
 func (f fakeClientFactory) AdminClient(*cli.Context) adminservice.AdminServiceClient {
 	return f.adminClient
+}
+
+func (f fakeClientFactory) MatchingClient(*cli.Context) matchingservice.MatchingServiceClient {
+	panic("unimplemented")
 }
 
 // The fake admin client accepts and returns canned responses

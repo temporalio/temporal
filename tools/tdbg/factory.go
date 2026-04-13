@@ -16,6 +16,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -34,6 +35,7 @@ type (
 	ClientFactory interface {
 		AdminClient(c *cli.Context) adminservice.AdminServiceClient
 		WorkflowClient(c *cli.Context) workflowservice.WorkflowServiceClient
+		MatchingClient(c *cli.Context) matchingservice.MatchingServiceClient
 	}
 	// ClientFactoryOption is used to configure the ClientFactory via NewClientFactory.
 	ClientFactoryOption func(params *clientFactoryParams)
@@ -92,6 +94,12 @@ func (b *clientFactory) WorkflowClient(c *cli.Context) workflowservice.WorkflowS
 	connection, _ := b.createGRPCConnection(c)
 
 	return workflowservice.NewWorkflowServiceClient(connection)
+}
+
+func (b *clientFactory) MatchingClient(c *cli.Context) matchingservice.MatchingServiceClient {
+	connection, _ := b.createGRPCConnection(c)
+
+	return matchingservice.NewMatchingServiceClient(connection)
 }
 
 func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, error) {
