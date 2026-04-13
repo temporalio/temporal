@@ -148,6 +148,9 @@ func TestStartStandaloneNexusOperation(t *testing.T) {
 			RequestId:   "different-request-id",
 		})
 		s.Error(err)
+		var alreadyStartedErr *serviceerror.AlreadyExists
+		s.ErrorAs(err, &alreadyStartedErr)
+		s.ErrorContains(err, "nexus operation execution already started")
 
 		// Second start with same request ID should return existing run.
 		resp2, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
