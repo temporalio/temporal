@@ -460,15 +460,15 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		if hbTimeout := a.GetHeartbeatTimeout().AsDuration(); hbTimeout > 0 {
 			// The next heartbeat time is the max of (the last heartbeats recorded time and
 			// the current attempts started time) plus the heartbeat timeout
-			lastHB, _ := a.LastHeartbeat.TryGet(ctx)
-			lastHBTime := util.MaxTime(
-				lastHB.GetRecordedTime().AsTime(),
+			lastHb, _ := a.LastHeartbeat.TryGet(ctx)
+			lastHbTime := util.MaxTime(
+				lastHb.GetRecordedTime().AsTime(),
 				attempt.GetStartedTime().AsTime(),
 			).Add(hbTimeout)
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
-					ScheduledTime: lastHBTime,
+					ScheduledTime: lastHbTime,
 				},
 				&activitypb.HeartbeatTimeoutTask{
 					Stamp: attempt.GetStamp(),
