@@ -14,6 +14,12 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+var MaxPerExecution = dynamicconfig.NewNamespaceIntSetting(
+	"callback.maxPerExecution",
+	2000,
+	`MaxPerExecution is the maximum number of callbacks that can be attached to an execution (workflow or standalone activity).`,
+)
+
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 	"callback.request.timeout",
 	time.Second*10,

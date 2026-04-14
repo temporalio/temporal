@@ -793,11 +793,10 @@ func OperatorHandlerProvider(
 // callbackValidatorProvider creates a callback Validator using the production dynamic config keys
 // so that existing operator configurations (component.callbacks.allowedAddresses) are honored.
 // TODO: Once HSM callbacks (components/callbacks) are removed, move this provider into
-// chasm/lib/callback/fx.go, read directly from callback.AllowedAddresses, and switch
-// MaxCallbacksPerWorkflow to MaxCHASMCallbacksPerWorkflow.
+// chasm/lib/callback/fx.go and read directly from callback.AllowedAddresses.
 func callbackValidatorProvider(dc *dynamicconfig.Collection) *callback.Validator {
 	return callback.NewValidator(
-		dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
+		callback.MaxPerExecution.Get(dc),
 		dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
 		dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
 		func(ns string) callback.AddressMatchRules {

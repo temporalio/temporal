@@ -275,6 +275,20 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx ch
 	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
 }
 
+type attachCallbacksRequest struct {
+	RequestID           string
+	CompletionCallbacks []*commonpb.Callback
+	MaxCallbacks        int
+}
+
+func (a *Activity) attachCallbacks(ctx chasm.MutableContext, req attachCallbacksRequest) (any, error) {
+	if a.LifecycleState(ctx).IsClosed() {
+		return nil, serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed activity")
+	}
+
+	return nil, a.addCompletionCallbacks(ctx, req.RequestID, req.CompletionCallbacks, req.MaxCallbacks)
+}
+
 func (a *Activity) addCompletionCallbacks(
 	ctx chasm.MutableContext,
 	requestID string,

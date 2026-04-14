@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -262,6 +263,46 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 			require.NoError(t, err)
 			require.Equal(t, firstStartResp.RunId, resp.RunId)
 			require.False(t, resp.GetStarted())
+		})
+
+		t.Run("AttachesCallbacksToExistingActivity", func(t *testing.T) {
+			s.OverrideDynamicConfig(
+				callbacks.AllowedAddresses,
+				[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+			)
+
+			resp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+				Namespace:    s.Namespace().String(),
+				ActivityId:   activityID,
+				ActivityType: s.tv.ActivityType(),
+				Identity:     s.tv.WorkerIdentity(),
+				Input:        defaultInput,
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: taskQueue,
+				},
+				StartToCloseTimeout: durationpb.New(1 * time.Minute),
+				IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+				RequestId:           s.tv.Any().String(),
+				CompletionCallbacks: []*commonpb.Callback{
+					{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/use-existing-cb"}}},
+				},
+				OnConflictOptions: &commonpb.OnConflictOptions{
+					AttachCompletionCallbacks: true,
+				},
+			})
+			require.NoError(t, err)
+			require.False(t, resp.GetStarted())
+			require.Equal(t, firstStartResp.RunId, resp.RunId)
+
+			// Verify the callback was attached to the existing activity.
+			descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      firstStartResp.RunId,
+			})
+			require.NoError(t, err)
+			require.Len(t, descResp.Callbacks, 1)
+			require.Equal(t, "http://localhost/use-existing-cb", descResp.Callbacks[0].GetInfo().GetCallback().GetNexus().GetUrl())
 		})
 
 		t.Run("DoesNotApplyToCompletedActivity", func(t *testing.T) {
@@ -5097,7 +5138,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 	t.Run("ExceedsMaxCallbacksLimit", func(t *testing.T) {
 		maxCallbacks := 1
 		s.OverrideDynamicConfig(
-			dynamicconfig.MaxCHASMCallbacksPerWorkflow,
+			callback.MaxPerExecution,
 			maxCallbacks,
 		)
 

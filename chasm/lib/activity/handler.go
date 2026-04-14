@@ -75,7 +75,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			}
 
 			if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
-				maxCallbacks := h.config.MaxCHASMCallbacksPerExecution(request.GetNamespace())
+				maxCallbacks := h.config.MaxCallbacksPerExecution(request.GetNamespace())
 				if err := newActivity.addCompletionCallbacks(mutableContext, request.GetRequestId(), cbs, maxCallbacks); err != nil {
 					return nil, err
 				}
@@ -100,6 +100,24 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		}
 
 		return nil, err
+	}
+
+	cbs := frontendReq.GetCompletionCallbacks()
+	if !result.Created && frontendReq.GetOnConflictOptions().GetAttachCompletionCallbacks() && len(cbs) > 0 {
+		ref := chasm.NewComponentRef[*Activity](result.ExecutionKey)
+		_, _, err := chasm.UpdateComponent(
+			ctx,
+			ref,
+			(*Activity).attachCallbacks,
+			attachCallbacksRequest{
+				RequestID:           frontendReq.GetRequestId(),
+				CompletionCallbacks: cbs,
+				MaxCallbacks:        h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace()),
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &activitypb.StartActivityExecutionResponse{

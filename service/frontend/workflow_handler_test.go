@@ -169,7 +169,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 	healthInterceptor := interceptor.NewHealthInterceptor()
 	healthInterceptor.SetHealthy(true)
 	cbValidator := callback.NewValidator(
-		config.MaxCallbacksPerWorkflow,
+		func(string) int { return 2000 },
 		config.CallbackURLMaxLength,
 		config.CallbackHeaderMaxSize,
 		func(string) callback.AddressMatchRules {

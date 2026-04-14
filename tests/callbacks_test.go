@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/testing/protoassert"
@@ -123,6 +124,7 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 	s.OverrideDynamicConfig(dynamicconfig.FrontendCallbackURLMaxLength, 50)
 	s.OverrideDynamicConfig(dynamicconfig.FrontendCallbackHeaderMaxSize, 6)
 	s.OverrideDynamicConfig(dynamicconfig.MaxCallbacksPerWorkflow, 2)
+	s.OverrideDynamicConfig(callback.MaxPerExecution, 2)
 	s.OverrideDynamicConfig(
 		callbacks.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "some-ignored-address", "AllowInsecure": true}, map[string]any{"Pattern": "some-secure-address", "AllowInsecure": false}},
