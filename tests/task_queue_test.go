@@ -22,6 +22,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
@@ -1533,7 +1534,7 @@ func (s *TaskQueueSuite) TestAdminGetTaskQueueUserData_RootPartition() {
 
 	// Root partition (partition_id=0) owns user data storage. The admin RPC resolves the
 	// namespace by name and routes to root via the bare task queue name.
-	resp, err := s.AdminClient().GetTaskQueueUserData(ctx, &v1.GetTaskQueueUserDataRequest{
+	resp, err := s.AdminClient().GetTaskQueueUserData(ctx, &adminservice.GetTaskQueueUserDataRequest{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tv.TaskQueue().GetName(),
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -1558,7 +1559,7 @@ func (s *TaskQueueSuite) TestAdminGetTaskQueueUserData_NonRootPartition() {
 	s.NoError(err)
 
 	// Get the root partition version to know what to expect on non-root partitions.
-	rootResp, err := s.AdminClient().GetTaskQueueUserData(ctx, &v1.GetTaskQueueUserDataRequest{
+	rootResp, err := s.AdminClient().GetTaskQueueUserData(ctx, &adminservice.GetTaskQueueUserDataRequest{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tv.TaskQueue().GetName(),
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -1572,7 +1573,7 @@ func (s *TaskQueueSuite) TestAdminGetTaskQueueUserData_NonRootPartition() {
 	// version matches. TaskQueueSuite sets MatchingNumTaskqueueWritePartitions=4, so
 	// partition 1 always exists.
 	s.Eventually(func() bool {
-		resp, err := s.AdminClient().GetTaskQueueUserData(testcore.NewContext(), &v1.GetTaskQueueUserDataRequest{
+		resp, err := s.AdminClient().GetTaskQueueUserData(testcore.NewContext(), &adminservice.GetTaskQueueUserDataRequest{
 			Namespace:     s.Namespace().String(),
 			TaskQueue:     tv.TaskQueue().GetName(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -1581,7 +1582,7 @@ func (s *TaskQueueSuite) TestAdminGetTaskQueueUserData_NonRootPartition() {
 		return err == nil && resp.GetVersion() == rootResp.GetVersion()
 	}, 15*time.Second, 200*time.Millisecond)
 
-	resp, err := s.AdminClient().GetTaskQueueUserData(ctx, &v1.GetTaskQueueUserDataRequest{
+	resp, err := s.AdminClient().GetTaskQueueUserData(ctx, &adminservice.GetTaskQueueUserDataRequest{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tv.TaskQueue().GetName(),
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
