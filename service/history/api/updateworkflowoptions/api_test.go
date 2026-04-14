@@ -3,8 +3,8 @@ package updateworkflowoptions
 import (
 	"context"
 	"testing"
+	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -28,6 +28,7 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
@@ -94,28 +95,28 @@ func TestMergeOptions_VersionOverrideMask(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	assert.EqualExportedValues(t, unpinnedOverrideOptions, merged)
+	require.EqualExportedValues(t, unpinnedOverrideOptions, merged)
 
 	// Merge pinned_A into unpinned options
 	merged, err = mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsA, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.EqualExportedValues(t, pinnedOverrideOptionsA, merged)
+	require.EqualExportedValues(t, pinnedOverrideOptionsA, merged)
 
 	// Merge pinned_B into pinned_A options
 	merged, err = mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsB, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.EqualExportedValues(t, pinnedOverrideOptionsB, merged)
+	require.EqualExportedValues(t, pinnedOverrideOptionsB, merged)
 
 	// Unset versioning override
 	merged, err = mergeWorkflowExecutionOptions(input, emptyOptions, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.EqualExportedValues(t, emptyOptions, merged)
+	require.EqualExportedValues(t, emptyOptions, merged)
 }
 
 func TestMergeOptions_PartialMask(t *testing.T) {
@@ -124,14 +125,14 @@ func TestMergeOptions_PartialMask(t *testing.T) {
 	deploymentOnlyUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.deployment"}}
 
 	_, err := mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, behaviorOnlyUpdateMask)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	_, err = mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, deploymentOnlyUpdateMask)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	merged, err := mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, bothUpdateMask)
-	assert.NoError(t, err)
-	assert.EqualExportedValues(t, unpinnedOverrideOptions, merged)
+	require.NoError(t, err)
+	require.EqualExportedValues(t, unpinnedOverrideOptions, merged)
 }
 
 func TestMergeOptions_EmptyMask(t *testing.T) {
@@ -140,25 +141,113 @@ func TestMergeOptions_EmptyMask(t *testing.T) {
 
 	// Don't merge anything
 	merged, err := mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsA, emptyUpdateMask)
-	assert.NoError(t, err)
-	assert.EqualExportedValues(t, input, merged)
+	require.NoError(t, err)
+	require.EqualExportedValues(t, input, merged)
 
 	// Don't merge anything
 	merged, err = mergeWorkflowExecutionOptions(input, nil, emptyUpdateMask)
-	assert.NoError(t, err)
-	assert.EqualExportedValues(t, input, merged)
+	require.NoError(t, err)
+	require.EqualExportedValues(t, input, merged)
 }
 
 func TestMergeOptions_AsteriskMask(t *testing.T) {
 	asteriskUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"*"}}
 	_, err := mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, asteriskUpdateMask)
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestMergeOptions_FooMask(t *testing.T) {
 	fooUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"foo"}}
 	_, err := mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, fooUpdateMask)
-	assert.Error(t, err)
+	require.Error(t, err)
+}
+
+func TestMergeOptions_TimeSkippingConfig(t *testing.T) {
+	tscMask := &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}}
+	cfgA := &workflowpb.TimeSkippingConfig{Enabled: true}
+	cfgB := &workflowpb.TimeSkippingConfig{
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
+	}
+
+	tcs := []struct {
+		name        string
+		current     *workflowpb.WorkflowExecutionOptions
+		update      *workflowpb.WorkflowExecutionOptions
+		wantChanged bool
+		wantConfig  *workflowpb.TimeSkippingConfig
+	}{
+		// nil update means "don't touch" even when mask is present
+		{
+			name:        "nil update - existing config preserved",
+			current:     &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgA},
+			update:      &workflowpb.WorkflowExecutionOptions{},
+			wantChanged: false,
+			wantConfig:  cfgA,
+		},
+		// non-nil update replaces and is detected as a change
+		{
+			name:        "new config - changed",
+			current:     &workflowpb.WorkflowExecutionOptions{},
+			update:      &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgB},
+			wantChanged: true,
+			wantConfig:  cfgB,
+		},
+		// identical config is not detected as a change
+		{
+			name:        "same config - no change",
+			current:     &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgB},
+			update:      &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgB},
+			wantChanged: false,
+			wantConfig:  cfgB,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			original := proto.Clone(tc.current).(*workflowpb.WorkflowExecutionOptions)
+			merged, err := mergeWorkflowExecutionOptions(tc.current, tc.update, tscMask)
+			require.NoError(t, err)
+			require.True(t, proto.Equal(tc.wantConfig, merged.GetTimeSkippingConfig()),
+				"config mismatch: want %v, got %v", tc.wantConfig, merged.GetTimeSkippingConfig())
+			require.Equal(t, tc.wantChanged, !proto.Equal(merged, original))
+		})
+	}
+}
+
+func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
+	tscMask := &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}}
+	cfg := &workflowpb.TimeSkippingConfig{
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
+	}
+
+	t.Run("same config - no event written", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+		ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{Config: cfg},
+		}).AnyTimes()
+
+		merged, hasChanges, err := MergeAndApply(ms, &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfg}, tscMask, "")
+		require.NoError(t, err)
+		require.False(t, hasChanges)
+		require.True(t, proto.Equal(cfg, merged.GetTimeSkippingConfig()))
+	})
+
+	t.Run("new config - event written with config", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+		ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
+		ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
+			nil, true, "", nil, nil, "", nil, cfg,
+		).Return(&historypb.HistoryEvent{}, nil)
+
+		merged, hasChanges, err := MergeAndApply(ms, &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfg}, tscMask, "")
+		require.NoError(t, err)
+		require.True(t, hasChanges)
+		require.True(t, proto.Equal(cfg, merged.GetTimeSkippingConfig()))
+	})
 }
 
 type (

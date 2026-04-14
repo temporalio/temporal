@@ -3486,6 +3486,107 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping
 	s.True(resp.Started)
 }
 
+// TestResetWorkflowExecution_TimeSkipping_DCDisabled verifies that when the DC gate is off,
+// a ResetWorkflowExecution request with a TimeSkippingConfig inside PostResetOperations is rejected.
+func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_TimeSkipping_DCDisabled() {
+	config := s.newConfig()
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	wh := s.getWorkflowHandler(config)
+
+	_, err := wh.ResetWorkflowExecution(context.Background(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: s.testNamespace.String(),
+		RequestId: uuid.NewString(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflow-id",
+			RunId:      uuid.NewString(),
+		},
+		PostResetOperations: []*workflowpb.PostResetOperation{
+			{
+				Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
+					UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
+						WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+							TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+						},
+						UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+					},
+				},
+			},
+		},
+	})
+	var unimplemented *serviceerror.Unimplemented
+	s.ErrorAs(err, &unimplemented)
+	s.ErrorContains(err, "The Time-Skipping feature is not enabled for namespace")
+}
+
+// TestStartBatchOperation_ResetOperation_TimeSkipping_DCDisabled verifies that when the DC gate
+// is off, a batch reset with a TimeSkippingConfig inside PostResetOperations is rejected.
+func (s *WorkflowHandlerSuite) TestStartBatchOperation_ResetOperation_TimeSkipping_DCDisabled() {
+	config := s.newConfig()
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	wh := s.getWorkflowHandler(config)
+	namespaceID := namespace.ID(uuid.NewString())
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
+
+	_, err := wh.StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+		Namespace:       s.testNamespace.String(),
+		JobId:           uuid.NewString(),
+		Reason:          "test",
+		VisibilityQuery: "WorkflowId='test'",
+		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
+			ResetOperation: &batchpb.BatchOperationReset{
+				Options: &commonpb.ResetOptions{
+					Target: &commonpb.ResetOptions_WorkflowTaskId{WorkflowTaskId: 1},
+				},
+				PostResetOperations: []*workflowpb.PostResetOperation{
+					{
+						Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
+							UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
+								WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+									TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+								},
+								UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	var unimplemented *serviceerror.Unimplemented
+	s.ErrorAs(err, &unimplemented)
+	s.ErrorContains(err, "The Time-Skipping feature is not enabled for namespace")
+}
+
+// TestStartBatchOperation_UpdateWorkflowOptionsOperation_TimeSkipping_DCDisabled verifies that
+// when the DC gate is off, a batch UpdateWorkflowOptions with a TimeSkippingConfig is rejected.
+func (s *WorkflowHandlerSuite) TestStartBatchOperation_UpdateWorkflowOptionsOperation_TimeSkipping_DCDisabled() {
+	config := s.newConfig()
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	wh := s.getWorkflowHandler(config)
+	namespaceID := namespace.ID(uuid.NewString())
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
+
+	_, err := wh.StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+		Namespace:       s.testNamespace.String(),
+		JobId:           uuid.NewString(),
+		Reason:          "test",
+		VisibilityQuery: "WorkflowId='test'",
+		Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
+			UpdateWorkflowOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
+				WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+					TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+				},
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+			},
+		},
+	})
+	var unimplemented *serviceerror.Unimplemented
+	s.ErrorAs(err, &unimplemented)
+	s.ErrorContains(err, "The Time-Skipping feature is not enabled for namespace")
+}
+
 func (s *WorkflowHandlerSuite) newConfig() *Config {
 	return NewConfig(dc.NewNoopCollection(), numHistoryShards)
 }
@@ -4473,6 +4574,29 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_Priority() {
 	s.ErrorAs(err, &invalidArg)
 	s.ErrorContains(err, "priority key can't be negative")
 	// NOTE: only testing a single validation scenario here; the priority validation has its own unit tests
+}
+
+// TestUpdateWorkflowExecutionOptions_TimeSkipping_DCDisabled verifies that when the DC gate is
+// off, UpdateWorkflowExecutionOptions rejects a request containing a TimeSkippingConfig.
+func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_DCDisabled() {
+	config := s.newConfig()
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	wh := s.getWorkflowHandler(config)
+
+	_, err := wh.UpdateWorkflowExecutionOptions(context.Background(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace: s.testNamespace.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflow-id",
+			RunId:      "run-id",
+		},
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+			TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+	})
+	var unimplemented *serviceerror.Unimplemented
+	s.ErrorAs(err, &unimplemented)
+	s.ErrorContains(err, "The Time-Skipping feature is not enabled for namespace")
 }
 
 func (s *WorkflowHandlerSuite) TestUpdateActivityOptions_Priority() {

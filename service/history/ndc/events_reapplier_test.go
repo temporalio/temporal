@@ -13,6 +13,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
@@ -114,6 +115,54 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_WorkflowExec
 		attr.GetIdentity(),
 		attr.GetPriority(),
 		attr.GetTimeSkippingConfig(),
+	).Return(event, nil)
+	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
+	msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
+	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
+	msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
+	msCurrent.EXPECT().UpdateDuplicatedResource(dedupResource)
+	events := []*historypb.HistoryEvent{
+		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+		event,
+	}
+	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
+	s.NoError(err)
+	s.Len(appliedEvent, 1)
+}
+
+func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_WorkflowExecutionOptionsUpdated_WithTimeSkippingConfig() {
+	runID := uuid.NewString()
+	execution := &persistencespb.WorkflowExecutionInfo{
+		NamespaceId: uuid.NewString(),
+	}
+	timeSkippingConfig := &workflowpb.TimeSkippingConfig{Enabled: true}
+	event := &historypb.HistoryEvent{
+		EventId:   1,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+			WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+				AttachedRequestId:  "test-attached-request-id",
+				TimeSkippingConfig: timeSkippingConfig,
+			},
+		},
+	}
+	attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+
+	msCurrent := historyi.NewMockMutableState(s.controller)
+	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
+	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
+	updateRegistry := update.NewRegistry(msCurrent)
+	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).Times(2)
+	msCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
+	msCurrent.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
+		attr.GetVersioningOverride(),
+		attr.GetUnsetVersioningOverride(),
+		attr.GetAttachedRequestId(),
+		attr.GetAttachedCompletionCallbacks(),
+		event.Links,
+		attr.GetIdentity(),
+		attr.GetPriority(),
+		timeSkippingConfig,
 	).Return(event, nil)
 	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
 	msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
