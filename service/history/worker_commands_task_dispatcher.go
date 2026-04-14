@@ -190,6 +190,14 @@ func (d *workerCommandsTaskDispatcher) handleError(nexusErr error, task *tasks.W
 			return nexusErr
 		}
 
+		if !handlerErr.Retryable() {
+			d.logger.Error("Worker commands non-retryable handler error",
+				tag.NewStringTag("control_queue", task.Destination),
+				tag.Error(nexusErr))
+			metrics.WorkerCommandsSent.With(d.metricsHandler).Record(1, metrics.OutcomeTag("non_retryable_error"))
+			return nil
+		}
+
 		d.logger.Warn("Worker commands transport failure",
 			tag.NewStringTag("control_queue", task.Destination),
 			tag.Error(nexusErr))

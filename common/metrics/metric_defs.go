@@ -751,6 +751,8 @@ var (
 		"nexus_completion_request_preprocess_errors",
 		WithDescription("The number of Nexus completion requests for which pre-processing failed."),
 	)
+	WorkerCommandsSent = NewCounterDef("worker_commands_sent")
+
 	HostRPSLimit          = NewGaugeDef("host_rps_limit")
 	NamespaceHostRPSLimit = NewGaugeDef("namespace_host_rps_limit")
 	HandoverWaitLatency   = NewTimerDef("handover_wait_latency")
@@ -863,7 +865,6 @@ var (
 			" latency of the final attempt to send the task to the DLQ, not the cumulative latency of all attempts."),
 	)
 	TaskDiscarded                   = NewCounterDef("task_errors_discarded")
-	WorkerCommandsSent              = NewCounterDef("worker_commands_sent")
 	TaskSkipped                     = NewCounterDef("task_skipped")
 	TaskVersionMisMatch             = NewCounterDef("task_errors_version_mismatch")
 	TasksDependencyTaskNotCompleted = NewCounterDef("task_dependency_task_not_completed")

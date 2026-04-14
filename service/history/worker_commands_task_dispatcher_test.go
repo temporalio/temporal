@@ -266,6 +266,24 @@ func TestHandleError_UpstreamTimeout_ReturnRetryable(t *testing.T) {
 	requireMetricValue(t, capture.Snapshot(), "no_poller")
 }
 
+func TestHandleError_NonRetryableHandlerError_ReturnNil(t *testing.T) {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	d := &workerCommandsTaskDispatcher{
+		metricsHandler: metricsHandler,
+		logger:         log.NewNoopLogger(),
+	}
+
+	handlerErr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "bad request")
+	task := testWorkerCommandsTask()
+	err := d.handleError(handlerErr, task)
+	require.NoError(t, err, "non-retryable handler errors should be swallowed")
+
+	requireMetricValue(t, capture.Snapshot(), "non_retryable_error")
+}
+
 func TestHandleError_OtherHandlerError_ReturnRetryable(t *testing.T) {
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
