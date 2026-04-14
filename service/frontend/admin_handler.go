@@ -26,6 +26,7 @@ import (
 	batchspb "go.temporal.io/server/api/batch/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
+	dynamicconfigspb "go.temporal.io/server/api/dynamicconfig/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	healthspb "go.temporal.io/server/api/health/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -44,6 +45,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -71,6 +73,7 @@ import (
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/grpc/health"
 	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -116,6 +119,7 @@ type (
 		historyHealthChecker       HealthChecker
 		chasmRegistry              *chasm.Registry
 		schedulerClient            schedulerpb.SchedulerServiceClient
+		dynamicClient              dynamicconfig.Client
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -153,6 +157,7 @@ type (
 		ChasmRegistry                       *chasm.Registry
 		NamespaceDataMerger                 nsreplication.NamespaceDataMerger
 		SchedulerClient                     schedulerpb.SchedulerServiceClient
+		dynamicClient                       dynamicconfig.Client
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -223,6 +228,7 @@ func NewAdminHandler(
 		healthServer:         args.HealthServer,
 		historyHealthChecker: historyHealthChecker,
 		taskCategoryRegistry: args.CategoryRegistry,
+		dynamicClient:        args.dynamicClient,
 		matchingClient:       args.matchingClient,
 		chasmRegistry:        args.ChasmRegistry,
 		schedulerClient:      args.SchedulerClient,
@@ -2388,6 +2394,65 @@ func (adh *AdminHandler) validateAndResolveArchetypeID(
 		return chasm.UnspecifiedArchetypeID, serviceerror.NewInvalidArgumentf("unknown archetype: %s", archetype)
 	}
 	return archetypeID, nil
+}
+
+func (adh *AdminHandler) GetDynamicConfigurations(
+	ctx context.Context,
+	req *adminservice.GetDynamicConfigurationsRequest,
+) (*adminservice.GetDynamicConfigurationsResponse, error) {
+	requestedKeys := req.GetDynamicConfigKeys()
+	dynamicConfig := make(map[string]*dynamicconfigspb.ConstrainedValues, len(requestedKeys))
+	adh.logger.Info("Received request for dynamic config values", tag.Int("numKeys", len(requestedKeys)))	
+	for _, key := range requestedKeys {
+		var dcEntry []dynamicconfig.ConstrainedValue
+		k := dynamicconfig.MakeKey(key)
+		dcEntry = adh.dynamicClient.GetValue(k)
+
+		// get global default value
+		if dcEntry == nil {
+			dcEntry = dynamicconfig.GetDefaultValues(k)
+		}
+
+		protoValues := make([]*dynamicconfigspb.ConstrainedValue, 0, len(dcEntry))
+		for _, cv := range dcEntry {
+			s, err := structpb.NewValue(normalizeValue(cv.Value))
+			if err != nil {
+				adh.logger.Error("Failed to convert dynamic config value to structpb.Value", tag.Error(err), tag.Key(key))
+				continue
+			}
+			protoValues = append(protoValues, &dynamicconfigspb.ConstrainedValue{
+				Value: s,
+				Constraints: &dynamicconfigspb.Constraints{
+					Namespace:     cv.Constraints.Namespace,
+					NamespaceId:   cv.Constraints.NamespaceID,
+					TaskQueueName: cv.Constraints.TaskQueueName,
+					TaskQueueType: int32(cv.Constraints.TaskQueueType),
+					ShardId:       cv.Constraints.ShardID,
+					TaskType:      int32(cv.Constraints.TaskType),
+					Destination:   cv.Constraints.Destination,
+				},
+			})
+		}
+		dynamicConfig[key] = &dynamicconfigspb.ConstrainedValues{Items: protoValues}
+	}
+
+	hostConfig := &adminservice.HostConfig{
+		Hostname:      adh.hostInfoProvider.HostInfo().Identity(),
+		DynamicConfig: dynamicConfig,
+	}
+
+	return &adminservice.GetDynamicConfigurationsResponse{
+		HostConfig: []*adminservice.HostConfig{hostConfig},
+	}, nil
+}
+
+func normalizeValue(v interface{}) interface{} {
+	switch val := v.(type) {
+	case time.Duration:
+		return val.String()
+	default:
+		return val
+	}
 }
 
 func validateHistoryDLQKey(

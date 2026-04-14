@@ -14,6 +14,7 @@ import "temporal/api/version/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/server/api/cluster/v1/message.proto";
 import "temporal/server/api/common/v1/dlq.proto";
+import "temporal/server/api/dynamicconfig/v1/message.proto";
 import "temporal/server/api/enums/v1/cluster.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/dlq.proto";
@@ -665,3 +666,18 @@ message MigrateScheduleRequest {
 }
 
 message MigrateScheduleResponse {}
+
+message HostConfig {
+  // The host that this configuration was loaded from.
+  string hostname = 1;
+  // The raw dynamic config loaded with all constraints.
+  map<string, temporal.server.api.dynamicconfig.v1.ConstrainedValues> dynamic_config = 2;
+}
+
+message GetDynamicConfigurationsRequest {
+  repeated string dynamic_config_keys = 1;
+}
+
+message GetDynamicConfigurationsResponse {
+  repeated HostConfig host_config = 1;
+}
