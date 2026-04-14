@@ -399,17 +399,14 @@ func TestQueryWorkflow_NonStickyMultiPageHistory(t *testing.T) {
 		return err == nil && resp.GetWorkflowExecutionInfo().GetHistoryLength() > 10
 	}, 10*time.Second, 200*time.Millisecond)
 
-	// Stop worker so the query goes through the non-sticky path.
+	// Stop worker to clear sticky cache so the query goes through non-sticky path.
 	queryWorker.Stop()
 
 	// Terminate the workflow to prevent any further workflow tasks from being
-	// scheduled. This eliminates the race with stale WFTs from activity processing
-	// that can appear on the normal queue via sticky-queue fallback.
-	// Querying a terminated workflow works — it replays from the last completed WFT.
+	// scheduled. This eliminates the race with stale WFTs from activity processing.
 	err = env.SdkClient().TerminateWorkflow(ctx, id, "", "test cleanup")
 	env.NoError(err)
 
-	// Issue a query in background; we'll poll for the task manually below.
 	go func() { _, _ = env.SdkClient().QueryWorkflow(ctx, id, "", "test") }()
 
 	// Poll for the query task on the normal (non-sticky) task queue.
