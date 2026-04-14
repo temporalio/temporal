@@ -74,6 +74,8 @@ type ChasmTask struct {
 
 var _ Task = &ChasmTask{}
 var _ HasArchetypeID = &ChasmTask{}
+var _ HasStateMachineTaskGroup = &ChasmTask{}
+var _ HasDestination = &ChasmTask{}
 
 func (t *ChasmTask) GetCategory() Category {
 	return t.Category

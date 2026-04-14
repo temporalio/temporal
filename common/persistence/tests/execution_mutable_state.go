@@ -71,6 +71,7 @@ func NewExecutionMutableStateSuite(
 			executionStore,
 			serializer,
 			nil,
+			nil,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 			dynamicconfig.GetBoolPropertyFn(false),

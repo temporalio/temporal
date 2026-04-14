@@ -70,6 +70,7 @@ func TestExecutionManager_DeletesTasksWhenEnabled(t *testing.T) {
 		store,
 		serializer,
 		nil,
+		nil,
 		log.NewNoopLogger(),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
 		dynamicconfig.GetBoolPropertyFn(true),
@@ -94,6 +95,7 @@ func TestExecutionManager_DoesNotDeleteTasksWhenDisabled(t *testing.T) {
 	em := p.NewExecutionManager(
 		store,
 		serializer,
+		nil,
 		nil,
 		log.NewNoopLogger(),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
@@ -131,6 +133,7 @@ func TestExecutionManager_DeleteTasksError_DoesNotFailUpdate(t *testing.T) {
 		store,
 		serializer,
 		nil,
+		nil,
 		log.NewNoopLogger(),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
 		dynamicconfig.GetBoolPropertyFn(true),
@@ -157,6 +160,7 @@ func TestExecutionManager_TrimHistoryBranchSkipped_NonWorkflow(t *testing.T) {
 	em := p.NewExecutionManager(
 		store,
 		serializer,
+		nil,
 		nil,
 		// TrimHistoryBranch logic is best effort and only emits error log if failed.
 		// Capture error logs to verify no unexpected errors.
@@ -220,6 +224,7 @@ func TestExecutionManager_TrimHistoryBranchSkipped_EmptyBranchToken(t *testing.T
 	em := p.NewExecutionManager(
 		store,
 		serializer,
+		nil,
 		nil,
 		// TrimHistoryBranch logic is best effort and only emits error log if failed.
 		// Capture error logs to verify no unexpected errors.

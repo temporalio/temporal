@@ -36,7 +36,7 @@ type (
 		GetVersion() int64
 	}
 
-	// HasStateMachineTaskGroup must be implemented by all HSM state machine tasks.
+	// HasStateMachineTaskGroup must be implemented by all tasks that participate in outbound task grouping.
 	HasStateMachineTaskGroup interface {
 		StateMachineTaskGroup() string
 	}

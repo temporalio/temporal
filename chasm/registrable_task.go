@@ -114,7 +114,7 @@ func NewRegistrablePureTask[C any, T any](
 		nil, // sideEffectTaskExecuteFn is not used for pure tasks
 		true,
 		nil, // sideEffectTaskDiscardFn is not used for pure tasks
-		"",  // sideEffectTaskGroup is not used for pure tasks
+		"",  // sideEffectTaskGroup is set to ungrouped for pure tasks
 		opts...,
 	)
 }

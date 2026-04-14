@@ -73,6 +73,7 @@ func NewExecutionMutableStateTaskSuite(
 			executionStore,
 			testSer,
 			nil,
+			nil,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 			dynamicconfig.GetBoolPropertyFn(false),
