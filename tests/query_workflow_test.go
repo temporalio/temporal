@@ -343,17 +343,17 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted(
 // non-sticky query task poll is a valid HistoryContinuation token usable with
 // GetWorkflowExecutionHistory. Fails with "Invalid NextPageToken" if matching service
 // returns a RawHistoryContinuation token instead.
-//
-// Uses a dedicated cluster with MatchingHistoryMaxPageSize=2. With the default
-// SendRawHistoryBetweenInternalServices=true, the raw blob path paginates at the blob
-// level: ReadFullPageRawEvents stops after 2 blobs, leaving a non-empty PersistenceToken
-// even when all events fit in a single Cassandra logical page. This ensures NextPageToken
-// is non-empty, which is what we need to verify it's a valid HistoryContinuation token.
+// Uses a dedicated cluster with MatchingHistoryMaxPageSize=14 (for query tasks) and
+// HistoryMaxPageSize=14 (for regular workflow tasks via RecordWorkflowTaskStarted).
+// With 5 activities generating ~16 history blobs, page size 14 ensures any task type
+// produces a multi-page history response with a non-empty NextPageToken. 14 is large
+// enough that activity-phase WFTs (≤14 blobs) don't need extra pagination roundtrips.
 func TestQueryWorkflow_NonStickyMultiPageHistory(t *testing.T) {
 	t.Parallel()
 	env := testcore.NewEnv(t,
 		testcore.WithDedicatedCluster(),
-		testcore.WithDynamicConfig(dynamicconfig.MatchingHistoryMaxPageSize, 2),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingHistoryMaxPageSize, 14),
+		testcore.WithDynamicConfig(dynamicconfig.HistoryMaxPageSize, 14),
 	)
 
 	activityFn := func(ctx context.Context) error { return nil }
@@ -402,6 +402,14 @@ func TestQueryWorkflow_NonStickyMultiPageHistory(t *testing.T) {
 	// Stop worker to clear sticky cache so the query goes through non-sticky path.
 	queryWorker.Stop()
 
+	// Clear stickiness so the query dispatches directly to the normal queue
+	// without waiting for StickyScheduleToStartTimeout (~5s).
+	_, err = env.FrontendClient().ResetStickyTaskQueue(ctx, &workflowservice.ResetStickyTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+	})
+	env.NoError(err)
+
 	// Issue a query in background; we'll poll for the task manually below.
 	// Don't assert inside the goroutine — it would panic if the test completes first.
 	go func() { _, _ = env.SdkClient().QueryWorkflow(ctx, id, "", "test") }()
@@ -417,7 +425,7 @@ func TestQueryWorkflow_NonStickyMultiPageHistory(t *testing.T) {
 			Identity:  "test-worker",
 		})
 		return err == nil && len(pollResp.GetTaskToken()) > 0
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 20*time.Second, 100*time.Millisecond)
 
 	env.NotNil(pollResp.GetHistory())
 	env.NotEmpty(pollResp.GetNextPageToken(), "multi-page history should have NextPageToken")
