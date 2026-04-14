@@ -396,6 +396,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims(useTemporalFailures b
 	}
 
 	testFn := func(s *NexusApiTestSuite, tc testcase, dispatchOnlyByEndpoint bool) {
+		// This still needs a dedicated cluster because of SetOnAuthorize/SetOnGetClaims.
 		env := newNexusTestEnv(s.T(), useTemporalFailures, testcore.WithDedicatedCluster())
 		env.GetTestCluster().Host().SetOnAuthorize(func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
 			if ct.APIName == configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName && (c == nil || c.Subject != "test") {
