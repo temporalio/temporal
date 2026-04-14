@@ -141,6 +141,7 @@ func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 }
 
 func (s *localStoreTlsProvider) GetRemoteClusterClientConfig(hostname string) (*tls.Config, error) {
+	certProviderKey := hostname
 	groupTLS, ok := s.settings.RemoteClusters[hostname]
 	if !ok {
 		// Fall back to default/wildcard config if present
@@ -148,25 +149,14 @@ func (s *localStoreTlsProvider) GetRemoteClusterClientConfig(hostname string) (*
 		if !ok {
 			return nil, nil
 		}
-		return s.getOrCreateRemoteClusterClientConfig(
-			hostname,
-			func() (*tls.Config, error) {
-				return newClientTLSConfig(
-					s.remoteClusterClientCertProvider[defaultRemoteCluster],
-					groupTLS.Client.ServerName,
-					groupTLS.Server.RequireClientAuth,
-					false,
-					!groupTLS.Client.DisableHostVerification)
-			},
-			groupTLS.IsClientEnabled(),
-		)
+		certProviderKey = defaultRemoteCluster
 	}
 
 	return s.getOrCreateRemoteClusterClientConfig(
 		hostname,
 		func() (*tls.Config, error) {
 			return newClientTLSConfig(
-				s.remoteClusterClientCertProvider[hostname],
+				s.remoteClusterClientCertProvider[certProviderKey],
 				groupTLS.Client.ServerName,
 				groupTLS.Server.RequireClientAuth,
 				false,
