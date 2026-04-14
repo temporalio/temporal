@@ -737,7 +737,7 @@ func (wh *WorkflowHandler) unaliasedSearchAttributesFrom(
 		return nil, err
 	}
 
-	if err = wh.validateSearchAttributes(sa, namespaceName); err != nil {
+	if err = wh.validator.ValidateSearchAttributes(sa, namespaceName.String()); err != nil {
 		return nil, err
 	}
 	return sa, nil
