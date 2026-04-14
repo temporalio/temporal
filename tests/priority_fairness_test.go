@@ -54,6 +54,7 @@ func (s *PrioritySuite) TestActivity_Basic() {
 	const Levels = 5
 
 	tv := testvars.New(s.T())
+	wfPrefix := uuid.NewString()[:8] + "-wf"
 
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
@@ -64,7 +65,7 @@ func (s *PrioritySuite) TestActivity_Basic() {
 	for wfidx := range N {
 		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:    s.Namespace().String(),
-			WorkflowId:   fmt.Sprintf("wf%d", wfidx),
+			WorkflowId:   fmt.Sprintf("%s%d", wfPrefix, wfidx),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
 		})
@@ -79,7 +80,7 @@ func (s *PrioritySuite) TestActivity_Basic() {
 				s.Len(task.History.Events, 3)
 
 				var wfidx int
-				_, err := fmt.Sscanf(task.WorkflowExecution.WorkflowId, "wf%d", &wfidx)
+				_, err := fmt.Sscanf(task.WorkflowExecution.WorkflowId, wfPrefix+"%d", &wfidx)
 				s.NoError(err)
 
 				var commands []*commandpb.Command
@@ -255,6 +256,7 @@ func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
 	const N = 10
 
 	tv := testvars.New(s.T())
+	wfPrefix := uuid.NewString()[:8] + "-"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -307,7 +309,7 @@ func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
 	for wfidx := range N {
 		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:    s.Namespace().String(),
-			WorkflowId:   fmt.Sprintf("wf%d", wfidx),
+			WorkflowId:   fmt.Sprintf("%swf%d", wfPrefix, wfidx),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
 		})
@@ -354,7 +356,7 @@ func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
 	for wfidx := range N {
 		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:    s.Namespace().String(),
-			WorkflowId:   fmt.Sprintf("highpri%d", wfidx),
+			WorkflowId:   fmt.Sprintf("%shighpri%d", wfPrefix, wfidx),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
 			Priority:     &commonpb.Priority{PriorityKey: 1},
@@ -362,7 +364,7 @@ func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
 		s.NoError(err)
 		_, err = s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:    s.Namespace().String(),
-			WorkflowId:   fmt.Sprintf("lowpri%d", wfidx),
+			WorkflowId:   fmt.Sprintf("%slowpri%d", wfPrefix, wfidx),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
 			Priority:     &commonpb.Priority{PriorityKey: 5},
@@ -395,9 +397,9 @@ func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
 	// validate the order
 	var priorityOrder []int
 	for _, wfid := range receivedOrder {
-		if strings.HasPrefix(wfid, "highpri") {
+		if strings.HasPrefix(wfid, wfPrefix+"highpri") {
 			priorityOrder = append(priorityOrder, 1)
-		} else if strings.HasPrefix(wfid, "lowpri") {
+		} else if strings.HasPrefix(wfid, wfPrefix+"lowpri") {
 			priorityOrder = append(priorityOrder, 3)
 		} else {
 			priorityOrder = append(priorityOrder, 2) // default priority (wf*)
