@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -155,38 +153,23 @@ func dispatchAndCompleteNexusTask(t *testing.T, s *testcore.TestEnv, expectTaskF
 }
 
 func verifyForwardingMetrics(t *testing.T, capture *testcore.NamespaceMetricCapture, expectTaskForwarded bool, expectPollForwarded bool) {
-	dispatchRecordings := capture.Metric("forwarded")
-	foundExpectedTaskForward := false
+	metricName := "_matches"
+	if expectPollForwarded {
+		metricName = "remote" + metricName
+	} else {
+		metricName = "local" + metricName
+	}
+	metricName = "_to_" + metricName
+	if expectTaskForwarded {
+		metricName = "remote" + metricName
+	} else {
+		metricName = "local" + metricName
+	}
+	dispatchRecordings := capture.Metric(metricName)
 	for _, rec := range dispatchRecordings {
-		if rec.Tags["operation"] == "MatchingDispatchNexusTask" {
-			foundExpectedTaskForward = true
-			break
+		if rec.Tags["task_type"] == "Nexus" {
+			return
 		}
 	}
-	require.Equal(t, expectTaskForwarded, foundExpectedTaskForward,
-		"expected task forward mismatch, expected: %v, actual: %v", expectTaskForwarded, foundExpectedTaskForward)
-
-	pollRecordings := capture.Metric("poll_latency")
-	require.NotEmpty(t, pollRecordings, "expected poll_latency metric to be recorded")
-	foundExpectedPollForward := false
-	for _, rec := range pollRecordings {
-		if rec.Tags["forwarded"] == fmt.Sprintf("%v", expectPollForwarded) && rec.Tags["task_type"] == "Nexus" {
-			foundExpectedPollForward = true
-			break
-		}
-	}
-	require.True(t, foundExpectedPollForward,
-		"expected poll_latency with forwarded=%v and task_type=Nexus, recordings: %v",
-		expectPollForwarded, formatRecordings(pollRecordings))
-}
-
-func formatRecordings(recordings []*metricstest.CapturedRecording) string {
-	var result string
-	for i, rec := range recordings {
-		if i > 0 {
-			result += ", "
-		}
-		result += fmt.Sprintf("{forwarded=%s, task_type=%s}", rec.Tags["forwarded"], rec.Tags["task_type"])
-	}
-	return "[" + result + "]"
+	require.FailNowf(t, "did not find expected metric", "expected to find a dispatch metric %s with task_type=Nexus", metricName)
 }
