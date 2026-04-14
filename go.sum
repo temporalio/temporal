@@ -105,6 +105,8 @@ github.com/cactus/go-statsd-client/statsd v0.0.0-20200423205355-cb0885a1018c/go.
 github.com/cactus/go-statsd-client/v4 v4.0.0/go.mod h1:m73kwJp6TN0Ja9P6ycdZhWM1MlfxY/95WZ//IptPQ+Y=
 github.com/cactus/go-statsd-client/v5 v5.1.0 h1:sbbdfIl9PgisjEoXzvXI1lwUKWElngsjJKaZeC021P4=
 github.com/cactus/go-statsd-client/v5 v5.1.0/go.mod h1:COEvJ1E+/E2L4q6QE5CkjWPi4eeDw9maJBMIuMPBZbY=
+github.com/caio/go-tdigest/v5 v5.0.0 h1:XQKgYSazZPbWFDAJ51dKqoZoDrISmTrB8UcWwCmfo6Y=
+github.com/caio/go-tdigest/v5 v5.0.0/go.mod h1:wI618wZoAYzIDZlpX2CfyTQdrdGtwEZOJuXdrI3zk/Y=
 github.com/cenkalti/backoff/v4 v4.3.0 h1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK343L8=
 github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
