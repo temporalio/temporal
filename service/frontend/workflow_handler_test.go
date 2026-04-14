@@ -3243,6 +3243,7 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 
 	// config with enabled=true and dynamic config enabled is valid
 	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+<<<<<<< HEAD
 
 	// MaxSkippedDuration below 1 minute is rejected
 	halfMinDuration := time.Duration(0.5 * float64(namespace.MinTimeSkippingDuration))
@@ -3280,6 +3281,8 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 		Enabled: true,
 		Bound:   &workflowpb.TimeSkippingConfig_MaxTargetTime{MaxTargetTime: timestamppb.New(time.Now().Add(2 * namespace.MinTimeSkippingDuration))},
 	}, s.testNamespace))
+=======
+>>>>>>> 5572a3893 (timeskipping: add configuration when workflows start)
 }
 
 // TestExecuteMultiOperation_TimeSkipping_DCDisabled verifies that when the DC gate is off,
@@ -3325,9 +3328,15 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCDisabled
 	s.Equal("Update-with-Start could not be executed.", err.Error())
 	var multiOpErr *serviceerror.MultiOperationExecution
 	s.ErrorAs(err, &multiOpErr)
+<<<<<<< HEAD
 	var unimplemented *serviceerror.Unimplemented
 	s.ErrorAs(multiOpErr.OperationErrors()[0], &unimplemented)
 	s.ErrorContains(multiOpErr.OperationErrors()[0], "The Time-Skipping feature is not enabled for namespace")
+=======
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(multiOpErr.OperationErrors()[0], &invalidArg)
+	s.ErrorContains(multiOpErr.OperationErrors()[0], "Time skipping is not enabled")
+>>>>>>> 5572a3893 (timeskipping: add configuration when workflows start)
 }
 
 // TestExecuteMultiOperation_TimeSkipping_DCEnabled verifies that when the DC gate is on,
@@ -3405,9 +3414,15 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCDisable
 	}
 
 	_, err := wh.StartWorkflowExecution(context.Background(), req)
+<<<<<<< HEAD
 	var unimplemented *serviceerror.Unimplemented
 	s.ErrorAs(err, &unimplemented)
 	s.ErrorContains(err, "The Time-Skipping feature is not enabled for namespace")
+=======
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, "Time skipping is not enabled")
+>>>>>>> 5572a3893 (timeskipping: add configuration when workflows start)
 }
 
 // TestStartWorkflowExecution_TimeSkipping_DCEnabled verifies that when the DC gate is on,
@@ -3454,9 +3469,15 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping
 	}
 
 	_, err := wh.SignalWithStartWorkflowExecution(context.Background(), req)
+<<<<<<< HEAD
 	var unimplemented *serviceerror.Unimplemented
 	s.ErrorAs(err, &unimplemented)
 	s.ErrorContains(err, "The Time-Skipping feature is not enabled for namespace")
+=======
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, "Time skipping is not enabled")
+>>>>>>> 5572a3893 (timeskipping: add configuration when workflows start)
 }
 
 // TestSignalWithStartWorkflowExecution_TimeSkipping_DCEnabled verifies that when the DC gate is on,
