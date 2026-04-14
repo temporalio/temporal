@@ -393,8 +393,22 @@ func lookupEndpoint(ctx context.Context, registry commonnexus.EndpointRegistry, 
 }
 
 func (h *operationInvocationTaskHandler) generateCallbackToken(serializedRef []byte, requestID string) (string, error) {
+	ref := &persistencespb.ChasmComponentRef{}
+	if err := ref.Unmarshal(serializedRef); err != nil {
+		return "", fmt.Errorf("%w: %w", queueserrors.NewUnprocessableTaskError("failed to decode component ref for callback token"), err)
+	}
+	namespaceID := ref.NamespaceId
+
+	// Execution VT becomes stale after workflow mutations between token minting and completion arrival.
+	ref.ExecutionVersionedTransition = nil
+	stableRef, err := ref.Marshal()
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", queueserrors.NewUnprocessableTaskError("failed to encode component ref for callback token"), err)
+	}
+
 	token, err := h.callbackTokenGenerator.Tokenize(&tokenspb.NexusOperationCompletion{
-		ComponentRef: serializedRef,
+		NamespaceId:  namespaceID,
+		ComponentRef: stableRef,
 		RequestId:    requestID,
 	})
 	if err != nil {
