@@ -53,21 +53,21 @@ const (
 // commands are best-effort — the activity will eventually time out anyway — so excessive
 // retries waste resources. The counter resets on shard movement, which is acceptable.
 type workerCommandsTaskDispatcher struct {
-	matchingRawClient resource.MatchingRawClient
+	matchingClient resource.MatchingClient
 	config            *configs.Config
 	metricsHandler    metrics.Handler
 	logger            log.Logger
 }
 
 func newWorkerCommandsTaskDispatcher(
-	matchingRawClient resource.MatchingRawClient,
+	matchingClient resource.MatchingClient,
 	config *configs.Config,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *workerCommandsTaskDispatcher {
 	return &workerCommandsTaskDispatcher{
-		matchingRawClient: matchingRawClient,
-		config:            config,
+		matchingClient: matchingClient,
+		config:         config,
 		metricsHandler:    metricsHandler,
 		logger:            logger,
 	}
@@ -143,7 +143,7 @@ func (d *workerCommandsTaskDispatcher) dispatchToWorker(
 		},
 	}
 
-	resp, err := d.matchingRawClient.DispatchNexusTask(ctx, &matchingservice.DispatchNexusTaskRequest{
+	resp, err := d.matchingClient.DispatchNexusTask(ctx, &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: task.NamespaceID,
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: task.Destination,

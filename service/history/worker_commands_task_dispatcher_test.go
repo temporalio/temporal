@@ -95,7 +95,7 @@ func TestExecute_AtMaxAttempt_StillExecutes(t *testing.T) {
 	defer metricsHandler.StopCapture(capture)
 
 	d := &workerCommandsTaskDispatcher{
-		matchingRawClient: mockClient,
+		matchingClient: mockClient,
 		config: &configs.Config{
 			EnableCancelActivityWorkerCommand: func() bool { return true },
 		},
@@ -133,7 +133,7 @@ func TestExecute_DispatchSuccess(t *testing.T) {
 	defer metricsHandler.StopCapture(capture)
 
 	d := &workerCommandsTaskDispatcher{
-		matchingRawClient: mockClient,
+		matchingClient: mockClient,
 		config: &configs.Config{
 			EnableCancelActivityWorkerCommand: func() bool { return true },
 		},
@@ -171,7 +171,7 @@ func TestExecute_DispatchRPCError(t *testing.T) {
 	defer metricsHandler.StopCapture(capture)
 
 	d := &workerCommandsTaskDispatcher{
-		matchingRawClient: mockClient,
+		matchingClient: mockClient,
 		config: &configs.Config{
 			EnableCancelActivityWorkerCommand: func() bool { return true },
 		},
@@ -198,7 +198,7 @@ func TestExecute_UpstreamTimeout(t *testing.T) {
 	defer metricsHandler.StopCapture(capture)
 
 	d := &workerCommandsTaskDispatcher{
-		matchingRawClient: mockClient,
+		matchingClient: mockClient,
 		config: &configs.Config{
 			EnableCancelActivityWorkerCommand: func() bool { return true },
 		},

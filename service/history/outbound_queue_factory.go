@@ -34,7 +34,7 @@ type outboundQueueFactoryParams struct {
 	QueueFactoryBaseParams
 	ClientBean         client.Bean
 	CircuitBreakerPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool
-	MatchingRawClient  resource.MatchingRawClient
+	MatchingClient resource.MatchingClient
 }
 
 type groupLimiter struct {
@@ -231,7 +231,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		logger,
 		metricsHandler,
 		f.ChasmEngine,
-		f.MatchingRawClient,
+		f.MatchingClient,
 	)
 
 	standbyExecutor := newOutboundQueueStandbyTaskExecutor(

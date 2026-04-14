@@ -37,7 +37,7 @@ func newOutboundQueueActiveTaskExecutor(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	chasmEngine chasm.Engine,
-	matchingRawClient resource.MatchingRawClient,
+	matchingClient resource.MatchingClient,
 ) *outboundQueueActiveTaskExecutor {
 	scopedMetricsHandler := metricsHandler.WithTags(
 		metrics.OperationTag(metrics.OperationOutboundQueueProcessorScope),
@@ -51,7 +51,7 @@ func newOutboundQueueActiveTaskExecutor(
 		},
 		chasmEngine: chasmEngine,
 		workerCommandsTaskDispatcher: newWorkerCommandsTaskDispatcher(
-			matchingRawClient,
+			matchingClient,
 			shardCtx.GetConfig(),
 			scopedMetricsHandler,
 			logger,
