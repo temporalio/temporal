@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/matchingservice/v1"
 )
 
@@ -62,14 +63,14 @@ func TestDispatchResponseToError_RequestTimeout(t *testing.T) {
 	require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, handlerErr.Type)
 }
 
-func TestDispatchResponseToError_FailureWithHandlerErrorInfo(t *testing.T) {
+func TestDispatchResponseToError_WorkerFailure(t *testing.T) {
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		Outcome: &matchingservice.DispatchNexusTaskResponse_Failure{
 			Failure: &failurepb.Failure{
 				Message: "bad request from worker",
-				FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
-					NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
-						Type: string(nexus.HandlerErrorTypeBadRequest),
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+						Type: "SomeError",
 					},
 				},
 			},
@@ -78,12 +79,12 @@ func TestDispatchResponseToError_FailureWithHandlerErrorInfo(t *testing.T) {
 	err := dispatchResponseToError(resp)
 	require.Error(t, err)
 
-	var handlerErr *nexus.HandlerError
-	require.ErrorAs(t, err, &handlerErr)
-	require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, "SomeError", appErr.Type())
 }
 
-func TestDispatchResponseToError_FailureVariant_OperationFailure(t *testing.T) {
+func TestDispatchResponseToError_OperationFailure_ApplicationError(t *testing.T) {
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
 			Response: &nexuspb.Response{
@@ -107,12 +108,12 @@ func TestDispatchResponseToError_FailureVariant_OperationFailure(t *testing.T) {
 	err := dispatchResponseToError(resp)
 	require.Error(t, err)
 
-	var opErr *nexus.OperationError
-	require.ErrorAs(t, err, &opErr)
-	require.Equal(t, nexus.OperationStateFailed, opErr.State)
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, "SomeError", appErr.Type())
 }
 
-func TestDispatchResponseToError_FailureVariant_CanceledFailure(t *testing.T) {
+func TestDispatchResponseToError_OperationFailure_CanceledError(t *testing.T) {
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
 			Response: &nexuspb.Response{
@@ -134,9 +135,8 @@ func TestDispatchResponseToError_FailureVariant_CanceledFailure(t *testing.T) {
 	err := dispatchResponseToError(resp)
 	require.Error(t, err)
 
-	var opErr *nexus.OperationError
-	require.ErrorAs(t, err, &opErr)
-	require.Equal(t, nexus.OperationStateCanceled, opErr.State)
+	var cancelErr *temporal.CanceledError
+	require.ErrorAs(t, err, &cancelErr)
 }
 
 func TestDispatchResponseToError_EmptyOutcome(t *testing.T) {

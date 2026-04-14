@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	workerpb "go.temporal.io/api/worker/v1"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	"go.temporal.io/server/common/definition"
@@ -223,7 +224,7 @@ func TestExecute_UpstreamTimeout(t *testing.T) {
 	requireMetricValue(t, capture.Snapshot(), "no_poller")
 }
 
-func TestHandleError_OperationError_ReturnNil(t *testing.T) {
+func TestHandleError_WorkerError_ReturnNil(t *testing.T) {
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
@@ -233,15 +234,13 @@ func TestHandleError_OperationError_ReturnNil(t *testing.T) {
 		logger:         log.NewNoopLogger(),
 	}
 
-	opErr := &nexus.OperationError{
-		State:   nexus.OperationStateFailed,
-		Message: "worker bug",
-	}
+	// Worker-returned errors (ApplicationError, CanceledError) are permanent.
+	workerErr := temporal.NewApplicationError("worker bug", "SomeType", nil)
 	task := testWorkerCommandsTask()
-	err := d.handleError(opErr, task)
-	require.NoError(t, err, "operation errors are permanent and should be swallowed")
+	err := d.handleError(workerErr, task)
+	require.NoError(t, err, "worker-returned errors are permanent and should be swallowed")
 
-	requireMetricValue(t, capture.Snapshot(), "operation_error")
+	requireMetricValue(t, capture.Snapshot(), "worker_error")
 }
 
 func TestHandleError_UpstreamTimeout_ReturnRetryable(t *testing.T) {

@@ -45,9 +45,9 @@ const (
 //     Safe to retry because commands are idempotent (e.g., cancelling a missing activity is a
 //     no-op success per the worker contract).
 //   - Transport/RPC failure: *nexus.HandlerError. Retryable.
-//   - Operation failure (worker explicitly returns error): *nexus.OperationError. Permanent --
-//     the worker contract requires success for all defined commands, so this indicates a bug
-//     or version incompatibility.
+//   - Worker failure (worker explicitly returns error): *temporal.ApplicationError or
+//     *temporal.CanceledError. Permanent — the worker contract requires success for all
+//     defined commands, so this indicates a bug or version incompatibility.
 //
 // Retryable errors are capped at workerCommandsMaxTaskAttempt attempts (in-memory). These
 // commands are best-effort — the activity will eventually time out anyway — so excessive
@@ -166,23 +166,10 @@ func (d *workerCommandsTaskDispatcher) dispatchToWorker(
 }
 
 func (d *workerCommandsTaskDispatcher) handleError(nexusErr error, task *tasks.WorkerCommandsTask) error {
-	var opErr *nexus.OperationError
-	if errors.As(nexusErr, &opErr) {
-		// Operation-level failure: the worker received and processed the request but returned
-		// an error. Permanent -- the worker contract requires success for all defined commands,
-		// so this indicates a bug or version incompatibility. Retrying won't help.
-		d.logger.Error("Worker returned operation failure for worker commands",
-			tag.WorkflowID(task.WorkflowID),
-			tag.WorkflowRunID(task.RunID),
-			tag.NewStringTag("control_queue", task.Destination),
-			tag.NewInt("command_count", len(task.Commands)),
-			tag.Error(nexusErr))
-		metrics.WorkerCommandsSent.With(d.metricsHandler).Record(1, metrics.OutcomeTag("operation_error"))
-		return nil
-	}
-
 	var handlerErr *nexus.HandlerError
 	if errors.As(nexusErr, &handlerErr) {
+		// Handler-level error (transport, timeout, internal). These are constructed by
+		// dispatchResponseToError for non-worker-returned failures.
 		if handlerErr.Type == nexus.HandlerErrorTypeUpstreamTimeout {
 			d.logger.Warn("No worker polling control queue",
 				tag.NewStringTag("control_queue", task.Destination))
@@ -205,9 +192,16 @@ func (d *workerCommandsTaskDispatcher) handleError(nexusErr error, task *tasks.W
 		return nexusErr
 	}
 
-	d.logger.Warn("Worker commands unexpected error",
+	// Worker-returned failure (ApplicationError, CanceledError, etc.). The worker received
+	// and processed the request but returned an error. Permanent — the worker contract
+	// requires success for all defined commands, so this indicates a bug or version
+	// incompatibility. Retrying won't help.
+	d.logger.Error("Worker returned failure for worker commands",
+		tag.WorkflowID(task.WorkflowID),
+		tag.WorkflowRunID(task.RunID),
 		tag.NewStringTag("control_queue", task.Destination),
+		tag.NewInt("command_count", len(task.Commands)),
 		tag.Error(nexusErr))
-	metrics.WorkerCommandsSent.With(d.metricsHandler).Record(1, metrics.OutcomeTag("unexpected_error"))
-	return nexusErr
+	metrics.WorkerCommandsSent.With(d.metricsHandler).Record(1, metrics.OutcomeTag("worker_error"))
+	return nil
 }
