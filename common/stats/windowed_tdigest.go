@@ -65,18 +65,18 @@ type (
 )
 
 // NewWindowedTDigest creates a new TimeWindowedStats backed by per-window t-digests.
-func NewWindowedTDigest(cfg WindowConfig) TimeWindowedStats {
+func NewWindowedTDigest(cfg WindowConfig) (TimeWindowedStats, error) {
 	if cfg.WindowCount <= 0 {
-		panic("windowCount must be non-negative")
+		return nil, errors.New("windowCount must be non-negative")
 	}
 	if cfg.WindowSize.Milliseconds() <= 50 {
-		panic("probable misconfiguration detected: windowSize is too small, consider increasing it to at least 50ms")
+		return nil, errors.New("probable misconfiguration detected: windowSize is too small, consider increasing it to at least 50ms")
 	}
 	return &timeWindowedTDigest{
 		windows: make([]timedWindow, cfg.WindowCount),
 		cfg:     cfg,
 		// mu and head both empty
-	}
+	}, nil
 }
 
 func (w *timeWindowedTDigest) Record(value float64, timestamp time.Time) {
@@ -122,14 +122,10 @@ func (w *timeWindowedTDigest) TrimmedMean(lowerQuantile, upperQuantile float64) 
 // TODO: this is expensive, maybe cache everything but the latest window so we can skip N merges?
 func (w *timeWindowedTDigest) getMergedWindows() *tdigest.TDigest {
 	windows := w.cloneWindows()
-	var merged *tdigest.TDigest
+	merged, _ := tdigest.New()
 	for idx := range windows {
 		if windows[idx].tdigest != nil {
-			if merged == nil {
-				merged = windows[idx].tdigest
-			} else {
-				_ = merged.Merge(windows[idx].tdigest)
-			}
+			_ = merged.Merge(windows[idx].tdigest)
 		}
 	}
 	return merged
