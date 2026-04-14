@@ -155,7 +155,7 @@ func recordActivityTaskStarted(
 			if ai.StartedClock != nil {
 				response.Clock = ai.StartedClock
 			} else {
-				// Activity started before StartedClock was deployed.
+				// Activity started before the StartedClock field was added.
 				// Create a fresh clock for the shard staleness check.
 				response.Clock, err = shardContext.NewVectorClock()
 				if err != nil {

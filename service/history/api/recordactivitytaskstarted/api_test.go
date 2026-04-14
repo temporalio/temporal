@@ -277,7 +277,11 @@ func TestGetDeploymentVersionForWorkflowID_UnversionedTaskQueue(t *testing.T) {
 
 const testClusterName = "active"
 
-func setupDuplicateRequestTest(t *testing.T, startedClock *clockspb.VectorClock) (
+// setupMutableStateWithStartedActivity creates mock shard and mutable state with an activity
+// that is already started (StartedEventId != EmptyEventID). The activity's StartedClock is set
+// to the provided value. Returns the mocks and a request whose RequestId matches the activity's,
+// so the call will hit the duplicate-request early-return path in recordActivityTaskStarted.
+func setupMutableStateWithStartedActivity(t *testing.T, startedClock *clockspb.VectorClock) (
 	*historyi.MockShardContext,
 	*historyi.MockMutableState,
 	*historyservice.RecordActivityTaskStartedRequest,
@@ -309,10 +313,9 @@ func setupDuplicateRequestTest(t *testing.T, startedClock *clockspb.VectorClock)
 	mockShard.EXPECT().GetClusterMetadata().Return(mockClusterMeta)
 	mockShard.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
 
-	// Activity that was already started — duplicate request path
 	ai := &persistencespb.ActivityInfo{
 		ScheduledEventId: scheduledEventID,
-		StartedEventId:   7,
+		StartedEventId:   7, // already started
 		RequestId:        requestID,
 		StartedTime:      timestamppb.Now(),
 		Attempt:          1,
@@ -340,10 +343,10 @@ func setupDuplicateRequestTest(t *testing.T, startedClock *clockspb.VectorClock)
 
 // TestRecordActivityTaskStarted_DuplicateRequest_NilStartedClock verifies that
 // when a duplicate RecordActivityTaskStarted request arrives for an activity
-// started before StartedClock was deployed (StartedClock is nil), the response
+// started before the StartedClock field was added (StartedClock is nil), the response
 // still contains a non-nil Clock for the shard staleness check.
 func TestRecordActivityTaskStarted_DuplicateRequest_NilStartedClock(t *testing.T) {
-	mockShard, mockMS, request := setupDuplicateRequestTest(t, nil /* no StartedClock */)
+	mockShard, mockMS, request := setupMutableStateWithStartedActivity(t, nil /* no StartedClock */)
 
 	// Should call NewVectorClock as fallback for nil StartedClock
 	fallbackClock := &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 42}
@@ -362,7 +365,7 @@ func TestRecordActivityTaskStarted_DuplicateRequest_NilStartedClock(t *testing.T
 // when StartedClock is stored, the stored clock is returned without creating a new one.
 func TestRecordActivityTaskStarted_DuplicateRequest_WithStartedClock(t *testing.T) {
 	storedClock := &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 100}
-	mockShard, mockMS, request := setupDuplicateRequestTest(t, storedClock)
+	mockShard, mockMS, request := setupMutableStateWithStartedActivity(t, storedClock)
 
 	// Should NOT call NewVectorClock since StartedClock is available
 	mockShard.EXPECT().NewVectorClock().Times(0)
