@@ -11,6 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
@@ -324,8 +325,29 @@ func (h *operationInvocationTaskHandler) generateCallbackToken(
 	serializedRef []byte,
 	requestID string,
 ) (string, error) {
+	ref := &persistencespb.ChasmComponentRef{}
+	if err := ref.Unmarshal(serializedRef); err != nil {
+		return "", fmt.Errorf("%w: %w", queueserrors.NewUnprocessableTaskError("failed to decode component ref for callback token"), err)
+	}
+	namespaceID := ref.NamespaceId
+
+	// Execution VT becomes stale after workflow mutations between token minting and completion arrival.
+	ref.ExecutionVersionedTransition = nil
+	stableRef, err := ref.Marshal()
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", queueserrors.NewUnprocessableTaskError("failed to encode component ref for callback token"), err)
+	}
+
+	// NamespaceId and WorkflowId are set at the top level for two reasons:
+	// 1. The frontend reads NamespaceId to resolve the namespace before deserializing ComponentRef.
+	// 2. The HSM CompleteNexusOperation RPC routes by namespace_id + workflow_id. CHASM completions
+	//    go through the same RPC (the frontend doesn't distinguish), so we populate WorkflowId from
+	//    the component ref's BusinessId to ensure correct shard routing. The history handler then
+	//    checks ComponentRef to redirect to the CHASM path.
 	token, err := h.callbackTokenGenerator.Tokenize(&tokenspb.NexusOperationCompletion{
-		ComponentRef: serializedRef,
+		NamespaceId:  namespaceID,
+		WorkflowId:   ref.BusinessId,
+		ComponentRef: stableRef,
 		RequestId:    requestID,
 	})
 	if err != nil {

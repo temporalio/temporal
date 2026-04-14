@@ -2197,15 +2197,34 @@ func (h *Handler) ListTasks(
 	return resp, nil
 }
 
-func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyservice.CompleteNexusOperationRequest) (*historyservice.CompleteNexusOperationResponse, error) {
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespace.ID(request.Completion.NamespaceId), request.Completion.WorkflowId)
+func (h *Handler) CompleteNexusOperation(
+	ctx context.Context,
+	request *historyservice.CompleteNexusOperationRequest,
+) (*historyservice.CompleteNexusOperationResponse, error) {
+	var err error
+	if len(request.GetCompletion().GetComponentRef()) > 0 {
+		err = h.completeNexusOperationChasm(ctx, request)
+	} else {
+		err = h.completeNexusOperationHSM(ctx, request)
+	}
 	if err != nil {
 		return nil, h.convertError(err)
+	}
+	return &historyservice.CompleteNexusOperationResponse{}, nil
+}
+
+func (h *Handler) completeNexusOperationHSM(
+	ctx context.Context,
+	request *historyservice.CompleteNexusOperationRequest,
+) error {
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespace.ID(request.Completion.NamespaceId), request.Completion.WorkflowId)
+	if err != nil {
+		return err
 	}
 
 	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
-		return nil, h.convertError(err)
+		return err
 	}
 
 	ref := hsm.Ref{
@@ -2217,7 +2236,7 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 		failure := commonnexus.ProtoFailureToNexusFailure(request.GetFailure())
 		recvdErr, err := nexusrpc.DefaultFailureConverter().FailureToError(failure)
 		if err != nil {
-			return nil, serviceerror.NewInvalidArgument("unable to convert failure to error")
+			return serviceerror.NewInvalidArgument("unable to convert failure to error")
 		}
 		// Backward compatibility: if the received error is not of type OperationError, wrap the error in OperationError.
 		var ok bool
@@ -2228,7 +2247,7 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 				Cause:   recvdErr,
 			}
 			if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
-				return nil, serviceerror.NewInvalidArgument("unable to convert operation error to failure")
+				return serviceerror.NewInvalidArgument("unable to convert operation error to failure")
 			}
 		}
 	}
@@ -2244,9 +2263,47 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 		opErr,
 	)
 	if err != nil {
-		return nil, h.convertError(err)
+		return err
 	}
-	return &historyservice.CompleteNexusOperationResponse{}, nil
+	return nil
+}
+
+func (h *Handler) completeNexusOperationChasm(
+	ctx context.Context,
+	request *historyservice.CompleteNexusOperationRequest,
+) error {
+	completion := &persistencespb.ChasmNexusCompletion{
+		RequestId: request.Completion.GetRequestId(),
+		Links:     request.Links,
+	}
+	switch {
+	case request.State == string(nexus.OperationStateSucceeded):
+		completion.Outcome = &persistencespb.ChasmNexusCompletion_Success{
+			Success: request.GetSuccess(),
+		}
+	default:
+		// Convert nexuspb.Failure → nexus.Failure → failurepb.Failure.
+		nf := commonnexus.ProtoFailureToNexusFailure(request.GetFailure())
+		tf, err := commonnexus.NexusFailureToTemporalFailure(nf)
+		if err != nil {
+			return serviceerror.NewInvalidArgument("unable to convert nexus failure")
+		}
+		completion.Outcome = &persistencespb.ChasmNexusCompletion_Failure{
+			Failure: tf,
+		}
+	}
+
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		request.GetCompletion().GetComponentRef(),
+		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
+			return nil, c.HandleNexusCompletion(ctx, completion)
+		},
+		completion)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (h *Handler) CompleteNexusOperationChasm(
@@ -2256,6 +2313,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 	completion := &persistencespb.ChasmNexusCompletion{
 		CloseTime: request.CloseTime,
 		RequestId: request.Completion.RequestId,
+		Links:     request.Links,
 	}
 	switch variant := request.Outcome.(type) {
 	case *historyservice.CompleteNexusOperationChasmRequest_Failure:

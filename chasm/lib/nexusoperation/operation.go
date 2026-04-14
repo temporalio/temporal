@@ -7,6 +7,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
@@ -15,6 +16,7 @@ import (
 )
 
 var _ chasm.StateMachine[nexusoperationpb.OperationStatus] = (*Operation)(nil)
+var _ chasm.NexusCompletionHandler = (*Operation)(nil)
 
 // ErrCancellationAlreadyRequested is returned when a cancellation has already been requested for an operation.
 var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancellation already requested")
@@ -167,6 +169,28 @@ func (o *Operation) onTimedOut(ctx chasm.MutableContext, cause *failurepb.Failur
 	}
 	// TODO(stephan): for standalone, store failure
 	return TransitionTimedOut.Apply(o, ctx, EventTimedOut{})
+}
+
+func (o *Operation) HandleNexusCompletion(
+	ctx chasm.MutableContext,
+	completion *persistencespb.ChasmNexusCompletion,
+) error {
+	// TODO: support completion-before-start
+	if completion.GetRequestId() != "" && completion.GetRequestId() != o.GetRequestId() {
+		return serviceerror.NewNotFound("operation not found")
+	}
+
+	switch outcome := completion.Outcome.(type) {
+	case *persistencespb.ChasmNexusCompletion_Success:
+		return o.onCompleted(ctx, outcome.Success, completion.GetLinks())
+	case *persistencespb.ChasmNexusCompletion_Failure:
+		if outcome.Failure.GetCanceledFailureInfo() != nil {
+			return o.onCanceled(ctx, outcome.Failure)
+		}
+		return o.onFailed(ctx, outcome.Failure)
+	default:
+		return serviceerror.NewInvalidArgument("invalid completion outcome")
+	}
 }
 
 // loadStartArgs is a ReadComponent callback that loads the start arguments from the operation.
