@@ -54,9 +54,9 @@ const (
 // retries waste resources. The counter resets on shard movement, which is acceptable.
 type workerCommandsTaskDispatcher struct {
 	matchingClient resource.MatchingClient
-	config            *configs.Config
-	metricsHandler    metrics.Handler
-	logger            log.Logger
+	config         *configs.Config
+	metricsHandler metrics.Handler
+	logger         log.Logger
 }
 
 func newWorkerCommandsTaskDispatcher(
@@ -68,8 +68,8 @@ func newWorkerCommandsTaskDispatcher(
 	return &workerCommandsTaskDispatcher{
 		matchingClient: matchingClient,
 		config:         config,
-		metricsHandler:    metricsHandler,
-		logger:            logger,
+		metricsHandler: metricsHandler,
+		logger:         logger,
 	}
 }
 

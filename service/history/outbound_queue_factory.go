@@ -34,7 +34,7 @@ type outboundQueueFactoryParams struct {
 	QueueFactoryBaseParams
 	ClientBean         client.Bean
 	CircuitBreakerPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool
-	MatchingClient resource.MatchingClient
+	MatchingClient     resource.MatchingClient
 }
 
 type groupLimiter struct {
