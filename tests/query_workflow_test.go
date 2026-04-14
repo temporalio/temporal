@@ -343,12 +343,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted(
 // non-sticky query task poll is a valid HistoryContinuation token usable with
 // GetWorkflowExecutionHistory. Fails with "Invalid NextPageToken" if matching service
 // returns a RawHistoryContinuation token instead.
-//
-// Uses a dedicated cluster with MatchingHistoryMaxPageSize=2. With the default
-// SendRawHistoryBetweenInternalServices=true, the raw blob path paginates at the blob
-// level: ReadFullPageRawEvents stops after 2 blobs, leaving a non-empty PersistenceToken
-// even when all events fit in a single Cassandra logical page. This ensures NextPageToken
-// is non-empty, which is what we need to verify it's a valid HistoryContinuation token.
+// Uses a dedicated cluster with MatchingHistoryMaxPageSize=2
 func TestQueryWorkflow_NonStickyMultiPageHistory(t *testing.T) {
 	t.Parallel()
 	env := testcore.NewEnv(t,
@@ -407,6 +402,8 @@ func TestQueryWorkflow_NonStickyMultiPageHistory(t *testing.T) {
 	go func() { _, _ = env.SdkClient().QueryWorkflow(ctx, id, "", "test") }()
 
 	// Poll for the query task on the normal (non-sticky) task queue.
+	// Regular (non-query) workflow tasks may arrive here due to sticky queue fallback;
+	// complete them immediately to prevent timeout/reschedule cycles.
 	var pollResp *workflowservice.PollWorkflowTaskQueueResponse
 	env.Eventually(func() bool {
 		pollCtx, pollCancel := context.WithTimeout(ctx, 3*time.Second)
@@ -416,8 +413,19 @@ func TestQueryWorkflow_NonStickyMultiPageHistory(t *testing.T) {
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:  "test-worker",
 		})
-		return err == nil && len(pollResp.GetTaskToken()) > 0
-	}, 10*time.Second, 100*time.Millisecond)
+		if err != nil || len(pollResp.GetTaskToken()) == 0 {
+			return false
+		}
+		if pollResp.GetQuery() != nil {
+			return true
+		}
+		// Got a regular workflow task — complete it so it doesn't time out and reschedule.
+		_, _ = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+			TaskToken: pollResp.GetTaskToken(),
+			Identity:  "test-worker",
+		})
+		return false
+	}, 20*time.Second, 100*time.Millisecond)
 
 	env.NotNil(pollResp.GetHistory())
 	env.NotEmpty(pollResp.GetNextPageToken(), "multi-page history should have NextPageToken")
