@@ -51,7 +51,7 @@ func TestInvokeWithPartitionCounts_CacheMissSuccess(t *testing.T) {
 		return &hpcRes{value: "ok"}, nil
 	}
 
-	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
+	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, &hpcReq{}, nil, op)
 	require.NoError(t, err)
 	assert.Equal(t, "ok", res.value)
 	assert.Equal(t, 1, calls)
@@ -75,7 +75,7 @@ func TestInvokeWithPartitionCounts_CacheHitSuccess(t *testing.T) {
 		return &hpcRes{value: "ok"}, nil
 	}
 
-	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
+	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, &hpcReq{}, nil, op)
 	require.NoError(t, err)
 	assert.Equal(t, "ok", res.value)
 	assert.Equal(t, cachedPC, cache.lookup(pkey))
@@ -95,7 +95,7 @@ func TestInvokeWithPartitionCounts_ServerUpdatesCount(t *testing.T) {
 		return &hpcRes{value: "ok"}, nil
 	}
 
-	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, &hpcReq{}, nil, op)
 	require.NoError(t, err)
 
 	// cache should be updated
@@ -121,7 +121,7 @@ func TestInvokeWithPartitionCounts_StaleRetry_Succeeds(t *testing.T) {
 		return &hpcRes{value: "ok"}, nil
 	}
 
-	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
+	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, &hpcReq{}, nil, op)
 	require.NoError(t, err)
 	assert.Equal(t, "ok", res.value)
 	assert.Equal(t, 2, calls)
@@ -146,7 +146,7 @@ func TestInvokeWithPartitionCounts_StaleRetry_Fails(t *testing.T) {
 		return nil, assert.AnError
 	}
 
-	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, &hpcReq{}, nil, op)
 	require.Error(t, err)
 	assert.Equal(t, 2, calls)
 }
@@ -166,7 +166,7 @@ func TestInvokeWithPartitionCounts_OtherErrorNoRetry(t *testing.T) {
 		return nil, assert.AnError
 	}
 
-	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, &hpcReq{}, nil, op)
 	require.Error(t, err)
 	assert.Equal(t, 1, calls) // no retry
 
@@ -187,7 +187,7 @@ func TestInvokeWithPartitionCounts_ZeroTrailerRemovesCache(t *testing.T) {
 		return &hpcRes{value: "ok"}, nil
 	}
 
-	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, &hpcReq{}, nil, op)
 	require.NoError(t, err)
 
 	// cache entry should be removed
@@ -207,7 +207,7 @@ func TestInvokeWithPartitionCounts_NoTrailerRemovesCache(t *testing.T) {
 		return &hpcRes{value: "ok"}, nil
 	}
 
-	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, &hpcReq{}, nil, op)
 	require.NoError(t, err)
 
 	// cache entry should be removed
@@ -236,6 +236,6 @@ func TestInvokeWithPartitionCounts_OutgoingContextHasHeader(t *testing.T) {
 		return &hpcRes{value: "ok"}, nil
 	}
 
-	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, &hpcReq{}, nil, op)
 	require.NoError(t, err)
 }

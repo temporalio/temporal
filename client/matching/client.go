@@ -75,13 +75,15 @@ func (c *clientImpl) AddActivityTask(
 	request *matchingservice.AddActivityTaskRequest,
 	opts ...grpc.CallOption,
 ) (*matchingservice.AddActivityTaskResponse, error) {
+	if !isPartitionAwareKind(request.GetTaskQueue().GetKind()) {
+		return c.addActivityTask(ctx, PartitionCounts{}, request, opts)
+	}
 	pkey := c.partitionCache.makeKey(
 		request.GetNamespaceId(),
 		request.GetTaskQueue().GetName(),
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 	)
-	kind := request.GetTaskQueue().GetKind()
-	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, kind, request, opts, c.addActivityTask)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, request, opts, c.addActivityTask)
 }
 
 func (c *clientImpl) addActivityTask(
@@ -111,13 +113,15 @@ func (c *clientImpl) AddWorkflowTask(
 	ctx context.Context,
 	request *matchingservice.AddWorkflowTaskRequest,
 	opts ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
+	if !isPartitionAwareKind(request.GetTaskQueue().GetKind()) {
+		return c.addWorkflowTask(ctx, PartitionCounts{}, request, opts)
+	}
 	pkey := c.partitionCache.makeKey(
 		request.GetNamespaceId(),
 		request.GetTaskQueue().GetName(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 	)
-	kind := request.GetTaskQueue().GetKind()
-	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, kind, request, opts, c.addWorkflowTask)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, request, opts, c.addWorkflowTask)
 }
 
 func (c *clientImpl) addWorkflowTask(
@@ -147,13 +151,15 @@ func (c *clientImpl) PollActivityTaskQueue(
 	request *matchingservice.PollActivityTaskQueueRequest,
 	opts ...grpc.CallOption,
 ) (*matchingservice.PollActivityTaskQueueResponse, error) {
+	if !isPartitionAwareKind(request.GetPollRequest().GetTaskQueue().GetKind()) {
+		return c.pollActivityTaskQueue(ctx, PartitionCounts{}, request, opts)
+	}
 	pkey := c.partitionCache.makeKey(
 		request.GetNamespaceId(),
 		request.GetPollRequest().GetTaskQueue().GetName(),
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 	)
-	kind := request.GetPollRequest().GetTaskQueue().GetKind()
-	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, kind, request, opts, c.pollActivityTaskQueue)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, request, opts, c.pollActivityTaskQueue)
 }
 
 func (c *clientImpl) pollActivityTaskQueue(
@@ -186,13 +192,15 @@ func (c *clientImpl) PollWorkflowTaskQueue(
 	request *matchingservice.PollWorkflowTaskQueueRequest,
 	opts ...grpc.CallOption,
 ) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+	if !isPartitionAwareKind(request.GetPollRequest().GetTaskQueue().GetKind()) {
+		return c.pollWorkflowTaskQueue(ctx, PartitionCounts{}, request, opts)
+	}
 	pkey := c.partitionCache.makeKey(
 		request.GetNamespaceId(),
 		request.GetPollRequest().GetTaskQueue().GetName(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 	)
-	kind := request.GetPollRequest().GetTaskQueue().GetKind()
-	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, kind, request, opts, c.pollWorkflowTaskQueue)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, request, opts, c.pollWorkflowTaskQueue)
 }
 
 func (c *clientImpl) pollWorkflowTaskQueue(
@@ -225,13 +233,15 @@ func (c *clientImpl) QueryWorkflow(
 	request *matchingservice.QueryWorkflowRequest,
 	opts ...grpc.CallOption,
 ) (*matchingservice.QueryWorkflowResponse, error) {
+	if !isPartitionAwareKind(request.GetTaskQueue().GetKind()) {
+		return c.queryWorkflow(ctx, PartitionCounts{}, request, opts)
+	}
 	pkey := c.partitionCache.makeKey(
 		request.GetNamespaceId(),
 		request.GetTaskQueue().GetName(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 	)
-	kind := request.GetTaskQueue().GetKind()
-	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, kind, request, opts, c.queryWorkflow)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, request, opts, c.queryWorkflow)
 }
 
 func (c *clientImpl) queryWorkflow(
@@ -350,4 +360,9 @@ func (c *clientImpl) getClientForTaskQueuePartition(
 		return nil, err
 	}
 	return client.(matchingservice.MatchingServiceClient), nil
+}
+
+func isPartitionAwareKind(kind enumspb.TaskQueueKind) bool {
+	// only normal partitions participate in scaling
+	return kind == enumspb.TASK_QUEUE_KIND_NORMAL
 }

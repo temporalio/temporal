@@ -6,7 +6,6 @@ import (
 	"slices"
 
 	"github.com/gogo/protobuf/proto"
-	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -93,7 +92,6 @@ func invokeWithPartitionCounts[Req, Res any](
 	logger log.Logger,
 	cache *partitionCache,
 	pkey string,
-	kind enumspb.TaskQueueKind,
 	request Req,
 	opts []grpc.CallOption,
 	op func(
@@ -103,11 +101,6 @@ func invokeWithPartitionCounts[Req, Res any](
 		opts []grpc.CallOption,
 	) (Res, error),
 ) (Res, error) {
-	if kind != enumspb.TASK_QUEUE_KIND_NORMAL {
-		// only normal partitions participate in scaling
-		return op(ctx, PartitionCounts{}, request, opts)
-	}
-
 	// capture trailer
 	var trailer metadata.MD
 	opts = append(slices.Clone(opts), grpc.Trailer(&trailer))
