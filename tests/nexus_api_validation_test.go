@@ -39,7 +39,7 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTa
 	client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: u, Service: "test-service"})
 	s.NoError(err)
 	ctx := testcore.NewContext()
-	capture := env.StartNamespaceMetricCapture().ForNamespace(namespace)
+	capture := env.StartNamespaceMetricCaptureFor(namespace)
 	_, err = nexusrpc.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
 	var handlerError *nexus.HandlerError
 	s.ErrorAs(err, &handlerError)

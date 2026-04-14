@@ -37,12 +37,12 @@ func (s *MetricCaptureSuite) TestNamespaceMetricCapture() {
 		s.Equal("test-ns", recordings[0].Tags["namespace"])
 	})
 
-	s.Run("can filter to a different namespace", func(s *MetricCaptureSuite) {
+	s.Run("can capture for an explicit namespace", func(s *MetricCaptureSuite) {
 		const metricName = "namespaced_metric_other"
 		handler.WithTags(metrics.NamespaceTag("test-ns")).Counter(metricName).Record(1)
 		handler.WithTags(metrics.NamespaceTag("other-ns")).Counter(metricName).Record(1)
 
-		namespaceCapture := newNamespaceMetricCapture(capture, "test-ns").ForNamespace("other-ns")
+		namespaceCapture := newNamespaceMetricCapture(capture, "other-ns")
 
 		recordings := namespaceCapture.Metric(metricName)
 		s.Len(recordings, 1)
