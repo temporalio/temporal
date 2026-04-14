@@ -128,7 +128,7 @@ func TestWindowedDigest(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			stats := NewWindowedTDigest(tc.WindowConfig)
+			stats, _ := NewWindowedTDigest(tc.WindowConfig)
 			for _, value := range tc.RecordingValues {
 				stats.RecordMulti(value.Value, value.Time, value.Count)
 			}
@@ -140,33 +140,33 @@ func TestWindowedDigest(t *testing.T) {
 }
 
 func TestWindowedDigest_OldTimestampDropped(t *testing.T) {
-	stats := NewWindowedTDigest(TestWindowConfig)
+	stats, _ := NewWindowedTDigest(TestWindowConfig)
 	// Record at t=5, then try to record at t=1 which is before the earliest window.
 	stats.Record(100, n(5))
 	stats.Record(999, n(1))
-	td := stats.(*timeWindowedTDigest)
-	require.Equal(t, 1, countNonEmptyWindows(td))
+	td := stats
+	require.Equal(t, 1, countNonEmptyWindows(td.(*timeWindowedTDigest)))
 	require.InDelta(t, 100, stats.Quantile(0.5), 0.01)
 }
 
 func TestWindowedDigest_GapTimestampDropped(t *testing.T) {
 	// Without FillBlankIntervals, a gap between windows causes the value to be dropped.
-	stats := NewWindowedTDigest(TestWindowConfig)
+	stats, _ := NewWindowedTDigest(TestWindowConfig)
 	// Create window at t=1 (covers [1,2)), then advance to t=5 (covers [5,6)).
 	// t=3 falls in the gap [2,5) with no window.
 	stats.Record(10, n(1))
 	stats.Record(50, n(5))
 	stats.Record(999, n(3)) // should be dropped (in gap)
-	td := stats.(*timeWindowedTDigest)
-	require.Equal(t, 2, countNonEmptyWindows(td))
+	td := stats
+	require.Equal(t, 2, countNonEmptyWindows(td.(*timeWindowedTDigest)))
 	require.InDelta(t, 30, stats.TrimmedMean(0, 1.0), 0.01)
 }
 
 func TestWindowedDigest_WindowBoundaryInclusiveExclusive(t *testing.T) {
-	stats := NewWindowedTDigest(TestWindowConfig)
+	stats, _ := NewWindowedTDigest(TestWindowConfig)
 	// Record at t=1, creating window [1s, 2s).
 	stats.Record(10, n(1))
-	td := stats.(*timeWindowedTDigest)
+	td := stats
 
 	// t=1 (start) is inclusive — should find the window.
 	w := td.SubWindowForTime(n(1))
@@ -179,14 +179,14 @@ func TestWindowedDigest_WindowBoundaryInclusiveExclusive(t *testing.T) {
 }
 
 func TestWindowedDigest_SubWindowForTimeMissing(t *testing.T) {
-	stats := NewWindowedTDigest(TestWindowConfig).(*timeWindowedTDigest)
+	stats, _ := NewWindowedTDigest(TestWindowConfig)
 	// No data recorded yet — all windows are uninitialized.
 	w := stats.SubWindowForTime(n(5))
 	require.Nil(t, w)
 }
 
 func TestWindowedDigest_RecordMultiWeighted(t *testing.T) {
-	stats := NewWindowedTDigest(TestWindowConfig)
+	stats, _ := NewWindowedTDigest(TestWindowConfig)
 	// RecordMulti with count=5 should weight the value heavily.
 	stats.RecordMulti(10, n(1), 5)
 	stats.RecordMulti(20, n(1), 1)
@@ -195,14 +195,14 @@ func TestWindowedDigest_RecordMultiWeighted(t *testing.T) {
 }
 
 func TestWindowedDigest_MultipleValuesInSameWindow(t *testing.T) {
-	stats := NewWindowedTDigest(TestWindowConfig)
+	stats, _ := NewWindowedTDigest(TestWindowConfig)
 	// All values land in the same 1-second window [1s, 2s).
 	halfwidth := 500 * time.Millisecond
 	stats.Record(10, n(1))
 	stats.Record(20, n(1).Add(halfwidth))
 	stats.Record(30, n(1).Add(halfwidth))
-	td := stats.(*timeWindowedTDigest)
-	require.Equal(t, 1, countNonEmptyWindows(td))
+	td := stats
+	require.Equal(t, 1, countNonEmptyWindows(td.(*timeWindowedTDigest)))
 	require.InDelta(t, 20, stats.TrimmedMean(0, 1.0), 0.01) // (10+20+30)/3
 	require.InDelta(t, 30, stats.Quantile(1.0), 0.01)
 	require.InDelta(t, 10, stats.Quantile(0.0), 0.01)
@@ -210,13 +210,13 @@ func TestWindowedDigest_MultipleValuesInSameWindow(t *testing.T) {
 
 func TestWindowedDigest_RingBufferWrapPreservesNewest(t *testing.T) {
 	cfg := WindowConfig{WindowSize: 1 * time.Second, WindowCount: 3}
-	stats := NewWindowedTDigest(cfg)
+	stats, _ := NewWindowedTDigest(cfg)
 	// Insert 5 values into 5 different windows; ring buffer holds 3.
 	for i := 1; i <= 5; i++ {
 		stats.Record(float64(i*10), n(i))
 	}
-	td := stats.(*timeWindowedTDigest)
-	require.Equal(t, 3, countNonEmptyWindows(td))
+	td := stats
+	require.Equal(t, 3, countNonEmptyWindows(td.(*timeWindowedTDigest)))
 	// Windows 3, 4, 5 should survive (values 30, 40, 50).
 	require.InDelta(t, 50, stats.Quantile(1.0), 0.01)
 	require.InDelta(t, 30, stats.Quantile(0.0), 0.01)
@@ -224,12 +224,12 @@ func TestWindowedDigest_RingBufferWrapPreservesNewest(t *testing.T) {
 }
 
 func TestWindowedDigest_RecordToLatestWindow(t *testing.T) {
-	stats := NewWindowedTDigest(TestWindowConfig)
+	stats, _ := NewWindowedTDigest(TestWindowConfig)
 	// RecordToLatestWindow uses time.Now(), so it should create a window.
 	stats.RecordToLatestWindow(42)
 	stats.RecordMultiToLatestWindow(100, 3)
-	td := stats.(*timeWindowedTDigest)
-	require.Equal(t, 1, countNonEmptyWindows(td))
+	td := stats
+	require.Equal(t, 1, countNonEmptyWindows(td.(*timeWindowedTDigest)))
 	// Weighted mean: (42*1 + 100*3) / 4 = 85.5
 	require.InDelta(t, 85.5, stats.TrimmedMean(0, 1.0), 0.01)
 }
