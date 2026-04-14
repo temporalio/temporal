@@ -384,7 +384,7 @@ func (e *TestEnv) StartNamespaceMetricCapture() *NamespaceMetricCapture {
 }
 
 // StartNamespaceMetricCaptureFor starts a metrics capture scoped to the provided namespace.
-func (e *TestEnv) StartNamespaceMetricCaptureFor(namespace string) *NamespaceMetricCapture {
+func (e *TestEnv) StartNamespaceMetricCaptureFor(namespaceName string) *NamespaceMetricCapture {
 	handler := e.cluster.host.CaptureMetricsHandler()
 	if handler == nil {
 		e.t.Fatal("StartNamespaceMetricCapture is unavailable because metrics capture is not enabled on this cluster")
@@ -394,7 +394,7 @@ func (e *TestEnv) StartNamespaceMetricCaptureFor(namespace string) *NamespaceMet
 	e.t.Cleanup(func() {
 		handler.StopCapture(capture)
 	})
-	return newNamespaceMetricCapture(capture, namespace)
+	return newNamespaceMetricCapture(capture, namespaceName)
 }
 
 func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
