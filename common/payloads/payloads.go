@@ -54,7 +54,7 @@ func MustEncodeSingle(value any) *commonpb.Payload {
 	return p
 }
 
-func MustEncode(value ...interface{}) *commonpb.Payloads {
+func MustEncode(value ...any) *commonpb.Payloads {
 	p, err := defaultDataConverter.ToPayloads(value...)
 	if err != nil {
 		// TODO: nolint
