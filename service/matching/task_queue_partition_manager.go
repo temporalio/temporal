@@ -167,7 +167,7 @@ func newTaskQueuePartitionManager(
 // computeEffectiveConfig determines the effective NewMatcher and EnableFairness config values
 // based on fairnessState, autoEnable, and the base dynamic config values.
 func (pm *taskQueuePartitionManagerImpl) computeEffectiveConfig(autoEnable, fairness, newMatcher bool) (effectiveNewMatcher, effectiveEnableFairness bool) {
-	effectiveEnableFairness = fairness && !pm.partition.IsEphemeral()
+	effectiveEnableFairness = fairness && pm.partition.SupportsFairness()
 	effectiveNewMatcher = newMatcher || fairness
 	if !autoEnable {
 		return
@@ -184,7 +184,7 @@ func (pm *taskQueuePartitionManagerImpl) computeEffectiveConfig(autoEnable, fair
 		effectiveEnableFairness = false
 	case enumsspb.FAIRNESS_STATE_V2:
 		effectiveNewMatcher = true
-		effectiveEnableFairness = !pm.partition.IsEphemeral()
+		effectiveEnableFairness = pm.partition.SupportsFairness()
 	default:
 		pm.logger.Error("unknown fairnessState in user data")
 	}
@@ -372,7 +372,7 @@ func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context,
 			return
 		}
 	}
-	if !pm.Partition().IsRoot() || pm.Partition().IsEphemeral() || !pm.config.AutoEnableV2() {
+	if !pm.Partition().IsRoot() || !pm.Partition().SupportsFairness() || !pm.config.AutoEnableV2() {
 		return
 	}
 	if !pm.autoEnableRateLimiter.Allow() {
@@ -964,7 +964,7 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 		//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
 		resp.DescResponse.TaskQueueStatus = dbq.LegacyDescribeTaskQueue(true).DescResponse.TaskQueueStatus
 	}
-	if !pm.partition.IsEphemeral() {
+	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL {
 		perTypeUserData, _, err := pm.getPerTypeUserData()
 		if err != nil {
 			return nil, err
@@ -1594,6 +1594,9 @@ func (pm *taskQueuePartitionManagerImpl) Partition() tqid.Partition {
 }
 
 func (pm *taskQueuePartitionManagerImpl) PartitionCount() int {
+	if !pm.partition.SupportsPartitions() {
+		return 1
+	}
 	return max(pm.config.NumWritePartitions(), pm.config.NumReadPartitions())
 }
 
@@ -1701,8 +1704,8 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 	deployment *deploymentpb.Deployment,
 	create bool,
 ) (physicalTaskQueueManager, error) {
-	if pm.partition.IsEphemeral() {
-		return nil, serviceerror.NewInternal("versioned queues can't be used in ephemeral partitions")
+	if !pm.partition.SupportsVersioning() {
+		return nil, serviceerror.NewInternal("versioned queues can't be used in partitions that don't support versioning")
 	}
 	if versionSet == "" && buildId == "" && deployment == nil {
 		return nil, serviceerror.NewInternal("deployment or build ID or version set should be given for a versioned queue")

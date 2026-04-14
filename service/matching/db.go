@@ -206,8 +206,8 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 
 		// If we are the draining one, then assume the other has tasks, so we can migrate
 		// backwards safely. Also assume other has tasks if the config allows for migration
-		// (and we're not ephemeral) since we may have just turned on fairness and need to migrate.
-		canMigrate := (db.config.NewMatcher || db.config.EnableFairness) && !db.queue.Partition().IsEphemeral()
+		// (and the partition supports fairness) since we may have just turned on fairness and need to migrate.
+		canMigrate := (db.config.NewMatcher || db.config.EnableFairness) && db.queue.Partition().SupportsFairness()
 		db.otherHasTasks = canMigrate || db.isDraining
 
 		if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
@@ -731,7 +731,7 @@ func (db *taskQueueDB) AllocateSubqueue(
 }
 
 func (db *taskQueueDB) expiryTime() *timestamppb.Timestamp {
-	if db.queue.Partition().IsEphemeral() {
+	if db.queue.Partition().HasTTLExpiry() {
 		return timestamppb.New(time.Now().Add(ephemeralTaskQueueTTL))
 	}
 	return nil

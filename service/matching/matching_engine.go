@@ -576,8 +576,8 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return "", false, serviceerror.NewInternal("AddWorkflowTask called with unexpected partition kind")
 	}
 
-	// do not load ephemeral task queue if it is not already loaded, which means it has no poller.
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !partition.IsEphemeral(), loadCauseTask)
+	// do not load task queues with TTL expiry if not already loaded, which means they have no poller.
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !partition.HasTTLExpiry(), loadCauseTask)
 	if err != nil {
 		return "", false, err
 	} else if partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && !stickyWorkerAvailable(pm) {
@@ -1097,8 +1097,8 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		"QueryWorkflow called with unexpected partition kind") {
 		return nil, serviceerror.NewInternal("QueryWorkflow called with unexpected partition kind")
 	}
-	// do not load ephemeral task queue if it is not already loaded, which means it has no poller.
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !partition.IsEphemeral(), loadCauseQuery)
+	// do not load task queues with TTL expiry if not already loaded, which means they have no poller.
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !partition.HasTTLExpiry(), loadCauseQuery)
 	if err != nil {
 		return nil, err
 	} else if partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && !stickyWorkerAvailable(pm) {
@@ -1251,7 +1251,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			return nil, err
 		}
 		tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, namespace.Name(req.Namespace))
-		if !rootPartition.IsRoot() || rootPartition.IsEphemeral() || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+		if !rootPartition.IsRoot() || rootPartition.Kind() != enumspb.TASK_QUEUE_KIND_NORMAL || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue must be called on the root partition of workflow task queue if api mode is DESCRIBE_TASK_QUEUE_MODE_ENHANCED")
 		}
 		userData, err := e.getUserDataClone(ctx, rootPartition, loadCauseDescribe)
