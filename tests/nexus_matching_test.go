@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -165,11 +166,8 @@ func verifyForwardingMetrics(t *testing.T, capture *testcore.NamespaceMetricCapt
 	} else {
 		metricName = "local" + metricName
 	}
-	dispatchRecordings := capture.Metric(metricName)
-	for _, rec := range dispatchRecordings {
-		if rec.Tags["task_type"] == "Nexus" {
-			return
-		}
-	}
-	require.FailNowf(t, "did not find expected metric", "expected to find a dispatch metric %s with task_type=Nexus", metricName)
+	dispatchRecordings := capture.CollectMetric(metricName, func(recording *metricstest.CapturedRecording) bool {
+		return recording.Tags["task_type"] == "Nexus"
+	})
+	require.NotEmpty(t, dispatchRecordings, "expected to find a dispatch metric %s with task_type=Nexus", metricName)
 }
