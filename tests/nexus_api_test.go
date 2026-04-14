@@ -610,8 +610,13 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 }
 
 func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_SupportsVersioning(useTemporalFailures bool) {
-	env := newNexusTestEnv(s.T(), useTemporalFailures, testcore.WithDedicatedCluster())
-	env.OverrideDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs, true)
+	env := newNexusTestEnv(s.T(), useTemporalFailures,
+		testcore.WithDedicatedCluster(),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs, true),
+		// UpdateWorkerBuildIdCompatibility is the v0.1 (Version Set-based) API gated by DataAPIs.
+		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningDataAPIs, true),
+	)
+
 	ctx, cancel := context.WithCancel(testcore.NewContext())
 	defer cancel()
 	taskQueue := testcore.RandomizeStr("task-queue")

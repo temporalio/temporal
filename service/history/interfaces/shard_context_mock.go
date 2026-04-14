@@ -32,6 +32,7 @@ import (
 	persistence0 "go.temporal.io/server/common/persistence"
 	serialization "go.temporal.io/server/common/persistence/serialization"
 	pingable "go.temporal.io/server/common/pingable"
+	quotas "go.temporal.io/server/common/quotas"
 	searchattribute "go.temporal.io/server/common/searchattribute"
 	configs "go.temporal.io/server/service/history/configs"
 	events "go.temporal.io/server/service/history/events"
@@ -121,6 +122,20 @@ func (mr *MockShardContextMockRecorder) AssertOwnership(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssertOwnership", reflect.TypeOf((*MockShardContext)(nil).AssertOwnership), ctx)
 }
 
+// BusinessIDReuseRateLimiter mocks base method.
+func (m *MockShardContext) BusinessIDReuseRateLimiter(namespaceID namespace.ID, businessID string, archetypeID chasm.ArchetypeID) quotas.RateLimiter {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BusinessIDReuseRateLimiter", namespaceID, businessID, archetypeID)
+	ret0, _ := ret[0].(quotas.RateLimiter)
+	return ret0
+}
+
+// BusinessIDReuseRateLimiter indicates an expected call of BusinessIDReuseRateLimiter.
+func (mr *MockShardContextMockRecorder) BusinessIDReuseRateLimiter(namespaceID, businessID, archetypeID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BusinessIDReuseRateLimiter", reflect.TypeOf((*MockShardContext)(nil).BusinessIDReuseRateLimiter), namespaceID, businessID, archetypeID)
+}
+
 // ChasmRegistry mocks base method.
 func (m *MockShardContext) ChasmRegistry() *chasm.Registry {
 	m.ctrl.T.Helper()
@@ -191,6 +206,20 @@ func (m *MockShardContext) DeleteWorkflowExecution(ctx context.Context, workflow
 func (mr *MockShardContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockShardContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage)
+}
+
+// EndpointRegistry mocks base method.
+func (m *MockShardContext) EndpointRegistry() chasm.EndpointRegistry {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EndpointRegistry")
+	ret0, _ := ret[0].(chasm.EndpointRegistry)
+	return ret0
+}
+
+// EndpointRegistry indicates an expected call of EndpointRegistry.
+func (mr *MockShardContextMockRecorder) EndpointRegistry() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EndpointRegistry", reflect.TypeOf((*MockShardContext)(nil).EndpointRegistry))
 }
 
 // GenerateTaskID mocks base method.
@@ -898,6 +927,20 @@ func (mr *MockControllableContextMockRecorder) AssertOwnership(ctx any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssertOwnership", reflect.TypeOf((*MockControllableContext)(nil).AssertOwnership), ctx)
 }
 
+// BusinessIDReuseRateLimiter mocks base method.
+func (m *MockControllableContext) BusinessIDReuseRateLimiter(namespaceID namespace.ID, businessID string, archetypeID chasm.ArchetypeID) quotas.RateLimiter {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BusinessIDReuseRateLimiter", namespaceID, businessID, archetypeID)
+	ret0, _ := ret[0].(quotas.RateLimiter)
+	return ret0
+}
+
+// BusinessIDReuseRateLimiter indicates an expected call of BusinessIDReuseRateLimiter.
+func (mr *MockControllableContextMockRecorder) BusinessIDReuseRateLimiter(namespaceID, businessID, archetypeID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BusinessIDReuseRateLimiter", reflect.TypeOf((*MockControllableContext)(nil).BusinessIDReuseRateLimiter), namespaceID, businessID, archetypeID)
+}
+
 // ChasmRegistry mocks base method.
 func (m *MockControllableContext) ChasmRegistry() *chasm.Registry {
 	m.ctrl.T.Helper()
@@ -968,6 +1011,20 @@ func (m *MockControllableContext) DeleteWorkflowExecution(ctx context.Context, w
 func (mr *MockControllableContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockControllableContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage)
+}
+
+// EndpointRegistry mocks base method.
+func (m *MockControllableContext) EndpointRegistry() chasm.EndpointRegistry {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EndpointRegistry")
+	ret0, _ := ret[0].(chasm.EndpointRegistry)
+	return ret0
+}
+
+// EndpointRegistry indicates an expected call of EndpointRegistry.
+func (mr *MockControllableContextMockRecorder) EndpointRegistry() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EndpointRegistry", reflect.TypeOf((*MockControllableContext)(nil).EndpointRegistry))
 }
 
 // FinishStop mocks base method.

@@ -18,6 +18,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -186,9 +187,10 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 
 	// Set Nexus callback URL now that we have the cluster's HTTP address. Note that we set
 	// a default for the global config here so callers that rely on this can still use a shared cluster.
-	env.FunctionalTestBase.OverrideDynamicConfig(
-		nexusoperations.CallbackURLTemplate,
-		"http://"+env.HttpAPIAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
+	//nolint:revive // test callback endpoints are served by the local HTTP API in functional tests
+	nexusCallbackTemplate := fmt.Sprintf("http://%s/namespaces/{{.NamespaceName}}/nexus/callback", env.HttpAPIAddress())
+	env.FunctionalTestBase.OverrideDynamicConfig(nexusoperations.CallbackURLTemplate, nexusCallbackTemplate)
+	env.FunctionalTestBase.OverrideDynamicConfig(chasmnexus.CallbackURLTemplate, nexusCallbackTemplate)
 
 	// For shared clusters, apply all dynamic config settings as overrides.
 	if !options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
@@ -349,7 +351,7 @@ func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, va
 			}}
 		}
 	}
-	return e.cluster.host.overrideDynamicConfig(e.t, setting.Key(), value)
+	return e.cluster.host.overrideDynamicConfigForTest(e.t, setting.Key(), value)
 }
 
 // StartGlobalMetricCapture starts a cluster-global metrics capture for this test and automatically stops it during cleanup.

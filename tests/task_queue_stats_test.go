@@ -52,11 +52,6 @@ type TaskQueueStatsSuite struct {
 	parallelsuite.Suite[*TaskQueueStatsSuite]
 }
 
-// TODO(pri): remove once the classic matcher is removed
-func TestTaskQueueStats_Classic_Suite(t *testing.T) {
-	parallelsuite.Run(t, &TaskQueueStatsSuite{}, false) // usePriMatcher = false
-}
-
 func TestTaskQueueStats_Pri_Suite(t *testing.T) {
 	parallelsuite.Run(t, &TaskQueueStatsSuite{}, true) // usePriMatcher = true
 }
