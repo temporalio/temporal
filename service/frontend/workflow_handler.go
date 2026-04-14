@@ -674,7 +674,73 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
+	if err := wh.validateTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
+		return nil, err
+	}
 	return request, nil
+}
+
+func (wh *WorkflowHandler) validateTimeSkippingConfig(
+	timeSkippingConfig *workflowpb.TimeSkippingConfig,
+	namespaceName namespace.Name,
+) error {
+
+	if timeSkippingConfig == nil {
+		return nil
+	}
+
+	// if this feature is not enabled, we don't allow setting any related config
+	if !wh.config.TimeSkippingEnabled(namespaceName.String()) {
+		return serviceerror.NewUnimplementedf(
+			"The Time-Skipping feature is not enabled for namespace %s",
+			namespaceName,
+		)
+	}
+
+	if timeSkippingConfig.GetBound() != nil {
+		switch bound := timeSkippingConfig.GetBound().(type) {
+		case *workflowpb.TimeSkippingConfig_MaxSkippedDuration:
+			if bound.MaxSkippedDuration.AsDuration() < namespace.MinTimeSkippingDuration {
+				return serviceerror.NewUnimplementedf(
+					"Max skipped duration must be at least %s",
+					namespace.MinTimeSkippingDuration,
+				)
+			}
+		case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
+			if bound.MaxElapsedDuration.AsDuration() < namespace.MinTimeSkippingDuration {
+				return serviceerror.NewUnimplementedf(
+					"Max elapsed duration must be at least %s",
+					namespace.MinTimeSkippingDuration,
+				)
+			}
+		// todo: will need to check current virtual time in updateOptions scenario
+		case *workflowpb.TimeSkippingConfig_MaxTargetTime:
+			if bound.MaxTargetTime.AsTime().Before(wh.namespaceHandler.timeSource.Now().Add(namespace.MinTimeSkippingDuration)) {
+				return serviceerror.NewUnimplementedf(
+					"Max target time must be at least %s from current time of the workflow",
+					namespace.MinTimeSkippingDuration,
+				)
+			}
+		default:
+			return serviceerror.NewInvalidArgumentf("unsupported time skipping bound type: %T", bound)
+		}
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) unaliasedSearchAttributesFrom(
+	attributes *commonpb.SearchAttributes,
+	namespaceName namespace.Name,
+) (*commonpb.SearchAttributes, error) {
+	sa, err := searchattribute.UnaliasFields(wh.saMapperProvider, attributes, namespaceName.String())
+	if err != nil {
+		return nil, err
+	}
+
+	if err = wh.validateSearchAttributes(sa, namespaceName); err != nil {
+		return nil, err
+	}
+	return sa, nil
 }
 
 func (wh *WorkflowHandler) ExecuteMultiOperation(
@@ -2263,7 +2329,16 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err := wh.validator.ValidateLinks(request.GetNamespace(), request.GetLinks()); err != nil {
+		return nil, err
+	}
+
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}

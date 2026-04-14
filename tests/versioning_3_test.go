@@ -88,8 +88,7 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 
 func (s *Versioning3Suite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.MatchingDeploymentWorkflowVersion.Key():   int(s.deploymentWorkflowVersion),
-		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key(): partitionTreeDegree,
+		dynamicconfig.MatchingDeploymentWorkflowVersion.Key(): int(s.deploymentWorkflowVersion),
 
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key():                1000,
@@ -4402,9 +4401,10 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 		}
 	}
 	f, err := tqid.NewTaskQueueFamily(s.NamespaceID().String(), tv.TaskQueue().GetName())
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
 		for pt := range remaining {
-			s.NoError(err)
+			a.NoError(err)
 			partition := f.TaskQueue(pt.tp).NormalPartition(pt.part)
 			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility
 			// here so that we can target activity queues.
@@ -4415,7 +4415,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 					TaskQueue:     partition.RpcName(),
 					TaskQueueType: partition.TaskType(),
 				})
-			s.NoError(err)
+			a.NoError(err)
 			perTypes := res.GetUserData().GetData().GetPerType()
 			if perTypes != nil {
 				deploymentsData := perTypes[int32(pt.tp)].GetDeploymentData().GetDeploymentsData()
@@ -4466,7 +4466,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 				}
 			}
 		}
-		return len(remaining) == 0
+		a.Empty(remaining)
 	}, 30*time.Second, 100*time.Millisecond)
 }
 
@@ -5788,10 +5788,8 @@ func (s *Versioning3Suite) TestTransitionDuringTransientTask_WithSignal() {
 // is properly set when a workflow task fails and is retried, and that the transition completes
 // successfully after a signal is sent during the retry backoff period.
 func (s *Versioning3Suite) testTransitionDuringTransientTask(withSignal bool) {
-
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, false)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
