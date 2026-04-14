@@ -6,14 +6,23 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/api/workflowservice/v1/workflowservicenexus"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/searchattribute"
 )
+
+// workflowServiceNexusDef holds the Nexus service and operation names for WorkflowService.
+// Previously provided by go.temporal.io/api/workflowservice/v1/workflowservicenexus.
+var workflowServiceNexusDef = struct {
+	ServiceName                      string
+	SignalWithStartWorkflowExecution nexus.OperationReference[workflowservice.SignalWithStartWorkflowExecutionRequest, workflowservice.SignalWithStartWorkflowExecutionResponse]
+}{
+	ServiceName:                      "WorkflowService",
+	SignalWithStartWorkflowExecution: nexus.NewOperationReference[workflowservice.SignalWithStartWorkflowExecutionRequest, workflowservice.SignalWithStartWorkflowExecutionResponse]("SignalWithStartWorkflowExecution"),
+}
 
 type workflowServiceNexusHandler struct {
 	namespaceRegistry namespace.Registry
@@ -58,9 +67,9 @@ func (h *workflowServiceNexusHandler) signalWithStartWorkflowExecution(
 func mustNewWorkflowServiceNexusHandler(
 	handler *workflowServiceNexusHandler,
 ) *nexus.Service {
-	svc := nexus.NewService(workflowservicenexus.WorkflowService.ServiceName)
+	svc := nexus.NewService(workflowServiceNexusDef.ServiceName)
 	svc.MustRegister(nexus.NewSyncOperation(
-		workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name(),
+		workflowServiceNexusDef.SignalWithStartWorkflowExecution.Name(),
 		handler.signalWithStartWorkflowExecution,
 	))
 	return svc
@@ -71,7 +80,7 @@ func (h *workflowServiceNexusHandler) setHistoryHandler(handler historyservice.H
 }
 
 type SignalWithStartOperationProcessor struct {
-	validator *Validator
+	validator *RequestValidator
 }
 
 func (o SignalWithStartOperationProcessor) ProcessInput(ctx chasm.NexusOperationProcessorContext, request *workflowservice.SignalWithStartWorkflowExecutionRequest) (*chasm.NexusOperationProcessorResult, error) {
@@ -122,8 +131,8 @@ func NewWorkflowServiceNexusServiceProcessor(
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 ) *chasm.NexusServiceProcessor {
-	sp := chasm.NewNexusServiceProcessor(workflowservicenexus.WorkflowService.ServiceName)
-	sp.MustRegisterOperation(workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name(), chasm.NewRegisterableNexusOperationProcessor(SignalWithStartOperationProcessor{
+	sp := chasm.NewNexusServiceProcessor(workflowServiceNexusDef.ServiceName)
+	sp.MustRegisterOperation(workflowServiceNexusDef.SignalWithStartWorkflowExecution.Name(), chasm.NewRegisterableNexusOperationProcessor(SignalWithStartOperationProcessor{
 		validator: NewValidator(config, saMapperProvider, saValidator),
 	}))
 	return sp

@@ -18,7 +18,7 @@ require (
 	github.com/emirpasic/gods v1.18.1
 	github.com/fatih/color v1.18.0
 	github.com/go-faker/faker/v4 v4.6.0
-	github.com/go-jose/go-jose/v4 v4.1.3
+	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/go-sql-driver/mysql v1.9.0
 	github.com/gocql/gocql v1.7.0
 	github.com/golang-jwt/jwt/v4 v4.5.2
@@ -60,7 +60,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.40.0
 	go.opentelemetry.io/otel/sdk/metric v1.40.0
 	go.opentelemetry.io/otel/trace v1.40.0
-	go.temporal.io/api v1.62.8-0.20260406214859-f85b47677ba3
+	go.temporal.io/api v1.62.8
 	go.temporal.io/auto-scaled-workers v0.0.0-20260401235702-f2721a623799
 	go.temporal.io/sdk v1.41.1
 	go.uber.org/fx v1.24.0

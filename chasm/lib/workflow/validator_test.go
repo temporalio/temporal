@@ -18,7 +18,7 @@ import (
 
 const testMaxIDLen = 1000
 
-func newTestValidator() *Validator {
+func newTestValidator() *RequestValidator {
 	saValidator := searchattribute.NewValidator(
 		searchattribute.NewTestProvider(),
 		searchattribute.NewTestMapperProvider(nil),

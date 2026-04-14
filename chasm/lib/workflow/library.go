@@ -7,39 +7,25 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 )
 
-type ComponentOnlyLibrary struct {
+type library struct {
 	chasm.UnimplementedLibrary
-}
 
-func NewComponentOnlyLibrary() *ComponentOnlyLibrary {
-	return &ComponentOnlyLibrary{}
-}
-
-func (l *ComponentOnlyLibrary) Name() string {
-	return chasm.WorkflowLibraryName
-}
-
-func (l *ComponentOnlyLibrary) Components() []*chasm.RegistrableComponent {
-	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Workflow](chasm.WorkflowComponentName),
-	}
-}
-
-type Library struct {
-	ComponentOnlyLibrary
+	registry                    *Registry
 	workflowServiceNexusHandler *workflowServiceNexusHandler
 	config                      Config
 	saMapperProvider            searchattribute.MapperProvider
 	saValidator                 *searchattribute.Validator
 }
 
-func NewLibrary(
+func newLibrary(
+	registry *Registry,
 	namespaceRegistry namespace.Registry,
 	config Config,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
-) *Library {
-	return &Library{
+) *library {
+	return &library{
+		registry:         registry,
 		config:           config,
 		saMapperProvider: saMapperProvider,
 		saValidator:      saValidator,
@@ -49,13 +35,59 @@ func NewLibrary(
 	}
 }
 
-func (l *Library) NexusServices() []*nexus.Service {
+// NewLibrary creates a new CHASM library for the workflow package.
+// Use newLibrary (via fx) for the full setup including Nexus services.
+func NewLibrary(registry *Registry) chasm.Library {
+	return &library{registry: registry}
+}
+
+func (l *library) Name() string {
+	return chasm.WorkflowLibraryName
+}
+
+type workflowContext struct {
+	registry *Registry
+}
+
+type ctxKeyWorkflowContextType struct{}
+
+var ctxKeyWorkflowContext = ctxKeyWorkflowContextType{}
+
+func workflowContextFromChasm(ctx chasm.Context) *workflowContext {
+	wc, ok := ctx.Value(ctxKeyWorkflowContext).(*workflowContext)
+	if !ok {
+		return nil
+	}
+	return wc
+}
+
+func (l *library) Components() []*chasm.RegistrableComponent {
+	return []*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*Workflow](chasm.WorkflowComponentName, chasm.WithContextValues(map[any]any{
+			ctxKeyWorkflowContext: &workflowContext{registry: l.registry},
+		})),
+	}
+}
+
+// SetEventRegistryOnContext injects the event registry into a CHASM context. This is primarily
+// useful for tests that construct MockMutableContext directly.
+func SetEventRegistryOnContext[C chasm.Context](ctx C, registry *Registry) C {
+	return chasm.ContextWithValue(ctx, ctxKeyWorkflowContext, &workflowContext{registry: registry})
+}
+
+func (l *library) NexusServices() []*nexus.Service {
+	if l.workflowServiceNexusHandler == nil {
+		return nil
+	}
 	return []*nexus.Service{
 		mustNewWorkflowServiceNexusHandler(l.workflowServiceNexusHandler),
 	}
 }
 
-func (l *Library) NexusServiceProcessors() []*chasm.NexusServiceProcessor {
+func (l *library) NexusServiceProcessors() []*chasm.NexusServiceProcessor {
+	if l.workflowServiceNexusHandler == nil {
+		return nil
+	}
 	return []*chasm.NexusServiceProcessor{
 		NewWorkflowServiceNexusServiceProcessor(l.config, l.saMapperProvider, l.saValidator),
 	}

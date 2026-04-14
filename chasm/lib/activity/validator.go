@@ -119,7 +119,7 @@ func validateAndNormalizeActivityAttributes(
 		return serviceerror.NewInvalidArgumentf("invalid priorities: %v", err)
 	}
 
-	return normalizeAndValidateTimeouts(activityID,
+	return validateAndNormalizeTimeouts(activityID,
 		activityType,
 		runTimeout,
 		options)
@@ -139,7 +139,7 @@ func validateActivityRetryPolicy(
 	return retrypolicy.Validate(retryPolicy)
 }
 
-func normalizeAndValidateTimeouts(
+func validateAndNormalizeTimeouts(
 	activityID string,
 	activityType string,
 	runTimeout *durationpb.Duration,
@@ -207,7 +207,7 @@ func normalizeAndValidateTimeouts(
 	return nil
 }
 
-func normalizeAndValidateIDPolicy(req *workflowservice.StartActivityExecutionRequest) error {
+func validateAndNormalizeIDPolicy(req *workflowservice.StartActivityExecutionRequest) error {
 	if req.GetIdReusePolicy() == enumspb.ACTIVITY_ID_REUSE_POLICY_UNSPECIFIED {
 		req.IdReusePolicy = enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
@@ -316,7 +316,55 @@ func validatePollActivityExecutionRequest(
 	return nil
 }
 
-func validateRequestCancelActivityExecutionRequest(
+func validateAndNormalizeStartRequest(
+	req *workflowservice.StartActivityExecutionRequest,
+	maxIDLengthLimit int,
+	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	logger log.Logger,
+	saMapperProvider searchattribute.MapperProvider,
+	saValidator *searchattribute.Validator,
+) error {
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	} else if len(req.GetRequestId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRequestId()), maxIDLengthLimit)
+	}
+
+	if len(req.GetIdentity()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
+	}
+
+	if err := validateAndNormalizeIDPolicy(req); err != nil {
+		return err
+	}
+
+	if err := validateBlobSize(
+		req.GetActivityId(),
+		"StartActivityExecution",
+		blobSizeLimitError,
+		blobSizeLimitWarn,
+		req.Input.Size(),
+		logger,
+		req.GetNamespace()); err != nil {
+		return serviceerror.NewInvalidArgument("input exceeds length limit")
+	}
+
+	if req.GetSearchAttributes() != nil {
+		if err := validateAndNormalizeSearchAttributes(
+			req,
+			saMapperProvider,
+			saValidator); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateAndNormalizeCancelRequest(
 	req *workflowservice.RequestCancelActivityExecutionRequest,
 	maxIDLengthLimit int,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
@@ -332,7 +380,9 @@ func validateRequestCancelActivityExecutionRequest(
 			len(req.GetActivityId()), maxIDLengthLimit)
 	}
 
-	if len(req.GetRequestId()) > maxIDLengthLimit {
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	} else if len(req.GetRequestId()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
 			len(req.GetRequestId()), maxIDLengthLimit)
 	}
@@ -364,7 +414,7 @@ func validateRequestCancelActivityExecutionRequest(
 	return nil
 }
 
-func validateDeleteActivityExecutionRequest(
+func validateAndNormalizeDeleteRequest(
 	req *workflowservice.DeleteActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
@@ -387,7 +437,7 @@ func validateDeleteActivityExecutionRequest(
 	return nil
 }
 
-func validateTerminateActivityExecutionRequest(
+func validateAndNormalizeTerminateRequest(
 	req *workflowservice.TerminateActivityExecutionRequest,
 	maxIDLengthLimit int,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
@@ -403,7 +453,9 @@ func validateTerminateActivityExecutionRequest(
 			len(req.GetActivityId()), maxIDLengthLimit)
 	}
 
-	if len(req.GetRequestId()) > maxIDLengthLimit {
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	} else if len(req.GetRequestId()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
 			len(req.GetRequestId()), maxIDLengthLimit)
 	}

@@ -1434,7 +1434,7 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeploymentVersion_WithComputeCo
 
 	s.env.RegisterActivity(a.UpdateWorkerControllerInstanceFromDeployment)
 	updateCalled := false
-	s.env.OnActivity(a.UpdateWorkerControllerInstanceFromDeployment, mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+	s.env.OnActivity(a.UpdateWorkerControllerInstanceFromDeployment, mock.Anything, mock.Anything).Return((*computepb.ComputeConfigSummary)(nil), nil).Run(func(args mock.Arguments) {
 		updateCalled = true
 	}).Once()
 
@@ -1539,6 +1539,7 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeploymentVersion_UpdateWorkerC
 	var a *Activities
 	s.env.RegisterActivity(a.UpdateWorkerControllerInstanceFromDeployment)
 	s.env.OnActivity(a.UpdateWorkerControllerInstanceFromDeployment, mock.Anything, mock.Anything).Return(
+		(*computepb.ComputeConfigSummary)(nil),
 		temporal.NewNonRetryableApplicationError("controller update failed", errInvalidComputeConfig, nil),
 	).Once()
 

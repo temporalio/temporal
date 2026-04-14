@@ -151,7 +151,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	}
 
 	chasmRegistry := chasm.NewRegistry(s.mockResource.GetLogger())
-	err := chasmRegistry.Register(chasmworkflow.NewComponentOnlyLibrary())
+	err := chasmRegistry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry()))
 	s.NoError(err)
 
 	args := NewAdminHandlerArgs{

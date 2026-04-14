@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -171,6 +172,19 @@ func generateBisectSummary(reports []TestBisectReport, repo string, minProb floa
 		sb.WriteString(fmt.Sprintf(", %d below confidence threshold", skipped))
 	}
 	sb.WriteString("\n\n")
+
+	// Sort by top suspect probability descending so the most actionable rows appear first.
+	sort.Slice(reports, func(i, j int) bool {
+		pi := 0.0
+		if len(reports[i].TopSuspects) > 0 {
+			pi = reports[i].TopSuspects[0].Probability
+		}
+		pj := 0.0
+		if len(reports[j].TopSuspects) > 0 {
+			pj = reports[j].TopSuspects[0].Probability
+		}
+		return pi > pj
+	})
 
 	writeBisectTable(&sb, reports, repo)
 	return sb.String()

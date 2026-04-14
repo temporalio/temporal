@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sync"
 
+	computepb "go.temporal.io/api/compute/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
@@ -275,19 +276,20 @@ func (a *Activities) StartWorkerDeploymentVersionWorkflow(
 	logger := activity.GetLogger(ctx)
 	logger.Info("starting worker deployment version workflow", "deploymentName", input.DeploymentName, "buildID", input.BuildId)
 	startIdentity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	return a.WorkerDeploymentClient.StartWorkerDeploymentVersion(ctx, a.namespace, input.DeploymentName, input.BuildId, startIdentity, input.RequestId, input.GetIdentity())
+	return a.WorkerDeploymentClient.StartWorkerDeploymentVersion(ctx, a.namespace, input.DeploymentName, input.BuildId, startIdentity, input.RequestId, input.GetIdentity(), input.GetComputeConfig())
 }
 
-func (a *Activities) UpdateWorkerControllerInstanceFromDeployment(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) error {
+func (a *Activities) UpdateWorkerControllerInstanceFromDeployment(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) (*computepb.ComputeConfigSummary, error) {
 	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
-	if err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups()); err != nil {
+	err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups())
+	if err != nil {
 		var invalidArgs *serviceerror.InvalidArgument
 		if errors.As(err, &invalidArgs) {
-			return temporal.NewApplicationError(err.Error(), errInvalidComputeConfig)
+			return nil, temporal.NewApplicationError(err.Error(), errInvalidComputeConfig)
 		}
-		return err
+		return nil, err
 	}
-	return nil
+	return nil, nil
 }
 
 func (a *Activities) DeleteWorkerControllerInstanceFromDeployment(ctx context.Context, input *deploymentspb.DeleteWorkerControllerInstanceInput) error {

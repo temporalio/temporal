@@ -16,7 +16,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/api/workflowservice/v1/workflowservicenexus"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -70,8 +69,8 @@ func (s *SignalWithStartFromWorkflowTestSuite) scheduleAndGetSWSResult(
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
-						Service:   workflowservicenexus.WorkflowService.ServiceName,
-						Operation: workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name(),
+						Service:   "WorkflowService",
+						Operation: "SignalWithStartWorkflowExecution",
 						Input:     payloads.MustEncodeSingle(swsReq),
 					},
 				},
@@ -170,8 +169,8 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestHappyPath() {
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
-						Service:   workflowservicenexus.WorkflowService.ServiceName,
-						Operation: workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name(),
+						Service:   "WorkflowService",
+						Operation: "SignalWithStartWorkflowExecution",
 						Input: payloads.MustEncodeSingle(&workflowservice.SignalWithStartWorkflowExecutionRequest{
 							WorkflowId: workflowID,
 							SignalName: "test-signal",

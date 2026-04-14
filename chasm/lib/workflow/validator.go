@@ -28,7 +28,7 @@ var (
 	ErrInvalidWorkflowStartDelaySeconds            = serviceerror.NewInvalidArgument("An invalid WorkflowStartDelaySeconds is set on request.")
 )
 
-type Validator struct {
+type RequestValidator struct {
 	config           Config
 	saMapperProvider searchattribute.MapperProvider
 	saValidator      *searchattribute.Validator
@@ -38,15 +38,15 @@ func NewValidator(
 	config Config,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
-) *Validator {
-	return &Validator{
+) *RequestValidator {
+	return &RequestValidator{
 		config:           config,
 		saMapperProvider: saMapperProvider,
 		saValidator:      saValidator,
 	}
 }
 
-func (v *Validator) ValidateWorkflowID(
+func (v *RequestValidator) ValidateWorkflowID(
 	workflowID string,
 ) error {
 	if workflowID == "" {
@@ -64,7 +64,7 @@ type StartWorkflowTimeoutLikeRequest interface {
 	GetWorkflowTaskTimeout() *durationpb.Duration
 }
 
-func (v *Validator) ValidateWorkflowTimeouts(
+func (v *RequestValidator) ValidateWorkflowTimeouts(
 	request StartWorkflowTimeoutLikeRequest,
 ) error {
 	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
@@ -82,7 +82,7 @@ func (v *Validator) ValidateWorkflowTimeouts(
 	return nil
 }
 
-func (v *Validator) ValidateRetryPolicy(namespaceName string, retryPolicy *commonpb.RetryPolicy) error {
+func (v *RequestValidator) ValidateRetryPolicy(namespaceName string, retryPolicy *commonpb.RetryPolicy) error {
 	if retryPolicy == nil {
 		// By default, if the user does not explicitly set a retry policy for a Workflow, do not perform any retries.
 		return nil
@@ -92,7 +92,7 @@ func (v *Validator) ValidateRetryPolicy(namespaceName string, retryPolicy *commo
 	return retrypolicy.Validate(retryPolicy)
 }
 
-func (v *Validator) ValidateWorkflowStartDelay(
+func (v *RequestValidator) ValidateWorkflowStartDelay(
 	cronSchedule string,
 	startDelay *durationpb.Duration,
 ) error {
@@ -106,7 +106,7 @@ func (v *Validator) ValidateWorkflowStartDelay(
 
 	return nil
 }
-func (v *Validator) ValidateWorkflowIdReusePolicy(
+func (v *RequestValidator) ValidateWorkflowIdReusePolicy(
 	reusePolicy enumspb.WorkflowIdReusePolicy,
 	conflictPolicy enumspb.WorkflowIdConflictPolicy,
 ) error {
@@ -121,7 +121,7 @@ func (v *Validator) ValidateWorkflowIdReusePolicy(
 	return nil
 }
 
-func (v *Validator) ValidateLinks(
+func (v *RequestValidator) ValidateLinks(
 	ns string,
 	links []*commonpb.Link,
 ) error {
@@ -160,7 +160,7 @@ func (v *Validator) ValidateLinks(
 	return nil
 }
 
-func (v *Validator) UnaliasedSearchAttributesFrom(
+func (v *RequestValidator) UnaliasedSearchAttributesFrom(
 	attributes *commonpb.SearchAttributes,
 	namespaceName string,
 ) (*commonpb.SearchAttributes, error) {
@@ -175,14 +175,14 @@ func (v *Validator) UnaliasedSearchAttributesFrom(
 	return sa, nil
 }
 
-func (v *Validator) ValidateSearchAttributes(searchAttributes *commonpb.SearchAttributes, namespaceName string) error {
+func (v *RequestValidator) ValidateSearchAttributes(searchAttributes *commonpb.SearchAttributes, namespaceName string) error {
 	if err := v.saValidator.Validate(searchAttributes, namespaceName); err != nil {
 		return err
 	}
 	return v.saValidator.ValidateSize(searchAttributes, namespaceName)
 }
 
-func (v *Validator) ValidateSignalWithStartRequest(request *workflowservice.SignalWithStartWorkflowExecutionRequest) error {
+func (v *RequestValidator) ValidateSignalWithStartRequest(request *workflowservice.SignalWithStartWorkflowExecutionRequest) error {
 	if request == nil {
 		return serviceerror.NewInvalidArgument("request is empty")
 	}
@@ -244,8 +244,7 @@ func (v *Validator) ValidateSignalWithStartRequest(request *workflowservice.Sign
 		return serviceerror.NewInvalidArgumentf("Invalid WorkflowIDConflictPolicy: %v is not supported for this operation.", name)
 	}
 
-	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
-	enums.SetDefaultWorkflowIdConflictPolicy(&request.WorkflowIdConflictPolicy, enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)
+	enums.SetDefaultWorkflowIDPolicies(&request.WorkflowIdReusePolicy, &request.WorkflowIdConflictPolicy, enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)
 
 	sa, err := v.UnaliasedSearchAttributesFrom(request.GetSearchAttributes(), request.GetNamespace())
 	if err != nil {
