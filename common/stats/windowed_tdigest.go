@@ -123,7 +123,7 @@ func (w *timeWindowedTDigest) TrimmedMean(lowerQuantile, upperQuantile float64) 
 func (w *timeWindowedTDigest) getMergedWindows() *tdigest.TDigest {
 	windows := w.cloneWindows()
 	var merged *tdigest.TDigest
-	for idx := 0; idx < len(windows); idx++ {
+	for idx := range windows {
 		if windows[idx].tdigest != nil {
 			if merged == nil {
 				merged = windows[idx].tdigest

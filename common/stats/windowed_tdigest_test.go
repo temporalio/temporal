@@ -63,7 +63,7 @@ func countNonEmptyWindows(stats *timeWindowedTDigest) int {
 
 func incrementingData(start time.Time, count int) []RecordingValue {
 	RecordingValues := make([]RecordingValue, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		RecordingValues[i] = RecordingValue{
 			Value: float64(i),
 			Time:  start.Add(time.Duration(i) * time.Second),
