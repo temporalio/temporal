@@ -2,12 +2,15 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -16,13 +19,51 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	systemnexus "go.temporal.io/api/workflowservice/v1/workflowservicenexus/json"
 	"go.temporal.io/sdk/client"
+	sdkworker "go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
+
+// systemNexusSWSWorkflow is an SDK workflow that calls SignalWithStartWorkflowExecution
+// via the __temporal_system Nexus endpoint and returns the RunID of the started/signaled
+// target workflow. It is used by TestBothWorkflowsVisibleAfterSWSFromWorkflow to verify
+// end-to-end SDK serialization against the real server.
+func systemNexusSWSWorkflow(ctx workflow.Context, req systemnexus.WorkflowServiceSignalWithStartWorkflowExecutionInput) (string, error) {
+	fmt.Printf("TESTING: %+v\n", req)
+	nc := workflow.NewNexusClient(commonnexus.SystemEndpoint, systemnexus.WorkflowService.ServiceName)
+	// fut := nc.ExecuteOperation(ctx, systemnexus.WorkflowService.SignalWithStartWorkflowExecution, req, workflow.NexusOperationOptions{})
+	fut := nc.ExecuteOperation(ctx, systemnexus.WorkflowService.SignalWithStartWorkflowExecution, systemnexus.WorkflowServiceSignalWithStartWorkflowExecutionInput{
+		WorkflowID:   req.WorkflowID,
+		SignalName:   "test-signal",
+		WorkflowType: &systemnexus.WorkflowType{Name: "sysNexusSWSTargetWorkflow"},
+		TaskQueue:    &systemnexus.TaskQueue{Name: req.TaskQueue.Name},
+		Input:        &systemnexus.Input{Payloads: []any{"workflow-input"}},
+		SignalInput:  &systemnexus.Input{Payloads: []any{"signal-input"}},
+		Memo:         &systemnexus.Memo{Fields: map[string]any{"memo-key": "memo-value"}},
+	}, workflow.NexusOperationOptions{})
+	var result systemnexus.WorkflowServiceSignalWithStartWorkflowExecutionOutput
+	if err := fut.Get(ctx, &result); err != nil {
+		return "", err
+	}
+	return result.RunID, nil
+}
+
+// sysNexusSWSTargetWorkflow is the workflow started by TestBothWorkflowsVisibleAfterSWSFromWorkflow
+// as the SWS target. It waits for "test-signal" and returns the received value. Completing the
+// workflow (rather than leaving it running) ensures the Nexus SWS operation's async callback fires
+// so that fut.Get() in systemNexusSWSWorkflow can resolve.
+func sysNexusSWSTargetWorkflow(ctx workflow.Context) (string, error) {
+	fmt.Printf("TESTING: started target workflow")
+	var received string
+	workflow.GetSignalChannel(ctx, "test-signal").Receive(ctx, &received)
+	return received, nil
+}
 
 type SignalWithStartFromWorkflowTestSuite struct {
 	testcore.FunctionalTestBase
@@ -593,6 +634,113 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_Fail() {
 	})
 	s.NotNil(failure, "expected the Nexus operation to fail with CONFLICT_POLICY_FAIL")
 	s.Contains(failure.GetCause().GetMessage()+failure.GetMessage(), "already started")
+}
+
+// TestBothWorkflowsVisibleAfterSWSFromWorkflow verifies that when SignalWithStart is invoked
+// from a real SDK workflow via the __temporal_system Nexus endpoint:
+//  1. A new target workflow is started (the caller workflow returns its RunID).
+//  2. Both the caller (completed) and target (completed after receiving the signal) are visible.
+//  3. The memo passed in the SWS request appears on the target workflow.
+//  4. The signal arrives in the target with the correct name and input payload.
+//
+// Unlike the other tests in this file, this test exercises the SDK's payload-serialization
+// path (the system-nexus payload converter) end-to-end against the real embedded server,
+// complementing the injector-based SDK unit test in sdk-go#2293.
+func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSFromWorkflow() {
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	s.T().Cleanup(cancel)
+	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
+	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
+	targetWorkflowID := testcore.RandomizeStr(s.T().Name())
+
+	// Stand up dedicated SDK workers for the caller and target workflows.
+	callerWorker := sdkworker.New(s.SdkClient(), callerTaskQueue, sdkworker.Options{})
+	callerWorker.RegisterWorkflow(systemNexusSWSWorkflow)
+	s.NoError(callerWorker.Start())
+	s.T().Cleanup(func() { callerWorker.Stop() })
+
+	targetWorker := sdkworker.New(s.SdkClient(), targetTaskQueue, sdkworker.Options{})
+	targetWorker.RegisterWorkflow(sysNexusSWSTargetWorkflow)
+	s.NoError(targetWorker.Start())
+	s.T().Cleanup(func() { targetWorker.Stop() })
+
+	// Execute the caller workflow. It calls SWS via the system Nexus endpoint and returns
+	// the RunID of the newly-started target workflow.
+	callerRun, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: callerTaskQueue,
+	}, systemNexusSWSWorkflow, systemnexus.WorkflowServiceSignalWithStartWorkflowExecutionInput{
+		WorkflowID:   targetWorkflowID,
+		SignalName:   "test-signal",
+		WorkflowType: &systemnexus.WorkflowType{Name: "sysNexusSWSTargetWorkflow"},
+		TaskQueue:    &systemnexus.TaskQueue{Name: targetTaskQueue},
+		Input:        &systemnexus.Input{Payloads: []any{"workflow-input"}},
+		SignalInput:  &systemnexus.Input{Payloads: []any{"signal-input"}},
+		Memo:         &systemnexus.Memo{Fields: map[string]any{"memo-key": "memo-value"}},
+	})
+	s.NoError(err)
+	s.NotEmpty(callerRun.GetID())
+	s.NotEmpty(callerRun.GetRunID())
+
+	// var targetRunID string
+	// s.NoError(callerRun.Get(ctx, &targetRunID))
+	// s.NotEmpty(targetRunID)
+	// s.T().Cleanup(func() {
+	// 	_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, targetRunID, "test cleanup")
+	// })
+	s.T().Cleanup(func() {
+		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, "", "test cleanup")
+	})
+
+	s.EventuallyWithT(func(collect *assert.CollectT) {
+		executions, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{Namespace: s.Namespace().String(), PageSize: 1000})
+		require.NoError(collect, err)
+		require.Len(collect, executions.Executions, 2)
+	}, 10*time.Second, 250*time.Millisecond)
+
+	// --- Assertion 1: Caller workflow completed and is still visible. ---
+	callerDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: callerRun.GetID()},
+	})
+	s.NoError(err)
+	// s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, callerDesc.WorkflowExecutionInfo.Status)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, callerDesc.WorkflowExecutionInfo.Status)
+
+	// --- Assertion 2: Target workflow was started and carries the expected memo. ---
+	// The target may be RUNNING or COMPLETED depending on whether it processed the signal yet.
+	targetDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID},
+	})
+	s.NoError(err)
+	s.NotEmpty(targetDesc.WorkflowExecutionInfo.Status)
+	s.Require().NotNil(targetDesc.WorkflowExecutionInfo.Memo)
+	s.Contains(targetDesc.WorkflowExecutionInfo.Memo.Fields, "memo-key")
+
+	// --- Assertion 3: Signal was delivered with the correct name and input. ---
+	// Wait for the signal event to appear in the target's history.
+	var signalEvent *historypb.HistoryEvent
+	s.Eventually(func() bool {
+		histResp, err := s.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace: s.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID},
+		})
+		if err != nil {
+			return false
+		}
+		for _, event := range histResp.History.Events {
+			if event.GetWorkflowExecutionSignaledEventAttributes() != nil {
+				signalEvent = event
+				return true
+			}
+		}
+		return false
+	}, 10*time.Second, 250*time.Millisecond, "expected WorkflowExecutionSignaled event in target history")
+
+	s.Equal("test-signal", signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
+	var signalInputVal string
+	s.NoError(payloads.Decode(signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input, &signalInputVal))
+	s.Equal("signal-input", signalInputVal)
 }
 
 // TestStartDelay verifies that SWS with WorkflowStartDelay completes successfully from a

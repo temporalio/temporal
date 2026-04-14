@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -35,6 +36,7 @@ func (h *workflowServiceNexusHandler) signalWithStartWorkflowExecution(
 	req *workflowservice.SignalWithStartWorkflowExecutionRequest,
 	options nexus.StartOperationOptions,
 ) (*workflowservice.SignalWithStartWorkflowExecutionResponse, error) {
+	fmt.Printf("TESTING: signalWithStartWorkflowExecution")
 	nsID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgumentf("Invalid namespace %q: %v", req.GetNamespace(), err)
@@ -84,6 +86,7 @@ type SignalWithStartOperationProcessor struct {
 }
 
 func (o SignalWithStartOperationProcessor) ProcessInput(ctx chasm.NexusOperationProcessorContext, request *workflowservice.SignalWithStartWorkflowExecutionRequest) (*chasm.NexusOperationProcessorResult, error) {
+	fmt.Printf("TESTING: ProcessInput")
 	if request == nil {
 		return nil, serviceerror.NewInvalidArgument("Request is empty")
 	}
