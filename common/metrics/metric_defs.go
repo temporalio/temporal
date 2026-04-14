@@ -1167,6 +1167,7 @@ var (
 	BufferThrottlePerTaskQueueCounter                 = NewCounterDef("buffer_throttle_count")
 	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired")
 	ForwardedPerTaskQueueCounter                      = NewCounterDef("forwarded_per_tl")
+	PriorityBacklogForwardedPerTaskQueueCounter       = NewCounterDef("priority_backlog_forwarded")
 	ForwardTaskErrorsPerTaskQueue                     = NewCounterDef("forward_task_errors")
 	LocalToLocalMatchPerTaskQueueCounter              = NewCounterDef("local_to_local_matches")
 	LocalToRemoteMatchPerTaskQueueCounter             = NewCounterDef("local_to_remote_matches")
