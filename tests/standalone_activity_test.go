@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	activitypb "go.temporal.io/api/activity/v1"
@@ -29,7 +28,6 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -2857,29 +2855,20 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 			RunId:                  startResp.RunId,
 			RunState:               enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
 			Priority:               startReq.GetPriority(),
+			ScheduleTime:           protorequire.NonZero[*timestamppb.Timestamp](),
 			ScheduleToCloseTimeout: startReq.GetScheduleToCloseTimeout(),
 			ScheduleToStartTimeout: startReq.GetScheduleToStartTimeout(),
 			StartToCloseTimeout:    startReq.GetStartToCloseTimeout(),
+			StateTransitionCount:   protorequire.NonZero[int64](),
 			Status:                 enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 			SearchAttributes:       defaultSearchAttributes,
 			TaskQueue:              taskQueue.Name,
 			UserMetadata:           defaultUserMetadata,
 		}
 
-		diff := cmp.Diff(expected, respInfo,
-			protocmp.Transform(),
-			// Ignore non-deterministic fields. Validated separately.
-			protocmp.IgnoreFields(&activitypb.ActivityExecutionInfo{},
-				"execution_duration",
-				"schedule_time",
-				"state_transition_count",
-			),
-		)
-		require.Empty(t, diff)
+		protorequire.ProtoEqual(t, expected, respInfo)
 		require.Equal(t, respInfo.GetExecutionDuration().AsDuration(), time.Duration(0)) // Never completed, so expect 0
 		require.Nil(t, describeResp.GetInfo().GetCloseTime())
-		require.Positive(t, respInfo.GetScheduleTime().AsTime().Unix())
-		require.Positive(t, respInfo.GetStateTransitionCount())
 
 		protorequire.ProtoEqual(t, defaultInput, describeResp.Input)
 
@@ -2920,23 +2909,16 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 		RetryPolicy:            defaultRetryPolicy,
 		RunId:                  startResp.RunId,
 		RunState:               enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+		ScheduleTime:           protorequire.NonZero[*timestamppb.Timestamp](),
 		SearchAttributes:       &commonpb.SearchAttributes{},
 		ScheduleToCloseTimeout: durationpb.New(0),
 		ScheduleToStartTimeout: durationpb.New(0),
 		StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+		StateTransitionCount:   protorequire.NonZero[int64](),
 		Status:                 enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 		TaskQueue:              taskQueue.Name,
 	}
-	diff := cmp.Diff(expected, firstDescribeResp.GetInfo(),
-		protocmp.Transform(),
-		// Ignore non-deterministic fields. Validated separately.
-		protocmp.IgnoreFields(&activitypb.ActivityExecutionInfo{},
-			"execution_duration",
-			"schedule_time",
-			"state_transition_count",
-		),
-	)
-	require.Empty(t, diff)
+	protorequire.ProtoEqual(t, expected, firstDescribeResp.GetInfo())
 
 	taskQueuePollErr := make(chan error, 1)
 	activityPollDone := make(chan struct{})
@@ -2974,28 +2956,21 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 			ActivityType:           s.tv.ActivityType(),
 			Attempt:                1,
 			HeartbeatTimeout:       durationpb.New(0),
+			LastStartedTime:        protorequire.NonZero[*timestamppb.Timestamp](),
 			LastWorkerIdentity:     defaultIdentity,
 			RetryPolicy:            defaultRetryPolicy,
 			RunId:                  startResp.RunId,
 			RunState:               enumspb.PENDING_ACTIVITY_STATE_STARTED,
+			ScheduleTime:           protorequire.NonZero[*timestamppb.Timestamp](),
 			ScheduleToCloseTimeout: durationpb.New(0),
 			ScheduleToStartTimeout: durationpb.New(0),
 			SearchAttributes:       &commonpb.SearchAttributes{},
 			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+			StateTransitionCount:   protorequire.NonZero[int64](),
 			Status:                 enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 			TaskQueue:              taskQueue.Name,
 		}
-		diff := cmp.Diff(expected, describeResp.GetInfo(),
-			protocmp.Transform(),
-			// Ignore non-deterministic fields. Validated separately.
-			protocmp.IgnoreFields(&activitypb.ActivityExecutionInfo{},
-				"execution_duration",
-				"last_started_time",
-				"schedule_time",
-				"state_transition_count",
-			),
-		)
-		require.Empty(t, diff)
+		protorequire.ProtoEqual(t, expected, describeResp.GetInfo())
 
 		protorequire.ProtoEqual(t, defaultInput, describeResp.Input)
 

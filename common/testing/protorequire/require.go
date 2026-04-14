@@ -1,6 +1,8 @@
 package protorequire
 
 import (
+	"fmt"
+
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/testing/protoassert"
 	"google.golang.org/protobuf/proto"
@@ -22,7 +24,33 @@ func ProtoEqual(t require.TestingT, a proto.Message, b proto.Message) {
 	if th, ok := t.(helper); ok {
 		th.Helper()
 	}
-	if !protoassert.ProtoEqual(t, a, b) {
+
+	// Find sentinels on the original message (pointer identity requires the
+	// original, not a clone).
+	paths := findSentinelPaths(a.ProtoReflect())
+	if len(paths) == 0 {
+		if !protoassert.ProtoEqual(t, a, b) {
+			t.FailNow()
+		}
+		return
+	}
+
+	// Validate sentinel fields against the actual message.
+	for _, p := range paths {
+		if !validateSentinel(b, p) {
+			require.Fail(t, fmt.Sprintf("expected field %q to be non-zero", p))
+		}
+	}
+
+	// Clone both messages, clear sentinel fields, then diff.
+	cleanA := proto.Clone(a)
+	cleanB := proto.Clone(b)
+	for _, p := range paths {
+		clearField(cleanA, p)
+		clearField(cleanB, p)
+	}
+
+	if !protoassert.ProtoEqual(t, cleanA, cleanB) {
 		t.FailNow()
 	}
 }
@@ -53,9 +81,7 @@ func (x ProtoAssertions) ProtoEqual(a proto.Message, b proto.Message) {
 	if th, ok := x.t.(helper); ok {
 		th.Helper()
 	}
-	if !protoassert.ProtoEqual(x.t, a, b) {
-		x.t.FailNow()
-	}
+	ProtoEqual(x.t, a, b)
 }
 
 func (x ProtoAssertions) NotProtoEqual(a proto.Message, b proto.Message) {
