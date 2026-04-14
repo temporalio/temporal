@@ -59,7 +59,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 	tv := testvars.New(s.T())
 
 	inputBound := &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-		MaxSkippedDuration: durationpb.New(10 * time.Second),
+		MaxSkippedDuration: durationpb.New(time.Hour),
 	}
 
 	resp, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
@@ -91,7 +91,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_SignalWithStart_DCEnabled() {
 	tv := testvars.New(s.T())
 
 	inputBound := &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
-		MaxElapsedDuration: durationpb.New(10 * time.Second),
+		MaxElapsedDuration: durationpb.New(time.Hour),
 	}
 
 	resp, err := env.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -126,12 +126,13 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ExecuteMultiOperation_DCEnabled
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
+	maxSkippedDuration := time.Hour
 
 	inputConfig := &workflowpb.TimeSkippingConfig{
 		Enabled:            true,
 		DisablePropagation: true,
 		Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-			MaxSkippedDuration: durationpb.New(30 * time.Second),
+			MaxSkippedDuration: durationpb.New(maxSkippedDuration),
 		},
 	}
 
