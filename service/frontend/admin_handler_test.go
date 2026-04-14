@@ -2214,7 +2214,7 @@ func (s *adminHandlerSuite) TestGetTaskQueueUserData() {
 		},
 	}
 	for _, tc := range errorCases {
-		s.T().Run(tc.Name, func(t *testing.T) {
+		s.Run(tc.Name, func() {
 			resp, err := handler.GetTaskQueueUserData(ctx, tc.Request)
 			s.Equal(tc.Expected, err)
 			s.Nil(resp)
@@ -2222,7 +2222,7 @@ func (s *adminHandlerSuite) TestGetTaskQueueUserData() {
 	}
 
 	// Namespace registry error is propagated before matching is called.
-	s.T().Run("namespace not found", func(t *testing.T) {
+	s.Run("namespace not found", func() {
 		s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.ID(""), serviceerror.NewNotFound("Namespace nonexistent is not found."))
 		resp, err := handler.GetTaskQueueUserData(ctx, &adminservice.GetTaskQueueUserDataRequest{
 			Namespace: "nonexistent",
@@ -2233,7 +2233,7 @@ func (s *adminHandlerSuite) TestGetTaskQueueUserData() {
 	})
 
 	// Task queue name starting with /_sys/ is rejected by tqid.NewTaskQueueFamily before matching is called.
-	s.T().Run("invalid task queue name", func(t *testing.T) {
+	s.Run("invalid task queue name", func() {
 		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
 		resp, err := handler.GetTaskQueueUserData(ctx, &adminservice.GetTaskQueueUserDataRequest{
 			Namespace: s.namespace.String(),
@@ -2244,7 +2244,7 @@ func (s *adminHandlerSuite) TestGetTaskQueueUserData() {
 	})
 
 	// Root partition (partition_id=0) sends bare task queue name to matching.
-	s.T().Run("root partition", func(t *testing.T) {
+	s.Run("root partition", func() {
 		perTypeData := &persistencespb.TaskQueueTypeUserData{}
 		matchingReq := &matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:                   s.namespaceID.String(),
@@ -2278,7 +2278,7 @@ func (s *adminHandlerSuite) TestGetTaskQueueUserData() {
 	})
 
 	// Non-root partition (partition_id=1) sends mangled name /_sys/my-queue/1 to matching.
-	s.T().Run("non-root partition", func(t *testing.T) {
+	s.Run("non-root partition", func() {
 		matchingReq := &matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:                   s.namespaceID.String(),
 			TaskQueue:                     "/_sys/my-queue/1",
@@ -2303,7 +2303,7 @@ func (s *adminHandlerSuite) TestGetTaskQueueUserData() {
 	})
 
 	// Empty per_type map: UserData is nil, but Version is still populated.
-	s.T().Run("no per-type data", func(t *testing.T) {
+	s.Run("no per-type data", func() {
 		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
 		s.mockMatchingClient.EXPECT().GetTaskQueueUserData(ctx, gomock.Any()).Return(
 			&matchingservice.GetTaskQueueUserDataResponse{
@@ -2325,7 +2325,7 @@ func (s *adminHandlerSuite) TestGetTaskQueueUserData() {
 	})
 
 	// Matching error is propagated to the caller.
-	s.T().Run("matching error", func(t *testing.T) {
+	s.Run("matching error", func() {
 		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
 		s.mockMatchingClient.EXPECT().GetTaskQueueUserData(ctx, gomock.Any()).Return(
 			nil, serviceerror.NewUnavailable("matching unavailable"),
