@@ -2221,13 +2221,14 @@ func (s *historyBuilderSuite) TestHasBufferEvent() {
 func (s *historyBuilderSuite) TestBufferEvent() {
 	// workflow status events will be assign event ID immediately
 	workflowEvents := map[enumspb.EventType]bool{
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:          true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:        true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:           true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:        true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:       true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW: true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:         true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:                    true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:                  true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:                     true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:                  true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:                 true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:           true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:                   true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED: true,
 	}
 
 	// workflow task events will be assign event ID immediately
@@ -2573,6 +2574,34 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated_NilSearch
 	s.Len(attrs.SearchAttributes.IndexedFields, 1)
 	s.NotNil(attrs.SearchAttributes.IndexedFields["validKey"])
 	s.Nil(attrs.SearchAttributes.IndexedFields["nilKey"])
+}
+
+func (s *historyBuilderSuite) TestAddWorkflowExecutionTimeSkippingTransitionedEvent() {
+	targetTime := s.now.Add(2 * time.Hour)
+
+	s.Run("WorkerMayIgnoreAndAttributesPopulated", func() {
+		event := s.historyBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(targetTime, false)
+
+		s.NotNil(event)
+		s.True(event.WorkerMayIgnore)
+		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED, event.EventType)
+
+		attrs := event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
+		s.NotNil(attrs)
+		s.NotNil(attrs.TargetTime)
+		s.Equal(targetTime, attrs.TargetTime.AsTime())
+		s.NotNil(attrs.WallClockTime)
+		s.False(attrs.DisabledAfterBound)
+	})
+
+	s.Run("DisabledAfterBoundPropagated", func() {
+		event := s.historyBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(targetTime, true)
+
+		attrs := event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
+		s.NotNil(attrs)
+		s.True(attrs.DisabledAfterBound)
+		s.True(event.WorkerMayIgnore)
+	})
 }
 
 func (s *historyBuilderSuite) payloadEncode(value any) (*commonpb.Payload, error) {

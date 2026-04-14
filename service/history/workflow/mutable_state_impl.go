@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -3938,6 +3939,127 @@ func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
 	)
 }
 
+// ShouldExecuteTimeSkipping checks if one mutable state should execute time skipping,
+// i.e. there is no in-flight work and there is a time point to skip to.
+func (ms *MutableStateImpl) ShouldExecuteTimeSkipping() bool {
+
+	tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
+	if tsi == nil {
+		return false
+	}
+	config := tsi.Config
+	if config == nil || !config.Enabled {
+		return false
+	}
+
+	noSkippingReason := ""
+	defer func() {
+		if noSkippingReason != "" {
+			ms.logger.Debug(fmt.Sprintf("no auto time skipping allowed: %s", noSkippingReason),
+				tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
+				tag.WorkflowRunID(ms.GetExecutionState().RunId),
+			)
+		}
+	}()
+
+	// pending work exists
+	if !ms.IsWorkflowExecutionRunning() {
+		noSkippingReason = "workflow is not running"
+		return false
+	}
+	if ms.HasPendingWorkflowTask() {
+		noSkippingReason = "pending workflow task"
+		return false
+	}
+	if len(ms.GetPendingActivityInfos()) > 0 {
+		noSkippingReason = "pending activity"
+		return false
+	}
+	if len(ms.GetPendingChildExecutionInfos()) > 0 {
+		noSkippingReason = "pending child execution"
+		return false
+	}
+	if nexusoperations.MachineCollection(ms.HSM()).Size() > 0 {
+		noSkippingReason = "pending Nexus operations"
+		return false
+	}
+
+	// TODO@time-skipping: This function needs special handling for pending external transfer tasks
+	// (signals and cancel requests), as their completion is not guaranteed to trigger
+	// a mutable state mutation — and without one, time skipping won't be re-triggered.
+	// We need a separate mechanism to catch these missed trigger opportunities.
+
+	if len(ms.GetPendingTimerInfos()) == 0 && config.GetBound() == nil {
+		noSkippingReason = "no related time to skip to"
+		return false
+	}
+	return true
+}
+
+// AddWorkflowExecutionTimeSkippingTransitionedEvent adds a workflow execution time skipping transitioned event to the mutable state.
+// This should be called only when IsTimeSkippingAutoSkippable returns true.
+func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context) (*historypb.HistoryEvent, error) {
+
+	opTag := tag.WorkflowActionWorkflowExecutionTimeSkippingTransitioned
+	if err := ms.checkMutability(opTag); err != nil {
+		return nil, err
+	}
+
+	// The event shall at least has one of skipped duration or disabled after bound flag.
+	// TODO@time-skipping: calculation of disabledAfterBound
+	disabledAfterBound := false
+
+	// get the earliest pending timer info
+	// generate the time-skipping transitioned event
+	// TODO@time-skipping: calculate the minimum of next user timer and time bound
+	var earliestTimerInfo *persistencespb.TimerInfo
+	for _, timerInfo := range ms.GetPendingTimerInfos() {
+		if earliestTimerInfo == nil || timerInfo.ExpiryTime.AsTime().Before(earliestTimerInfo.ExpiryTime.AsTime()) {
+			earliestTimerInfo = timerInfo
+		}
+	}
+	if !disabledAfterBound && earliestTimerInfo == nil {
+		return nil, serviceerror.NewInternal("time skipping is triggered when there is no pending timer info")
+	}
+	targetTime := earliestTimerInfo.ExpiryTime.AsTime()
+
+	// build and apply the event
+	event := ms.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(targetTime, disabledAfterBound)
+	return event, ms.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx, event)
+}
+
+// ApplyWorkflowExecutionTimeSkippingTransitionedEvent applies the WorkflowExecutionTimeSkippingTransitionedEvent to the mutable state,
+// and regenerate all pending timer tasks if necessary.
+func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error {
+
+	attr := event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
+	skippedDuration := attr.GetTargetTime().AsTime().Sub(event.GetEventTime().AsTime())
+	disabledAfterBound := attr.GetDisabledAfterBound()
+
+	// update TimeSkippingInfo in ms
+	if ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration == nil {
+		ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(skippedDuration)
+	} else {
+		ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(
+			ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration() + skippedDuration,
+		)
+	}
+
+	if disabledAfterBound {
+		ms.executionInfo.TimeSkippingInfo.Config.Enabled = false
+	}
+
+	if skippedDuration > 0 {
+		return NewTaskRefresher(ms.shard).Refresh(ctx, ms, false)
+	}
+	return nil
+}
+
+func (ms *MutableStateImpl) GetTimeSkippingVirtualTime() time.Time {
+	offset := ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
+	return ms.timeSource.Now().Add(offset.AsDuration())
+}
+
 func (ms *MutableStateImpl) ApplyWorkflowTaskFailedEvent() error {
 	return ms.workflowTaskManager.ApplyWorkflowTaskFailedEvent()
 }
@@ -7016,6 +7138,9 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 		Checksum:        result.checksum,
 	}
 
+	// todo: close transaction as snapshot may also need time skipping
+	// for features like start-with-delay feature that has something to skip before the first workflow task is scheduled.
+
 	ms.checksum = result.checksum
 	if err := ms.cleanupTransaction(); err != nil {
 		return nil, nil, err
@@ -7108,6 +7233,19 @@ func (ms *MutableStateImpl) closeTransaction(
 		transactionPolicy,
 	); err != nil {
 		return closeTransactionResult{}, err
+	}
+
+	// adjust time skipping info, and this should be after closeTransactionHandleWorkflowTask because
+	if ms.ShouldExecuteTimeSkipping() {
+		if _, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx); err != nil {
+			ms.metricsHandler.Counter(metrics.ExecutionTimeSkippingTransitionedErrorCounter.Name()).Record(1)
+			ms.logger.Error(
+				"failed to add workflow execution time skipping transitioned event, and ignore this error and continue",
+				tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
+				tag.WorkflowRunID(ms.GetExecutionState().RunId),
+				tag.Error(err),
+			)
+		}
 	}
 
 	// Save if the state is dirty before closeTransactionPrepareEvents since it flushes the buffer

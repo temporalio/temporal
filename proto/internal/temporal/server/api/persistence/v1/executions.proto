@@ -321,11 +321,14 @@ message WorkflowExecutionInfo {
 }
 
 message TimeSkippingInfo {
-  // The config for the time skipping for the workflow.
+  // Current tconfiguration for the workflow.
   temporal.api.workflow.v1.TimeSkippingConfig config = 1;
 
-// TODO: runtime details to be added later
+  // Runtime history of time skipping for the workflow.
+  google.protobuf.Duration accumulated_skipped_duration = 2;
 }
+
+
 
 // Internal wrapper message to distinguish "never notified" (nil wrapper) from
 // "notified about an unversioned target" (non-nil wrapper with nil deployment_version).

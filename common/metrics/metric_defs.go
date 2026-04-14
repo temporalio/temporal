@@ -1149,6 +1149,9 @@ var (
 	NamespaceRegistryRefreshFailures    = NewCounterDef("namespace_registry_refresh_failures")
 	NamespaceRegistryRefreshLatency     = NewTimerDef("namespace_registry_refresh_latency")
 
+	ExecutionTimeSkippingTransitionedCounter      = NewCounterDef("execution_time_skipping_transitioned_count")
+	ExecutionTimeSkippingTransitionedErrorCounter = NewCounterDef("execution_time_skipping_transitioned_error_count")
+
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
 	MatchingClientInvalidTaskQueueName        = NewCounterDef("invalid_task_queue_name")
