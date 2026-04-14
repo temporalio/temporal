@@ -315,6 +315,16 @@ message WorkflowExecutionInfo {
   //
   // Wrapper distinguishes "never declined" (nil) from "declined unversioned" (non-nil, nil version).
   temporal.api.history.v1.DeclinedTargetVersionUpgrade declined_target_version_upgrade = 114;
+
+  // Time skipping info that contains the config and runtime history of the time skipping for the workflow.
+  TimeSkippingInfo time_skipping_info = 115;
+}
+
+message TimeSkippingInfo {
+  // The config for the time skipping for the workflow.
+  temporal.api.workflow.v1.TimeSkippingConfig config = 1;
+
+// TODO: runtime details to be added later
 }
 
 // Internal wrapper message to distinguish "never notified" (nil wrapper) from

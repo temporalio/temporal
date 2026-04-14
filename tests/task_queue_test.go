@@ -963,7 +963,6 @@ func (s *TaskQueueSuite) TestTaskDispatchLatencyMetric_Nexus() {
 
 func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(s *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, forwardDelay time.Duration)) {
 	baseOpts := []testcore.TestOption{
-		testcore.WithDynamicConfig(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 3),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingEmitTaskDispatchLatencyAtPoll, true),
 	}
 

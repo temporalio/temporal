@@ -1394,7 +1394,9 @@ func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb
 	// for now, only sticky partitions act on ephemeral data, normal partitions ignore it.
 	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
 		return
-	} else if !pm.defaultQueueFuture.Ready() {
+	}
+	dbq, err := pm.defaultQueueFuture.GetIfReady()
+	if err != nil {
 		return // not initialized yet
 	}
 
@@ -1424,7 +1426,6 @@ func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb
 		pqm.UpdateRemotePriorityBacklogs(updates[key])
 	}
 
-	dbq := pm.defaultQueue()
 	if dbq != nil {
 		update(PhysicalTaskQueueVersion{}, dbq)
 	}
