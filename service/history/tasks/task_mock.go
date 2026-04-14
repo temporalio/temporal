@@ -215,42 +215,42 @@ func (mr *MockHasVersionMockRecorder) GetVersion() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersion", reflect.TypeOf((*MockHasVersion)(nil).GetVersion))
 }
 
-// MockHasStateMachineTaskType is a mock of HasStateMachineTaskType interface.
-type MockHasStateMachineTaskType struct {
+// MockHasStateMachineTaskGroup is a mock of HasStateMachineTaskGroup interface.
+type MockHasStateMachineTaskGroup struct {
 	ctrl     *gomock.Controller
-	recorder *MockHasStateMachineTaskTypeMockRecorder
+	recorder *MockHasStateMachineTaskGroupMockRecorder
 	isgomock struct{}
 }
 
-// MockHasStateMachineTaskTypeMockRecorder is the mock recorder for MockHasStateMachineTaskType.
-type MockHasStateMachineTaskTypeMockRecorder struct {
-	mock *MockHasStateMachineTaskType
+// MockHasStateMachineTaskGroupMockRecorder is the mock recorder for MockHasStateMachineTaskGroup.
+type MockHasStateMachineTaskGroupMockRecorder struct {
+	mock *MockHasStateMachineTaskGroup
 }
 
-// NewMockHasStateMachineTaskType creates a new mock instance.
-func NewMockHasStateMachineTaskType(ctrl *gomock.Controller) *MockHasStateMachineTaskType {
-	mock := &MockHasStateMachineTaskType{ctrl: ctrl}
-	mock.recorder = &MockHasStateMachineTaskTypeMockRecorder{mock}
+// NewMockHasStateMachineTaskGroup creates a new mock instance.
+func NewMockHasStateMachineTaskGroup(ctrl *gomock.Controller) *MockHasStateMachineTaskGroup {
+	mock := &MockHasStateMachineTaskGroup{ctrl: ctrl}
+	mock.recorder = &MockHasStateMachineTaskGroupMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockHasStateMachineTaskType) EXPECT() *MockHasStateMachineTaskTypeMockRecorder {
+func (m *MockHasStateMachineTaskGroup) EXPECT() *MockHasStateMachineTaskGroupMockRecorder {
 	return m.recorder
 }
 
-// StateMachineTaskType mocks base method.
-func (m *MockHasStateMachineTaskType) StateMachineTaskType() string {
+// StateMachineTaskGroup mocks base method.
+func (m *MockHasStateMachineTaskGroup) StateMachineTaskGroup() string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StateMachineTaskType")
+	ret := m.ctrl.Call(m, "StateMachineTaskGroup")
 	ret0, _ := ret[0].(string)
 	return ret0
 }
 
-// StateMachineTaskType indicates an expected call of StateMachineTaskType.
-func (mr *MockHasStateMachineTaskTypeMockRecorder) StateMachineTaskType() *gomock.Call {
+// StateMachineTaskGroup indicates an expected call of StateMachineTaskGroup.
+func (mr *MockHasStateMachineTaskGroupMockRecorder) StateMachineTaskGroup() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StateMachineTaskType", reflect.TypeOf((*MockHasStateMachineTaskType)(nil).StateMachineTaskType))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StateMachineTaskGroup", reflect.TypeOf((*MockHasStateMachineTaskGroup)(nil).StateMachineTaskGroup))
 }
 
 // MockHasDestination is a mock of HasDestination interface.

@@ -68,6 +68,7 @@ type ChasmTask struct {
 	Info                   *persistencespb.ChasmTaskInfo
 
 	// In-memory only
+	TaskGroup        string
 	DeserializedTask reflect.Value
 }
 
@@ -105,6 +106,15 @@ func (t *ChasmTask) GetVisibilityTime() time.Time {
 func (t *ChasmTask) SetVisibilityTime(timestamp time.Time) {
 	t.VisibilityTimestamp = timestamp
 }
+
 func (t *ChasmTask) GetArchetypeID() uint32 {
 	return t.Info.GetArchetypeId()
+}
+
+func (t *ChasmTask) GetDestination() string {
+	return t.Destination
+}
+
+func (t *ChasmTask) StateMachineTaskGroup() string {
+	return t.TaskGroup
 }
