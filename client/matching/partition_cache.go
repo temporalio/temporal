@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/goro"
+	"go.temporal.io/server/common/metrics"
 )
 
 // Shards should be a power of 2.
@@ -20,7 +21,9 @@ const partitionCacheRotateInterval = time.Hour
 // It uses a sharded map+mutex and periodic rotation for efficiency.
 type partitionCache struct {
 	shards [partitionCacheNumShards]partitionCacheShard
-	rotate *goro.Handle
+
+	metricsHandler metrics.Handler
+	rotate         *goro.Handle
 }
 
 type partitionCacheShard struct {
@@ -31,8 +34,12 @@ type partitionCacheShard struct {
 }
 
 // newPartitionCache returns a new partitionCache. Start() must be called before using it.
-func newPartitionCache() *partitionCache {
-	return &partitionCache{}
+func newPartitionCache(
+	metricsHandler metrics.Handler,
+) *partitionCache {
+	return &partitionCache{
+		metricsHandler: metricsHandler,
+	}
 }
 
 func (c *partitionCache) Start() {
@@ -46,6 +53,7 @@ func (c *partitionCache) Start() {
 			select {
 			case <-t.C:
 				c.shards[i].rotate()
+				c.emitMetrics()
 			case <-ctx.Done():
 				return ctx.Err()
 			}
@@ -55,6 +63,14 @@ func (c *partitionCache) Start() {
 
 func (c *partitionCache) Stop() {
 	c.rotate.Cancel()
+}
+
+func (c *partitionCache) emitMetrics() {
+	totalSize := 0
+	for i := range c.shards {
+		totalSize += c.shards[i].size()
+	}
+	metrics.PartitionCacheSize.With(c.metricsHandler).Record(float64(totalSize))
 }
 
 func (*partitionCache) makeKey(
@@ -115,4 +131,10 @@ func (s *partitionCacheShard) rotate() {
 	defer s.lock.Unlock()
 	s.prev = s.active
 	s.active = make(map[string]PartitionCounts)
+}
+
+func (s *partitionCacheShard) size() int {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return len(s.prev) + len(s.active)
 }

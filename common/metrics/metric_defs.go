@@ -1242,6 +1242,11 @@ var (
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 
+	PartitionCacheSize = NewGaugeDef(
+		"partition_cache_size",
+		WithDescription("Size of client-size matching partition cache (# entries)"),
+	)
+
 	// Versioning and Reachability
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")
 

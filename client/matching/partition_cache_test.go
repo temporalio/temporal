@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/metrics"
 )
 
 // Using a fixed UUID so tests are deterministic. Must be valid UUID format for makeKey.
@@ -13,7 +14,7 @@ const testNsID = "f47ac10b-58cc-4372-a567-0e02b2c3d479"
 
 func TestPartitionCache_BasicPutLookup(t *testing.T) {
 	t.Parallel()
-	c := newPartitionCache()
+	c := newPartitionCache(metrics.NoopMetricsHandler)
 	c.Start()
 	defer c.Stop()
 
@@ -42,7 +43,7 @@ func TestPartitionCache_BasicPutLookup(t *testing.T) {
 
 func TestPartitionCache_Rotate(t *testing.T) {
 	t.Parallel()
-	c := newPartitionCache()
+	c := newPartitionCache(metrics.NoopMetricsHandler)
 	c.Start()
 	defer c.Stop()
 
@@ -69,7 +70,7 @@ func TestPartitionCache_Rotate(t *testing.T) {
 
 func TestPartitionCache_ConcurrentAccess(t *testing.T) {
 	t.Parallel()
-	c := newPartitionCache()
+	c := newPartitionCache(metrics.NoopMetricsHandler)
 	c.Start()
 	defer c.Stop()
 

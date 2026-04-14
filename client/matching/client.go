@@ -59,7 +59,7 @@ func NewClient(
 		logger:          logger,
 		loadBalancer:    lb,
 		spreadRouting:   spreadRouting,
-		partitionCache:  newPartitionCache(),
+		partitionCache:  newPartitionCache(metricsHandler),
 	}
 
 	// Start goroutine to prune partition count cache.
