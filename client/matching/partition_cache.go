@@ -11,7 +11,7 @@ import (
 )
 
 // Shards should be a power of 2.
-const partitionCacheShards = 8
+const partitionCacheNumShards = 8
 
 // How long for a full rotation of the cache.
 const partitionCacheRotateInterval = time.Hour
@@ -19,7 +19,7 @@ const partitionCacheRotateInterval = time.Hour
 // partitionCache is a cache of PartitionCounts values for task queues.
 // It uses a sharded map+mutex and periodic rotation for efficiency.
 type partitionCache struct {
-	shards [partitionCacheShards]partitionCacheShard
+	shards [partitionCacheNumShards]partitionCacheShard
 	rotate *goro.Handle
 }
 
@@ -27,7 +27,7 @@ type partitionCacheShard struct {
 	lock   sync.RWMutex
 	active map[string]PartitionCounts
 	prev   map[string]PartitionCounts
-	_      [64 - 24 - 8 - 8]byte // eliminate false sharing
+	_      [64 - 24 - 8 - 8]byte // force to different cache lines to eliminate false sharing
 }
 
 // newPartitionCache returns a new partitionCache. Start() must be called before using it.
@@ -40,8 +40,9 @@ func (c *partitionCache) Start() {
 		c.shards[i].rotate()
 	}
 	c.rotate = goro.NewHandle(context.Background()).Go(func(ctx context.Context) error {
-		t := time.NewTicker(partitionCacheRotateInterval / partitionCacheShards)
-		for i := 0; ; i = (i + 1) % partitionCacheShards {
+		t := time.NewTicker(partitionCacheRotateInterval / partitionCacheNumShards)
+		defer t.Stop()
+		for i := 0; ; i = (i + 1) % partitionCacheNumShards {
 			select {
 			case <-t.C:
 				c.shards[i].rotate()
@@ -73,7 +74,7 @@ func (*partitionCache) shardFromKey(key string) int {
 	// mix a few bits to pick a shard
 	l := len(key)
 	shard := int(key[min(14, l-3)] ^ key[l-2] ^ key[l-1])
-	return shard % partitionCacheShards
+	return shard % partitionCacheNumShards
 }
 
 func (c *partitionCache) lookup(key string) PartitionCounts {
