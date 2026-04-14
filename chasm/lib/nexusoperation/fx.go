@@ -33,7 +33,7 @@ var Module = fx.Module(
 	fx.Provide(defaultNexusTransportProvider),
 	fx.Provide(clientProviderFactory),
 	fx.Provide(newCancellationBackoffTaskHandler),
-	fx.Provide(newCancellationTaskHandler),
+	fx.Provide(newCancellationInvocationTaskHandler),
 	fx.Provide(newOperationBackoffTaskHandler),
 	fx.Provide(newOperationInvocationTaskHandler),
 	fx.Provide(newOperationScheduleToCloseTimeoutTaskHandler),
