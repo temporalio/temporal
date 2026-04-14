@@ -116,10 +116,12 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
 	lib.EXPECT().NexusServices().Return(nil)
 	lib.EXPECT().NexusServiceProcessors().Return(nil)
 
+	mockSEHandler := chasm.NewMockSideEffectTaskHandler[*chasm.MockComponent, testTask1](ctrl)
+	mockSEHandler.EXPECT().TaskGroup().Return("").AnyTimes()
 	lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{
 		chasm.NewRegistrableSideEffectTask(
 			"Task1",
-			chasm.NewMockSideEffectTaskHandler[*chasm.MockComponent, testTask1](ctrl),
+			mockSEHandler,
 		),
 		chasm.NewRegistrablePureTask(
 			"Task2",
@@ -395,6 +397,8 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Error() {
 	})
 
 	s.T().Run("task is already registered by name", func(t *testing.T) {
+		mockSEHandler2 := chasm.NewMockSideEffectTaskHandler[*chasm.MockComponent, testTask1](ctrl)
+		mockSEHandler2.EXPECT().TaskGroup().Return("").AnyTimes()
 		lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{
 			chasm.NewRegistrablePureTask[*chasm.MockComponent, testTask1](
 				"Task1",
@@ -402,7 +406,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Error() {
 			),
 			chasm.NewRegistrableSideEffectTask[*chasm.MockComponent, testTask1](
 				"Task1",
-				chasm.NewMockSideEffectTaskHandler[*chasm.MockComponent, testTask1](ctrl),
+				mockSEHandler2,
 			),
 		})
 		r := chasm.NewRegistry(s.logger)

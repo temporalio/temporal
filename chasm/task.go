@@ -36,6 +36,9 @@ type (
 		// The ctx carries engine access, but implementations must avoid mutating component state on standby
 		// clusters.
 		Discard(context.Context, ComponentRef, TaskAttributes, T) error
+
+		// TaskGroup returns an identifier used to group side-effect tasks together for outbound circuit breaking
+		TaskGroup() string
 		sideEffectTaskHandler()
 	}
 

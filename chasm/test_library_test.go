@@ -19,12 +19,20 @@ type TestLibrary struct {
 func newTestLibrary(
 	controller *gomock.Controller,
 ) *TestLibrary {
+	mockSEHandler := NewMockSideEffectTaskHandler[any, *TestSideEffectTask](controller)
+	mockDiscardHandler := NewMockSideEffectTaskHandler[any, *TestDiscardableSideEffectTask](controller)
+	mockOutboundHandler := NewMockSideEffectTaskHandler[any, TestOutboundSideEffectTask](controller)
+
+	mockSEHandler.EXPECT().TaskGroup().Return("").AnyTimes()
+	mockDiscardHandler.EXPECT().TaskGroup().Return("").AnyTimes()
+	mockOutboundHandler.EXPECT().TaskGroup().Return("").AnyTimes()
+
 	return &TestLibrary{
 		controller: controller,
 
-		mockSideEffectTaskHandler:         NewMockSideEffectTaskHandler[any, *TestSideEffectTask](controller),
-		mockDiscardableSideEffectHandler:  NewMockSideEffectTaskHandler[any, *TestDiscardableSideEffectTask](controller),
-		mockOutboundSideEffectTaskHandler: NewMockSideEffectTaskHandler[any, TestOutboundSideEffectTask](controller),
+		mockSideEffectTaskHandler:         mockSEHandler,
+		mockDiscardableSideEffectHandler:  mockDiscardHandler,
+		mockOutboundSideEffectTaskHandler: mockOutboundHandler,
 		mockPureTaskHandler:               NewMockPureTaskHandler[any, *TestPureTask](controller),
 	}
 }

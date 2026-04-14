@@ -68,6 +68,20 @@ func (mr *MockSideEffectTaskHandlerMockRecorder[C, T]) Execute(arg0, arg1, arg2,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockSideEffectTaskHandler[C, T])(nil).Execute), arg0, arg1, arg2, arg3)
 }
 
+// TaskGroup mocks base method.
+func (m *MockSideEffectTaskHandler[C, T]) TaskGroup() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TaskGroup")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// TaskGroup indicates an expected call of TaskGroup.
+func (mr *MockSideEffectTaskHandlerMockRecorder[C, T]) TaskGroup() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TaskGroup", reflect.TypeOf((*MockSideEffectTaskHandler[C, T])(nil).TaskGroup))
+}
+
 // Validate mocks base method.
 func (m *MockSideEffectTaskHandler[C, T]) Validate(arg0 Context, arg1 C, arg2 TaskAttributes, arg3 T) (bool, error) {
 	m.ctrl.T.Helper()

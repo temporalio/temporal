@@ -10,6 +10,8 @@ func (SideEffectTaskHandlerBase[T]) Discard(_ context.Context, _ ComponentRef, _
 	return ErrTaskDiscarded
 }
 
+func (SideEffectTaskHandlerBase[T]) TaskGroup() string { return "" }
+
 func (SideEffectTaskHandlerBase[T]) sideEffectTaskHandler() {}
 
 // PureTaskHandlerBase must be embedded in all pure task handler implementations.

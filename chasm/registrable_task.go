@@ -16,6 +16,7 @@ type (
 		sideEffectTaskExecuteFn sideEffectTaskExecuteFn
 		sideEffectTaskDiscardFn sideEffectTaskDiscardFn
 		isPureTask              bool
+		sideEffectTaskGroup     string
 
 		// Those two fields are initialized when the component is registered to a library.
 		library    namer
@@ -68,6 +69,7 @@ func NewRegistrableSideEffectTask[C any, T any](
 		func(ctx context.Context, ref ComponentRef, attrs TaskAttributes, task any) error {
 			return handler.Discard(ctx, ref, attrs, task.(T))
 		},
+		handler.TaskGroup(),
 		opts...,
 	)
 }
@@ -112,6 +114,7 @@ func NewRegistrablePureTask[C any, T any](
 		nil, // sideEffectTaskExecuteFn is not used for pure tasks
 		true,
 		nil, // sideEffectTaskDiscardFn is not used for pure tasks
+		"",  // sideEffectTaskGroup is not used for pure tasks
 		opts...,
 	)
 }
@@ -124,6 +127,7 @@ func newRegistrableTask(
 	sideEffectTaskExecuteFn sideEffectTaskExecuteFn,
 	isPureTask bool,
 	sideEffectTaskDiscardFn sideEffectTaskDiscardFn,
+	sideEffectTaskGroup string,
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
 	rt := &RegistrableTask{
@@ -135,6 +139,7 @@ func newRegistrableTask(
 		sideEffectTaskExecuteFn: sideEffectTaskExecuteFn,
 		sideEffectTaskDiscardFn: sideEffectTaskDiscardFn,
 		isPureTask:              isPureTask,
+		sideEffectTaskGroup:     sideEffectTaskGroup,
 	}
 
 	for _, opt := range opts {
@@ -156,6 +161,11 @@ func (rt *RegistrableTask) registerToLibrary(
 	fqn := rt.fqType()
 	rt.taskTypeID = GenerateTypeID(fqn)
 	return fqn, rt.taskTypeID, nil
+}
+
+// TaskGroup returns the task group string for this registrable task.
+func (rt *RegistrableTask) TaskGroup() string {
+	return rt.sideEffectTaskGroup
 }
 
 // GoType returns the reflect.Type of the task's Go struct.
