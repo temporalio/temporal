@@ -152,7 +152,16 @@ func recordActivityTaskStarted(
 		if ai.RequestId == requestID {
 			response.StartedTime = ai.StartedTime
 			response.Attempt = ai.Attempt
-			response.Clock = ai.StartedClock
+			if ai.StartedClock != nil {
+				response.Clock = ai.StartedClock
+			} else {
+				// Activity started before StartedClock was deployed.
+				// Create a fresh clock for the shard staleness check.
+				response.Clock, err = shardContext.NewVectorClock()
+				if err != nil {
+					return nil, rejectCodeUndefined, err
+				}
+			}
 			return response, rejectCodeAccepted, nil
 		}
 
