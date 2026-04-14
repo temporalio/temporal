@@ -37,7 +37,9 @@ func (b MatchingBehavior) Name() string {
 
 // Options returns the TestOptions to configure matching behavior.
 func (b MatchingBehavior) Options() []TestOption {
-	opts := []TestOption{WithDynamicConfig(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 3)}
+	opts := []TestOption{
+		WithDynamicConfig(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 3),
+	}
 	if b.ForceTaskForward || b.ForcePollForward {
 		opts = append(opts,
 			WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13),
