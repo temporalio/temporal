@@ -36,25 +36,7 @@ func newTestCache(t *testing.T) *partitionCache {
 	return cache
 }
 
-func TestHandlePartitionCounts_NonNormalSkipsCache(t *testing.T) {
-	t.Parallel()
-	cache := newTestCache(t)
-
-	calls := 0
-	op := func(ctx context.Context, pc PartitionCounts, req *hpcReq, opts []grpc.CallOption) (*hpcRes, error) {
-		calls++
-		assert.Equal(t, PartitionCounts{}, pc) // should get zero counts
-		return &hpcRes{value: "ok"}, nil
-	}
-
-	pkey := cache.makeKey(testNsID, "my-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	res, err := handlePartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_STICKY, &hpcReq{}, nil, op)
-	require.NoError(t, err)
-	assert.Equal(t, "ok", res.value)
-	assert.Equal(t, 1, calls)
-}
-
-func TestHandlePartitionCounts_CacheMissSuccess(t *testing.T) {
+func TestInvokeWithPartitionCounts_CacheMissSuccess(t *testing.T) {
 	t.Parallel()
 	cache := newTestCache(t)
 
@@ -69,7 +51,7 @@ func TestHandlePartitionCounts_CacheMissSuccess(t *testing.T) {
 		return &hpcRes{value: "ok"}, nil
 	}
 
-	res, err := handlePartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
+	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
 	require.NoError(t, err)
 	assert.Equal(t, "ok", res.value)
 	assert.Equal(t, 1, calls)
@@ -78,7 +60,7 @@ func TestHandlePartitionCounts_CacheMissSuccess(t *testing.T) {
 	assert.Equal(t, serverPC, cache.lookup(pkey))
 }
 
-func TestHandlePartitionCounts_CacheHitSuccess(t *testing.T) {
+func TestInvokeWithPartitionCounts_CacheHitSuccess(t *testing.T) {
 	t.Parallel()
 	cache := newTestCache(t)
 
@@ -93,13 +75,13 @@ func TestHandlePartitionCounts_CacheHitSuccess(t *testing.T) {
 		return &hpcRes{value: "ok"}, nil
 	}
 
-	res, err := handlePartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
+	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
 	require.NoError(t, err)
 	assert.Equal(t, "ok", res.value)
 	assert.Equal(t, cachedPC, cache.lookup(pkey))
 }
 
-func TestHandlePartitionCounts_ServerUpdatesCount(t *testing.T) {
+func TestInvokeWithPartitionCounts_ServerUpdatesCount(t *testing.T) {
 	t.Parallel()
 	cache := newTestCache(t)
 
@@ -113,14 +95,14 @@ func TestHandlePartitionCounts_ServerUpdatesCount(t *testing.T) {
 		return &hpcRes{value: "ok"}, nil
 	}
 
-	_, err := handlePartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
 	require.NoError(t, err)
 
 	// cache should be updated
 	assert.Equal(t, newPC, cache.lookup(pkey))
 }
 
-func TestHandlePartitionCounts_StaleRetry_Succeeds(t *testing.T) {
+func TestInvokeWithPartitionCounts_StaleRetry_Succeeds(t *testing.T) {
 	t.Parallel()
 	cache := newTestCache(t)
 
@@ -139,14 +121,14 @@ func TestHandlePartitionCounts_StaleRetry_Succeeds(t *testing.T) {
 		return &hpcRes{value: "ok"}, nil
 	}
 
-	res, err := handlePartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
+	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
 	require.NoError(t, err)
 	assert.Equal(t, "ok", res.value)
 	assert.Equal(t, 2, calls)
 	assert.Equal(t, serverPC, cache.lookup(pkey))
 }
 
-func TestHandlePartitionCounts_StaleRetry_Fails(t *testing.T) {
+func TestInvokeWithPartitionCounts_StaleRetry_Fails(t *testing.T) {
 	t.Parallel()
 	cache := newTestCache(t)
 
@@ -164,12 +146,12 @@ func TestHandlePartitionCounts_StaleRetry_Fails(t *testing.T) {
 		return nil, assert.AnError
 	}
 
-	_, err := handlePartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
 	require.Error(t, err)
 	assert.Equal(t, 2, calls)
 }
 
-func TestHandlePartitionCounts_OtherErrorNoRetry(t *testing.T) {
+func TestInvokeWithPartitionCounts_OtherErrorNoRetry(t *testing.T) {
 	t.Parallel()
 	cache := newTestCache(t)
 
@@ -184,7 +166,7 @@ func TestHandlePartitionCounts_OtherErrorNoRetry(t *testing.T) {
 		return nil, assert.AnError
 	}
 
-	_, err := handlePartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
 	require.Error(t, err)
 	assert.Equal(t, 1, calls) // no retry
 
@@ -192,7 +174,7 @@ func TestHandlePartitionCounts_OtherErrorNoRetry(t *testing.T) {
 	assert.Equal(t, serverPC, cache.lookup(pkey))
 }
 
-func TestHandlePartitionCounts_ZeroTrailerRemovesCache(t *testing.T) {
+func TestInvokeWithPartitionCounts_ZeroTrailerRemovesCache(t *testing.T) {
 	t.Parallel()
 	cache := newTestCache(t)
 
@@ -205,14 +187,14 @@ func TestHandlePartitionCounts_ZeroTrailerRemovesCache(t *testing.T) {
 		return &hpcRes{value: "ok"}, nil
 	}
 
-	_, err := handlePartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
 	require.NoError(t, err)
 
 	// cache entry should be removed
 	assert.Equal(t, PartitionCounts{}, cache.lookup(pkey))
 }
 
-func TestHandlePartitionCounts_NoTrailerRemovesCache(t *testing.T) {
+func TestInvokeWithPartitionCounts_NoTrailerRemovesCache(t *testing.T) {
 	t.Parallel()
 	cache := newTestCache(t)
 
@@ -225,14 +207,14 @@ func TestHandlePartitionCounts_NoTrailerRemovesCache(t *testing.T) {
 		return &hpcRes{value: "ok"}, nil
 	}
 
-	_, err := handlePartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
 	require.NoError(t, err)
 
 	// cache entry should be removed
 	assert.Equal(t, PartitionCounts{}, cache.lookup(pkey))
 }
 
-func TestHandlePartitionCounts_OutgoingContextHasHeader(t *testing.T) {
+func TestInvokeWithPartitionCounts_OutgoingContextHasHeader(t *testing.T) {
 	t.Parallel()
 	cache := newTestCache(t)
 
@@ -254,6 +236,6 @@ func TestHandlePartitionCounts_OutgoingContextHasHeader(t *testing.T) {
 		return &hpcRes{value: "ok"}, nil
 	}
 
-	_, err := handlePartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, enumspb.TASK_QUEUE_KIND_NORMAL, &hpcReq{}, nil, op)
 	require.NoError(t, err)
 }

@@ -84,10 +84,11 @@ func parsePartitionCountsFromTrailer(trailer metadata.MD) (PartitionCounts, erro
 	return parsePartitionCounts(vals[0])
 }
 
-// handlePartitionCounts encapsulates the pattern of passing a partition count header to a
-// matchingservice function, retrying on StalePartitionCounts errors, and processing the
-// trailer.
-func handlePartitionCounts[Req, Res any](
+// invokeWithPartitionCounts wraps a partition-aware matchingservice RPC call:
+// - attaches the client's cached counts to the outgoing request (as header)
+// - updates the cache from the server's response (trailer)
+// - retries once if it receives StalePartitionCounts error
+func invokeWithPartitionCounts[Req, Res any](
 	ctx context.Context,
 	logger log.Logger,
 	cache *partitionCache,
@@ -115,34 +116,27 @@ func handlePartitionCounts[Req, Res any](
 	// for counts, which the server will always accept as not-stale.
 	pc := cache.lookup(pkey)
 
-	// try once
-	res, err := op(pc.appendToOutgoingContext(ctx), pc, request, opts)
+	for attempt := 0; ; attempt++ {
+		res, err := op(pc.appendToOutgoingContext(ctx), pc, request, opts)
 
-	// update cache on trailer on both success and error. if the trailer has no data,
-	// this removes the key from the cache.
-	pc2, err2 := parsePartitionCountsFromTrailer(trailer)
-	if err2 != nil {
-		logger.Info("partition count trailer parse error", tag.Error(err2))
-		// continue with zero value for pc2
-	}
-	if pc2 != pc {
-		cache.put(pkey, pc2)
-	}
-
-	if _, ok := errors.AsType[*serviceerrors.StalePartitionCounts](err); ok {
-		// if we got a StalePartitionCounts, retry once
+		// update cache on trailer on both success and error. if the trailer has no data,
+		// this removes the key from the cache.
+		newPc, parseErr := parsePartitionCountsFromTrailer(trailer)
 		trailer = nil
-		res, err = op(pc2.appendToOutgoingContext(ctx), pc2, request, opts)
-		// update again
-		pc3, err3 := parsePartitionCountsFromTrailer(trailer)
-		if err3 != nil {
-			logger.Info("partition count trailer parse error", tag.Error(err3))
-			// continue with zero value for pc3
+		if parseErr != nil {
+			logger.Info("partition count trailer parse error", tag.Error(parseErr))
+			// continue with zero value for newPc
 		}
-		if pc3 != pc2 {
-			cache.put(pkey, pc3)
+		if newPc != pc {
+			cache.put(pkey, newPc)
+			pc = newPc
 		}
-	}
 
-	return res, err
+		if _, ok := errors.AsType[*serviceerrors.StalePartitionCounts](err); ok && attempt == 0 {
+			// if we got a StalePartitionCounts on the first attempt, retry once
+			continue
+		}
+
+		return res, err
+	}
 }

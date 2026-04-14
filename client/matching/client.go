@@ -81,7 +81,7 @@ func (c *clientImpl) AddActivityTask(
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 	)
 	kind := request.GetTaskQueue().GetKind()
-	return handlePartitionCounts(ctx, c.logger, c.partitionCache, pkey, kind, request, opts, c.addActivityTask)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, kind, request, opts, c.addActivityTask)
 }
 
 func (c *clientImpl) addActivityTask(
@@ -117,7 +117,7 @@ func (c *clientImpl) AddWorkflowTask(
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 	)
 	kind := request.GetTaskQueue().GetKind()
-	return handlePartitionCounts(ctx, c.logger, c.partitionCache, pkey, kind, request, opts, c.addWorkflowTask)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, kind, request, opts, c.addWorkflowTask)
 }
 
 func (c *clientImpl) addWorkflowTask(
@@ -153,7 +153,7 @@ func (c *clientImpl) PollActivityTaskQueue(
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 	)
 	kind := request.GetPollRequest().GetTaskQueue().GetKind()
-	return handlePartitionCounts(ctx, c.logger, c.partitionCache, pkey, kind, request, opts, c.pollActivityTaskQueue)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, kind, request, opts, c.pollActivityTaskQueue)
 }
 
 func (c *clientImpl) pollActivityTaskQueue(
@@ -192,7 +192,7 @@ func (c *clientImpl) PollWorkflowTaskQueue(
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 	)
 	kind := request.GetPollRequest().GetTaskQueue().GetKind()
-	return handlePartitionCounts(ctx, c.logger, c.partitionCache, pkey, kind, request, opts, c.pollWorkflowTaskQueue)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, kind, request, opts, c.pollWorkflowTaskQueue)
 }
 
 func (c *clientImpl) pollWorkflowTaskQueue(
@@ -231,7 +231,7 @@ func (c *clientImpl) QueryWorkflow(
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 	)
 	kind := request.GetTaskQueue().GetKind()
-	return handlePartitionCounts(ctx, c.logger, c.partitionCache, pkey, kind, request, opts, c.queryWorkflow)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, kind, request, opts, c.queryWorkflow)
 }
 
 func (c *clientImpl) queryWorkflow(
