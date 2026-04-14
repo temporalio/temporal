@@ -351,7 +351,7 @@ func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, va
 			}}
 		}
 	}
-	return e.cluster.host.overrideDynamicConfig(e.t, setting.Key(), value)
+	return e.cluster.host.overrideDynamicConfigForTest(e.t, setting.Key(), value)
 }
 
 // StartGlobalMetricCapture starts a cluster-global metrics capture for this test and automatically stops it during cleanup.
