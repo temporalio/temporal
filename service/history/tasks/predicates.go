@@ -122,11 +122,11 @@ func NewOutboundTaskGroupPredicate(
 }
 
 func (n *OutboundTaskGroupPredicate) Test(task Task) bool {
-	smTask, ok := task.(HasStateMachineTaskType)
+	smTask, ok := task.(HasStateMachineTaskGroup)
 	if !ok {
 		return false
 	}
-	_, ok = n.Groups[smTask.StateMachineTaskType()]
+	_, ok = n.Groups[smTask.StateMachineTaskGroup()]
 	return ok
 }
 
@@ -204,8 +204,8 @@ func (t *OutboundTaskPredicate) Test(task Task) bool {
 	group := TaskGroupNamespaceIDAndDestination{
 		NamespaceID: task.GetNamespaceID(),
 	}
-	if smTask, ok := task.(HasStateMachineTaskType); ok {
-		group.TaskGroup = smTask.StateMachineTaskType()
+	if smTask, ok := task.(HasStateMachineTaskGroup); ok {
+		group.TaskGroup = smTask.StateMachineTaskGroup()
 	}
 	if dTask, ok := task.(HasDestination); ok {
 		group.Destination = dTask.GetDestination()

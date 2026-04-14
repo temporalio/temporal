@@ -36,10 +36,11 @@ type (
 		GetVersion() int64
 	}
 
-	// HasStateMachineTaskType must be implemented by all HSM state machine tasks.
-	HasStateMachineTaskType interface {
-		StateMachineTaskType() string
+	// HasStateMachineTaskGroup must be implemented by all HSM state machine tasks.
+	HasStateMachineTaskGroup interface {
+		StateMachineTaskGroup() string
 	}
+
 	// HasDestination must be implemented by all tasks used in the outbound queue.
 	HasDestination interface {
 		GetDestination() string

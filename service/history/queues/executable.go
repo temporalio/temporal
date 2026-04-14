@@ -746,8 +746,8 @@ func (e *executableImpl) GetDestination() string {
 
 // StateMachineTaskType returns the embedded task's state machine task type if it exists. Defaults to 0.
 func (e *executableImpl) StateMachineTaskType() string {
-	if t, ok := e.Task.(tasks.HasStateMachineTaskType); ok {
-		return t.StateMachineTaskType()
+	if t, ok := e.Task.(tasks.HasStateMachineTaskGroup); ok {
+		return t.StateMachineTaskGroup()
 	}
 	return ""
 }
