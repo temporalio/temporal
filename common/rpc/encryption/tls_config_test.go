@@ -235,7 +235,7 @@ func (s *stubCertProvider) FetchClientCertificate(_ bool) (*tls.Certificate, err
 func (s *stubCertProvider) FetchServerRootCAsForClient(_ bool) (*x509.CertPool, error) {
 	return nil, nil
 }
-func (s *stubCertProvider) GetExpiringCerts(_ time.Duration) (CertExpirationMap, CertExpirationMap, error) {
+func (s *stubCertProvider) GetExpiringCerts(_ time.Duration) (expiring CertExpirationMap, expired CertExpirationMap, err error) {
 	return nil, nil, nil
 }
 
