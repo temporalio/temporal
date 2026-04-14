@@ -397,6 +397,13 @@ func TestQueryWorkflow_NonStickyMultiPageHistory(t *testing.T) {
 	// Stop worker to clear sticky cache so the query goes through non-sticky path.
 	queryWorker.Stop()
 
+	// Explicitly clear stickiness so the query dispatches directly to the normal queue
+	_, err = env.FrontendClient().ResetStickyTaskQueue(ctx, &workflowservice.ResetStickyTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+	})
+	env.NoError(err)
+
 	// Issue a query in background; we'll poll for the task manually below.
 	// Don't assert inside the goroutine — it would panic if the test completes first.
 	go func() { _, _ = env.SdkClient().QueryWorkflow(ctx, id, "", "test") }()
