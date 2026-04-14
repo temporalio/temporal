@@ -1520,3 +1520,41 @@ func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
 	s.Empty(actResp.GetTaskToken(), "activity re-poll from shutdown worker should return empty response")
 	s.Less(time.Since(actStart), 2*time.Minute, "activity re-poll should be rejected quickly, not wait for timeout")
 }
+
+func (s *TaskQueueSuite) TestShutdownWorkerIsIdempotent() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableCancelWorkerPollsOnShutdown, true)
+
+	tv := testvars.New(s.T())
+	workerInstanceKey := uuid.NewString()
+	ctx := context.Background()
+
+	shutdownReq := &workflowservice.ShutdownWorkerRequest{
+		Namespace:         s.Namespace().String(),
+		StickyTaskQueue:   tv.StickyTaskQueue().GetName(),
+		Identity:          tv.WorkerIdentity(),
+		Reason:            "idempotency test",
+		WorkerInstanceKey: workerInstanceKey,
+		TaskQueue:         tv.TaskQueue().GetName(),
+	}
+
+	// Call ShutdownWorker three times in a row — all should succeed.
+	for range 3 {
+		_, err := s.FrontendClient().ShutdownWorker(ctx, shutdownReq)
+		s.NoError(err)
+	}
+
+	// A poll from this worker should still be rejected after repeated shutdowns.
+	pollStart := time.Now()
+	pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer pollCancel()
+	resp, err := s.FrontendClient().PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         s.Namespace().String(),
+		TaskQueue:         tv.TaskQueue(),
+		Identity:          tv.WorkerIdentity(),
+		WorkerInstanceKey: workerInstanceKey,
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Empty(resp.GetTaskToken(), "poll from shutdown worker should return empty response")
+	s.Less(time.Since(pollStart), 2*time.Minute, "poll should be rejected quickly by shutdown cache")
+}
