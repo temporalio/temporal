@@ -10,6 +10,9 @@ breaking:
     - chasm/lib/scheduler/proto/v1/message.proto
     # TODO seankane: remove after merging #8499
     - chasm/lib/callback/proto/v1/tasks.proto
+    # TODO bergundy: remove after nexus-chasm-cleanup merges
+    - chasm/lib/nexusoperation/proto/v1/operation.proto
+    - chasm/lib/nexusoperation/proto/v1/tasks.proto
 lint:
   use:
     - DEFAULT

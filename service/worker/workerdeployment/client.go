@@ -165,6 +165,7 @@ type Client interface {
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		deploymentName, buildID, identity, requestID, modifierIdentity string,
+		computeConfig *computepb.ComputeConfigSummary,
 	) error
 
 	// Used internally by the Worker Deployment workflow in its SyncWorkerDeploymentVersion Activity
@@ -1346,6 +1347,7 @@ func (d *ClientImpl) StartWorkerDeploymentVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deploymentName, buildID, identity, requestID, modifierIdentity string,
+	computeConfig *computepb.ComputeConfigSummary,
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("StartWorkerDeploymentVersion", deploymentName, &retErr, namespaceEntry.Name(), identity)()
@@ -1360,7 +1362,7 @@ func (d *ClientImpl) StartWorkerDeploymentVersion(
 	}
 
 	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
-	args := d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry, modifierIdentity, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED)
+	args := d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry, modifierIdentity, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED, computeConfig)
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(args)
 	if err != nil {
 		return err
@@ -1534,7 +1536,12 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 	}
 
 	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
-	input, err := sdk.PreferProtoDataConverter.ToPayloads(d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry, "", enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE))
+	input, err := sdk.PreferProtoDataConverter.ToPayloads(d.makeVersionWorkflowArgs(deploymentName,
+		buildID,
+		namespaceEntry,
+		"",
+		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+		nil))
 	if err != nil {
 		return nil, err
 	}
@@ -1769,6 +1776,7 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 			LastCurrentTime:      v.GetLastCurrentTime(),
 			LastDeactivationTime: v.GetLastDeactivationTime(),
 			Status:               v.GetStatus(),
+			ComputeConfig:        v.GetComputeConfig(),
 		})
 	}
 
@@ -2017,11 +2025,12 @@ func (d *ClientImpl) makeVersionWorkflowArgs(
 	namespaceEntry *namespace.Namespace,
 	identity string,
 	initialStatus enumspb.WorkerDeploymentVersionStatus,
+	computeConfig *computepb.ComputeConfigSummary,
 ) *deploymentspb.WorkerDeploymentVersionWorkflowArgs {
 	return &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
 		NamespaceName: namespaceEntry.Name().String(),
 		NamespaceId:   namespaceEntry.ID().String(),
-		VersionState:  makeNewVersionState(deploymentName, buildID, time.Now(), identity, initialStatus, d.getSyncBatchSize()),
+		VersionState:  makeNewVersionState(deploymentName, buildID, time.Now(), identity, initialStatus, computeConfig, d.getSyncBatchSize()),
 	}
 }
 

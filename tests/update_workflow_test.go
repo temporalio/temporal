@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -23,7 +22,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
@@ -35,12 +33,12 @@ import (
 )
 
 func speculativeWorkflowTaskOutcomes(
-	snap map[string][]*metricstest.CapturedRecording,
+	capture *testcore.GlobalMetricCapture,
 ) (commits, rollbacks int) {
-	for range snap[metrics.SpeculativeWorkflowTaskCommits.Name()] {
+	for range capture.Metric(metrics.SpeculativeWorkflowTaskCommits.Name()) {
 		commits += 1
 	}
-	for range snap[metrics.SpeculativeWorkflowTaskRollbacks.Name()] {
+	for range capture.Metric(metrics.SpeculativeWorkflowTaskRollbacks.Name()) {
 		rollbacks += 1
 	}
 	return
@@ -103,8 +101,7 @@ func (s *WorkflowUpdateSuite) TestEmptySpeculativeWorkflowTask_AcceptComplete() 
 				tv = tv.WithRunID(runID)
 			}
 
-			capture := env.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-			defer env.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+			capture := env.StartGlobalMetricCapture()
 
 			wtHandlerCalls := 0
 			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -188,7 +185,7 @@ func (s *WorkflowUpdateSuite) TestEmptySpeculativeWorkflowTask_AcceptComplete() 
 			s.Equal(2, wtHandlerCalls)
 			s.Equal(2, msgHandlerCalls)
 
-			commits, rollbacks := speculativeWorkflowTaskOutcomes(capture.Snapshot())
+			commits, rollbacks := speculativeWorkflowTaskOutcomes(capture)
 			s.Equal(1, commits)
 			s.Equal(0, rollbacks)
 
@@ -559,8 +556,7 @@ func (s *WorkflowUpdateSuite) TestRunningWorkflowTask_NewEmptySpeculativeWorkflo
 	env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
 	mustStartWorkflow(env, env.Tv())
 
-	capture := env.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-	defer env.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+	capture := env.StartGlobalMetricCapture()
 
 	var updateResultCh <-chan *workflowservice.UpdateWorkflowExecutionResponse
 
@@ -654,7 +650,7 @@ func (s *WorkflowUpdateSuite) TestRunningWorkflowTask_NewEmptySpeculativeWorkflo
 	s.Equal(3, wtHandlerCalls)
 	s.Equal(3, msgHandlerCalls)
 
-	commits, rollbacks := speculativeWorkflowTaskOutcomes(capture.Snapshot())
+	commits, rollbacks := speculativeWorkflowTaskOutcomes(capture)
 	s.Equal(0, commits)
 	s.Equal(1, rollbacks)
 
@@ -2542,10 +2538,8 @@ func (s *WorkflowUpdateSuite) TestScheduledSpeculativeWorkflowTask_ConvertToNorm
 }
 
 func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_StartToCloseTimeout() {
-	// Uses CaptureMetricsHandler which requires a dedicated cluster to avoid metric interference.
-	env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
-	capture := env.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-	defer env.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+	env := testcore.NewEnv(s.T())
+	capture := env.StartNamespaceMetricCapture()
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           env.Tv().Any().String(),
@@ -2650,10 +2644,8 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_StartToCloseTimeout() 
 	s.Equal("Workflow task not found.", err.Error())
 
 	// ensure correct metrics were recorded
-	snap := capture.Snapshot()
-
 	var speculativeWorkflowTaskTimeoutTasks int
-	for _, m := range snap[metrics.TaskRequests.Name()] {
+	for _, m := range capture.Metric(metrics.TaskRequests.Name()) {
 		if m.Tags[metrics.OperationTagName] == metrics.TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout {
 			speculativeWorkflowTaskTimeoutTasks += 1
 		}
@@ -2661,7 +2653,7 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_StartToCloseTimeout() 
 	s.Equal(1, speculativeWorkflowTaskTimeoutTasks, "expected 1 speculative workflow task timeout task to be created")
 
 	var speculativeStartToCloseTimeouts int
-	for _, m := range snap[metrics.StartToCloseTimeoutCounter.Name()] {
+	for _, m := range capture.Metric(metrics.StartToCloseTimeoutCounter.Name()) {
 		if m.Tags[metrics.OperationTagName] == metrics.TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout {
 			speculativeStartToCloseTimeouts += 1
 		}
@@ -4987,10 +4979,9 @@ type multiopsResponseErr struct {
 	err      error
 }
 
-func (s *UpdateWithStartSuite) sendUpdateWithStart(env testcore.Env, startReq *workflowservice.StartWorkflowExecutionRequest, updateReq *workflowservice.UpdateWorkflowExecutionRequest) chan multiopsResponseErr {
+func (s *UpdateWithStartSuite) sendUpdateWithStart(env *testcore.TestEnv, startReq *workflowservice.StartWorkflowExecutionRequest, updateReq *workflowservice.UpdateWorkflowExecutionRequest) chan multiopsResponseErr {
 	ctx := testcore.NewContext(env.Context())
-	capture := env.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-	defer env.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+	capture := env.StartNamespaceMetricCapture()
 
 	retCh := make(chan multiopsResponseErr)
 	go func() {
@@ -5013,28 +5004,41 @@ func (s *UpdateWithStartSuite) sendUpdateWithStart(env testcore.Env, startReq *w
 			})
 
 		if err == nil {
-			// Use assert (not require) in goroutine - require calls t.FailNow() which panics
-			//nolint:testifylint // intentional use of assert in goroutine
-			assert.Len(s.T(), resp.Responses, 2)
+			completedStage := updateReq.WaitPolicy != nil &&
+				updateReq.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED
 
-			startRes := resp.Responses[0].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow).StartWorkflow
-			//nolint:testifylint // intentional use of assert in goroutine
-			assert.NotEmpty(s.T(), startRes.RunId)
+			var startResp *workflowservice.StartWorkflowExecutionResponse
+			var updateResp *workflowservice.UpdateWorkflowExecutionResponse
+			if resp != nil && len(resp.Responses) == 2 {
+				startResp = resp.Responses[0].GetStartWorkflow()
+				updateResp = resp.Responses[1].GetUpdateWorkflow()
+			}
 
-			updateRes := resp.Responses[1].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow).UpdateWorkflow
-			if updateReq.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
-				//nolint:testifylint // intentional use of assert in goroutine
-				assert.NotNil(s.T(), updateRes.Outcome)
-				//nolint:testifylint // intentional use of assert in goroutine
-				assert.NotEmpty(s.T(), updateRes.Outcome.String())
+			switch {
+			case len(capture.Metric(metrics.TaskWorkflowBusyCounter.Name())) != 0:
+				err = fmt.Errorf("expected no %q metrics", metrics.TaskWorkflowBusyCounter.Name())
+			case resp == nil:
+				err = errors.New("expected ExecuteMultiOperation response")
+			case len(resp.Responses) != 2:
+				err = fmt.Errorf("expected 2 ExecuteMultiOperation responses, got %d", len(resp.Responses))
+			case startResp == nil:
+				err = errors.New("expected start workflow response")
+			case startResp.RunId == "":
+				err = errors.New("expected non-empty start workflow run ID")
+			case updateResp == nil:
+				err = errors.New("expected update workflow response")
+			case completedStage && updateResp.Outcome == nil:
+				err = errors.New("expected completed update outcome")
+			case completedStage && updateResp.Outcome.String() == "":
+				err = errors.New("expected non-empty completed update outcome")
+			default:
 			}
 		}
 
-		// make sure there's no lock contention
-		//nolint:testifylint // intentional use of assert in goroutine
-		assert.Empty(s.T(), capture.Snapshot()[metrics.TaskWorkflowBusyCounter.Name()])
-
-		retCh <- multiopsResponseErr{resp, err}
+		retCh <- multiopsResponseErr{
+			response: resp,
+			err:      err,
+		}
 	}()
 	return retCh
 }
@@ -5073,7 +5077,7 @@ func (s *UpdateWithStartSuite) TestWorkflowIsNotRunning() {
 				s.NoError(err)
 
 				uwsRes := <-uwsCh
-				s.NoError(err)
+				s.NoError(uwsRes.err)
 				startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 				updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
 				requireStartedAndRunning(s.T(), startResp)
@@ -5426,7 +5430,7 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 					})
 				s.NoError(err)
 				uwsRes2 := <-uwsCh2
-				s.NoError(uwsRes1.err)
+				s.NoError(uwsRes2.err)
 
 				s.Equal(uwsRes1.response.Responses[0].GetStartWorkflow().RunId, uwsRes2.response.Responses[0].GetStartWorkflow().RunId)
 			})

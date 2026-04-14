@@ -147,6 +147,9 @@ message VersionLocalState {
   // Covers changes through: CreateWorkerDeploymentVersion, UpdateWorkerDeploymentVersionComputeConfig,
   // UpdateWorkerDeploymentVersionMetadata.
   string last_modifier_identity = 17;
+
+  // Cached compute config summary, kept in sync with the WCI on each compute config update.
+  temporal.api.compute.v1.ComputeConfigSummary compute_config = 18;
 }
 
 // Data specific to a task queue, from the perspective of a worker deployment version.
@@ -226,6 +229,10 @@ message WorkerDeploymentVersionSummary {
   // Request ID used to create this version. Used for idempotency.
   // Not synced from the version workflow; only set by the deployment workflow.
   string create_request_id = 12;
+
+  // Compute config summary for this version. Synced from the version workflow on each compute config update.
+  // Also set by the deployment workflow at version creation time if a compute config was provided.
+  temporal.api.compute.v1.ComputeConfigSummary compute_config = 13;
 }
 
 // used as Worker Deployment Version workflow update input:
@@ -337,6 +344,7 @@ message StartWorkerDeploymentVersionRequest {
   string build_id = 2;
   string request_id = 3;
   string identity = 4;
+  temporal.api.compute.v1.ComputeConfigSummary compute_config = 5;
 }
 
 // used as Worker Deployment Version workflow activity input:
