@@ -524,9 +524,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion_LargePayload(c
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled bool) {
-	if chasmEnabled {
-		s.T().Skip("Blocked on CHASM Nexus async completion support")
-	}
 	env := s.newNexusWorkflowTestEnv(chasmEnabled)
 	ctx := testcore.NewContext()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
@@ -719,31 +716,36 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	completionToken, err := gen.DecodeCompletion(decodedToken)
 	s.NoError(err)
 
-	// Request fails if the workflow is not found.
-	workflowNotFoundToken := common.CloneProto(completionToken)
-	workflowNotFoundToken.WorkflowId = "not-found"
-	callbackToken, err = gen.Tokenize(workflowNotFoundToken)
-	s.NoError(err)
-	completion.Header = nexus.Header{commonnexus.CallbackTokenHeader: callbackToken}
+	if !chasmEnabled {
+		// These token-mutation tests use HSM-specific fields (WorkflowId, Ref) that
+		// don't exist on CHASM callback tokens.
 
-	snap, err = s.sendNexusCompletionRequest(ctx, env, publicCallbackURL, completion)
-	s.ErrorAs(err, &handlerErr)
-	s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
-	s.Len(snap["nexus_completion_requests"], 1)
-	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "error_not_found"})
+		// Request fails if the workflow is not found.
+		workflowNotFoundToken := common.CloneProto(completionToken)
+		workflowNotFoundToken.WorkflowId = "not-found"
+		callbackToken, err = gen.Tokenize(workflowNotFoundToken)
+		s.NoError(err)
+		completion.Header = nexus.Header{commonnexus.CallbackTokenHeader: callbackToken}
 
-	// Request fails if the state machine reference is stale.
-	staleToken := common.CloneProto(completionToken)
-	staleToken.Ref.MachineInitialVersionedTransition.NamespaceFailoverVersion++
-	callbackToken, err = gen.Tokenize(staleToken)
-	s.NoError(err)
-	completion.Header = nexus.Header{commonnexus.CallbackTokenHeader: callbackToken}
+		snap, err = s.sendNexusCompletionRequest(ctx, env, publicCallbackURL, completion)
+		s.ErrorAs(err, &handlerErr)
+		s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
+		s.Len(snap["nexus_completion_requests"], 1)
+		s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "error_not_found"})
 
-	snap, err = s.sendNexusCompletionRequest(ctx, env, publicCallbackURL, completion)
-	s.ErrorAs(err, &handlerErr)
-	s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
-	s.Len(snap["nexus_completion_requests"], 1)
-	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "error_not_found"})
+		// Request fails if the state machine reference is stale.
+		staleToken := common.CloneProto(completionToken)
+		staleToken.Ref.MachineInitialVersionedTransition.NamespaceFailoverVersion++
+		callbackToken, err = gen.Tokenize(staleToken)
+		s.NoError(err)
+		completion.Header = nexus.Header{commonnexus.CallbackTokenHeader: callbackToken}
+
+		snap, err = s.sendNexusCompletionRequest(ctx, env, publicCallbackURL, completion)
+		s.ErrorAs(err, &handlerErr)
+		s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
+		s.Len(snap["nexus_completion_requests"], 1)
+		s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "error_not_found"})
+	}
 
 	callbackToken, err = gen.Tokenize(completionToken)
 	s.NoError(err)
@@ -856,7 +858,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart(chasmEnabled bool) {
 	if chasmEnabled {
-		s.T().Skip("Blocked on CHASM Nexus async completion before start support")
+		// TODO: Implement completion-before-start in stephanos/nexus-chasm-async-compl-2.
+		s.T().Skip("Blocked on CHASM Nexus completion-before-start support")
 	}
 	env := s.newNexusWorkflowTestEnv(chasmEnabled)
 	ctx := testcore.NewContext()
@@ -1109,9 +1112,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart(ch
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure(chasmEnabled bool) {
-	if chasmEnabled {
-		s.T().Skip("Blocked on CHASM Nexus async completion support")
-	}
 	env := s.newNexusWorkflowTestEnv(chasmEnabled)
 	ctx := testcore.NewContext()
 	taskQueue := testcore.RandomizeStr(s.T().Name())

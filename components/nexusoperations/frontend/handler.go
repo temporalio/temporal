@@ -17,6 +17,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
@@ -183,6 +184,39 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 			h.Logger.Warn(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
 		}
 	}
+
+	// Route the completion to the appropriate handler based on whether the component ref is present.
+	if len(completion.GetComponentRef()) > 0 {
+		_, err = h.completeChasmOperation(ctx, r, completion, links, ns.Name().String(), logger)
+	} else {
+		_, err = h.completeHSMOperation(ctx, r, completion, links, ns.Name().String(), logger)
+	}
+	if err != nil {
+		// Validation errors from the helpers are already nexus.HandlerError — return them directly
+		// to avoid mangling them through gRPC error conversion.
+		if _, ok := errors.AsType[*nexus.HandlerError](err); ok {
+			return err
+		}
+		logger.Error("failed to process nexus completion request", tag.Error(err))
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotActive](err); ok {
+			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
+		}
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+			return commonnexus.ConvertGRPCError(err, true)
+		}
+		return commonnexus.ConvertGRPCError(err, false)
+	}
+	return nil
+}
+
+func (h *completionHandler) completeHSMOperation(
+	ctx context.Context,
+	r *nexusrpc.CompletionRequest,
+	completion *tokenspb.NexusOperationCompletion,
+	links []*commonpb.Link,
+	nsName string,
+	logger log.Logger,
+) (*historyservice.CompleteNexusOperationResponse, error) {
 	hr := &historyservice.CompleteNexusOperationRequest{
 		Completion:     completion,
 		State:          string(r.State),
@@ -199,34 +233,63 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 		var result *commonpb.Payload
 		if err := r.Result.Consume(&result); err != nil {
 			logger.Error("cannot deserialize payload from completion result", tag.Error(err))
-			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid result content")
+			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid result content")
 		}
-		if result.Size() > h.Config.PayloadSizeLimit(ns.Name().String()) {
-			logger.Error("payload size exceeds error limit for Nexus CompleteOperation request", tag.WorkflowNamespace(ns.Name().String()))
-			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "result exceeds size limit")
+		if result.Size() > h.Config.PayloadSizeLimit(nsName) {
+			logger.Error("payload size exceeds error limit for Nexus CompleteOperation request", tag.WorkflowNamespace(nsName))
+			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "result exceeds size limit")
 		}
 		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Success{
 			Success: result,
 		}
 	default:
-		// The Nexus SDK ensures this never happens but just in case...
-		logger.Error("invalid operation state in completion request", tag.String("state", string(r.State)), tag.Error(err))
-		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid completion state")
+		logger.Error("invalid operation state in completion request", tag.String("state", string(r.State)))
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid completion state")
 	}
-	_, err = h.HistoryClient.CompleteNexusOperation(ctx, hr)
-	if err != nil {
-		logger.Error("failed to process nexus completion request", tag.Error(err))
-		var namespaceInactiveErr *serviceerror.NamespaceNotActive
-		if errors.As(err, &namespaceInactiveErr) {
-			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
-		}
-		var notFoundErr *serviceerror.NotFound
-		if errors.As(err, &notFoundErr) {
-			return commonnexus.ConvertGRPCError(err, true)
-		}
-		return commonnexus.ConvertGRPCError(err, false)
+	return h.HistoryClient.CompleteNexusOperation(ctx, hr)
+}
+
+func (h *completionHandler) completeChasmOperation(
+	ctx context.Context,
+	r *nexusrpc.CompletionRequest,
+	completion *tokenspb.NexusOperationCompletion,
+	links []*commonpb.Link,
+	nsName string,
+	logger log.Logger,
+) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+	chasmReq := &historyservice.CompleteNexusOperationChasmRequest{
+		Completion: completion,
+		CloseTime:  timestamppb.New(r.CloseTime),
+		Links:      links,
 	}
-	return nil
+	switch r.State { // nolint:exhaustive
+	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
+		chasmFailure, err := commonnexus.NexusFailureToTemporalFailure(*r.Error.OriginalFailure)
+		if err != nil {
+			logger.Error("cannot convert completion failure", tag.Error(err))
+			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid failure content")
+		}
+		chasmReq.Outcome = &historyservice.CompleteNexusOperationChasmRequest_Failure{
+			Failure: chasmFailure,
+		}
+	case nexus.OperationStateSucceeded:
+		var result *commonpb.Payload
+		if err := r.Result.Consume(&result); err != nil {
+			logger.Error("cannot deserialize payload from completion result", tag.Error(err))
+			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid result content")
+		}
+		if result.Size() > h.Config.PayloadSizeLimit(nsName) {
+			logger.Error("payload size exceeds error limit for Nexus CompleteOperation request", tag.WorkflowNamespace(nsName))
+			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "result exceeds size limit")
+		}
+		chasmReq.Outcome = &historyservice.CompleteNexusOperationChasmRequest_Success{
+			Success: result,
+		}
+	default:
+		logger.Error("invalid operation state in completion request", tag.String("state", string(r.State)))
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid completion state")
+	}
+	return h.HistoryClient.CompleteNexusOperationChasm(ctx, chasmReq)
 }
 
 func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest, rCtx *requestContext) error {

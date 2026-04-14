@@ -12,6 +12,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
@@ -31,6 +32,7 @@ var _ chasm.Component = (*Operation)(nil)
 var _ chasm.RootComponent = (*Operation)(nil)
 var _ chasm.StateMachine[nexusoperationpb.OperationStatus] = (*Operation)(nil)
 var _ chasm.VisibilitySearchAttributesProvider = (*Operation)(nil)
+var _ chasm.NexusCompletionHandler = (*Operation)(nil)
 
 var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancellation already requested")
 var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation already completed")
@@ -204,6 +206,25 @@ func (o *Operation) onTimedOut(ctx chasm.MutableContext, cause *failurepb.Failur
 		}
 	}
 	return TransitionTimedOut.Apply(o, ctx, EventTimedOut{})
+}
+
+func (o *Operation) HandleNexusCompletion(
+	ctx chasm.MutableContext,
+	completion *persistencespb.ChasmNexusCompletion,
+) error {
+	// TODO: support completion-before-start
+
+	switch outcome := completion.Outcome.(type) {
+	case *persistencespb.ChasmNexusCompletion_Success:
+		return o.onCompleted(ctx, outcome.Success, completion.GetLinks())
+	case *persistencespb.ChasmNexusCompletion_Failure:
+		if outcome.Failure.GetCanceledFailureInfo() != nil {
+			return o.onCanceled(ctx, outcome.Failure)
+		}
+		return o.onFailed(ctx, outcome.Failure)
+	default:
+		return serviceerror.NewInvalidArgument("invalid completion outcome")
+	}
 }
 
 func (o *Operation) loadStartArgs(
