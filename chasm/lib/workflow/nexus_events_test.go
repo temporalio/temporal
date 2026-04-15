@@ -11,7 +11,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -29,7 +28,7 @@ func scheduleOperation(t *testing.T, tcx testContext) (*historypb.HistoryEvent, 
 				ScheduleToCloseTimeout: durationpb.New(time.Hour),
 			},
 		},
-	}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+	}, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 	require.NoError(t, err)
 	require.NotEmpty(t, tcx.history.Events)
 	event := tcx.history.Events[len(tcx.history.Events)-1]
@@ -56,8 +55,8 @@ func applyEventDefinition(
 	event *historypb.HistoryEvent,
 ) {
 	t.Helper()
-	chReg := chasmworkflow.NewRegistry()
-	require.NoError(t, chReg.Register(newLibrary(defaultConfig, chasm.NewNexusEndpointProcessor())))
+	chReg := NewRegistry()
+	require.NoError(t, chReg.Register(newNexusLibrary(defaultConfig, chasm.NewNexusEndpointProcessor())))
 	def, ok := chReg.EventDefinitionByEventType(eventType)
 	require.True(t, ok)
 	err := def.Apply(tcx.chasmCtx, tcx.wf, event)
@@ -82,7 +81,7 @@ func TestCherryPick(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		event, _ := scheduleOperation(t, tcx)
 
-		nexusEventDefs := []chasmworkflow.EventDefinition{
+		nexusEventDefs := []EventDefinition{
 			ScheduledEventDefinition{},
 			StartedEventDefinition{},
 			CompletedEventDefinition{},
@@ -99,7 +98,7 @@ func TestCherryPick(t *testing.T) {
 		}
 		for _, def := range nexusEventDefs {
 			err := def.CherryPick(tcx.chasmCtx, tcx.wf, event, excludeNexus)
-			require.ErrorIs(t, err, chasmworkflow.ErrEventNotCherryPickable,
+			require.ErrorIs(t, err, ErrEventNotCherryPickable,
 				"%T should not be cherry-pickable when RESET_REAPPLY_EXCLUDE_TYPE_NEXUS is set", def)
 		}
 	})
@@ -110,7 +109,7 @@ func TestCherryPick(t *testing.T) {
 
 		def := ScheduledEventDefinition{}
 		err := def.CherryPick(tcx.chasmCtx, tcx.wf, event, nil)
-		require.ErrorIs(t, err, chasmworkflow.ErrEventNotCherryPickable)
+		require.ErrorIs(t, err, ErrEventNotCherryPickable)
 	})
 
 	t.Run("cancel requested is never cherry-pickable", func(t *testing.T) {
@@ -119,7 +118,7 @@ func TestCherryPick(t *testing.T) {
 
 		def := CancelRequestedEventDefinition{}
 		err := def.CherryPick(tcx.chasmCtx, tcx.wf, event, nil)
-		require.ErrorIs(t, err, chasmworkflow.ErrEventNotCherryPickable)
+		require.ErrorIs(t, err, ErrEventNotCherryPickable)
 	})
 
 	t.Run("started cherry-pick applies", func(t *testing.T) {
