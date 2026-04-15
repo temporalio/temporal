@@ -310,6 +310,53 @@ func (s *DeploymentVersionSuite) TestForceCAN_WithOverrideState() {
 	}, time.Second*10, time.Millisecond*1000)
 }
 
+// TestEmergencyCaN_SignalFlood verifies that a version workflow can continue-as-new
+// when its history grows too large due to a flood of reactivation signals. This
+// reproduces the root cause of the beh-qa.vazty incident where r127's version workflow
+// became permanently stuck because HasPending() blocked CaN.
+func (s *DeploymentVersionSuite) TestEmergencyCaN_SignalFlood() {
+	// Lower the CaN suggestion threshold so we don't need thousands of signals
+	s.OverrideDynamicConfig(dynamicconfig.HistoryCountSuggestContinueAsNew, 10)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	tv := testvars.New(s)
+
+	// Start a version workflow
+	s.startVersionWorkflow(ctx, tv)
+
+	// Set it as current so it has a meaningful state to verify after CaN
+	err := s.setCurrent(tv, false)
+	s.NoError(err)
+
+	versionWorkflowID := workerdeployment.GenerateVersionWorkflowID(tv.DeploymentSeries(), tv.BuildID())
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: versionWorkflowID,
+	}
+
+	// Flood the version workflow with reactivation signals to grow its history
+	// past the CaN suggestion threshold. Some signals may fail with
+	// "workflow is closing" if the workflow is mid-CaN — that's expected.
+	for i := 0; i < 30; i++ {
+		_ = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.ReactivateVersionSignalName, nil, tv.ClientIdentity())
+	}
+
+	// Verify the workflow is still responsive — it should have CaN'd via the
+	// emergency path and restarted with a fresh history
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := s.describeVersion(tv)
+		if !a.NoError(err) {
+			return
+		}
+
+		// State should be preserved after emergency CaN
+		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, resp.GetWorkerDeploymentVersionInfo().GetStatus())
+	}, time.Second*15, time.Millisecond*1000)
+}
+
 func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
