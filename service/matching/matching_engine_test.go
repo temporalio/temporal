@@ -5286,7 +5286,7 @@ func TestLoggerAndMetricsForPartition_BreakdownEnabled(t *testing.T) {
 					found = true
 				}
 			}
-			assert.True(t, found, "expected taskqueue=%q partition=%q, got: %v", tc.expectTQValue, tc.expectPartitionTag, recordings)
+			require.True(t, found, "expected taskqueue=%q partition=%q, got: %v", tc.expectTQValue, tc.expectPartitionTag, recordings)
 		})
 	}
 }
@@ -5349,7 +5349,7 @@ func TestLoggerAndMetricsForPartition_BreakdownDisabled(t *testing.T) {
 					found = true
 				}
 			}
-			assert.True(t, found, "expected taskqueue=%q partition=%q, got: %v", tc.expectTQValue, tc.expectPartitionTag, recordings)
+			require.True(t, found, "expected taskqueue=%q partition=%q, got: %v", tc.expectTQValue, tc.expectPartitionTag, recordings)
 		})
 	}
 }

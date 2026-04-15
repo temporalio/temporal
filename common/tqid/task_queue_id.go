@@ -339,7 +339,7 @@ func (w *WorkerCommandsPartition) Kind() enumspb.TaskQueueKind {
 	return enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS
 }
 
-func (w *WorkerCommandsPartition) NamespaceId() string { //nolint:stylecheck
+func (w *WorkerCommandsPartition) NamespaceId() string { //nolint:stylecheck // matches Partition interface
 	return w.taskQueue.family.NamespaceId()
 }
 
@@ -361,7 +361,7 @@ func (w *WorkerCommandsPartition) SupportsVersioning() bool      { return false 
 func (w *WorkerCommandsPartition) SupportsPartitions() bool      { return false }
 func (w *WorkerCommandsPartition) MetricTag() string             { return "__worker_commands__" }
 
-func (w *WorkerCommandsPartition) RpcName() string { //nolint:stylecheck
+func (w *WorkerCommandsPartition) RpcName() string { //nolint:stylecheck // matches Partition interface
 	return w.name
 }
 
