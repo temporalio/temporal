@@ -576,8 +576,8 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return "", false, serviceerror.NewInternal("AddWorkflowTask called with unexpected partition kind")
 	}
 
-	// do not load task queues with TTL expiry if not already loaded, which means they have no poller.
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !partition.HasTTLExpiry(), loadCauseTask)
+	// do not load sticky task queues if not already loaded, which means they have no poller.
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY, loadCauseTask)
 	if err != nil {
 		return "", false, err
 	} else if partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && !stickyWorkerAvailable(pm) {
@@ -1097,8 +1097,8 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		"QueryWorkflow called with unexpected partition kind") {
 		return nil, serviceerror.NewInternal("QueryWorkflow called with unexpected partition kind")
 	}
-	// do not load task queues with TTL expiry if not already loaded, which means they have no poller.
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !partition.HasTTLExpiry(), loadCauseQuery)
+	// do not load sticky task queues if not already loaded, which means they have no poller.
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY, loadCauseQuery)
 	if err != nil {
 		return nil, err
 	} else if partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && !stickyWorkerAvailable(pm) {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -46,9 +47,9 @@ type (
 		IsRoot() bool
 		Kind() enumspb.TaskQueueKind
 		IsChild() bool
-		// HasTTLExpiry returns true for partition types that expire after a TTL.
-		// These partitions are not loaded on demand — they must already be loaded.
-		HasTTLExpiry() bool
+		// PersistenceTTL returns the TTL for the partition's persistence metadata.
+		// A zero value means no TTL (metadata persists indefinitely).
+		PersistenceTTL() time.Duration
 		SupportsFairness() bool
 		SupportsVersioning() bool
 		// SupportsPartitions returns true for partition types that can be split into
@@ -279,10 +280,10 @@ func (s *StickyPartition) IsChild() bool {
 	return false
 }
 
-func (s *StickyPartition) HasTTLExpiry() bool       { return true }
-func (s *StickyPartition) SupportsFairness() bool   { return false }
-func (s *StickyPartition) SupportsVersioning() bool { return false }
-func (s *StickyPartition) SupportsPartitions() bool { return false }
+func (s *StickyPartition) PersistenceTTL() time.Duration { return 24 * time.Hour }
+func (s *StickyPartition) SupportsFairness() bool        { return false }
+func (s *StickyPartition) SupportsVersioning() bool      { return false }
+func (s *StickyPartition) SupportsPartitions() bool      { return false }
 
 func (s *StickyPartition) RpcName() string {
 	return s.stickyName
@@ -317,10 +318,10 @@ func (p *NormalPartition) IsChild() bool {
 	return !p.IsRoot()
 }
 
-func (p *NormalPartition) HasTTLExpiry() bool       { return false }
-func (p *NormalPartition) SupportsFairness() bool   { return true }
-func (p *NormalPartition) SupportsVersioning() bool { return true }
-func (p *NormalPartition) SupportsPartitions() bool { return true }
+func (p *NormalPartition) PersistenceTTL() time.Duration { return 0 }
+func (p *NormalPartition) SupportsFairness() bool        { return true }
+func (p *NormalPartition) SupportsVersioning() bool      { return true }
+func (p *NormalPartition) SupportsPartitions() bool      { return true }
 
 func (p *NormalPartition) Kind() enumspb.TaskQueueKind {
 	return enumspb.TASK_QUEUE_KIND_NORMAL

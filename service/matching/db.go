@@ -21,8 +21,7 @@ import (
 )
 
 const (
-	initialRangeID        = 1 // Id of the first range of a new task queue
-	ephemeralTaskQueueTTL = 24 * time.Hour
+	initialRangeID = 1 // Id of the first range of a new task queue
 
 	// Subqueue zero corresponds to "the queue" before migrating metadata to subqueues.
 	// For backwards compatibility, some operations only apply to subqueue zero for now.
@@ -283,10 +282,14 @@ func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	defer db.Unlock()
 	defer db.emitPhysicalBacklogGaugesLocked()
 
-	// We only need to write if something changed, or if we're past half of the ephemeral queue TTL.
-	// Note that we use the same threshold for non-ephemeral queues even though they don't have a
-	// persistence TTL, since the scavenger looks for metadata that hasn't been updated in 48 hours.
-	needWrite := db.lastChange.After(db.lastWrite) || time.Since(db.lastWrite) > ephemeralTaskQueueTTL/2
+	// We only need to write if something changed, or if we're past half of the persistence TTL.
+	// Note that we use the same threshold for all queues even if they don't have a persistence TTL,
+	// since the scavenger looks for metadata that hasn't been updated in 48 hours.
+	ttl := db.queue.Partition().PersistenceTTL()
+	if ttl == 0 {
+		ttl = 24 * time.Hour // default write interval for non-TTL queues
+	}
+	needWrite := db.lastChange.After(db.lastWrite) || time.Since(db.lastWrite) > ttl/2
 	if !needWrite {
 		return nil
 	}
@@ -731,8 +734,8 @@ func (db *taskQueueDB) AllocateSubqueue(
 }
 
 func (db *taskQueueDB) expiryTime() *timestamppb.Timestamp {
-	if db.queue.Partition().HasTTLExpiry() {
-		return timestamppb.New(time.Now().Add(ephemeralTaskQueueTTL))
+	if ttl := db.queue.Partition().PersistenceTTL(); ttl > 0 {
+		return timestamppb.New(time.Now().Add(ttl))
 	}
 	return nil
 }
