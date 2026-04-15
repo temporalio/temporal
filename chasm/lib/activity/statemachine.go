@@ -376,7 +376,7 @@ var TransitionTimedOut = chasm.NewTransition(
 			}
 
 			a.PauseState = nil
-			
+
 			a.emitOnTimedOutMetrics(ctx, event.metricsHandler, timeoutType, event.fromStatus)
 
 			return nil
