@@ -8,8 +8,6 @@ import (
 
 const (
 	omitted = "__omitted__"
-	normal  = "__normal__"
-	sticky  = "__sticky__"
 )
 
 // GetPerTaskQueueFamilyScope returns "namespace" and "taskqueue" tags. "taskqueue" will be "__omitted__" if
@@ -55,14 +53,10 @@ func GetPerTaskQueuePartitionIDScope(
 	var value string
 	if partition == nil {
 		value = unknownValue
-	} else if normalPartition, ok := partition.(*tqid.NormalPartition); ok {
-		if partitionIDBreakdown {
-			value = strconv.Itoa(normalPartition.PartitionId())
-		} else {
-			value = normal
-		}
+	} else if normalPartition, ok := partition.(*tqid.NormalPartition); ok && partitionIDBreakdown {
+		value = strconv.Itoa(normalPartition.PartitionId())
 	} else {
-		value = sticky
+		value = partition.MetricTag()
 	}
 
 	return GetPerTaskQueueScope(handler, namespaceName, partition.TaskQueue(), taskQueueBreakdown,
@@ -81,10 +75,8 @@ func GetPerTaskQueuePartitionTypeScope(
 	var value string
 	if partition == nil {
 		value = unknownValue
-	} else if _, ok := partition.(*tqid.NormalPartition); ok {
-		value = normal
 	} else {
-		value = sticky
+		value = partition.MetricTag()
 	}
 
 	return GetPerTaskQueueScope(handler, namespaceName, partition.TaskQueue(), taskQueueBreakdown,

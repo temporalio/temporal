@@ -55,6 +55,8 @@ type (
 		// SupportsPartitions returns true for partition types that can be split into
 		// multiple partitions for load distribution. When false, partition count must be 1.
 		SupportsPartitions() bool
+		// MetricTag returns a label for this partition kind to be used in metrics.
+		MetricTag() string
 
 		// RpcName returns the mangled name of the task queue partition, to be used in RPCs.
 		//
@@ -284,6 +286,7 @@ func (s *StickyPartition) PersistenceTTL() time.Duration { return 24 * time.Hour
 func (s *StickyPartition) SupportsFairness() bool        { return false }
 func (s *StickyPartition) SupportsVersioning() bool      { return false }
 func (s *StickyPartition) SupportsPartitions() bool      { return false }
+func (s *StickyPartition) MetricTag() string             { return "__sticky__" }
 
 func (s *StickyPartition) RpcName() string {
 	return s.stickyName
@@ -322,6 +325,7 @@ func (p *NormalPartition) PersistenceTTL() time.Duration { return 0 }
 func (p *NormalPartition) SupportsFairness() bool        { return true }
 func (p *NormalPartition) SupportsVersioning() bool      { return true }
 func (p *NormalPartition) SupportsPartitions() bool      { return true }
+func (p *NormalPartition) MetricTag() string             { return "__normal__" }
 
 func (p *NormalPartition) Kind() enumspb.TaskQueueKind {
 	return enumspb.TASK_QUEUE_KIND_NORMAL
