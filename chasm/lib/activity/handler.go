@@ -62,11 +62,13 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, serviceerror.NewInvalidArgumentf("unsupported ID conflict policy: %v", frontendReq.GetIdConflictPolicy())
 	}
 
+	maxCallbacks := h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace())
+
 	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: req.GetNamespaceId(),
-			BusinessID:  req.GetFrontendRequest().GetActivityId(),
+			BusinessID:  frontendReq.GetActivityId(),
 		},
 		func(mutableContext chasm.MutableContext, request *workflowservice.StartActivityExecutionRequest) (*Activity, error) {
 			newActivity, err := NewStandaloneActivity(mutableContext, request)
@@ -75,7 +77,6 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			}
 
 			if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
-				maxCallbacks := h.config.MaxCallbacksPerExecution(request.GetNamespace())
 				if err := newActivity.addCompletionCallbacks(mutableContext, request.GetRequestId(), cbs, maxCallbacks); err != nil {
 					return nil, err
 				}
@@ -88,8 +89,8 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 
 			return newActivity, nil
 		},
-		req.GetFrontendRequest(),
-		chasm.WithRequestID(req.GetFrontendRequest().GetRequestId()),
+		frontendReq,
+		chasm.WithRequestID(frontendReq.GetRequestId()),
 		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
 	)
 
@@ -102,18 +103,19 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, err
 	}
 
+	// Attach callbacks to an existing activity when on_conflict_options.attach_completion_callbacks is set.
+	// TODO: Use chasm.UpdateWithStartExecution to avoid a second transaction once the engine supports BusinessIDConflictPolicyFail in the updateFn path.
 	cbs := frontendReq.GetCompletionCallbacks()
 	if !result.Created && frontendReq.GetOnConflictOptions().GetAttachCompletionCallbacks() && len(cbs) > 0 {
+		requestID := frontendReq.GetRequestId()
 		ref := chasm.NewComponentRef[*Activity](result.ExecutionKey)
 		_, _, err := chasm.UpdateComponent(
 			ctx,
 			ref,
-			(*Activity).attachCallbacks,
-			attachCallbacksRequest{
-				RequestID:           frontendReq.GetRequestId(),
-				CompletionCallbacks: cbs,
-				MaxCallbacks:        h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace()),
+			func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
+				return nil, a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks)
 			},
+			nil,
 		)
 		if err != nil {
 			return nil, err

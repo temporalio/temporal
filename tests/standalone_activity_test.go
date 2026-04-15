@@ -225,14 +225,14 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 	})
 
 	t.Run("UseExisting", func(t *testing.T) {
-		activityID := testcore.RandomizeStr(t.Name())
+		originalActivityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
-		firstStartResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		firstStartResp := s.startAndValidateActivity(ctx, t, originalActivityID, taskQueue)
 
 		startWithUseExisting := func(requestID string) (*workflowservice.StartActivityExecutionResponse, error) {
 			return s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 				Namespace:    s.Namespace().String(),
-				ActivityId:   activityID,
+				ActivityId:   originalActivityID,
 				ActivityType: s.tv.ActivityType(),
 				Identity:     s.tv.WorkerIdentity(),
 				Input:        defaultInput,
@@ -255,7 +255,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 			link := resp.GetLink().GetActivity()
 			require.NotNil(t, link)
 			require.Equal(t, s.Namespace().String(), link.Namespace)
-			require.Equal(t, activityID, link.ActivityId)
+			require.Equal(t, originalActivityID, link.ActivityId)
 			require.Equal(t, firstStartResp.RunId, link.RunId)
 		})
 		t.Run("SecondStartWithSameRequestIdReturnsExistingRun", func(t *testing.T) {
@@ -265,48 +265,132 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 			require.False(t, resp.GetStarted())
 		})
 
-		t.Run("AttachesCallbacksToExistingActivity", func(t *testing.T) {
+		t.Run("OnConflictOptions", func(t *testing.T) {
 			s.OverrideDynamicConfig(
 				callbacks.AllowedAddresses,
 				[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 			)
 
-			resp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-				Namespace:    s.Namespace().String(),
-				ActivityId:   activityID,
-				ActivityType: s.tv.ActivityType(),
-				Identity:     s.tv.WorkerIdentity(),
-				Input:        defaultInput,
-				TaskQueue: &taskqueuepb.TaskQueue{
-					Name: taskQueue,
-				},
-				StartToCloseTimeout: durationpb.New(1 * time.Minute),
-				IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-				RequestId:           s.tv.Any().String(),
-				CompletionCallbacks: []*commonpb.Callback{
-					{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/use-existing-cb"}}},
-				},
-				OnConflictOptions: &commonpb.OnConflictOptions{
-					AttachCompletionCallbacks: true,
-				},
-			})
-			require.NoError(t, err)
-			require.False(t, resp.GetStarted())
-			require.Equal(t, firstStartResp.RunId, resp.RunId)
+			onConflictOpts := &commonpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+				AttachLinks:               true,
+			}
 
-			// Verify the callback was attached to the existing activity.
-			descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				ActivityId: activityID,
-				RunId:      firstStartResp.RunId,
+			t.Run("AttachesToNewActivity", func(t *testing.T) {
+				newActivityID := testcore.RandomizeStr(t.Name())
+				newTaskQueue := testcore.RandomizeStr(t.Name())
+
+				resp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+					Namespace:    s.Namespace().String(),
+					ActivityId:   newActivityID,
+					ActivityType: s.tv.ActivityType(),
+					Identity:     s.tv.WorkerIdentity(),
+					Input:        defaultInput,
+					TaskQueue: &taskqueuepb.TaskQueue{
+						Name: newTaskQueue,
+					},
+					StartToCloseTimeout: durationpb.New(1 * time.Minute),
+					IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+					RequestId:           s.tv.Any().String(),
+					CompletionCallbacks: []*commonpb.Callback{
+						{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/new-activity-cb"}}},
+					},
+					OnConflictOptions: onConflictOpts,
+				})
+				require.NoError(t, err)
+				require.True(t, resp.GetStarted())
+
+				descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+					Namespace:  s.Namespace().String(),
+					ActivityId: newActivityID,
+					RunId:      resp.RunId,
+				})
+				require.NoError(t, err)
+				require.Len(t, descResp.Callbacks, 1)
+				require.Equal(t, "http://localhost/new-activity-cb", descResp.Callbacks[0].GetInfo().GetCallback().GetNexus().GetUrl())
 			})
-			require.NoError(t, err)
-			require.Len(t, descResp.Callbacks, 1)
-			require.Equal(t, "http://localhost/use-existing-cb", descResp.Callbacks[0].GetInfo().GetCallback().GetNexus().GetUrl())
+
+			t.Run("AttachesToExistingActivity", func(t *testing.T) {
+				resp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+					Namespace:    s.Namespace().String(),
+					ActivityId:   originalActivityID,
+					ActivityType: s.tv.ActivityType(),
+					Identity:     s.tv.WorkerIdentity(),
+					Input:        defaultInput,
+					TaskQueue: &taskqueuepb.TaskQueue{
+						Name: taskQueue,
+					},
+					StartToCloseTimeout: durationpb.New(1 * time.Minute),
+					IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+					RequestId:           s.tv.Any().String(),
+					CompletionCallbacks: []*commonpb.Callback{
+						{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/existing-activity-cb"}}},
+					},
+					OnConflictOptions: onConflictOpts,
+				})
+				require.NoError(t, err)
+				require.False(t, resp.GetStarted())
+				require.Equal(t, firstStartResp.RunId, resp.RunId)
+
+				descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+					Namespace:  s.Namespace().String(),
+					ActivityId: originalActivityID,
+					RunId:      firstStartResp.RunId,
+				})
+				require.NoError(t, err)
+				require.Len(t, descResp.Callbacks, 1)
+				require.Equal(t, "http://localhost/existing-activity-cb", descResp.Callbacks[0].GetInfo().GetCallback().GetNexus().GetUrl())
+			})
+
+			t.Run("IdempotentWithSameRequestId", func(t *testing.T) {
+				idempotentActivityID := testcore.RandomizeStr(t.Name())
+				idempotentTaskQueue := testcore.RandomizeStr(t.Name())
+				idempotentStartResp := s.startAndValidateActivity(ctx, t, idempotentActivityID, idempotentTaskQueue)
+
+				requestID := s.tv.Any().String()
+				startReq := &workflowservice.StartActivityExecutionRequest{
+					Namespace:    s.Namespace().String(),
+					ActivityId:   idempotentActivityID,
+					ActivityType: s.tv.ActivityType(),
+					Identity:     s.tv.WorkerIdentity(),
+					Input:        defaultInput,
+					TaskQueue: &taskqueuepb.TaskQueue{
+						Name: idempotentTaskQueue,
+					},
+					StartToCloseTimeout: durationpb.New(1 * time.Minute),
+					IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+					RequestId:           requestID,
+					CompletionCallbacks: []*commonpb.Callback{
+						{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/idempotent-cb"}}},
+					},
+					OnConflictOptions: onConflictOpts,
+				}
+
+				// First call attaches the callback.
+				resp1, err := s.FrontendClient().StartActivityExecution(ctx, startReq)
+				require.NoError(t, err)
+				require.False(t, resp1.GetStarted())
+
+				// Second call with the same request ID should not duplicate the callback.
+				resp2, err := s.FrontendClient().StartActivityExecution(ctx, startReq)
+				require.NoError(t, err)
+				require.False(t, resp2.GetStarted())
+
+				descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+					Namespace:  s.Namespace().String(),
+					ActivityId: idempotentActivityID,
+					RunId:      idempotentStartResp.RunId,
+				})
+				require.NoError(t, err)
+				// Only 1 callback: the second call with the same request ID should not add another.
+				require.Len(t, descResp.Callbacks, 1)
+				require.Equal(t, "http://localhost/idempotent-cb", descResp.Callbacks[0].GetInfo().GetCallback().GetNexus().GetUrl())
+			})
 		})
 
 		t.Run("DoesNotApplyToCompletedActivity", func(t *testing.T) {
-			pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, firstStartResp.RunId)
+			pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, originalActivityID, taskQueue, firstStartResp.RunId)
 			_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
 				Namespace: s.Namespace().String(),
 				TaskToken: pollTaskResp.TaskToken,
