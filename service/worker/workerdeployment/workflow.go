@@ -387,14 +387,9 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// there are no pending updates/signals and the state has changed.
 	err = workflow.Await(ctx, func() bool {
 		canContinue := d.deleteDeployment || // deployment is deleted -> it's ok to drop all signals and updates.
-			// Normal CaN path: no pending signal or update, but the state is dirty or forceCaN is requested:
+			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
 			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
-				(d.forceCAN || d.stateChanged || workflow.GetInfo(ctx).GetContinueAsNewSuggested())) ||
-			// Emergency CaN path: history too large — bypass HasPending() but still
-			// wait for in-flight handlers to complete.
-			(workflow.GetInfo(ctx).GetContinueAsNewSuggested() &&
-				d.signalHandler.processingSignals == 0 &&
-				workflow.AllHandlersFinished(ctx))
+				(d.forceCAN || d.stateChanged || workflow.GetInfo(ctx).GetContinueAsNewSuggested()))
 
 		// TODO(carlydf): remove verbose logging
 		if canContinue {
@@ -419,9 +414,6 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return nil
 	}
 
-	if d.signalHandler.signalSelector.HasPending() {
-		d.logger.Warn("Deployment CaN with pending signals due to large history")
-	}
 	// TODO(carlydf): remove verbose logging
 	d.logger.Info("Continuing workflow as new",
 		"create_time", d.State.GetCreateTime(),
