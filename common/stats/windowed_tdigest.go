@@ -16,23 +16,37 @@ type (
 	TimeWindowedStats interface {
 		// Record records a value that occurred at the given timestamp.
 		Record(value float64, timestamp time.Time)
-		// RecordToLatestWindow records a value in the current time window. Faster than Record.
-		// Warning: This is lower-accuracy than Record, lock-access will
-		// bias the recording time later than the call-time
+		// RecordToLatestWindow records a value in the current time window.
+		// This will call time.Now(), don't call this in a tight loop.
 		RecordToLatestWindow(value float64)
+		// RecordMulti records a weighted value that occurred at the given timestamp
+		// with the provided count. Imagine you have 3 counts of 10, and you
+		// call RecordMulti(20, t, 3). Your new mean will be 15 because you added
+		// 3 counts of 20.
 		RecordMulti(value float64, timestamp time.Time, count uint64)
+		// RecordMultiToLatestWindow records a weighted value in the current time window.
+		// This will call time.Now(), don't call this in a tight loop.
 		RecordMultiToLatestWindow(value float64, count uint64)
-		// Quantile returns the approximate value at quantile q (0 <= q <= 1)
-		// across all active windows.
+		// Quantile returns the approximate value at quantile q (0 <= q <= 1).
+		// Aggregates across all active windows.
 		Quantile(q float64) float64
-		// TrimmedMean returns the approximate mean value within the given
-		// quantile range (0 <= q <= 1) across all active windows.
+		// TrimmedMean returns the mean of the values within the given quantile range (0 <= q <= 1).
+		// For example, TrimmedMean(0.9, 0.99) returns the average of all the values between the
+		// 90th percentile and the 99th percentile.
+		// Aggregates across all active windows.
 		TrimmedMean(lowerQuantile, upperQuantile float64) float64
+		// SubWindowForTime returns a view of the time window containing the given instant.
+		// Use this to get detailed information about a specific time window.
 		SubWindowForTime(instant time.Time) TimeWindowView
 	}
 
+	// TimeWindowView is a read-only view of a single time window.
 	TimeWindowView interface {
+		// Quantile returns the approximate value at quantile q (0 <= q <= 1)
 		Quantile(q float64) float64
+		// TrimmedMean returns the mean of the values within the given quantile range (0 <= q <= 1).
+		// For example, TrimmedMean(0.9, 0.99) returns the average of all the values between the
+		// 90th percentile and the 99th percentile.
 		TrimmedMean(lowerQuantile, upperQuantile float64) float64
 		Start() time.Time
 		End() time.Time
@@ -64,7 +78,13 @@ type (
 	}
 )
 
+// Compile-time assertion that timeWindowedTDigest implements TimeWindowedStats.
+var _ TimeWindowedStats = (*timeWindowedTDigest)(nil)
+
 // NewWindowedTDigest creates a new TimeWindowedStats backed by per-window t-digests.
+// Some guidance on sizing the windows/counts: Prefer windows containing 100-1000 datapoints.
+// T-Digest is somewhat super-linear with datapoint count, and 1000 is a breakpoint with the
+// cost of just creating a new window. See BenchmarkInsert in windowed_tdigest_performance_test.go for details.
 func NewWindowedTDigest(cfg WindowConfig) (TimeWindowedStats, error) {
 	if cfg.WindowCount <= 0 {
 		return nil, errors.New("windowCount must be non-negative")
