@@ -471,6 +471,8 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	// We reuse the TemporalNamespaceDivision column to store the string representation of ArchetypeID.
 	requestBase.SearchAttributes.IndexedFields[sadefs.TemporalNamespaceDivision] = payload.EncodeString(strconv.FormatUint(uint64(tree.ArchetypeID()), 10))
 
+	chasmStateSizeBytes := int64(mutableState.GetApproximatePersistedSize())
+
 	// Override TaskQueue if provided by CHASM search attributes.
 	if chasmTaskQueue != "" {
 		requestBase.TaskQueue = chasmTaskQueue
@@ -482,6 +484,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 			ctx,
 			&manager.UpsertWorkflowExecutionRequest{
 				VisibilityRequestBase: requestBase,
+				StateSizeBytes:        chasmStateSizeBytes,
 			},
 		)
 	}
@@ -490,6 +493,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	if err != nil {
 		return err
 	}
+	closedRequest.HistorySizeBytes = chasmStateSizeBytes
 
 	release(nil)
 	return t.visibilityMgr.RecordWorkflowExecutionClosed(ctx, closedRequest)

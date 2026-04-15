@@ -133,5 +133,6 @@ type (
 	// InternalUpsertWorkflowExecutionRequest is request to UpsertWorkflowExecution
 	InternalUpsertWorkflowExecutionRequest struct {
 		*InternalVisibilityRequestBase
+		StateSizeBytes int64
 	}
 )

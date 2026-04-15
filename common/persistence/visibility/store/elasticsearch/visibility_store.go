@@ -268,6 +268,9 @@ func (s *VisibilityStore) UpsertWorkflowExecution(
 	if err != nil {
 		return err
 	}
+	if request.StateSizeBytes > 0 {
+		doc[sadefs.HistorySizeBytes] = request.StateSizeBytes
+	}
 
 	return s.addBulkIndexRequestAndWait(ctx, request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
 }

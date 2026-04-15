@@ -164,6 +164,9 @@ func (s *VisibilityStore) UpsertWorkflowExecution(
 	if err != nil {
 		return err
 	}
+	if request.StateSizeBytes > 0 {
+		row.HistorySizeBytes = &request.StateSizeBytes
+	}
 
 	result, err := s.sqlStore.DB.ReplaceIntoVisibility(ctx, row)
 	if err != nil {

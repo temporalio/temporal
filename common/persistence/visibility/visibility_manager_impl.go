@@ -131,6 +131,7 @@ func (p *visibilityManagerImpl) UpsertWorkflowExecution(
 	}
 	req := &store.InternalUpsertWorkflowExecutionRequest{
 		InternalVisibilityRequestBase: requestBase,
+		StateSizeBytes:                request.StateSizeBytes,
 	}
 	return p.store.UpsertWorkflowExecution(ctx, req)
 }

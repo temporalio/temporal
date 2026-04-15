@@ -85,6 +85,7 @@ type (
 	// UpsertWorkflowExecutionRequest is used to upsert workflow execution
 	UpsertWorkflowExecutionRequest struct {
 		*VisibilityRequestBase
+		StateSizeBytes int64
 	}
 
 	// ListWorkflowExecutionsRequest is used to list executions in a namespace
