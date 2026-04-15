@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/nexus/nexustoken"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/frontend/configs"
@@ -60,7 +61,7 @@ type HandlerOptions struct {
 	Logger                               log.Logger
 	MetricsHandler                       metrics.Handler
 	Config                               *Config
-	CallbackTokenGenerator               *commonnexus.CallbackTokenGenerator
+	CallbackTokenGenerator               *nexustoken.CallbackTokenGenerator
 	HistoryClient                        resource.HistoryClient
 	TelemetryInterceptor                 *interceptor.TelemetryInterceptor
 	RequestErrorHandler                  *interceptor.RequestErrorHandler
@@ -74,27 +75,30 @@ type HandlerOptions struct {
 	HTTPTraceProvider                    commonnexus.HTTPClientTraceProvider
 }
 
-type completionHandler struct {
+type CompletionHandler struct {
 	HandlerOptions
 	clientVersionChecker    headers.VersionChecker
 	preProcessErrorsCounter metrics.CounterIface
 }
 
+func newCompletionHandler(options HandlerOptions) *CompletionHandler {
+	return &CompletionHandler{
+		HandlerOptions:          options,
+		clientVersionChecker:    headers.NewDefaultVersionChecker(),
+		preProcessErrorsCounter: options.MetricsHandler.Counter(metrics.NexusCompletionRequestPreProcessErrors.Name()),
+	}
+}
+
 // CompleteOperation implements nexus.CompletionHandler.
 // nolint:revive // (cyclomatic complexity) This function is long but the complexity is justified.
-func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest) (retErr error) {
+func (h *CompletionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest) (retErr error) {
 	startTime := time.Now()
-	token, err := commonnexus.DecodeCallbackToken(r.HTTPRequest.Header.Get(commonnexus.CallbackTokenHeader))
-	if err != nil {
-		h.Logger.Error("failed to decode callback token", tag.Error(err))
+	completion := r.CompletionToken
+	if completion == nil {
+		h.Logger.Error("missing completion token")
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
-
-	completion, err := h.CallbackTokenGenerator.DecodeCompletion(token)
-	if err != nil {
-		h.Logger.Error("failed to decode completion from token", tag.Error(err))
-		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
-	}
+	var err error
 	ns, err := h.NamespaceRegistry.GetNamespaceByID(namespace.ID(completion.NamespaceId))
 	if err != nil {
 		h.Logger.Error("failed to get namespace for nexus completion request", tag.WorkflowNamespaceID(completion.NamespaceId), tag.Error(err))
@@ -112,7 +116,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 		tag.WorkflowRunID(completion.GetRunId()),
 	)
 	rCtx := &requestContext{
-		completionHandler: h,
+		CompletionHandler: h,
 		namespace:         ns,
 		workflowID:        completion.GetWorkflowId(),
 		logger:            log.With(h.Logger, tag.WorkflowNamespace(ns.Name().String())),
@@ -229,7 +233,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 	return nil
 }
 
-func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest, rCtx *requestContext) error {
+func (h *CompletionHandler) forwardCompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest, rCtx *requestContext) error {
 	client, err := h.ForwardingClients.Get(rCtx.namespace.ActiveClusterName(rCtx.workflowID))
 	if err != nil {
 		h.Logger.Error("unable to get HTTP client for forward request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err), tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()), tag.TargetCluster(rCtx.namespace.ActiveClusterName(rCtx.workflowID)))
@@ -307,7 +311,7 @@ func (f *forwardingHTTPHeaderWrapper) Do(req *http.Request) (*http.Response, err
 }
 
 type requestContext struct {
-	*completionHandler
+	*CompletionHandler
 	logger                        log.Logger
 	metricsHandler                metrics.Handler
 	metricsHandlerForInterceptors metrics.Handler

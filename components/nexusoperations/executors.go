@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/nexus/nexustoken"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
@@ -60,7 +61,7 @@ type TaskExecutorOptions struct {
 	NamespaceRegistry      namespace.Registry
 	MetricsHandler         metrics.Handler
 	Logger                 log.Logger
-	CallbackTokenGenerator *commonnexus.CallbackTokenGenerator
+	CallbackTokenGenerator *nexustoken.CallbackTokenGenerator
 	ClientProvider         ClientProvider
 	EndpointRegistry       commonnexus.EndpointRegistry
 	HTTPTraceProvider      commonnexus.HTTPClientTraceProvider
@@ -262,7 +263,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		CallbackURL: callbackURL,
 		RequestID:   args.requestID,
 		CallbackHeader: nexus.Header{
-			commonnexus.CallbackTokenHeader: token,
+			nexustoken.CallbackTokenHeader: token,
 		},
 		Links: []nexus.Link{args.nexusLink},
 	}

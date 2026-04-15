@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/nexus/nexustoken"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
@@ -27,11 +28,12 @@ const nexusCallbackSourceHeader = "Nexus-Callback-Source"
 var Module = fx.Module(
 	"chasm.lib.nexusoperation",
 	fx.Provide(configProvider),
-	fx.Provide(commonnexus.NewCallbackTokenGenerator),
+	fx.Provide(nexustoken.NewCallbackTokenGenerator),
 	fx.Provide(endpointRegistryProvider),
 	fx.Invoke(endpointRegistryLifetimeHooks),
 	fx.Provide(defaultNexusTransportProvider),
 	fx.Provide(clientProviderFactory),
+	fx.Provide(newCompletionHandler),
 	fx.Provide(newCancellationBackoffTaskHandler),
 	fx.Provide(newCancellationInvocationTaskHandler),
 	fx.Provide(newOperationBackoffTaskHandler),

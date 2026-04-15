@@ -68,7 +68,9 @@ func (s *CallbacksSuite) SetupSuite() {
 }
 
 func (s *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completionHandler) string {
-	hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: h})
+	hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{
+		Handler: h,
+	})
 	srv := httptest.NewServer(hh)
 	t.Cleanup(func() {
 		srv.Close()

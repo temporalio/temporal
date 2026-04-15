@@ -33,6 +33,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/nexus/nexustoken"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -592,7 +593,7 @@ func TestProcessInvocationTask(t *testing.T) {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
 				},
-				CallbackTokenGenerator: commonnexus.NewCallbackTokenGenerator(),
+				CallbackTokenGenerator: nexustoken.NewCallbackTokenGenerator(),
 				NamespaceRegistry:      namespaceRegistry,
 				MetricsHandler:         metricsHandler,
 				Logger:                 log.NewNoopLogger(),
@@ -1698,7 +1699,7 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
 				},
-				CallbackTokenGenerator: commonnexus.NewCallbackTokenGenerator(),
+				CallbackTokenGenerator: nexustoken.NewCallbackTokenGenerator(),
 				NamespaceRegistry:      namespaceRegistry,
 				MetricsHandler:         metricsHandler,
 				Logger:                 log.NewNoopLogger(),

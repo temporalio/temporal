@@ -32,6 +32,7 @@ import (
 	cnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/nexus/nexustoken"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/tests/testcore"
@@ -488,7 +489,7 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 
 			h := nexustest.Handler{
 				OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-					callbackToken = options.CallbackHeader.Get(cnexus.CallbackTokenHeader)
+					callbackToken = options.CallbackHeader.Get(nexustoken.CallbackTokenHeader)
 					publicCallbackUrl = options.CallbackURL
 					return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 				},
@@ -593,7 +594,7 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 
 			completion := tc.getCompletionFn()
 			completion.Header = make(nexus.Header, 1)
-			completion.Header.Set(cnexus.CallbackTokenHeader, callbackToken)
+			completion.Header.Set(nexustoken.CallbackTokenHeader, callbackToken)
 			snap, err := s.sendNexusCompletionRequest(ctx, s.T(), s.clusters[1], publicCallbackUrl, completion)
 			s.NoError(err)
 			s.Len(snap["nexus_completion_requests"], 1)

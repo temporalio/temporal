@@ -80,7 +80,9 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 
 	// Start HTTP server for nexus callback completion
 	callbackAddress := func() string {
-		hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: ch})
+		hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{
+			Handler: ch,
+		})
 		srv := httptest.NewServer(hh)
 		s.T().Cleanup(func() {
 			srv.Close()
@@ -217,7 +219,9 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 
 	// Start HTTP server for nexus callback completion
 	callbackAddress := func() string {
-		hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: ch})
+		hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{
+			Handler: ch,
+		})
 		srv := httptest.NewServer(hh)
 		s.T().Cleanup(func() {
 			srv.Close()
@@ -353,7 +357,9 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 
 	// Start HTTP servers for nexus callback completion
 	callbackAddress1 := func() string {
-		hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: ch1})
+		hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{
+			Handler: ch1,
+		})
 		srv := httptest.NewServer(hh)
 		s.T().Cleanup(func() {
 			srv.Close()
@@ -362,7 +368,9 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 	}()
 
 	callbackAddress2 := func() string {
-		hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: ch2})
+		hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{
+			Handler: ch2,
+		})
 		srv := httptest.NewServer(hh)
 		s.T().Cleanup(func() {
 			srv.Close()

@@ -30,6 +30,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/nexus/nexustoken"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
@@ -117,7 +118,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 				return nil, errors.New("injected error for failing nexus start operation")
 			}
 
-			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
+			callbackToken = options.CallbackHeader.Get(nexustoken.CallbackTokenHeader)
 			publicCallbackUrl = options.CallbackURL
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
@@ -267,7 +268,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 	var publicCallbackUrl string
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
+			callbackToken = options.CallbackHeader.Get(nexustoken.CallbackTokenHeader)
 			publicCallbackUrl = options.CallbackURL
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
@@ -725,7 +726,7 @@ func (s *NexusStateReplicationSuite) waitCallback(
 func (s *NexusStateReplicationSuite) completeNexusOperation(ctx context.Context, result any, callbackUrl, callbackToken string) {
 	completion := nexusrpc.CompleteOperationOptions{
 		Result: testcore.MustToPayload(s.T(), result),
-		Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
+		Header: nexus.Header{nexustoken.CallbackTokenHeader: callbackToken},
 	}
 	client := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
 		Serializer: commonnexus.PayloadSerializer,
@@ -739,7 +740,7 @@ func (s *NexusStateReplicationSuite) cancelNexusOperation(ctx context.Context, c
 		Error: nexus.NewOperationCanceledErrorf("operation canceled"),
 	}
 	if callbackToken != "" {
-		completion.Header = nexus.Header{commonnexus.CallbackTokenHeader: callbackToken}
+		completion.Header = nexus.Header{nexustoken.CallbackTokenHeader: callbackToken}
 	}
 	c := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
 		Serializer: commonnexus.PayloadSerializer,

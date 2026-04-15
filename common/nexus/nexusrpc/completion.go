@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common/nexus/nexustoken"
 )
 
 // CompletionHTTPClient is a client for sending Nexus operation completion callbacks via HTTP.
@@ -184,6 +186,8 @@ func (c CompleteOperationOptions) applyToHTTPRequest(cc *CompletionHTTPClient, r
 type CompletionRequest struct {
 	// The original HTTP request.
 	HTTPRequest *http.Request
+	// Decoded Temporal callback token, if present and valid.
+	CompletionToken *tokenspb.NexusOperationCompletion
 	// State of the operation.
 	State nexus.OperationState
 	// OperationToken is the unique token for this operation. Used when a completion callback is received before a
@@ -233,6 +237,12 @@ func (h *completionHTTPHandler) ServeHTTP(writer http.ResponseWriter, request *h
 		State:          nexus.OperationState(request.Header.Get(headerOperationState)),
 		OperationToken: request.Header.Get(nexus.HeaderOperationToken),
 		HTTPRequest:    request,
+	}
+	var err error
+	completion.CompletionToken, err = nexustoken.DecodeCompletionToken(request)
+	if err != nil {
+		h.WriteFailure(writer, request, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token"))
+		return
 	}
 	if startTimeHeader := request.Header.Get(headerOperationStartTime); startTimeHeader != "" {
 		var parseTimeErr error

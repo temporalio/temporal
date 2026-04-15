@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexustoken"
 )
 
 // Header key used to identify callbacks that originate from and target the same cluster.
@@ -25,13 +26,13 @@ func routeSystemCallbackRequest(
 	clusterMetadata cluster.Metadata,
 	namespaceRegistry namespace.Registry,
 	httpClientCache *cluster.FrontendHTTPClientCache,
-	callbackTokenGenerator *commonnexus.CallbackTokenGenerator,
+	callbackTokenGenerator *nexustoken.CallbackTokenGenerator,
 	localClient *common.FrontendHTTPClient,
 	logger log.Logger,
 ) (*http.Response, error) {
 	var frontendClient *common.FrontendHTTPClient
 	if r.Header != nil {
-		token, err := commonnexus.DecodeCallbackToken(r.Header.Get(commonnexus.CallbackTokenHeader))
+		token, err := nexustoken.DecodeCallbackToken(r.Header.Get(nexustoken.CallbackTokenHeader))
 		if err != nil {
 			logger.Error("failed to decode callback token", tag.Error(err))
 			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
@@ -83,7 +84,7 @@ func routeRequest(
 	clusterMetadata cluster.Metadata,
 	namespaceRegistry namespace.Registry,
 	httpClientCache *cluster.FrontendHTTPClientCache,
-	callbackTokenGenerator *commonnexus.CallbackTokenGenerator,
+	callbackTokenGenerator *nexustoken.CallbackTokenGenerator,
 	defaultClient *http.Client,
 	localClient *common.FrontendHTTPClient,
 	logger log.Logger,

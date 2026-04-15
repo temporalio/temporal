@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexustoken"
 	"go.uber.org/mock/gomock"
 )
 
@@ -160,7 +161,7 @@ func TestRouteSystemCallbackRequest_NilHeaders(t *testing.T) {
 func TestRouteSystemCallbackRequest_InvalidToken(t *testing.T) {
 	r, err := http.NewRequest(http.MethodPost, commonnexus.SystemCallbackURL, nil)
 	require.NoError(t, err)
-	r.Header.Set(commonnexus.CallbackTokenHeader, "not-valid-json")
+	r.Header.Set(nexustoken.CallbackTokenHeader, "not-valid-json")
 
 	_, err = routeSystemCallbackRequest(
 		r,
@@ -182,9 +183,9 @@ func TestRouteSystemCallbackRequest_InvalidTokenData(t *testing.T) {
 	// Valid token structure but invalid data field.
 	r, err := http.NewRequest(http.MethodPost, commonnexus.SystemCallbackURL, nil)
 	require.NoError(t, err)
-	r.Header.Set(commonnexus.CallbackTokenHeader, `{"v":1,"d":"!!!invalid-base64"}`)
+	r.Header.Set(nexustoken.CallbackTokenHeader, `{"v":1,"d":"!!!invalid-base64"}`)
 
-	tokenGen := commonnexus.NewCallbackTokenGenerator()
+	tokenGen := nexustoken.NewCallbackTokenGenerator()
 
 	_, err = routeSystemCallbackRequest(
 		r,
@@ -205,7 +206,7 @@ func TestRouteSystemCallbackRequest_NamespaceNotFound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	nsRegistry := namespace.NewMockRegistry(ctrl)
 
-	tokenGen := commonnexus.NewCallbackTokenGenerator()
+	tokenGen := nexustoken.NewCallbackTokenGenerator()
 	tokenStr, err := tokenGen.Tokenize(&tokenspb.NexusOperationCompletion{
 		NamespaceId: "ns-id-1",
 		WorkflowId:  "wf-1",
@@ -218,7 +219,7 @@ func TestRouteSystemCallbackRequest_NamespaceNotFound(t *testing.T) {
 
 	r, err := http.NewRequest(http.MethodPost, commonnexus.SystemCallbackURL, nil)
 	require.NoError(t, err)
-	r.Header.Set(commonnexus.CallbackTokenHeader, tokenStr)
+	r.Header.Set(nexustoken.CallbackTokenHeader, tokenStr)
 
 	_, err = routeSystemCallbackRequest(
 		r,
@@ -246,7 +247,7 @@ func TestRouteSystemCallbackRequest_Success(t *testing.T) {
 	clusterMeta := cluster.NewMockMetadata(ctrl)
 	nsRegistry := namespace.NewMockRegistry(ctrl)
 
-	tokenGen := commonnexus.NewCallbackTokenGenerator()
+	tokenGen := nexustoken.NewCallbackTokenGenerator()
 	tokenStr, err := tokenGen.Tokenize(&tokenspb.NexusOperationCompletion{
 		NamespaceId: "ns-id-1",
 		WorkflowId:  "wf-1",
@@ -272,7 +273,7 @@ func TestRouteSystemCallbackRequest_Success(t *testing.T) {
 
 	r, err := http.NewRequest(http.MethodPost, commonnexus.SystemCallbackURL, nil)
 	require.NoError(t, err)
-	r.Header.Set(commonnexus.CallbackTokenHeader, tokenStr)
+	r.Header.Set(nexustoken.CallbackTokenHeader, tokenStr)
 
 	resp, err := routeSystemCallbackRequest(
 		r,

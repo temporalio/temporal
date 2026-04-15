@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/nexus/nexustoken"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -64,7 +65,7 @@ func (c invocableInternal) Invoke(
 	}
 
 	// Get back the base64-encoded ComponentRef from the header.
-	encodedRef := header.Get(commonnexus.CallbackTokenHeader)
+	encodedRef := header.Get(nexustoken.CallbackTokenHeader)
 	if encodedRef == "" {
 		return invocationResultFail{logInternalError(h.logger, "callback missing token", nil)}
 	}

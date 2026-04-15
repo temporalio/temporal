@@ -22,8 +22,8 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/nexus/nexustoken"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/queues/common"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
@@ -579,7 +579,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			// Create headers
 			headers := nexus.Header{}
 			if tc.headerValue != "" {
-				headers.Set(commonnexus.CallbackTokenHeader, tc.headerValue)
+				headers.Set(nexustoken.CallbackTokenHeader, tc.headerValue)
 			}
 
 			// Create callback with chasm internal URL

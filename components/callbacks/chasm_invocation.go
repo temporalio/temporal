@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/nexus/nexustoken"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -48,7 +49,7 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		header = nexus.Header{}
 	}
 
-	encodedRef := header.Get(commonnexus.CallbackTokenHeader)
+	encodedRef := header.Get(nexustoken.CallbackTokenHeader)
 	if encodedRef == "" {
 		return invocationResultFail{logInternalError(e.Logger, "callback missing token", nil)}
 	}

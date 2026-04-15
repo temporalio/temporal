@@ -1,8 +1,9 @@
-package nexus
+package nexustoken
 
 import (
 	"encoding/base64"
 	"encoding/json"
+	"net/http"
 
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"google.golang.org/grpc/codes"
@@ -71,4 +72,16 @@ func DecodeCallbackToken(encoded string) (token *CallbackToken, err error) {
 		return nil, status.Errorf(codes.InvalidArgument, "unsupported token version: %d", token.Version)
 	}
 	return
+}
+
+func DecodeCompletionToken(r *http.Request) (*tokenspb.NexusOperationCompletion, error) {
+	encoded := r.Header.Get(CallbackTokenHeader)
+	if encoded == "" {
+		return nil, nil
+	}
+	token, err := DecodeCallbackToken(encoded)
+	if err != nil {
+		return nil, err
+	}
+	return NewCallbackTokenGenerator().DecodeCompletion(token)
 }

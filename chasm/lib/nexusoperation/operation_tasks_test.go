@@ -31,6 +31,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/nexus/nexustoken"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protorequire"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
@@ -93,7 +94,7 @@ func newInvocationTaskTestEnv(
 			clientProvider:    clientProvider,
 			endpointRegistry:  endpointReg,
 		},
-		callbackTokenGenerator: commonnexus.NewCallbackTokenGenerator(),
+		callbackTokenGenerator: nexustoken.NewCallbackTokenGenerator(),
 	}
 
 	// Set up CHASM tree with mock store as parent of the operation.

@@ -9,7 +9,7 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexustoken"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	"go.uber.org/fx"
 )
@@ -35,7 +35,7 @@ func HTTPCallerProviderProvider(
 		return nil, fmt.Errorf("cannot create local frontend HTTP client: %w", err)
 	}
 	defaultClient := &http.Client{}
-	callbackTokenGenerator := commonnexus.NewCallbackTokenGenerator()
+	callbackTokenGenerator := nexustoken.NewCallbackTokenGenerator()
 
 	m := collection.NewOnceMap(func(queuescommon.NamespaceIDAndDestination) HTTPCaller {
 		return func(r *http.Request) (*http.Response, error) {

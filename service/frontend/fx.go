@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -108,6 +109,7 @@ var Module = fx.Options(
 	fx.Provide(NewVersionChecker),
 	fx.Provide(ServiceResolverProvider),
 	fx.Invoke(RegisterNexusHTTPHandler),
+	fx.Invoke(RegisterNexusCompletionHandler),
 	fx.Invoke(RegisterOpenAPIHTTPHandler),
 	fx.Provide(HTTPAPIServerProvider),
 	fx.Provide(NewServiceProvider),
@@ -116,6 +118,7 @@ var Module = fx.Options(
 	fx.Invoke(ServiceLifetimeHooks),
 	fx.Invoke(EndpointRegistryLifetimeHooks),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
+	chasmnexus.Module,
 	nexusfrontend.Module,
 	activity.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
