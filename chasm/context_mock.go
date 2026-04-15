@@ -2,14 +2,17 @@ package chasm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sync"
 	"time"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 )
 
 var _ Context = (*MockContext)(nil)
@@ -17,11 +20,16 @@ var _ MutableContext = (*MockMutableContext)(nil)
 
 // MockContext is a mock implementation of [Context].
 type MockContext struct {
-	HandleExecutionKey   func() ExecutionKey
-	HandleNow            func(component Component) time.Time
-	HandleRef            func(component Component) ([]byte, error)
-	HandleExecutionInfo  func() ExecutionInfo
-	HandleMetricsHandler func() metrics.Handler
+	HandleExecutionKey         func() ExecutionKey
+	HandleNow                  func(component Component) time.Time
+	HandleRef                  func(component Component) ([]byte, error)
+	HandleExecutionCloseTime   func() time.Time
+	HandleStateTransitionCount func() int64
+	HandleExecutionInfo        func() ExecutionInfo
+	HandleLibrary              func(name string) (Library, bool)
+	HandleNamespaceEntry       func() *namespace.Namespace
+	HandleEndpointByName       func(string) (*persistencespb.NexusEndpointEntry, error)
+	HandleMetricsHandler       func() metrics.Handler
 
 	// GoCtx is the underlying context.Context used for context value lookups.
 	// Any values set on it will be available via the CHASM mock context's Value method,
@@ -52,6 +60,13 @@ func (c *MockContext) goContext() context.Context {
 		c.GoCtx = context.Background()
 	}
 	return c.GoCtx
+}
+
+func (c *MockContext) EndpointByName(name string) (*persistencespb.NexusEndpointEntry, error) {
+	if c.HandleEndpointByName != nil {
+		return c.HandleEndpointByName(name)
+	}
+	return nil, errors.New("endpoint registry not available")
 }
 
 func (c *MockContext) Now(cmp Component) time.Time {
@@ -86,6 +101,13 @@ func (c *MockContext) ExecutionInfo() ExecutionInfo {
 	return ExecutionInfo{}
 }
 
+func (c *MockContext) NamespaceEntry() *namespace.Namespace {
+	if c.HandleNamespaceEntry != nil {
+		return c.HandleNamespaceEntry()
+	}
+	return nil
+}
+
 func (c *MockContext) Logger() log.Logger {
 	executionKey := c.ExecutionKey()
 	return log.NewTestLogger().With(
@@ -114,6 +136,8 @@ func (c *MockContext) withValue(key any, value any) Context {
 		HandleExecutionInfo:  c.HandleExecutionInfo,
 		HandleMetricsHandler: c.HandleMetricsHandler,
 		GoCtx:                context.WithValue(c.goContext(), key, value),
+		HandleNamespaceEntry: c.HandleNamespaceEntry,
+		HandleEndpointByName: c.HandleEndpointByName,
 	}
 }
 

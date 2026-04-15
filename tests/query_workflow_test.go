@@ -343,11 +343,18 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted(
 // non-sticky query task poll is a valid HistoryContinuation token usable with
 // GetWorkflowExecutionHistory. Fails with "Invalid NextPageToken" if matching service
 // returns a RawHistoryContinuation token instead.
-func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
-	// Small page size forces pagination in matching service.
-	s.OverrideDynamicConfig(dynamicconfig.MatchingHistoryMaxPageSize, 2)
-
-	s.SdkWorker().Stop()
+// Uses a dedicated cluster with MatchingHistoryMaxPageSize=14 (for query tasks) and
+// HistoryMaxPageSize=14 (for regular workflow tasks via RecordWorkflowTaskStarted).
+// With 5 activities generating ~16 history blobs, page size 14 ensures any task type
+// produces a multi-page history response with a non-empty NextPageToken. 14 is large
+// enough that activity-phase WFTs (≤14 blobs) don't need extra pagination roundtrips.
+func TestQueryWorkflow_NonStickyMultiPageHistory(t *testing.T) {
+	t.Parallel()
+	env := testcore.NewEnv(t,
+		testcore.WithDedicatedCluster(),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingHistoryMaxPageSize, 14),
+		testcore.WithDynamicConfig(dynamicconfig.HistoryMaxPageSize, 14),
+	)
 
 	activityFn := func(ctx context.Context) error { return nil }
 	workflowFn := func(ctx workflow.Context) (string, error) {
@@ -365,63 +372,75 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 		return "done", nil
 	}
 
+	tq := env.WorkerTaskQueue()
 	id := "test-query-non-sticky-multi-page"
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(env.Context(), 30*time.Second)
 	defer cancel()
 
-	queryWorker := worker.New(s.SdkClient(), s.TaskQueue(), worker.Options{})
+	queryWorker := worker.New(env.SdkClient(), tq, worker.Options{})
 	queryWorker.RegisterWorkflow(workflowFn)
 	queryWorker.RegisterActivity(activityFn)
-	s.NoError(queryWorker.Start())
+	env.NoError(queryWorker.Start())
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:                 id,
-		TaskQueue:          s.TaskQueue(),
+		TaskQueue:          tq,
 		WorkflowRunTimeout: 20 * time.Second,
 	}, workflowFn)
-	s.NoError(err)
-	s.NotNil(workflowRun)
+	env.NoError(err)
+	env.NotNil(workflowRun)
 
 	// Wait for all activities to complete, generating many event batches.
-	s.Eventually(func() bool {
-		resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.Namespace().String(),
+	env.Eventually(func() bool {
+		resp, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: id},
 		})
-		return err == nil && resp.GetWorkflowExecutionInfo().GetHistoryLength() > 10
+		return err == nil && resp.GetWorkflowExecutionInfo().GetHistoryLength() > 30
 	}, 10*time.Second, 200*time.Millisecond)
 
-	// Stop worker to clear sticky cache so the query goes through non-sticky path.
+	// Stop worker so the query goes through the non-sticky path.
 	queryWorker.Stop()
 
-	// Issue a query in background; we'll poll for the task manually below.
-	go func() { _, _ = s.SdkClient().QueryWorkflow(ctx, id, "", "test") }()
+	// Clear stickiness so the query dispatches directly to the normal queue
+	// without waiting for StickyScheduleToStartTimeout (~5s).
+	_, err = env.FrontendClient().ResetStickyTaskQueue(ctx, &workflowservice.ResetStickyTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+	})
+	env.NoError(err)
+
+	// Terminate the workflow to prevent any further workflow tasks from being scheduled.
+	err = env.SdkClient().TerminateWorkflow(ctx, id, "", "test cleanup")
+	env.NoError(err)
+
+	go func() { _, _ = env.SdkClient().QueryWorkflow(ctx, id, "", "test") }()
 
 	// Poll for the query task on the normal (non-sticky) task queue.
 	var pollResp *workflowservice.PollWorkflowTaskQueueResponse
-	s.Eventually(func() bool {
+	env.Eventually(func() bool {
 		pollCtx, pollCancel := context.WithTimeout(ctx, 3*time.Second)
 		defer pollCancel()
-		pollResp, err = s.FrontendClient().PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: s.TaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:  "test-worker",
 		})
 		return err == nil && len(pollResp.GetTaskToken()) > 0
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 20*time.Second, 100*time.Millisecond)
 
-	s.NotNil(pollResp.GetHistory())
-	s.NotEmpty(pollResp.GetNextPageToken(), "multi-page history should have NextPageToken")
+	env.NotNil(pollResp.GetHistory())
+	env.NotEmpty(pollResp.GetNextPageToken(), "multi-page history should have NextPageToken")
 
 	// Use the token with GetWorkflowExecutionHistory — this is what the worker SDK does.
 	// Fails with "Invalid NextPageToken" if the token is a RawHistoryContinuation.
-	histResp, err := s.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace:     s.Namespace().String(),
+	histResp, err := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace:     env.Namespace().String(),
 		Execution:     &commonpb.WorkflowExecution{WorkflowId: id},
 		NextPageToken: pollResp.GetNextPageToken(),
 	})
-	s.NoError(err)
-	s.NotNil(histResp)
+	env.NoError(err)
+	env.NotNil(histResp)
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {

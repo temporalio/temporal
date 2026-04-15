@@ -955,8 +955,9 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
 		if effectiveVersioningBehavior := mutableState.GetEffectiveVersioningBehavior(); effectiveVersioningBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
 			inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
-				SourceDeploymentVersion:        sourceDeploymentVersion,
-				SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
+				SourceDeploymentVersion:                sourceDeploymentVersion,
+				SourceDeploymentRevisionNumber:         sourceDeploymentRevisionNumber,
+				ContinueAsNewInitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED, // don't pass to child
 			}
 
 			newTQ := attributes.GetTaskQueue().GetName()

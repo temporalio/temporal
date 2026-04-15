@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
@@ -167,6 +168,38 @@ func (s *taskSerializerSuite) TestTransferResetTask() {
 	}
 
 	s.assertEqualTasks(resetTask)
+}
+
+func (s *taskSerializerSuite) TestOutboundWorkerCommandsTask() {
+	workerCommandsTask := &tasks.WorkerCommandsTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+		Commands: []*workerpb.WorkerCommand{
+			{Type: &workerpb.WorkerCommand_CancelActivity{
+				CancelActivity: &workerpb.CancelActivityCommand{TaskToken: []byte("token1")},
+			}},
+			{Type: &workerpb.WorkerCommand_CancelActivity{
+				CancelActivity: &workerpb.CancelActivityCommand{TaskToken: []byte("token2")},
+			}},
+			{Type: &workerpb.WorkerCommand_CancelActivity{
+				CancelActivity: &workerpb.CancelActivityCommand{TaskToken: []byte("token3")},
+			}},
+		},
+		Destination: "test-control-queue",
+	}
+
+	s.assertEqualTasksWithOpts(workerCommandsTask,
+		func(task, deserializedTask tasks.Task) {
+			orig := task.(*tasks.WorkerCommandsTask).Commands
+			deser := deserializedTask.(*tasks.WorkerCommandsTask).Commands
+			s.Require().Len(deser, len(orig))
+			for i := range orig {
+				protorequire.ProtoEqual(s.T(), orig[i], deser[i])
+			}
+		},
+		cmpopts.IgnoreFields(tasks.WorkerCommandsTask{}, "Commands"),
+	)
 }
 
 func (s *taskSerializerSuite) TestTimerWorkflowTask() {
