@@ -5,8 +5,10 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
@@ -21,6 +23,9 @@ var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancel
 
 // ErrOperationAlreadyCompleted is returned when trying to cancel an operation that has already completed.
 var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation already completed")
+
+// errNexusOperationStateUnspecified is returned when converting an operation in an unspecified state for an api response.
+var errNexusOperationStateUnspecified = serviceerror.NewInternal("Nexus operation with UNSPECIFIED state")
 
 // InvocationData contains data needed to invoke a Nexus operation.
 type InvocationData struct {
@@ -262,4 +267,67 @@ func (o *Operation) resolveUnsuccessfully(ctx chasm.MutableContext, failure *fai
 	o.NextAttemptScheduleTime = nil
 	// Terminal state - no tasks to emit.
 	return nil
+}
+
+func pendingOperationState(status nexusoperationpb.OperationStatus) enumspb.PendingNexusOperationState {
+	switch status {
+	case nexusoperationpb.OPERATION_STATUS_SCHEDULED:
+		return enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED
+	case nexusoperationpb.OPERATION_STATUS_BACKING_OFF:
+		return enumspb.PENDING_NEXUS_OPERATION_STATE_BACKING_OFF
+	case nexusoperationpb.OPERATION_STATUS_STARTED:
+		return enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED
+	default:
+		return enumspb.PENDING_NEXUS_OPERATION_STATE_UNSPECIFIED
+	}
+}
+
+// ToPendingNexusOperationInfo converts a CHASM Operation to the API PendingNexusOperationInfo format.
+// Returns nil if the operation is not in a pending state.
+func (o *Operation) ToPendingNexusOperationInfo(
+	ctx chasm.Context,
+	scheduledEventID int64,
+	invocationCBOpen func(endpoint string) bool,
+	cancellationCBOpen func(endpoint string) bool,
+) (*workflowpb.PendingNexusOperationInfo, error) {
+	if o.Status == nexusoperationpb.OPERATION_STATUS_UNSPECIFIED {
+		return nil, errNexusOperationStateUnspecified
+	}
+
+	state := pendingOperationState(o.Status)
+	if state == enumspb.PENDING_NEXUS_OPERATION_STATE_UNSPECIFIED {
+		// Operation is not pending
+		return nil, nil
+	}
+
+	blockedReason := ""
+	if state == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED && invocationCBOpen(o.Endpoint) {
+		state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
+		blockedReason = "The circuit breaker is open."
+	}
+
+	info := &workflowpb.PendingNexusOperationInfo{
+		Endpoint:                o.Endpoint,
+		Service:                 o.Service,
+		Operation:               o.Operation,
+		OperationId:             o.OperationToken,
+		OperationToken:          o.OperationToken,
+		ScheduledEventId:        scheduledEventID,
+		ScheduleToCloseTimeout:  o.ScheduleToCloseTimeout,
+		ScheduleToStartTimeout:  o.ScheduleToStartTimeout,
+		StartToCloseTimeout:     o.StartToCloseTimeout,
+		ScheduledTime:           o.ScheduledTime,
+		State:                   state,
+		Attempt:                 o.Attempt,
+		LastAttemptCompleteTime: o.LastAttemptCompleteTime,
+		LastAttemptFailure:      o.LastAttemptFailure,
+		NextAttemptScheduleTime: o.NextAttemptScheduleTime,
+		BlockedReason:           blockedReason,
+	}
+
+	if cancel, ok := o.Cancellation.TryGet(ctx); ok {
+		info.CancellationInfo = cancel.ToCancellationInfo(cancellationCBOpen, o.Endpoint)
+	}
+
+	return info, nil
 }
