@@ -56,9 +56,6 @@ func GetPerTaskQueuePartitionIDScope(
 	} else if normalPartition, ok := partition.(*tqid.NormalPartition); ok && partitionIDBreakdown {
 		value = strconv.Itoa(normalPartition.PartitionId())
 	} else {
-		if _, ok := partition.(*tqid.WorkerCommandsPartition); ok {
-			taskQueueBreakdown = false
-		}
 		value = partition.MetricTag()
 	}
 
@@ -79,9 +76,6 @@ func GetPerTaskQueuePartitionTypeScope(
 	if partition == nil {
 		value = unknownValue
 	} else {
-		if _, ok := partition.(*tqid.WorkerCommandsPartition); ok {
-			taskQueueBreakdown = false
-		}
 		value = partition.MetricTag()
 	}
 

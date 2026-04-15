@@ -5257,9 +5257,9 @@ func TestLoggerAndMetricsForPartition_BreakdownEnabled(t *testing.T) {
 			expectPartitionTag: "0",
 		},
 		{
-			name:               "worker-commands queue gets __worker_commands__ partition and __omitted__ taskqueue",
+			name:               "worker-commands",
 			partition:          newTestTaskQueue(ns.ID().String(), "my-task-queue", enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition("/temporal-sys/worker-commands/ns/key"),
-			expectTQValue:      "__omitted__",
+			expectTQValue:      "my-task-queue",
 			expectPartitionTag: "__worker_commands__",
 		},
 		{
