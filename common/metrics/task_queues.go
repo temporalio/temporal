@@ -53,8 +53,13 @@ func GetPerTaskQueuePartitionIDScope(
 	var value string
 	if partition == nil {
 		value = unknownValue
-	} else if normalPartition, ok := partition.(*tqid.NormalPartition); ok && partitionIDBreakdown {
-		value = strconv.Itoa(normalPartition.PartitionId())
+	} else if partitionIDBreakdown && partition.SupportsPartitions() {
+		if normalPartition, ok := partition.(*tqid.NormalPartition); ok {
+			value = strconv.Itoa(normalPartition.PartitionId())
+		} else {
+			// If a new partition kind supports partitions, add a case here to emit partition IDs.
+			value = partition.MetricTag()
+		}
 	} else {
 		value = partition.MetricTag()
 	}
