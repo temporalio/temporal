@@ -1171,3 +1171,192 @@ func TestGenerateWorkerCommandsTasks(t *testing.T) {
 		})
 	}
 }
+
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	skippedDuration := time.Hour
+
+	// Two pending timers: expiry at now+1h and now+2h.
+	timer1ExpiryTime := now.Add(1 * time.Hour)
+	timer2ExpiryTime := now.Add(2 * time.Hour)
+
+	ctrl := gomock.NewController(t)
+	mutableState := historyi.NewMockMutableState(ctrl)
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(skippedDuration),
+		},
+	}).AnyTimes()
+	mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{
+		"timer-1": {
+			StartedEventId: 1,
+			ExpiryTime:     timestamppb.New(timer1ExpiryTime),
+		},
+		"timer-2": {
+			StartedEventId: 2,
+			ExpiryTime:     timestamppb.New(timer2ExpiryTime),
+		},
+	}).AnyTimes()
+	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+
+	var capturedTasks []tasks.Task
+	mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+		capturedTasks = append(capturedTasks, ts...)
+	}).AnyTimes()
+
+	taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
+	err := taskGenerator.RegenerateTimerTasksForTimeSkipping()
+	require.NoError(t, err)
+
+	// Both timers must be regenerated.
+	require.Len(t, capturedTasks, 2)
+
+	// Build a map from EventID to task for order-independent verification.
+	taskByEventID := make(map[int64]*tasks.UserTimerTask, 2)
+	for _, task := range capturedTasks {
+		timerTask, ok := task.(*tasks.UserTimerTask)
+		require.True(t, ok, "expected *tasks.UserTimerTask, got %T", task)
+		taskByEventID[timerTask.EventID] = timerTask
+	}
+
+	// Timer 1: expiry now+1h, skipped 1h => visibility = now.
+	t1, ok := taskByEventID[1]
+	require.True(t, ok, "missing regenerated task for EventID=1")
+	assert.Equal(t, timer1ExpiryTime.Add(-skippedDuration), t1.VisibilityTimestamp)
+	assert.Equal(t, tests.WorkflowKey, t1.WorkflowKey)
+	// TaskID must be zero: the generator leaves it unset; the shard assigns the real ID.
+	assert.Equal(t, int64(0), t1.TaskID, "TaskID must be zero (set by shard, not the generator)")
+
+	// Timer 2: expiry now+2h, skipped 1h => visibility = now+1h.
+	t2, ok := taskByEventID[2]
+	require.True(t, ok, "missing regenerated task for EventID=2")
+	assert.Equal(t, timer2ExpiryTime.Add(-skippedDuration), t2.VisibilityTimestamp)
+	assert.Equal(t, tests.WorkflowKey, t2.WorkflowKey)
+	assert.Equal(t, int64(0), t2.TaskID, "TaskID must be zero (set by shard, not the generator)")
+}
+
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_EdgeCases(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name        string
+		execInfo    *persistencespb.WorkflowExecutionInfo
+		setupTimers func(mutableState *historyi.MockMutableState)
+	}{
+		{
+			name:     "nil TimeSkippingInfo returns immediately without touching timers",
+			execInfo: &persistencespb.WorkflowExecutionInfo{TimeSkippingInfo: nil},
+			// GetPendingTimerInfos and AddTasks must not be called — no expectations set.
+		},
+		{
+			name: "zero AccumulatedSkippedDuration returns immediately without touching timers",
+			execInfo: &persistencespb.WorkflowExecutionInfo{
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					AccumulatedSkippedDuration: durationpb.New(0),
+				},
+			},
+			// GetPendingTimerInfos and AddTasks must not be called — no expectations set.
+		},
+		{
+			name: "no pending timers produces no tasks",
+			execInfo: &persistencespb.WorkflowExecutionInfo{
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					AccumulatedSkippedDuration: durationpb.New(time.Hour),
+				},
+			},
+			setupTimers: func(ms *historyi.MockMutableState) {
+				ms.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{})
+				// AddTasks must not be called — no expectation set.
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+			mutableState := historyi.NewMockMutableState(ctrl)
+			mutableState.EXPECT().GetExecutionInfo().Return(tc.execInfo).AnyTimes()
+			if tc.setupTimers != nil {
+				tc.setupTimers(mutableState)
+			}
+
+			taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
+			err := taskGenerator.RegenerateTimerTasksForTimeSkipping()
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AccumulatedDurationNotStacked(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	timer1ExpiryTime := now.Add(time.Hour)
+	timer2ExpiryTime := now.Add(2 * time.Hour)
+
+	pendingTimers := map[string]*persistencespb.TimerInfo{
+		"timer-1": {StartedEventId: 1, ExpiryTime: timestamppb.New(timer1ExpiryTime)},
+		"timer-2": {StartedEventId: 2, ExpiryTime: timestamppb.New(timer2ExpiryTime)},
+	}
+
+	ctrl := gomock.NewController(t)
+	mutableState := historyi.NewMockMutableState(ctrl)
+
+	// GetExecutionInfo is called twice per RegenerateTimerTasksForTimeSkipping invocation:
+	// once for the nil guard, once to read AccumulatedSkippedDuration.
+	execInfoWith10min := &persistencespb.WorkflowExecutionInfo{
+		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(10 * time.Minute),
+		},
+	}
+	execInfoWith20min := &persistencespb.WorkflowExecutionInfo{
+		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(20 * time.Minute),
+		},
+	}
+	gomock.InOrder(
+		mutableState.EXPECT().GetExecutionInfo().Return(execInfoWith10min).Times(2),
+		mutableState.EXPECT().GetExecutionInfo().Return(execInfoWith20min).Times(2),
+	)
+	mutableState.EXPECT().GetPendingTimerInfos().Return(pendingTimers).Times(2)
+	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+
+	var allTasks []tasks.Task
+	mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+		allTasks = append(allTasks, ts...)
+	}).AnyTimes()
+
+	taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
+	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+
+	// 2 timers × 2 calls = 4 tasks total.
+	require.Len(t, allTasks, 4)
+
+	// Tasks from each call are appended in order; index within each pair by EventID
+	// because map iteration order is non-deterministic.
+	byEventID := func(ts []tasks.Task) map[int64]*tasks.UserTimerTask {
+		m := make(map[int64]*tasks.UserTimerTask, len(ts))
+		for _, task := range ts {
+			ut, ok := task.(*tasks.UserTimerTask)
+			require.True(t, ok, "expected *tasks.UserTimerTask, got %T", task)
+			m[ut.EventID] = ut
+		}
+		return m
+	}
+
+	call1 := byEventID(allTasks[:2])
+	call2 := byEventID(allTasks[2:])
+
+	// First call used 10 min: visibility = expiry - 10 min.
+	assert.Equal(t, timer1ExpiryTime.Add(-10*time.Minute), call1[1].VisibilityTimestamp)
+	assert.Equal(t, timer2ExpiryTime.Add(-10*time.Minute), call1[2].VisibilityTimestamp)
+
+	// Second call used 20 min: visibility = expiry - 20 min, NOT expiry - 30 min.
+	// Each call reads AccumulatedSkippedDuration independently; the durations are not stacked.
+	assert.Equal(t, timer1ExpiryTime.Add(-20*time.Minute), call2[1].VisibilityTimestamp)
+	assert.Equal(t, timer2ExpiryTime.Add(-20*time.Minute), call2[2].VisibilityTimestamp)
+}
