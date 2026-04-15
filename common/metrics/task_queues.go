@@ -1,8 +1,6 @@
 package metrics
 
 import (
-	"strconv"
-
 	"go.temporal.io/server/common/tqid"
 )
 
@@ -53,15 +51,8 @@ func GetPerTaskQueuePartitionIDScope(
 	var value string
 	if partition == nil {
 		value = unknownValue
-	} else if partitionIDBreakdown && partition.SupportsPartitions() {
-		if normalPartition, ok := partition.(*tqid.NormalPartition); ok {
-			value = strconv.Itoa(normalPartition.PartitionId())
-		} else {
-			// If a new partition kind supports partitions, add a case here to emit partition IDs.
-			value = partition.MetricTag()
-		}
 	} else {
-		value = partition.MetricTag()
+		value = partition.MetricTag(partitionIDBreakdown)
 	}
 
 	return GetPerTaskQueueScope(handler, namespaceName, partition.TaskQueue(), taskQueueBreakdown,
@@ -81,7 +72,7 @@ func GetPerTaskQueuePartitionTypeScope(
 	if partition == nil {
 		value = unknownValue
 	} else {
-		value = partition.MetricTag()
+		value = partition.MetricTag(false)
 	}
 
 	return GetPerTaskQueueScope(handler, namespaceName, partition.TaskQueue(), taskQueueBreakdown,

@@ -572,16 +572,17 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	if err != nil {
 		return "", false, err
 	}
-	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY,
+	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
+	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || sticky,
 		"AddWorkflowTask called with unexpected partition kind") {
 		return "", false, serviceerror.NewInternal("AddWorkflowTask called with unexpected partition kind")
 	}
 
 	// do not load sticky task queues if not already loaded, which means they have no poller.
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY, loadCauseTask)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
 	if err != nil {
 		return "", false, err
-	} else if partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && !stickyWorkerAvailable(pm) {
+	} else if sticky && !stickyWorkerAvailable(pm) {
 		return "", false, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
@@ -1096,15 +1097,16 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	if err != nil {
 		return nil, err
 	}
-	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY,
+	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
+	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || sticky,
 		"QueryWorkflow called with unexpected partition kind") {
 		return nil, serviceerror.NewInternal("QueryWorkflow called with unexpected partition kind")
 	}
 	// do not load sticky task queues if not already loaded, which means they have no poller.
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY, loadCauseQuery)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseQuery)
 	if err != nil {
 		return nil, err
-	} else if partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && !stickyWorkerAvailable(pm) {
+	} else if sticky && !stickyWorkerAvailable(pm) {
 		return nil, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
