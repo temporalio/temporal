@@ -311,9 +311,7 @@ func (s *DeploymentVersionSuite) TestForceCAN_WithOverrideState() {
 }
 
 // TestEmergencyCaN_SignalFlood verifies that a version workflow can continue-as-new
-// when its history grows too large due to a flood of reactivation signals. This
-// reproduces the root cause of the beh-qa.vazty incident where r127's version workflow
-// became permanently stuck because HasPending() blocked CaN.
+// when its history grows too large due to a flood of reactivation signals.
 func (s *DeploymentVersionSuite) TestEmergencyCaN_SignalFlood() {
 	// Lower the CaN suggestion threshold so we don't need thousands of signals
 	s.OverrideDynamicConfig(dynamicconfig.HistoryCountSuggestContinueAsNew, 10)
@@ -344,7 +342,7 @@ func (s *DeploymentVersionSuite) TestEmergencyCaN_SignalFlood() {
 	// Verify the workflow is still responsive — it should have CaN'd via the
 	// emergency path and restarted with a fresh history
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
+		a := assert.New(t) //nolint:forbidigo // assert.CollectT is allowed for EventuallyWithT callbacks
 
 		resp, err := s.describeVersion(tv)
 		if !a.NoError(err) {
