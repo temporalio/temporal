@@ -572,7 +572,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	if err != nil {
 		return "", false, err
 	}
-	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY, //nolint:forbidigo
+	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY,
 		"AddWorkflowTask called with unexpected partition kind") {
 		return "", false, serviceerror.NewInternal("AddWorkflowTask called with unexpected partition kind")
 	}
@@ -1096,7 +1096,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	if err != nil {
 		return nil, err
 	}
-	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY, //nolint:forbidigo
+	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY,
 		"QueryWorkflow called with unexpected partition kind") {
 		return nil, serviceerror.NewInternal("QueryWorkflow called with unexpected partition kind")
 	}

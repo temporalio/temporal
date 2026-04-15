@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"cmp"
 	"context"
 	"math"
 	"slices"
@@ -283,12 +284,9 @@ func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	defer db.emitPhysicalBacklogGaugesLocked()
 
 	// We only need to write if something changed, or if we're past half of the persistence TTL.
-	// Note that we use the same threshold for all queues even if they don't have a persistence TTL,
-	// since the scavenger looks for metadata that hasn't been updated in 48 hours.
-	ttl := db.queue.Partition().PersistenceTTL()
-	if ttl == 0 {
-		ttl = 24 * time.Hour // default write interval for non-TTL queues
-	}
+	// Cap at 24h so that the scavenger (which looks for metadata not updated in 48h) doesn't
+	// mistake the queue for idle, even if a future partition kind has a longer TTL.
+	ttl := min(24*time.Hour, cmp.Or(db.queue.Partition().PersistenceTTL(), 24*time.Hour))
 	needWrite := db.lastChange.After(db.lastWrite) || time.Since(db.lastWrite) > ttl/2
 	if !needWrite {
 		return nil
