@@ -2,7 +2,6 @@ package activity
 
 import (
 	"fmt"
-	"math/rand"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -218,6 +217,7 @@ var TransitionFailed = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, event failedEvent) error {
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			req := event.req.GetFailedRequest()
+			a.PauseState = nil
 
 			if details := req.GetLastHeartbeatDetails(); details != nil {
 				heartbeat := a.getOrCreateLastHeartbeat(ctx)
@@ -258,6 +258,7 @@ var TransitionTerminated = chasm.NewTransition(
 			a.TerminateState = &activitypb.ActivityTerminateState{
 				RequestId: event.request.RequestID,
 			}
+			a.PauseState = nil
 			outcome := a.Outcome.Get(ctx)
 			failure := &failurepb.Failure{
 				// TODO(saa-preview): if the reason isn't provided, perhaps set a default reason. Also see if we should prefix with "Activity terminated: "
@@ -328,6 +329,7 @@ var TransitionCanceled = chasm.NewTransition(
 					Failure: failure,
 				},
 			}
+			a.PauseState = nil
 
 			a.emitOnCanceledMetrics(ctx, event.handler, event.fromStatus)
 
@@ -373,6 +375,8 @@ var TransitionTimedOut = chasm.NewTransition(
 				return err
 			}
 
+			a.PauseState = nil
+			
 			a.emitOnTimedOutMetrics(ctx, event.metricsHandler, timeoutType, event.fromStatus)
 
 			return nil
@@ -400,12 +404,6 @@ var TransitionPaused = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, event pauseEvent) error {
 		attempt := a.LastAttempt.Get(ctx)
 		attempt.Stamp++
-		a.PauseState = &activitypb.ActivityPauseState{
-			PauseTime: timestamppb.New(ctx.Now(a)),
-			Identity:  event.req.GetIdentity(),
-			Reason:    event.req.GetReason(),
-		}
-		a.emitOnPausedMetrics(ctx, event.metricsHandler)
 		return nil
 	},
 )
@@ -421,30 +419,6 @@ var TransitionUnpaused = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, event unpauseEvent) error {
-		a.PauseState = nil
-		attempt := a.LastAttempt.Get(ctx)
-		if event.req.GetResetAttempts() {
-			attempt.Count = 1
-		}
-		if event.req.GetResetHeartbeat() {
-			a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{})
-		}
-		attempt.Stamp++
-		scheduleTime := ctx.Now(a)
-		if jitter := event.req.GetJitter().AsDuration(); jitter > 0 {
-			scheduleTime = scheduleTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
-		}
-		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
-			ctx.AddTask(
-				a,
-				chasm.TaskAttributes{ScheduledTime: scheduleTime.Add(timeout)},
-				&activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()})
-		}
-		ctx.AddTask(
-			a,
-			chasm.TaskAttributes{ScheduledTime: scheduleTime},
-			&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()})
-		a.emitOnUnpausedMetrics(ctx, event.metricsHandler)
-		return nil
+		return a.unpause(ctx, event)
 	},
 )

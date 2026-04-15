@@ -644,8 +644,10 @@ func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activityp
 	if a.isTerminal() {
 		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
 	}
-	// Idempotent: already paused (real status or flag).
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED || a.PauseState != nil {
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		return nil, serviceerror.NewFailedPrecondition("cannot pause an activity with a pending cancellation")
+	}
+	if a.PauseState != nil {
 		return &activitypb.PauseActivityExecutionResponse{}, nil
 	}
 
@@ -654,7 +656,7 @@ func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activityp
 		return nil, err
 	}
 
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
+	if TransitionPaused.Possible(a) {
 		// SCHEDULED → real PAUSED status; stamp bumped to invalidate the pending dispatch task.
 		if err := TransitionPaused.Apply(a, ctx, pauseEvent{
 			req:            req.GetFrontendRequest(),
@@ -662,17 +664,17 @@ func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activityp
 		}); err != nil {
 			return nil, err
 		}
-	} else {
-		// STARTED → flag-only pause. Status stays STARTED so the worker's token remains valid.
-		// The worker will see ActivityPaused=true on the next heartbeat.
-		frontendReq := req.GetFrontendRequest()
-		a.PauseState = &activitypb.ActivityPauseState{
-			PauseTime: timestamppb.New(ctx.Now(a)),
-			Identity:  frontendReq.GetIdentity(),
-			Reason:    frontendReq.GetReason(),
-		}
-		a.emitOnPausedMetrics(ctx, metricsHandler)
 	}
+	// STARTED → flag-only pause. Status stays STARTED so the worker's token remains valid.
+	// The worker will see ActivityPaused=true on the next heartbeat.
+	frontendReq := req.GetFrontendRequest()
+	a.PauseState = &activitypb.ActivityPauseState{
+		PauseTime: timestamppb.New(ctx.Now(a)),
+		Identity:  frontendReq.GetIdentity(),
+		Reason:    frontendReq.GetReason(),
+	}
+	a.emitOnPausedMetrics(metricsHandler)
+
 	return &activitypb.PauseActivityExecutionResponse{}, nil
 }
 
@@ -682,8 +684,8 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 	if a.isTerminal() {
 		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
 	}
-	// Not paused at all → no-op.
-	if a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED && a.PauseState == nil {
+	// Not paused → no-op.
+	if a.PauseState == nil {
 		return &activitypb.UnpauseActivityExecutionResponse{}, nil
 	}
 
@@ -692,8 +694,7 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 		return nil, err
 	}
 
-	// Real PAUSED status (came from SCHEDULED → pause).
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED {
+	if TransitionUnpaused.Possible(a) {
 		if err := TransitionUnpaused.Apply(a, ctx, unpauseEvent{
 			req:            req.GetFrontendRequest(),
 			metricsHandler: metricsHandler,
@@ -703,38 +704,55 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 		return &activitypb.UnpauseActivityExecutionResponse{}, nil
 	}
 
-	// Flag-based pause (status is STARTED or SCHEDULED after retry while paused).
-	frontendReq := req.GetFrontendRequest()
+	// Flag-based pause (status is STARTED, CANCEL_REQUESTED, or SCHEDULED after retry while paused).
 	a.PauseState = nil
-
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED {
 		// Worker continues with its existing token — no stamp bump needed, no dispatch task.
-		a.emitOnUnpausedMetrics(ctx, metricsHandler)
+		a.emitOnUnpausedMetrics(metricsHandler)
 		return &activitypb.UnpauseActivityExecutionResponse{}, nil
 	}
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		// Cancel takes precedence over pause. Unpause clears the pause flag but does not re-dispatch;
+		// the activity remains CANCEL_REQUESTED and will be cancelled when the worker responds.
+		a.emitOnUnpausedMetrics(metricsHandler)
+		return &activitypb.UnpauseActivityExecutionResponse{}, nil
+	}
+	return &activitypb.UnpauseActivityExecutionResponse{}, a.unpause(ctx, unpauseEvent{
+		req:            req.GetFrontendRequest(),
+		metricsHandler: metricsHandler,
+	})
+}
 
-	// SCHEDULED + PauseState: activity was retried while the pause flag was set.
-	// Bump stamp to invalidate the old dispatch task, then add a new one.
+func (a *Activity) unpause(
+	ctx chasm.MutableContext,
+	event unpauseEvent,
+) error {
+	a.PauseState = nil
 	attempt := a.LastAttempt.Get(ctx)
-	if frontendReq.GetResetAttempts() {
+	if event.req.GetResetAttempts() {
 		attempt.Count = 1
 	}
-	if frontendReq.GetResetHeartbeat() {
+	if event.req.GetResetHeartbeat() {
 		a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{})
 	}
 	attempt.Stamp++
+	attempt.CurrentRetryInterval = nil
 	scheduleTime := ctx.Now(a)
-	if jitter := frontendReq.GetJitter().AsDuration(); jitter > 0 {
+	if jitter := event.req.GetJitter().AsDuration(); jitter > 0 {
 		scheduleTime = scheduleTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
 	}
 	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
-		ctx.AddTask(a, chasm.TaskAttributes{ScheduledTime: scheduleTime.Add(timeout)},
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{ScheduledTime: scheduleTime.Add(timeout)},
 			&activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()})
 	}
-	ctx.AddTask(a, chasm.TaskAttributes{ScheduledTime: scheduleTime},
+	ctx.AddTask(
+		a,
+		chasm.TaskAttributes{ScheduledTime: scheduleTime},
 		&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()})
-	a.emitOnUnpausedMetrics(ctx, metricsHandler)
-	return &activitypb.UnpauseActivityExecutionResponse{}, nil
+	a.emitOnUnpausedMetrics(event.metricsHandler)
+	return nil
 }
 
 // recordScheduleToStartOrCloseTimeoutFailure records schedule-to-start or schedule-to-close timeouts. Such timeouts are not retried so we
@@ -895,7 +913,8 @@ func InternalStatusToAPIStatus(status activitypb.ActivityExecutionStatus) enumsp
 	switch status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
 		return enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING
 	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
 		return enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED
@@ -907,8 +926,6 @@ func InternalStatusToAPIStatus(status activitypb.ActivityExecutionStatus) enumsp
 		return enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED
 	case activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
 		return enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
-	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
-		return enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING
 	case activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED:
 		return enumspb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
 	default:
@@ -1239,7 +1256,6 @@ func (a *Activity) emitOnTimedOutMetrics(
 }
 
 func (a *Activity) emitOnPausedMetrics(
-	ctx chasm.Context,
 	handler metrics.Handler,
 ) {
 	metrics.ActivityPauseRequests.With(handler).Record(1)
@@ -1247,7 +1263,6 @@ func (a *Activity) emitOnPausedMetrics(
 }
 
 func (a *Activity) emitOnUnpausedMetrics(
-	ctx chasm.Context,
 	handler metrics.Handler,
 ) {
 	metrics.ActivityUnpauseRequests.With(handler).Record(1)
