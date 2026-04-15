@@ -2531,7 +2531,10 @@ func (e *matchingEngineImpl) PollNexusTaskQueue(
 	pollerID := req.GetPollerId()
 	request := req.Request
 	taskQueueName := request.TaskQueue.GetName()
-	e.logger.Debug("Received PollNexusTaskQueue for taskQueue", tag.Name(taskQueueName))
+	ns, err := e.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return nil, err
+	}
 pollLoop:
 	for {
 		err := common.IsValidContext(ctx)
@@ -2589,7 +2592,7 @@ pollLoop:
 			nexusReq.Header[nexus.HeaderOperationTimeout] = commonnexus.FormatDuration(time.Until(task.nexus.operationDeadline))
 		}
 
-		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
+		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), ns.Name().String(), pollMetadata)
 		return &matchingservice.PollNexusTaskQueueResponse{
 			Response: &workflowservice.PollNexusTaskQueueResponse{
 				TaskToken:             serializedToken,
@@ -2859,17 +2862,17 @@ func (e *matchingEngineImpl) pollTask(
 // emitTaskDispatchLatency emits latency metrics for a task dispatched to a worker.
 // Here is what task_dispatch_latency measures vs schedule_to_start_latency:
 //
-//	Latency        					 		 | task_dispatch 	| schedule_to_start
+// Latency                                          | task_dispatch    | schedule_to_start
 //
-// --------------------------------------------------+------------------+------------------
+// -------------------------------------------------+------------------+------------------
 //
-//	transfer task processing 						 | excluded 		| included
-//	record*TaskStarted latency 						 | included 		| partial
-//	task forward latency 							 | included 		| included
-//	poll forward latency 							 | excluded for now | excluded
-//	backlog delay 									 | included 	    | included
-//	sync match delay 								 | included 	    | included
-//	rescheduling of the same task attempt by History | resets latency   | does not reset
+// transfer task processing                         | excluded         | included
+// record*TaskStarted latency                       | included         | partial
+// task forward latency                             | included         | included
+// poll forward latency                             | excluded for now | excluded
+// backlog delay                                    | included         | included
+// sync match delay                                 | included         | included
+// rescheduling of the same task attempt by History | resets latency   | does not reset
 //
 // ----------------------------------------------------------------------------------------
 func (e *matchingEngineImpl) emitTaskDispatchLatency(

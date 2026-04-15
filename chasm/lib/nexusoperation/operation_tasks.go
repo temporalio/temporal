@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -12,7 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/log"
@@ -21,64 +20,135 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/resource"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 )
 
-// operationTaskHandlerOptions is the fx parameter object for common options supplied to all operation task handlers.
-type operationTaskHandlerOptions struct {
-	fx.In
+// startResult is a marker interface for the outcome of a Nexus start operation call.
+type startResult interface {
+	mustImplementStartResult()
+}
 
-	Config *Config
+// startResultOK indicates the operation completed synchronously or started asynchronously.
+type startResultOK struct {
+	response *nexusrpc.ClientStartOperationResponse[*commonpb.Payload]
+	links    []*commonpb.Link
+}
 
-	MetricsHandler metrics.Handler
-	Logger         log.Logger
+func (startResultOK) mustImplementStartResult() {}
+
+// startResultFail indicates a non-retryable failure.
+type startResultFail struct {
+	failure *failurepb.Failure
+}
+
+func (startResultFail) mustImplementStartResult() {}
+
+// startResultRetry indicates a retryable failure.
+type startResultRetry struct {
+	failure *failurepb.Failure
+}
+
+func (startResultRetry) mustImplementStartResult() {}
+
+// startResultCancel indicates the operation completed as canceled.
+type startResultCancel struct {
+	failure *failurepb.Failure
+}
+
+func (startResultCancel) mustImplementStartResult() {}
+
+// startResultTimeout indicates the operation timed out while attempting to invoke.
+type startResultTimeout struct {
+	failure *failurepb.Failure
+}
+
+func (startResultTimeout) mustImplementStartResult() {}
+
+func newStartResult(
+	response *nexusrpc.ClientStartOperationResponse[*commonpb.Payload],
+	callErr error,
+) (startResult, error) {
+	if callErr == nil {
+		return startResultOK{response: response}, nil
+	}
+
+	if opErr, ok := errors.AsType[*nexus.OperationError](callErr); ok {
+		failure, err := operationErrorToFailure(opErr)
+		if err != nil {
+			return nil, err
+		}
+		if opErr.State == nexus.OperationStateCanceled {
+			return startResultCancel{failure: failure}, nil
+		}
+		return startResultFail{failure: failure}, nil
+	}
+
+	if opTimeoutBelowMinErr, ok := errors.AsType[*operationTimeoutBelowMinError](callErr); ok {
+		failure := &failurepb.Failure{
+			Message: "operation timed out",
+			FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: opTimeoutBelowMinErr.timeoutType,
+				},
+			},
+		}
+		return startResultTimeout{failure: failure}, nil
+	}
+
+	failure, retryable, err := callErrorToFailure(callErr)
+	if err != nil {
+		return nil, err
+	}
+	if retryable {
+		return startResultRetry{failure: failure}, nil
+	}
+	return startResultFail{failure: failure}, nil
+}
+
+// operationErrorToFailure converts a Nexus OperationError to the appropriate failure.
+func operationErrorToFailure(opErr *nexus.OperationError) (*failurepb.Failure, error) {
+	var nf nexus.Failure
+	if opErr.OriginalFailure != nil {
+		nf = *opErr.OriginalFailure
+	} else {
+		var err error
+		nf, err = nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
+		if err != nil {
+			return nil, err
+		}
+	}
+	// Special marker for Temporal->Temporal calls to indicate that the original failure should be unwrapped.
+	// Temporal uses a wrapper operation error with no additional information to transmit the OperationError over the network.
+	// The meaningful information is in the operation error's cause.
+	unwrapError := nf.Metadata["unwrap-error"] == "true"
+
+	if unwrapError && nf.Cause != nil {
+		return commonnexus.NexusFailureToTemporalFailure(*nf.Cause)
+	}
+	// Transform the OperationError to either ApplicationFailure or CanceledFailure based on the operation error state.
+	return commonnexus.NexusFailureToTemporalFailure(nf)
 }
 
 // operationInvocationTaskHandlerOptions is the fx parameter object for the invocation task executor.
 type operationInvocationTaskHandlerOptions struct {
 	fx.In
 
-	Config                 *Config
-	NamespaceRegistry      namespace.Registry
-	MetricsHandler         metrics.Handler
-	Logger                 log.Logger
+	InvocationTaskHandlerOptions
 	CallbackTokenGenerator *commonnexus.CallbackTokenGenerator
-	ClientProvider         ClientProvider
-	EndpointRegistry       commonnexus.EndpointRegistry
-	HTTPTraceProvider      commonnexus.HTTPClientTraceProvider
-	HistoryClient          resource.HistoryClient
-	ChasmRegistry          *chasm.Registry
 }
 
 type operationInvocationTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*nexusoperationpb.InvocationTask]
 
-	config                 *Config
-	namespaceRegistry      namespace.Registry
-	metricsHandler         metrics.Handler
-	logger                 log.Logger
+	nexusTaskHandlerBase
 	callbackTokenGenerator *commonnexus.CallbackTokenGenerator
-	clientProvider         ClientProvider
-	endpointRegistry       commonnexus.EndpointRegistry
-	httpTraceProvider      commonnexus.HTTPClientTraceProvider
-	historyClient          resource.HistoryClient
-	chasmRegistry          *chasm.Registry
 }
 
 func newOperationInvocationTaskHandler(opts operationInvocationTaskHandlerOptions) *operationInvocationTaskHandler {
 	return &operationInvocationTaskHandler{
-		config:                 opts.Config,
-		namespaceRegistry:      opts.NamespaceRegistry,
-		metricsHandler:         opts.MetricsHandler,
-		logger:                 opts.Logger,
+		nexusTaskHandlerBase:   opts.toBase(),
 		callbackTokenGenerator: opts.CallbackTokenGenerator,
-		clientProvider:         opts.ClientProvider,
-		endpointRegistry:       opts.EndpointRegistry,
-		httpTraceProvider:      opts.HTTPTraceProvider,
-		historyClient:          opts.HistoryClient,
-		chasmRegistry:          opts.ChasmRegistry,
 	}
 }
 
@@ -108,12 +178,12 @@ func (h *operationInvocationTaskHandler) Execute(
 		return err
 	}
 
-	endpoint, err := h.resolveEndpoint(ctx, ns, args)
+	endpoint, err := h.lookupEndpoint(ctx, ns.ID(), args.endpointID, args.endpointName)
 	if err != nil {
 		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			h.logger.Error("endpoint not found while processing invocation task", tag.Error(err))
 			handlerErr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
-			result, err := newInvocationResult(nil, handlerErr)
+			result, err := newStartResult(nil, handlerErr)
 			if err != nil {
 				return fmt.Errorf("failed to construct invocation result: %w", err)
 			}
@@ -126,7 +196,7 @@ func (h *operationInvocationTaskHandler) Execute(
 		return err
 	}
 
-	callbackURL, err := buildCallbackURL(h.config.UseSystemCallbackURL(), h.config.CallbackURLTemplate(), ns, endpoint)
+	callbackURL, err := h.buildCallbackURL(ns, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to build callback URL: %w", err)
 	}
@@ -142,11 +212,15 @@ func (h *operationInvocationTaskHandler) Execute(
 	// Adjust timeout based on remaining operation timeouts.
 	// ScheduleToStart takes precedence over ScheduleToClose since it is already capped by it.
 	if args.scheduleToStartTimeout > 0 {
-		callTimeout = min(callTimeout, args.scheduleToStartTimeout-elapsed)
-		timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START
+		if t := args.scheduleToStartTimeout - elapsed; t < callTimeout {
+			callTimeout = t
+			timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START
+		}
 	} else if args.scheduleToCloseTimeout > 0 {
-		callTimeout = min(callTimeout, args.scheduleToCloseTimeout-elapsed)
-		timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+		if t := args.scheduleToCloseTimeout - elapsed; t < callTimeout {
+			callTimeout = t
+			timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+		}
 	}
 
 	// Inform the handler of the operation timeout via header.
@@ -171,11 +245,8 @@ func (h *operationInvocationTaskHandler) Execute(
 		header.Set(nexusrpc.HeaderTemporalNexusFailureSupport, "true")
 	}
 
-	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
+	callCtx, cancel := h.setupCallContext(ctx, callTimeout)
 	defer cancel()
-	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot
-	// access response headers directly.
-	callCtx = context.WithValue(callCtx, commonnexus.FailureSourceContextKey, &atomic.Value{})
 
 	options := nexus.StartOperationOptions{
 		Header:      header,
@@ -187,7 +258,21 @@ func (h *operationInvocationTaskHandler) Execute(
 		Links: []nexus.Link{args.nexusLink},
 	}
 
-	invocation, err := h.newInvocation(callCtx, ns, endpoint, opRef, args, task, callTimeout, timeoutType)
+	invocation, err := h.newInvocation(
+		callCtx, ns, endpoint, args.endpointName, args.service,
+		callTimeout, timeoutType,
+		invocationTraceContext{
+			operationTag:  "StartOperation",
+			namespaceName: ns.Name().String(),
+			requestID:     args.requestID,
+			operation:     args.operation,
+			endpointName:  args.endpointName,
+			workflowID:    opRef.BusinessID,
+			runID:         opRef.RunID,
+			attemptStart:  args.currentTime.UTC(),
+			attempt:       task.GetAttempt(),
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("failed to construct invocation: %w", err)
 	}
@@ -199,9 +284,9 @@ func (h *operationInvocationTaskHandler) Execute(
 	}
 	failureSource := failureSourceFromContext(callCtx)
 
-	h.recordStartCallOutcome(callCtx, ns, endpoint, args, response, callErr, callDuration, failureSource)
+	h.recordCallOutcome(ns, endpoint, args.endpointName, "StartOperation", startCallOutcomeTag(callCtx, response, callErr), callErr, callDuration, failureSource)
 
-	result, err := newInvocationResult(response, callErr)
+	result, err := newStartResult(response, callErr)
 	if err != nil {
 		return fmt.Errorf("failed to construct invocation result: %w", err)
 	}
@@ -215,43 +300,6 @@ func (h *operationInvocationTaskHandler) Execute(
 	}
 
 	return saveErr
-}
-
-func (h *operationInvocationTaskHandler) resolveEndpoint(
-	ctx context.Context,
-	ns *namespace.Namespace,
-	args startArgs,
-) (*persistencespb.NexusEndpointEntry, error) {
-	// Skip endpoint lookup for system-internal operations.
-	if args.endpointName == commonnexus.SystemEndpoint {
-		return nil, nil
-	}
-	// This happens when we accept the ScheduleNexusOperation command when the endpoint is not found in the
-	// registry as indicated by the EndpointNotFoundAlwaysNonRetryable dynamic config.
-	// The config has been removed but we keep this check for backward compatibility.
-	if args.endpointID == "" {
-		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
-	}
-	return lookupEndpoint(ctx, h.endpointRegistry, ns.ID(), args.endpointID, args.endpointName)
-}
-
-func (h *operationInvocationTaskHandler) newInvocation(
-	ctx context.Context,
-	ns *namespace.Namespace,
-	endpoint *persistencespb.NexusEndpointEntry,
-	opRef chasm.ComponentRef,
-	args startArgs,
-	task *nexusoperationpb.InvocationTask,
-	callTimeout time.Duration,
-	timeoutType enumspb.TimeoutType,
-) (invocation, error) {
-	if callTimeout < h.config.MinRequestTimeout(ns.Name().String()) {
-		return &invocationTimeout{timeoutType}, nil
-	}
-	if args.endpointName == commonnexus.SystemEndpoint {
-		return newInvocationSystem(h, ns), nil
-	}
-	return newInvocationHTTP(ctx, h, ns, endpoint, opRef, task, args)
 }
 
 func (h *operationInvocationTaskHandler) validateStartResult(
@@ -271,37 +319,19 @@ func (h *operationInvocationTaskHandler) validateStartResult(
 	return nil
 }
 
-func (h *operationInvocationTaskHandler) recordStartCallOutcome(
-	callCtx context.Context,
-	ns *namespace.Namespace,
-	endpoint *persistencespb.NexusEndpointEntry,
-	args startArgs,
-	response *nexusrpc.ClientStartOperationResponse[*commonpb.Payload],
-	callErr error,
-	callDuration time.Duration,
-	failureSource string,
-) {
-	methodTag := metrics.NexusMethodTag("StartOperation")
-	namespaceTag := metrics.NamespaceTag(ns.Name().String())
-	var destTag metrics.Tag
-	if endpoint != nil {
-		destTag = metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
-	} else {
-		destTag = metrics.DestinationTag(args.endpointName)
+// generateCallbackToken creates a callback token for the given operation reference.
+func (h *operationInvocationTaskHandler) generateCallbackToken(
+	serializedRef []byte,
+	requestID string,
+) (string, error) {
+	token, err := h.callbackTokenGenerator.Tokenize(&tokenspb.NexusOperationCompletion{
+		ComponentRef: serializedRef,
+		RequestId:    requestID,
+	})
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", queueserrors.NewUnprocessableTaskError("failed to generate a callback token"), err)
 	}
-	outcomeTag := metrics.OutcomeTag(startCallOutcomeTag(callCtx, response, callErr))
-	failureSourceTag := metrics.FailureSourceTag(failureSource)
-	OutboundRequestCounter.With(h.metricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
-	OutboundRequestLatency.With(h.metricsHandler).Record(callDuration, namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
-
-	if callErr != nil {
-		_, isTimeoutBelowMin := errors.AsType[*operationTimeoutBelowMinError](callErr)
-		if failureSource == commonnexus.FailureSourceWorker || isTimeoutBelowMin {
-			h.logger.Debug("Nexus StartOperation request failed", tag.Error(callErr))
-		} else {
-			h.logger.Error("Nexus StartOperation request failed", tag.Error(callErr))
-		}
-	}
+	return token, nil
 }
 
 type operationBackoffTaskHandler struct {
@@ -312,7 +342,7 @@ type operationBackoffTaskHandler struct {
 	logger         log.Logger
 }
 
-func newOperationBackoffTaskHandler(opts operationTaskHandlerOptions) *operationBackoffTaskHandler {
+func newOperationBackoffTaskHandler(opts commonTaskHandlerOptions) *operationBackoffTaskHandler {
 	return &operationBackoffTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
@@ -346,7 +376,7 @@ type operationScheduleToStartTimeoutTaskHandler struct {
 	logger         log.Logger
 }
 
-func newOperationScheduleToStartTimeoutTaskHandler(opts operationTaskHandlerOptions) *operationScheduleToStartTimeoutTaskHandler {
+func newOperationScheduleToStartTimeoutTaskHandler(opts commonTaskHandlerOptions) *operationScheduleToStartTimeoutTaskHandler {
 	return &operationScheduleToStartTimeoutTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
@@ -387,7 +417,7 @@ type operationStartToCloseTimeoutTaskHandler struct {
 	logger         log.Logger
 }
 
-func newOperationStartToCloseTimeoutTaskHandler(opts operationTaskHandlerOptions) *operationStartToCloseTimeoutTaskHandler {
+func newOperationStartToCloseTimeoutTaskHandler(opts commonTaskHandlerOptions) *operationStartToCloseTimeoutTaskHandler {
 	return &operationStartToCloseTimeoutTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
@@ -428,7 +458,7 @@ type operationScheduleToCloseTimeoutTaskHandler struct {
 	logger         log.Logger
 }
 
-func newOperationScheduleToCloseTimeoutTaskHandler(opts operationTaskHandlerOptions) *operationScheduleToCloseTimeoutTaskHandler {
+func newOperationScheduleToCloseTimeoutTaskHandler(opts commonTaskHandlerOptions) *operationScheduleToCloseTimeoutTaskHandler {
 	return &operationScheduleToCloseTimeoutTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,

@@ -2777,6 +2777,13 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 			),
 		).Record(1)
 	}
+
+	if tsc := startRequest.GetStartRequest().GetTimeSkippingConfig(); tsc != nil && tsc.GetEnabled() {
+		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: tsc,
+		}
+	}
+
 	return event, nil
 }
 
