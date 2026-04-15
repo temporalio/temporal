@@ -335,7 +335,7 @@ func (s *DeploymentVersionSuite) TestEmergencyCaN_SignalFlood() {
 	// Flood the version workflow with reactivation signals to grow its history
 	// past the CaN suggestion threshold. Some signals may fail with
 	// "workflow is closing" if the workflow is mid-CaN — that's expected.
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		_ = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.ReactivateVersionSignalName, nil, tv.ClientIdentity())
 	}
 

@@ -2725,4 +2725,3 @@ func (s *VersionWorkflowSuite) Test_NoCaNWhenPendingSignalsButHistoryNotTooLarge
 	// Workflow should complete normally (CaN via normal path after processing all signals)
 	s.True(s.env.IsWorkflowCompleted())
 }
-
