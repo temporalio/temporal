@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -73,25 +72,6 @@ func NewEngine(
 	}
 
 	return e
-}
-
-// Ref returns a ComponentRef for a subcomponent attached to this engine. For root components,
-// prefer constructing a ref directly with [chasm.NewComponentRef] using the execution key.
-// Subcomponent refs cannot be constructed externally (the component path is unexported), so
-// this method is needed when testing task handlers that operate on subcomponents.
-func (e *Engine) Ref(component chasm.Component) chasm.ComponentRef {
-	for _, execution := range e.executions {
-		ref, err := execution.node.Ref(component)
-		if err != nil {
-			continue
-		}
-		structuredRef, err := chasm.DeserializeComponentRef(ref)
-		require.NoError(e.t, err)
-		return structuredRef
-	}
-
-	e.t.Fatalf("component %T is not attached to the chasmtest engine", component)
-	return chasm.ComponentRef{}
 }
 
 func (e *Engine) StartExecution(

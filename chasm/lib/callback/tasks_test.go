@@ -238,7 +238,17 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			callbackRef := testEngine.Ref(callback)
+			rootRef := chasm.NewComponentRef[*mockNexusCompletionGetterComponent](executionKey)
+			var callbackRef chasm.ComponentRef
+			require.NoError(t, testEngine.ReadComponent(engineCtx, rootRef, func(chasmCtx chasm.Context, _ chasm.Component) error {
+				serialized, err := chasmCtx.Ref(callback)
+				if err != nil {
+					return err
+				}
+				callbackRef, err = chasm.DeserializeComponentRef(serialized)
+				return err
+			}))
+
 			err = handler.Execute(
 				engineCtx,
 				callbackRef,
