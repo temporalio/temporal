@@ -2604,3 +2604,61 @@ func (s *VersionWorkflowSuite) Test_ReactivateVersion_IgnoredWhenNotDrainedOrIna
 
 	s.True(s.env.IsWorkflowCompleted())
 }
+
+// Test_CaNWhenHistoryTooLargeDespitePendingSignals verifies that the version workflow
+// can continue-as-new when GetContinueAsNewSuggested() is true, even if there are
+// pending (unprocessed) signals in the buffer. This is the emergency CaN escape hatch
+// that prevents the workflow from getting permanently stuck under signal floods.
+func (s *VersionWorkflowSuite) Test_CaNWhenHistoryTooLargeDespitePendingSignals() {
+	tv := testvars.New(s.T())
+	now := timestamppb.New(time.Now())
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	// Mock activities that the reactivation signal handler calls
+	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
+		&deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil,
+	).Maybe()
+	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	// Set ContinueAsNewSuggested to simulate large history
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SetContinueAsNewSuggested(true)
+	}, 0)
+
+	// Send reactivation signals to keep HasPending() true.
+	// These are the same no-op signals that caused the incident.
+	for i := 1; i <= 5; i++ {
+		delay := time.Duration(i) * time.Millisecond
+		s.env.RegisterDelayedCallback(func() {
+			s.env.SignalWorkflow(ReactivateVersionSignalName, nil)
+		}, delay)
+	}
+
+	// Start workflow with DRAINED status (so reactivation signals are meaningful)
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+			DrainageInfo: &deploymentpb.VersionDrainageInfo{
+				Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
+				LastChangedTime: now,
+				LastCheckedTime: now,
+			},
+			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
+			StartedDeploymentWorkflow: true,
+		},
+	})
+
+	// Workflow should complete via CaN despite pending signals
+	s.True(s.env.IsWorkflowCompleted())
+}
+
