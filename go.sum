@@ -444,6 +444,8 @@ go.opentelemetry.io/proto/otlp v1.7.1 h1:gTOMpGDb0WTBOP8JaO72iL3auEZhVmAQg4ipjOV
 go.opentelemetry.io/proto/otlp v1.7.1/go.mod h1:b2rVh6rfI/s2pHWNlB7ILJcRALpcNDzKhACevjI+ZnE=
 go.temporal.io/api v1.62.9-0.20260414175922-e6fd51f41fde h1:1c+mRnTOHfN1WqPUK4rL1ahwH/VS2ddc1CPqxcrDyK8=
 go.temporal.io/api v1.62.9-0.20260414175922-e6fd51f41fde/go.mod h1:iaxoP/9OXMJcQkETTECfwYq4cw/bj4nwov8b3ZLVnXM=
+go.temporal.io/api v1.62.10-0.20260415205944-dbe8c077fbf1 h1:YM1RgEu5BHI5HnuRoAsZ+3UDbreTdmPu0oXTIl2PKEs=
+go.temporal.io/api v1.62.10-0.20260415205944-dbe8c077fbf1/go.mod h1:iaxoP/9OXMJcQkETTECfwYq4cw/bj4nwov8b3ZLVnXM=
 go.temporal.io/auto-scaled-workers v0.0.0-20260407181057-edd947d743d2 h1:1hKeH3GyR6YD6LKMHGCZ76t6h1Sgha0hXVQBxWi3dlQ=
 go.temporal.io/auto-scaled-workers v0.0.0-20260407181057-edd947d743d2/go.mod h1:T8dnzVPeO+gaUTj9eDgm/lT2lZH4+JXNvrGaQGyVi50=
 go.temporal.io/sdk v1.41.1 h1:yOpvsHyDD1lNuwlGBv/SUodCPhjv9nDeC9lLHW/fJUA=
