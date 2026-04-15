@@ -1450,6 +1450,21 @@ func serializeOutboundTask(
 				ChasmTaskInfo: task.Info,
 			},
 		}
+	case *tasks.WorkerCommandsTask:
+		outboundTaskInfo = &persistencespb.OutboundTaskInfo{
+			NamespaceId:    task.NamespaceID,
+			WorkflowId:     task.WorkflowID,
+			RunId:          task.RunID,
+			TaskId:         task.TaskID,
+			TaskType:       task.GetType(),
+			Destination:    task.Destination,
+			VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
+			TaskDetails: &persistencespb.OutboundTaskInfo_WorkerCommandsTask{
+				WorkerCommandsTask: &persistencespb.WorkerCommandsTask{
+					Commands: task.Commands,
+				},
+			},
+		}
 	default:
 		return nil, serviceerror.NewInternalf("unknown outbound task type while serializing: %v", task)
 	}
@@ -1490,6 +1505,18 @@ func deserializeOutboundTask(
 			TaskID:              info.TaskId,
 			Category:            tasks.CategoryOutbound,
 			Info:                info.GetChasmTaskInfo(),
+			Destination:         info.Destination,
+		}, nil
+	case enumsspb.TASK_TYPE_WORKER_COMMANDS:
+		return &tasks.WorkerCommandsTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				info.NamespaceId,
+				info.WorkflowId,
+				info.RunId,
+			),
+			VisibilityTimestamp: info.VisibilityTime.AsTime(),
+			TaskID:              info.TaskId,
+			Commands:            info.GetWorkerCommandsTask().GetCommands(),
 			Destination:         info.Destination,
 		}, nil
 	default:

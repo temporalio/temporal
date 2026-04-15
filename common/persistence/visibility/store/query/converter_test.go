@@ -23,16 +23,6 @@ const (
 	testNamespaceID   = namespace.ID("test-namespace-id")
 )
 
-type identityMapper struct{}
-
-func (identityMapper) GetAlias(fieldName string, _ string) (string, error) {
-	return fieldName, nil
-}
-
-func (identityMapper) GetFieldName(alias string, _ string) (string, error) {
-	return alias, nil
-}
-
 func TestWithSearchAttributeInterceptor(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
@@ -1927,7 +1917,7 @@ func TestQueryConverter_ResolveSearchAttributeAlias(t *testing.T) {
 			)
 
 			if tc.useNoopMapper {
-				queryConverter.saMapper = identityMapper{}
+				queryConverter.saMapper = &searchattribute.NoopMapper{}
 			}
 
 			fn, ft, err := queryConverter.resolveSearchAttributeAlias(tc.in)

@@ -1393,7 +1393,9 @@ func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb
 	// for now, only sticky partitions act on ephemeral data, normal partitions ignore it.
 	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
 		return
-	} else if !pm.defaultQueueFuture.Ready() {
+	}
+	dbq, err := pm.defaultQueueFuture.GetIfReady()
+	if err != nil {
 		return // not initialized yet
 	}
 
@@ -1423,7 +1425,6 @@ func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb
 		pqm.UpdateRemotePriorityBacklogs(updates[key])
 	}
 
-	dbq := pm.defaultQueue()
 	if dbq != nil {
 		update(PhysicalTaskQueueVersion{}, dbq)
 	}
@@ -1861,7 +1862,15 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	}
 
 	current, currentRevisionNumber, _, ramping, _, rampingPercentage, rampingRevisionNumber, _ := worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
-	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber, workflowId)
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
+		current,
+		currentRevisionNumber,
+		ramping,
+		rampingPercentage,
+		rampingRevisionNumber,
+		workflowId,
+		directive.GetUseRampingVersion(),
+	)
 	targetDeployment := worker_versioning.DeploymentFromDeploymentVersion(targetDeploymentVersion)
 
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {

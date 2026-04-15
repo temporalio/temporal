@@ -106,6 +106,7 @@ type (
 		forwardedFrom             string
 		localPollStartTime        time.Time
 		workerInstanceKey         string
+		workerControlTaskQueue    string
 	}
 
 	userDataUpdate struct {
@@ -571,16 +572,17 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	if err != nil {
 		return "", false, err
 	}
-	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY, //nolint:forbidigo
+	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
+	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || sticky,
 		"AddWorkflowTask called with unexpected partition kind") {
 		return "", false, serviceerror.NewInternal("AddWorkflowTask called with unexpected partition kind")
 	}
 
 	// do not load sticky task queues if not already loaded, which means they have no poller.
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY, loadCauseTask)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
 	if err != nil {
 		return "", false, err
-	} else if partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && !stickyWorkerAvailable(pm) {
+	} else if sticky && !stickyWorkerAvailable(pm) {
 		return "", false, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
@@ -690,6 +692,7 @@ pollLoop:
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
+			workerControlTaskQueue:    request.WorkerControlTaskQueue,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -962,6 +965,7 @@ pollLoop:
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
+			workerControlTaskQueue:    request.WorkerControlTaskQueue,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -1093,15 +1097,16 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	if err != nil {
 		return nil, err
 	}
-	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY, //nolint:forbidigo
+	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
+	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || sticky,
 		"QueryWorkflow called with unexpected partition kind") {
 		return nil, serviceerror.NewInternal("QueryWorkflow called with unexpected partition kind")
 	}
 	// do not load sticky task queues if not already loaded, which means they have no poller.
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY, loadCauseQuery)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseQuery)
 	if err != nil {
 		return nil, err
-	} else if partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY && !stickyWorkerAvailable(pm) {
+	} else if sticky && !stickyWorkerAvailable(pm) {
 		return nil, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
@@ -2535,7 +2540,10 @@ func (e *matchingEngineImpl) PollNexusTaskQueue(
 	pollerID := req.GetPollerId()
 	request := req.Request
 	taskQueueName := request.TaskQueue.GetName()
-	e.logger.Debug("Received PollNexusTaskQueue for taskQueue", tag.Name(taskQueueName))
+	ns, err := e.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return nil, err
+	}
 pollLoop:
 	for {
 		err := common.IsValidContext(ctx)
@@ -2593,7 +2601,7 @@ pollLoop:
 			nexusReq.Header[nexus.HeaderOperationTimeout] = commonnexus.FormatDuration(time.Until(task.nexus.operationDeadline))
 		}
 
-		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
+		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), ns.Name().String(), pollMetadata)
 		return &matchingservice.PollNexusTaskQueueResponse{
 			Response: &workflowservice.PollNexusTaskQueueResponse{
 				TaskToken:             serializedToken,
@@ -2863,17 +2871,17 @@ func (e *matchingEngineImpl) pollTask(
 // emitTaskDispatchLatency emits latency metrics for a task dispatched to a worker.
 // Here is what task_dispatch_latency measures vs schedule_to_start_latency:
 //
-//	Latency        					 		 | task_dispatch 	| schedule_to_start
+// Latency                                          | task_dispatch    | schedule_to_start
 //
-// --------------------------------------------------+------------------+------------------
+// -------------------------------------------------+------------------+------------------
 //
-//	transfer task processing 						 | excluded 		| included
-//	record*TaskStarted latency 						 | included 		| partial
-//	task forward latency 							 | included 		| included
-//	poll forward latency 							 | excluded for now | excluded
-//	backlog delay 									 | included 	    | included
-//	sync match delay 								 | included 	    | included
-//	rescheduling of the same task attempt by History | resets latency   | does not reset
+// transfer task processing                         | excluded         | included
+// record*TaskStarted latency                       | included         | partial
+// task forward latency                             | included         | included
+// poll forward latency                             | excluded for now | excluded
+// backlog delay                                    | included         | included
+// sync match delay                                 | included         | included
+// rescheduling of the same task attempt by History | resets latency   | does not reset
 //
 // ----------------------------------------------------------------------------------------
 func (e *matchingEngineImpl) emitTaskDispatchLatency(

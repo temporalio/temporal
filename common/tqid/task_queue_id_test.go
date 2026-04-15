@@ -96,7 +96,7 @@ func TestWorkerCommandsPartitionProperties(t *testing.T) {
 	a.False(p.SupportsFairness())
 	a.False(p.SupportsVersioning())
 	a.False(p.SupportsPartitions())
-	a.Equal("__worker_commands__", p.MetricTag())
+	a.Equal("__worker_commands__", p.MetricTag(false))
 }
 
 func TestFromProtoPartition_Normal(t *testing.T) {
