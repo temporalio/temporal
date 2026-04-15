@@ -2942,7 +2942,7 @@ instead of the previous HSM backed implementation.`,
 
 	ExternalPayloadsEnabled = NewNamespaceBoolSetting(
 		"history.externalPayloadsEnabled",
-		false,
+		true,
 		`ExternalPayloadsEnabled controls whether external payload features are enabled for a namespace.`,
 	)
 

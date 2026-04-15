@@ -376,10 +376,15 @@ func (e *TestEnv) StartGlobalMetricCapture() *GlobalMetricCapture {
 	return globalCapture
 }
 
-// StartNamespaceMetricCapture starts a metrics capture that only allows safe per-metric namespace filtering.
+// StartNamespaceMetricCapture starts a metrics capture scoped to this test's namespace.
 // Namespace captures are safe on shared clusters because reads are restricted to
 // per-metric namespace-filtered iteration and reject non-namespaced metrics.
 func (e *TestEnv) StartNamespaceMetricCapture() *NamespaceMetricCapture {
+	return e.StartNamespaceMetricCaptureFor(e.Namespace().String())
+}
+
+// StartNamespaceMetricCaptureFor starts a metrics capture scoped to the provided namespace.
+func (e *TestEnv) StartNamespaceMetricCaptureFor(namespaceName string) *NamespaceMetricCapture {
 	handler := e.cluster.host.CaptureMetricsHandler()
 	if handler == nil {
 		e.t.Fatal("StartNamespaceMetricCapture is unavailable because metrics capture is not enabled on this cluster")
@@ -389,7 +394,7 @@ func (e *TestEnv) StartNamespaceMetricCapture() *NamespaceMetricCapture {
 	e.t.Cleanup(func() {
 		handler.StopCapture(capture)
 	})
-	return newNamespaceMetricCapture(capture, e.Namespace().String())
+	return newNamespaceMetricCapture(capture, namespaceName)
 }
 
 func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {

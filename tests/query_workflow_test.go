@@ -396,10 +396,10 @@ func TestQueryWorkflow_NonStickyMultiPageHistory(t *testing.T) {
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: id},
 		})
-		return err == nil && resp.GetWorkflowExecutionInfo().GetHistoryLength() > 10
+		return err == nil && resp.GetWorkflowExecutionInfo().GetHistoryLength() > 30
 	}, 10*time.Second, 200*time.Millisecond)
 
-	// Stop worker to clear sticky cache so the query goes through non-sticky path.
+	// Stop worker so the query goes through the non-sticky path.
 	queryWorker.Stop()
 
 	// Clear stickiness so the query dispatches directly to the normal queue
@@ -410,8 +410,10 @@ func TestQueryWorkflow_NonStickyMultiPageHistory(t *testing.T) {
 	})
 	env.NoError(err)
 
-	// Issue a query in background; we'll poll for the task manually below.
-	// Don't assert inside the goroutine — it would panic if the test completes first.
+	// Terminate the workflow to prevent any further workflow tasks from being scheduled.
+	err = env.SdkClient().TerminateWorkflow(ctx, id, "", "test cleanup")
+	env.NoError(err)
+
 	go func() { _, _ = env.SdkClient().QueryWorkflow(ctx, id, "", "test") }()
 
 	// Poll for the query task on the normal (non-sticky) task queue.

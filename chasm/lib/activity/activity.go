@@ -806,12 +806,12 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		ScheduleToCloseTimeout:  a.GetScheduleToCloseTimeout(),
 		ScheduleToStartTimeout:  a.GetScheduleToStartTimeout(),
 		StartToCloseTimeout:     a.GetStartToCloseTimeout(),
+		StateSizeBytes:          int64(executionInfo.ApproximateStateSize),
 		StateTransitionCount:    executionInfo.StateTransitionCount,
-		// TODO(saa-preview): StateSizeBytes?
-		SearchAttributes: sa,
-		Status:           status,
-		TaskQueue:        a.GetTaskQueue().GetName(),
-		UserMetadata:     requestData.GetUserMetadata(),
+		SearchAttributes:        sa,
+		Status:                  status,
+		TaskQueue:               a.GetTaskQueue().GetName(),
+		UserMetadata:            requestData.GetUserMetadata(),
 	}
 
 	return info
