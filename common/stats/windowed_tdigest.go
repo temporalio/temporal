@@ -82,9 +82,10 @@ type (
 var _ TimeWindowedStats = (*timeWindowedTDigest)(nil)
 
 // NewWindowedTDigest creates a new TimeWindowedStats backed by per-window t-digests.
-// Some guidance on sizing the windows/counts: Prefer windows containing 100-1000 datapoints.
-// T-Digest is somewhat super-linear with datapoint count, and 1000 is a breakpoint with the
-// cost of just creating a new window. See BenchmarkInsert in windowed_tdigest_performance_test.go for details.
+// Some guidance on sizing the windows/counts: Prefer windows containing about 10,000 datapoints.
+// Insert latency increases by a factor of about 3x from a size of 1k-10k, but the stored size in RAM drops by 7x.
+// So, if you want 300 seconds of history on an event that records 1k counts/sec, 3 10-second windows
+// is fine.
 func NewWindowedTDigest(cfg WindowConfig) (TimeWindowedStats, error) {
 	if cfg.WindowCount <= 0 {
 		return nil, errors.New("windowCount must be non-negative")
