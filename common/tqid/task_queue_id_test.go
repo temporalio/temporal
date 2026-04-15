@@ -82,6 +82,11 @@ func TestFromProtoPartition_WorkerCommands(t *testing.T) {
 	proto.Name = "/_sys/" + queueName + "/1"
 	_, err = PartitionFromProto(proto, nsid, taskType)
 	require.Error(t, err)
+
+	// worker-commands must have nexus task type
+	proto.Name = queueName
+	_, err = PartitionFromProto(proto, nsid, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	require.Error(t, err)
 }
 
 func TestWorkerCommandsPartitionProperties(t *testing.T) {

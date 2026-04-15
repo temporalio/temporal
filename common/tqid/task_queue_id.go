@@ -188,6 +188,9 @@ func PartitionFromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskTy
 		if partition != 0 {
 			return nil, serviceerror.NewInvalidArgumentf("worker-commands partitions cannot have non-zero partition ID. base name: %s", baseName)
 		}
+		if taskType != enumspb.TASK_QUEUE_TYPE_NEXUS {
+			return nil, serviceerror.NewInvalidArgumentf("worker-commands partitions must have nexus task type, got: %v. base name: %s", taskType, baseName)
+		}
 		tq := &TaskQueue{TaskQueueFamily{namespaceId, baseName}, taskType}
 		return tq.WorkerCommandsPartition(), nil
 	default:
