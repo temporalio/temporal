@@ -99,7 +99,6 @@ type (
 	// These queues are per-worker-process and only exist for the lifetime of the worker process. The SDK sets
 	// Kind=TASK_QUEUE_KIND_WORKER_COMMANDS when polling on these queues.
 	WorkerCommandsPartition struct {
-		name      string
 		taskQueue *TaskQueue
 	}
 
@@ -157,7 +156,7 @@ func UnsafePartitionFromProto(proto *taskqueuepb.TaskQueue, namespaceId string, 
 		return tq.StickyPartition(proto.GetName())
 	case enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS:
 		tq := &TaskQueue{TaskQueueFamily{namespaceId, proto.GetName()}, taskType}
-		return tq.WorkerCommandsPartition(proto.GetName())
+		return tq.WorkerCommandsPartition()
 	default:
 		tq := &TaskQueue{TaskQueueFamily{namespaceId, proto.GetName()}, taskType}
 		return tq.RootPartition()
@@ -188,7 +187,7 @@ func PartitionFromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskTy
 			return nil, serviceerror.NewInvalidArgumentf("worker-commands partitions cannot have non-zero partition ID. base name: %s", baseName)
 		}
 		tq := &TaskQueue{TaskQueueFamily{namespaceId, baseName}, taskType}
-		return tq.WorkerCommandsPartition(baseName), nil
+		return tq.WorkerCommandsPartition(), nil
 	default:
 		tq := &TaskQueue{TaskQueueFamily{namespaceId, baseName}, taskType}
 		return tq.NormalPartition(partition), nil
@@ -264,8 +263,8 @@ func (n *TaskQueue) StickyPartition(stickyName string) *StickyPartition {
 	return &StickyPartition{stickyName, n}
 }
 
-func (n *TaskQueue) WorkerCommandsPartition(name string) *WorkerCommandsPartition {
-	return &WorkerCommandsPartition{name, n}
+func (n *TaskQueue) WorkerCommandsPartition() *WorkerCommandsPartition {
+	return &WorkerCommandsPartition{n}
 }
 
 func (n *TaskQueue) RootPartition() *NormalPartition {
@@ -362,13 +361,13 @@ func (w *WorkerCommandsPartition) SupportsPartitions() bool      { return false 
 func (w *WorkerCommandsPartition) MetricTag() string             { return "__worker_commands__" }
 
 func (w *WorkerCommandsPartition) RpcName() string { //nolint:stylecheck,staticcheck // matches Partition interface
-	return w.name
+	return w.taskQueue.Name()
 }
 
 func (w *WorkerCommandsPartition) Key() PartitionKey {
 	return PartitionKey{
 		namespaceId: w.NamespaceId(),
-		name:        w.name,
+		name:        w.taskQueue.Name(),
 		taskType:    w.TaskType(),
 	}
 }

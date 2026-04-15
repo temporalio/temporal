@@ -5258,7 +5258,7 @@ func TestLoggerAndMetricsForPartition_BreakdownEnabled(t *testing.T) {
 		},
 		{
 			name:               "worker-commands",
-			partition:          newTestTaskQueue(ns.ID().String(), "my-task-queue", enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition("/temporal-sys/worker-commands/ns/key"),
+			partition:          newTestTaskQueue(ns.ID().String(), "/temporal-sys/worker-commands/ns/key", enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition(),
 			expectTQValue:      "my-task-queue",
 			expectPartitionTag: "__worker_commands__",
 		},
@@ -5327,7 +5327,7 @@ func TestLoggerAndMetricsForPartition_BreakdownDisabled(t *testing.T) {
 		},
 		{
 			name:               "worker-commands",
-			partition:          newTestTaskQueue(ns.ID().String(), "my-task-queue", enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition("/temporal-sys/worker-commands/ns/key"),
+			partition:          newTestTaskQueue(ns.ID().String(), "/temporal-sys/worker-commands/ns/key", enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition(),
 			expectTQValue:      "__omitted__",
 			expectPartitionTag: "__worker_commands__",
 		},
