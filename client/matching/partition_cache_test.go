@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/metrics"
 )
@@ -26,19 +26,19 @@ func TestPartitionCache_BasicPutLookup(t *testing.T) {
 
 	c.put(key, pc4)
 	c.put(keyb, pc8)
-	assert.Equal(t, pc4, c.lookup(key))
-	assert.Equal(t, pc8, c.lookup(keyb))
+	require.Equal(t, pc4, c.lookup(key))
+	require.Equal(t, pc8, c.lookup(keyb))
 
 	c.put(key, pc8)
-	assert.Equal(t, pc8, c.lookup(key))
+	require.Equal(t, pc8, c.lookup(key))
 
 	// missing key
 	keyc := c.makeKey(testNsID, "nonexistent", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	assert.Equal(t, PartitionCounts{}, c.lookup(keyc))
+	require.Equal(t, PartitionCounts{}, c.lookup(keyc))
 
 	// removes
 	c.put(key, PartitionCounts{Read: -3, Write: -5})
-	assert.Equal(t, PartitionCounts{}, c.lookup(key))
+	require.Equal(t, PartitionCounts{}, c.lookup(key))
 }
 
 func TestPartitionCache_Rotate(t *testing.T) {
@@ -55,17 +55,17 @@ func TestPartitionCache_Rotate(t *testing.T) {
 	c.shards[c.shardFromKey(key)].rotate()
 
 	// Lookup should still find it (promotes from prev to active)
-	assert.Equal(t, pc, c.lookup(key))
+	require.Equal(t, pc, c.lookup(key))
 
 	// After promotion, rotate again — it should still be in active
 	c.shards[c.shardFromKey(key)].rotate()
-	assert.Equal(t, pc, c.lookup(key))
+	require.Equal(t, pc, c.lookup(key))
 
 	// Rotate twice without any lookup — entry should be gone
 	c.shards[c.shardFromKey(key)].rotate()
 	c.shards[c.shardFromKey(key)].rotate()
 
-	assert.Equal(t, PartitionCounts{}, c.lookup(key))
+	require.Equal(t, PartitionCounts{}, c.lookup(key))
 }
 
 func TestPartitionCache_ConcurrentAccess(t *testing.T) {

@@ -2,9 +2,9 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/log"
@@ -46,18 +46,18 @@ func TestInvokeWithPartitionCounts_CacheMissSuccess(t *testing.T) {
 	calls := 0
 	op := func(ctx context.Context, pc PartitionCounts, req *hpcReq, opts []grpc.CallOption) (*hpcRes, error) {
 		calls++
-		assert.Equal(t, PartitionCounts{}, pc) // cache miss
+		require.Equal(t, PartitionCounts{}, pc) // cache miss
 		setTrailerInOpts(opts, serverPC)
 		return &hpcRes{value: "ok"}, nil
 	}
 
 	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, &hpcReq{}, nil, op)
 	require.NoError(t, err)
-	assert.Equal(t, "ok", res.value)
-	assert.Equal(t, 1, calls)
+	require.Equal(t, "ok", res.value)
+	require.Equal(t, 1, calls)
 
 	// cache should be updated
-	assert.Equal(t, serverPC, cache.lookup(pkey))
+	require.Equal(t, serverPC, cache.lookup(pkey))
 }
 
 func TestInvokeWithPartitionCounts_CacheHitSuccess(t *testing.T) {
@@ -69,7 +69,7 @@ func TestInvokeWithPartitionCounts_CacheHitSuccess(t *testing.T) {
 	cache.put(pkey, cachedPC)
 
 	op := func(ctx context.Context, pc PartitionCounts, req *hpcReq, opts []grpc.CallOption) (*hpcRes, error) {
-		assert.Equal(t, cachedPC, pc)
+		require.Equal(t, cachedPC, pc)
 		// server confirms same counts
 		setTrailerInOpts(opts, cachedPC)
 		return &hpcRes{value: "ok"}, nil
@@ -77,8 +77,8 @@ func TestInvokeWithPartitionCounts_CacheHitSuccess(t *testing.T) {
 
 	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, &hpcReq{}, nil, op)
 	require.NoError(t, err)
-	assert.Equal(t, "ok", res.value)
-	assert.Equal(t, cachedPC, cache.lookup(pkey))
+	require.Equal(t, "ok", res.value)
+	require.Equal(t, cachedPC, cache.lookup(pkey))
 }
 
 func TestInvokeWithPartitionCounts_ServerUpdatesCount(t *testing.T) {
@@ -99,7 +99,7 @@ func TestInvokeWithPartitionCounts_ServerUpdatesCount(t *testing.T) {
 	require.NoError(t, err)
 
 	// cache should be updated
-	assert.Equal(t, newPC, cache.lookup(pkey))
+	require.Equal(t, newPC, cache.lookup(pkey))
 }
 
 func TestInvokeWithPartitionCounts_StaleRetry_Succeeds(t *testing.T) {
@@ -114,18 +114,18 @@ func TestInvokeWithPartitionCounts_StaleRetry_Succeeds(t *testing.T) {
 		calls++
 		setTrailerInOpts(opts, serverPC)
 		if calls == 1 {
-			assert.Equal(t, PartitionCounts{}, pc) // cache miss
+			require.Equal(t, PartitionCounts{}, pc) // cache miss
 			return nil, serviceerrors.NewStalePartitionCounts("stale")
 		}
-		assert.Equal(t, serverPC, pc) // retry with updated counts
+		require.Equal(t, serverPC, pc) // retry with updated counts
 		return &hpcRes{value: "ok"}, nil
 	}
 
 	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, &hpcReq{}, nil, op)
 	require.NoError(t, err)
-	assert.Equal(t, "ok", res.value)
-	assert.Equal(t, 2, calls)
-	assert.Equal(t, serverPC, cache.lookup(pkey))
+	require.Equal(t, "ok", res.value)
+	require.Equal(t, 2, calls)
+	require.Equal(t, serverPC, cache.lookup(pkey))
 }
 
 func TestInvokeWithPartitionCounts_StaleRetry_Fails(t *testing.T) {
@@ -143,12 +143,12 @@ func TestInvokeWithPartitionCounts_StaleRetry_Fails(t *testing.T) {
 			return nil, serviceerrors.NewStalePartitionCounts("stale first")
 		}
 		// second attempt: different non-stale error
-		return nil, assert.AnError
+		return nil, errors.New("error")
 	}
 
 	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, &hpcReq{}, nil, op)
 	require.Error(t, err)
-	assert.Equal(t, 2, calls)
+	require.Equal(t, 2, calls)
 }
 
 func TestInvokeWithPartitionCounts_OtherErrorNoRetry(t *testing.T) {
@@ -163,15 +163,15 @@ func TestInvokeWithPartitionCounts_OtherErrorNoRetry(t *testing.T) {
 		calls++
 		// even on error, server sends trailer
 		setTrailerInOpts(opts, serverPC)
-		return nil, assert.AnError
+		return nil, errors.New("error")
 	}
 
 	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, &hpcReq{}, nil, op)
 	require.Error(t, err)
-	assert.Equal(t, 1, calls) // no retry
+	require.Equal(t, 1, calls) // no retry
 
 	// cache should still be updated from trailer
-	assert.Equal(t, serverPC, cache.lookup(pkey))
+	require.Equal(t, serverPC, cache.lookup(pkey))
 }
 
 func TestInvokeWithPartitionCounts_ZeroTrailerRemovesCache(t *testing.T) {
@@ -191,7 +191,7 @@ func TestInvokeWithPartitionCounts_ZeroTrailerRemovesCache(t *testing.T) {
 	require.NoError(t, err)
 
 	// cache entry should be removed
-	assert.Equal(t, PartitionCounts{}, cache.lookup(pkey))
+	require.Equal(t, PartitionCounts{}, cache.lookup(pkey))
 }
 
 func TestInvokeWithPartitionCounts_NoTrailerRemovesCache(t *testing.T) {
@@ -211,7 +211,7 @@ func TestInvokeWithPartitionCounts_NoTrailerRemovesCache(t *testing.T) {
 	require.NoError(t, err)
 
 	// cache entry should be removed
-	assert.Equal(t, PartitionCounts{}, cache.lookup(pkey))
+	require.Equal(t, PartitionCounts{}, cache.lookup(pkey))
 }
 
 func TestInvokeWithPartitionCounts_ParseErrorRemovesCache(t *testing.T) {
@@ -235,7 +235,7 @@ func TestInvokeWithPartitionCounts_ParseErrorRemovesCache(t *testing.T) {
 	require.NoError(t, err)
 
 	// cache entry should be removed
-	assert.Equal(t, PartitionCounts{}, cache.lookup(pkey))
+	require.Equal(t, PartitionCounts{}, cache.lookup(pkey))
 }
 
 func TestInvokeWithPartitionCounts_OutgoingContextHasHeader(t *testing.T) {
@@ -254,7 +254,7 @@ func TestInvokeWithPartitionCounts_OutgoingContextHasHeader(t *testing.T) {
 		require.Len(t, vals, 1)
 		parsed, err := parsePartitionCounts(vals[0])
 		require.NoError(t, err)
-		assert.Equal(t, cachedPC, parsed)
+		require.Equal(t, cachedPC, parsed)
 
 		setTrailerInOpts(opts, cachedPC)
 		return &hpcRes{value: "ok"}, nil
