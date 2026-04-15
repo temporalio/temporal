@@ -5495,8 +5495,12 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 
 	// Update time skipping config.
 	if tsc := attributes.GetTimeSkippingConfig(); tsc != nil {
-		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: tsc,
+		if ms.executionInfo.TimeSkippingInfo == nil {
+			ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+				Config: tsc,
+			}
+		} else {
+			ms.executionInfo.TimeSkippingInfo.Config = tsc
 		}
 	}
 
