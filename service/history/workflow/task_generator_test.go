@@ -1224,17 +1224,17 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping(t *testing.T) {
 	// Timer 1: expiry now+1h, skipped 1h => visibility = now.
 	t1, ok := taskByEventID[1]
 	require.True(t, ok, "missing regenerated task for EventID=1")
-	assert.Equal(t, timer1ExpiryTime.Add(-skippedDuration), t1.VisibilityTimestamp)
-	assert.Equal(t, tests.WorkflowKey, t1.WorkflowKey)
+	require.Equal(t, timer1ExpiryTime.Add(-skippedDuration), t1.VisibilityTimestamp)
+	require.Equal(t, tests.WorkflowKey, t1.WorkflowKey)
 	// TaskID must be zero: the generator leaves it unset; the shard assigns the real ID.
-	assert.Equal(t, int64(0), t1.TaskID, "TaskID must be zero (set by shard, not the generator)")
+	require.Equal(t, int64(0), t1.TaskID, "TaskID must be zero (set by shard, not the generator)")
 
 	// Timer 2: expiry now+2h, skipped 1h => visibility = now+1h.
 	t2, ok := taskByEventID[2]
 	require.True(t, ok, "missing regenerated task for EventID=2")
-	assert.Equal(t, timer2ExpiryTime.Add(-skippedDuration), t2.VisibilityTimestamp)
-	assert.Equal(t, tests.WorkflowKey, t2.WorkflowKey)
-	assert.Equal(t, int64(0), t2.TaskID, "TaskID must be zero (set by shard, not the generator)")
+	require.Equal(t, timer2ExpiryTime.Add(-skippedDuration), t2.VisibilityTimestamp)
+	require.Equal(t, tests.WorkflowKey, t2.WorkflowKey)
+	require.Equal(t, int64(0), t2.TaskID, "TaskID must be zero (set by shard, not the generator)")
 }
 
 func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_EdgeCases(t *testing.T) {
@@ -1352,11 +1352,11 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AccumulatedDurati
 	call2 := byEventID(allTasks[2:])
 
 	// First call used 10 min: visibility = expiry - 10 min.
-	assert.Equal(t, timer1ExpiryTime.Add(-10*time.Minute), call1[1].VisibilityTimestamp)
-	assert.Equal(t, timer2ExpiryTime.Add(-10*time.Minute), call1[2].VisibilityTimestamp)
+	require.Equal(t, timer1ExpiryTime.Add(-10*time.Minute), call1[1].VisibilityTimestamp)
+	require.Equal(t, timer2ExpiryTime.Add(-10*time.Minute), call1[2].VisibilityTimestamp)
 
 	// Second call used 20 min: visibility = expiry - 20 min, NOT expiry - 30 min.
 	// Each call reads AccumulatedSkippedDuration independently; the durations are not stacked.
-	assert.Equal(t, timer1ExpiryTime.Add(-20*time.Minute), call2[1].VisibilityTimestamp)
-	assert.Equal(t, timer2ExpiryTime.Add(-20*time.Minute), call2[2].VisibilityTimestamp)
+	require.Equal(t, timer1ExpiryTime.Add(-20*time.Minute), call2[1].VisibilityTimestamp)
+	require.Equal(t, timer2ExpiryTime.Add(-20*time.Minute), call2[2].VisibilityTimestamp)
 }

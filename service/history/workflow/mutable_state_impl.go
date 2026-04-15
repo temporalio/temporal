@@ -8446,8 +8446,9 @@ func (ms *MutableStateImpl) closeTransactionHandlerTimeSkipping(
 			return false
 		}
 		// TODO@time-skipping: need to support start-with-delay
-		if transactionPolicy == historyi.TransactionPolicyActive && ms.ShouldExecuteTimeSkipping() {
-			if _, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx); err != nil {
+		if ms.ShouldExecuteTimeSkipping() {
+			_, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx)
+			if err != nil {
 				ms.metricsHandler.Counter(metrics.ExecutionTimeSkippingTransitionedErrorCounter.Name()).Record(1)
 				ms.logger.Error(
 					"failed to add workflow execution time skipping transitioned event, and ignore this error and continue",
@@ -8455,15 +8456,19 @@ func (ms *MutableStateImpl) closeTransactionHandlerTimeSkipping(
 					tag.WorkflowRunID(ms.GetExecutionState().RunId),
 					tag.Error(err),
 				)
-			} else {
-				return true
+				return false
 			}
+			return true
 		}
 		return false
 	case historyi.TransactionPolicyPassive:
 		return false
 	default:
-		panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
+		ms.logger.Error(fmt.Sprintf("closeTransactionHandlerTimeSkipping: unknown transaction policy: %v", transactionPolicy),
+			tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
+			tag.WorkflowRunID(ms.GetExecutionState().RunId),
+		)
+		return false
 	}
 }
 
@@ -8480,7 +8485,7 @@ func (ms *MutableStateImpl) closeTransactionRegenerateTimerTasksForTimeSkipping(
 	case historyi.TransactionPolicyPassive:
 		return nil
 	default:
-		panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
+		return serviceerror.NewInternalf("unknown transaction policy: %v", transactionPolicy)
 	}
 }
 

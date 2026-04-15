@@ -326,9 +326,9 @@ func (b *HistoryBuilder) AddWorkflowExecutionTimeSkippingTransitionedEvent(
 	targetTime time.Time,
 	triggeredDisable bool,
 ) *historypb.HistoryEvent {
-	event := b.EventFactory.CreateWorkflowExecutionTimeSkippingTransitionedEvent(targetTime, triggeredDisable)
+	event := b.CreateWorkflowExecutionTimeSkippingTransitionedEvent(targetTime, triggeredDisable)
 	event.WorkerMayIgnore = true
-	event, _ = b.EventStore.add(event)
+	event, _ = b.add(event)
 	b.metricsHandler.Counter(metrics.ExecutionTimeSkippingTransitionedCounter.Name()).Record(1)
 	return event
 }

@@ -419,6 +419,8 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ActivityTimerActivityTimer() {
 			timerFiredCount++
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED:
 			timeSkippingCount++
+		default:
+			// other event types are not relevant to this test
 		}
 	}
 	s.Equal(2, timerFiredCount, "both timers must fire via time-skipping")
