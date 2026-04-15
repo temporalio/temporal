@@ -11,10 +11,20 @@ type (
 	}
 )
 
+const (
+	libraryName   = "tests"
+	componentName = "payloadStore"
+)
+
+var (
+	Archetype   = chasm.FullyQualifiedName(libraryName, componentName)
+	ArchetypeID = chasm.GenerateTypeID(Archetype)
+)
+
 var Library = &library{}
 
 func (l *library) Name() string {
-	return "tests"
+	return libraryName
 }
 
 func (l *library) NexusServices() []*nexus.Service {
@@ -28,7 +38,7 @@ func (l *library) NexusServiceProcessors() []*chasm.NexusServiceProcessor {
 func (l *library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*PayloadStore](
-			"payloadStore",
+			componentName,
 			chasm.WithBusinessIDAlias("PayloadStoreId"),
 			chasm.WithSearchAttributes(
 				PayloadTotalCountSearchAttribute,

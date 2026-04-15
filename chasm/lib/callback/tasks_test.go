@@ -54,6 +54,17 @@ func (m *mockNexusCompletionGetterComponent) LifecycleState(_ chasm.Context) cha
 	return chasm.LifecycleStateRunning
 }
 
+func (m *mockNexusCompletionGetterComponent) ContextMetadata(_ chasm.Context) map[string]string {
+	return nil
+}
+
+func (m *mockNexusCompletionGetterComponent) Terminate(
+	_ chasm.MutableContext,
+	_ chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	return chasm.TerminateComponentResponse{}, nil
+}
+
 type mockNexusCompletionGetterLibrary struct {
 	chasm.UnimplementedLibrary
 }
@@ -143,6 +154,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 
 			// Setup metrics expectations
 			metricsHandler := metrics.NewMockHandler(ctrl)
+			metricsHandler.EXPECT().WithTags(gomock.Any()).Return(metricsHandler).AnyTimes()
 			counter := metrics.NewMockCounterIface(ctrl)
 			timer := metrics.NewMockTimerIface(ctrl)
 			metricsHandler.EXPECT().Counter(RequestCounter.Name()).Return(counter)
@@ -167,7 +179,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 
 			// Create mock engine
 			mockEngine := chasm.NewMockEngine(ctrl)
-			handler := &InvocationTaskHandler{
+			handler := &invocationTaskHandler{
 				config: &Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 					RetryPolicy: func() backoff.RetryPolicy {
@@ -269,7 +281,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 
 			// Execute with engine context
 			engineCtx := chasm.NewEngineContext(context.Background(), mockEngine)
-			err = handler.Invoke(
+			err = handler.Execute(
 				engineCtx,
 				ref,
 				chasm.TaskAttributes{Destination: "http://localhost"},
@@ -288,7 +300,6 @@ func TestProcessBackoffTask(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	logger := log.NewTestLogger()
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(time.Now())
 
@@ -321,15 +332,7 @@ func TestProcessBackoffTask(t *testing.T) {
 		},
 	}
 
-	handler := BackoffTaskHandler{
-		config: &Config{
-			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
-			RetryPolicy: func() backoff.RetryPolicy {
-				return backoff.NewExponentialRetryPolicy(time.Second)
-			},
-		},
-		logger: logger,
-	}
+	handler := backoffTaskHandler{}
 
 	// Execute the backoff task
 	task := &callbackspb.BackoffTask{Attempt: 1}
@@ -549,7 +552,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 
 			// Create mock engine and setup expectations
 			mockEngine := chasm.NewMockEngine(ctrl)
-			handler := &InvocationTaskHandler{
+			handler := &invocationTaskHandler{
 				config: &Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 					RetryPolicy: func() backoff.RetryPolicy {
@@ -669,7 +672,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 
 			// Execute the invocation task
 			task := &callbackspb.InvocationTask{Attempt: 1}
-			err = handler.Invoke(
+			err = handler.Execute(
 				ctx,
 				ref,
 				chasm.TaskAttributes{},

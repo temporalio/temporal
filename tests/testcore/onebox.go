@@ -231,11 +231,13 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 	outputFile := fmt.Sprintf("/tmp/replication_stream_messages_%s.txt", clusterName)
 	impl.replicationStreamRecorder.SetOutputFile(outputFile)
 
-	for k, v := range dynamicConfigOverrides {
-		impl.overrideDynamicConfig(t, k, v)
+	// Global defaults: applied without cleanup so they persist across cluster reuse.
+	for k, v := range defaultDynamicConfigOverrides {
+		impl.dcClient.PartialOverrideValue(k, v)
 	}
+	// Per-test overrides: cleaned up when the creating test finishes.
 	for k, v := range params.DynamicConfigOverrides {
-		impl.overrideDynamicConfig(t, k, v)
+		impl.overrideDynamicConfigForTest(t, k, v)
 	}
 
 	return impl
@@ -715,6 +717,8 @@ func (c *TemporalImpl) TlsConfigProvider() *encryption.FixedTLSConfigProvider {
 	return c.tlsConfigProvider
 }
 
+// Deprecated: metric capture is cluster-global.
+// Use (*TestEnv).StartGlobalMetricCapture() or (*TestEnv).StartNamespaceMetricCapture() instead.
 func (c *TemporalImpl) CaptureMetricsHandler() *metricstest.CaptureHandler {
 	return c.captureMetricsHandler
 }
@@ -964,7 +968,8 @@ func sdkClientFactoryProvider(
 	)
 }
 
-func (c *TemporalImpl) overrideDynamicConfig(t *testing.T, name dynamicconfig.Key, value any) func() {
+// overrideDynamicConfigForTest overrides a dynamic config value for the duration of the test.
+func (c *TemporalImpl) overrideDynamicConfigForTest(t *testing.T, name dynamicconfig.Key, value any) func() {
 	cleanup := c.dcClient.PartialOverrideValue(name, value)
 	t.Cleanup(cleanup)
 	return cleanup

@@ -60,6 +60,8 @@ const (
 	toUnversioned                                  = "to_unversioned"
 	queryTypeTag                                   = "query_type"
 	namespaceAllValue                              = "all"
+	clientName                                     = "client_name"
+	isInternal                                     = "is_internal"
 	activityTargetingMethod                        = "activity_targeting_method"
 	unknownValue                                   = "_unknown_"
 	totalMetricSuffix                              = "_total"
@@ -278,6 +280,20 @@ func TaskTypeTag(value string) Tag {
 		value = unknownValue
 	}
 	return Tag{Key: TaskTypeTagName, Value: value}
+}
+
+func ArchetypeTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: ArchetypeTagName, Value: value}
+}
+
+func ChasmTaskTypeTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: ChasmTaskTypeTagName, Value: value}
 }
 
 func PartitionTag(partition string) Tag {
@@ -535,6 +551,18 @@ func ToUnversionedTag(version string) Tag {
 var TaskExpireStageReadTag = Tag{Key: taskExpireStage, Value: "read"}
 var TaskExpireStageMemoryTag = Tag{Key: taskExpireStage, Value: "memory"}
 var TaskInvalidTag = Tag{Key: taskExpireStage, Value: "invalid"}
+
+// ClientNameTag returns a new client_name tag for the SDK client name.
+func ClientNameTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: clientName, Value: value}
+}
+
+func IsInternalTag(internal bool) Tag {
+	return Tag{Key: isInternal, Value: strconv.FormatBool(internal)}
+}
 
 func PersistenceDBKindTag(kind string) Tag {
 	return Tag{Key: PersistenceDBKindTagName, Value: kind}

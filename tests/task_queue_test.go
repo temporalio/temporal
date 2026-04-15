@@ -962,12 +962,7 @@ func (s *TaskQueueSuite) TestTaskDispatchLatencyMetric_Nexus() {
 }
 
 func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(s *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, forwardDelay time.Duration)) {
-	baseOpts := []testcore.TestOption{
-		testcore.WithDynamicConfig(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 3),
-		testcore.WithDynamicConfig(dynamicconfig.MatchingEmitTaskDispatchLatencyAtPoll, true),
-	}
-
-	runWithMatchingBehaviors(s.T(), baseOpts, func(s *testcore.TestEnv, b testcore.MatchingBehavior) {
+	runWithMatchingBehaviors(s.T(), nil, func(s *testcore.TestEnv, b testcore.MatchingBehavior) {
 
 		// When task forwarding is forced, inject a delay so we can verify
 		// the latency metric captures forwarding time.
@@ -1002,8 +997,7 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+	capture := s.StartNamespaceMetricCapture()
 
 	activityStarted := make(chan struct{})
 
@@ -1089,16 +1083,11 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 	s.NoError(err)
 
 	<-activityStarted
-	snap := capture.Snapshot()
-
 	// Filter recordings for our specific task queue to avoid interference from other activity.
 	tqName := tv.TaskQueue().GetName()
-	var recordings []*metricstest.CapturedRecording
-	for _, rec := range snap["task_dispatch_latency"] {
-		if rec.Tags["taskqueue"] == tqName {
-			recordings = append(recordings, rec)
-		}
-	}
+	recordings := capture.CollectMetric("task_dispatch_latency", func(rec *metricstest.CapturedRecording) bool {
+		return rec.Tags["taskqueue"] == tqName
+	})
 	s.NotEmpty(recordings, "expected task_dispatch_latency metric to be recorded")
 
 	// Verify no redundant emissions: expect exactly one recording per task type
@@ -1175,8 +1164,7 @@ func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 	})
 	s.NoError(err)
 
-	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+	capture := s.StartNamespaceMetricCapture()
 
 	nexusDone := make(chan struct{})
 
@@ -1246,15 +1234,10 @@ func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 	s.NoError(err)
 
 	<-nexusDone
-	snap := capture.Snapshot()
-
 	// Filter recordings for our specific task queue.
-	var recordings []*metricstest.CapturedRecording
-	for _, rec := range snap["task_dispatch_latency"] {
-		if rec.Tags["taskqueue"] == tqName {
-			recordings = append(recordings, rec)
-		}
-	}
+	recordings := capture.CollectMetric("task_dispatch_latency", func(rec *metricstest.CapturedRecording) bool {
+		return rec.Tags["taskqueue"] == tqName
+	})
 	s.NotEmpty(recordings, "expected task_dispatch_latency metric for nexus task")
 
 	var nexusCount int
@@ -1339,8 +1322,7 @@ func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 	<-wftDone
 
 	// Now start metric capture (after WFT so only query metric is captured).
-	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+	capture := s.StartNamespaceMetricCapture()
 
 	queryDone := make(chan struct{})
 
@@ -1392,16 +1374,11 @@ func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 	s.NoError(err)
 
 	<-queryDone
-	snap := capture.Snapshot()
-
 	// Filter recordings for our specific task queue.
 	tqName := tv.TaskQueue().GetName()
-	var recordings []*metricstest.CapturedRecording
-	for _, rec := range snap["task_dispatch_latency"] {
-		if rec.Tags["taskqueue"] == tqName {
-			recordings = append(recordings, rec)
-		}
-	}
+	recordings := capture.CollectMetric("task_dispatch_latency", func(rec *metricstest.CapturedRecording) bool {
+		return rec.Tags["taskqueue"] == tqName
+	})
 	s.NotEmpty(recordings, "expected task_dispatch_latency metric for query task")
 
 	var queryCount int

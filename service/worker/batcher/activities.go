@@ -133,6 +133,10 @@ func fetchPage(
 		Query:         config.adjustedQuery,
 	})
 	if err != nil {
+		var invalidArgErr *serviceerror.InvalidArgument
+		if errors.As(err, &invalidArgErr) {
+			return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
+		}
 		return nil, err
 	}
 
@@ -266,8 +270,19 @@ type activities struct {
 	concurrency dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
-func (a *activities) checkNamespaceID(namespaceID string) error {
-	if namespaceID != a.namespaceID.String() {
+// checkNamespace validates that batchParams targets the worker's own namespace.
+// The NamespaceId, Request.Namespace (if set), and AdminRequest.Namespace (if set)
+// must all agree with the worker's bound namespace. This prevents cross-namespace
+// escalation via the privileged internal-frontend connection (NoopClaimMapper → RoleAdmin).
+func (a *activities) checkNamespace(batchParams *batchspb.BatchOperationInput) error {
+	if batchParams.NamespaceId != a.namespaceID.String() {
+		return errNamespaceMismatch
+	}
+	ns := a.namespace.String()
+	if req := batchParams.GetRequest(); req != nil && req.GetNamespace() != ns {
+		return errNamespaceMismatch
+	}
+	if req := batchParams.GetAdminRequest(); req != nil && req.GetNamespace() != ns {
 		return errNamespaceMismatch
 	}
 	return nil
@@ -280,14 +295,15 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	hbd := HeartBeatDetails{}
 	metricsHandler := a.MetricsHandler.WithTags(metrics.OperationTag(metrics.BatcherScope), metrics.NamespaceIDTag(batchParams.NamespaceId))
 
-	if err := a.checkNamespaceID(batchParams.NamespaceId); err != nil {
+	if err := a.checkNamespace(batchParams); err != nil {
 		metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 		logger.Error("Failed to run batch operation due to namespace mismatch", tag.Error(err))
 		return hbd, err
 	}
+	ns := a.namespace.String()
 
 	sdkClient := a.ClientFactory.NewClient(sdkclient.Options{
-		Namespace:     a.namespace.String(),
+		Namespace:     ns,
 		DataConverter: sdk.PreferProtoDataConverter,
 	})
 	startOver := true
@@ -299,19 +315,16 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		}
 	}
 
-	// Get namespace and query based on request type (public vs admin)
-	var ns string
+	// Get executions based on request type (public vs admin).
 	var visibilityQuery string
 	var executions []*commonpb.WorkflowExecution
 
 	if batchParams.AdminRequest != nil {
 		ctx = headers.SetCallerType(ctx, headers.CallerTypePreemptable)
 		adminReq := batchParams.AdminRequest
-		ns = adminReq.Namespace
 		visibilityQuery = adminReq.GetVisibilityQuery()
 		executions = adminReq.GetExecutions()
 	} else {
-		ns = batchParams.Request.Namespace
 		visibilityQuery = a.adjustQueryBatchTypeEnum(batchParams.Request.VisibilityQuery, batchParams.BatchType)
 		executions = batchParams.Request.Executions
 	}
@@ -325,6 +338,10 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to get estimate workflow count", tag.Error(err))
+				var invalidArgErr *serviceerror.InvalidArgument
+				if errors.As(err, &invalidArgErr) {
+					return HeartBeatDetails{}, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
+				}
 				return HeartBeatDetails{}, err
 			}
 			estimateCount = resp.GetCount()
@@ -482,7 +499,7 @@ func (a *activities) startTaskProcessor(
 						} else {
 							// Old fields
 							//nolint:staticcheck // SA1019: worker versioning v0.31
-							eventId, err = getResetEventIDByType(ctx, operation.ResetOperation.ResetType, batchOperation.Request.Namespace, executionInfo.Execution, frontendClient, logger)
+							eventId, err = getResetEventIDByType(ctx, operation.ResetOperation.ResetType, namespace, executionInfo.Execution, frontendClient, logger)
 							//nolint:staticcheck // SA1019: worker versioning v0.31
 							resetReapplyType = operation.ResetOperation.ResetReapplyType
 						}

@@ -8,6 +8,8 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	chasmnexusworkflow "go.temporal.io/server/chasm/lib/nexusoperation/workflow"
 	"go.temporal.io/server/common"
 	commoncache "go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -32,8 +34,8 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
-	"go.temporal.io/server/components/nexusoperations"
-	nexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
+	hsmnexusoperations "go.temporal.io/server/components/nexusoperations"
+	hsmnexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/archival"
@@ -88,14 +90,16 @@ var Module = fx.Options(
 	fx.Provide(ReplicationProgressCacheProvider),
 	fx.Provide(VersionMembershipCacheProvider),
 	fx.Provide(ReactivationSignalCacheProvider),
-	fx.Provide(workerdeployment.ClientProvider),
+	workerdeployment.ClientModule,
 	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 
 	callbacks.Module,
-	nexusoperations.Module,
-	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
+	hsmnexusoperations.Module,
+	fx.Invoke(hsmnexusworkflow.RegisterCommandHandlers),
 	activity.HistoryModule,
+	chasmnexus.Module,
+	chasmnexusworkflow.Module,
 )
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {

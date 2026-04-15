@@ -150,6 +150,11 @@ for signal / start / signal with start API if namespace is not active`,
 		false,
 		`EnableCrossNamespaceCommands is the key to enable commands for external namespaces`,
 	)
+	DisableStreamingAuthorizer = NewGlobalBoolSetting(
+		"system.disableStreamingAuthorizer",
+		false,
+		`DisableStreamingAuthorizer is the key to disable the auth on streaming endpoint`,
+	)
 	ClusterMetadataRefreshInterval = NewGlobalDurationSetting(
 		"system.clusterMetadataRefreshInterval",
 		time.Minute,
@@ -174,6 +179,12 @@ config as the other services.`,
 		`RingpopApproximateMaxPropagationTime is used for timing certain startup and shutdown processes.
 (It is not and doesn't have to be a guarantee.)`,
 	)
+	RingpopReplicaPoints = NewGlobalIntSetting(
+		"system.ringpopReplicaPoints",
+		100,
+		`RingpopReplicaPoints is the number of virtual nodes (replica points) per physical host
+in the consistent hash ring used by ringpop. Changing it may cause service disruption during deployment.`,
+	)
 	EnableParentClosePolicyWorker = NewGlobalBoolSetting(
 		"system.enableParentClosePolicyWorker",
 		true,
@@ -188,6 +199,11 @@ config as the other services.`,
 		"system.enableActivityEagerExecution",
 		false,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
+	)
+	EnableCancelActivityWorkerCommand = NewGlobalBoolSetting(
+		"system.enableCancelActivityWorkerCommand",
+		false,
+		`EnableCancelActivityWorkerCommand enables pushing activity cancellation to workers via Nexus worker commands`,
 	)
 	NamespaceMinRetentionGlobal = NewGlobalDurationSetting(
 		"system.namespaceMinRetentionGlobal",
@@ -838,6 +854,12 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		false,
 		`ExposeAuthorizerErrors controls whether the frontend authorization interceptor will pass through errors returned by
 the Authorizer component. If false, a generic PermissionDenied error without details will be returned. Default false.`,
+	)
+	EnablePrincipalPropagation = NewNamespaceBoolSetting(
+		"frontend.enablePrincipalPropagation",
+		false,
+		`EnablePrincipalPropagation controls whether the authorization interceptor propagates the authenticated
+principal identity as gRPC headers.`,
 	)
 	KeepAliveMinTime = NewGlobalDurationSetting(
 		"frontend.keepAliveMinTime",
@@ -1520,6 +1542,13 @@ Don't change this on a live cluster without using the gradual change mechanism.
 		true,
 		`EnableHistoryReplicationDLQV2 switches to the DLQ v2 implementation for history replication. See details in
 [go.temporal.io/server/common/persistence.QueueV2]`,
+	)
+
+	EnableDeleteWorkflowExecutionReplication = NewGlobalBoolSetting(
+		"history.enableDeleteWorkflowExecutionReplication",
+		false,
+		`EnableDeleteWorkflowExecutionReplication controls whether a replication task is generated when a workflow
+execution is deleted. When enabled, workflow deletions on the active cluster will be replicated to passive clusters.`,
 	)
 
 	HistoryRPS = NewGlobalIntSetting(
@@ -2773,6 +2802,30 @@ that task will be sent to DLQ.`,
 		false,
 		`If true, validate the start time of the old workflow is older than WorkflowIdReuseMinimalInterval when reusing workflow ID.`,
 	)
+	BusinessIDReuseRate = NewNamespaceIntSetting(
+		"history.businessIDReuseRate",
+		0,
+		`BusinessIDReuseRate limits the rate of new execution creation per
+(namespace, businessID, archetype) tuple on a single history host. 0 = disabled (default).`,
+	)
+	BusinessIDReuseBurstRatio = NewNamespaceFloatSetting(
+		"history.businessIDReuseBurstRatio",
+		1.0,
+		`BusinessIDReuseBurstRatio is the burst-to-rate ratio for the per-(namespace, businessID, archetype)
+start rate limiter. Burst = max(1, int(rps * ratio)). Default 1.0 (no burst above rate).`,
+	)
+	BusinessIDReuseLimiterCacheSize = NewGlobalIntSetting(
+		"history.businessIDReuseLimiterCacheSize",
+		10000,
+		`BusinessIDReuseLimiterCacheSize is the max number of per-(namespace, businessID, archetype) rate limiters
+cached on a single history shard. Requires service restart to take effect.`,
+	)
+	BusinessIDReuseLimiterCacheTTL = NewGlobalDurationSetting(
+		"history.businessIDReuseLimiterCacheTTL",
+		60*time.Second,
+		`BusinessIDReuseLimiterCacheTTL is the TTL for per-(namespace, businessID, archetype) rate limiter cache entries.
+Requires service restart to take effect.`,
+	)
 	HealthPersistenceLatencyFailure = NewGlobalFloatSetting(
 		"history.healthPersistenceLatencyFailure",
 		500,
@@ -3205,5 +3258,10 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"frontend.WorkflowPauseEnabled",
 		false,
 		`WorkflowPauseEnabled is a "feature enable" flag. When enabled it allows clients to pause workflows.`,
+	)
+	TimeSkippingEnabled = NewNamespaceBoolSetting(
+		"frontend.TimeSkippingEnabled",
+		false,
+		`TimeSkippingEnabled is a "feature enable" flag. When enabled it allows clients to skip time in executions.`,
 	)
 )

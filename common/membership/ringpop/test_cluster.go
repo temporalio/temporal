@@ -152,6 +152,7 @@ func newTestCluster(
 			2*time.Second,
 			3*time.Second,
 			joinTime,
+			100,
 		)
 		cluster.rings[i].Start()
 	}

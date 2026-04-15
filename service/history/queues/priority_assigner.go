@@ -43,7 +43,8 @@ func (a *priorityAssignerImpl) Assign(executable Executable) tasks.Priority {
 	case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
 		enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT,
 		enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
-		enumsspb.TASK_TYPE_WORKFLOW_EXECUTION_TIMEOUT:
+		enumsspb.TASK_TYPE_WORKFLOW_EXECUTION_TIMEOUT,
+		enumsspb.TASK_TYPE_WORKER_COMMANDS:
 		return tasks.PriorityLow
 	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
 		enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,

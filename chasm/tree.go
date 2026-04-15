@@ -13,6 +13,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -22,6 +23,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/transitionhistory"
@@ -188,7 +190,7 @@ type (
 		Nodes map[string]*persistencespb.ChasmNode // encoded node path -> chasm node
 	}
 
-	// NodeBackend is a set of methods needed from MutableState
+	// NodeBackend is a set of methods needed from MutableState.
 	//
 	// This is for breaking cycle dependency between
 	// this package and service/history/workflow package
@@ -197,11 +199,16 @@ type (
 		// TODO: Add methods needed from MutateState here.
 		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
+		GetApproximatePersistedSize() int
+		GetNamespaceEntry() *namespace.Namespace
 		GetCurrentVersion() int64
 		NextTransitionCount() int64
 		CurrentVersionedTransition() *persistencespb.VersionedTransition
 		GetWorkflowKey() definition.WorkflowKey
 		AddTasks(...tasks.Task)
+		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
+		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
+		HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool) bool
 		DeleteCHASMPureTasks(maxScheduledTime time.Time)
 		UpdateWorkflowStateStatus(
 			state enumsspb.WorkflowExecutionState,
@@ -212,6 +219,7 @@ type (
 			ctx context.Context,
 			requestID string,
 		) (nexusrpc.CompleteOperationOptions, error)
+		EndpointRegistry() EndpointRegistry
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.
@@ -357,7 +365,7 @@ func searchAttributeKeyValuesToMap(saSlice []SearchAttributeKeyValue) map[string
 }
 
 func (n *Node) SetRootComponent(
-	rootComponent Component,
+	rootComponent RootComponent,
 ) error {
 	root := n.root()
 	root.setValue(rootComponent)
@@ -2332,8 +2340,10 @@ func (n *Node) applyUpdates(
 			newNode.resetTaskStatus()
 			if isSystemUpdates {
 				n.systemMutation.UpdatedNodes[encodedPath] = newNode.serializedNode
+				delete(n.systemMutation.DeletedNodes, encodedPath)
 			} else {
 				n.mutation.UpdatedNodes[encodedPath] = newNode.serializedNode
+				delete(n.mutation.DeletedNodes, encodedPath)
 			}
 			continue
 		}
@@ -2361,8 +2371,10 @@ func (n *Node) applyUpdates(
 
 			if isSystemUpdates {
 				n.systemMutation.UpdatedNodes[encodedPath] = updatedNode
+				delete(n.systemMutation.DeletedNodes, encodedPath)
 			} else {
 				n.mutation.UpdatedNodes[encodedPath] = updatedNode
+				delete(n.mutation.DeletedNodes, encodedPath)
 			}
 			node.setValue(nil)
 			node.setValueState(valueStateNeedDeserialize)
@@ -2482,6 +2494,16 @@ func (n *Node) delete(isSystemDelete bool) error {
 		return err
 	}
 
+	// TODO: consider remove entries from UpdatedNodes map as well
+	// if the same node is updated and then deleted in the same transaction.
+	//
+	// That's not a problem today though and DeletedNodes entries are always added
+	// before UpdatedNodes entires.
+	// - For active logic, DeletedNodes are added upon syncSubComponents(),
+	//   and UpdatedNodes are added when closing transaction and serializing nodes.
+	// - For standby replication logic, mutable state calls ApplyMutation() twice,
+	//   first with a deletion only mutation for tombstone nodes, and then an
+	//   update only mutation.
 	if isSystemDelete {
 		n.systemMutation.DeletedNodes[encodedPath] = struct{}{}
 	} else {
@@ -2993,7 +3015,14 @@ func (n *Node) ExecutePureTask(
 
 	defer log.CapturePanic(n.logger, &retErr)
 
-	return true, registrableTask.pureTaskExecuteFn(
+	archetypeTag := metrics.ArchetypeTag("")
+	if name, ok := n.registry.ArchetypeDisplayName(n.ArchetypeID()); ok {
+		archetypeTag = metrics.ArchetypeTag(name)
+	}
+	chasmTaskTypeTag := metrics.ChasmTaskTypeTag(registrableTask.fqType())
+	metricsHandler := n.metricsHandler.WithTags(archetypeTag)
+
+	execErr := registrableTask.pureTaskExecuteFn(
 		executionContext,
 		component,
 		taskAttributes,
@@ -3001,12 +3030,21 @@ func (n *Node) ExecutePureTask(
 		n.registry,
 	)
 
+	metrics.ChasmPureTaskRequests.With(metricsHandler).Record(1, chasmTaskTypeTag)
+
+	if execErr != nil {
+		metrics.ChasmPureTaskErrors.With(metricsHandler).Record(1, chasmTaskTypeTag)
+		return true, execErr
+	}
+
 	// TODO - a task validator must succeed validation after a task executes
 	// successfully (without error), otherwise it will generate an infinite loop.
 	// Check for this case by marking the in-memory task as having executed, which the
 	// CloseTransaction method will check against.
 	//
 	// See: https://github.com/temporalio/temporal/pull/7701#discussion_r2072026993
+
+	return true, nil
 }
 
 // ValidatePureTask runs a pure task's associated validator, returning true

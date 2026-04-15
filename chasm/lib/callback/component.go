@@ -76,7 +76,7 @@ func (c *Callback) recordAttempt(ts time.Time) {
 func (c *Callback) loadInvocationArgs(
 	ctx chasm.Context,
 	_ chasm.NoValue,
-) (callbackInvokable, error) {
+) (invocable, error) {
 	target := c.CompletionSource.Get(ctx)
 
 	completion, err := target.GetNexusCompletion(ctx, c.RequestId)
@@ -84,23 +84,23 @@ func (c *Callback) loadInvocationArgs(
 		return nil, err
 	}
 
-	variant := c.GetCallback().GetNexus()
-	if variant == nil {
+	callback := c.GetCallback().GetNexus()
+	if callback == nil {
 		return nil, queueserrors.NewUnprocessableTaskError(
-			fmt.Sprintf("unprocessable callback variant: %v", variant),
+			fmt.Sprintf("unprocessable callback variant: %v", callback),
 		)
 	}
 
-	if variant.Url == chasm.NexusCompletionHandlerURL {
-		return chasmInvocation{
-			nexus:      variant,
+	if callback.Url == chasm.NexusCompletionHandlerURL {
+		return invocableInternal{
+			callback:   callback,
 			attempt:    c.Attempt,
 			completion: completion,
 			requestID:  c.RequestId,
 		}, nil
 	}
-	return nexusInvocation{
-		nexus:      variant,
+	return invocableOutbound{
+		callback:   callback,
 		completion: completion,
 		workflowID: ctx.ExecutionKey().BusinessID,
 		runID:      ctx.ExecutionKey().RunID,
