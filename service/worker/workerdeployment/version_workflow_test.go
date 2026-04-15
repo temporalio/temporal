@@ -2662,3 +2662,67 @@ func (s *VersionWorkflowSuite) Test_CaNWhenHistoryTooLargeDespitePendingSignals(
 	s.True(s.env.IsWorkflowCompleted())
 }
 
+// Test_NoCaNWhenPendingSignalsButHistoryNotTooLarge verifies that the emergency CaN path
+// does NOT fire when there are pending signals but GetContinueAsNewSuggested() is false.
+// The workflow should process signals normally and only CaN through the normal path.
+func (s *VersionWorkflowSuite) Test_NoCaNWhenPendingSignalsButHistoryNotTooLarge() {
+	tv := testvars.New(s.T())
+	now := timestamppb.New(time.Now())
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	// Mock activities that the reactivation signal handler calls
+	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
+		&deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil,
+	).Maybe()
+	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	// Do NOT set ContinueAsNewSuggested — history is fine
+
+	// Send reactivation signals
+	for i := 1; i <= 3; i++ {
+		delay := time.Duration(i) * time.Millisecond
+		s.env.RegisterDelayedCallback(func() {
+			s.env.SignalWorkflow(ReactivateVersionSignalName, nil)
+		}, delay)
+	}
+
+	// After signals are processed, query to verify version was reactivated normally
+	s.env.RegisterDelayedCallback(func() {
+		queryResp := &deploymentspb.QueryDescribeVersionResponse{}
+		val, err := s.env.QueryWorkflow(QueryDescribeVersion)
+		s.Require().NoError(err)
+		err = val.Get(queryResp)
+		s.Require().NoError(err)
+
+		// Version should be DRAINING (reactivated from DRAINED via normal signal processing)
+		s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, queryResp.VersionState.Status)
+	}, 10*time.Millisecond)
+
+	// Start workflow with DRAINED status
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+			DrainageInfo: &deploymentpb.VersionDrainageInfo{
+				Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
+				LastChangedTime: now,
+				LastCheckedTime: now,
+			},
+			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
+			StartedDeploymentWorkflow: true,
+		},
+	})
+
+	// Workflow should complete normally (CaN via normal path after processing all signals)
+	s.True(s.env.IsWorkflowCompleted())
+}
+
