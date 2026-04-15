@@ -168,6 +168,6 @@ message VersionedEphemeralData {
 
 // ClientPartitionCounts is propagated from the matching service to clients in grpc headers/trailers.
 message ClientPartitionCounts {
-    int32 read = 1;
-    int32 write = 2;
+  int32 read = 1;
+  int32 write = 2;
 }
