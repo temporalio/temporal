@@ -30,6 +30,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type noopVersionMembershipCache struct{}
@@ -215,41 +216,6 @@ func TestMergeOptions_TimeSkippingConfig(t *testing.T) {
 	}
 }
 
-func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
-	tscMask := &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}}
-	cfg := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
-	}
-
-	t.Run("same config - no event written", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		ms := historyi.NewMockMutableState(ctrl)
-		ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{Config: cfg},
-		}).AnyTimes()
-
-		merged, hasChanges, err := MergeAndApply(ms, &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfg}, tscMask, "")
-		require.NoError(t, err)
-		require.False(t, hasChanges)
-		require.True(t, proto.Equal(cfg, merged.GetTimeSkippingConfig()))
-	})
-
-	t.Run("new config - event written with config", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		ms := historyi.NewMockMutableState(ctrl)
-		ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
-		ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
-			nil, true, "", nil, nil, "", nil, cfg,
-		).Return(&historypb.HistoryEvent{}, nil)
-
-		merged, hasChanges, err := MergeAndApply(ms, &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfg}, tscMask, "")
-		require.NoError(t, err)
-		require.True(t, hasChanges)
-		require.True(t, proto.Equal(cfg, merged.GetTimeSkippingConfig()))
-	})
-}
-
 type (
 	// updateWorkflowOptionsSuite contains tests for the UpdateWorkflowOptions API.
 	updateWorkflowOptionsSuite struct {
@@ -371,4 +337,127 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 	s.NoError(err)
 	s.NotNil(resp)
 	proto.Equal(expectedOverrideOptions, resp.GetWorkflowExecutionOptions())
+}
+
+func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
+	oneHour := durationpb.New(time.Hour)
+	twoHours := durationpb.New(2 * time.Hour)
+	thirtyMin := durationpb.New(30 * time.Minute)
+	targetTime := timestamppb.New(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+
+	testCases := []struct {
+		name           string
+		initialConfig  *workflowpb.TimeSkippingConfig
+		updateOptions  *workflowpb.WorkflowExecutionOptions
+		updateMask     *fieldmaskpb.FieldMask
+		expectedConfig *workflowpb.TimeSkippingConfig
+	}{
+		{
+			name: "update max_skipped_duration preserves enabled and disable_propagation",
+			initialConfig: &workflowpb.TimeSkippingConfig{
+				Enabled:            true,
+				DisablePropagation: true,
+				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
+					MaxSkippedDuration: oneHour,
+				},
+			},
+			updateOptions: &workflowpb.WorkflowExecutionOptions{
+				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+					Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
+						MaxSkippedDuration: twoHours,
+					},
+				},
+			},
+			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_skipped_duration"}},
+			expectedConfig: &workflowpb.TimeSkippingConfig{
+				Enabled:            true,
+				DisablePropagation: true,
+				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
+					MaxSkippedDuration: twoHours,
+				},
+			},
+		},
+		{
+			name: "change bound type to max_elapsed_duration preserves enabled",
+			initialConfig: &workflowpb.TimeSkippingConfig{
+				Enabled: true,
+				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
+					MaxSkippedDuration: oneHour,
+				},
+			},
+			updateOptions: &workflowpb.WorkflowExecutionOptions{
+				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+					Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
+						MaxElapsedDuration: thirtyMin,
+					},
+				},
+			},
+			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_elapsed_duration"}},
+			expectedConfig: &workflowpb.TimeSkippingConfig{
+				Enabled: true,
+				Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
+					MaxElapsedDuration: thirtyMin,
+				},
+			},
+		},
+		{
+			name:          "enable from nil config",
+			initialConfig: nil,
+			updateOptions: &workflowpb.WorkflowExecutionOptions{
+				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+			},
+			updateMask:     &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.enabled"}},
+			expectedConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+		},
+		{
+			name:          "disable from enabled config",
+			initialConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+			updateOptions: &workflowpb.WorkflowExecutionOptions{
+				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: false},
+			},
+			updateMask:     &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.enabled"}},
+			expectedConfig: &workflowpb.TimeSkippingConfig{Enabled: false},
+		},
+		{
+			name: "change bound type to max_target_time preserves enabled",
+			initialConfig: &workflowpb.TimeSkippingConfig{
+				Enabled: true,
+				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
+					MaxSkippedDuration: oneHour,
+				},
+			},
+			updateOptions: &workflowpb.WorkflowExecutionOptions{
+				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
+					Bound: &workflowpb.TimeSkippingConfig_MaxTargetTime{
+						MaxTargetTime: targetTime,
+					},
+				},
+			},
+			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_target_time"}},
+			expectedConfig: &workflowpb.TimeSkippingConfig{
+				Enabled: true,
+				Bound: &workflowpb.TimeSkippingConfig_MaxTargetTime{
+					MaxTargetTime: targetTime,
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			ms := historyi.NewMockMutableState(ctrl)
+			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					Config: tc.initialConfig,
+				},
+			}).AnyTimes()
+			ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, "", nil, gomock.Any()).Return(&historypb.HistoryEvent{}, nil)
+
+			result, hasChanges, err := MergeAndApply(ms, tc.updateOptions, tc.updateMask, "")
+			require.NoError(t, err)
+			require.True(t, hasChanges)
+			require.True(t, proto.Equal(tc.expectedConfig, result.GetTimeSkippingConfig()))
+		})
+	}
 }

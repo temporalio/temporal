@@ -172,8 +172,10 @@ func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowEx
 			opts.Priority = cloned
 		}
 	}
-	if timeSkippingInfo := ms.GetExecutionInfo().GetTimeSkippingInfo(); timeSkippingInfo != nil {
-		opts.TimeSkippingConfig = timeSkippingInfo.GetConfig()
+	if tsInfo := ms.GetExecutionInfo().GetTimeSkippingInfo(); tsInfo != nil {
+		if cloned, ok := proto.Clone(tsInfo.GetConfig()).(*workflowpb.TimeSkippingConfig); ok {
+			opts.TimeSkippingConfig = cloned
+		}
 	}
 	return opts
 }
@@ -238,6 +240,47 @@ func mergeWorkflowExecutionOptions(
 	if _, ok := updateFields["timeSkippingConfig"]; ok {
 		if mergeFrom.GetTimeSkippingConfig() != nil {
 			mergeInto.TimeSkippingConfig = mergeFrom.GetTimeSkippingConfig()
+		}
+	}
+
+	if _, ok := updateFields["timeSkippingConfig.enabled"]; ok {
+		if mergeInto.TimeSkippingConfig == nil {
+			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
+		}
+		mergeInto.TimeSkippingConfig.Enabled = mergeFrom.GetTimeSkippingConfig().GetEnabled()
+	}
+
+	if _, ok := updateFields["timeSkippingConfig.disablePropagation"]; ok {
+		if mergeInto.TimeSkippingConfig == nil {
+			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
+		}
+		mergeInto.TimeSkippingConfig.DisablePropagation = mergeFrom.GetTimeSkippingConfig().GetDisablePropagation()
+	}
+
+	if _, ok := updateFields["timeSkippingConfig.maxSkippedDuration"]; ok {
+		if mergeInto.TimeSkippingConfig == nil {
+			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
+		}
+		mergeInto.TimeSkippingConfig.Bound = &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
+			MaxSkippedDuration: mergeFrom.GetTimeSkippingConfig().GetMaxSkippedDuration(),
+		}
+	}
+
+	if _, ok := updateFields["timeSkippingConfig.maxElapsedDuration"]; ok {
+		if mergeInto.TimeSkippingConfig == nil {
+			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
+		}
+		mergeInto.TimeSkippingConfig.Bound = &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
+			MaxElapsedDuration: mergeFrom.GetTimeSkippingConfig().GetMaxElapsedDuration(),
+		}
+	}
+
+	if _, ok := updateFields["timeSkippingConfig.maxTargetTime"]; ok {
+		if mergeInto.TimeSkippingConfig == nil {
+			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
+		}
+		mergeInto.TimeSkippingConfig.Bound = &workflowpb.TimeSkippingConfig_MaxTargetTime{
+			MaxTargetTime: mergeFrom.GetTimeSkippingConfig().GetMaxTargetTime(),
 		}
 	}
 
