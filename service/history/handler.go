@@ -2256,6 +2256,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 	completion := &persistencespb.ChasmNexusCompletion{
 		CloseTime: request.CloseTime,
 		RequestId: request.Completion.RequestId,
+		Links:     request.Links,
 	}
 	switch variant := request.Outcome.(type) {
 	case *historyservice.CompleteNexusOperationChasmRequest_Failure:
