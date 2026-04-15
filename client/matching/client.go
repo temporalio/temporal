@@ -279,6 +279,23 @@ func (c *clientImpl) DispatchNexusTask(
 	request *matchingservice.DispatchNexusTaskRequest,
 	opts ...grpc.CallOption,
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
+	if !isPartitionAwareKind(request.GetTaskQueue().GetKind()) {
+		return c.dispatchNexusTask(ctx, PartitionCounts{}, request, opts)
+	}
+	pkey := c.partitionCache.makeKey(
+		request.GetNamespaceId(),
+		request.GetTaskQueue().GetName(),
+		enumspb.TASK_QUEUE_TYPE_NEXUS,
+	)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, request, opts, c.dispatchNexusTask)
+}
+
+func (c *clientImpl) dispatchNexusTask(
+	ctx context.Context,
+	pc PartitionCounts,
+	request *matchingservice.DispatchNexusTaskRequest,
+	opts []grpc.CallOption,
+) (*matchingservice.DispatchNexusTaskResponse, error) {
 	// use shallow copy since Request may contain a large payload
 	request = &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: request.NamespaceId,
@@ -286,7 +303,13 @@ func (c *clientImpl) DispatchNexusTask(
 		Request:     request.Request,
 		ForwardInfo: request.ForwardInfo,
 	}
-	client, err := c.pickClientForWrite(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_NEXUS, request.GetForwardInfo().GetSourcePartition())
+	client, err := c.pickClientForWrite(
+		request.GetTaskQueue(),
+		request.GetNamespaceId(),
+		enumspb.TASK_QUEUE_TYPE_NEXUS,
+		request.GetForwardInfo().GetSourcePartition(),
+		pc,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -300,12 +323,31 @@ func (c *clientImpl) PollNexusTaskQueue(
 	request *matchingservice.PollNexusTaskQueueRequest,
 	opts ...grpc.CallOption,
 ) (*matchingservice.PollNexusTaskQueueResponse, error) {
+	if !isPartitionAwareKind(request.GetRequest().GetTaskQueue().GetKind()) {
+		return c.pollNexusTaskQueue(ctx, PartitionCounts{}, request, opts)
+	}
+	pkey := c.partitionCache.makeKey(
+		request.GetNamespaceId(),
+		request.GetRequest().GetTaskQueue().GetName(),
+		enumspb.TASK_QUEUE_TYPE_NEXUS,
+	)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, request, opts, c.pollNexusTaskQueue)
+}
+
+func (c *clientImpl) pollNexusTaskQueue(
+	ctx context.Context,
+	pc PartitionCounts,
+	request *matchingservice.PollNexusTaskQueueRequest,
+	opts []grpc.CallOption,
+) (*matchingservice.PollNexusTaskQueueResponse, error) {
 	request = common.CloneProto(request)
 	client, release, err := c.pickClientForRead(
 		request.GetRequest().GetTaskQueue(),
 		request.GetNamespaceId(),
 		enumspb.TASK_QUEUE_TYPE_NEXUS,
-		request.GetForwardedSource())
+		request.GetForwardedSource(),
+		pc,
+	)
 	if err != nil {
 		return nil, err
 	}
