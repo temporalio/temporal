@@ -683,7 +683,7 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 			},
 		},
 		{
-			Name:  "get-task-queue-user-data",
+			Name:  "get-user-data",
 			Usage: "Get per-type user data stored for a task queue",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -699,7 +699,7 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 				&cli.StringFlag{
 					Name:  FlagTaskQueueType,
 					Value: "TASK_QUEUE_TYPE_WORKFLOW",
-					Usage: "Task Queue type: TASK_QUEUE_TYPE_WORKFLOW, TASK_QUEUE_TYPE_ACTIVITY, TASK_QUEUE_TYPE_NEXUS",
+					Usage: "Task Queue type: TASK_QUEUE_TYPE_WORKFLOW, TASK_QUEUE_TYPE_ACTIVITY, TASK_QUEUE_TYPE_NEXUS (default TASK_QUEUE_TYPE_WORKFLOW)",
 				},
 				&cli.Int64Flag{
 					Name:  FlagPartitionID,

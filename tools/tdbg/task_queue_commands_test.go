@@ -172,9 +172,9 @@ func (s *taskQueueCommandTestSuite) TestForceUnloadTaskQueuePartition() {
 	}
 }
 
-// TestGetTaskQueueUserData tests that the cli accepts the various arguments for get-task-queue-user-data.
+// TestGetTaskQueueUserData tests that the cli accepts the various arguments for get-user-data.
 func (s *taskQueueCommandTestSuite) TestGetTaskQueueUserData() {
-	baseCommand := []string{"tdbg", "taskqueue", "get-task-queue-user-data",
+	baseCommand := []string{"tdbg", "taskqueue", "get-user-data",
 		"--namespace", "default", "--task-queue", "test"}
 
 	// Run shared test cases, skipping sticky-name (not a registered flag on this command)
@@ -194,18 +194,18 @@ func (s *taskQueueCommandTestSuite) TestGetTaskQueueUserData() {
 	}
 
 	// TASK_QUEUE_TYPE_UNSPECIFIED defaults to WORKFLOW (no error).
-	s.NoError(s.app.Run([]string{"tdbg", "taskqueue", "get-task-queue-user-data",
+	s.NoError(s.app.Run([]string{"tdbg", "taskqueue", "get-user-data",
 		"--namespace", "default", "--task-queue", "test",
 		"--task-queue-type", "TASK_QUEUE_TYPE_UNSPECIFIED"}))
 
 	// Missing --task-queue is enforced by cli/v2 (Required: true) before the action runs.
-	s.Error(s.app.Run([]string{"tdbg", "taskqueue", "get-task-queue-user-data", "--namespace", "default"}))
+	s.Error(s.app.Run([]string{"tdbg", "taskqueue", "get-user-data", "--namespace", "default"}))
 
 	// Missing --namespace is enforced by cli/v2 (Required: true) before the action runs.
-	s.Error(s.app.Run([]string{"tdbg", "taskqueue", "get-task-queue-user-data", "--task-queue", "test"}))
+	s.Error(s.app.Run([]string{"tdbg", "taskqueue", "get-user-data", "--task-queue", "test"}))
 
 	// No --task-queue-type or --partition-id: both use their defaults and succeed.
-	s.NoError(s.app.Run([]string{"tdbg", "taskqueue", "get-task-queue-user-data",
+	s.NoError(s.app.Run([]string{"tdbg", "taskqueue", "get-user-data",
 		"--namespace", "default", "--task-queue", "test"}))
 
 	// Matching client returns an error: CLI wraps and returns it.
@@ -216,7 +216,7 @@ func (s *taskQueueCommandTestSuite) TestGetTaskQueueUserData() {
 	}
 	errorApp := NewCliApp(func(params *Params) { params.ClientFactory = errorClient })
 	errorApp.ExitErrHandler = func(context *cli.Context, err error) {}
-	resp := errorApp.Run([]string{"tdbg", "taskqueue", "get-task-queue-user-data",
+	resp := errorApp.Run([]string{"tdbg", "taskqueue", "get-user-data",
 		"--namespace", "default", "--task-queue", "test"})
 	s.ErrorContains(resp, "unable to get Task Queue User Data")
 }
