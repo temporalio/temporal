@@ -116,12 +116,10 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
 	lib.EXPECT().NexusServices().Return(nil)
 	lib.EXPECT().NexusServiceProcessors().Return(nil)
 
-	mockSEHandler := chasm.NewMockSideEffectTaskHandler[*chasm.MockComponent, testTask1](ctrl)
-	mockSEHandler.EXPECT().TaskGroup().Return("test-task-group").AnyTimes()
 	lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{
 		chasm.NewRegistrableSideEffectTask(
 			"Task1",
-			mockSEHandler,
+			chasm.NewMockSideEffectTaskHandler[*chasm.MockComponent, testTask1](ctrl),
 		),
 		chasm.NewRegistrablePureTask(
 			"Task2",
@@ -135,7 +133,6 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
 	rt1, ok := r.Task("TestLibrary.Task1")
 	require.True(s.T(), ok)
 	require.Equal(s.T(), "TestLibrary.Task1", rt1.FqType())
-	s.Require().Equal("test-task-group", rt1.TaskGroup())
 
 	missingRT, ok := r.Task("TestLibrary.TaskMissing")
 	require.False(s.T(), ok)
@@ -149,7 +146,6 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
 	rt2, ok = r.TaskOf(reflect.TypeOf(tInstance1))
 	require.True(s.T(), ok)
 	require.Equal(s.T(), "TestLibrary.Task2", rt2.FqType())
-	s.Require().Empty(rt2.TaskGroup())
 
 	tInstance2 := "invalid task instance"
 	rt3, ok := r.TaskFor(tInstance2)
@@ -399,8 +395,6 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Error() {
 	})
 
 	s.T().Run("task is already registered by name", func(t *testing.T) {
-		mockSEHandler2 := chasm.NewMockSideEffectTaskHandler[*chasm.MockComponent, testTask1](ctrl)
-		mockSEHandler2.EXPECT().TaskGroup().Return("").AnyTimes()
 		lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{
 			chasm.NewRegistrablePureTask[*chasm.MockComponent, testTask1](
 				"Task1",
@@ -408,7 +402,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Error() {
 			),
 			chasm.NewRegistrableSideEffectTask[*chasm.MockComponent, testTask1](
 				"Task1",
-				mockSEHandler2,
+				chasm.NewMockSideEffectTaskHandler[*chasm.MockComponent, testTask1](ctrl),
 			),
 		})
 		r := chasm.NewRegistry(s.logger)

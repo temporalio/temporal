@@ -334,10 +334,6 @@ func (h *operationInvocationTaskHandler) generateCallbackToken(
 	return token, nil
 }
 
-func (h *operationInvocationTaskHandler) TaskGroup() string {
-	return TaskGroupName
-}
-
 type operationBackoffTaskHandler struct {
 	chasm.PureTaskHandlerBase
 	config *Config

@@ -69,7 +69,6 @@ func NewRegistrableSideEffectTask[C any, T any](
 		func(ctx context.Context, ref ComponentRef, attrs TaskAttributes, task any) error {
 			return handler.Discard(ctx, ref, attrs, task.(T))
 		},
-		handler.TaskGroup(),
 		opts...,
 	)
 }
@@ -114,7 +113,6 @@ func NewRegistrablePureTask[C any, T any](
 		nil, // sideEffectTaskExecuteFn is not used for pure tasks
 		true,
 		nil, // sideEffectTaskDiscardFn is not used for pure tasks
-		"",  // sideEffectTaskGroup is set to ungrouped for pure tasks
 		opts...,
 	)
 }
@@ -127,7 +125,6 @@ func newRegistrableTask(
 	sideEffectTaskExecuteFn sideEffectTaskExecuteFn,
 	isPureTask bool,
 	sideEffectTaskDiscardFn sideEffectTaskDiscardFn,
-	sideEffectTaskGroup string,
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
 	rt := &RegistrableTask{
@@ -139,7 +136,6 @@ func newRegistrableTask(
 		sideEffectTaskExecuteFn: sideEffectTaskExecuteFn,
 		sideEffectTaskDiscardFn: sideEffectTaskDiscardFn,
 		isPureTask:              isPureTask,
-		sideEffectTaskGroup:     sideEffectTaskGroup,
 	}
 
 	for _, opt := range opts {
@@ -182,4 +178,11 @@ func (rt *RegistrableTask) fqType() string {
 		panic("task is not registered to a library")
 	}
 	return FullyQualifiedName(rt.library.Name(), rt.taskType)
+}
+
+// SideEffectTaskGroupRegisterOpt sets the side-effect task group on the registered registrable task to taskgroup
+func SideEffectTaskGroupRegisterOpt(taskgroup string) RegistrableTaskOption {
+	return func(rt *RegistrableTask) {
+		rt.sideEffectTaskGroup = taskgroup
+	}
 }

@@ -194,10 +194,6 @@ func (h *cancellationInvocationTaskHandler) saveCancellationResult(
 	return err
 }
 
-func (h *cancellationInvocationTaskHandler) TaskGroup() string {
-	return TaskGroupName
-}
-
 type cancellationBackoffTaskHandler struct {
 	chasm.PureTaskHandlerBase
 	config *Config
