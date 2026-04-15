@@ -212,6 +212,9 @@ type (
 		// isResetStateUpdated is used to track if resetRunID is updated.
 		isResetStateUpdated bool
 
+		// timeSkippingInfoUpdated is used to track if executionInfo.TimeSkippingInfo is updated.
+		timeSkippingInfoUpdated bool
+
 		// in memory fields to track potential reapply events that needs to be reapplied during workflow update
 		// should only be used in the state based replication as state based replication does not have
 		// event inside history builder. This is only for x-run reapply (from zombie wf to current wf)
@@ -4046,6 +4049,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	if disabledAfterBound {
 		ms.executionInfo.TimeSkippingInfo.Config.Enabled = false
 	}
+	ms.timeSkippingInfoUpdated = true
 	return nil
 }
 
@@ -7007,9 +7011,9 @@ func (ms *MutableStateImpl) isStateDirty() bool {
 		ms.executionStateUpdated ||
 		ms.workflowTaskUpdated ||
 		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty()) ||
-
 		ms.chasmTree.IsStateDirty() ||
-		ms.isResetStateUpdated
+		ms.isResetStateUpdated ||
+		ms.timeSkippingInfoUpdated
 }
 
 func (ms *MutableStateImpl) IsTransitionHistoryEnabled() bool {
@@ -7234,7 +7238,6 @@ func (ms *MutableStateImpl) closeTransaction(
 
 	// Save if the state is dirty before closeTransactionPrepareEvents since it flushes the buffer
 	// events, and therefore change the dirty state.
-	// todo@time-skipping: isStateDirty should
 	isStateDirty := ms.isStateDirty()
 
 	// closeTransactionPrepareEvents must be called after closeTransactionHandleWorkflowTask because
@@ -7906,6 +7909,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.executionStateUpdated = false
 	ms.workflowTaskUpdated = false
 	ms.isResetStateUpdated = false
+	ms.timeSkippingInfoUpdated = false
 	ms.updateInfoUpdated = make(map[string]struct{})
 	ms.timerInfosUserDataUpdated = make(map[string]struct{})
 	ms.activityInfosUserDataUpdated = make(map[int64]struct{})
