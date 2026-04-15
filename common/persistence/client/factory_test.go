@@ -44,7 +44,6 @@ func TestFactoryImpl_NewHistoryTaskQueueManager(t *testing.T) {
 				nil,
 				nil,
 				nil,
-				nil,
 				"",
 				nil,
 				nil,

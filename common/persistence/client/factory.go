@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
@@ -52,7 +51,6 @@ type (
 		dataStoreFactory                            persistence.DataStoreFactory
 		config                                      *config.Persistence
 		serializer                                  serialization.Serializer
-		chasmRegistry                               *chasm.Registry
 		eventBlobCache                              persistence.XDCCache
 		metricsHandler                              metrics.Handler
 		logger                                      log.Logger
@@ -80,7 +78,6 @@ func NewFactory(
 	namespaceRateLimiter quotas.RequestRateLimiter,
 	shardRateLimiter quotas.RequestRateLimiter,
 	serializer serialization.Serializer,
-	chasmRegistry *chasm.Registry,
 	eventBlobCache persistence.XDCCache,
 	clusterName string,
 	metricsHandler metrics.Handler,
@@ -93,7 +90,6 @@ func NewFactory(
 		dataStoreFactory:      dataStoreFactory,
 		config:                cfg,
 		serializer:            serializer,
-		chasmRegistry:         chasmRegistry,
 		eventBlobCache:        eventBlobCache,
 		metricsHandler:        metricsHandler,
 		logger:                logger,
@@ -207,7 +203,6 @@ func (f *factoryImpl) NewExecutionManager() (persistence.ExecutionManager, error
 	result := persistence.NewExecutionManager(
 		store,
 		f.serializer,
-		f.chasmRegistry,
 		f.eventBlobCache,
 		f.logger,
 		f.config.TransactionSizeLimit,

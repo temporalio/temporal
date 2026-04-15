@@ -28,7 +28,6 @@ type (
 	// executionManagerImpl implements ExecutionManager based on ExecutionStore, statsComputer and Serializer
 	executionManagerImpl struct {
 		serializer                                  serialization.Serializer
-		chasmRegistry                               *chasm.Registry
 		eventBlobCache                              XDCCache
 		persistence                                 ExecutionStore
 		logger                                      log.Logger
@@ -44,7 +43,6 @@ var _ ExecutionManager = (*executionManagerImpl)(nil)
 func NewExecutionManager(
 	persistence ExecutionStore,
 	serializer serialization.Serializer,
-	chasmRegistry *chasm.Registry,
 	eventBlobCache XDCCache,
 	logger log.Logger,
 	transactionSizeLimit dynamicconfig.IntPropertyFn,
@@ -52,7 +50,6 @@ func NewExecutionManager(
 ) ExecutionManager {
 	return &executionManagerImpl{
 		serializer:            serializer,
-		chasmRegistry:         chasmRegistry,
 		eventBlobCache:        eventBlobCache,
 		persistence:           persistence,
 		logger:                logger,
@@ -945,12 +942,6 @@ func (m *executionManagerImpl) GetHistoryTasks(
 			task.SetVisibilityTime(internalTask.Key.FireTime)
 		}
 		task.SetTaskID(internalTask.Key.TaskID)
-
-		if ct, ok := task.(*tasks.ChasmTask); ok && m.chasmRegistry != nil {
-			if rt, ok := m.chasmRegistry.TaskByID(ct.Info.GetTypeId()); ok {
-				ct.TaskGroup = rt.TaskGroup()
-			}
-		}
 
 		historyTasks = append(historyTasks, task)
 	}

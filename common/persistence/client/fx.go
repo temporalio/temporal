@@ -6,7 +6,6 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -59,7 +58,6 @@ type (
 		EnableDataLossMetrics                       EnableDataLossMetrics
 		EnableBestEffortDeleteTasksOnWorkflowUpdate EnableBestEffortDeleteTasksOnWorkflowUpdate
 		Serializer                                  serialization.Serializer
-		ChasmRegistry                               *chasm.Registry
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -152,7 +150,6 @@ func FactoryProvider(
 		namespaceRequestRateLimiter,
 		shardRequestRateLimiter,
 		params.Serializer,
-		params.ChasmRegistry,
 		params.EventBlobCache,
 		string(params.ClusterName),
 		params.MetricsHandler,

@@ -112,7 +112,6 @@ func TestHistoryManager_InvalidBranchToken_ReturnsInvalidArgument(t *testing.T) 
 				store,
 				serialization.NewSerializer(),
 				nil,
-				nil,
 				log.NewNoopLogger(),
 				dynamicconfig.GetIntPropertyFn(1024*1024),
 				dynamicconfig.GetBoolPropertyFn(false),
