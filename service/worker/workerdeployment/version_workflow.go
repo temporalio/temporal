@@ -298,12 +298,8 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 				(d.forceCAN || (d.stateChanged && d.asyncPropagationsInProgress == 0) || workflow.GetInfo(ctx).GetContinueAsNewSuggested())) ||
 			// Emergency CaN path: history too large — bypass HasPending() but still
 			// wait for in-flight handlers and async propagations to complete.
-			// Pending signals will be dropped; they are either idempotent (reactivation)
-			// or will be re-sent by the caller (drainage sync, force-CaN).
 			(workflow.GetInfo(ctx).GetContinueAsNewSuggested() &&
-				d.signalHandler.processingSignals == 0 &&
-				workflow.AllHandlersFinished(ctx) &&
-				d.asyncPropagationsInProgress == 0)
+				d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) && d.asyncPropagationsInProgress == 0)
 	})
 	if err != nil {
 		return err
