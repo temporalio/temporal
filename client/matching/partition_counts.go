@@ -5,13 +5,13 @@ import (
 	"errors"
 	"slices"
 
-	"github.com/gogo/protobuf/proto"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 )
 
 // The "-bin" suffix instructs grpc to base64-encode the value, so we can use binary.
