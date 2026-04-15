@@ -8,11 +8,12 @@ import (
 )
 
 // ExecutePureTask validates and executes a pure task atomically via [Engine.UpdateComponent].
-// It returns taskDropped=true if [chasm.PureTaskHandler.Validate] returns (false, nil),
+// It returns taskDropped set to true if [chasm.PureTaskHandler.Validate] returns (false, nil),
 // indicating the task is no longer relevant and was not executed.
 //
-// For root components, construct ref with [chasm.NewComponentRef]. For subcomponents, use
-// [Engine.Ref] to look up the ref from the component instance.
+// For root components, construct the ref with [chasm.NewComponentRef]. For subcomponents, obtain
+// the ref via [chasm.Context.Ref] inside a [Engine.ReadComponent] or [Engine.UpdateComponent]
+// callback and deserialize it with [chasm.DeserializeComponentRef].
 //
 // This helper ensures that Validate is always exercised alongside Execute, matching the real
 // engine's behavior. Use [chasm.MockMutableContext] directly when you need to inspect the
@@ -49,20 +50,21 @@ func ExecutePureTask[C chasm.Component, T any](
 	return taskDropped, err
 }
 
-// ExecuteSideEffectTask validates and executes a side-effect task.
-// Validation runs via [Engine.ReadComponent] (read-only), and if valid,
+// ExecuteSideEffectTask validates and executes a side effect task.
+// Validation runs via [Engine.ReadComponent] in read only mode, and if valid,
 // [chasm.SideEffectTaskHandler.Execute] is called with an engine context so that
 // [chasm.UpdateComponent] and [chasm.ReadComponent] inside the handler route through
 // the test engine.
 //
-// It returns taskDropped=true if [chasm.SideEffectTaskHandler.Validate] returns (false, nil),
+// It returns taskDropped set to true if [chasm.SideEffectTaskHandler.Validate] returns (false, nil),
 // indicating the task is no longer relevant and was not executed.
 //
-// For root components, construct ref with [chasm.NewComponentRef]. For subcomponents, use
-// [Engine.Ref] to look up the ref from the component instance.
+// For root components, construct the ref with [chasm.NewComponentRef]. For subcomponents, obtain
+// the ref via [chasm.Context.Ref] inside a [Engine.ReadComponent] or [Engine.UpdateComponent]
+// callback and deserialize it with [chasm.DeserializeComponentRef].
 //
 // Use [chasm.MockMutableContext] directly when you need to inspect typed task payloads added
-// during execution, since the real engine serializes them into history-layer tasks.
+// during execution, since the real engine serializes them into history layer tasks.
 func ExecuteSideEffectTask[C chasm.Component, T any](
 	ctx context.Context,
 	e *Engine,
