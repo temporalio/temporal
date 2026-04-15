@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/stream_batcher"
 	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tasktoken"
@@ -67,7 +68,7 @@ import (
 )
 
 const (
-	// If sticky poller is not seem in last 10s, we treat it as sticky worker unavailable
+	// If sticky poller is not seen in last 10s, we treat it as sticky worker unavailable.
 	// This seems aggressive, but the default sticky schedule_to_start timeout is 5s, so 10s seems reasonable.
 	stickyPollerUnavailableWindow = 10 * time.Second
 
@@ -571,9 +572,13 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	if err != nil {
 		return "", false, err
 	}
-
 	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
-	// do not load sticky task queue if it is not already loaded, which means it has no poller.
+	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || sticky,
+		"AddWorkflowTask called with unexpected partition kind") {
+		return "", false, serviceerror.NewInternal("AddWorkflowTask called with unexpected partition kind")
+	}
+
+	// do not load sticky task queues if not already loaded, which means they have no poller.
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
 	if err != nil {
 		return "", false, err
@@ -1093,7 +1098,11 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
-	// do not load sticky task queue if it is not already loaded, which means it has no poller.
+	if !softassert.That(e.logger, partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL || sticky,
+		"QueryWorkflow called with unexpected partition kind") {
+		return nil, serviceerror.NewInternal("QueryWorkflow called with unexpected partition kind")
+	}
+	// do not load sticky task queues if not already loaded, which means they have no poller.
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseQuery)
 	if err != nil {
 		return nil, err
@@ -1247,7 +1256,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			return nil, err
 		}
 		tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, namespace.Name(req.Namespace))
-		if !rootPartition.IsRoot() || rootPartition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+		if !rootPartition.IsRoot() || rootPartition.Kind() != enumspb.TASK_QUEUE_KIND_NORMAL || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue must be called on the root partition of workflow task queue if api mode is DESCRIBE_TASK_QUEUE_MODE_ENHANCED")
 		}
 		userData, err := e.getUserDataClone(ctx, rootPartition, loadCauseDescribe)
