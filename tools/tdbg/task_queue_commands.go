@@ -200,7 +200,7 @@ func AdminGetTaskQueueUserData(c *cli.Context, clientFactory ClientFactory) erro
 	}
 	tqType := enumspb.TaskQueueType(tlTypeInt)
 	if tqType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-		return errors.New("invalid task queue type") // nolint
+		tqType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
 	}
 
 	partitionID := 0

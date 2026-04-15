@@ -683,7 +683,7 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 			},
 		},
 		{
-			Name:  "get-user-data",
+			Name:  "get-task-queue-user-data",
 			Usage: "Get per-type user data stored for a task queue",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
