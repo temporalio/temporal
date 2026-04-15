@@ -328,8 +328,6 @@ message TimeSkippingInfo {
   google.protobuf.Duration accumulated_skipped_duration = 2;
 }
 
-
-
 // Internal wrapper message to distinguish "never notified" (nil wrapper) from
 // "notified about an unversioned target" (non-nil wrapper with nil deployment_version).
 // Used only within server persistence; never flows to the public API.

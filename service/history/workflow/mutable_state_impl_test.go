@@ -6584,10 +6584,10 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 	buildEligibleState := func(timerExpiry time.Time) *persistencespb.WorkflowMutableState {
 		return &persistencespb.WorkflowMutableState{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-				NamespaceId:                     s.namespaceEntry.ID().String(),
-				WorkflowId:                      tests.WorkflowID,
-				TaskQueue:                       "testTaskQueue",
-				WorkflowTypeName:                "testWorkflowType",
+				NamespaceId:                      s.namespaceEntry.ID().String(),
+				WorkflowId:                       tests.WorkflowID,
+				TaskQueue:                        "testTaskQueue",
+				WorkflowTypeName:                 "testWorkflowType",
 				WorkflowExecutionTimerTaskStatus: TimerTaskStatusCreated,
 				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
 					Config: &workflowpb.TimeSkippingConfig{Enabled: true},

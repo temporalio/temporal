@@ -158,6 +158,9 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 
 	timerSequence := t.getTimerSequence(mutableState)
 	referenceTime := t.Now()
+	if tsInfo := mutableState.GetExecutionInfo().GetTimeSkippingInfo(); tsInfo != nil && tsInfo.GetAccumulatedSkippedDuration() != nil {
+		referenceTime = mutableState.GetTimeSkippingVirtualTime()
+	}
 	timerFired := false
 Loop:
 	for _, timerSequenceID := range timerSequence.LoadAndSortUserTimers() {

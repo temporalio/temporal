@@ -4054,6 +4054,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 }
 
 func (ms *MutableStateImpl) GetTimeSkippingVirtualTime() time.Time {
+	// TODO@time-skipping: need to use this to adjust all timestamps for tasks sent to SDK worker.
 	offset := ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
 	return ms.timeSource.Now().Add(offset.AsDuration())
 }
