@@ -151,6 +151,12 @@ func (w *timeWindowedTDigest) getMergedWindows() *tdigest.TDigest {
 	return merged
 }
 
+func (w *timeWindowedTDigest) pretouchWindowsForTest(start time.Time) {
+	for range w.cfg.WindowCount {
+		w.advanceWindowSimple(start)
+	}
+}
+
 // cloneWindows creates a shallow copy of the ring buffer.
 // Use this to avoid holding the lock while accessing the windows for aggregated queries.
 func (w *timeWindowedTDigest) cloneWindows() []timedWindow {
@@ -236,6 +242,12 @@ func (w *timeWindowedTDigest) advanceWindow(timestamp time.Time) *timedWindow {
 
 func (w *timeWindowedTDigest) advanceWindowSimple(start time.Time) *timedWindow {
 	w.head = w.modInc(w.head)
+	if curr := &w.windows[w.head]; curr.tdigest != nil {
+		curr.tdigest.Reset()
+		curr.start = start
+		curr.end = start.Add(w.cfg.WindowSize)
+		return curr
+	}
 	digest, _ := tdigest.New()
 	window := timedWindow{
 		tdigest: digest,

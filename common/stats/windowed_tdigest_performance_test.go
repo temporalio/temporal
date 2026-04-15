@@ -5,6 +5,7 @@ import (
 	"math/rand/v2"
 	"testing"
 	"time"
+	"unsafe"
 )
 
 // Uses declarations from windowed_tdigest_test.go
@@ -59,7 +60,7 @@ func BenchmarkTenMillionRecordQuery(b *testing.B) {
 			WindowSize:  time.Duration(windowSize) * time.Second,
 			WindowCount: 10_000_000 / windowSize,
 		})
-		datapoints := generateDatapoints(10_000_000, 1, rand.NewPCG(7, 42))
+		datapoints := generateDatapoints(1, 10_000_000, 1, rand.NewPCG(7, 42))
 		for _, dp := range datapoints {
 			stats.RecordMulti(dp.Value, dp.Time, dp.Count)
 		}
@@ -86,29 +87,114 @@ func BenchmarkTenMillionRecordQuery(b *testing.B) {
 // has a nonlinear impact on latency. Observe that increasing datapoint count
 // for a fixed window size also has a somewhat super-linear impact on latency.
 // Increasing window rotation by reducing the total window count was tested.
-// It did not make a significant (<1%) impact on latency
-// -                                                        s, ms, us, ns       GB, MB, KB,  B
-// BenchmarkInsert/datapoints-10,000-window-size-1             79,594,851 ns/op    220,978,893 B/op     90,277 allocs/op
-// BenchmarkInsert/datapoints-10,000-window-size-10             8,262,293 ns/op     22,684,401 B/op     18,272 allocs/op
-// BenchmarkInsert/datapoints-10,000-window-size-100            1,496,739 ns/op      2,852,384 B/op     11,067 allocs/op
-// BenchmarkInsert/datapoints-10,000-window-size-1000           1,764,475 ns/op        867,330 B/op     10,344 allocs/op
-// BenchmarkInsert/datapoints-10,000-window-size-10000          4,493,649 ns/op      1,161,041 B/op     10,316 allocs/op
-// BenchmarkInsert/datapoints-10,000-window-size-100000     <Same as above. Did not saturate all the windows>
-// -                                                        s, ms, us, ns       GB, MB, KB,  B
-// BenchmarkInsert/datapoints-10,000,000-window-size-1      <Not tested due to test runtime>
-// BenchmarkInsert/datapoints-10,000,000-window-size-10     9,569,462,583 ns/op 22,680,717,288 B/op 18,302,020 allocs/op
-// BenchmarkInsert/datapoints-10,000,000-window-size-100    1,888,510,125 ns/op  2,851,910,864 B/op 11,101,984 allocs/op
-// BenchmarkInsert/datapoints-10,000,000-window-size-1000   1,782,219,708 ns/op    869,035,776 B/op 10,381,987 allocs/op
-// BenchmarkInsert/datapoints-10,000,000-window-size-10000  4,656,263,666 ns/op  1,162,586,672 B/op 10,353,995 allocs/op
-// BenchmarkInsert/datapoints-10,000,000-window-size-100000 5,698,841,500 ns/op  1,248,606,488 B/op 10,356,404 allocs/op
+// It did not make a significant (<1%) impact on latency.
+// Tests were run on a 2025 Macbook Pro M4 Max, your CPU features may differ!
+//
+// -                                                            s, ms, us, ns         MB, KB,  B                        GB, MB, KB,  B
+// BenchmarkInsert/10k-datapoints-retain-all-window-size-10           402,160 ns/op      254,672 B/stats-size-estimate         656,036 B/op-alloc
+// BenchmarkInsert/10k-datapoints-retain-all-window-size-100          680,058 ns/op      168,272 B/stats-size-estimate         649,773 B/op-alloc
+// BenchmarkInsert/10k-datapoints-retain-all-window-size-1000       1,668,972 ns/op      159,632 B/stats-size-estimate         647,274 B/op-alloc
+// BenchmarkInsert/10k-datapoints-retain-all-window-size-10000      4,438,201 ns/op       23,232 B/stats-size-estimate       1,139,031 B/op-alloc
+// BenchmarkInsert/10M-datapoints-retain-all-window-size-10    11,239,292,208 ns/op  254,389,632 B/stats-size-estimate  22,680,700,936 B/op-alloc
+// BenchmarkInsert/10M-datapoints-retain-all-window-size-100    1,765,953,792 ns/op  167,989,632 B/stats-size-estimate   2,851,912,088 B/op-alloc
+// BenchmarkInsert/10M-datapoints-retain-all-window-size-1000   1,723,260,708 ns/op  159,349,632 B/stats-size-estimate    ,869,028,368 B/op-alloc
+// BenchmarkInsert/10M-datapoints-retain-all-window-size-10000  4,644,341,542 ns/op   22,848,592 B/stats-size-estimate   1,162,587,904 B/op-alloc
+// BenchmarkInsert/10M-datapoints-retain-all-window-size-100000 5,661,283,750 ns/op    2,395,696 B/stats-size-estimate   1,248,610,672 B/op-alloc
+// BenchmarkInsert/10M-datapoints-retain-10k-window-size-10       392,717,680 ns/op      254,560 B/stats-size-estimate     656,047,216 B/op-alloc
+// BenchmarkInsert/10M-datapoints-retain-10k-window-size-100      680,680,917 ns/op      168,160 B/stats-size-estimate     649,804,400 B/op-alloc
+// BenchmarkInsert/10M-datapoints-retain-10k-window-size-1000   1,665,408,958 ns/op      159,520 B/stats-size-estimate     648,923,456 B/op-alloc
+// BenchmarkInsert/10M-datapoints-retain-10k-window-size-10000  4,630,973,833 ns/op       23,168 B/stats-size-estimate   1,115,983,792 B/op-alloc
 func BenchmarkInsert(b *testing.B) {
-	slidingBenchmark("datapoints-10,000", b, 10_000, 1, 10_000)
-	slidingBenchmark("datapoints-10,000,000", b, 10_000_000, 10, 100_000)
+	slidingBenchmark(benchmarkInput{
+		name:                "10k-datapoints-retain-all",
+		b:                   b,
+		inputDatapointCount: 10_000,
+		windowRotations:     1,
+		startWindowSize:     10,
+		maxWindowSize:       10_000,
+	})
+	slidingBenchmark(benchmarkInput{
+		name:                "10M-datapoints-retain-all",
+		b:                   b,
+		inputDatapointCount: 10_000_000,
+		windowRotations:     1,
+		startWindowSize:     10,
+		maxWindowSize:       100_000,
+	})
+	slidingBenchmark(benchmarkInput{
+		name:                "10M-datapoints-retain-10k",
+		b:                   b,
+		inputDatapointCount: 10_000_000,
+		windowRotations:     1_000,
+		startWindowSize:     10,
+		maxWindowSize:       10_000,
+	})
 }
 
-func generateDatapoints(datapoints int, pointsPerBucket uint64, random UIntGenerator) (output []RecordingValue) {
+type benchmarkInput struct {
+	name                string
+	b                   *testing.B
+	inputDatapointCount int
+	windowRotations     int
+	startWindowSize     int
+	maxWindowSize       int
+}
+
+func slidingBenchmark(in benchmarkInput) {
+	if (in.startWindowSize != 1 && in.startWindowSize%10 != 0) || in.maxWindowSize%10 != 0 ||
+		in.inputDatapointCount%10 != 0 {
+		in.b.Skip("startWindowSize, maxWindowSize, datapointCount must be a multiple of 10")
+	}
+	if in.inputDatapointCount/in.maxWindowSize < in.windowRotations {
+		in.b.Skip("Not enough datapoints to rotate windows that many times.")
+	}
+	datapoints := generateDatapoints(uint64(in.maxWindowSize*in.windowRotations), in.inputDatapointCount,
+		1, rand.NewPCG(7, 42))
+	for windowSize := in.startWindowSize; windowSize <= in.maxWindowSize; windowSize *= 10 {
+		in.b.Run(fmt.Sprintf("%s-window-size-%d", in.name, windowSize), func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				// Need to recreate this each loop
+				stats, _ := NewWindowedTDigest(WindowConfig{
+					WindowSize:  time.Duration(windowSize) * time.Second,
+					WindowCount: in.inputDatapointCount / (windowSize * in.windowRotations),
+				})
+				stats.(*timeWindowedTDigest).pretouchWindowsForTest(n(1))
+				b.StartTimer()
+				for _, dp := range datapoints {
+					stats.RecordMulti(dp.Value, dp.Time, dp.Count)
+				}
+				b.StopTimer()
+				b.ReportMetric(float64(estimateTDigestSize(stats.(*timeWindowedTDigest))), "B/stats-size-estimate")
+			}
+		})
+	}
+}
+
+func estimateTDigestSize(impl *timeWindowedTDigest) uintptr {
+	// Count outer struct size
+	size := unsafe.Sizeof(*impl)
+	for _, w := range impl.windows {
+		// Count the window struct size
+		size += unsafe.Sizeof(timedWindow{})
+		if w.tdigest != nil {
+			// Count tdigest-struct's size
+			size += unsafe.Sizeof(*w.tdigest)
+			// Reverse-engineered from the tdigest package implementation:
+			// Each tdigest contains a "summary", which contains two slices
+			// of equal size, "mean" and "count". ForEachCentroid iterates those slices.
+			w.tdigest.ForEachCentroid(func(_ float64, _ uint64) bool {
+				size += 16
+				return true
+			})
+		}
+	}
+	return size
+}
+
+func generateDatapoints(timeStartSeconds uint64, datapoints int, pointsPerBucket uint64, random UIntGenerator) (output []RecordingValue) {
 	output = make([]RecordingValue, datapoints)
-	timeIdx := uint64(1)
+	timeIdx := timeStartSeconds
 	for i := range datapoints {
 		output[i] = RecordingValue{
 			Value: float64(i),
@@ -121,26 +207,4 @@ func generateDatapoints(datapoints int, pointsPerBucket uint64, random UIntGener
 		}
 	}
 	return
-}
-
-func slidingBenchmark(baseName string, b *testing.B, datapointCount, startWindowSize, maxWindowSize int) {
-	if (startWindowSize != 1 && startWindowSize%10 != 0) || maxWindowSize%10 != 0 ||
-		datapointCount%10 != 0 {
-		b.Skip("startWindowSize, maxWindowSize, datapointCount must be a multiple of 10")
-	}
-	datapoints := generateDatapoints(datapointCount, 1, rand.NewPCG(7, 42))
-	for windowSize := startWindowSize; windowSize <= maxWindowSize; windowSize *= 10 {
-		b.Run(fmt.Sprintf("%s-window-size-%d", baseName, windowSize), func(b *testing.B) {
-			b.ReportAllocs()
-			for b.Loop() {
-				stats, _ := NewWindowedTDigest(WindowConfig{
-					WindowSize:  time.Duration(windowSize) * time.Second,
-					WindowCount: datapointCount,
-				})
-				for _, dp := range datapoints {
-					stats.RecordMulti(dp.Value, dp.Time, dp.Count)
-				}
-			}
-		})
-	}
 }
