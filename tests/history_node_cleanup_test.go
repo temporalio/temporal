@@ -18,18 +18,26 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+type HistoryNodeCleanupSuite struct {
+	parallelsuite.Suite[*HistoryNodeCleanupSuite]
+}
+
+func TestHistoryNodeCleanupSuite(t *testing.T) {
+	parallelsuite.Run(t, &HistoryNodeCleanupSuite{})
+}
+
 // TestDeletionOfSingleWorkflow runs a single workflow, force-deletes it via the
 // admin API, then asserts that all history_tree and history_node rows are removed.
-func TestDeletionOfSingleWorkflow(t *testing.T) {
-	t.Parallel()
-	env := testcore.NewEnv(t)
-	tv := testvars.New(t)
+func (s *HistoryNodeCleanupSuite) TestDeletionOfSingleWorkflow() {
+	env := testcore.NewEnv(s.T())
+	tv := testvars.New(s.T())
 	ctx := env.Context()
 
 	shardID := common.WorkflowIDToHistoryShard(
@@ -38,7 +46,7 @@ func TestDeletionOfSingleWorkflow(t *testing.T) {
 		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
 	execMgr := env.GetTestCluster().TestBase().ExecutionManager
-	poller := taskpoller.New(t, env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
 
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:    uuid.NewString(),
@@ -81,10 +89,9 @@ func TestDeletionOfSingleWorkflow(t *testing.T) {
 // TestDeletionOfWorkflowAfterReset runs a workflow, resets it to create a new
 // run, force-deletes both runs via the admin API, then asserts that no
 // history_node rows remain for either branch.
-func TestDeletionOfWorkflowAfterReset(t *testing.T) {
-	t.Parallel()
-	env := testcore.NewEnv(t)
-	tv := testvars.New(t)
+func (s *HistoryNodeCleanupSuite) TestDeletionOfWorkflowAfterReset() {
+	env := testcore.NewEnv(s.T())
+	tv := testvars.New(s.T())
 	ctx := env.Context()
 
 	shardID := common.WorkflowIDToHistoryShard(
@@ -93,7 +100,7 @@ func TestDeletionOfWorkflowAfterReset(t *testing.T) {
 		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
 	execMgr := env.GetTestCluster().TestBase().ExecutionManager
-	poller := taskpoller.New(t, env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
 
 	// ── Step 1: start and complete run A ─────────────────────────────────────
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
