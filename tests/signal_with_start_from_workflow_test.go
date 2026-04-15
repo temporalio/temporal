@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -72,6 +70,14 @@ type SignalWithStartFromWorkflowTestSuite struct {
 func TestSignalWithStartFromWorkflowTestSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(SignalWithStartFromWorkflowTestSuite))
+}
+
+func (s *SignalWithStartFromWorkflowTestSuite) SetupSuite() {
+	s.SetupSuiteWithCluster(
+		testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
+			dynamicconfig.EnableChasm.Key(): true,
+		}),
+	)
 }
 
 // scheduleAndGetSWSResult dispatches a SignalWithStartWorkflowExecution Nexus operation
@@ -633,7 +639,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_Fail() {
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 	})
 	s.NotNil(failure, "expected the Nexus operation to fail with CONFLICT_POLICY_FAIL")
-	s.Contains(failure.GetCause().GetMessage()+failure.GetMessage(), "already started")
+	s.Contains(failure.GetCause().GetMessage()+failure.GetMessage(), "WorkflowExecutionAlreadyStarted")
 }
 
 // TestBothWorkflowsVisibleAfterSWSFromWorkflow verifies that when SignalWithStart is invoked
@@ -680,63 +686,59 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSF
 	s.NoError(err)
 	s.NotEmpty(callerRun.GetID())
 	s.NotEmpty(callerRun.GetRunID())
-
-	// var targetRunID string
-	// s.NoError(callerRun.Get(ctx, &targetRunID))
-	// s.NotEmpty(targetRunID)
-	// s.T().Cleanup(func() {
-	// 	_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, targetRunID, "test cleanup")
-	// })
 	s.T().Cleanup(func() {
 		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, "", "test cleanup")
 	})
 
-	s.EventuallyWithT(func(collect *assert.CollectT) {
-		executions, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{Namespace: s.Namespace().String(), PageSize: 1000})
-		require.NoError(collect, err)
-		require.Len(collect, executions.Executions, 2)
-	}, 10*time.Second, 250*time.Millisecond)
+	// --- Assertion 1: Caller workflow completes and returns the target's RunID. ---
+	// callerRun.Get blocks until the caller workflow finishes (or the context times out),
+	// implicitly asserting it reaches COMPLETED status.
+	var targetRunID string
+	s.NoError(callerRun.Get(ctx, &targetRunID))
+	s.NotEmpty(targetRunID)
 
-	// --- Assertion 1: Caller workflow completed and is still visible. ---
+	// Confirm COMPLETED via Describe now that we know the caller has finished.
 	callerDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{WorkflowId: callerRun.GetID()},
+		Execution: &commonpb.WorkflowExecution{WorkflowId: callerRun.GetID(), RunId: callerRun.GetRunID()},
 	})
 	s.NoError(err)
-	// s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, callerDesc.WorkflowExecutionInfo.Status)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, callerDesc.WorkflowExecutionInfo.Status)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, callerDesc.WorkflowExecutionInfo.Status)
 
-	// --- Assertion 2: Target workflow was started and carries the expected memo. ---
-	// The target may be RUNNING or COMPLETED depending on whether it processed the signal yet.
+	// --- Assertion 2: Target workflow completes and returns the signal input value. ---
+	// GetWorkflow(...).Get blocks until the target workflow finishes, implicitly asserting
+	// it reaches COMPLETED status. The target returns whatever signal payload it received.
+	var targetResult string
+	s.NoError(s.SdkClient().GetWorkflow(ctx, targetWorkflowID, targetRunID).Get(ctx, &targetResult))
+	s.Equal("signal-input", targetResult)
+
+	// Confirm COMPLETED via Describe now that we know the target has finished.
 	targetDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID},
+		Execution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID, RunId: targetRunID},
 	})
 	s.NoError(err)
-	s.NotEmpty(targetDesc.WorkflowExecutionInfo.Status)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, targetDesc.WorkflowExecutionInfo.Status)
+
+	// --- Assertion 3: Target carries the memo passed in the SWS request. ---
 	s.Require().NotNil(targetDesc.WorkflowExecutionInfo.Memo)
 	s.Contains(targetDesc.WorkflowExecutionInfo.Memo.Fields, "memo-key")
 
-	// --- Assertion 3: Signal was delivered with the correct name and input. ---
-	// Wait for the signal event to appear in the target's history.
+	// --- Assertion 4: Signal was delivered with the correct name and input. ---
+	// Since the target has already completed, its full history is available without polling.
+	histResp, err := s.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID, RunId: targetRunID},
+	})
+	s.NoError(err)
 	var signalEvent *historypb.HistoryEvent
-	s.Eventually(func() bool {
-		histResp, err := s.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace: s.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID},
-		})
-		if err != nil {
-			return false
+	for _, event := range histResp.History.Events {
+		if event.GetWorkflowExecutionSignaledEventAttributes() != nil {
+			signalEvent = event
+			break
 		}
-		for _, event := range histResp.History.Events {
-			if event.GetWorkflowExecutionSignaledEventAttributes() != nil {
-				signalEvent = event
-				return true
-			}
-		}
-		return false
-	}, 10*time.Second, 250*time.Millisecond, "expected WorkflowExecutionSignaled event in target history")
-
+	}
+	s.Require().NotNil(signalEvent, "expected WorkflowExecutionSignaled event in target history")
 	s.Equal("test-signal", signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
 	var signalInputVal string
 	s.NoError(payloads.Decode(signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input, &signalInputVal))

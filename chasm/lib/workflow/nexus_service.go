@@ -30,23 +30,26 @@ type workflowServiceNexusHandler struct {
 	historyHandler    historyservice.HistoryServiceServer
 }
 
-// SignalWithStartWorkflowExecution implements the SignalWithStartWorkflowExecution Nexus operation.
+// signalWithStartWorkflowExecution implements the SignalWithStartWorkflowExecution Nexus operation.
+// It returns a plain Go struct (not a proto message) so that the Nexus SDK serializes the response
+// as standard JSON with snake_case field names, matching what the SDK caller expects.
 func (h *workflowServiceNexusHandler) signalWithStartWorkflowExecution(
 	ctx context.Context,
 	req *workflowservice.SignalWithStartWorkflowExecutionRequest,
 	options nexus.StartOperationOptions,
-) (*workflowservice.SignalWithStartWorkflowExecutionResponse, error) {
+) (signalWithStartWorkflowExecutionResponse, error) {
 	fmt.Printf("TESTING: signalWithStartWorkflowExecution")
 	nsID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgumentf("Invalid namespace %q: %v", req.GetNamespace(), err)
+		return signalWithStartWorkflowExecutionResponse{}, serviceerror.NewInvalidArgumentf("Invalid namespace %q: %v", req.GetNamespace(), err)
 	}
 	res, err := h.historyHandler.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId:            nsID.String(),
 		SignalWithStartRequest: req,
 	})
+	fmt.Printf("TESTING: signalWithStartWorkflowExecution result res=%v err=%v conflictPolicy=%v\n", res, err, req.GetWorkflowIdConflictPolicy())
 	if err != nil {
-		return nil, err
+		return signalWithStartWorkflowExecutionResponse{}, err
 	}
 	link := commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
 		Namespace:  req.GetNamespace(),
@@ -59,11 +62,17 @@ func (h *workflowServiceNexusHandler) signalWithStartWorkflowExecution(
 		},
 	})
 	nexus.AddHandlerLinks(ctx, link)
+	fmt.Printf("TESTING: signal with start response: run_id=%s started=%v\n", res.GetRunId(), res.GetStarted())
+	return signalWithStartWorkflowExecutionResponse{RunID: res.GetRunId(), Started: res.GetStarted()}, nil
+}
 
-	return &workflowservice.SignalWithStartWorkflowExecutionResponse{
-		RunId:   res.GetRunId(),
-		Started: res.GetStarted(),
-	}, nil
+// signalWithStartWorkflowExecutionResponse is a plain Go struct mirroring
+// WorkflowServiceSignalWithStartWorkflowExecutionOutput. Using a plain struct ensures
+// payloads.Encode produces a json/plain payload (via JsonPayloadConverter), which the
+// SDK can decode into the json output type via standard json.Unmarshal.
+type signalWithStartWorkflowExecutionResponse struct {
+	RunID   string `json:"run_id,omitempty"`
+	Started bool   `json:"started,omitempty"`
 }
 
 func mustNewWorkflowServiceNexusHandler(
@@ -135,8 +144,11 @@ func NewWorkflowServiceNexusServiceProcessor(
 	saValidator *searchattribute.Validator,
 ) *chasm.NexusServiceProcessor {
 	sp := chasm.NewNexusServiceProcessor(workflowServiceNexusDef.ServiceName)
-	sp.MustRegisterOperation(workflowServiceNexusDef.SignalWithStartWorkflowExecution.Name(), chasm.NewRegisterableNexusOperationProcessor(SignalWithStartOperationProcessor{
-		validator: NewValidator(config, saMapperProvider, saValidator),
-	}))
+	fmt.Printf("TESTING: signal with start name: %s\n", workflowServiceNexusDef.SignalWithStartWorkflowExecution.Name())
+	op := SignalWithStartOperationProcessor{validator: NewValidator(config, saMapperProvider, saValidator)}
+	sp.MustRegisterOperation(
+		workflowServiceNexusDef.SignalWithStartWorkflowExecution.Name(),
+		chasm.NewRegisterableNexusOperationProcessor(op),
+	)
 	return sp
 }

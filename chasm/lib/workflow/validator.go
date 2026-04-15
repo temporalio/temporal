@@ -238,12 +238,6 @@ func (v *RequestValidator) ValidateSignalWithStartRequest(request *workflowservi
 		return err
 	}
 
-	if request.WorkflowIdConflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL {
-		// Signal-with-*Required*-Start is not supported
-		name := enumspb.WorkflowIdConflictPolicy_name[int32(request.WorkflowIdConflictPolicy.Number())]
-		return serviceerror.NewInvalidArgumentf("Invalid WorkflowIDConflictPolicy: %v is not supported for this operation.", name)
-	}
-
 	enums.SetDefaultWorkflowIDPolicies(&request.WorkflowIdReusePolicy, &request.WorkflowIdConflictPolicy, enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)
 
 	sa, err := v.UnaliasedSearchAttributesFrom(request.GetSearchAttributes(), request.GetNamespace())
