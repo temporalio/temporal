@@ -214,6 +214,30 @@ func TestInvokeWithPartitionCounts_NoTrailerRemovesCache(t *testing.T) {
 	assert.Equal(t, PartitionCounts{}, cache.lookup(pkey))
 }
 
+func TestInvokeWithPartitionCounts_ParseErrorRemovesCache(t *testing.T) {
+	t.Parallel()
+	cache := newTestCache(t)
+
+	pkey := cache.makeKey(testNsID, "my-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	originalPC := PartitionCounts{Read: 4, Write: 4}
+	cache.put(pkey, originalPC)
+
+	op := func(ctx context.Context, pc PartitionCounts, req *hpcReq, opts []grpc.CallOption) (*hpcRes, error) {
+		for _, opt := range opts {
+			if t, ok := opt.(grpc.TrailerCallOption); ok {
+				*t.TrailerAddr = metadata.Pairs(partitionCountsTrailerName, "this is an invalid proto message")
+			}
+		}
+		return &hpcRes{value: "ok"}, nil
+	}
+
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, pkey, &hpcReq{}, nil, op)
+	require.NoError(t, err)
+
+	// cache entry should be removed
+	assert.Equal(t, PartitionCounts{}, cache.lookup(pkey))
+}
+
 func TestInvokeWithPartitionCounts_OutgoingContextHasHeader(t *testing.T) {
 	t.Parallel()
 	cache := newTestCache(t)
