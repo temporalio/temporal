@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/iancoleman/strcase"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -229,7 +230,6 @@ func NewExecutable(
 }
 
 func (e *executableImpl) Execute() (retErr error) {
-
 	startTime := e.timeSource.Now()
 	e.scheduleLatency = startTime.Sub(e.scheduledTime)
 
@@ -259,15 +259,30 @@ func (e *executableImpl) Execute() (retErr error) {
 	// Wrapped in if block to avoid unnecessary allocations when OTEL is disabled.
 	if telemetry.IsEnabled(e.tracer) {
 		var span trace.Span
+
+		// Set defaults assuming workflow task
+		entityID := e.GetWorkflowID()
+		idKey := telemetry.WorkflowIDKey
+		taskLabel := e.GetType().String()
+
+		// Override defaults if CHASM task
+		if _, ok := e.GetTask().(tasks.HasArchetypeID); ok {
+			idKey = telemetry.BusinessIDKey
+			if name := e.GetTask().GetCategory().Name(); name != "" {
+				taskLabel = strcase.ToCamel(strcase.ToSnake(name + "Task"))
+			}
+		}
+
 		ctx, span = e.tracer.Start(
 			ctx,
-			fmt.Sprintf("queue.Execute/%v", e.GetType().String()),
+			fmt.Sprintf("queue.Execute/%v", taskLabel),
 			trace.WithSpanKind(trace.SpanKindConsumer),
-			trace.WithAttributes(
-				attribute.Key(telemetry.WorkflowIDKey).String(e.GetWorkflowID()),
-				attribute.Key(telemetry.WorkflowRunIDKey).String(e.GetRunID()),
-				attribute.Key("queue.task.type").String(e.GetType().String()),
-				attribute.Key("queue.task.id").Int64(e.GetTaskID())))
+		)
+		span.SetAttributes(
+			attribute.Key(idKey).String(entityID),
+			attribute.Key(telemetry.RunIDKey).String(e.GetRunID()),
+			attribute.Key("queue.task.type").String(e.GetType().String()),
+			attribute.Key("queue.task.id").Int64(e.GetTaskID()))
 
 		if telemetry.DebugMode() {
 			if taskPayload, err := json.Marshal(e.GetTask()); err != nil {
