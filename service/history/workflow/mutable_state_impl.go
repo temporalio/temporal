@@ -7137,9 +7137,6 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 		Checksum:        result.checksum,
 	}
 
-	// todo: close transaction as snapshot may also need time skipping
-	// for features like start-with-delay feature that has something to skip before the first workflow task is scheduled.
-
 	ms.checksum = result.checksum
 	if err := ms.cleanupTransaction(); err != nil {
 		return nil, nil, err
@@ -8441,11 +8438,13 @@ func (ms *MutableStateImpl) closeTransactionHandlerTimeSkipping(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
 ) (regenTimerTasksForTimeSkipping bool) {
+	// TODO@time-skipping: need to check if passive cluster need this function
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
 		if !ms.IsWorkflowExecutionRunning() {
 			return false
 		}
+		// TODO@time-skipping: need to support start-with-delay
 		if transactionPolicy == historyi.TransactionPolicyActive && ms.ShouldExecuteTimeSkipping() {
 			if _, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx); err != nil {
 				ms.metricsHandler.Counter(metrics.ExecutionTimeSkippingTransitionedErrorCounter.Name()).Record(1)
@@ -8470,6 +8469,7 @@ func (ms *MutableStateImpl) closeTransactionHandlerTimeSkipping(
 func (ms *MutableStateImpl) closeTransactionRegenerateTimerTasksForTimeSkipping(
 	transactionPolicy historyi.TransactionPolicy,
 ) error {
+	// TODO@time-skipping: need to check if passive cluster need this function
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
 		if !ms.IsWorkflowExecutionRunning() {

@@ -6562,3 +6562,187 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionTimeSkippingTransitionedEven
 		s.False(s.mutableState.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)
 	})
 }
+
+// TestCloseTransactionTimeSkipping exercises the time-skipping logic that runs inside
+// closeTransaction:
+//
+//   - closeTransactionHandlerTimeSkipping: decides whether to fire time skipping and, if so,
+//     calls AddWorkflowExecutionTimeSkippingTransitionedEvent to write the history event and
+//     accumulate the skipped duration.
+//   - closeTransactionRegenerateTimerTasksForTimeSkipping: regenerates UserTimerTask entries
+//     with timestamps shifted back by AccumulatedSkippedDuration.
+func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
+	failoverVersion := s.namespaceEntry.FailoverVersion(tests.WorkflowID)
+
+	// buildEligibleState returns a minimal running workflow state that satisfies
+	// ShouldExecuteTimeSkipping(): time-skipping enabled, one pending timer, no pending
+	// workflow task / activities / child executions.
+	//
+	// The timer's TaskStatus is pre-set to TimerTaskStatusCreated so that
+	// closeTransactionHandleActivityUserTimerTasks does NOT add a second UserTimerTask for it.
+	// That way the only timer task in the mutation is the regenerated (time-shifted) one.
+	buildEligibleState := func(timerExpiry time.Time) *persistencespb.WorkflowMutableState {
+		return &persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				NamespaceId:                     s.namespaceEntry.ID().String(),
+				WorkflowId:                      tests.WorkflowID,
+				TaskQueue:                       "testTaskQueue",
+				WorkflowTypeName:                "testWorkflowType",
+				WorkflowExecutionTimerTaskStatus: TimerTaskStatusCreated,
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+				},
+				VersionHistories: &historyspb.VersionHistories{
+					Histories: []*historyspb.VersionHistory{
+						{
+							BranchToken: []byte("token#1"),
+							Items:       []*historyspb.VersionHistoryItem{{EventId: 2, Version: failoverVersion}},
+						},
+					},
+				},
+				TransitionHistory: []*persistencespb.VersionedTransition{
+					{NamespaceFailoverVersion: failoverVersion, TransitionCount: 1},
+				},
+			},
+			ExecutionState: &persistencespb.WorkflowExecutionState{
+				RunId:  tests.RunID,
+				State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			},
+			NextEventId: 3,
+			TimerInfos: map[string]*persistencespb.TimerInfo{
+				"t1": {
+					TimerId:        "t1",
+					StartedEventId: 1,
+					ExpiryTime:     timestamppb.New(timerExpiry),
+					TaskStatus:     TimerTaskStatusCreated,
+				},
+			},
+		}
+	}
+
+	s.Run("Active_Eligible_WritesEventAndRegeneratesTimerTask", func() {
+		// Happy path: active cluster, running workflow, time-skipping enabled, one pending
+		// timer, no other in-flight work.  Expect:
+		//   1. A WorkflowExecutionTimeSkippingTransitioned event in the event batch.
+		//   2. AccumulatedSkippedDuration set on execution info.
+		//   3. A regenerated UserTimerTask at (timerExpiry - accumulatedDuration).
+		now := s.mockShard.GetTimeSource().Now()
+		timerExpiry := now.Add(2 * time.Hour)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, buildEligibleState(timerExpiry), 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		mutation, workflowEventsSeq, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		// AccumulatedSkippedDuration must be positive.
+		accumulated := ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
+		s.Require().NotNil(accumulated)
+		s.Greater(accumulated.AsDuration(), time.Duration(0))
+
+		// A WorkflowExecutionTimeSkippingTransitioned event must appear in the written batches.
+		var tsEvent *historypb.HistoryEvent
+		for _, we := range workflowEventsSeq {
+			for _, ev := range we.Events {
+				if ev.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED {
+					tsEvent = ev
+				}
+			}
+		}
+		s.Require().NotNil(tsEvent, "expected WorkflowExecutionTimeSkippingTransitioned event in workflowEventsSeq")
+		s.Equal(timerExpiry, tsEvent.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetTargetTime().AsTime())
+
+		// The mutation must contain a regenerated UserTimerTask shifted back by the accumulated duration.
+		expectedTS := timerExpiry.Add(-accumulated.AsDuration())
+		var regenerated *tasks.UserTimerTask
+		for _, task := range mutation.Tasks[tasks.CategoryTimer] {
+			if ut, ok := task.(*tasks.UserTimerTask); ok && ut.EventID == 1 {
+				regenerated = ut
+			}
+		}
+		s.Require().NotNil(regenerated, "expected regenerated UserTimerTask for EventID=1")
+		s.Equal(expectedTS, regenerated.VisibilityTimestamp)
+		s.Equal(int64(0), regenerated.TaskID, "TaskID must be zero — assigned by shard, not the generator")
+	})
+
+	s.Run("Active_TimeSkippingDisabled_NoEvent", func() {
+		// When TimeSkippingInfo is nil, ShouldExecuteTimeSkipping returns false immediately.
+		// No time-skipping event should be emitted and AccumulatedSkippedDuration stays nil.
+		now := s.mockShard.GetTimeSource().Now()
+		timerExpiry := now.Add(2 * time.Hour)
+
+		dbState := buildEligibleState(timerExpiry)
+		dbState.ExecutionInfo.TimeSkippingInfo = nil // time skipping not configured
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		_, workflowEventsSeq, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		for _, we := range workflowEventsSeq {
+			for _, ev := range we.Events {
+				s.NotEqual(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED, ev.GetEventType(),
+					"unexpected WorkflowExecutionTimeSkippingTransitioned event when time skipping is disabled")
+			}
+		}
+	})
+
+	s.Run("Active_NoPendingTimers_NoEvent", func() {
+		// ShouldExecuteTimeSkipping returns false when there are no pending timers and no
+		// time bound configured.  No event should be emitted.
+		now := s.mockShard.GetTimeSource().Now()
+
+		dbState := buildEligibleState(now.Add(time.Hour))
+		dbState.TimerInfos = nil // no pending timers → nothing to skip to
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		_, workflowEventsSeq, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		for _, we := range workflowEventsSeq {
+			for _, ev := range we.Events {
+				s.NotEqual(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED, ev.GetEventType(),
+					"unexpected WorkflowExecutionTimeSkippingTransitioned event when there are no pending timers")
+			}
+		}
+		s.Nil(ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration)
+	})
+
+	s.Run("Passive_EligibleState_NoEvent", func() {
+		// Passive policy always short-circuits time skipping.
+		// Even with an otherwise eligible state, no event or regenerated timer task is produced.
+		now := s.mockShard.GetTimeSource().Now()
+		timerExpiry := now.Add(2 * time.Hour)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, buildEligibleState(timerExpiry), 1)
+		s.Require().NoError(err)
+
+		mutation, workflowEventsSeq, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyPassive)
+		s.Require().NoError(err)
+
+		for _, we := range workflowEventsSeq {
+			for _, ev := range we.Events {
+				s.NotEqual(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED, ev.GetEventType(),
+					"passive cluster must not emit WorkflowExecutionTimeSkippingTransitioned event")
+			}
+		}
+		s.Nil(ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration)
+
+		// No regenerated UserTimerTask: the passive path skips both
+		// closeTransactionHandlerTimeSkipping and closeTransactionRegenerateTimerTasksForTimeSkipping.
+		for _, task := range mutation.Tasks[tasks.CategoryTimer] {
+			_, ok := task.(*tasks.UserTimerTask)
+			s.False(ok, "passive cluster must not produce regenerated UserTimerTask")
+		}
+	})
+}
