@@ -4012,31 +4012,29 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(ct
 	// get the earliest pending timer info
 	// generate the time-skipping transitioned event
 	// TODO@time-skipping: calculate the minimum of next user timer and time bound
-	var earliestTimerInfo *persistencespb.TimerInfo
+	var nextUserTimerInfo *persistencespb.TimerInfo
 	for _, timerInfo := range ms.GetPendingTimerInfos() {
-		if earliestTimerInfo == nil || timerInfo.ExpiryTime.AsTime().Before(earliestTimerInfo.ExpiryTime.AsTime()) {
-			earliestTimerInfo = timerInfo
+		if nextUserTimerInfo == nil || timerInfo.ExpiryTime.AsTime().Before(nextUserTimerInfo.ExpiryTime.AsTime()) {
+			nextUserTimerInfo = timerInfo
 		}
 	}
-	if !disabledAfterBound && earliestTimerInfo == nil {
+	if !disabledAfterBound && nextUserTimerInfo == nil {
 		return nil, serviceerror.NewInternal("time skipping is triggered when there is no pending timer info")
 	}
-	targetTime := earliestTimerInfo.ExpiryTime.AsTime()
+	targetTime := nextUserTimerInfo.ExpiryTime.AsTime()
 
 	// build and apply the event
 	event := ms.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(targetTime, disabledAfterBound)
 	return event, ms.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx, event)
 }
 
-// ApplyWorkflowExecutionTimeSkippingTransitionedEvent applies the WorkflowExecutionTimeSkippingTransitionedEvent to the mutable state,
-// and regenerate all pending timer tasks if necessary.
+// ApplyWorkflowExecutionTimeSkippingTransitionedEvent applies the WorkflowExecutionTimeSkippingTransitionedEvent to the mutable state.
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error {
 
 	attr := event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
 	skippedDuration := attr.GetTargetTime().AsTime().Sub(event.GetEventTime().AsTime())
 	disabledAfterBound := attr.GetDisabledAfterBound()
 
-	// update TimeSkippingInfo in ms
 	if ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration == nil {
 		ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(skippedDuration)
 	} else {
@@ -4047,10 +4045,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 
 	if disabledAfterBound {
 		ms.executionInfo.TimeSkippingInfo.Config.Enabled = false
-	}
-
-	if skippedDuration > 0 {
-		return NewTaskRefresher(ms.shard).Refresh(ctx, ms, false)
 	}
 	return nil
 }
@@ -7013,6 +7007,7 @@ func (ms *MutableStateImpl) isStateDirty() bool {
 		ms.executionStateUpdated ||
 		ms.workflowTaskUpdated ||
 		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty()) ||
+
 		ms.chasmTree.IsStateDirty() ||
 		ms.isResetStateUpdated
 }
@@ -7235,21 +7230,11 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
-	// adjust time skipping info, and this should be after closeTransactionHandleWorkflowTask because
-	if ms.ShouldExecuteTimeSkipping() {
-		if _, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx); err != nil {
-			ms.metricsHandler.Counter(metrics.ExecutionTimeSkippingTransitionedErrorCounter.Name()).Record(1)
-			ms.logger.Error(
-				"failed to add workflow execution time skipping transitioned event, and ignore this error and continue",
-				tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
-				tag.WorkflowRunID(ms.GetExecutionState().RunId),
-				tag.Error(err),
-			)
-		}
-	}
+	regenTimerTasksForTimeSkipping := ms.closeTransactionHandlerTimeSkipping(ctx, transactionPolicy)
 
 	// Save if the state is dirty before closeTransactionPrepareEvents since it flushes the buffer
 	// events, and therefore change the dirty state.
+	// todo@time-skipping: isStateDirty should
 	isStateDirty := ms.isStateDirty()
 
 	// closeTransactionPrepareEvents must be called after closeTransactionHandleWorkflowTask because
@@ -7318,6 +7303,7 @@ func (ms *MutableStateImpl) closeTransaction(
 		transactionPolicy,
 		eventBatches,
 		clearBuffer,
+		regenTimerTasksForTimeSkipping,
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
@@ -7719,6 +7705,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	transactionPolicy historyi.TransactionPolicy,
 	eventBatches [][]*historypb.HistoryEvent,
 	clearBufferEvents bool,
+	regenerateTimerTasksForTimeSkipping bool,
 ) error {
 	if err := ms.closeTransactionHandleWorkflowResetTask(
 		transactionPolicy,
@@ -7743,6 +7730,12 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	//  so the calculation must be at the very end
 	if err := ms.closeTransactionHandleActivityUserTimerTasks(transactionPolicy); err != nil {
 		return err
+	}
+
+	if regenerateTimerTasksForTimeSkipping {
+		if err := ms.closeTransactionRegenerateTimerTasksForTimeSkipping(transactionPolicy); err != nil {
+			return err
+		}
 	}
 
 	return ms.closeTransactionPrepareReplicationTasks(transactionPolicy, eventBatches, clearBufferEvents)
@@ -8433,6 +8426,52 @@ func (ms *MutableStateImpl) closeTransactionHandleActivityUserTimerTasks(
 			return err
 		}
 		return ms.taskGenerator.GenerateUserTimerTasks()
+	case historyi.TransactionPolicyPassive:
+		return nil
+	default:
+		panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
+	}
+}
+
+func (ms *MutableStateImpl) closeTransactionHandlerTimeSkipping(
+	ctx context.Context,
+	transactionPolicy historyi.TransactionPolicy,
+) (regenTimerTasksForTimeSkipping bool) {
+	switch transactionPolicy {
+	case historyi.TransactionPolicyActive:
+		if !ms.IsWorkflowExecutionRunning() {
+			return false
+		}
+		if transactionPolicy == historyi.TransactionPolicyActive && ms.ShouldExecuteTimeSkipping() {
+			if _, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx); err != nil {
+				ms.metricsHandler.Counter(metrics.ExecutionTimeSkippingTransitionedErrorCounter.Name()).Record(1)
+				ms.logger.Error(
+					"failed to add workflow execution time skipping transitioned event, and ignore this error and continue",
+					tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
+					tag.WorkflowRunID(ms.GetExecutionState().RunId),
+					tag.Error(err),
+				)
+			} else {
+				return true
+			}
+		}
+		return false
+	case historyi.TransactionPolicyPassive:
+		return false
+	default:
+		panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
+	}
+}
+
+func (ms *MutableStateImpl) closeTransactionRegenerateTimerTasksForTimeSkipping(
+	transactionPolicy historyi.TransactionPolicy,
+) error {
+	switch transactionPolicy {
+	case historyi.TransactionPolicyActive:
+		if !ms.IsWorkflowExecutionRunning() {
+			return nil
+		}
+		return ms.taskGenerator.RegenerateTimerTasksForTimeSkipping()
 	case historyi.TransactionPolicyPassive:
 		return nil
 	default:
