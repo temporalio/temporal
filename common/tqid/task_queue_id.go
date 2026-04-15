@@ -96,7 +96,7 @@ type (
 	}
 
 	// WorkerCommandsPartition is used for server-to-worker communication (e.g. activity cancellations).
-	// These queues are per-worker and only exist for the lifetime of the worker process. The SDK sets
+	// These queues are per-worker-process and only exist for the lifetime of the worker process. The SDK sets
 	// Kind=TASK_QUEUE_KIND_WORKER_COMMANDS when polling on these queues.
 	WorkerCommandsPartition struct {
 		name      string
