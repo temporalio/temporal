@@ -19,9 +19,10 @@ type (
 		componentID uint32
 		fqn         string
 
-		ephemeral     bool
-		singleCluster bool
-		detached      bool
+		ephemeral                  bool
+		singleCluster              bool
+		detached                   bool
+		skipPersistenceIfUnchanged bool
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 
@@ -72,6 +73,16 @@ func WithDetached() RegistrableComponentOption {
 // IsDetached returns true if the component type is registered as detached.
 func (rc *RegistrableComponent) IsDetached() bool {
 	return rc.detached
+}
+
+// WithSkipPersistenceIfUnchanged marks a component type so that CHASM skips
+// persistence calls when the serialized data is equal to what was
+// last loaded from storage. The LastUpdateVersionedTransition is also not bumped
+// for such nodes.
+func WithSkipPersistenceIfUnchanged() RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.skipPersistenceIfUnchanged = true
+	}
 }
 
 // WithBusinessIDAlias allows specifying the business ID alias of the component.

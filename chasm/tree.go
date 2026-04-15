@@ -1,6 +1,7 @@
 package chasm
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"errors"
@@ -98,6 +99,18 @@ type (
 		value any
 		// Do NOT set this field directly, use setValueState() method instead.
 		valueState valueState
+
+		// initialStatePersisted is true when this node was created in a prior
+		// transaction, false when it is being created for the first time in the
+		// current transaction.
+		//
+		// It guards the skip-if-unchanged optimization in closeTransactionSerializeNodes:
+		// a node being written for the first time must always be persisted; for all
+		// subsequent transactions the serialized-data comparison determines whether
+		// persistence is needed. We use an explicit bool rather than checking
+		// node.serializedNode.Data != nil because a component's data field may
+		// legitimately be nil, making that check ambiguous.
+		initialStatePersisted bool
 
 		// Cached encoded path for this node.
 		// DO NOT read this field directly. Always use getEncodedPath() method to retrieve the encoded path.
@@ -732,6 +745,7 @@ func (n *Node) setSerializedNode(
 ) *Node {
 	if len(nodePath) == 0 {
 		n.serializedNode = serializedNode
+		n.initialStatePersisted = true
 		n.setValueState(valueStateNeedDeserialize)
 		n.encodedPath = &encodedPath
 		return n
@@ -744,6 +758,13 @@ func (n *Node) setSerializedNode(
 		n.children[childName] = childNode
 	}
 	return childNode.setSerializedNode(nodePath[1:], encodedPath, serializedNode)
+}
+
+// shouldSkipIfUnchanged returns true when this node's component type has opted in
+// to skip-if-unchanged behavior via WithSkipPersistenceIfUnchanged.
+func (n *Node) shouldSkipIfUnchanged() bool {
+	rc, ok := n.registry.componentFor(n.value)
+	return ok && rc.skipPersistenceIfUnchanged
 }
 
 // serialize sets or updates serializedValue field of the node n with serialized value.
@@ -1673,8 +1694,40 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			continue
 		}
 
+		// For component types that opt in to skip-if-unchanged AND that were loaded
+		// from storage (not brand-new), capture the existing serialized bytes and
+		// metadata before serialize() overwrites them. After serialization we compare
+		// the old and new bytes; if they are identical we revert the metadata mutation
+		// and skip adding this node to UpdatedNodes.
+		//
+		// We capture prevData as a pointer to the existing DataBlob (O(1), no copy).
+		// serialize() replaces node.serializedNode.Data with a freshly allocated blob,
+		// so prevData keeps the original reference intact.
+		var (
+			prevData                *commonpb.DataBlob
+			prevVersionedTransition *persistencespb.VersionedTransition
+		)
+		skipIfUnchanged := node.shouldSkipIfUnchanged() && node.initialStatePersisted
+		if skipIfUnchanged {
+			prevData = node.serializedNode.Data
+			cloned, ok := proto.Clone(
+				node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
+			).(*persistencespb.VersionedTransition)
+			if ok {
+				prevVersionedTransition = cloned
+			}
+		}
+
 		if err := node.serialize(); err != nil {
 			return err
+		}
+
+		// If data bytes are identical to what was in storage, revert the metadata
+		// mutation and skip persistence for this node.
+		if skipIfUnchanged && bytes.Equal(prevData.GetData(), node.serializedNode.Data.GetData()) {
+			node.serializedNode.GetMetadata().LastUpdateVersionedTransition = prevVersionedTransition
+			node.setValueState(valueStateSynced)
+			continue
 		}
 
 		if componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes(); componentAttr != nil &&

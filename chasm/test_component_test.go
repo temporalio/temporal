@@ -18,7 +18,15 @@ type (
 	// It would be nice to move it another package, but this creates a circular dependency.
 
 	protoMessageType = persistencespb.WorkflowExecutionState // Random proto message.
-	TestComponent    struct {
+
+	// TestSkipIfUnchangedComponent is a minimal component used to test the
+	// WithSkipPersistenceIfUnchanged registration option.
+	TestSkipIfUnchangedComponent struct {
+		UnimplementedComponent
+		Data *protoMessageType
+	}
+
+	TestComponent struct {
 		UnimplementedComponent
 
 		ComponentData                *protoMessageType
@@ -158,6 +166,21 @@ func (tsc11 *TestSubComponent11) LifecycleState(_ Context) LifecycleState {
 
 func (tsc2 *TestSubComponent2) LifecycleState(_ Context) LifecycleState {
 	return LifecycleStateRunning
+}
+
+func (c *TestSkipIfUnchangedComponent) LifecycleState(_ Context) LifecycleState {
+	return LifecycleStateRunning
+}
+
+func (c *TestSkipIfUnchangedComponent) Terminate(
+	_ MutableContext,
+	_ TerminateComponentRequest,
+) (TerminateComponentResponse, error) {
+	return TerminateComponentResponse{}, nil
+}
+
+func (c *TestSkipIfUnchangedComponent) ContextMetadata(_ Context) map[string]string {
+	return nil
 }
 
 func setTestComponentFields(c *TestComponent, backend *MockNodeBackend) {
