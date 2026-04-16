@@ -1568,15 +1568,18 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 	return res.VersionState, err
 }
 
-// signalDemoteVersion sends a fire-and-forget signal to a version workflow to demote it
-// with the given routing config. The version workflow will determine its new status,
-// propagate to task queues, and sync its summary back to the deployment workflow.
+// signalDemoteVersion sends a signal to a version workflow to demote it with the given
+// routing config. The version workflow will determine its new status, propagate to task
+// queues, and sync its summary back to the deployment workflow.
 func (d *WorkflowRunner) signalDemoteVersion(ctx workflow.Context, version string, routingConfig *deploymentpb.RoutingConfig) {
 	v := worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(version)
 	wfID := GenerateVersionWorkflowID(v.GetDeploymentName(), v.GetBuildId())
-	_ = workflow.SignalExternalWorkflow(ctx, wfID, "", DemoteVersionSignalName, &deploymentspb.DemoteVersionSignalArgs{
+	err := workflow.SignalExternalWorkflow(ctx, wfID, "", DemoteVersionSignalName, &deploymentspb.DemoteVersionSignalArgs{
 		RoutingConfig: routingConfig,
-	})
+	}).Get(ctx, nil)
+	if err != nil {
+		d.logger.Error("failed to signal demote version", "version", version, "error", err)
+	}
 }
 
 // syncUnversionedRamp should not be called in async mode
