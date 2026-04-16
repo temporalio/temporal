@@ -2107,7 +2107,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
 }
 
 func (s *workflowSuite) TestUnpauseAfterRetentionPeriodDoesNotClose() {
-	scheduleId := "myschedule"
+	scheduleID := "myschedule"
 	pauseTime := baseStartTime.Add(time.Minute)
 	unpauseTime := baseStartTime.Add(CurrentTweakablePolicies.RetentionTime + 2*time.Minute)
 
@@ -2134,7 +2134,7 @@ func (s *workflowSuite) TestUnpauseAfterRetentionPeriodDoesNotClose() {
 		State: &schedulespb.InternalState{
 			Namespace:     "myns",
 			NamespaceId:   "mynsid",
-			ScheduleId:    scheduleId,
+			ScheduleId:    scheduleID,
 			ConflictToken: InitialConflictToken,
 		},
 	})
@@ -2142,7 +2142,7 @@ func (s *workflowSuite) TestUnpauseAfterRetentionPeriodDoesNotClose() {
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 	// retention should be measured from unpause, not original create time
-	s.True(s.env.Now().Sub(unpauseTime) == CurrentTweakablePolicies.RetentionTime)
+	s.Equal(CurrentTweakablePolicies.RetentionTime, s.env.Now().Sub(unpauseTime))
 }
 
 func (s *workflowSuite) TestCANByIterations() {
