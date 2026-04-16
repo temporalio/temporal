@@ -197,15 +197,15 @@ func (mdb *db) DeleteFromVisibility(
 			retError = fmt.Errorf("transaction rollback failed: %w", retError)
 		}
 	}()
-	_, err = mdb.NamedExecContext(ctx, templateDeleteCustomSearchAttributes, filter)
+	_, err = tx.NamedExecContext(ctx, templateDeleteCustomSearchAttributes, filter)
 	if err != nil {
 		return nil, fmt.Errorf("unable to delete custom search attributes: %w", err)
 	}
-	result, err = mdb.NamedExecContext(ctx, templateDeleteWorkflowExecution_v8, filter)
+	result, err = tx.NamedExecContext(ctx, templateDeleteWorkflowExecution_v8, filter)
 	if err != nil {
 		return nil, fmt.Errorf("unable to delete workflow execution: %w", err)
 	}
-	_, err = mdb.NamedExecContext(ctx, templateDeleteChasmSearchAttributes, filter)
+	_, err = tx.NamedExecContext(ctx, templateDeleteChasmSearchAttributes, filter)
 	if err != nil {
 		return nil, fmt.Errorf("unable to delete chasm search attributes: %w", err)
 	}

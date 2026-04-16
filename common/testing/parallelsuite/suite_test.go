@@ -1,6 +1,8 @@
 package parallelsuite
 
 import (
+	"flag"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -106,6 +108,42 @@ func TestRun_RejectsSuite(t *testing.T) {
 	})
 	t.Run("SetupTest forbidden", func(t *testing.T) {
 		require.Panics(t, func() { Run(t, &setupTestSuite{}) })
+	})
+}
+
+type multiMethodSuite struct{ Suite[*multiMethodSuite] }
+
+func (s *multiMethodSuite) TestFoo() {}
+func (s *multiMethodSuite) TestBar() {}
+func (s *multiMethodSuite) TestBaz() {}
+
+func TestApplyTestifyMFilter(t *testing.T) {
+	typ := reflect.TypeFor[*multiMethodSuite]()
+	methods := discoverTestMethods(typ, typ.Elem(), nil)
+
+	setFlag := func(t *testing.T, pattern string) {
+		t.Helper()
+		require.NoError(t, flag.Set("testify.m", pattern))
+		t.Cleanup(func() { _ = flag.Set("testify.m", "") })
+	}
+
+	t.Run("no filter", func(t *testing.T) {
+		require.Equal(t, methods, applyTestifyMFilter(methods))
+	})
+	t.Run("exact match", func(t *testing.T) {
+		setFlag(t, "^TestBar$")
+		filtered := applyTestifyMFilter(methods)
+		require.Len(t, filtered, 1)
+		require.Equal(t, "TestBar", filtered[0].Name)
+	})
+	t.Run("prefix match", func(t *testing.T) {
+		setFlag(t, "^TestBa")
+		filtered := applyTestifyMFilter(methods)
+		require.Len(t, filtered, 2)
+	})
+	t.Run("no match", func(t *testing.T) {
+		setFlag(t, "^TestNope$")
+		require.Empty(t, applyTestifyMFilter(methods))
 	})
 }
 

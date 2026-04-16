@@ -557,6 +557,10 @@ report-test-crash: $(TEST_OUTPUT_ROOT)
 		--junitfile=$(TEST_OUTPUT_ROOT)/junit.crash.xml \
 		--crashreportname=$(CRASH_REPORT_NAME)
 
+print-test-summary: $(TEST_OUTPUT_ROOT)
+	@go run ./cmd/tools/test-runner print-summary \
+		--junit-glob=$(TEST_OUTPUT_ROOT)/junit.*.xml
+
 ##### Schema #####
 install-schema-cass-es: temporal-cassandra-tool install-schema-es
 	@printf $(COLOR) "Install Cassandra schema..."
@@ -696,6 +700,10 @@ start-xdc-cluster-b: temporal-server
 
 start-xdc-cluster-c: temporal-server
 	./temporal-server --config-file config/development-cluster-c.yaml --allow-no-auth start
+
+start-jwt: temporal-server
+	@./config/jwt/setup-keys.sh
+	./temporal-server --config-file config/development-jwt.yaml start --service frontend --service internal-frontend --service history --service matching --service worker
 
 ##### Grafana #####
 update-dashboards:

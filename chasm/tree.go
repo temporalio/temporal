@@ -13,6 +13,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -22,6 +23,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/transitionhistory"
@@ -188,7 +190,7 @@ type (
 		Nodes map[string]*persistencespb.ChasmNode // encoded node path -> chasm node
 	}
 
-	// NodeBackend is a set of methods needed from MutableState
+	// NodeBackend is a set of methods needed from MutableState.
 	//
 	// This is for breaking cycle dependency between
 	// this package and service/history/workflow package
@@ -198,11 +200,15 @@ type (
 		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetApproximatePersistedSize() int
+		GetNamespaceEntry() *namespace.Namespace
 		GetCurrentVersion() int64
 		NextTransitionCount() int64
 		CurrentVersionedTransition() *persistencespb.VersionedTransition
 		GetWorkflowKey() definition.WorkflowKey
 		AddTasks(...tasks.Task)
+		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
+		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
+		HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool) bool
 		DeleteCHASMPureTasks(maxScheduledTime time.Time)
 		UpdateWorkflowStateStatus(
 			state enumsspb.WorkflowExecutionState,
@@ -213,6 +219,7 @@ type (
 			ctx context.Context,
 			requestID string,
 		) (nexusrpc.CompleteOperationOptions, error)
+		EndpointRegistry() EndpointRegistry
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.
@@ -2333,8 +2340,10 @@ func (n *Node) applyUpdates(
 			newNode.resetTaskStatus()
 			if isSystemUpdates {
 				n.systemMutation.UpdatedNodes[encodedPath] = newNode.serializedNode
+				delete(n.systemMutation.DeletedNodes, encodedPath)
 			} else {
 				n.mutation.UpdatedNodes[encodedPath] = newNode.serializedNode
+				delete(n.mutation.DeletedNodes, encodedPath)
 			}
 			continue
 		}
@@ -2362,8 +2371,10 @@ func (n *Node) applyUpdates(
 
 			if isSystemUpdates {
 				n.systemMutation.UpdatedNodes[encodedPath] = updatedNode
+				delete(n.systemMutation.DeletedNodes, encodedPath)
 			} else {
 				n.mutation.UpdatedNodes[encodedPath] = updatedNode
+				delete(n.mutation.DeletedNodes, encodedPath)
 			}
 			node.setValue(nil)
 			node.setValueState(valueStateNeedDeserialize)
@@ -2483,6 +2494,16 @@ func (n *Node) delete(isSystemDelete bool) error {
 		return err
 	}
 
+	// TODO: consider remove entries from UpdatedNodes map as well
+	// if the same node is updated and then deleted in the same transaction.
+	//
+	// That's not a problem today though and DeletedNodes entries are always added
+	// before UpdatedNodes entires.
+	// - For active logic, DeletedNodes are added upon syncSubComponents(),
+	//   and UpdatedNodes are added when closing transaction and serializing nodes.
+	// - For standby replication logic, mutable state calls ApplyMutation() twice,
+	//   first with a deletion only mutation for tombstone nodes, and then an
+	//   update only mutation.
 	if isSystemDelete {
 		n.systemMutation.DeletedNodes[encodedPath] = struct{}{}
 	} else {
