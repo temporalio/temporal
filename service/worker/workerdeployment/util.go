@@ -65,6 +65,7 @@ const (
 	SyncVersionSummarySignal    = "sync-version-summary"
 	PropagationCompleteSignal   = "propagation-complete"
 	ReactivateVersionSignalName = "reactivate-version" // for Worker Deployment Version wfs
+	DemoteVersionSignalName     = "demote-version"     // for Worker Deployment Version wfs
 
 	// Queries
 	QueryDescribeVersion    = "describe-version"    // for Worker Deployment Version wf

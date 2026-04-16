@@ -183,6 +183,52 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 		})
 	}
 
+	// Version gate for demote version signal to prevent NDEs during rollback
+	if workflow.GetVersion(ctx, "demote-version-signal", workflow.DefaultVersion, 0) >= 0 {
+		demoteSignalChannel := workflow.GetSignalChannel(ctx, DemoteVersionSignalName)
+
+		d.signalHandler.signalSelector.AddReceive(demoteSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+			d.signalHandler.processingSignals++
+			defer func() { d.signalHandler.processingSignals-- }()
+
+			var args *deploymentspb.DemoteVersionSignalArgs
+			c.Receive(ctx, &args)
+
+			rg := args.GetRoutingConfig()
+			if rg == nil {
+				return
+			}
+
+			if d.deleteVersion {
+				return
+			}
+
+			// Acquire lock — syncTaskQueuesAsync requires it
+			if err := d.lock.Lock(ctx); err != nil {
+				d.logger.Error("Could not acquire workflow lock for demote signal")
+				return
+			}
+			defer d.lock.Unlock()
+
+			state := d.GetVersionState()
+			newStatus := d.findNewVersionStatusFromRoutingConfig(rg)
+			versionDataChanged := d.updateStateFromRoutingConfig(newStatus, state, rg)
+
+			// Propagate routing config to task queues
+			d.syncTaskQueuesAsync(ctx, rg, versionDataChanged)
+
+			// Start drainage tracking
+			if newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING {
+				state.LastDeactivationTime = state.RoutingUpdateTime
+				d.startDrainage(ctx)
+			}
+
+			// Sync summary back to deployment workflow
+			d.syncSummary(ctx)
+			d.setStateChanged()
+		})
+	}
+
 	// Keep waiting for signals, when it's time to CaN the main goroutine will exit.
 	for {
 		d.signalHandler.signalSelector.Select(ctx)
