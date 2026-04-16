@@ -147,10 +147,16 @@ func (j *junitReport) appendAlertsSuite(alerts []alert) {
 // legal XML and cause parsers to reject the document.
 func sanitizeXML(s string) string {
 	return strings.Map(func(r rune) rune {
-		if r == '\t' || r == '\n' || r == '\r' {
+		switch r {
+		case '\t', '\n', '\r':
 			return r
+		case 0xFFFE:
+			return -1 // Reserved Unicode noncharacter; disallowed in XML 1.0.
+		case 0xFFFF:
+			return -1 // Reserved Unicode noncharacter; disallowed in XML 1.0.
 		}
-		if r < 0x20 || r == 0xFFFE || r == 0xFFFF {
+		if r < 0x20 {
+			// 0x20 is space; lower code points are ASCII control characters.
 			return -1
 		}
 		return r
