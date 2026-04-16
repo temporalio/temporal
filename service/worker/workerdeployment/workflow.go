@@ -1573,12 +1573,32 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 // queues, and sync its summary back to the deployment workflow.
 func (d *WorkflowRunner) signalDemoteVersion(ctx workflow.Context, version string, routingConfig *deploymentpb.RoutingConfig) {
 	v := worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(version)
-	wfID := GenerateVersionWorkflowID(v.GetDeploymentName(), v.GetBuildId())
+	bld := v.GetBuildId()
+	revisionNumber := routingConfig.GetRevisionNumber()
+	if revisionNumber > 0 {
+		// Track revision number until the version workflow signals PropagationComplete.
+		// Without this, RoutingConfigUpdateState never transitions to COMPLETED.
+		if len(d.State.PropagatingRevisions) == 0 {
+			d.State.PropagatingRevisions = make(map[string]*deploymentspb.PropagatingRevisions)
+		}
+		revs, ok := d.State.PropagatingRevisions[bld]
+		if !ok {
+			revs = &deploymentspb.PropagatingRevisions{}
+			d.State.PropagatingRevisions[bld] = revs
+		}
+		revs.RevisionNumbers = append(revs.RevisionNumbers, revisionNumber)
+	}
+
+	wfID := GenerateVersionWorkflowID(v.GetDeploymentName(), bld)
 	err := workflow.SignalExternalWorkflow(ctx, wfID, "", DemoteVersionSignalName, &deploymentspb.DemoteVersionSignalArgs{
 		RoutingConfig: routingConfig,
 	}).Get(ctx, nil)
 	if err != nil {
 		d.logger.Error("failed to signal demote version", "version", version, "error", err)
+		// Signal delivery failed — untrack the revision so we don't block forever.
+		if revisionNumber > 0 {
+			d.handlePropagationComplete(&deploymentspb.PropagationCompletionInfo{RevisionNumber: revisionNumber, BuildId: bld})
+		}
 	}
 }
 
