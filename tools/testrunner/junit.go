@@ -150,10 +150,8 @@ func sanitizeXML(s string) string {
 		switch r {
 		case '\t', '\n', '\r':
 			return r
-		case 0xFFFE:
-			return -1 // Reserved Unicode noncharacter; disallowed in XML 1.0.
-		case 0xFFFF:
-			return -1 // Reserved Unicode noncharacter; disallowed in XML 1.0.
+		case 0xFFFE, 0xFFFF:
+			return -1 // Reserved Unicode noncharacters; disallowed in XML 1.0.
 		}
 		if r < 0x20 {
 			// 0x20 is space; lower code points are ASCII control characters.
