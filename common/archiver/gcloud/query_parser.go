@@ -82,7 +82,8 @@ func (p *queryParser) Parse(query string) (*parsedQuery, error) {
 		}
 	} else {
 		// If WorkflowId is provided, then we want to do a workflowId-based query.
-		// We only support startTime in this case and if provided, we also require a searchPrecision
+		// We only support closeTime in this case and if provided, we also require a searchPrecision
+		// StartTime is not supported here and an error should be returned.
 		if !parsedQuery.startTime.IsZero() {
 			return nil, errors.New("StartTime is not supported when searching for a WorkflowId")
 		}
