@@ -180,6 +180,7 @@ func (w *priTaskWriter) taskWriterLoop() {
 }
 
 func (w *priTaskWriter) getWriteBatch(reqs []*writeTaskRequest) []*writeTaskRequest {
+	time.Sleep(w.config.TaskWriterMinWait())
 	for range w.config.MaxTaskBatchSize() - 1 {
 		select {
 		case req := <-w.appendCh:

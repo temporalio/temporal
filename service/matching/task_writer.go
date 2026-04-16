@@ -180,6 +180,7 @@ func (w *taskWriter) taskWriterLoop() {
 }
 
 func (w *taskWriter) getWriteBatch(reqs []*writeTaskRequest) []*writeTaskRequest {
+	time.Sleep(w.config.TaskWriterMinWait())
 readLoop:
 	for i := 0; i < w.config.MaxTaskBatchSize(); i++ {
 		select {

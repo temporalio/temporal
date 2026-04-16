@@ -1214,6 +1214,11 @@ Note: this should be greater than matching.longPollExpirationInterval and matchi
 		100,
 		`MatchingMaxTaskBatchSize is max batch size for task writer`,
 	)
+	MatchingTaskWriterMinWait = NewTaskQueueDurationSetting(
+		"matching.taskWriterMinWait",
+		0,
+		`Minimum time to wait after receiving the first task before writing a batch, to try to collect more tasks in a batch.`,
+	)
 	MatchingMaxTaskDeleteBatchSize = NewTaskQueueIntSetting(
 		"matching.maxTaskDeleteBatchSize",
 		100,

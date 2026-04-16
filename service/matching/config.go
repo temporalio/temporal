@@ -105,6 +105,7 @@ type (
 		// taskWriter configuration
 		OutstandingTaskAppendsThreshold dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		MaxTaskBatchSize                dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		TaskWriterMinWait               dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 
 		ThrottledLogRPS dynamicconfig.IntPropertyFn
 
@@ -182,6 +183,7 @@ type (
 		// taskWriter configuration
 		OutstandingTaskAppendsThreshold func() int
 		MaxTaskBatchSize                func() int
+		TaskWriterMinWait               func() time.Duration
 		NumWritePartitions              func() int
 		NumReadPartitions               func() int
 		NumReadPartitionsSub            func(func(int)) (int, func())
@@ -287,6 +289,7 @@ func NewConfig(
 		TaskDeleteInterval:                       dynamicconfig.MatchingTaskDeleteInterval.Get(dc),
 		OutstandingTaskAppendsThreshold:          dynamicconfig.MatchingOutstandingTaskAppendsThreshold.Get(dc),
 		MaxTaskBatchSize:                         dynamicconfig.MatchingMaxTaskBatchSize.Get(dc),
+		TaskWriterMinWait:                        dynamicconfig.MatchingTaskWriterMinWait.Get(dc),
 		ThrottledLogRPS:                          dynamicconfig.MatchingThrottledLogRPS.Get(dc),
 		NumTaskqueueWritePartitions:              dynamicconfig.MatchingNumTaskqueueWritePartitions.Get(dc),
 		NumTaskqueueReadPartitions:               dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
@@ -451,6 +454,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		MaxTaskBatchSize: func() int {
 			return config.MaxTaskBatchSize(ns.String(), taskQueueName, taskType)
+		},
+		TaskWriterMinWait: func() time.Duration {
+			return config.TaskWriterMinWait(ns.String(), taskQueueName, taskType)
 		},
 		NumWritePartitions: func() int {
 			return max(1, config.NumTaskqueueWritePartitions(ns.String(), taskQueueName, taskType))
