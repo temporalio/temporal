@@ -111,6 +111,10 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestSchedule_InternalTaskQueue", func(t *testing.T) { testScheduleInternalTaskQueue(t, newContext) })
 	t.Run("TestDeletedScheduleOperations", func(t *testing.T) { testDeletedScheduleOperations(t, newContext) })
 	t.Run("TestUnpauseResumesProcessing", func(t *testing.T) { testCHASMUnpauseResumesProcessing(t, newContext) })
+	t.Run("TestListSchedulesPagination", func(t *testing.T) { testListSchedulesPagination(t, newContext) })
+	t.Run("TestListSchedulesAfterUpdate", func(t *testing.T) { testListSchedulesAfterUpdate(t, newContext) })
+	t.Run("TestListSchedulesMemoAndSearchAttributes", func(t *testing.T) { testListSchedulesMemoAndSearchAttributes(t, newContext) })
+	t.Run("TestListSchedulesQueryFilterByScheduleId", func(t *testing.T) { testListSchedulesQueryFilterByScheduleId(t, newContext) })
 }
 
 func testDeletedScheduleOperations(t *testing.T, newContext contextFactory) {
@@ -1086,6 +1090,296 @@ func testCountSchedules(t *testing.T, newContext contextFactory) {
 		})
 		return err == nil && countResp.Count >= 2
 	}, 15*time.Second, 1*time.Second, "Expected at least 2 non-paused schedules")
+}
+
+func testListSchedulesPagination(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+
+	const numSchedules = 4
+	sidPrefix := "sched-test-pagination-"
+
+	for i := range numSchedules {
+		sid := fmt.Sprintf("%s%d", sidPrefix, i)
+		schedule := &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(1 * time.Hour)},
+				},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   fmt.Sprintf("wf-pagination-%d", i),
+						WorkflowType: &commonpb.WorkflowType{Name: "action"},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		}
+		_, err := s.FrontendClient().CreateSchedule(newContext(s.Context()), &workflowservice.CreateScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+			Schedule:   schedule,
+			Identity:   "test",
+			RequestId:  uuid.NewString(),
+		})
+		s.NoError(err)
+	}
+
+	// Wait for all schedules to be visible.
+	s.Eventually(func() bool {
+		countResp, err := s.FrontendClient().CountSchedules(newContext(s.Context()), &workflowservice.CountSchedulesRequest{
+			Namespace: s.Namespace().String(),
+		})
+		return err == nil && countResp.Count >= numSchedules
+	}, 15*time.Second, 1*time.Second, "Expected all schedules to be visible")
+
+	// Paginate with page size 2 and collect all schedule IDs.
+	ctx := newContext(s.Context())
+	var allIDs []string
+	var nextPageToken []byte
+	for {
+		resp, err := s.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+			Namespace:       s.Namespace().String(),
+			MaximumPageSize: 2,
+			NextPageToken:   nextPageToken,
+		})
+		s.NoError(err)
+		for _, entry := range resp.Schedules {
+			allIDs = append(allIDs, entry.ScheduleId)
+		}
+		nextPageToken = resp.NextPageToken
+		if len(nextPageToken) == 0 {
+			break
+		}
+		// Each page except possibly the last should have entries.
+		s.NotEmpty(resp.Schedules)
+	}
+
+	// Verify we found all created schedules.
+	for i := range numSchedules {
+		sid := fmt.Sprintf("%s%d", sidPrefix, i)
+		s.Contains(allIDs, sid, "Expected schedule %s in paginated results", sid)
+	}
+}
+
+func testListSchedulesAfterUpdate(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+
+	sid := "sched-test-list-after-update"
+	wid := "sched-test-list-after-update-wf"
+	wt := "sched-test-list-after-update-wt"
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Verify initial state in list.
+	entry := getScheduleEntryFromVisibility(s, sid, newContext, nil)
+	s.False(entry.Info.Paused)
+	s.Equal(wt, entry.Info.WorkflowType.Name)
+
+	// Update the schedule: change interval and pause it.
+	schedule.Spec.Interval[0].Interval = durationpb.New(30 * time.Minute)
+	schedule.State = &schedulepb.ScheduleState{
+		Paused: true,
+		Notes:  "paused for update test",
+	}
+	_, err = s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Verify the list reflects updated state.
+	entry = getScheduleEntryFromVisibility(s, sid, newContext, func(e *schedulepb.ScheduleListEntry) bool {
+		return e.Info.Paused
+	})
+	s.True(entry.Info.Paused)
+	s.Equal("paused for update test", entry.Info.Notes)
+	s.Equal(int64(30*time.Minute), entry.Info.Spec.Interval[0].Interval.AsDuration().Nanoseconds())
+
+	// Unpause and verify.
+	schedule.State.Paused = false
+	schedule.State.Notes = ""
+	_, err = s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	entry = getScheduleEntryFromVisibility(s, sid, newContext, func(e *schedulepb.ScheduleListEntry) bool {
+		return !e.Info.Paused
+	})
+	s.False(entry.Info.Paused)
+	s.Empty(entry.Info.Notes)
+}
+
+func testListSchedulesMemoAndSearchAttributes(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+
+	sid := "sched-test-list-memo-sa"
+	wid := "sched-test-list-memo-sa-wf"
+	wt := "sched-test-list-memo-sa-wt"
+
+	schMemo, _ := payload.Encode("schedule memo value")
+	csaKeyword := "CustomKeywordField"
+	schSAValue, _ := payload.Encode("sched-sa-val")
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+		Memo: &commonpb.Memo{
+			Fields: map[string]*commonpb.Payload{
+				"schedmemo1": schMemo,
+			},
+		},
+		SearchAttributes: &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				csaKeyword: schSAValue,
+			},
+		},
+	})
+	s.NoError(err)
+
+	// Verify memo and search attributes appear on the list entry.
+	entry := getScheduleEntryFromVisibility(s, sid, newContext, nil)
+	s.NotNil(entry.Memo)
+	s.Equal(schMemo.Data, entry.Memo.Fields["schedmemo1"].Data)
+	s.NotNil(entry.SearchAttributes)
+	s.Equal(schSAValue.Data, entry.SearchAttributes.IndexedFields[csaKeyword].Data)
+
+	// Verify schedule-level info is also correct.
+	s.Equal(wt, entry.Info.WorkflowType.Name)
+	s.False(entry.Info.Paused)
+	s.NotNil(entry.Info.Spec)
+}
+
+func testListSchedulesQueryFilterByScheduleId(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+
+	// Create two schedules: one paused, one not.
+	sidActive := "sched-test-filter-active"
+	sidPaused := "sched-test-filter-paused"
+
+	makeSchedule := func(sid string, paused bool) {
+		schedule := &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(1 * time.Hour)},
+				},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   "wf-" + sid,
+						WorkflowType: &commonpb.WorkflowType{Name: "action"},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+			State: &schedulepb.ScheduleState{
+				Paused: paused,
+			},
+		}
+		_, err := s.FrontendClient().CreateSchedule(newContext(s.Context()), &workflowservice.CreateScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+			Schedule:   schedule,
+			Identity:   "test",
+			RequestId:  uuid.NewString(),
+		})
+		s.NoError(err)
+	}
+
+	makeSchedule(sidActive, false)
+	makeSchedule(sidPaused, true)
+
+	// Wait for both to be visible.
+	getScheduleEntryFromVisibility(s, sidActive, newContext, nil)
+	getScheduleEntryFromVisibility(s, sidPaused, newContext, nil)
+
+	ctx := newContext(s.Context())
+
+	// Filter for paused=true should return only the paused schedule.
+	listResp, err := s.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+		Namespace:       s.Namespace().String(),
+		MaximumPageSize: 10,
+		Query:           fmt.Sprintf("%s = true", sadefs.TemporalSchedulePaused),
+	})
+	s.NoError(err)
+	var pausedIDs []string
+	for _, entry := range listResp.Schedules {
+		pausedIDs = append(pausedIDs, entry.ScheduleId)
+		s.True(entry.Info.Paused, "Expected only paused schedules in filtered list")
+	}
+	s.Contains(pausedIDs, sidPaused)
+	s.NotContains(pausedIDs, sidActive)
+
+	// Filter for paused=false should return only the active schedule.
+	listResp, err = s.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+		Namespace:       s.Namespace().String(),
+		MaximumPageSize: 10,
+		Query:           fmt.Sprintf("%s = false", sadefs.TemporalSchedulePaused),
+	})
+	s.NoError(err)
+	var activeIDs []string
+	for _, entry := range listResp.Schedules {
+		activeIDs = append(activeIDs, entry.ScheduleId)
+		s.False(entry.Info.Paused, "Expected only active schedules in filtered list")
+	}
+	s.Contains(activeIDs, sidActive)
+	s.NotContains(activeIDs, sidPaused)
 }
 
 func testScheduleInternalTaskQueue(t *testing.T, newContext contextFactory) {
