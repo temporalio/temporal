@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
@@ -193,6 +194,7 @@ func (s *mutableStateSuite) SetupTest() {
 	reg := hsm.NewRegistry()
 	s.Require().NoError(RegisterStateMachine(reg))
 	s.Require().NoError(callbacks.RegisterStateMachine(reg))
+	s.Require().NoError(nexusoperations.RegisterStateMachines(reg))
 	s.mockShard.SetStateMachineRegistry(reg)
 
 	s.mockConfig.MutableStateActivityFailureSizeLimitWarn = func(namespace string) int { return 1 * 1024 }
@@ -6365,10 +6367,73 @@ func (s *mutableStateSuite) TestCloseTransaction_PrincipalPreserved() {
 	s.Equal("bob", principalBySignalName["signal-from-bob"], "bob's signal should retain his principal")
 }
 
-func (s *mutableStateSuite) TestIsTimeSkippingAutoSkippable() {
+func (s *mutableStateSuite) TestHasInflightWorkToPreventTimeSkipping() {
 	// Each s.Run() gets a fresh mutable state via SetupSubTest().
-	// The default state is CREATED (which IsWorkflowExecutionRunning() considers running)
-	// with Status=RUNNING and no pending work.
+
+	s.Run("FalseWhenNoPendingWork", func() {
+		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
+		s.False(hasPendingWork)
+		s.Empty(reason)
+	})
+
+	s.Run("TrueWhenPendingWorkflowTask", func() {
+		s.mutableState.executionInfo.WorkflowTaskScheduledEventId = 1
+		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
+		s.True(hasPendingWork)
+		s.Equal("has pending workflow task", reason)
+	})
+
+	s.Run("TrueWhenPendingActivity", func() {
+		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{}
+		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
+		s.True(hasPendingWork)
+		s.Equal("has pending activity", reason)
+	})
+
+	s.Run("TrueWhenPendingChildExecution", func() {
+		s.mutableState.pendingChildExecutionInfoIDs[1] = &persistencespb.ChildExecutionInfo{}
+		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
+		s.True(hasPendingWork)
+		s.Equal("has pending child execution", reason)
+	})
+
+	s.Run("TrueWhenPendingNexusOperation", func() {
+		_, err := nexusoperations.AddChild(s.mutableState.HSM(), "op-1", &historypb.HistoryEvent{
+			EventTime: timestamppb.Now(),
+			Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+				NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{},
+			},
+		}, []byte("token"))
+		s.Require().NoError(err)
+		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
+		s.True(hasPendingWork)
+		s.Equal("has pending nexus operations", reason)
+	})
+}
+
+func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
+	// Each s.Run() gets a fresh mutable state via SetupSubTest().
+	// The default state is RUNNING with no pending work.
+
+	s.Run("FalseWhenTimeSkippingInfoNil", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
+	})
+
+	s.Run("FalseWhenConfigNil", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: nil}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
+	})
+
+	s.Run("FalseWhenConfigDisabled", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: false},
+		}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
+	})
 
 	s.Run("FalseWhenWorkflowNotRunning", func() {
 		s.mutableState.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
@@ -6377,7 +6442,7 @@ func (s *mutableStateSuite) TestIsTimeSkippingAutoSkippable() {
 			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.False(s.mutableState.ShouldExecuteTimeSkipping())
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
 	})
 
 	s.Run("FalseWhenPendingWorkflowTask", func() {
@@ -6387,7 +6452,7 @@ func (s *mutableStateSuite) TestIsTimeSkippingAutoSkippable() {
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		s.mutableState.executionInfo.WorkflowTaskScheduledEventId = 1
 		s.True(s.mutableState.HasPendingWorkflowTask())
-		s.False(s.mutableState.ShouldExecuteTimeSkipping())
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
 	})
 
 	s.Run("FalseWhenPendingActivity", func() {
@@ -6396,7 +6461,7 @@ func (s *mutableStateSuite) TestIsTimeSkippingAutoSkippable() {
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{}
-		s.False(s.mutableState.ShouldExecuteTimeSkipping())
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
 	})
 
 	s.Run("FalseWhenPendingChildExecution", func() {
@@ -6405,15 +6470,31 @@ func (s *mutableStateSuite) TestIsTimeSkippingAutoSkippable() {
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		s.mutableState.pendingChildExecutionInfoIDs[1] = &persistencespb.ChildExecutionInfo{}
-		s.False(s.mutableState.ShouldExecuteTimeSkipping())
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
 	})
 
-	s.Run("FalseWhenNoTimersAndNoBound", func() {
+	s.Run("FalseWhenPendingNexusOperation", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
 		}
-		// No pending timers, no bound configured — nothing to skip to.
-		s.False(s.mutableState.ShouldExecuteTimeSkipping())
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		_, err := nexusoperations.AddChild(s.mutableState.HSM(), "op-1", &historypb.HistoryEvent{
+			EventTime: timestamppb.Now(),
+			Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+				NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{},
+			},
+		}, []byte("token"))
+		s.Require().NoError(err)
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
+	})
+
+	s.Run("FalseWhenNoPendingTimers", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		// No pending timers — nothing to skip to.
+		// TODO@time-skipping: bound support will add another path to return true here.
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
 	})
 
 	s.Run("TrueWhenPendingTimerAndNoPendingWork", func() {
@@ -6421,20 +6502,7 @@ func (s *mutableStateSuite) TestIsTimeSkippingAutoSkippable() {
 			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.True(s.mutableState.ShouldExecuteTimeSkipping())
-	})
-
-	s.Run("TrueWhenBoundConfiguredAndNoPendingWork", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-					MaxSkippedDuration: durationpb.New(time.Hour),
-				},
-			},
-		}
-		// No pending timers, but a bound is configured — still skippable.
-		s.True(s.mutableState.ShouldExecuteTimeSkipping())
+		s.True(s.mutableState.shouldExecuteTimeSkipping())
 	})
 }
 
@@ -6624,6 +6692,7 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionTimeSkippingTransitionedEven
 		s.NoError(err)
 		s.False(s.mutableState.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)
 	})
+
 }
 
 // TestCloseTransactionTimeSkipping exercises the time-skipping logic that runs inside

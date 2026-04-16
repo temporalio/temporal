@@ -3604,20 +3604,6 @@ func (mr *MockMutableStateMockRecorder) SetWorkflowTaskStartToCloseTimeoutTask(t
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowTaskStartToCloseTimeoutTask", reflect.TypeOf((*MockMutableState)(nil).SetWorkflowTaskStartToCloseTimeoutTask), task)
 }
 
-// ShouldExecuteTimeSkipping mocks base method.
-func (m *MockMutableState) ShouldExecuteTimeSkipping() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ShouldExecuteTimeSkipping")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// ShouldExecuteTimeSkipping indicates an expected call of ShouldExecuteTimeSkipping.
-func (mr *MockMutableStateMockRecorder) ShouldExecuteTimeSkipping() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShouldExecuteTimeSkipping", reflect.TypeOf((*MockMutableState)(nil).ShouldExecuteTimeSkipping))
-}
-
 // ShouldResetActivityTimerTaskMask mocks base method.
 func (m *MockMutableState) ShouldResetActivityTimerTaskMask(current, incoming *persistence.ActivityInfo) bool {
 	m.ctrl.T.Helper()
