@@ -5259,7 +5259,7 @@ func TestLoggerAndMetricsForPartition_BreakdownEnabled(t *testing.T) {
 		{
 			name:               "worker-commands",
 			partition:          newTestTaskQueue(ns.ID().String(), "/temporal-sys/worker-commands/ns/key", enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition(),
-			expectTQValue:      "my-task-queue",
+			expectTQValue:      "/temporal-sys/worker-commands/ns/key",
 			expectPartitionTag: "__worker_commands__",
 		},
 		{
