@@ -678,6 +678,21 @@ message ActivityInfo {
   // A dedicated per-worker Nexus task queue on which the server sends control
   // tasks (e.g. activity cancellation) to this specific worker instance.
   string worker_control_task_queue = 51;
+
+  // The shard clock at the time this activity was started (RecordActivityTaskStarted).
+  // Matching uses this clock to build the task token sent to the worker. Stored here so
+  // that history can later reconstruct the same task token (e.g. for cancel worker commands).
+  //
+  // IMPORTANT: The clock approach requires history to reconstruct the token using
+  // the same fields and logic as matching — if NewActivityTaskToken changes, both
+  // call sites must stay in sync or the tokens will silently diverge. An alternative
+  // is to store the full serialized task token (~150-300 bytes), which avoids
+  // reconstruction entirely and is immune to token format changes. We chose the
+  // clock approach to keep the per-activity memory footprint minimal (~24 bytes).
+  //
+  // Replication: This field is part of ActivityInfo and is automatically replicated
+  // via state-based replication. No special handling is needed.
+  temporal.server.api.clock.v1.VectorClock started_clock = 52;
 }
 
 // timer_map column
