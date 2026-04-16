@@ -1,15 +1,11 @@
 package metrics
 
 import (
-	"strconv"
-
 	"go.temporal.io/server/common/tqid"
 )
 
 const (
 	omitted = "__omitted__"
-	normal  = "__normal__"
-	sticky  = "__sticky__"
 )
 
 // GetPerTaskQueueFamilyScope returns "namespace" and "taskqueue" tags. "taskqueue" will be "__omitted__" if
@@ -55,14 +51,8 @@ func GetPerTaskQueuePartitionIDScope(
 	var value string
 	if partition == nil {
 		value = unknownValue
-	} else if normalPartition, ok := partition.(*tqid.NormalPartition); ok {
-		if partitionIDBreakdown {
-			value = strconv.Itoa(normalPartition.PartitionId())
-		} else {
-			value = normal
-		}
 	} else {
-		value = sticky
+		value = partition.MetricTag(partitionIDBreakdown)
 	}
 
 	return GetPerTaskQueueScope(handler, namespaceName, partition.TaskQueue(), taskQueueBreakdown,
@@ -81,10 +71,8 @@ func GetPerTaskQueuePartitionTypeScope(
 	var value string
 	if partition == nil {
 		value = unknownValue
-	} else if _, ok := partition.(*tqid.NormalPartition); ok {
-		value = normal
 	} else {
-		value = sticky
+		value = partition.MetricTag(false)
 	}
 
 	return GetPerTaskQueueScope(handler, namespaceName, partition.TaskQueue(), taskQueueBreakdown,
