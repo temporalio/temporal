@@ -633,7 +633,7 @@ func (s *FunctionalTestBase) DurationNear(value, target, tolerance time.Duration
 }
 
 func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
-	return s.testCluster.host.overrideDynamicConfig(s.T(), setting.Key(), value)
+	return s.testCluster.host.overrideDynamicConfigForTest(s.T(), setting.Key(), value)
 }
 
 // InjectHook sets a test hook inside the cluster.
@@ -679,6 +679,7 @@ func (s *FunctionalTestBase) GetNamespaceID(namespace string) string {
 func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 	for _, behavior := range AllMatchingBehaviors() {
 		s.Run(behavior.Name(), func() {
+			s.OverrideDynamicConfig(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 3)
 			if behavior.ForceTaskForward || behavior.ForcePollForward {
 				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
 				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)

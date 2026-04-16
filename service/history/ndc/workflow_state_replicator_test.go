@@ -189,6 +189,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		gomock.Any(),
 		gomock.Any(),
 		[]*persistence.WorkflowEvents{},
+		gomock.Any(),
 	).Return(nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{Name: namespaceName},
@@ -307,6 +308,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 		gomock.Any(),
 		gomock.Any(),
 		[]*persistence.WorkflowEvents{},
+		gomock.Any(),
 	).Return(nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{Name: namespaceName},

@@ -73,16 +73,13 @@ const (
 
 // Matching Client Operations
 const (
-	// MatchingClientPollWorkflowTaskQueueScope tracks RPC calls to matching service
 	MatchingClientPollWorkflowTaskQueueScope = "MatchingClientPollWorkflowTaskQueue"
-	// MatchingClientPollActivityTaskQueueScope tracks RPC calls to matching service
 	MatchingClientPollActivityTaskQueueScope = "MatchingClientPollActivityTaskQueue"
-	// MatchingClientAddActivityTaskScope tracks RPC calls to matching service
-	MatchingClientAddActivityTaskScope = "MatchingClientAddActivityTask"
-	// MatchingClientAddWorkflowTaskScope tracks RPC calls to matching service
-	MatchingClientAddWorkflowTaskScope = "MatchingClientAddWorkflowTask"
-	// MatchingClientQueryWorkflowScope tracks RPC calls to matching service
-	MatchingClientQueryWorkflowScope = "MatchingClientQueryWorkflow"
+	MatchingClientPollNexusTaskQueueScope    = "MatchingClientPollNexusTaskQueue"
+	MatchingClientAddActivityTaskScope       = "MatchingClientAddActivityTask"
+	MatchingClientAddWorkflowTaskScope       = "MatchingClientAddWorkflowTask"
+	MatchingClientQueryWorkflowScope         = "MatchingClientQueryWorkflow"
+	MatchingClientDispatchNexusTaskScope     = "MatchingDispatchNexusTask"
 )
 
 // Worker
@@ -751,6 +748,11 @@ var (
 		"nexus_completion_request_preprocess_errors",
 		WithDescription("The number of Nexus completion requests for which pre-processing failed."),
 	)
+	WorkerCommandsSent = NewCounterDef(
+		"worker_commands_sent",
+		WithDescription("The number of worker command dispatches, tagged by outcome (e.g. success, no_poller, rpc_error)."),
+	)
+
 	HostRPSLimit          = NewGaugeDef("host_rps_limit")
 	NamespaceHostRPSLimit = NewGaugeDef("namespace_host_rps_limit")
 	HandoverWaitLatency   = NewTimerDef("handover_wait_latency")
@@ -929,6 +931,7 @@ var (
 	WorkflowExecutionUpdateRegistrySize              = NewBytesHistogramDef("workflow_update_registry_size")
 	WorkflowExecutionUpdateRegistrySizeLimited       = NewCounterDef("workflow_update_registry_size_limited")
 	WorkflowExecutionUpdateRequestRateLimited        = NewCounterDef("workflow_update_request_rate_limited")
+	BusinessIDReuseRateLimited                       = NewCounterDef("business_id_reuse_rate_limited")
 	WorkflowExecutionUpdateTooMany                   = NewCounterDef("workflow_update_request_too_many")
 	WorkflowExecutionUpdateAborted                   = NewCounterDef("workflow_update_aborted")
 	WorkflowExecutionUpdateSentToWorker              = NewCounterDef("workflow_update_sent_to_worker")
@@ -1169,6 +1172,7 @@ var (
 	BufferThrottlePerTaskQueueCounter                 = NewCounterDef("buffer_throttle_count")
 	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired")
 	ForwardedPerTaskQueueCounter                      = NewCounterDef("forwarded_per_tl")
+	PriorityBacklogForwardedPerTaskQueueCounter       = NewCounterDef("priority_backlog_forwarded")
 	ForwardTaskErrorsPerTaskQueue                     = NewCounterDef("forward_task_errors")
 	LocalToLocalMatchPerTaskQueueCounter              = NewCounterDef("local_to_local_matches")
 	LocalToRemoteMatchPerTaskQueueCounter             = NewCounterDef("local_to_remote_matches")

@@ -146,7 +146,9 @@ var TransitionStarted = chasm.NewTransition(
 		// an operation token.
 		cancellation, ok := o.Cancellation.TryGet(ctx)
 		if ok && cancellation.StateMachineState() == nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED {
-			return TransitionCancellationScheduled.Apply(cancellation, ctx, EventCancellationScheduled{})
+			return TransitionCancellationScheduled.Apply(cancellation, ctx, EventCancellationScheduled{
+				Destination: o.GetEndpoint(),
+			})
 		}
 
 		return nil

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -1073,6 +1074,100 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ChasmComponentRetentio
 				"Delete time should be at least closeTime + retention")
 			assert.LessOrEqual(t, deleteHistoryEventTask.VisibilityTimestamp, closeTime.Add(tc.expectedMaxRetention),
 				"Delete time should not exceed closeTime + retention + jitter")
+		})
+	}
+}
+
+func TestGenerateWorkerCommandsTasks(t *testing.T) {
+	t.Parallel()
+
+	token1 := []byte("token1")
+	token2 := []byte("token2")
+	token3 := []byte("token3")
+
+	makeCommands := func(tokens ...[]byte) []*workerpb.WorkerCommand {
+		commands := make([]*workerpb.WorkerCommand, 0, len(tokens))
+		for _, token := range tokens {
+			commands = append(commands, &workerpb.WorkerCommand{
+				Type: &workerpb.WorkerCommand_CancelActivity{
+					CancelActivity: &workerpb.CancelActivityCommand{
+						TaskToken: token,
+					},
+				},
+			})
+		}
+		return commands
+	}
+
+	testCases := []struct {
+		name           string
+		featureEnabled bool
+		commands       []*workerpb.WorkerCommand
+		controlQueue   string
+		expectTask     bool
+	}{
+		{
+			name:           "creates task when enabled with valid inputs",
+			featureEnabled: true,
+			commands:       makeCommands(token1, token2, token3),
+			controlQueue:   "test-control-queue",
+			expectTask:     true,
+		},
+		{
+			name:           "no task when feature disabled",
+			featureEnabled: false,
+			commands:       makeCommands(token1, token2, token3),
+			controlQueue:   "test-control-queue",
+			expectTask:     false,
+		},
+		{
+			name:           "no task when commands empty",
+			featureEnabled: true,
+			commands:       []*workerpb.WorkerCommand{},
+			controlQueue:   "test-control-queue",
+			expectTask:     false,
+		},
+		{
+			name:           "no task when controlQueue empty",
+			featureEnabled: true,
+			commands:       makeCommands(token1, token2, token3),
+			controlQueue:   "",
+			expectTask:     false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+
+			mutableState := historyi.NewMockMutableState(ctrl)
+			mutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(
+				tests.NamespaceID.String(), tests.WorkflowID, tests.RunID,
+			)).AnyTimes()
+
+			var capturedTasks []tasks.Task
+			if tc.expectTask {
+				mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+					capturedTasks = append(capturedTasks, ts...)
+				}).Times(1)
+			}
+
+			cfg := &configs.Config{
+				EnableCancelActivityWorkerCommand: func() bool { return tc.featureEnabled },
+			}
+
+			taskGenerator := NewTaskGenerator(nil, mutableState, cfg, nil, log.NewTestLogger())
+			err := taskGenerator.GenerateWorkerCommandsTasks(tc.commands, tc.controlQueue)
+			require.NoError(t, err)
+
+			if tc.expectTask {
+				require.Len(t, capturedTasks, 1)
+				commandTask, ok := capturedTasks[0].(*tasks.WorkerCommandsTask)
+				require.True(t, ok)
+				require.Equal(t, tc.commands, commandTask.Commands)
+				require.Equal(t, tc.controlQueue, commandTask.Destination)
+				require.Equal(t, tests.NamespaceID.String(), commandTask.NamespaceID)
+			}
 		})
 	}
 }

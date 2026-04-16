@@ -276,7 +276,8 @@ func TestTransitionStarted(t *testing.T) {
 			pendingCancellation: true,
 			expectedTasks: []chasm.MockTask{
 				{
-					Payload: &nexusoperationpb.CancellationTask{},
+					Attributes: chasm.TaskAttributes{Destination: "test-endpoint"},
+					Payload:    &nexusoperationpb.CancellationTask{Attempt: 1},
 				},
 			},
 		},
@@ -298,12 +299,14 @@ func TestTransitionStarted(t *testing.T) {
 			operation.Attempt = 1
 			operation.StartToCloseTimeout = durationpb.New(tc.startToCloseTimeout)
 			if tc.pendingCancellation {
-				operation.Cancellation = chasm.NewComponentField[*Cancellation](nil, newCancellation(
+				cancellation := newCancellation(
 					&nexusoperationpb.CancellationState{
 						Status:        nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED,
 						RequestedTime: timestamppb.New(defaultTime),
 					},
-				))
+				)
+				cancellation.Operation = chasm.NewMockParentPtr[*Operation](operation)
+				operation.Cancellation = chasm.NewComponentField[*Cancellation](nil, cancellation)
 			}
 
 			err := TransitionStarted.Apply(operation, ctx, EventStarted{

@@ -22,6 +22,9 @@ type (
 		GetFieldName(alias string, namespace string) (string, error)
 	}
 
+	// NoopMapper is an identity mapper that returns all field names and aliases unchanged.
+	NoopMapper struct{}
+
 	// This mapper preserves legacy custom search attribute behavior by falling back
 	// to identity mapping when the wrapped mapper misses but cluster metadata still
 	// recognizes the name as a legacy custom search attribute.
@@ -42,9 +45,18 @@ type (
 	}
 )
 
+var _ Mapper = (*NoopMapper)(nil)
 var _ Mapper = (*backCompMapper)(nil)
 var _ Mapper = (*namespace.CustomSearchAttributesMapper)(nil)
 var _ MapperProvider = (*mapperProviderImpl)(nil)
+
+func (*NoopMapper) GetAlias(fieldName string, _ string) (string, error) {
+	return fieldName, nil
+}
+
+func (*NoopMapper) GetFieldName(alias string, _ string) (string, error) {
+	return alias, nil
+}
 
 func (m *backCompMapper) GetAlias(fieldName string, namespaceName string) (string, error) {
 	alias, firstErr := m.mapper.GetAlias(fieldName, namespaceName)

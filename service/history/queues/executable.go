@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -43,6 +44,7 @@ type (
 		ctasks.Task
 		tasks.Task
 
+		Attempt() int
 		GetTask() tasks.Task
 		GetPriority() ctasks.Priority
 		GetScheduledTime() time.Time
@@ -123,7 +125,7 @@ type (
 		dlqWriter             *DLQWriter
 
 		readerID                   int64
-		attempt                    int
+		attempt                    atomic.Int64
 		priority                   ctasks.Priority
 		scheduledTime              time.Time
 		scheduleLatency            time.Duration
@@ -190,7 +192,6 @@ func NewExecutable(
 		Task:  task,
 		state: ctasks.TaskStatePending,
 
-		attempt:             1,
 		executor:            executor,
 		scheduler:           scheduler,
 		rescheduler:         rescheduler,
@@ -216,6 +217,7 @@ func NewExecutable(
 		dlqErrorPattern:            params.DLQErrorPattern,
 	}
 	e.refreshMetricsHandlers(nil)
+	e.attempt.Store(1)
 	e.priority = priorityAssigner.Assign(e)
 
 	loadTime := util.MaxTime(timeSource.Now(), task.GetKey().FireTime)
@@ -349,7 +351,7 @@ func (e *executableImpl) Execute() (retErr error) {
 		// namespace did a failover,
 		// reset task attempt since the execution logic used will change
 		// reset task priority since it changes between active/standby
-		e.attempt = 1
+		e.resetAttempt()
 		e.priority = e.priorityAssigner.Assign(e)
 	}
 	e.lastActiveness = resp.ExecutedAsActive
@@ -521,7 +523,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if e.isInvalidTaskError(err) {
 		// only consider task invalid if it's the first attempt
 		// otherwise we have no idea if it's invalid due to the (failed) write operation in previous attempts.
-		e.invalidTask = e.attempt == 1
+		e.invalidTask = e.attempt.Load() == 1
 		return nil
 	}
 
@@ -541,12 +543,12 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	logger := log.With(e.logger,
 		tag.Error(err),
 		tag.ErrorType(err),
-		tag.Attempt(int32(e.attempt)),
+		tag.Attempt(int32(e.attempt.Load())),
 		tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
 		tag.LifeCycleProcessingFailed,
 		tag.String("task-category", e.GetCategory().Name()),
 	)
-	if e.attempt > taskCriticalLogMetricAttempts {
+	if e.attempt.Load() > taskCriticalLogMetricAttempts {
 		logger.Error("Critical error processing task, retrying.", tag.OperationCritical)
 	} else {
 		logger.Warn("Fail to process task")
@@ -653,7 +655,7 @@ func (e *executableImpl) Ack() {
 		return
 	}
 
-	metrics.TaskAttempt.With(e.chasmMetricsHandler).Record(int64(e.attempt))
+	metrics.TaskAttempt.With(e.chasmMetricsHandler).Record(e.attempt.Load())
 
 	priorityTaggedProvider := e.chasmMetricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 	metrics.TaskLatency.With(priorityTaggedProvider).Record(e.inMemoryNoUserLatency)
@@ -714,6 +716,10 @@ func (e *executableImpl) State() ctasks.State {
 	return e.state
 }
 
+func (e *executableImpl) Attempt() int {
+	return int(e.attempt.Load())
+}
+
 func (e *executableImpl) GetPriority() ctasks.Priority {
 	return e.priority
 }
@@ -750,7 +756,7 @@ func (e *executableImpl) shouldResubmitOnNack(err error) bool {
 	// this is an optimization for skipping rescheduler and retry the task sooner.
 	// this is useful for errors like workflow busy, which doesn't have to wait for
 	// the longer rescheduling backoff.
-	if e.attempt > resubmitMaxAttempts {
+	if e.attempt.Load() > resubmitMaxAttempts {
 		return false
 	}
 
@@ -784,14 +790,14 @@ func (e *executableImpl) backoffDuration(
 		common.IsInternalError(err) {
 		// using a different reschedule policy to slow down retry
 		// as immediate retry typically won't resolve the issue.
-		return taskNotReadyReschedulePolicy.ComputeNextDelay(0, e.attempt, err)
+		return taskNotReadyReschedulePolicy.ComputeNextDelay(0, int(e.attempt.Load()), err)
 	}
 
 	if err == consts.ErrDependencyTaskNotCompleted {
-		return dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, e.attempt, err)
+		return dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, int(e.attempt.Load()), err)
 	}
 
-	backoffDuration := reschedulePolicy.ComputeNextDelay(0, e.attempt, err)
+	backoffDuration := reschedulePolicy.ComputeNextDelay(0, int(e.attempt.Load()), err)
 	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) && common.IsResourceExhausted(err) {
 		// try a different reschedule policy to slow down retry
 		// upon system resource exhausted error and pick the longer backoff duration
@@ -805,11 +811,15 @@ func (e *executableImpl) backoffDuration(
 }
 
 func (e *executableImpl) incAttempt() {
-	e.attempt++
+	attempt := e.attempt.Add(1)
 
-	if e.attempt > taskCriticalLogMetricAttempts {
-		metrics.TaskAttempt.With(e.chasmMetricsHandler).Record(int64(e.attempt))
+	if attempt > taskCriticalLogMetricAttempts {
+		metrics.TaskAttempt.With(e.chasmMetricsHandler).Record(attempt)
 	}
+}
+
+func (e *executableImpl) resetAttempt() {
+	e.attempt.Store(1)
 }
 
 func (e *executableImpl) refreshMetricsHandlers(executionMetricTags []metrics.Tag) {

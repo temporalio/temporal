@@ -17,6 +17,8 @@ import (
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	workerpb "go.temporal.io/api/worker/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
@@ -29,6 +31,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -108,6 +111,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		)
 		out.handler = newWorkflowTaskCompletedHandler(
 			t.Name(), // identity
+			"",       // workerControlTaskQueue
 			123,      // workflowTaskCompletedID
 			out.ms,
 			out.updates,
@@ -449,4 +453,201 @@ func (l testWorkflowLibrary) CommandHandlers() map[enumspb.CommandType]chasmwork
 
 func (l testWorkflowLibrary) EventDefinitions() []chasmworkflow.EventDefinition {
 	return nil
+}
+
+func TestFlushWorkerCommandsTasks(t *testing.T) {
+	t.Parallel()
+
+	token1 := []byte("token1")
+	token2 := []byte("token2")
+	token3 := []byte("token3")
+	token4 := []byte("token4")
+
+	makeCommands := func(tokens ...[]byte) []*workerpb.WorkerCommand {
+		commands := make([]*workerpb.WorkerCommand, 0, len(tokens))
+		for _, token := range tokens {
+			commands = append(commands, &workerpb.WorkerCommand{
+				Type: &workerpb.WorkerCommand_CancelActivity{
+					CancelActivity: &workerpb.CancelActivityCommand{
+						TaskToken: token,
+					},
+				},
+			})
+		}
+		return commands
+	}
+
+	t.Run("batches commands by control queue", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		expectedCommands := makeCommands(token1, token2, token3)
+		ms.EXPECT().AddWorkerCommandsTasks(
+			expectedCommands,
+			"control-queue-1",
+		).Return(nil).Times(1)
+
+		handler := &workflowTaskCompletedHandler{
+			mutableState: ms,
+			pendingWorkerCommandsByControlQueue: map[string][]*workerpb.WorkerCommand{
+				"control-queue-1": expectedCommands,
+			},
+		}
+
+		err := handler.flushWorkerCommandsTasks()
+		require.NoError(t, err)
+	})
+
+	t.Run("creates separate tasks for different control queues", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		calls := make(map[string][]*workerpb.WorkerCommand)
+		ms.EXPECT().AddWorkerCommandsTasks(
+			gomock.Any(),
+			gomock.Any(),
+		).DoAndReturn(func(commands []*workerpb.WorkerCommand, queue string) error {
+			calls[queue] = commands
+			return nil
+		}).Times(2)
+
+		handler := &workflowTaskCompletedHandler{
+			mutableState: ms,
+			pendingWorkerCommandsByControlQueue: map[string][]*workerpb.WorkerCommand{
+				"control-queue-1": makeCommands(token1, token2),
+				"control-queue-2": makeCommands(token3, token4),
+			},
+		}
+
+		err := handler.flushWorkerCommandsTasks()
+		require.NoError(t, err)
+
+		require.Len(t, calls["control-queue-1"], 2)
+		require.Len(t, calls["control-queue-2"], 2)
+	})
+
+	t.Run("does nothing when no pending commands", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		handler := &workflowTaskCompletedHandler{
+			mutableState:                        ms,
+			pendingWorkerCommandsByControlQueue: nil,
+		}
+
+		err := handler.flushWorkerCommandsTasks()
+		require.NoError(t, err)
+	})
+}
+
+func TestHandleCommandRequestCancelActivity_WorkerCommands(t *testing.T) {
+	t.Parallel()
+
+	cancelReqEvent := &historypb.HistoryEvent{EventId: 10}
+	scheduledEventID := int64(5)
+	controlQueue := "/_sys/worker-commands/test-ns/key1"
+
+	t.Run("collects commands for activities with clock, skips those without", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		// Activity 1: started with clock (post-deploy) — should produce a cancel command.
+		ai1 := &persistencespb.ActivityInfo{
+			ScheduledEventId:       int64(5),
+			StartedEventId:         7,
+			ActivityId:             "act-1",
+			WorkerControlTaskQueue: controlQueue,
+			StartedClock:           &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 100},
+			Version:                1,
+			StartVersion:           1,
+			Attempt:                1,
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity"},
+		}
+		// Activity 2: started without clock (pre-deploy) — should be skipped.
+		ai2 := &persistencespb.ActivityInfo{
+			ScheduledEventId:       int64(6),
+			StartedEventId:         8,
+			ActivityId:             "act-2",
+			WorkerControlTaskQueue: controlQueue,
+			StartedClock:           nil,
+			Version:                1,
+			StartVersion:           1,
+			Attempt:                1,
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity"},
+		}
+		// Activity 3: started with clock — should also produce a cancel command.
+		ai3 := &persistencespb.ActivityInfo{
+			ScheduledEventId:       int64(7),
+			StartedEventId:         9,
+			ActivityId:             "act-3",
+			WorkerControlTaskQueue: controlQueue,
+			StartedClock:           &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 200},
+			Version:                1,
+			StartVersion:           1,
+			Attempt:                1,
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity"},
+		}
+
+		ms.EXPECT().AddActivityTaskCancelRequestedEvent(int64(123), int64(5), "test-identity").
+			Return(&historypb.HistoryEvent{EventId: 10}, ai1, nil)
+		ms.EXPECT().AddActivityTaskCancelRequestedEvent(int64(123), int64(6), "test-identity").
+			Return(&historypb.HistoryEvent{EventId: 11}, ai2, nil)
+		ms.EXPECT().AddActivityTaskCancelRequestedEvent(int64(123), int64(7), "test-identity").
+			Return(&historypb.HistoryEvent{EventId: 12}, ai3, nil)
+		ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+		ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+
+		handler := &workflowTaskCompletedHandler{
+			identity:                "test-identity",
+			workflowTaskCompletedID: 123,
+			mutableState:            ms,
+			tokenSerializer:         tasktoken.NewSerializer(),
+			logger:                  log.NewNoopLogger(),
+		}
+
+		for _, id := range []int64{5, 6, 7} {
+			_, err := handler.handleCommandRequestCancelActivity(
+				context.Background(),
+				&commandpb.RequestCancelActivityTaskCommandAttributes{ScheduledEventId: id},
+			)
+			require.NoError(t, err)
+		}
+
+		// Activities 1 and 3 (with clock) should produce commands; activity 2 (nil clock) should be skipped.
+		require.Len(t, handler.pendingWorkerCommandsByControlQueue[controlQueue], 2,
+			"only activities with StartedClock should produce cancel commands")
+	})
+
+	t.Run("started activity without control queue does not collect worker command", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		ai := &persistencespb.ActivityInfo{
+			ScheduledEventId:       scheduledEventID,
+			StartedEventId:         7,
+			ActivityId:             "act-1",
+			WorkerControlTaskQueue: "", // worker doesn't support control tasks
+			StartedClock:           &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 100},
+		}
+
+		ms.EXPECT().AddActivityTaskCancelRequestedEvent(int64(123), scheduledEventID, "test-identity").
+			Return(cancelReqEvent, ai, nil)
+
+		handler := &workflowTaskCompletedHandler{
+			identity:                "test-identity",
+			workflowTaskCompletedID: 123,
+			mutableState:            ms,
+			logger:                  log.NewNoopLogger(),
+		}
+
+		event, err := handler.handleCommandRequestCancelActivity(
+			context.Background(),
+			&commandpb.RequestCancelActivityTaskCommandAttributes{
+				ScheduledEventId: scheduledEventID,
+			},
+		)
+		require.NoError(t, err)
+		require.Equal(t, cancelReqEvent, event)
+		require.Empty(t, handler.pendingWorkerCommandsByControlQueue)
+	})
 }

@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -2776,6 +2777,13 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 			),
 		).Record(1)
 	}
+
+	if tsc := startRequest.GetStartRequest().GetTimeSkippingConfig(); tsc != nil && tsc.GetEnabled() {
+		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: tsc,
+		}
+	}
+
 	return event, nil
 }
 
@@ -4093,6 +4101,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	deployment *deploymentpb.Deployment,
 	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
+	workerControlTaskQueue string,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionActivityTaskStarted
 	err := ms.checkMutability(opTag)
@@ -4120,6 +4129,8 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		ai.LastWorkerDeploymentVersion = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment))
 		ai.LastDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment)
 	}
+
+	ai.WorkerControlTaskQueue = workerControlTaskQueue
 
 	if !ai.HasRetryPolicy {
 		event := ms.hBuilder.AddActivityTaskStartedEvent(
@@ -4400,6 +4411,10 @@ func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 	}
 
 	return actCancelReqEvent, ai, nil
+}
+
+func (ms *MutableStateImpl) AddWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error {
+	return ms.taskGenerator.GenerateWorkerCommandsTasks(commands, controlQueue)
 }
 
 func (ms *MutableStateImpl) ApplyActivityTaskCancelRequestedEvent(

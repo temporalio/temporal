@@ -2633,6 +2633,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.NoError(t, err)
 	require.NotNil(t, describeResp2)
 	require.NotNil(t, describeResp2.GetInfo())
+	require.Positive(t, describeResp2.GetInfo().GetStateSizeBytes())
 	require.Greater(t, describeResp2.GetInfo().GetStateTransitionCount(), describeResp1.GetInfo().GetStateTransitionCount())
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, describeResp2.GetInfo().GetStatus(),
 		"expected Running but is %s", describeResp2.GetInfo().GetStatus())
@@ -2651,6 +2652,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.NoError(t, err)
 	require.NotNil(t, describeResp3)
 	require.NotNil(t, describeResp3.GetInfo())
+	require.Positive(t, describeResp3.GetInfo().GetStateSizeBytes())
 	require.Greater(t, describeResp3.GetInfo().GetStateTransitionCount(), describeResp2.GetInfo().GetStateTransitionCount())
 
 	// The activity has timed out due to StartToClose. This is an attempt failure, therefore the
@@ -2872,6 +2874,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 			protocmp.IgnoreFields(&activitypb.ActivityExecutionInfo{},
 				"execution_duration",
 				"schedule_time",
+				"state_size_bytes",
 				"state_transition_count",
 			),
 		)
@@ -2879,6 +2882,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 		require.Equal(t, respInfo.GetExecutionDuration().AsDuration(), time.Duration(0)) // Never completed, so expect 0
 		require.Nil(t, describeResp.GetInfo().GetCloseTime())
 		require.Positive(t, respInfo.GetScheduleTime().AsTime().Unix())
+		require.Positive(t, respInfo.GetStateSizeBytes())
 		require.Positive(t, respInfo.GetStateTransitionCount())
 
 		protorequire.ProtoEqual(t, defaultInput, describeResp.Input)
@@ -2933,10 +2937,12 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 		protocmp.IgnoreFields(&activitypb.ActivityExecutionInfo{},
 			"execution_duration",
 			"schedule_time",
+			"state_size_bytes",
 			"state_transition_count",
 		),
 	)
 	require.Empty(t, diff)
+	require.Positive(t, firstDescribeResp.GetInfo().GetStateSizeBytes())
 
 	taskQueuePollErr := make(chan error, 1)
 	activityPollDone := make(chan struct{})
@@ -2992,10 +2998,12 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 				"execution_duration",
 				"last_started_time",
 				"schedule_time",
+				"state_size_bytes",
 				"state_transition_count",
 			),
 		)
 		require.Empty(t, diff)
+		require.Positive(t, describeResp.GetInfo().GetStateSizeBytes())
 
 		protorequire.ProtoEqual(t, defaultInput, describeResp.Input)
 
@@ -3135,6 +3143,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_Completed() 
 			require.NotNil(t, info.GetCloseTime())
 			require.Positive(t, info.GetCloseTime().AsTime().Unix())
 			require.GreaterOrEqual(t, info.GetCloseTime().AsTime().UnixNano(), info.GetLastStartedTime().AsTime().UnixNano())
+			require.Positive(t, info.GetStateSizeBytes())
 			require.Positive(t, info.GetStateTransitionCount())
 
 			tc.outcomeValidator(t, describeResp)
