@@ -183,6 +183,8 @@ var TransitionCompleted = chasm.NewTransition(
 	activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 	func(a *Activity, ctx chasm.MutableContext, event completeEvent) error {
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+			a.PauseState = nil
+
 			req := event.req.GetCompleteRequest()
 
 			attempt := a.LastAttempt.Get(ctx)
@@ -402,8 +404,7 @@ var TransitionPaused = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 	func(a *Activity, ctx chasm.MutableContext, event pauseEvent) error {
-		attempt := a.LastAttempt.Get(ctx)
-		attempt.Stamp++
+		a.pause(ctx, event)
 		return nil
 	},
 )

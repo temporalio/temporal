@@ -664,17 +664,11 @@ func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activityp
 		}); err != nil {
 			return nil, err
 		}
+		return &activitypb.PauseActivityExecutionResponse{}, nil
 	}
 	// STARTED → flag-only pause. Status stays STARTED so the worker's token remains valid.
 	// The worker will see ActivityPaused=true on the next heartbeat.
-	frontendReq := req.GetFrontendRequest()
-	a.PauseState = &activitypb.ActivityPauseState{
-		PauseTime: timestamppb.New(ctx.Now(a)),
-		Identity:  frontendReq.GetIdentity(),
-		Reason:    frontendReq.GetReason(),
-	}
-	a.emitOnPausedMetrics(metricsHandler)
-
+	a.pause(ctx, pauseEvent{req.GetFrontendRequest(), metricsHandler})
 	return &activitypb.PauseActivityExecutionResponse{}, nil
 }
 
@@ -705,15 +699,12 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 	}
 
 	// Flag-based pause (status is STARTED, CANCEL_REQUESTED, or SCHEDULED after retry while paused).
-	a.PauseState = nil
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED {
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
+		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
 		// Worker continues with its existing token — no stamp bump needed, no dispatch task.
-		a.emitOnUnpausedMetrics(metricsHandler)
-		return &activitypb.UnpauseActivityExecutionResponse{}, nil
-	}
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
 		// Cancel takes precedence over pause. Unpause clears the pause flag but does not re-dispatch;
 		// the activity remains CANCEL_REQUESTED and will be cancelled when the worker responds.
+		a.PauseState = nil
 		a.emitOnUnpausedMetrics(metricsHandler)
 		return &activitypb.UnpauseActivityExecutionResponse{}, nil
 	}
@@ -752,6 +743,23 @@ func (a *Activity) unpause(
 		chasm.TaskAttributes{ScheduledTime: scheduleTime},
 		&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()})
 	a.emitOnUnpausedMetrics(event.metricsHandler)
+	return nil
+}
+func (a *Activity) pause(
+	ctx chasm.MutableContext,
+	event pauseEvent,
+) error {
+	attempt := a.LastAttempt.Get(ctx)
+	attempt.Stamp++
+
+	a.PauseState = &activitypb.ActivityPauseState{
+		PauseTime: timestamppb.New(ctx.Now(a)),
+		Identity:  event.req.GetIdentity(),
+		Reason:    event.req.GetReason(),
+	}
+	a.emitOnPausedMetrics(event.metricsHandler)
+
+	a.emitOnPausedMetrics(event.metricsHandler)
 	return nil
 }
 
@@ -1259,14 +1267,14 @@ func (a *Activity) emitOnPausedMetrics(
 	handler metrics.Handler,
 ) {
 	metrics.ActivityPauseRequests.With(handler).Record(1)
-	metrics.ActivityTaskPause.With(handler).Record(1)
+	metrics.ActivityPause.With(handler).Record(1)
 }
 
 func (a *Activity) emitOnUnpausedMetrics(
 	handler metrics.Handler,
 ) {
 	metrics.ActivityUnpauseRequests.With(handler).Record(1)
-	metrics.ActivityTaskUnpause.With(handler).Record(1)
+	metrics.ActivityUnpause.With(handler).Record(1)
 }
 
 // SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface.
