@@ -6468,34 +6468,50 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEv
 	// Use fixed UTC times so duration arithmetic is exact.
 	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 
-	makeEvent := func(eventTime, targetTime time.Time, disabledAfterBound bool) *historypb.HistoryEvent {
+	makeEvent := func(eventTime time.Time, targetTime *time.Time, disabledAfterBound bool) *historypb.HistoryEvent {
+		attr := &historypb.WorkflowExecutionTimeSkippingTransitionedEventAttributes{
+			DisabledAfterBound: disabledAfterBound,
+		}
+		if targetTime != nil {
+			attr.TargetTime = timestamppb.New(*targetTime)
+		}
 		return &historypb.HistoryEvent{
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED,
 			EventTime: timestamppb.New(eventTime),
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionTimeSkippingTransitionedEventAttributes{
-				WorkflowExecutionTimeSkippingTransitionedEventAttributes: &historypb.WorkflowExecutionTimeSkippingTransitionedEventAttributes{
-					TargetTime:         timestamppb.New(targetTime),
-					DisabledAfterBound: disabledAfterBound,
-				},
+				WorkflowExecutionTimeSkippingTransitionedEventAttributes: attr,
 			},
 		}
 	}
+
+	s.Run("ErrorWhenTimeSkippingInfoNil", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		targetTime := baseTime.Add(2 * time.Hour)
+		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(),
+			makeEvent(baseTime, &targetTime, false),
+		)
+		s.Require().Error(err)
+	})
 
 	s.Run("AccumulatesDurationFirstTime", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
 		}
+		s.mutableState.timeSkippingInfoUpdated = false
+		targetTime := baseTime.Add(2 * time.Hour)
 
 		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 			context.Background(),
-			makeEvent(baseTime, baseTime.Add(2*time.Hour), false),
+			makeEvent(baseTime, &targetTime, false),
 		)
-		s.NoError(err)
+		s.Require().NoError(err)
 
 		accumulated := s.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
-		s.NotNil(accumulated)
-		s.Equal(2*time.Hour, accumulated.AsDuration())
-		s.True(s.mutableState.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)
+		s.Require().NotNil(accumulated)
+		s.Require().Equal(2*time.Hour, accumulated.AsDuration())
+		s.Require().True(s.mutableState.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)
+		s.Require().True(s.mutableState.timeSkippingInfoUpdated)
 	})
 
 	s.Run("AccumulatesDurationAdditively", func() {
@@ -6503,15 +6519,62 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEv
 			Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 		}
+		targetTime := baseTime.Add(2 * time.Hour)
 
 		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 			context.Background(),
-			makeEvent(baseTime, baseTime.Add(2*time.Hour), false),
+			makeEvent(baseTime, &targetTime, false),
 		)
-		s.NoError(err)
+		s.Require().NoError(err)
 
 		accumulated := s.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
-		s.Equal(3*time.Hour, accumulated.AsDuration()) // 1h pre-existing + 2h new
+		s.Require().Equal(3*time.Hour, accumulated.AsDuration()) // 1h pre-existing + 2h new
+	})
+
+	s.Run("ErrorWhenNilTargetTimeAndNotDisabledAfterBound", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+
+		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(),
+			makeEvent(baseTime, nil, false),
+		)
+		s.Require().Error(err)
+	})
+
+	s.Run("NilTargetTimeWithDisabledAfterBoundDoesNotAccumulateDuration", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		}
+
+		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(),
+			makeEvent(baseTime, nil, true),
+		)
+		s.Require().NoError(err)
+
+		accumulated := s.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
+		s.Require().Equal(time.Hour, accumulated.AsDuration())
+		s.Require().False(s.mutableState.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)
+	})
+
+	s.Run("DisabledAfterBoundDisablesConfigAndAccumulatesDuration", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		targetTime := baseTime.Add(2 * time.Hour)
+
+		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(),
+			makeEvent(baseTime, &targetTime, true),
+		)
+		s.Require().NoError(err)
+
+		s.Require().False(s.mutableState.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)
+		accumulated := s.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
+		s.Require().Equal(2*time.Hour, accumulated.AsDuration())
 	})
 }
 
@@ -6556,7 +6619,7 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionTimeSkippingTransitionedEven
 		}
 		targetTime := s.mockShard.GetTimeSource().Now().Add(time.Hour)
 		// Build an event with DisabledAfterBound=true directly via the history builder.
-		event := s.mutableState.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(targetTime, true)
+		event := s.mutableState.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(&targetTime, true)
 		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(context.Background(), event)
 		s.NoError(err)
 		s.False(s.mutableState.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)

@@ -4000,7 +4000,7 @@ func (ms *MutableStateImpl) ShouldExecuteTimeSkipping() bool {
 }
 
 // AddWorkflowExecutionTimeSkippingTransitionedEvent adds a workflow execution time skipping transitioned event to the mutable state.
-// This should be called only when IsTimeSkippingAutoSkippable returns true.
+// This should only be called only when `ShouldExecuteTimeSkipping` returns true.
 func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowExecutionTimeSkippingTransitioned
@@ -4012,22 +4012,32 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(ct
 	// TODO@time-skipping: calculation of disabledAfterBound
 	disabledAfterBound := false
 
-	// get the earliest pending timer info
-	// generate the time-skipping transitioned event
-	// TODO@time-skipping: calculate the minimum of next user timer and time bound
-	var nextUserTimerInfo *persistencespb.TimerInfo
+	// TODO@time-skipping: the calculation of nextTimePointToSkip will be changed when bound is introduced
+	var nextTimePointToSkip *persistencespb.TimerInfo
 	for _, timerInfo := range ms.GetPendingTimerInfos() {
-		if nextUserTimerInfo == nil || timerInfo.ExpiryTime.AsTime().Before(nextUserTimerInfo.ExpiryTime.AsTime()) {
-			nextUserTimerInfo = timerInfo
+		if nextTimePointToSkip == nil || timerInfo.ExpiryTime.AsTime().Before(nextTimePointToSkip.ExpiryTime.AsTime()) {
+			nextTimePointToSkip = timerInfo
 		}
 	}
-	if !disabledAfterBound && nextUserTimerInfo == nil {
-		return nil, serviceerror.NewInternal("time skipping is triggered when there is no pending timer info")
-	}
-	targetTime := nextUserTimerInfo.ExpiryTime.AsTime()
 
-	// build and apply the event
-	event := ms.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(targetTime, disabledAfterBound)
+	// shouldn't happen if called after `ShouldExecuteTimeSkipping` returns true
+	if !disabledAfterBound && nextTimePointToSkip == nil {
+		return nil, serviceerror.NewInternal("time skipping is triggered when conditions are not met")
+	}
+
+	if nextTimePointToSkip == nil {
+		event := ms.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(
+			nil,
+			disabledAfterBound,
+		)
+		return event, ms.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx, event)
+	}
+
+	targetTime := nextTimePointToSkip.ExpiryTime.AsTime()
+	event := ms.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(
+		&targetTime,
+		disabledAfterBound,
+	)
 	return event, ms.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx, event)
 }
 
@@ -4035,26 +4045,34 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(ct
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error {
 
 	attr := event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
-	skippedDuration := attr.GetTargetTime().AsTime().Sub(event.GetEventTime().AsTime())
-	disabledAfterBound := attr.GetDisabledAfterBound()
-
+	// validate
 	if ms.executionInfo.TimeSkippingInfo == nil {
 		return serviceerror.NewInternal(
-			"time skipping info is not set in mutable state when applying time skipping transitioned event, mutable state is corrupted",
+			"TimeSkippingInfo is not set when applying WorkflowExecutionTimeSkippingTransitionedEvent, mutable state is corrupted",
 		)
 	}
-	if ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration == nil {
-		ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(skippedDuration)
-	} else {
-		ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(
-			ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration() + skippedDuration,
+	if attr.TargetTime == nil && !attr.GetDisabledAfterBound() {
+		return serviceerror.NewInternal(
+			"empty WorkflowExecutionTimeSkippingTransitionedEvent found, event is corrupted",
 		)
-	}
-	if disabledAfterBound {
-		ms.executionInfo.TimeSkippingInfo.Config.Enabled = false
 	}
 
+	// init
+	if ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration == nil {
+		ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(0)
+	}
+
+	// calculate
+	accumulatedSkippedDuration := ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration()
+	if attr.TargetTime != nil {
+		accumulatedSkippedDuration += attr.GetTargetTime().AsTime().Sub(event.GetEventTime().AsTime())
+	}
+
+	// update
+	ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(accumulatedSkippedDuration)
+	ms.executionInfo.TimeSkippingInfo.Config.Enabled = !attr.GetDisabledAfterBound()
 	ms.timeSkippingInfoUpdated = true
+
 	return nil
 }
 

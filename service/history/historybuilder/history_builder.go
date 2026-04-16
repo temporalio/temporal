@@ -323,7 +323,7 @@ func (b *HistoryBuilder) AddActivityTaskScheduledEvent(
 }
 
 func (b *HistoryBuilder) AddWorkflowExecutionTimeSkippingTransitionedEvent(
-	targetTime time.Time,
+	targetTime *time.Time,
 	triggeredDisable bool,
 ) *historypb.HistoryEvent {
 	event := b.CreateWorkflowExecutionTimeSkippingTransitionedEvent(targetTime, triggeredDisable)
