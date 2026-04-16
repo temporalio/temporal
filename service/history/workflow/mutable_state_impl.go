@@ -4038,6 +4038,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	skippedDuration := attr.GetTargetTime().AsTime().Sub(event.GetEventTime().AsTime())
 	disabledAfterBound := attr.GetDisabledAfterBound()
 
+	if ms.executionInfo.TimeSkippingInfo == nil {
+		return serviceerror.NewInternal(
+			"time skipping info is not set in mutable state when applying time skipping transitioned event, mutable state is corrupted",
+		)
+	}
 	if ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration == nil {
 		ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(skippedDuration)
 	} else {
@@ -4045,10 +4050,10 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 			ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration() + skippedDuration,
 		)
 	}
-
 	if disabledAfterBound {
 		ms.executionInfo.TimeSkippingInfo.Config.Enabled = false
 	}
+
 	ms.timeSkippingInfoUpdated = true
 	return nil
 }

@@ -321,7 +321,7 @@ message WorkflowExecutionInfo {
 }
 
 message TimeSkippingInfo {
-  // Current tconfiguration for the workflow.
+  // Current time-skipping configuration for the workflow.
   temporal.api.workflow.v1.TimeSkippingConfig config = 1;
 
   // Runtime history of time skipping for the workflow.
