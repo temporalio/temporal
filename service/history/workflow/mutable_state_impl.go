@@ -3999,9 +3999,10 @@ func (ms *MutableStateImpl) shouldExecuteTimeSkipping() bool {
 	}
 
 	// time point check
+	// TODO@time-skipping: need to support start-with-delay
+	// TODO@time-skipping: when bound is introduced, we need to check if the bound is reached
 	if len(ms.GetPendingTimerInfos()) == 0 {
 		noSkippingReason = "no related time point to skip to"
-		// TODO@time-skipping: when bound is introduced, we need to check if the bound is reached
 		return false
 	}
 	return true
@@ -4080,12 +4081,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	ms.timeSkippingInfoUpdated = true
 
 	return nil
-}
-
-func (ms *MutableStateImpl) GetTimeSkippingVirtualTime() time.Time {
-	// TODO@time-skipping: need to use this to adjust all timestamps for tasks sent to SDK worker.
-	offset := ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
-	return ms.timeSource.Now().Add(offset.AsDuration())
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskFailedEvent() error {
@@ -7754,14 +7749,13 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	}
 
 	// TODO merge active & passive task generation
-	// NOTE: this function must be the last call
+	// NOTE: this function must be the last call before time skipping is applied
 	//  since we only generate at most one activity & user timer,
 	//  regardless of how many activity & user timer created
 	//  so the calculation must be at the very end
 	if err := ms.closeTransactionHandleActivityUserTimerTasks(transactionPolicy); err != nil {
 		return err
 	}
-
 	if regenerateTimerTasksForTimeSkipping {
 		if err := ms.closeTransactionRegenerateTimerTasksForTimeSkipping(transactionPolicy); err != nil {
 			return err
@@ -8468,13 +8462,11 @@ func (ms *MutableStateImpl) closeTransactionHandlerTimeSkipping(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
 ) (regenTimerTasksForTimeSkipping bool) {
-	// TODO@time-skipping: need to check if passive cluster need this function
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
 		if !ms.IsWorkflowExecutionRunning() {
 			return false
 		}
-		// TODO@time-skipping: need to support start-with-delay
 		if ms.shouldExecuteTimeSkipping() {
 			_, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx)
 			if err != nil {
@@ -8504,13 +8496,13 @@ func (ms *MutableStateImpl) closeTransactionHandlerTimeSkipping(
 func (ms *MutableStateImpl) closeTransactionRegenerateTimerTasksForTimeSkipping(
 	transactionPolicy historyi.TransactionPolicy,
 ) error {
-	// TODO@time-skipping: need to check if passive cluster need this function
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
 		if !ms.IsWorkflowExecutionRunning() {
 			return nil
 		}
-		return ms.taskGenerator.RegenerateTimerTasksForTimeSkipping()
+		ms.taskGenerator.RegenerateTimerTasksForTimeSkipping()
+		return nil
 	case historyi.TransactionPolicyPassive:
 		return nil
 	default:

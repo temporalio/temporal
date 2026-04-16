@@ -6506,32 +6506,6 @@ func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
 	})
 }
 
-func (s *mutableStateSuite) TestGetTimeSkippingVirtualTime() {
-	s.Run("ZeroAccumulatedDuration", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
-			AccumulatedSkippedDuration: durationpb.New(0),
-		}
-		before := s.mockShard.GetTimeSource().Now()
-		virtualTime := s.mutableState.GetTimeSkippingVirtualTime()
-		after := s.mockShard.GetTimeSource().Now()
-		s.True(!virtualTime.Before(before) && !virtualTime.After(after),
-			"virtual time %v should be between %v and %v", virtualTime, before, after)
-	})
-
-	s.Run("WithAccumulatedDuration", func() {
-		offset := 5 * time.Hour
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
-			AccumulatedSkippedDuration: durationpb.New(offset),
-		}
-		before := s.mockShard.GetTimeSource().Now()
-		virtualTime := s.mutableState.GetTimeSkippingVirtualTime()
-		after := s.mockShard.GetTimeSource().Now()
-		s.WithinDuration(before.Add(offset), virtualTime, after.Sub(before)+time.Millisecond)
-	})
-}
-
 func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEvent() {
 	// Use fixed UTC times so duration arithmetic is exact.
 	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)

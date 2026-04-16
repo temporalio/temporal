@@ -2738,20 +2738,6 @@ func (mr *MockMutableStateMockRecorder) GetStartedWorkflowTask() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStartedWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).GetStartedWorkflowTask))
 }
 
-// GetTimeSkippingVirtualTime mocks base method.
-func (m *MockMutableState) GetTimeSkippingVirtualTime() time.Time {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTimeSkippingVirtualTime")
-	ret0, _ := ret[0].(time.Time)
-	return ret0
-}
-
-// GetTimeSkippingVirtualTime indicates an expected call of GetTimeSkippingVirtualTime.
-func (mr *MockMutableStateMockRecorder) GetTimeSkippingVirtualTime() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimeSkippingVirtualTime", reflect.TypeOf((*MockMutableState)(nil).GetTimeSkippingVirtualTime))
-}
-
 // GetTransientWorkflowTaskInfo mocks base method.
 func (m *MockMutableState) GetTransientWorkflowTaskInfo(workflowTask *WorkflowTaskInfo, identity string) *history0.TransientWorkflowTaskInfo {
 	m.ctrl.T.Helper()

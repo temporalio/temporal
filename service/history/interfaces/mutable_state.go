@@ -401,6 +401,5 @@ type (
 		// time-skipping related methods
 		AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context) (*historypb.HistoryEvent, error)
 		ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error
-		GetTimeSkippingVirtualTime() time.Time
 	}
 )

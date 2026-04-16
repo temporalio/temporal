@@ -81,7 +81,7 @@ type (
 		GenerateUserTimerTasks() error
 
 		// time skipping tasks
-		RegenerateTimerTasksForTimeSkipping() error
+		RegenerateTimerTasksForTimeSkipping()
 
 		// replication tasks
 		GenerateHistoryReplicationTasks(
@@ -1031,26 +1031,30 @@ func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.St
 	return true
 }
 
-func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
+// RegenerateTimerTasksForTimeSkipping regenerates the timer tasks for time skipping.
+// This function is not idempotent, but when called twice, logically the timerTasks regenerated will have the same contents,
+// and the only difference is the TaskID.
+// TODO@time-skipping: currently not safe to call in replication context
+func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() {
 	if r.mutableState.GetExecutionInfo().TimeSkippingInfo == nil {
-		return nil
+		return
 	}
 	accumulatedSkippedDuration := r.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration()
-	// todo@time-skipping: to add a precision level for time-skipping runtime
 	if accumulatedSkippedDuration == 0 {
-		return nil
+		return
 	}
-
-	// pendingTimerInfoIDs in mutable state is only timers that need regenerated
-	// and the new timerTasks should not change the original pendingTimerInfoIDs in mutable state
-	for _, timerInfo := range r.mutableState.GetPendingTimerInfos() {
-		visibilityTimestamp := timerInfo.ExpiryTime.AsTime().Add(-accumulatedSkippedDuration)
-		r.mutableState.AddTasks(&tasks.UserTimerTask{
-			// TaskID is set by shard
-			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			VisibilityTimestamp: visibilityTimestamp,
-			EventID:             timerInfo.GetStartedEventId(),
-		})
+	userTimerSequenceIDs := r.getTimerSequence().LoadAndSortUserTimers()
+	if len(userTimerSequenceIDs) == 0 {
+		// This method maybe called when there are no user timers to regenerate,
+		// time-skipping transition may happen without user timers
+		return
 	}
-	return nil
+	firstUserTimerSequenceID := userTimerSequenceIDs[0]
+	visibilityTimestamp := firstUserTimerSequenceID.Timestamp.Add(-accumulatedSkippedDuration)
+	r.mutableState.AddTasks(&tasks.UserTimerTask{
+		// TaskID is set by shard
+		WorkflowKey:         r.mutableState.GetWorkflowKey(),
+		VisibilityTimestamp: visibilityTimestamp,
+		EventID:             firstUserTimerSequenceID.EventID,
+	})
 }

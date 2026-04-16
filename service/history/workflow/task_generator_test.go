@@ -1207,34 +1207,19 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping(t *testing.T) {
 	}).AnyTimes()
 
 	taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
-	err := taskGenerator.RegenerateTimerTasksForTimeSkipping()
-	require.NoError(t, err)
+	taskGenerator.RegenerateTimerTasksForTimeSkipping()
 
-	// Both timers must be regenerated.
-	require.Len(t, capturedTasks, 2)
+	// Only the earliest timer (timer1) must be regenerated.
+	require.Len(t, capturedTasks, 1)
 
-	// Build a map from EventID to task for order-independent verification.
-	taskByEventID := make(map[int64]*tasks.UserTimerTask, 2)
-	for _, task := range capturedTasks {
-		timerTask, ok := task.(*tasks.UserTimerTask)
-		require.True(t, ok, "expected *tasks.UserTimerTask, got %T", task)
-		taskByEventID[timerTask.EventID] = timerTask
-	}
-
+	t1, ok := capturedTasks[0].(*tasks.UserTimerTask)
+	require.True(t, ok, "expected *tasks.UserTimerTask, got %T", capturedTasks[0])
+	require.Equal(t, int64(1), t1.EventID)
 	// Timer 1: expiry now+1h, skipped 1h => visibility = now.
-	t1, ok := taskByEventID[1]
-	require.True(t, ok, "missing regenerated task for EventID=1")
 	require.Equal(t, timer1ExpiryTime.Add(-skippedDuration), t1.VisibilityTimestamp)
 	require.Equal(t, tests.WorkflowKey, t1.WorkflowKey)
 	// TaskID must be zero: the generator leaves it unset; the shard assigns the real ID.
 	require.Equal(t, int64(0), t1.TaskID, "TaskID must be zero (set by shard, not the generator)")
-
-	// Timer 2: expiry now+2h, skipped 1h => visibility = now+1h.
-	t2, ok := taskByEventID[2]
-	require.True(t, ok, "missing regenerated task for EventID=2")
-	require.Equal(t, timer2ExpiryTime.Add(-skippedDuration), t2.VisibilityTimestamp)
-	require.Equal(t, tests.WorkflowKey, t2.WorkflowKey)
-	require.Equal(t, int64(0), t2.TaskID, "TaskID must be zero (set by shard, not the generator)")
 }
 
 func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_EdgeCases(t *testing.T) {
@@ -1284,8 +1269,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_EdgeCases(t *test
 			}
 
 			taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
-			err := taskGenerator.RegenerateTimerTasksForTimeSkipping()
-			require.NoError(t, err)
+			taskGenerator.RegenerateTimerTasksForTimeSkipping()
 		})
 	}
 }
@@ -1330,33 +1314,20 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AccumulatedDurati
 	}).AnyTimes()
 
 	taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
-	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
-	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+	taskGenerator.RegenerateTimerTasksForTimeSkipping()
+	taskGenerator.RegenerateTimerTasksForTimeSkipping()
 
-	// 2 timers × 2 calls = 4 tasks total.
-	require.Len(t, allTasks, 4)
+	// Only the earliest timer (timer1) × 2 calls = 2 tasks total.
+	require.Len(t, allTasks, 2)
 
-	// Tasks from each call are appended in order; index within each pair by EventID
-	// because map iteration order is non-deterministic.
-	byEventID := func(ts []tasks.Task) map[int64]*tasks.UserTimerTask {
-		m := make(map[int64]*tasks.UserTimerTask, len(ts))
-		for _, task := range ts {
-			ut, ok := task.(*tasks.UserTimerTask)
-			require.True(t, ok, "expected *tasks.UserTimerTask, got %T", task)
-			m[ut.EventID] = ut
-		}
-		return m
-	}
-
-	call1 := byEventID(allTasks[:2])
-	call2 := byEventID(allTasks[2:])
-
+	call1Task := allTasks[0].(*tasks.UserTimerTask)
+	require.Equal(t, int64(1), call1Task.EventID)
 	// First call used 10 min: visibility = expiry - 10 min.
-	require.Equal(t, timer1ExpiryTime.Add(-10*time.Minute), call1[1].VisibilityTimestamp)
-	require.Equal(t, timer2ExpiryTime.Add(-10*time.Minute), call1[2].VisibilityTimestamp)
+	require.Equal(t, timer1ExpiryTime.Add(-10*time.Minute), call1Task.VisibilityTimestamp)
 
+	call2Task := allTasks[1].(*tasks.UserTimerTask)
+	require.Equal(t, int64(1), call2Task.EventID)
 	// Second call used 20 min: visibility = expiry - 20 min, NOT expiry - 30 min.
 	// Each call reads AccumulatedSkippedDuration independently; the durations are not stacked.
-	require.Equal(t, timer1ExpiryTime.Add(-20*time.Minute), call2[1].VisibilityTimestamp)
-	require.Equal(t, timer2ExpiryTime.Add(-20*time.Minute), call2[2].VisibilityTimestamp)
+	require.Equal(t, timer1ExpiryTime.Add(-20*time.Minute), call2Task.VisibilityTimestamp)
 }

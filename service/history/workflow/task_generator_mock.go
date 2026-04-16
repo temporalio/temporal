@@ -360,11 +360,9 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateWorkflowStartTasks(startEvent a
 }
 
 // RegenerateTimerTasksForTimeSkipping mocks base method.
-func (m *MockTaskGenerator) RegenerateTimerTasksForTimeSkipping() error {
+func (m *MockTaskGenerator) RegenerateTimerTasksForTimeSkipping() {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RegenerateTimerTasksForTimeSkipping")
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "RegenerateTimerTasksForTimeSkipping")
 }
 
 // RegenerateTimerTasksForTimeSkipping indicates an expected call of RegenerateTimerTasksForTimeSkipping.
