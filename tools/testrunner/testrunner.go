@@ -239,7 +239,7 @@ func Main() {
 
 // nolint:revive,deep-exit
 func (r *runner) reportCrash() {
-	jr := generateStatic([]string{r.crashName}, "crash", failureKindCrash)
+	jr := generateReport([]string{r.crashName}, "crash", failureTypeCrash)
 	jr.path = r.junitOutputPath
 	if err := jr.write(); err != nil {
 		log.Fatal(err)
@@ -321,7 +321,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 				// gotestsum didn't finish writing a JUnit XML. Fall back to parsing
 				// stdout for any "--- FAIL:" lines that completed before the kill.
 				if failedTests := parseFailedTestsFromOutput(stdout); len(failedTests) > 0 {
-					currentAttempt.junitReport = generateStatic(failedTests, "total timeout", failureKindTimeout)
+					currentAttempt.junitReport = generateReport(failedTests, "total timeout", failureTypeTimeout)
 				}
 				// If no failed tests are found either, the current attempt's report
 				// remains empty and mergeReports will include only prior attempts.
@@ -337,7 +337,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		if len(timedoutTests) > 0 {
 			// Run timed out and was aborted.
 			// Update JUnit XML output for timed out tests since none will have been generated.
-			currentAttempt.junitReport = generateStatic(timedoutTests, "timed out", failureKindTimeout)
+			currentAttempt.junitReport = generateReport(timedoutTests, "timed out", failureTypeTimeout)
 			log.Print(stacktrace)
 
 			// Don't retry.

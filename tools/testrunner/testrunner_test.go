@@ -226,14 +226,14 @@ func TestRunnerPrintSummary(t *testing.T) {
 	report1 := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
 	report1.Suites[0].Name = "SuiteA"
 	report1.Suites[0].Testcases[0].Name = "TestAlpha"
-	report1.Suites[0].Testcases[0].Failure.Type = failureKindFailed
+	report1.Suites[0].Testcases[0].Failure.Type = string(failureTypeFailed)
 	report1.Suites[0].Testcases[0].Failure.Data = "alpha failure"
 	report1.path = filepath.Join(dir, "junit.alpha.xml")
 	require.NoError(t, report1.write())
 	report2 := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
 	report2.Suites[0].Name = "SuiteB"
 	report2.Suites[0].Testcases[0].Name = "TestBeta"
-	report2.Suites[0].Testcases[0].Failure.Type = failureKindFailed
+	report2.Suites[0].Testcases[0].Failure.Type = string(failureTypeFailed)
 	report2.Suites[0].Testcases[0].Failure.Data = "beta failure"
 	report2.path = filepath.Join(dir, "junit.beta.xml")
 	require.NoError(t, report2.write())

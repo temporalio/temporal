@@ -28,7 +28,7 @@ func TestGenerateJUnitReportForTimedoutTests(t *testing.T) {
 		"TestCallbacksSuite/TestWorkflowCallbacks_1",
 		"TestCallbacksSuite/TestWorkflowCallbacks_2",
 	}
-	j := generateStatic(testNames, "timeout", failureKindTimeout)
+	j := generateReport(testNames, "timeout", failureTypeTimeout)
 	j.path = out.Name()
 	require.NoError(t, j.write())
 	requireReportEquals(t, "testdata/junit-timeout-output.xml", out.Name())
@@ -61,8 +61,8 @@ func TestNode(t *testing.T) {
 func TestAppendAlertsSuite(t *testing.T) {
 	j := &junitReport{}
 	alerts := []alert{
-		{Kind: alertKindDataRace, Summary: "Data race detected", Details: "WARNING: DATA RACE\n...", Tests: []string{"go.temporal.io/server/tools/testrunner.TestShowPanic"}},
-		{Kind: alertKindPanic, Summary: "This is a panic", Details: "panic: This is a panic\n...", Tests: []string{"TestPanicExample"}},
+		{Type: failureTypeDataRace, Summary: "Data race detected", Details: "WARNING: DATA RACE\n...", Tests: []string{"go.temporal.io/server/tools/testrunner.TestShowPanic"}},
+		{Type: failureTypePanic, Summary: "This is a panic", Details: "panic: This is a panic\n...", Tests: []string{"TestPanicExample"}},
 	}
 	j.appendAlertsSuite(alerts)
 
@@ -84,7 +84,7 @@ func TestAppendAlertsSuite_TruncatesLargeDetails(t *testing.T) {
 	j := &junitReport{}
 	details := "panic: large panic\n" + strings.Repeat("x", junitAlertDetailsMaxBytes) + "\ntrailing sentinel"
 	j.appendAlertsSuite([]alert{{
-		Kind:    alertKindPanic,
+		Type:    failureTypePanic,
 		Summary: "large panic",
 		Details: details,
 		Tests:   []string{"TestLargePanic"},
@@ -128,7 +128,7 @@ func TestMergeReports_SingleReport(t *testing.T) {
 	require.NotContains(t, failureData, "--- FAIL:")
 	for _, tc := range suites[0].Testcases {
 		if tc.Failure != nil {
-			require.Equal(t, failureKindFailed, tc.Failure.Type)
+			require.Equal(t, string(failureTypeFailed), tc.Failure.Type)
 		}
 	}
 }
@@ -201,7 +201,7 @@ func TestMergeReports_PreservesAlertFailureMessage(t *testing.T) {
 	require.Len(t, merged.Suites, 1)
 	require.Len(t, merged.Suites[0].Testcases, 1)
 	require.NotNil(t, merged.Suites[0].Testcases[0].Failure)
-	require.Equal(t, "PANIC", merged.Suites[0].Testcases[0].Failure.Type)
+	require.Equal(t, string(failureTypePanic), merged.Suites[0].Testcases[0].Failure.Type)
 }
 
 func TestMergeReports_PreservesOriginalFailureDataWhenExtractionFindsNothing(t *testing.T) {
@@ -242,7 +242,7 @@ func TestJUnitXMLWellFormed(t *testing.T) {
 		{
 			name: "basic_report",
 			setup: func() *junitReport {
-				return generateStatic([]string{"TestBasic"}, "test", "Test failed")
+				return generateReport([]string{"TestBasic"}, "test", "Test failed")
 			},
 		},
 		{
@@ -251,7 +251,7 @@ func TestJUnitXMLWellFormed(t *testing.T) {
 				j := &junitReport{}
 				alerts := []alert{
 					{
-						Kind:    alertKindPanic,
+						Type:    failureTypePanic,
 						Summary: "runtime error: invalid memory address or nil pointer dereference",
 						Details: "panic: runtime error: invalid memory address or nil pointer dereference\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x123456]\n\ngoroutine 1 [running]:\nmain.TestPanic()\n\t/path/to/test.go:123 +0x456",
 						Tests: []string{
@@ -261,7 +261,7 @@ func TestJUnitXMLWellFormed(t *testing.T) {
 						},
 					},
 					{
-						Kind:    alertKindDataRace,
+						Type:    failureTypeDataRace,
 						Summary: "Data race detected",
 						Details: "WARNING: DATA RACE\nWrite at 0x00c000123456 by goroutine 7:\n  runtime.racewrite()\n      /usr/local/go/src/runtime/race_amd64.s:269 +0x21\n  main.TestDataRace()\n      /path/to/test.go:456 +0x789\n\nPrevious read at 0x00c000123456 by goroutine 8:\n  runtime.raceread()\n      /usr/local/go/src/runtime/race_amd64.s:260 +0x21\n  main.TestDataRace()\n      /path/to/test.go:789 +0xabc",
 						Tests:   []string{"TestDataRace"},
@@ -277,7 +277,7 @@ func TestJUnitXMLWellFormed(t *testing.T) {
 				j := &junitReport{}
 				alerts := []alert{
 					{
-						Kind:    alertKindFatal,
+						Type:    failureTypeFatal,
 						Summary: "Fatal error with special chars: <>&\"'",
 						Details: "fatal error: unexpected signal during runtime execution\n[signal SIGABRT: abort]\n\nStack trace:\n<function> & \"quoted\" 'string'\n\t/path/to/file.go:123",
 						Tests:   []string{"TestSpecialChars"},

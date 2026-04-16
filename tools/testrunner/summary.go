@@ -16,7 +16,7 @@ type summary struct {
 
 // summaryRow is a single entry in the summary table.
 type summaryRow struct {
-	kind    string // e.g. failureKindFailed, DATA RACE, PANIC
+	kind    failureType
 	name    string // test or alert name
 	details string // failure body
 }
@@ -36,7 +36,7 @@ func newSummaryRowsFromReports(reports []*junitReport) []summaryRow {
 					continue
 				}
 				rows = append(rows, summaryRow{
-					kind:    tc.Failure.Type,
+					kind:    failureType(tc.Failure.Type),
 					name:    tc.Name,
 					details: tc.Failure.Data,
 				})
@@ -47,7 +47,7 @@ func newSummaryRowsFromReports(reports []*junitReport) []summaryRow {
 		if byName := strings.Compare(a.name, b.name); byName != 0 {
 			return byName
 		}
-		if byKind := strings.Compare(a.kind, b.kind); byKind != 0 {
+		if byKind := strings.Compare(string(a.kind), string(b.kind)); byKind != 0 {
 			return byKind
 		}
 		return strings.Compare(a.details, b.details)
@@ -95,7 +95,7 @@ func (row summaryRow) String() string {
 		truncated = true
 	}
 
-	kind := row.kind
+	kind := string(row.kind)
 	if strings.Contains(row.name, "(final)") {
 		kind = "❌ " + kind
 	}

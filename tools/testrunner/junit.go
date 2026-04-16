@@ -19,10 +19,16 @@ const alertsSuiteName = "ALERTS"
 
 const junitAlertDetailsMaxBytes = 64 * 1024
 
+type failureType string
+
 const (
-	failureKindFailed  = "Failed"
-	failureKindTimeout = "TIMEOUT"
-	failureKindCrash   = "CRASH"
+	// failureTypeFailed marks a failed assertion.
+	failureTypeFailed   failureType = "Failed"
+	failureTypeTimeout  failureType = "TIMEOUT"
+	failureTypeCrash    failureType = "CRASH"
+	failureTypeDataRace failureType = "DATA RACE"
+	failureTypePanic    failureType = "PANIC"
+	failureTypeFatal    failureType = "FATAL"
 )
 
 type junitReport struct {
@@ -45,15 +51,16 @@ func (j *junitReport) read() error {
 	return nil
 }
 
-// generateStatic creates synthetic failures for non-JUnit failure modes such as
-// timeouts and crashes. Failure.Type is the canonical failure kind for these
-// synthetic rows (for example TIMEOUT or CRASH), and Failure.Data is left empty.
-func generateStatic(names []string, suffix string, message string) *junitReport {
+// generateReport builds a JUnit report for failures that the runner
+// derives itself, such as timeouts and crashes. Failure.Type stores the
+// canonical failure type (for example TIMEOUT or CRASH), and Failure.Data is
+// intentionally left empty.
+func generateReport(names []string, suffix string, kind failureType) *junitReport {
 	var testcases []junit.Testcase
 	for _, name := range names {
 		testcases = append(testcases, junit.Testcase{
 			Name:    fmt.Sprintf("%s (%s)", name, suffix),
-			Failure: newSyntheticFailure(message, ""),
+			Failure: generateFailure(kind, ""),
 		})
 	}
 	return &junitReport{
@@ -68,10 +75,10 @@ func generateStatic(names []string, suffix string, message string) *junitReport 
 	}
 }
 
-func newSyntheticFailure(kind, data string) *junit.Result {
+func generateFailure(kind failureType, data string) *junit.Result {
 	return &junit.Result{
-		Message: kind,
-		Type:    kind,
+		Message: string(kind),
+		Type:    string(kind),
 		Data:    data,
 	}
 }
@@ -95,7 +102,7 @@ func (j *junitReport) write() error {
 // appendAlertsSuite adds a synthetic JUnit suite summarizing high-priority alerts
 // (data races, panics, fatals) so that CI surfaces them prominently.
 func (j *junitReport) appendAlertsSuite(alerts []alert) {
-	// Deduplicate by kind+details to avoid noisy repeats across retries.
+	// Deduplicate by type+details to avoid noisy repeats across retries.
 	alerts = dedupeAlerts(alerts)
 	if len(alerts) == 0 {
 		return
@@ -104,7 +111,7 @@ func (j *junitReport) appendAlertsSuite(alerts []alert) {
 	// Convert alerts to JUnit test cases.
 	var cases []junit.Testcase
 	for _, a := range alerts {
-		name := fmt.Sprintf("%s: %s", a.Kind, a.Summary)
+		name := fmt.Sprintf("%s: %s", a.Type, a.Summary)
 		if p := primaryTestName(a.Tests); p != "" {
 			name = fmt.Sprintf("%s — in %s", name, p)
 		}
@@ -116,10 +123,10 @@ func (j *junitReport) appendAlertsSuite(alerts []alert) {
 		if len(a.Tests) > 0 {
 			fmt.Fprintf(&sb, "Detected in tests:\n\t%s", strings.Join(a.Tests, "\n\t"))
 		}
-		r := newSyntheticFailure(string(a.Kind), strings.TrimRight(sb.String(), "\n"))
+		f := generateFailure(a.Type, strings.TrimRight(sb.String(), "\n"))
 		cases = append(cases, junit.Testcase{
 			Name:    name,
-			Failure: r,
+			Failure: f,
 		})
 	}
 
@@ -160,12 +167,12 @@ func truncateAlertDetails(s string) string {
 }
 
 // dedupeAlerts removes duplicate alerts (e.g., repeated across retries) based
-// on kind and details while preserving the first-seen order.
+// on type and details while preserving the first-seen order.
 func dedupeAlerts(alerts []alert) []alert {
 	seen := make(map[string]struct{}, len(alerts))
 	var out []alert
 	for _, a := range alerts {
-		key := string(a.Kind) + "\n" + a.Details
+		key := string(a.Type) + "\n" + a.Details
 		if _, ok := seen[key]; ok {
 			continue
 		}
@@ -293,7 +300,7 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 							testCase.Failure.Type = testCase.Failure.Message
 						}
 					} else {
-						testCase.Failure.Type = failureKindFailed
+						testCase.Failure.Type = string(failureTypeFailed)
 					}
 				}
 				testCase.Name += suffix

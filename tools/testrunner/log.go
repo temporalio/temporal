@@ -70,18 +70,9 @@ func testOnlyStacktrace(stacktrace string) string {
 	return res
 }
 
-// alertKind represents a category of high-priority alert detected in test output.
-type alertKind string
-
-const (
-	alertKindDataRace alertKind = "DATA RACE"
-	alertKindPanic    alertKind = "PANIC"
-	alertKindFatal    alertKind = "FATAL"
-)
-
 // alert captures a prominent issue detected from stdout/stderr of test runs.
 type alert struct {
-	Kind    alertKind
+	Type    failureType
 	Summary string
 	Details string
 	Tests   []string
@@ -263,7 +254,7 @@ func tryParseDataRace(lines []string, i int, line string) (alert, int, bool) {
 		return false
 	})
 	return alert{
-		Kind:    alertKindDataRace,
+		Type:    failureTypeDataRace,
 		Summary: "Data race detected",
 		Details: block,
 		Tests:   extractTestNames(block),
@@ -277,7 +268,7 @@ func tryParsePanic(lines []string, i int, line string) (alert, int, bool) {
 	}
 	block, end := collectBlock(lines, i, shouldStopOnTestBoundary)
 	return alert{
-		Kind:    alertKindPanic,
+		Type:    failureTypePanic,
 		Summary: strings.TrimSpace(strings.TrimPrefix(line, "panic: ")),
 		Details: block,
 		Tests:   extractTestNames(block),
@@ -291,7 +282,7 @@ func tryParseFatal(lines []string, i int, line string) (alert, int, bool) {
 	}
 	block, end := collectBlock(lines, i, shouldStopOnTestBoundary)
 	return alert{
-		Kind:    alertKindFatal,
+		Type:    failureTypeFatal,
 		Summary: strings.TrimSpace(strings.TrimPrefix(line, "fatal error: ")),
 		Details: block,
 		Tests:   extractTestNames(block),
