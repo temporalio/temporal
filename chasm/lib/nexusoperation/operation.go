@@ -39,9 +39,9 @@ var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancel
 var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation already completed")
 
 type InvocationData struct {
-	Input     *commonpb.Payload
-	Header    map[string]string
-	NexusLink nexus.Link
+	Input      *commonpb.Payload
+	Header     map[string]string
+	NexusLinks []nexus.Link
 }
 
 type OperationStore interface {
@@ -256,7 +256,7 @@ func (o *Operation) loadStartArgs(
 		startToCloseTimeout:    o.GetStartToCloseTimeout().AsDuration(),
 		payload:                invocationData.Input,
 		header:                 invocationData.Header,
-		nexusLink:              invocationData.NexusLink,
+		nexusLinks:             invocationData.NexusLinks,
 		serializedRef:          serializedRef,
 	}, nil
 }

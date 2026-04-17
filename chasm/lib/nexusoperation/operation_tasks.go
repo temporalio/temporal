@@ -169,11 +169,6 @@ func (h *operationInvocationTaskHandler) Execute(
 		header.Set(nexusrpc.HeaderTemporalNexusFailureSupport, "true")
 	}
 
-	var links []nexus.Link
-	if args.nexusLink != (nexus.Link{}) {
-		links = []nexus.Link{args.nexusLink}
-	}
-
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot
@@ -187,7 +182,7 @@ func (h *operationInvocationTaskHandler) Execute(
 		CallbackHeader: nexus.Header{
 			commonnexus.CallbackTokenHeader: token,
 		},
-		Links: links,
+		Links: args.nexusLinks,
 	}
 
 	invocation, err := h.newInvocation(callCtx, ns, endpoint, opRef, args, task, callTimeout, timeoutType)

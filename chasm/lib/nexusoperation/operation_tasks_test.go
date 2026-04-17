@@ -519,9 +519,9 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 
 			env := newInvocationTaskTestEnv(t, op,
 				InvocationData{
-					Input:     mustToPayload(t, "input"),
-					Header:    tc.header,
-					NexusLink: callerLink,
+					Input:      mustToPayload(t, "input"),
+					Header:     tc.header,
+					NexusLinks: []nexus.Link{callerLink},
 				},
 				endpointReg, clientProvider, metricsHandler, cmp.Or(tc.requestTimeout, time.Hour))
 
@@ -1118,7 +1118,7 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 			})
 
 			env := newInvocationTaskTestEnv(t, op,
-				InvocationData{Input: input, NexusLink: callerLink},
+				InvocationData{Input: input, NexusLinks: []nexus.Link{callerLink}},
 				nexustest.FakeEndpointRegistry{}, nil, metricsHandler, time.Hour)
 
 			// Set up system endpoint dependencies.
