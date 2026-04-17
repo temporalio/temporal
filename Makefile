@@ -218,6 +218,11 @@ YAMLFMT := $(LOCALBIN)/yamlfmt-$(YAMLFMT_VER)
 $(YAMLFMT): | $(LOCALBIN)
 	$(call go-install-tool,$(YAMLFMT),github.com/google/yamlfmt/cmd/yamlfmt,$(YAMLFMT_VER))
 
+GO_MUTESTING_VER := v0.0.0-20251226130216-48d0401f00fb
+GO_MUTESTING := $(LOCALBIN)/go-mutesting-$(GO_MUTESTING_VER)
+$(GO_MUTESTING): | $(LOCALBIN)
+	$(call go-install-tool,$(GO_MUTESTING),github.com/avito-tech/go-mutesting/cmd/go-mutesting,$(GO_MUTESTING_VER))
+
 GOIMPORTS_VER := v0.36.0
 GOIMPORTS := $(LOCALBIN)/goimports-$(GOIMPORTS_VER)
 $(STAMPDIR)/goimports-$(GOIMPORTS_VER): | $(STAMPDIR) $(LOCALBIN)
@@ -512,6 +517,19 @@ verify-test-log:
 	@! grep -q "^--- FAIL" test.log || (echo "TEST FAILURE: failing test found in test.log" && exit 1)
 
 test: unit-test integration-test functional-test
+
+mutation-test: $(GO_MUTESTING)
+	@printf $(COLOR) "Run mutation tests..."
+	@go run ./cmd/tools/mutationtest \
+		-mutator "$(abspath $(GO_MUTESTING))" \
+		-output-root "$(CURDIR)/$(TEST_OUTPUT_ROOT)/mutations" \
+		-ref "$(MUTATION_REF)" \
+		-include-files "$(MUTATION_SOURCE_FILES)" \
+		-exclude-files "$(MUTATION_SOURCE_EXCLUDE_FILES)" \
+		-test-files "$(MUTATION_TEST_FILES)" \
+		-test-tags "$(MUTATION_TEST_TAGS)" \
+		-shard-level "$(MUTATION_SHARD_LEVEL)" \
+		-timeout "$(MUTATION_TIMEOUT)"
 
 ##### Coverage & Reporting #####
 $(TEST_OUTPUT_ROOT):
