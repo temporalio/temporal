@@ -4,9 +4,161 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSerializedeserializeActivityMetadata(t *testing.T) {
+	t.Run("round-trips single activity", func(t *testing.T) {
+		activities := []ActivityMetadata{
+			{ActivityType: "SendEmail", TaskQueue: "email-queue"},
+		}
+		serialized, err := serializeActivityMetadata(activities)
+		require.NoError(t, err)
+
+		deserialized, err := deserializeActivityMetadata(serialized)
+		require.NoError(t, err)
+		require.Equal(t, activities, deserialized)
+	})
+
+	t.Run("round-trips multiple activities", func(t *testing.T) {
+		activities := []ActivityMetadata{
+			{ActivityType: "SendEmail", TaskQueue: "email-queue"},
+			{ActivityType: "ProcessPayment", TaskQueue: "payment-queue"},
+			{ActivityType: "UpdateInventory", TaskQueue: "inventory-queue"},
+		}
+		serialized, err := serializeActivityMetadata(activities)
+		require.NoError(t, err)
+
+		deserialized, err := deserializeActivityMetadata(serialized)
+		require.NoError(t, err)
+		require.Equal(t, activities, deserialized)
+	})
+
+	t.Run("round-trips empty slice", func(t *testing.T) {
+		activities := []ActivityMetadata{}
+		serialized, err := serializeActivityMetadata(activities)
+		require.NoError(t, err)
+
+		deserialized, err := deserializeActivityMetadata(serialized)
+		require.NoError(t, err)
+		require.Empty(t, deserialized)
+	})
+
+	t.Run("deserialize returns error for invalid JSON", func(t *testing.T) {
+		_, err := deserializeActivityMetadata("not-json")
+		require.Error(t, err)
+	})
+
+	t.Run("preserves ordering", func(t *testing.T) {
+		activities := []ActivityMetadata{
+			{ActivityType: "B", TaskQueue: "queue-B"},
+			{ActivityType: "A", TaskQueue: "queue-A"},
+		}
+		serialized, err := serializeActivityMetadata(activities)
+		require.NoError(t, err)
+
+		deserialized, err := deserializeActivityMetadata(serialized)
+		require.NoError(t, err)
+		require.Equal(t, "B", deserialized[0].ActivityType)
+		require.Equal(t, "A", deserialized[1].ActivityType)
+	})
+}
+
+func TestContextMetadataAddActivity(t *testing.T) {
+	t.Run("adds single activity", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+
+		ok := ContextMetadataAddActivity(ctx, "SendEmail", "email-queue")
+		require.True(t, ok)
+
+		activities := ContextMetadataGetActivities(ctx)
+		require.Len(t, activities, 1)
+		require.Equal(t, "SendEmail", activities[0].ActivityType)
+		require.Equal(t, "email-queue", activities[0].TaskQueue)
+	})
+
+	t.Run("adds multiple activities preserving order", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+
+		ContextMetadataAddActivity(ctx, "SendEmail", "email-queue")
+		ContextMetadataAddActivity(ctx, "ProcessPayment", "payment-queue")
+		ContextMetadataAddActivity(ctx, "UpdateInventory", "inventory-queue")
+
+		activities := ContextMetadataGetActivities(ctx)
+		require.Len(t, activities, 3)
+		require.Equal(t, "SendEmail", activities[0].ActivityType)
+		require.Equal(t, "ProcessPayment", activities[1].ActivityType)
+		require.Equal(t, "UpdateInventory", activities[2].ActivityType)
+		require.Equal(t, "email-queue", activities[0].TaskQueue)
+		require.Equal(t, "payment-queue", activities[1].TaskQueue)
+		require.Equal(t, "inventory-queue", activities[2].TaskQueue)
+	})
+
+	t.Run("returns false without metadata context", func(t *testing.T) {
+		ctx := context.Background()
+
+		ok := ContextMetadataAddActivity(ctx, "SendEmail", "email-queue")
+		require.False(t, ok)
+	})
+}
+
+func TestContextMetadataGetActivities(t *testing.T) {
+	t.Run("returns nil without metadata context", func(t *testing.T) {
+		ctx := context.Background()
+		require.Nil(t, ContextMetadataGetActivities(ctx))
+	})
+
+	t.Run("returns nil when no activities added", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		require.Nil(t, ContextMetadataGetActivities(ctx))
+	})
+
+	t.Run("returns nil for corrupted value", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		// Write directly to simulate corruption (ContextMetadataSet rejects this key)
+		mc := getMetadataContext(ctx)
+		mc.Metadata[metadataKeyActivityMetadata] = "not-json"
+		require.Nil(t, ContextMetadataGetActivities(ctx))
+	})
+
+	t.Run("returns nil for non-string value", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		mc := getMetadataContext(ctx)
+		mc.Metadata[metadataKeyActivityMetadata] = 12345
+		require.Nil(t, ContextMetadataGetActivities(ctx))
+	})
+
+	t.Run("AddActivity returns false for corrupted value", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		mc := getMetadataContext(ctx)
+		mc.Metadata[metadataKeyActivityMetadata] = "not-json"
+		require.False(t, ContextMetadataAddActivity(ctx, "SendEmail", "email-queue"))
+		// Corrupted value should not be overwritten
+		require.Equal(t, "not-json", mc.Metadata[metadataKeyActivityMetadata])
+	})
+
+	t.Run("AddActivity returns false for non-string value", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		mc := getMetadataContext(ctx)
+		mc.Metadata[metadataKeyActivityMetadata] = 12345
+		require.False(t, ContextMetadataAddActivity(ctx, "SendEmail", "email-queue"))
+	})
+
+	t.Run("ContextMetadataSet rejects invalid metadataKeyActivityMetadata", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		require.False(t, ContextMetadataSet(ctx, metadataKeyActivityMetadata, "not-json"))
+		require.False(t, ContextMetadataSet(ctx, metadataKeyActivityMetadata, 12345))
+		require.Nil(t, ContextMetadataGetActivities(ctx))
+	})
+
+	t.Run("ContextMetadataSet accepts valid JSON for metadataKeyActivityMetadata", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		require.True(t, ContextMetadataSet(ctx, metadataKeyActivityMetadata, `[{"activityType":"SendEmail","taskQueue":"email-queue"}]`))
+		activities := ContextMetadataGetActivities(ctx)
+		require.Len(t, activities, 1)
+		require.Equal(t, "SendEmail", activities[0].ActivityType)
+	})
+}
 
 func TestAddMetadataContext(t *testing.T) {
 	t.Run("adds metadata context to empty context", func(t *testing.T) {
@@ -15,17 +167,17 @@ func TestAddMetadataContext(t *testing.T) {
 
 		metadataCtx := getMetadataContext(ctx)
 		require.NotNil(t, metadataCtx)
-		assert.NotNil(t, metadataCtx.Metadata)
-		assert.Empty(t, metadataCtx.Metadata)
+		require.NotNil(t, metadataCtx.Metadata)
+		require.Empty(t, metadataCtx.Metadata)
 	})
 
 	t.Run("returns new context with metadata", func(t *testing.T) {
 		ctx := context.Background()
 		ctxWithMetadata := WithMetadataContext(ctx)
 
-		assert.NotEqual(t, ctx, ctxWithMetadata)
-		assert.Nil(t, getMetadataContext(ctx))
-		assert.NotNil(t, getMetadataContext(ctxWithMetadata))
+		require.NotEqual(t, ctx, ctxWithMetadata)
+		require.Nil(t, getMetadataContext(ctx))
+		require.NotNil(t, getMetadataContext(ctxWithMetadata))
 	})
 }
 
@@ -34,11 +186,11 @@ func TestContextMetadataSet(t *testing.T) {
 		ctx := WithMetadataContext(context.Background())
 
 		success := ContextMetadataSet(ctx, "key1", "value1")
-		assert.True(t, success)
+		require.True(t, success)
 
 		metadataCtx := getMetadataContext(ctx)
 		require.NotNil(t, metadataCtx)
-		assert.Equal(t, "value1", metadataCtx.Metadata["key1"])
+		require.Equal(t, "value1", metadataCtx.Metadata["key1"])
 	})
 
 	t.Run("sets multiple values successfully", func(t *testing.T) {
@@ -50,9 +202,9 @@ func TestContextMetadataSet(t *testing.T) {
 
 		metadataCtx := getMetadataContext(ctx)
 		require.NotNil(t, metadataCtx)
-		assert.Equal(t, "value1", metadataCtx.Metadata["key1"])
-		assert.Equal(t, 42, metadataCtx.Metadata["key2"])
-		assert.Equal(t, true, metadataCtx.Metadata["key3"])
+		require.Equal(t, "value1", metadataCtx.Metadata["key1"])
+		require.Equal(t, 42, metadataCtx.Metadata["key2"])
+		require.Equal(t, true, metadataCtx.Metadata["key3"])
 	})
 
 	t.Run("overwrites existing value", func(t *testing.T) {
@@ -63,14 +215,14 @@ func TestContextMetadataSet(t *testing.T) {
 
 		metadataCtx := getMetadataContext(ctx)
 		require.NotNil(t, metadataCtx)
-		assert.Equal(t, "value2", metadataCtx.Metadata["key1"])
+		require.Equal(t, "value2", metadataCtx.Metadata["key1"])
 	})
 
 	t.Run("returns false when context has no metadata", func(t *testing.T) {
 		ctx := context.Background()
 
 		success := ContextMetadataSet(ctx, "key1", "value1")
-		assert.False(t, success)
+		require.False(t, success)
 	})
 
 	t.Run("supports various value types", func(t *testing.T) {
@@ -97,11 +249,11 @@ func TestContextMetadataSet(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.key, func(t *testing.T) {
 				success := ContextMetadataSet(ctx, tc.key, tc.value)
-				assert.True(t, success)
+				require.True(t, success)
 
 				metadataCtx := getMetadataContext(ctx)
 				require.NotNil(t, metadataCtx)
-				assert.Equal(t, tc.value, metadataCtx.Metadata[tc.key])
+				require.Equal(t, tc.value, metadataCtx.Metadata[tc.key])
 			})
 		}
 	})
@@ -113,24 +265,24 @@ func TestContextMetadataGet(t *testing.T) {
 		ContextMetadataSet(ctx, "key1", "value1")
 
 		value, ok := ContextMetadataGet(ctx, "key1")
-		assert.True(t, ok)
-		assert.Equal(t, "value1", value)
+		require.True(t, ok)
+		require.Equal(t, "value1", value)
 	})
 
 	t.Run("returns false for non-existent key", func(t *testing.T) {
 		ctx := WithMetadataContext(context.Background())
 
 		value, ok := ContextMetadataGet(ctx, "nonexistent")
-		assert.False(t, ok)
-		assert.Nil(t, value)
+		require.False(t, ok)
+		require.Nil(t, value)
 	})
 
 	t.Run("returns false when context has no metadata", func(t *testing.T) {
 		ctx := context.Background()
 
 		value, ok := ContextMetadataGet(ctx, "key1")
-		assert.False(t, ok)
-		assert.Nil(t, value)
+		require.False(t, ok)
+		require.Nil(t, value)
 	})
 
 	t.Run("retrieves nil value correctly", func(t *testing.T) {
@@ -138,8 +290,8 @@ func TestContextMetadataGet(t *testing.T) {
 		ContextMetadataSet(ctx, "nilKey", nil)
 
 		value, ok := ContextMetadataGet(ctx, "nilKey")
-		assert.True(t, ok)
-		assert.Nil(t, value)
+		require.True(t, ok)
+		require.Nil(t, value)
 	})
 
 	t.Run("retrieves various value types", func(t *testing.T) {
@@ -150,16 +302,16 @@ func TestContextMetadataGet(t *testing.T) {
 		ContextMetadataSet(ctx, "slice", []int{1, 2, 3})
 
 		strVal, ok := ContextMetadataGet(ctx, "string")
-		assert.True(t, ok)
-		assert.Equal(t, "test", strVal)
+		require.True(t, ok)
+		require.Equal(t, "test", strVal)
 
 		intVal, ok := ContextMetadataGet(ctx, "int")
-		assert.True(t, ok)
-		assert.Equal(t, 42, intVal)
+		require.True(t, ok)
+		require.Equal(t, 42, intVal)
 
 		sliceVal, ok := ContextMetadataGet(ctx, "slice")
-		assert.True(t, ok)
-		assert.Equal(t, []int{1, 2, 3}, sliceVal)
+		require.True(t, ok)
+		require.Equal(t, []int{1, 2, 3}, sliceVal)
 	})
 }
 
@@ -170,25 +322,25 @@ func TestContextMetadataGetAll(t *testing.T) {
 		ContextMetadataSet(ctx, "key2", 42)
 
 		allMetadata := ContextMetadataGetAll(ctx)
-		assert.NotNil(t, allMetadata)
-		assert.Len(t, allMetadata, 2)
-		assert.Equal(t, "value1", allMetadata["key1"])
-		assert.Equal(t, 42, allMetadata["key2"])
+		require.NotNil(t, allMetadata)
+		require.Len(t, allMetadata, 2)
+		require.Equal(t, "value1", allMetadata["key1"])
+		require.Equal(t, 42, allMetadata["key2"])
 	})
 
 	t.Run("returns nil when context has no metadata", func(t *testing.T) {
 		ctx := context.Background()
 
 		allMetadata := ContextMetadataGetAll(ctx)
-		assert.Nil(t, allMetadata)
+		require.Nil(t, allMetadata)
 	})
 
 	t.Run("returns empty map when no metadata set", func(t *testing.T) {
 		ctx := WithMetadataContext(context.Background())
 
 		allMetadata := ContextMetadataGetAll(ctx)
-		assert.NotNil(t, allMetadata)
-		assert.Empty(t, allMetadata)
+		require.NotNil(t, allMetadata)
+		require.Empty(t, allMetadata)
 	})
 
 	t.Run("returned map is a copy", func(t *testing.T) {
@@ -200,7 +352,7 @@ func TestContextMetadataGetAll(t *testing.T) {
 
 		// Original should not be affected
 		_, ok := ContextMetadataGet(ctx, "key2")
-		assert.False(t, ok)
+		require.False(t, ok)
 	})
 }
 
@@ -208,19 +360,19 @@ func TestGetMetadataContext(t *testing.T) {
 	t.Run("returns nil for context without metadata", func(t *testing.T) {
 		ctx := context.Background()
 		metadataCtx := getMetadataContext(ctx)
-		assert.Nil(t, metadataCtx)
+		require.Nil(t, metadataCtx)
 	})
 
 	t.Run("returns metadata context when present", func(t *testing.T) {
 		ctx := WithMetadataContext(context.Background())
 		metadataCtx := getMetadataContext(ctx)
-		assert.NotNil(t, metadataCtx)
+		require.NotNil(t, metadataCtx)
 	})
 
 	t.Run("returns nil for wrong type in context", func(t *testing.T) {
 		ctx := context.WithValue(context.Background(), metadataCtxKey, "wrong type")
 		metadataCtx := getMetadataContext(ctx)
-		assert.Nil(t, metadataCtx)
+		require.Nil(t, metadataCtx)
 	})
 }
 
@@ -236,16 +388,16 @@ func TestMetadataContextWithContextCancellation(t *testing.T) {
 
 		// Metadata should still be accessible
 		value, ok := ContextMetadataGet(ctx, "key1")
-		assert.True(t, ok)
-		assert.Equal(t, "value1", value)
+		require.True(t, ok)
+		require.Equal(t, "value1", value)
 
 		// Should still be able to set new values
 		success := ContextMetadataSet(ctx, "key2", "value2")
-		assert.True(t, success)
+		require.True(t, success)
 
 		value, ok = ContextMetadataGet(ctx, "key2")
-		assert.True(t, ok)
-		assert.Equal(t, "value2", value)
+		require.True(t, ok)
+		require.Equal(t, "value2", value)
 	})
 }
 
@@ -260,10 +412,10 @@ func TestMetadataContextIsolation(t *testing.T) {
 		value1, ok1 := ContextMetadataGet(ctx1, "key")
 		value2, ok2 := ContextMetadataGet(ctx2, "key")
 
-		assert.True(t, ok1)
-		assert.True(t, ok2)
-		assert.Equal(t, "value1", value1)
-		assert.Equal(t, "value2", value2)
+		require.True(t, ok1)
+		require.True(t, ok2)
+		require.Equal(t, "value1", value1)
+		require.Equal(t, "value2", value2)
 	})
 
 	t.Run("child context does not inherit parent metadata", func(t *testing.T) {
@@ -275,14 +427,14 @@ func TestMetadataContextIsolation(t *testing.T) {
 
 		// Child can still access parent's metadata context
 		value, ok := ContextMetadataGet(childCtx, "key")
-		assert.True(t, ok)
-		assert.Equal(t, "parent-value", value)
+		require.True(t, ok)
+		require.Equal(t, "parent-value", value)
 
 		// Setting in child affects parent (same metadata context)
 		ContextMetadataSet(childCtx, "key2", "child-value")
 		value, ok = ContextMetadataGet(parentCtx, "key2")
-		assert.True(t, ok)
-		assert.Equal(t, "child-value", value)
+		require.True(t, ok)
+		require.Equal(t, "child-value", value)
 	})
 
 	t.Run("adding metadata context twice creates new isolated context", func(t *testing.T) {
@@ -295,22 +447,22 @@ func TestMetadataContextIsolation(t *testing.T) {
 		value1, ok1 := ContextMetadataGet(ctx1, "key")
 		value2, ok2 := ContextMetadataGet(ctx2, "key")
 
-		assert.True(t, ok1)
-		assert.True(t, ok2)
-		assert.Equal(t, "value1", value1)
-		assert.Equal(t, "value2", value2)
+		require.True(t, ok1)
+		require.True(t, ok2)
+		require.Equal(t, "value1", value1)
+		require.Equal(t, "value2", value2)
 	})
 }
 
 func TestContextHasMetadata(t *testing.T) {
 	t.Run("returns true when context has metadata", func(t *testing.T) {
 		ctx := WithMetadataContext(context.Background())
-		assert.True(t, ContextHasMetadata(ctx))
+		require.True(t, ContextHasMetadata(ctx))
 	})
 
 	t.Run("returns false for context without metadata", func(t *testing.T) {
 		ctx := context.Background()
-		assert.False(t, ContextHasMetadata(ctx))
+		require.False(t, ContextHasMetadata(ctx))
 	})
 
 	t.Run("returns true after setting metadata values", func(t *testing.T) {
@@ -318,13 +470,13 @@ func TestContextHasMetadata(t *testing.T) {
 		ContextMetadataSet(ctx, "key1", "value1")
 		ContextMetadataSet(ctx, "key2", "value2")
 
-		assert.True(t, ContextHasMetadata(ctx))
+		require.True(t, ContextHasMetadata(ctx))
 	})
 
 	t.Run("returns true for empty metadata context", func(t *testing.T) {
 		ctx := WithMetadataContext(context.Background())
 		// No values set, but metadata context exists
-		assert.True(t, ContextHasMetadata(ctx))
+		require.True(t, ContextHasMetadata(ctx))
 	})
 
 	t.Run("child context inherits metadata from parent", func(t *testing.T) {
@@ -334,13 +486,13 @@ func TestContextHasMetadata(t *testing.T) {
 		type testContextKey string
 		childCtx := context.WithValue(parentCtx, testContextKey("other-key"), "other-value")
 
-		assert.True(t, ContextHasMetadata(parentCtx))
-		assert.True(t, ContextHasMetadata(childCtx))
+		require.True(t, ContextHasMetadata(parentCtx))
+		require.True(t, ContextHasMetadata(childCtx))
 	})
 
 	t.Run("returns false for wrong type in context", func(t *testing.T) {
 		ctx := context.WithValue(context.Background(), metadataCtxKey, "wrong type")
-		assert.False(t, ContextHasMetadata(ctx))
+		require.False(t, ContextHasMetadata(ctx))
 	})
 
 	t.Run("returns true for cancelled context with metadata", func(t *testing.T) {
@@ -348,7 +500,7 @@ func TestContextHasMetadata(t *testing.T) {
 		ctx = WithMetadataContext(ctx)
 		cancel()
 
-		assert.True(t, ContextHasMetadata(ctx))
+		require.True(t, ContextHasMetadata(ctx))
 	})
 
 	t.Run("multiple contexts with metadata are independent", func(t *testing.T) {
@@ -356,8 +508,8 @@ func TestContextHasMetadata(t *testing.T) {
 		ctx2 := WithMetadataContext(context.Background())
 		ctx3 := context.Background()
 
-		assert.True(t, ContextHasMetadata(ctx1))
-		assert.True(t, ContextHasMetadata(ctx2))
-		assert.False(t, ContextHasMetadata(ctx3))
+		require.True(t, ContextHasMetadata(ctx1))
+		require.True(t, ContextHasMetadata(ctx2))
+		require.False(t, ContextHasMetadata(ctx3))
 	})
 }

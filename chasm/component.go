@@ -46,6 +46,8 @@ type RootComponent interface {
 	TerminableComponent
 
 	// ContextMetadata returns execution metadata to propagate to the request context.
+	// Keys are defined in common/contextutil/metadata.go; propagated keys are returned by
+	// contextutil.PropagatedMetadataKeys().
 	ContextMetadata(Context) map[string]string
 }
 
