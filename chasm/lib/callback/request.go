@@ -44,12 +44,23 @@ func routeSystemCallbackRequest(
 			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 		}
 
+		// Normalize to support two possible token shapes:
+		// - legacy HSM tokens carry namespace/workflow IDs directly
+		// - CHASM tokens carry an encoded component ref instead
 		namespaceID := completion.GetNamespaceId()
 		businessID := completion.GetWorkflowId()
 		if namespaceID == "" && len(completion.GetComponentRef()) > 0 {
 			ref := &persistencespb.ChasmComponentRef{}
 			if err := ref.Unmarshal(completion.GetComponentRef()); err != nil {
 				logger.Error("failed to decode CHASM component ref from callback token", tag.Error(err))
+				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
+			}
+			if ref.GetNamespaceId() == "" {
+				logger.Error("decoded CHASM component ref is missing namespace ID")
+				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
+			}
+			if ref.GetBusinessId() == "" {
+				logger.Error("decoded CHASM component ref is missing business ID")
 				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 			}
 			namespaceID = ref.GetNamespaceId()

@@ -238,6 +238,57 @@ func TestRouteSystemCallbackRequest_NamespaceNotFound(t *testing.T) {
 	require.Equal(t, nexus.HandlerErrorTypeNotFound, handlerErr.Type)
 }
 
+func TestRouteSystemCallbackRequest_InvalidChasmComponentRef(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		ref  *persistencespb.ChasmComponentRef
+	}{
+		{
+			name: "missing namespace id",
+			ref: &persistencespb.ChasmComponentRef{
+				BusinessId: "wf-1",
+				RunId:      "run-1",
+			},
+		},
+		{
+			name: "missing business id",
+			ref: &persistencespb.ChasmComponentRef{
+				NamespaceId: "ns-id-1",
+				RunId:       "run-1",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tokenGen := commonnexus.NewCallbackTokenGenerator()
+
+			ref, err := tc.ref.Marshal()
+			require.NoError(t, err)
+
+			tokenStr, err := tokenGen.Tokenize(&tokenspb.NexusOperationCompletion{ComponentRef: ref})
+			require.NoError(t, err)
+
+			r, err := http.NewRequest(http.MethodPost, commonnexus.SystemCallbackURL, nil)
+			require.NoError(t, err)
+			r.Header.Set(commonnexus.CallbackTokenHeader, tokenStr)
+
+			_, err = routeSystemCallbackRequest(
+				r,
+				nil,
+				nil,
+				nil,
+				tokenGen,
+				nil,
+				log.NewNoopLogger(),
+			)
+			require.Error(t, err)
+			var handlerErr *nexus.HandlerError
+			require.ErrorAs(t, err, &handlerErr)
+			require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
+			require.Contains(t, handlerErr.Error(), "invalid callback token")
+		})
+	}
+}
+
 func TestRouteSystemCallbackRequest_Success(t *testing.T) {
 	for _, tc := range []struct {
 		name            string
