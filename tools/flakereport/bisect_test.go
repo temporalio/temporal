@@ -478,6 +478,82 @@ func TestCommitPriorWeight(t *testing.T) {
 	})
 }
 
+func TestRunBisectForTestDirectionFilter(t *testing.T) {
+	// Build a scenario where the failure rate DECREASES at a commit (the flake was fixed,
+	// not introduced). The direction filter must suppress this suspect so it does not appear
+	// as a culprit in the report.
+	commitOrderSlice := []string{"sha0", "sha1", "sha2", "sha3", "sha4", "sha5"}
+	runToSHA := map[int64]string{0: "sha0", 1: "sha1", 2: "sha2", 3: "sha3", 4: "sha4", 5: "sha5"}
+
+	var allRuns []TestRun
+	// sha0-sha4: 8 failures + 2 passes each (80% failure rate)
+	for shaIdx := range 5 {
+		runID := int64(shaIdx)
+		for range 8 {
+			allRuns = append(allRuns, TestRun{Name: "TestFoo", Failed: true, RunID: runID})
+		}
+		for range 2 {
+			allRuns = append(allRuns, TestRun{Name: "TestFoo", Failed: false, RunID: runID})
+		}
+	}
+	// sha5: 10 passes, 0 fails — the flake disappeared here
+	for range 10 {
+		allRuns = append(allRuns, TestRun{Name: "TestFoo", Failed: false, RunID: 5})
+	}
+
+	cfg := BisectConfig{
+		MinFailures:    5,
+		MinRuns:        30,
+		MinProbability: 0.5,
+	}
+
+	report := runBisectForTest(cfg, "TestFoo", allRuns, commitOrderSlice, runToSHA, nil)
+
+	// The only high-probability transition point (sha5, where rate dropped 80%→0%) should be
+	// filtered out by the direction filter, leaving no actionable suspects.
+	assert.True(t, report.Skipped, "report should be skipped: the only transition is a fix, not an introduction")
+	assert.Empty(t, report.TopSuspects)
+}
+
+func TestRunBisectForTestDirectionFilterKeepsIntroduction(t *testing.T) {
+	// Complementary: failure rate INCREASES at sha3 (flake introduced). The direction filter
+	// must retain this suspect.
+	commitOrderSlice := []string{"sha0", "sha1", "sha2", "sha3", "sha4", "sha5"}
+	runToSHA := map[int64]string{0: "sha0", 1: "sha1", 2: "sha2", 3: "sha3", 4: "sha4", 5: "sha5"}
+
+	var allRuns []TestRun
+	// sha0-sha2: clean (0% failure rate)
+	for shaIdx := range 3 {
+		runID := int64(shaIdx)
+		for range 10 {
+			allRuns = append(allRuns, TestRun{Name: "TestFoo", Failed: false, RunID: runID})
+		}
+	}
+	// sha3-sha5: 8 failures + 2 passes each (80% failure rate — flake introduced at sha3)
+	for shaIdx := 3; shaIdx < 6; shaIdx++ {
+		runID := int64(shaIdx)
+		for range 8 {
+			allRuns = append(allRuns, TestRun{Name: "TestFoo", Failed: true, RunID: runID})
+		}
+		for range 2 {
+			allRuns = append(allRuns, TestRun{Name: "TestFoo", Failed: false, RunID: runID})
+		}
+	}
+
+	cfg := BisectConfig{
+		MinFailures:    5,
+		MinRuns:        30,
+		MinProbability: 0.5,
+	}
+
+	report := runBisectForTest(cfg, "TestFoo", allRuns, commitOrderSlice, runToSHA, nil)
+
+	require.False(t, report.Skipped, "report should not be skipped: a real introduction exists")
+	require.NotEmpty(t, report.TopSuspects)
+	assert.Equal(t, "sha3", report.TopSuspects[0].CommitSHA, "sha3 should be the top suspect")
+	assert.Greater(t, report.TopSuspects[0].Probability, 0.5)
+}
+
 // makeRunsForTest creates a slice of TestRun with the given total count and failure count.
 // The first `failures` runs are marked as failed, the rest as passed.
 func makeRunsForTest(name string, total, failures int) []TestRun {

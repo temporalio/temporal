@@ -184,6 +184,7 @@ func AuthorizationInterceptorProvider(
 		serviceConfig.ExposeAuthorizerErrors,
 		dynamicconfig.EnableCrossNamespaceCommands.Get(dc),
 		dynamicconfig.EnablePrincipalPropagation.Get(dc),
+		dynamicconfig.DisableStreamingAuthorizer.Get(dc),
 	)
 }
 
@@ -260,6 +261,8 @@ func GrpcServerOptionsProvider(
 		maskInternalErrorDetailsInterceptor.Intercept,
 		interceptor.ServiceErrorInterceptor,
 		interceptor.NewFrontendServiceErrorInterceptor(logger),
+		// BusinessID interceptor extracts business ID and adds it to context for use, must be before any interceptor that touches namespaces (namespaceValidator, handoverInterceptor)
+		businessIDInterceptor.Intercept,
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		metrics.NewServerMetricsContextInjectorInterceptor(),
@@ -267,8 +270,6 @@ func GrpcServerOptionsProvider(
 		// Handover interceptor has to above redirection because the request will route to the correct cluster after handover completed.
 		// And retry cannot be performed before customInterceptors.
 		namespaceHandoverInterceptor.Intercept,
-		// BusinessID interceptor extracts business ID and adds it to context for use by redirection policy
-		businessIDInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
 		// Telemetry interceptor must be after redirection to ensure metrics are recorded in the correct cluster
 		telemetryInterceptor.UnaryIntercept,
@@ -290,6 +291,7 @@ func GrpcServerOptionsProvider(
 	unaryInterceptors = append(unaryInterceptors, retryableInterceptor.Intercept)
 
 	streamInterceptor := []grpc.StreamServerInterceptor{
+		authInterceptor.InterceptStream,
 		telemetryInterceptor.StreamIntercept,
 	}
 	if len(customStreamInterceptors) > 0 {

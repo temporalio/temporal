@@ -3,6 +3,7 @@ package xdc
 import (
 	"cmp"
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -10,8 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	namespacepb "go.temporal.io/api/namespace/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
@@ -23,6 +25,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
@@ -229,6 +232,42 @@ func (s *xdcBaseSuite) createGlobalNamespace() string {
 	return s.createNamespace(true, s.clusters)
 }
 
+func (s *xdcBaseSuite) registerTestSearchAttributes(ns string) {
+	expectedSearchAttributes := searchattribute.TestSearchAttributesToRegister()
+	// For SQL: call AddSearchAttributes on the active cluster only. It calls UpdateNamespace
+	// internally, so the alias mapping replicates to all clusters. Calling it on each cluster
+	// independently is unsafe — alias assignment uses non-deterministic Go map iteration and
+	// can produce different field→alias mappings per cluster, corrupting standby visibility.
+	// For ES: each cluster has its own index and cluster metadata, so register on each.
+	clusters := s.clusters
+	if testcore.UseSQLVisibility() {
+		clusters = s.clusters[:1]
+	}
+	for _, cl := range clusters {
+		_, err := cl.OperatorClient().AddSearchAttributes(testcore.NewContext(), &operatorservice.AddSearchAttributesRequest{
+			Namespace:        ns,
+			SearchAttributes: expectedSearchAttributes,
+		})
+		var alreadyExistsErr *serviceerror.AlreadyExists
+		if err != nil && !errors.As(err, &alreadyExistsErr) {
+			s.Require().NoError(err)
+		}
+	}
+	for _, cl := range s.clusters {
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			resp, err := cl.OperatorClient().ListSearchAttributes(testcore.NewContext(), &operatorservice.ListSearchAttributesRequest{
+				Namespace: ns,
+			})
+			require.NoError(t, err)
+			for attrName, attrType := range expectedSearchAttributes {
+				gotType, ok := resp.GetCustomAttributes()[attrName]
+				require.True(t, ok, "expected search attribute %q to be registered", attrName)
+				require.Equal(t, attrType, gotType)
+			}
+		}, replicationWaitTime, replicationCheckInterval)
+	}
+}
+
 // TODO (alex): rename this to createLocalNamespace, and everywhere where it is called with isGlobal == true, add call to promoteNamespace.
 func (s *xdcBaseSuite) createNamespaceInCluster0(isGlobal bool) string {
 	return s.createNamespace(isGlobal, s.clusters[:1])
@@ -288,68 +327,6 @@ func (s *xdcBaseSuite) createNamespace(
 	}
 
 	return ns
-}
-
-func updateNamespaceConfig(
-	s *require.Assertions,
-	ns string,
-	newConfigFn func() *namespacepb.NamespaceConfig,
-	clusters []*testcore.TestCluster,
-	inClusterIndex int,
-) {
-
-	configVersion := int64(-1)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		for _, r := range clusters[inClusterIndex].Host().NamespaceRegistries() {
-			// TODO(alex): here and everywere else in this file: instead of waiting for registry to be updated
-			// r.RefreshNamespaceById() can be used. It will require to pass nsID everywhere.
-			resp, err := r.GetNamespace(namespace.Name(ns))
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			if configVersion == -1 {
-				configVersion = resp.ConfigVersion()
-			}
-			require.Equal(t, configVersion, resp.ConfigVersion(), "config version must be the same for all namespace registries")
-		}
-	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
-	s.NotEqual(int64(-1), configVersion)
-
-	updateReq := &workflowservice.UpdateNamespaceRequest{
-		Namespace: ns,
-		Config:    newConfigFn(),
-	}
-	_, err := clusters[inClusterIndex].FrontendClient().UpdateNamespace(testcore.NewContext(), updateReq)
-	s.NoError(err)
-
-	// TODO (alex): This leaks implementation details of UpdateNamespace.
-	// Consider returning configVersion in response or using persistence directly.
-	configVersion++
-
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		for _, r := range clusters[inClusterIndex].Host().NamespaceRegistries() {
-			resp, err := r.GetNamespace(namespace.Name(ns))
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			require.Equal(t, configVersion, resp.ConfigVersion())
-		}
-	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
-
-	if len(clusters) > 1 {
-		// check remote ns too
-		s.EventuallyWithT(func(t *assert.CollectT) {
-			for ci, c := range clusters {
-				if ci == inClusterIndex {
-					continue
-				}
-				for _, r := range c.Host().NamespaceRegistries() {
-					resp, err := r.GetNamespace(namespace.Name(ns))
-					require.NoError(t, err)
-					require.NotNil(t, resp)
-					require.Equal(t, configVersion, resp.ConfigVersion())
-				}
-			}
-		}, replicationWaitTime, replicationCheckInterval)
-	}
 }
 
 func (s *xdcBaseSuite) updateNamespaceClusters(
