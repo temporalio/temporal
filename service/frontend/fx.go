@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
@@ -40,6 +41,8 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	hsmcallbacks "go.temporal.io/server/components/callbacks"
+	nexusfrontend "go.temporal.io/server/components/nexusoperations/frontend"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
@@ -100,6 +103,7 @@ var Module = fx.Options(
 	fx.Provide(AuthorizationInterceptorProvider),
 	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
+	fx.Provide(callbackValidatorProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
 	fx.Provide(NamespaceDLQHandlerProvider),
@@ -788,6 +792,26 @@ func OperatorHandlerProvider(
 	return NewOperatorHandlerImpl(args)
 }
 
+// callbackValidatorProvider creates a callback Validator using the production dynamic config keys
+// so that existing operator configurations (component.callbacks.allowedAddresses) are honored.
+// TODO: Once HSM callbacks (components/callbacks) are removed, move this provider into
+// chasm/lib/callback/fx.go and read directly from callback.AllowedAddresses.
+func callbackValidatorProvider(dc *dynamicconfig.Collection) *callback.Validator {
+	return callback.NewValidator(
+		callback.MaxPerExecution.Get(dc),
+		dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		func(ns string) callback.AddressMatchRules {
+			hsmRules := hsmcallbacks.AllowedAddresses.Get(dc)(ns)
+			chasmRules := make([]callback.AddressMatchRule, len(hsmRules.Rules))
+			for i, r := range hsmRules.Rules {
+				chasmRules[i] = callback.AddressMatchRule{Regexp: r.Regexp, AllowInsecure: r.AllowInsecure}
+			}
+			return callback.AddressMatchRules{Rules: chasmRules}
+		},
+	)
+}
+
 func HandlerProvider(
 	cfg *config.Config,
 	serviceName primitives.ServiceName,
@@ -821,6 +845,7 @@ func HandlerProvider(
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	activityHandler activity.FrontendHandler,
+	callbackValidator *callback.Validator,
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
 ) Handler {
@@ -831,6 +856,7 @@ func HandlerProvider(
 	)
 
 	wfHandler := NewWorkflowHandler(
+		callbackValidator,
 		serviceConfig,
 		namespaceReplicationQueue,
 		visibilityMgr,
