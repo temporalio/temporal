@@ -3,6 +3,7 @@ package nexus
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"google.golang.org/grpc/codes"
@@ -58,7 +59,36 @@ func (g *CallbackTokenGenerator) DecodeCompletion(token *CallbackToken) (*tokens
 	}
 
 	completion := &tokenspb.NexusOperationCompletion{}
-	return completion, proto.Unmarshal(plaintext, completion)
+	if err := proto.Unmarshal(plaintext, completion); err != nil {
+		return nil, err
+	}
+	if err := validateCompletion(completion); err != nil {
+		return nil, err
+	}
+	return completion, nil
+}
+
+func validateCompletion(completion *tokenspb.NexusOperationCompletion) error {
+	hasCHASMRef := len(completion.GetComponentRef()) > 0
+	hasHSMRef := completion.GetNamespaceId() != "" ||
+		completion.GetWorkflowId() != "" ||
+		completion.GetRunId() != "" ||
+		completion.GetRef() != nil
+	isCompleteHSM := completion.GetNamespaceId() != "" &&
+		completion.GetWorkflowId() != "" &&
+		completion.GetRunId() != "" &&
+		completion.GetRef() != nil
+
+	switch {
+	case hasCHASMRef && hasHSMRef:
+		return errors.New("callback token contains both HSM and CHASM fields")
+	case hasCHASMRef:
+		return nil
+	case isCompleteHSM:
+		return nil
+	default:
+		return errors.New("callback token must contain either all HSM fields or a component ref")
+	}
 }
 
 // DecodeCallbackToken unmarshals the given token applying minimal data verification.

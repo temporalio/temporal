@@ -210,6 +210,8 @@ func TestRouteSystemCallbackRequest_NamespaceNotFound(t *testing.T) {
 	tokenStr, err := tokenGen.Tokenize(&tokenspb.NexusOperationCompletion{
 		NamespaceId: "ns-id-1",
 		WorkflowId:  "wf-1",
+		RunId:       "run-1",
+		Ref:         &persistencespb.StateMachineRef{},
 	})
 	require.NoError(t, err)
 
@@ -245,9 +247,11 @@ func TestRouteSystemCallbackRequest_Success(t *testing.T) {
 			name: "HSM",
 			completionToken: func(tokenGen *commonnexus.CallbackTokenGenerator) (string, error) {
 				return tokenGen.Tokenize(&tokenspb.NexusOperationCompletion{
-					// HSM sets NamespaceId and WorkflowId.
+					// HSM sets the deprecated execution fields and ref.
 					NamespaceId: "ns-id-1",
 					WorkflowId:  "wf-1",
+					RunId:       "run-1",
+					Ref:         &persistencespb.StateMachineRef{},
 				})
 			},
 		},
