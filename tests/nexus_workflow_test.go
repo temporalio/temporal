@@ -745,7 +745,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 			s.Len(completionRequests, 1, caseName)
 			s.Subset(completionRequests[0].Tags, map[string]string{"outcome": "error_not_found"}, caseName)
 		} else {
-			s.Len(completionRequests, 0, caseName)
+			s.Empty(completionRequests, caseName)
 		}
 	}
 
