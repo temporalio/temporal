@@ -191,7 +191,7 @@ func (o *Operation) onTimedOut(ctx chasm.MutableContext, cause *failurepb.Failur
 		return store.OnNexusOperationTimedOut(ctx, o, cause)
 	}
 	if cause != nil {
-		o.outcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
+		o.getOrCreateOutcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
 			Failed: &nexusoperationpb.OperationOutcome_Failed{Failure: cause},
 		}
 	}
@@ -301,14 +301,14 @@ func (o *Operation) resolveUnsuccessfully(ctx chasm.MutableContext, failure *fai
 	o.ClosedTime = timestamppb.New(closeTime)
 	o.NextAttemptScheduleTime = nil
 	if failure != nil {
-		o.outcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
+		o.getOrCreateOutcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
 			Failed: &nexusoperationpb.OperationOutcome_Failed{Failure: failure},
 		}
 	}
 	return nil
 }
 
-func (o *Operation) outcome(ctx chasm.MutableContext) *nexusoperationpb.OperationOutcome {
+func (o *Operation) getOrCreateOutcome(ctx chasm.MutableContext) *nexusoperationpb.OperationOutcome {
 	if outcome, ok := o.Outcome.TryGet(ctx); ok {
 		return outcome
 	}

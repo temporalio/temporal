@@ -184,7 +184,7 @@ var TransitionSucceeded = chasm.NewTransition(
 		// Result is set by standalone operations. Workflow-attached operations store
 		// the result in the history event and remove the operation after this transition.
 		if event.Result != nil {
-			o.outcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Successful_{
+			o.getOrCreateOutcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Successful_{
 				Successful: &nexusoperationpb.OperationOutcome_Successful{Result: event.Result},
 			}
 		}
@@ -262,7 +262,7 @@ var TransitionTerminated = chasm.NewTransition(
 		}
 		o.ClosedTime = timestamppb.New(ctx.Now(o))
 		o.NextAttemptScheduleTime = nil
-		o.outcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
+		o.getOrCreateOutcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
 			Failed: &nexusoperationpb.OperationOutcome_Failed{
 				Failure: &failurepb.Failure{
 					Message: event.Reason,
