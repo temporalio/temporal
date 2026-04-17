@@ -36,6 +36,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/callback"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client/frontend"
@@ -81,10 +82,8 @@ import (
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/service/worker/workerdeployment"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -117,6 +116,7 @@ type (
 
 		status int32
 
+		callbackValidator               *callback.Validator
 		tokenSerializer                 *tasktoken.Serializer
 		config                          *Config
 		versionChecker                  headers.VersionChecker
@@ -295,6 +295,7 @@ func (wh *WorkflowHandler) ValidateWorkerDeploymentVersionComputeConfig(
 
 // NewWorkflowHandler creates a gRPC handler for workflowservice
 func NewWorkflowHandler(
+	callbackValidator *callback.Validator,
 	config *Config,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
@@ -325,11 +326,12 @@ func NewWorkflowHandler(
 	workerDeploymentReadRateLimiter quotas.RequestRateLimiter,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
-		FrontendHandler: activityHandler,
-		status:          common.DaemonStatusInitialized,
-		config:          config,
-		tokenSerializer: tasktoken.NewSerializer(),
-		versionChecker:  headers.NewDefaultVersionChecker(),
+		FrontendHandler:   activityHandler,
+		status:            common.DaemonStatusInitialized,
+		callbackValidator: callbackValidator,
+		config:            config,
+		tokenSerializer:   tasktoken.NewSerializer(),
+		versionChecker:    headers.NewDefaultVersionChecker(),
 		namespaceHandler: newNamespaceHandler(
 			logger,
 			persistenceMetadataManager,
@@ -668,8 +670,10 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	if err := wh.validateWorkflowCompletionCallbacks(namespaceName, request.GetCompletionCallbacks()); err != nil {
-		return nil, err
+	if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
+		if err := wh.callbackValidator.Validate(namespaceName.String(), cbs); err != nil {
+			return nil, err
+		}
 	}
 
 	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCompletionCallbacks())
@@ -6348,61 +6352,6 @@ func (wh *WorkflowHandler) validateLinks(
 		}
 	}
 	return nil
-}
-
-func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
-	ns namespace.Name,
-	callbacks []*commonpb.Callback,
-) error {
-	if len(callbacks) > wh.config.MaxCallbacksPerWorkflow(ns.String()) {
-		return status.Error(
-			codes.InvalidArgument,
-			fmt.Sprintf(
-				"cannot attach more than %d callbacks to a workflow",
-				wh.config.MaxCallbacksPerWorkflow(ns.String()),
-			),
-		)
-	}
-
-	for _, callback := range callbacks {
-		switch cb := callback.GetVariant().(type) {
-		case *commonpb.Callback_Nexus_:
-			if err := wh.validateCallbackURL(ns, cb.Nexus.GetUrl()); err != nil {
-				return err
-			}
-
-			headerSize := 0
-			lowerCaseHeaders := make(map[string]string, len(cb.Nexus.GetHeader()))
-			for k, v := range cb.Nexus.GetHeader() {
-				headerSize += len(k) + len(v)
-				lowerCaseHeaders[strings.ToLower(k)] = v
-			}
-			if headerSize > wh.config.CallbackHeaderMaxSize(ns.String()) {
-				return status.Error(
-					codes.InvalidArgument,
-					fmt.Sprintf(
-						"invalid header: header size longer than max allowed size of %d",
-						wh.config.CallbackHeaderMaxSize(ns.String()),
-					),
-				)
-			}
-			cb.Nexus.Header = lowerCaseHeaders
-		case *commonpb.Callback_Internal_:
-			// TODO(Tianyu): For now, there is nothing to validate given that this is an internal field.
-			continue
-		default:
-			return status.Error(codes.Unimplemented, fmt.Sprintf("unknown callback variant: %T", cb))
-		}
-	}
-	return nil
-}
-
-func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string) error {
-	if len(rawURL) > wh.config.CallbackURLMaxLength(ns.String()) {
-		return status.Errorf(codes.InvalidArgument, "invalid url: url length longer than max length allowed of %d", wh.config.CallbackURLMaxLength(ns.String()))
-	}
-	rules := wh.config.CallbackEndpointConfigs(ns.String())
-	return rules.Validate(rawURL)
 }
 
 type buildIdAndFlag interface {
