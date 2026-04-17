@@ -151,8 +151,7 @@ func UnsafePartitionFromProto(proto *taskqueuepb.TaskQueue, namespaceId string, 
 	if err == nil {
 		return p
 	}
-	kind := proto.GetKind()
-switch proto.GetKind() { //nolint:exhaustive
+	switch proto.GetKind() { //nolint:exhaustive
 	case enumspb.TASK_QUEUE_KIND_STICKY:
 		tq := &TaskQueue{TaskQueueFamily{namespaceId, proto.GetNormalName()}, taskType}
 		return tq.StickyPartition(proto.GetName())
