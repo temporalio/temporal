@@ -167,7 +167,6 @@ func TestDescribeOutcome(t *testing.T) {
 
 	successResult := payload.EncodeString("result")
 	outcomeFailure := &failurepb.Failure{Message: "outcome failure"}
-	lastAttemptFailure := &failurepb.Failure{Message: "last attempt failure"}
 
 	successOutcome := &nexusoperationpb.OperationOutcome{
 		Variant: &nexusoperationpb.OperationOutcome_Successful_{
@@ -189,25 +188,6 @@ func TestDescribeOutcome(t *testing.T) {
 		expectedFailure *failurepb.Failure
 	}{
 		{
-			name:            "TimedOut_PrefersLastAttemptFailureOverOutcome",
-			status:          nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
-			outcome:         failedOutcome,
-			lastAttempt:     lastAttemptFailure,
-			expectedFailure: lastAttemptFailure,
-		},
-		{
-			name:            "TimedOut_FallsBackToOutcomeFailure",
-			status:          nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
-			outcome:         failedOutcome,
-			expectedFailure: outcomeFailure,
-		},
-		{
-			name:            "NoOutcome_ReturnsLastAttemptFailure",
-			status:          nexusoperationpb.OPERATION_STATUS_FAILED,
-			lastAttempt:     lastAttemptFailure,
-			expectedFailure: lastAttemptFailure,
-		},
-		{
 			name:           "Successful",
 			status:         nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
 			outcome:        successOutcome,
@@ -218,6 +198,11 @@ func TestDescribeOutcome(t *testing.T) {
 			status:          nexusoperationpb.OPERATION_STATUS_FAILED,
 			outcome:         failedOutcome,
 			expectedFailure: outcomeFailure,
+		},
+		{
+			name:   "NoOutcome_ReturnsNil",
+			status: nexusoperationpb.OPERATION_STATUS_STARTED,
+			// returns nil for both result and failure
 		},
 	}
 

@@ -404,16 +404,10 @@ func (o *Operation) describeOutcome(ctx chasm.Context) (*commonpb.Payload, *fail
 
 	switch {
 	case !hasOutcome:
-		return nil, o.LastAttemptFailure
+		return nil, nil
 	case outcome.GetSuccessful() != nil:
 		return outcome.GetSuccessful().GetResult(), nil
 	case outcome.GetFailed() != nil:
-		// Timeouts often close after one or more retryable attempt failures. For describe/poll, prefer the
-		// last concrete attempt failure over the generic timeout wrapper because it is more actionable.
-		// Note that LastAttemptFailure may be nil if the operation timed out before any attempt.
-		if o.Status == nexusoperationpb.OPERATION_STATUS_TIMED_OUT && o.LastAttemptFailure != nil {
-			return nil, o.LastAttemptFailure
-		}
 		return nil, outcome.GetFailed().GetFailure()
 	default:
 		softassert.Fail(ctx.Logger(), "operation outcome has no variant set")

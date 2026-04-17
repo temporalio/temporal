@@ -439,7 +439,7 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 			expectedFailureMessage string
 		}{
 			{
-				name: "TimeoutLastAttemptFailure",
+				name: "Timeout",
 				setup: func(req *workflowservice.StartNexusOperationExecutionRequest) {
 					req.ScheduleToCloseTimeout = durationpb.New(2 * time.Second)
 				},
@@ -457,7 +457,7 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 					return err
 				},
 				expectedStatus:         enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TIMED_OUT,
-				expectedFailureMessage: "last attempt failure",
+				expectedFailureMessage: "operation timed out",
 			},
 			{
 				name: "Canceled",
@@ -1577,7 +1577,7 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.Equal(t, enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED, pollResp.GetWaitStage())
-			require.Equal(t, "last attempt failure", pollResp.GetFailure().GetMessage())
+			require.Equal(t, "operation timed out", pollResp.GetFailure().GetMessage())
 		}, 10*time.Second, 100*time.Millisecond)
 
 		s.NoError(<-pollerErrCh)
