@@ -171,16 +171,6 @@ func TestContextMetadataInterceptor_appendContextMetadataToTrailer(t *testing.T)
 			expectTrailerErr: true,
 		},
 		{
-			name: "ActivityMetadataJSON",
-			setupContext: func() context.Context {
-				ctx := contextutil.WithMetadataContext(t.Context())
-				contextutil.ContextMetadataAddActivity(ctx, "SendEmail", "email-queue")
-				contextutil.ContextMetadataAddActivity(ctx, "ProcessPayment", "payment-queue")
-				return metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{}))
-			},
-			expectTrailerErr: true,
-		},
-		{
 			name: "NonStringValues",
 			setupContext: func() context.Context {
 				ctx := contextutil.WithMetadataContext(t.Context())
@@ -245,6 +235,5 @@ func TestNewContextMetadataInterceptor(t *testing.T) {
 func TestContextMetadataInterceptor_PropagatedMetadataKeys(t *testing.T) {
 	require.Contains(t, contextutil.PropagatedMetadataKeys(), contextutil.MetadataKeyWorkflowType)
 	require.Contains(t, contextutil.PropagatedMetadataKeys(), contextutil.MetadataKeyWorkflowTaskQueue)
-	require.Contains(t, contextutil.PropagatedMetadataKeys(), "activity-metadata")
-	require.Len(t, contextutil.PropagatedMetadataKeys(), 3)
+	require.Len(t, contextutil.PropagatedMetadataKeys(), 2)
 }

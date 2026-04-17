@@ -3,7 +3,6 @@ package interceptor
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -100,42 +99,6 @@ func TestTrailerToContextMetadataInterceptor(t *testing.T) {
 				taskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
 				require.True(t, ok)
 				require.Equal(t, "test-task-queue", taskQueue)
-			},
-		},
-		{
-			name: "ActivityMetadataJSONRoundTrip",
-			setupInvoker: func() grpc.UnaryInvoker {
-				// Simulate the server side: use ContextMetadataAddActivity to generate JSON,
-				// then read it back and put it in the trailer — proving the full chain:
-				// AddActivity → serialize → fmt.Sprint → trailer → read → GetActivities
-				serverCtx := contextutil.WithMetadataContext(t.Context())
-				contextutil.ContextMetadataAddActivity(serverCtx, "SendEmail", "email-queue")
-				contextutil.ContextMetadataAddActivity(serverCtx, "ProcessPayment", "payment-queue")
-				activityJSON, ok := contextutil.ContextMetadataGet(serverCtx, "activity-metadata")
-				require.True(t, ok)
-
-				return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
-					for _, opt := range opts {
-						if trailer, ok := opt.(grpc.TrailerCallOption); ok {
-							md := trailer.TrailerAddr
-							*md = metadata.Pairs(
-								"activity-metadata",
-								fmt.Sprint(activityJSON),
-							)
-						}
-					}
-					return nil
-				}
-			},
-			contextWrapped: true,
-			wantErr:        false,
-			validateMetadata: func(t *testing.T, ctx context.Context) {
-				activities := contextutil.ContextMetadataGetActivities(ctx)
-				require.Len(t, activities, 2)
-				require.Equal(t, "SendEmail", activities[0].ActivityType)
-				require.Equal(t, "email-queue", activities[0].TaskQueue)
-				require.Equal(t, "ProcessPayment", activities[1].ActivityType)
-				require.Equal(t, "payment-queue", activities[1].TaskQueue)
 			},
 		},
 		{

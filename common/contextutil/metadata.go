@@ -2,7 +2,6 @@ package contextutil
 
 import (
 	"context"
-	"encoding/json"
 	"sync"
 )
 
@@ -23,11 +22,6 @@ const (
 	MetadataKeyWorkflowType = "workflow-type"
 	// MetadataKeyWorkflowTaskQueue is the context metadata key for workflow task queue
 	MetadataKeyWorkflowTaskQueue = "workflow-task-queue"
-	// metadataKeyActivityMetadata is the context metadata key for paired activity type and task queue metadata.
-	// A single request (e.g., RespondWorkflowTaskCompleted) can carry multiple activity types and task queues,
-	// so these are stored together as a JSON-serialized []ActivityMetadata.
-	// Use ContextMetadataAddActivity and ContextMetadataGetActivities instead of ContextMetadataSet/Get for this key.
-	metadataKeyActivityMetadata = "activity-metadata"
 )
 
 // PropagatedMetadataKeys returns the explicit allowlist of context metadata keys propagated
@@ -37,88 +31,7 @@ func PropagatedMetadataKeys() []string {
 	return []string{
 		MetadataKeyWorkflowType,
 		MetadataKeyWorkflowTaskQueue,
-		metadataKeyActivityMetadata,
 	}
-}
-
-// ActivityMetadata represents a paired activity type and task queue.
-type ActivityMetadata struct {
-	ActivityType string `json:"activityType"`
-	TaskQueue    string `json:"taskQueue"`
-}
-
-// serializeActivityMetadata serializes activity metadata pairs to a JSON string
-// for trailer propagation.
-func serializeActivityMetadata(activities []ActivityMetadata) (string, error) {
-	data, err := json.Marshal(activities)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
-// deserializeActivityMetadata deserializes activity metadata pairs from a JSON string.
-func deserializeActivityMetadata(value string) ([]ActivityMetadata, error) {
-	var activities []ActivityMetadata
-	if err := json.Unmarshal([]byte(value), &activities); err != nil {
-		return nil, err
-	}
-	return activities, nil
-}
-
-// ContextMetadataAddActivity appends an activity's type and task queue to the context metadata.
-// Returns false if the context has no metadata support.
-// This operation is atomic — the entire read-modify-write is performed under a single lock.
-func ContextMetadataAddActivity(ctx context.Context, activityType, taskQueue string) bool {
-	metadataCtx := getMetadataContext(ctx)
-	if metadataCtx == nil {
-		return false
-	}
-
-	metadataCtx.Lock()
-	defer metadataCtx.Unlock()
-
-	var existing []ActivityMetadata
-	if raw, ok := metadataCtx.Metadata[metadataKeyActivityMetadata]; ok {
-		str, ok := raw.(string)
-		if !ok {
-			return false
-		}
-		var err error
-		existing, err = deserializeActivityMetadata(str)
-		if err != nil {
-			return false
-		}
-	}
-
-	activities := append(existing, ActivityMetadata{
-		ActivityType: activityType,
-		TaskQueue:    taskQueue,
-	})
-	serialized, err := serializeActivityMetadata(activities)
-	if err != nil {
-		return false
-	}
-	metadataCtx.Metadata[metadataKeyActivityMetadata] = serialized
-	return true
-}
-
-// ContextMetadataGetActivities retrieves all activity metadata from the context.
-// Returns nil if the context has no metadata support or no activities have been added.
-func ContextMetadataGetActivities(ctx context.Context) []ActivityMetadata {
-	value, ok := ContextMetadataGet(ctx, metadataKeyActivityMetadata)
-	if !ok {
-		return nil
-	}
-	str, ok := value.(string)
-	if !ok {
-		return nil
-	}
-	activities, err := deserializeActivityMetadata(str)
-	if err != nil {
-		return nil
-	}
-	return activities
 }
 
 // getMetadataContext extracts metadata context from golang context.
@@ -149,26 +62,12 @@ func ContextHasMetadata(ctx context.Context) bool {
 }
 
 // ContextMetadataSet sets a metadata key-value pair in the context, overwriting any existing value.
-// For metadataKeyActivityMetadata, the value must be a valid JSON string (as produced by
-// the trailer interceptor). Unlike ContextMetadataAddActivity which appends atomically,
-// this overwrites the entire activity metadata — use ContextMetadataAddActivity for programmatic use.
+// This is used by TrailerToContextMetadataInterceptor which propagates all trailer keys generically
+// without special-casing individual keys.
 func ContextMetadataSet(ctx context.Context, key string, value any) bool {
 	metadataCtx := getMetadataContext(ctx)
 	if metadataCtx == nil {
 		return false
-	}
-
-	// ContextMetadataAddActivity is preferred for this key, but we allow direct Set as long as the
-	// value is valid JSON. Validates on write to catch corruption early, before it propagates through
-	// gRPC trailers to other services where it would silently fail to deserialize.
-	if key == metadataKeyActivityMetadata {
-		str, ok := value.(string)
-		if !ok {
-			return false
-		}
-		if _, err := deserializeActivityMetadata(str); err != nil {
-			return false
-		}
 	}
 
 	metadataCtx.Lock()

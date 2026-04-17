@@ -41,11 +41,6 @@ func TrailerToContextMetadataInterceptor(logger log.Logger) grpc.UnaryClientInte
 				continue
 			}
 
-			// NOTE: ContextMetadataSet overwrites activity metadata rather than accumulating.
-			// This is safe today because only History populates activity metadata, and each
-			// Frontend request calls one downstream service, not both. If a future flow has
-			// multiple downstream RPCs independently contributing activity metadata in the
-			// same request, switch to ContextMetadataAddActivity to accumulate.
 			trailerMetadata[key] = trailerValues[0]
 			if contextutil.ContextMetadataSet(ctx, key, trailerValues[0]) {
 				propagatedMetadata[key] = trailerValues[0]

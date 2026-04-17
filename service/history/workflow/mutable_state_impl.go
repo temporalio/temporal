@@ -7240,6 +7240,7 @@ func (ms *MutableStateImpl) SetContextMetadata(
 			contextutil.ContextMetadataSet(ctx, contextutil.MetadataKeyWorkflowTaskQueue, ms.executionInfo.TaskQueue)
 		}
 
+		ms.GetPendingActivityInfos()
 		// TODO: To set activity_type/activity_task_queue metadata, the history gRPC handler should
 		// set the relevant activity information on the metadata context before calling mutable state.
 	default:
