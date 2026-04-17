@@ -48,6 +48,8 @@ linters:
           msg: "FunctionalTestBase is deprecated. Use testcore.NewEnv(t) instead. See docs/development/testing.md for details."
         - pattern: context\.Background\(\)
           msg: "Avoid context.Background() in tests; use t.Context() to respect test timeouts and cancellation"
+        - pattern: 'assert\.\w+'
+          msg: "Use require.X / protorequire.X instead of assert.X / protoassert.X — assert doesn't stop the test on failure. assert.CollectT is still allowed for EventuallyWithT callbacks."
     depguard:
       rules:
         main:
@@ -198,6 +200,12 @@ linters:
           - forbidigo
       - path-except: tests/.+_test\.go # only enforce in test files
         text: "context.Background"
+        linters:
+          - forbidigo
+      - text: "use of `assert\\.CollectT`" # allowed for EventuallyWithT callbacks
+        linters:
+          - forbidigo
+      - text: "use of `softassert\\.\\w+`"
         linters:
           - forbidigo
       - path: _test\.go|tests/.+\.go|common/testing/

@@ -441,6 +441,8 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 		return nil
 	}
 
+	// if mutableState.ExecutionInfo.TimeSkippingInfo changed,
+	// we need to
 	pendingTimerInfos := mutableState.GetPendingTimerInfos()
 	for _, timerInfo := range pendingTimerInfos {
 

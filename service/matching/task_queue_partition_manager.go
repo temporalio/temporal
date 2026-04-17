@@ -91,6 +91,7 @@ type (
 
 		cancelNewMatcherSub func()
 		cancelFairnessSub   func()
+		cancelAutoEnableSub func()
 
 		// rateLimitManager is used to manage the rate limit for task queues.
 		rateLimitManager *rateLimitManager
@@ -163,13 +164,36 @@ func newTaskQueuePartitionManager(
 	return pm, nil
 }
 
+// computeEffectiveConfig determines the effective NewMatcher and EnableFairness config values
+// based on fairnessState, autoEnable, and the base dynamic config values.
+func (pm *taskQueuePartitionManagerImpl) computeEffectiveConfig(autoEnable, fairness, newMatcher bool) (effectiveNewMatcher, effectiveEnableFairness bool) {
+	effectiveEnableFairness = fairness && pm.partition.SupportsFairness()
+	effectiveNewMatcher = newMatcher || fairness
+	if !autoEnable {
+		return
+	}
+
+	switch pm.fairnessState {
+	case enumsspb.FAIRNESS_STATE_UNSPECIFIED:
+		// use values from config
+	case enumsspb.FAIRNESS_STATE_V0:
+		effectiveNewMatcher = false
+		effectiveEnableFairness = false
+	case enumsspb.FAIRNESS_STATE_V1:
+		effectiveNewMatcher = true
+		effectiveEnableFairness = false
+	case enumsspb.FAIRNESS_STATE_V2:
+		effectiveNewMatcher = true
+		effectiveEnableFairness = pm.partition.SupportsFairness()
+	default:
+		pm.logger.Error("unknown fairnessState in user data")
+	}
+	return
+}
+
 func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	defer pm.initCancel()
 	defer func() { pm.defaultQueueFuture.SetIfNotReady(nil, retErr) }()
-
-	unload := func(bool) {
-		pm.unloadFromEngine(unloadCauseConfigChange)
-	}
 
 	err := pm.userDataManager.WaitUntilInitialized(pm.initCtx)
 	if err != nil {
@@ -181,36 +205,24 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	}
 
 	pm.fairnessState = data.GetFairnessState()
-	switch {
-	case !pm.config.AutoEnableV2() || pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED:
-		var fairness bool
-		changeKey := pm.partition.GradualChangeKey()
-		fairness, pm.cancelFairnessSub = dynamicconfig.SubscribeGradualChange(
-			pm.config.EnableFairnessSub, changeKey, unload, pm.engine.timeSource)
-		// Fairness is disabled for sticky queues for now so that we can still use TTLs.
-		pm.config.EnableFairness = fairness && pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY
-		if fairness {
-			pm.config.NewMatcher = true
-		} else {
-			pm.config.NewMatcher, pm.cancelNewMatcherSub = dynamicconfig.SubscribeGradualChange(
-				pm.config.NewMatcherSub, changeKey, unload, pm.engine.timeSource)
+	changeKey := pm.partition.GradualChangeKey()
+
+	var autoEnable, fairness, newMatcher bool
+	autoEnable, pm.cancelAutoEnableSub = pm.config.AutoEnableV2Sub(pm.autoEnableChanged)
+
+	unloadOnBaseConfigChange := func(bool) {
+		if pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED || !pm.config.AutoEnableV2() {
+			pm.unloadFromEngine(unloadCauseConfigChange)
 		}
-	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V0:
-		pm.config.NewMatcher = false
-		pm.config.EnableFairness = false
-	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V1:
-		pm.config.NewMatcher = true
-		pm.config.EnableFairness = false
-	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V2:
-		pm.config.NewMatcher = true
-		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-			pm.config.EnableFairness = false
-		} else {
-			pm.config.EnableFairness = true
-		}
-	default:
-		return serviceerror.NewInternal("Unknown FairnessState in UserData")
 	}
+
+	newMatcher, pm.cancelNewMatcherSub = dynamicconfig.SubscribeGradualChange(
+		pm.config.NewMatcherSub, changeKey, unloadOnBaseConfigChange, pm.engine.timeSource)
+	fairness, pm.cancelFairnessSub = dynamicconfig.SubscribeGradualChange(
+		pm.config.EnableFairnessSub, changeKey, unloadOnBaseConfigChange, pm.engine.timeSource)
+
+	// Determine initial config values
+	pm.config.NewMatcher, pm.config.EnableFairness = pm.computeEffectiveConfig(autoEnable, fairness, newMatcher)
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(pm.partition))
 	if err != nil {
@@ -268,6 +280,9 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	if pm.cancelNewMatcherSub != nil {
 		pm.cancelNewMatcherSub()
 	}
+	if pm.cancelAutoEnableSub != nil {
+		pm.cancelAutoEnableSub()
+	}
 
 	pm.versionedQueuesLock.Lock()
 	for version, vq := range pm.versionedQueues {
@@ -314,6 +329,36 @@ func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Contex
 	return queue.WaitUntilInitialized(ctx)
 }
 
+// autoEnableChanged is called when the AutoEnableV2 dynamic config value changes.
+// It determines the effective config based on the new autoEnable value and fairnessState,
+// and unloads if the effective config differs from the current config.
+func (pm *taskQueuePartitionManagerImpl) autoEnableChanged(en bool) {
+	_, err := pm.defaultQueueFuture.Get(context.Background())
+	if err != nil {
+		return
+	}
+
+	// When fairnessState is UNSPECIFIED, autoEnable changes don't affect the effective config
+	if pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED {
+		return
+	}
+
+	changeKey := pm.partition.GradualChangeKey()
+	now := pm.engine.timeSource.Now()
+
+	fairnessGC, _ := pm.config.EnableFairnessSub(nil)
+	fairness := fairnessGC.Value(changeKey, now)
+
+	newMatcherGC, _ := pm.config.NewMatcherSub(nil)
+	newMatcher := newMatcherGC.Value(changeKey, now)
+
+	effectiveNewMatcher, effectiveEnableFairness := pm.computeEffectiveConfig(en, fairness, newMatcher)
+
+	if effectiveNewMatcher != pm.config.NewMatcher || effectiveEnableFairness != pm.config.EnableFairness {
+		pm.unloadFromEngine(unloadCauseConfigChange)
+	}
+}
+
 func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context, params addTaskParams) {
 	if pm.fairnessState != enumsspb.FAIRNESS_STATE_UNSPECIFIED {
 		return
@@ -327,7 +372,7 @@ func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context,
 			return
 		}
 	}
-	if !pm.Partition().IsRoot() || pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY || !pm.config.AutoEnableV2() {
+	if !pm.Partition().IsRoot() || !pm.Partition().SupportsFairness() || !pm.config.AutoEnableV2() {
 		return
 	}
 	if !pm.autoEnableRateLimiter.Allow() {
@@ -919,7 +964,7 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 		//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
 		resp.DescResponse.TaskQueueStatus = dbq.LegacyDescribeTaskQueue(true).DescResponse.TaskQueueStatus
 	}
-	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL {
 		perTypeUserData, _, err := pm.getPerTypeUserData()
 		if err != nil {
 			return nil, err
@@ -1348,7 +1393,9 @@ func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb
 	// for now, only sticky partitions act on ephemeral data, normal partitions ignore it.
 	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
 		return
-	} else if !pm.defaultQueueFuture.Ready() {
+	}
+	dbq, err := pm.defaultQueueFuture.GetIfReady()
+	if err != nil {
 		return // not initialized yet
 	}
 
@@ -1378,7 +1425,6 @@ func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb
 		pqm.UpdateRemotePriorityBacklogs(updates[key])
 	}
 
-	dbq := pm.defaultQueue()
 	if dbq != nil {
 		update(PhysicalTaskQueueVersion{}, dbq)
 	}
@@ -1549,6 +1595,9 @@ func (pm *taskQueuePartitionManagerImpl) Partition() tqid.Partition {
 }
 
 func (pm *taskQueuePartitionManagerImpl) PartitionCount() int {
+	if !pm.partition.SupportsPartitions() {
+		return 1
+	}
 	return max(pm.config.NumWritePartitions(), pm.config.NumReadPartitions())
 }
 
@@ -1656,8 +1705,8 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 	deployment *deploymentpb.Deployment,
 	create bool,
 ) (physicalTaskQueueManager, error) {
-	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-		return nil, serviceerror.NewInternal("versioned queues can't be used in sticky partitions")
+	if !pm.partition.SupportsVersioning() {
+		return nil, serviceerror.NewInternal("versioned queues can't be used in partitions that don't support versioning")
 	}
 	if versionSet == "" && buildId == "" && deployment == nil {
 		return nil, serviceerror.NewInternal("deployment or build ID or version set should be given for a versioned queue")
@@ -1813,7 +1862,15 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	}
 
 	current, currentRevisionNumber, _, ramping, _, rampingPercentage, rampingRevisionNumber, _ := worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
-	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber, workflowId)
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
+		current,
+		currentRevisionNumber,
+		ramping,
+		rampingPercentage,
+		rampingRevisionNumber,
+		workflowId,
+		directive.GetUseRampingVersion(),
+	)
 	targetDeployment := worker_versioning.DeploymentFromDeploymentVersion(targetDeploymentVersion)
 
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {

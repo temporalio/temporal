@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -34,6 +35,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -62,6 +64,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -210,6 +213,9 @@ type (
 		// isResetStateUpdated is used to track if resetRunID is updated.
 		isResetStateUpdated bool
 
+		// timeSkippingInfoUpdated is used to track if executionInfo.TimeSkippingInfo is updated.
+		timeSkippingInfoUpdated bool
+
 		// in memory fields to track potential reapply events that needs to be reapplied during workflow update
 		// should only be used in the state based replication as state based replication does not have
 		// event inside history builder. This is only for x-run reapply (from zombie wf to current wf)
@@ -261,6 +267,7 @@ type (
 		timeSource             clock.TimeSource
 		logger                 log.Logger
 		metricsHandler         metrics.Handler
+		endpointRegistry       chasm.EndpointRegistry
 		stateMachineNode       *hsm.Node
 		subStateMachineDeleted bool
 
@@ -352,13 +359,14 @@ func NewMutableState(
 
 		QueryRegistry: NewQueryRegistry(),
 
-		shard:           shard,
-		clusterMetadata: shard.GetClusterMetadata(),
-		eventsCache:     eventsCache,
-		config:          shard.GetConfig(),
-		timeSource:      shard.GetTimeSource(),
-		logger:          logger,
-		metricsHandler:  shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
+		shard:            shard,
+		clusterMetadata:  shard.GetClusterMetadata(),
+		eventsCache:      eventsCache,
+		config:           shard.GetConfig(),
+		timeSource:       shard.GetTimeSource(),
+		logger:           logger,
+		metricsHandler:   shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
+		endpointRegistry: shard.EndpointRegistry(),
 	}
 
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
@@ -686,7 +694,7 @@ func (ms *MutableStateImpl) ChasmWorkflowComponent(ctx context.Context) (*chasmw
 	return wf, chasmCtx, nil
 }
 
-func (ms *MutableStateImpl) ensureChasmWorkflowComponent(ctx context.Context) {
+func (ms *MutableStateImpl) EnsureChasmWorkflowComponent(ctx context.Context) {
 	// Initialize chasm tree once for new workflows.
 	// Using context.Background() because this is done outside an actual request context and the
 	// chasmworkflow.NewWorkflow does not actually use it currently.
@@ -715,6 +723,10 @@ func (ms *MutableStateImpl) ChasmWorkflowComponentReadOnly(ctx context.Context) 
 		return nil, nil, serviceerror.NewInternalf("expected workflow component, but got %T", rootComponent)
 	}
 	return wf, chasmCtx, nil
+}
+
+func (ms *MutableStateImpl) EndpointRegistry() chasm.EndpointRegistry {
+	return ms.endpointRegistry
 }
 
 // GetNexusCompletion converts a workflow completion event into a [nexus.OperationCompletion].
@@ -2493,13 +2505,13 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// AutoUpgrade in the first task and then assume the SDK-sent behavior on first workflow task completion.
 	var inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion
 	if previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
-		command.GetInitialVersioningBehavior() != enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+		command.GetInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED {
 		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
 		newTQ := command.GetTaskQueue().GetName()
 		if newTQ != previousExecutionInfo.GetTaskQueue() {
 			newTQInPinnedVersion, err = IsWFTaskQueueInVersionDetector(ctx, ms.GetNamespaceEntry().ID().String(), newTQ, inheritedPinnedVersion)
 			if err != nil {
-				return nil, fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
+				return nil, fmt.Errorf("error determining continue-as-new task queue presence in inherited version: %w", err)
 			}
 			if !newTQInPinnedVersion {
 				inheritedPinnedVersion = nil
@@ -2525,9 +2537,10 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// after first workflow task completion.
 	var sourceDeploymentVersion *deploymentpb.WorkerDeploymentVersion
 	var sourceDeploymentRevisionNumber int64
-	if previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE ||
-		(previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
-			command.GetInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE) {
+	previousBehavior := previousExecutionState.GetEffectiveVersioningBehavior()
+	nonEmptyContinueAsNewInitialBehavior := command.GetInitialVersioningBehavior() != enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED
+	if previousBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE ||
+		(previousBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED && nonEmptyContinueAsNewInitialBehavior) {
 		sourceDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
 		sourceDeploymentRevisionNumber = previousExecutionState.GetVersioningRevisionNumber()
 
@@ -2620,6 +2633,12 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		req.InheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
 			SourceDeploymentVersion:        sourceDeploymentVersion,
 			SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
+			// ContinueAsNewInitialVersioningBehavior is taken from the command that triggered this CaN,
+			// not from the previous workflow's InheritedAutoUpgradeInfo. This ensures that each CaN hop
+			// carries only the behavior the user explicitly requested for that hop, and that a
+			// UseRampingVersion CaN run cannot accidentally propagate the behavior through a child
+			// workflow or a future CaN of its own.
+			ContinueAsNewInitialVersioningBehavior: command.GetInitialVersioningBehavior(),
 		}
 	}
 
@@ -2763,6 +2782,13 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 			),
 		).Record(1)
 	}
+
+	if tsc := startRequest.GetStartRequest().GetTimeSkippingConfig(); tsc != nil && tsc.GetEnabled() {
+		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: tsc,
+		}
+	}
+
 	return event, nil
 }
 
@@ -2961,6 +2987,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.executionInfo.VersioningInfo.DeploymentVersion = event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentVersion()
 		// Assume AutoUpgrade behavior for the first workflow task.
 		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+		ms.executionInfo.VersioningInfo.ContinueAsNewInitialVersioningBehavior = event.GetInheritedAutoUpgradeInfo().GetContinueAsNewInitialVersioningBehavior()
 	}
 
 	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {
@@ -3129,7 +3156,7 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 		// Initialize chasm tree once for new workflows.
 		// Using context.Background() because this is done outside an actual request context and the
 		// chasmworkflow.NewWorkflow does not actually use it currently.
-		ms.ensureChasmWorkflowComponent(context.Background())
+		ms.EnsureChasmWorkflowComponent(context.Background())
 		return ms.addCompletionCallbacksChasm(event, requestID, completionCallbacks)
 	}
 
@@ -3195,7 +3222,7 @@ func (ms *MutableStateImpl) addCompletionCallbacksChasm(
 		return err
 	}
 
-	maxCallbacksPerWorkflow := ms.config.MaxCHASMCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
+	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerExecution(ms.GetNamespaceEntry().Name().String())
 	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks, maxCallbacksPerWorkflow)
 }
 
@@ -3916,6 +3943,139 @@ func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
 	)
 }
 
+// hasInflightWorkToPreventTimeSkipping checks if there is no-inflight work and time can skip.
+func (ms *MutableStateImpl) hasInflightWorkToPreventTimeSkipping() (bool, string) {
+	if ms.HasPendingWorkflowTask() {
+		return true, "has pending workflow task"
+	}
+	if len(ms.GetPendingActivityInfos()) > 0 {
+		return true, "has pending activity"
+	}
+	if len(ms.GetPendingChildExecutionInfos()) > 0 {
+		return true, "has pending child execution"
+	}
+	if nexusoperations.MachineCollection(ms.HSM()).Size() > 0 {
+		return true, "has pending nexus operations"
+	}
+
+	// TODO@time-skipping: handle pending external transfer tasks
+	// (signals and cancel requests), their completion is not guaranteed to trigger
+	// a mutable state mutation — and without one, time skipping won't be re-triggered.
+	// We need a separate mechanism to catch these missed trigger opportunities.
+	return false, ""
+}
+
+// ShouldExecuteTimeSkipping checks if one mutable state should execute time skipping,
+// i.e. there is no in-flight work and there is a time point to skip to.
+func (ms *MutableStateImpl) shouldExecuteTimeSkipping() bool {
+	// configuration check
+	tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
+	if tsi == nil {
+		return false
+	}
+	if tsi.GetConfig() == nil || !tsi.GetConfig().Enabled {
+		return false
+	}
+
+	// runtime check
+	noSkippingReason := ""
+	defer func() {
+		if noSkippingReason != "" {
+			ms.logger.Debug(fmt.Sprintf("time skipping skipped for: %s", noSkippingReason),
+				tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
+				tag.WorkflowRunID(ms.GetExecutionState().RunId),
+			)
+		}
+	}()
+
+	if !ms.IsWorkflowExecutionRunning() {
+		noSkippingReason = "workflow is not running"
+		return false
+	}
+
+	// pending work exists
+	if hasPendingWork, detailedReason := ms.hasInflightWorkToPreventTimeSkipping(); hasPendingWork {
+		noSkippingReason = fmt.Sprintf("pending work: %s", detailedReason)
+		return false
+	}
+
+	// time point check
+	// TODO@time-skipping: need to support start-with-delay
+	// TODO@time-skipping: when bound is introduced, we need to check if the bound is reached
+	if len(ms.GetPendingTimerInfos()) == 0 {
+		noSkippingReason = "no related time point to skip to"
+		return false
+	}
+	return true
+}
+
+// AddWorkflowExecutionTimeSkippingTransitionedEvent adds a workflow execution time skipping transitioned event to the mutable state.
+// This should only be called only when `ShouldExecuteTimeSkipping` returns true.
+func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context) (*historypb.HistoryEvent, error) {
+
+	opTag := tag.WorkflowActionWorkflowExecutionTimeSkippingTransitioned
+	if err := ms.checkMutability(opTag); err != nil {
+		return nil, err
+	}
+
+	// The event shall at least has one of skipped duration or disabled after bound flag.
+	// TODO@time-skipping: both calculation of disabledAfterBound and nextTimePointToSkip will be changed when bound is introduced
+	disabledAfterBound := false
+	var nextTimePointToSkip *persistencespb.TimerInfo
+	for _, timerInfo := range ms.GetPendingTimerInfos() {
+		if nextTimePointToSkip == nil || timerInfo.ExpiryTime.AsTime().Before(nextTimePointToSkip.ExpiryTime.AsTime()) {
+			nextTimePointToSkip = timerInfo
+		}
+	}
+
+	// shouldn't happen if called after `ShouldExecuteTimeSkipping` returns true
+	if !disabledAfterBound && nextTimePointToSkip == nil {
+		return nil, serviceerror.NewInternal("time skipping is triggered when conditions are not met")
+	}
+
+	var targetTime time.Time
+	if nextTimePointToSkip != nil {
+		targetTime = nextTimePointToSkip.ExpiryTime.AsTime()
+	}
+	event := ms.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(targetTime, disabledAfterBound)
+	return event, ms.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx, event)
+}
+
+// ApplyWorkflowExecutionTimeSkippingTransitionedEvent applies the WorkflowExecutionTimeSkippingTransitionedEvent to the mutable state.
+func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error {
+
+	attr := event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
+	// validate
+	if ms.executionInfo.TimeSkippingInfo == nil {
+		return serviceerror.NewInternal(
+			"TimeSkippingInfo is not set when applying WorkflowExecutionTimeSkippingTransitionedEvent, mutable state is corrupted",
+		)
+	}
+	if attr.TargetTime == nil && !attr.GetDisabledAfterBound() {
+		return serviceerror.NewInternal(
+			"empty WorkflowExecutionTimeSkippingTransitionedEvent found, event is corrupted",
+		)
+	}
+
+	// init
+	if ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration == nil {
+		ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(0)
+	}
+
+	// calculate
+	accumulatedSkippedDuration := ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration()
+	if attr.TargetTime != nil {
+		accumulatedSkippedDuration += attr.GetTargetTime().AsTime().Sub(event.GetEventTime().AsTime())
+	}
+
+	// update
+	ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(accumulatedSkippedDuration)
+	ms.executionInfo.TimeSkippingInfo.Config.Enabled = !attr.GetDisabledAfterBound()
+	ms.timeSkippingInfoUpdated = true
+
+	return nil
+}
+
 func (ms *MutableStateImpl) ApplyWorkflowTaskFailedEvent() error {
 	return ms.workflowTaskManager.ApplyWorkflowTaskFailedEvent()
 }
@@ -4079,6 +4239,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	deployment *deploymentpb.Deployment,
 	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
+	workerControlTaskQueue string,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionActivityTaskStarted
 	err := ms.checkMutability(opTag)
@@ -4106,6 +4267,8 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		ai.LastWorkerDeploymentVersion = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment))
 		ai.LastDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment)
 	}
+
+	ai.WorkerControlTaskQueue = workerControlTaskQueue
 
 	if !ai.HasRetryPolicy {
 		event := ms.hBuilder.AddActivityTaskStartedEvent(
@@ -4386,6 +4549,10 @@ func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 	}
 
 	return actCancelReqEvent, ai, nil
+}
+
+func (ms *MutableStateImpl) AddWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error {
+	return ms.taskGenerator.GenerateWorkerCommandsTasks(commands, controlQueue)
 }
 
 func (ms *MutableStateImpl) ApplyActivityTaskCancelRequestedEvent(
@@ -5390,6 +5557,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	links []*commonpb.Link,
 	identity string,
 	priority *commonpb.Priority,
+	timeSkippingConfig *workflowpb.TimeSkippingConfig,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
 		return nil, err
@@ -5402,6 +5570,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 		links,
 		identity,
 		priority,
+		timeSkippingConfig,
 	)
 	prevEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	prevEffectiveDeployment := ms.GetEffectiveDeployment()
@@ -5460,6 +5629,17 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 			requestReschedulePendingWorkflowTask = true
 		}
 		ms.executionInfo.Priority = attributes.GetPriority()
+	}
+
+	// Update time skipping config.
+	if tsc := attributes.GetTimeSkippingConfig(); tsc != nil {
+		if ms.executionInfo.TimeSkippingInfo == nil {
+			ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+				Config: tsc,
+			}
+		} else {
+			ms.executionInfo.TimeSkippingInfo.Config = tsc
+		}
 	}
 
 	// Finally, reschedule the pending workflow task if so requested.
@@ -6691,7 +6871,7 @@ func (ms *MutableStateImpl) processCloseCallbacksChasm() error {
 		return err
 	}
 
-	return wf.ProcessCloseCallbacks(ctx)
+	return callback.ScheduleStandbyCallbacks(ctx, wf.Callbacks)
 }
 
 func (ms *MutableStateImpl) AddTasks(
@@ -6863,7 +7043,8 @@ func (ms *MutableStateImpl) isStateDirty() bool {
 		ms.workflowTaskUpdated ||
 		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty()) ||
 		ms.chasmTree.IsStateDirty() ||
-		ms.isResetStateUpdated
+		ms.isResetStateUpdated ||
+		ms.timeSkippingInfoUpdated
 }
 
 func (ms *MutableStateImpl) IsTransitionHistoryEnabled() bool {
@@ -7081,6 +7262,8 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
+	regenTimerTasksForTimeSkipping := ms.closeTransactionHandleTimeSkipping(ctx, transactionPolicy)
+
 	// Save if the state is dirty before closeTransactionPrepareEvents since it flushes the buffer
 	// events, and therefore change the dirty state.
 	isStateDirty := ms.isStateDirty()
@@ -7151,6 +7334,7 @@ func (ms *MutableStateImpl) closeTransaction(
 		transactionPolicy,
 		eventBatches,
 		clearBuffer,
+		regenTimerTasksForTimeSkipping,
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
@@ -7552,6 +7736,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	transactionPolicy historyi.TransactionPolicy,
 	eventBatches [][]*historypb.HistoryEvent,
 	clearBufferEvents bool,
+	regenerateTimerTasksForTimeSkipping bool,
 ) error {
 	if err := ms.closeTransactionHandleWorkflowResetTask(
 		transactionPolicy,
@@ -7570,12 +7755,17 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	}
 
 	// TODO merge active & passive task generation
-	// NOTE: this function must be the last call
+	// NOTE: this function must be the last call before time skipping is applied
 	//  since we only generate at most one activity & user timer,
 	//  regardless of how many activity & user timer created
 	//  so the calculation must be at the very end
 	if err := ms.closeTransactionHandleActivityUserTimerTasks(transactionPolicy); err != nil {
 		return err
+	}
+	if regenerateTimerTasksForTimeSkipping {
+		if err := ms.closeTransactionRegenerateTimerTasksForTimeSkipping(transactionPolicy); err != nil {
+			return err
+		}
 	}
 
 	return ms.closeTransactionPrepareReplicationTasks(transactionPolicy, eventBatches, clearBufferEvents)
@@ -7746,6 +7936,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.executionStateUpdated = false
 	ms.workflowTaskUpdated = false
 	ms.isResetStateUpdated = false
+	ms.timeSkippingInfoUpdated = false
 	ms.updateInfoUpdated = make(map[string]struct{})
 	ms.timerInfosUserDataUpdated = make(map[string]struct{})
 	ms.activityInfosUserDataUpdated = make(map[int64]struct{})
@@ -8270,6 +8461,58 @@ func (ms *MutableStateImpl) closeTransactionHandleActivityUserTimerTasks(
 		return nil
 	default:
 		panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
+	}
+}
+
+func (ms *MutableStateImpl) closeTransactionHandleTimeSkipping(
+	ctx context.Context,
+	transactionPolicy historyi.TransactionPolicy,
+) (regenTimerTasksForTimeSkipping bool) {
+	switch transactionPolicy {
+	case historyi.TransactionPolicyActive:
+		if !ms.IsWorkflowExecutionRunning() {
+			return false
+		}
+		if ms.shouldExecuteTimeSkipping() {
+			_, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx)
+			if err != nil {
+				ms.metricsHandler.Counter(metrics.ExecutionTimeSkippingTransitionedErrorCounter.Name()).Record(1)
+				ms.logger.Error(
+					"failed to add workflow execution time skipping transitioned event, and ignore this error and continue",
+					tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
+					tag.WorkflowRunID(ms.GetExecutionState().RunId),
+					tag.Error(err),
+				)
+				return false
+			}
+			return true
+		}
+		return false
+	case historyi.TransactionPolicyPassive:
+		return false
+	default:
+		ms.logger.Error(fmt.Sprintf("closeTransactionHandleTimeSkipping: unknown transaction policy: %v", transactionPolicy),
+			tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
+			tag.WorkflowRunID(ms.GetExecutionState().RunId),
+		)
+		return false
+	}
+}
+
+func (ms *MutableStateImpl) closeTransactionRegenerateTimerTasksForTimeSkipping(
+	transactionPolicy historyi.TransactionPolicy,
+) error {
+	switch transactionPolicy {
+	case historyi.TransactionPolicyActive:
+		if !ms.IsWorkflowExecutionRunning() {
+			return nil
+		}
+		ms.taskGenerator.RegenerateTimerTasksForTimeSkipping()
+		return nil
+	case historyi.TransactionPolicyPassive:
+		return nil
+	default:
+		return serviceerror.NewInternalf("unknown transaction policy: %v", transactionPolicy)
 	}
 }
 
@@ -9111,6 +9354,24 @@ func (ms *MutableStateImpl) SetVersioningRevisionNumber(revisionNumber int64) {
 		ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
 	}
 	ms.GetExecutionInfo().GetVersioningInfo().RevisionNumber = revisionNumber
+}
+
+func (ms *MutableStateImpl) GetShouldUseRampingVersion() bool {
+	execInfo := ms.GetExecutionInfo()
+	versioningInfo := execInfo.GetVersioningInfo()
+
+	hasNoCompletedWorkflowTask := execInfo.GetLastCompletedWorkflowTaskStartedEventId() == common.EmptyEventID
+
+	// Backward-compat note: history events written before ContinueAsNewInitialVersioningBehavior existed
+	// carry UNSPECIFIED, which does not match USE_RAMPING_VERSION, so those runs correctly fall through
+	// and return false — the same as AUTO_UPGRADE behavior.
+	hasInitialBehaviorUseRampingVersion := versioningInfo.GetContinueAsNewInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_USE_RAMPING_VERSION
+
+	// ContinueAsNewInitialVersioningBehavior is only populated (in ApplyWorkflowExecutionStartedEvent)
+	// from InheritedAutoUpgradeInfo, which always sets Behavior to AUTO_UPGRADE. So there is no world
+	// in which ContinueAsNewInitialVersioningBehavior is set without Behavior also being AUTO_UPGRADE.
+	// We could also check if the behavior is AUTO_UPGRADE, but that's redundant.
+	return hasNoCompletedWorkflowTask && hasInitialBehaviorUseRampingVersion
 }
 
 // reschedulePendingActivities reschedules all the activities that are not started, so they are

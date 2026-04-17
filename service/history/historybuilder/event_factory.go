@@ -404,6 +404,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 	links []*commonpb.Link,
 	identity string,
 	priority *commonpb.Priority,
+	timeSkippingConfig *workflowpb.TimeSkippingConfig,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
@@ -414,6 +415,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 			AttachedCompletionCallbacks: attachCompletionCallbacks,
 			Identity:                    identity,
 			Priority:                    priority,
+			TimeSkippingConfig:          timeSkippingConfig,
 		},
 	}
 	event.Links = links
@@ -1078,4 +1080,22 @@ func (b *EventFactory) createHistoryEvent(
 	historyEvent.TaskId = common.EmptyEventTaskID
 
 	return historyEvent
+}
+
+func (b *EventFactory) CreateWorkflowExecutionTimeSkippingTransitionedEvent(
+	targetTime time.Time,
+	triggeredDisable bool,
+) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED, b.timeSource.Now())
+	transitionedAttr := &historypb.WorkflowExecutionTimeSkippingTransitionedEventAttributes{
+		WallClockTime:      timestamppb.New(b.timeSource.Now()),
+		DisabledAfterBound: triggeredDisable,
+	}
+	if !targetTime.IsZero() {
+		transitionedAttr.TargetTime = timestamppb.New(targetTime.UTC())
+	}
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionTimeSkippingTransitionedEventAttributes{
+		WorkflowExecutionTimeSkippingTransitionedEventAttributes: transitionedAttr,
+	}
+	return event
 }

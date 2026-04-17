@@ -1325,6 +1325,63 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_Success() {
 			},
 		}, info.GetComputeConfig()))
 	}, 10*time.Second, 500*time.Millisecond)
+
+	// Verify the compute config summary is reflected in DescribeWorkerDeployment version summaries.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		descDeployResp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		var versionSummary *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary
+		for _, vs := range descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+			if vs.GetVersion() == tv.DeploymentVersionString() { //nolint:staticcheck // SA1019: worker versioning v0.31
+				versionSummary = vs
+				break
+			}
+		}
+		a.NotNil(versionSummary, "version %s not found in DescribeWorkerDeployment", tv.DeploymentVersionString())
+		a.True(proto.Equal(&computepb.ComputeConfigSummary{
+			ScalingGroups: map[string]*computepb.ComputeConfigScalingGroupSummary{
+				"sg1": {
+					ProviderType: validProvider.GetType(),
+				},
+				"sg2": {
+					TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+					ProviderType:   validProvider.GetType(),
+				},
+			},
+		}, versionSummary.GetComputeConfig()))
+	}, 10*time.Second, 500*time.Millisecond)
+
+	// Verify the compute config summary is reflected in ListWorkerDeployments latest version summary.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		listResp, err := s.FrontendClient().ListWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
+			Namespace: s.Namespace().String(),
+		})
+		a.NoError(err)
+		var found *workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary
+		for _, d := range listResp.GetWorkerDeployments() {
+			if d.GetName() == tv.DeploymentSeries() {
+				found = d
+				break
+			}
+		}
+		a.NotNil(found, "deployment %s not found in ListWorkerDeployments", tv.DeploymentSeries())
+		a.True(proto.Equal(&computepb.ComputeConfigSummary{
+			ScalingGroups: map[string]*computepb.ComputeConfigScalingGroupSummary{
+				"sg1": {
+					ProviderType: validProvider.GetType(),
+				},
+				"sg2": {
+					TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+					ProviderType:   validProvider.GetType(),
+				},
+			},
+		}, found.GetLatestVersionSummary().GetComputeConfig()))
+	}, 60*time.Second, 500*time.Millisecond)
 }
 
 func (s *DeploymentVersionSuite) TestUpdateComputeConfig_UpdateExistingGroup() {
@@ -1480,6 +1537,31 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_InvalidProvider() {
 	var invalidArg *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArg)
 	s.Contains(invalidArg.Message, "invalid compute provider type")
+
+	// Verify compute config summary is unchanged — the failed update should not have added sg2.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		descDeployResp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		var versionSummary *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary
+		for _, vs := range descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+			if vs.GetVersion() == tv.DeploymentVersionString() { //nolint:staticcheck // SA1019: worker versioning v0.31
+				versionSummary = vs
+				break
+			}
+		}
+		a.NotNil(versionSummary, "version %s not found in deployment summaries", tv.DeploymentVersionString())
+		a.True(proto.Equal(&computepb.ComputeConfigSummary{
+			ScalingGroups: map[string]*computepb.ComputeConfigScalingGroupSummary{
+				"sg1": {
+					ProviderType: computeprovider.TestInvokeComputeProviderValidComputeProvider().GetType(),
+				},
+			},
+		}, versionSummary.GetComputeConfig()))
+	}, 10*time.Second, 500*time.Millisecond)
 }
 
 func (s *DeploymentVersionSuite) TestUpdateComputeConfig_DeletedVersion() {
@@ -3822,7 +3904,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 		a.Equal(identity, descResp.GetWorkerDeploymentVersionInfo().GetLastModifierIdentity())
 	}, 10*time.Second, 500*time.Millisecond)
 
-	// Verify the version shows up in deployment's version summaries with CREATED status
+	// Verify the version shows up in deployment's version summaries with CREATED status and correct compute config summary.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
 		descDeployResp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
@@ -3831,8 +3913,40 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 		})
 		a.NoError(err)
 		a.Len(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries(), 1)
-		a.Equal(tv.DeploymentVersionStringV32(), worker_versioning.ExternalWorkerDeploymentVersionToString(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetDeploymentVersion()))
-		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED, descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetStatus())
+		versionSummary := descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0]
+		a.Equal(tv.DeploymentVersionStringV32(), worker_versioning.ExternalWorkerDeploymentVersionToString(versionSummary.GetDeploymentVersion()))
+		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED, versionSummary.GetStatus())
+		a.True(proto.Equal(&computepb.ComputeConfigSummary{
+			ScalingGroups: map[string]*computepb.ComputeConfigScalingGroupSummary{
+				"sg1": {
+					ProviderType: computeConfig.GetScalingGroups()["sg1"].GetProvider().GetType(),
+				},
+			},
+		}, versionSummary.GetComputeConfig()))
+	}, 10*time.Second, 500*time.Millisecond)
+
+	// Verify the compute config summary is reflected in ListWorkerDeployments latest version summary.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		listResp, err := s.FrontendClient().ListWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
+			Namespace: s.Namespace().String(),
+		})
+		a.NoError(err)
+		var found *workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary
+		for _, d := range listResp.GetWorkerDeployments() {
+			if d.GetName() == deploymentName {
+				found = d
+				break
+			}
+		}
+		a.NotNil(found, "deployment %s not found in ListWorkerDeployments", deploymentName)
+		a.True(proto.Equal(&computepb.ComputeConfigSummary{
+			ScalingGroups: map[string]*computepb.ComputeConfigScalingGroupSummary{
+				"sg1": {
+					ProviderType: computeConfig.GetScalingGroups()["sg1"].GetProvider().GetType(),
+				},
+			},
+		}, found.GetLatestVersionSummary().GetComputeConfig()))
 	}, 10*time.Second, 500*time.Millisecond)
 }
 

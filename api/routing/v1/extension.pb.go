@@ -90,16 +90,16 @@ var file_temporal_server_api_routing_v1_extension_proto_extTypes = []protoimpl.E
 	{
 		ExtendedType:  (*descriptorpb.MethodOptions)(nil),
 		ExtensionType: (*RoutingOptions)(nil),
-		Field:         7234,
+		Field:         50234,
 		Name:          "temporal.server.api.routing.v1.routing",
-		Tag:           "bytes,7234,opt,name=routing",
+		Tag:           "bytes,50234,opt,name=routing",
 		Filename:      "temporal/server/api/routing/v1/extension.proto",
 	},
 }
 
 // Extension fields to descriptorpb.MethodOptions.
 var (
-	// optional temporal.server.api.routing.v1.RoutingOptions routing = 7234;
+	// optional temporal.server.api.routing.v1.RoutingOptions routing = 50234;
 	E_Routing = &file_temporal_server_api_routing_v1_extension_proto_extTypes[0]
 )
 
@@ -112,8 +112,8 @@ const file_temporal_server_api_routing_v1_extension_proto_rawDesc = "" +
 	"\x06random\x18\x01 \x01(\bR\x06random\x12!\n" +
 	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vbusiness_id\x18\x03 \x01(\tR\n" +
-	"businessId:l\n" +
-	"\arouting\x12\x1e.google.protobuf.MethodOptions\x18\xc28 \x01(\v2..temporal.server.api.routing.v1.RoutingOptionsR\arouting\x88\x01\x01B.Z,go.temporal.io/server/api/routing/v1;routingb\x06proto3"
+	"businessId:m\n" +
+	"\arouting\x12\x1e.google.protobuf.MethodOptions\x18\xba\x88\x03 \x01(\v2..temporal.server.api.routing.v1.RoutingOptionsR\arouting\x88\x01\x01B.Z,go.temporal.io/server/api/routing/v1;routingb\x06proto3"
 
 var (
 	file_temporal_server_api_routing_v1_extension_proto_rawDescOnce sync.Once

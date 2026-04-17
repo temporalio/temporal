@@ -75,6 +75,7 @@ type WorkflowRun struct {
 	Status     string    `json:"status"`
 	Conclusion string    `json:"conclusion"`
 	HeadBranch string    `json:"head_branch"`
+	HeadSHA    string    `json:"head_sha"`
 }
 
 // WorkflowArtifact represents a downloadable artifact
@@ -89,4 +90,56 @@ type WorkflowArtifact struct {
 type ArtifactsResponse struct {
 	TotalCount int                `json:"total_count"`
 	Artifacts  []WorkflowArtifact `json:"artifacts"`
+}
+
+// CommitObservation holds aggregated pass/fail data for a single (test, commit) pair.
+type CommitObservation struct {
+	CommitSHA     string
+	CommitIdx     int     // chronological index (0 = oldest)
+	Prior         float64 // prior weight (1.0 = uniform; adjusted by heuristics)
+	HeuristicNote string  // reason for prior adjustment, if any
+	Passes        int
+	Fails         int
+}
+
+// BisectResult is one candidate culprit commit with its posterior probability.
+type BisectResult struct {
+	CommitSHA     string
+	CommitIdx     int
+	Probability   float64 // posterior P(this commit introduced the flakiness)
+	PassesBefore  int
+	FailsBefore   int
+	PassesAfter   int
+	FailsAfter    int
+	CommitTitle   string
+	CommitAuthor  string
+	CommitDate    string // formatted date of the commit, e.g. "2024-01-15"
+	HeuristicNote string // e.g. "only touches .github/ — deprioritized"
+}
+
+// TestBisectReport is the full bisect output for a single test.
+type TestBisectReport struct {
+	TestName    string
+	TopSuspects []BisectResult // sorted by Probability descending
+	TotalObs    int            // total observations (pass + fail) used
+	Skipped     bool           // true if below signal or confidence threshold
+}
+
+// CommitMeta holds changed-file info fetched from the GitHub API.
+// GET /repos/{owner}/{repo}/commits/{sha}
+type CommitMeta struct {
+	SHA         string
+	Title       string
+	Author      string
+	CommittedAt time.Time
+	Files       []string // relative paths of changed files
+}
+
+// BisectConfig holds configuration for a bisect analysis run.
+type BisectConfig struct {
+	Repo           string
+	TopN           int // max tests to analyze; 0 = all qualifying tests
+	MinFailures    int
+	MinRuns        int
+	MinProbability float64 // only report tests whose top suspect exceeds this (0–1); 0 = report all
 }
