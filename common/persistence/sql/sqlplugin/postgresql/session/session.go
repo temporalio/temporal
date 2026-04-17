@@ -55,11 +55,21 @@ func createConnection(
 	d driver.Driver,
 	resolver resolver.ServiceResolver,
 ) (*sqlx.DB, error) {
-	dsn, err := buildDSN(cfg, resolver)
-	if err != nil {
-		return nil, err
+	var db *sqlx.DB
+	var err error
+
+	if cfg.PasswordCommand != nil {
+		db, err = d.CreateRefreshableConnection(func() (string, error) {
+			return buildDSN(cfg, resolver)
+		})
+	} else {
+		var dsn string
+		dsn, err = buildDSN(cfg, resolver)
+		if err != nil {
+			return nil, err
+		}
+		db, err = d.CreateConnection(dsn)
 	}
-	db, err := d.CreateConnection(dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -82,6 +92,10 @@ func buildDSN(
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
 ) (string, error) {
+	password, err := cfg.ResolvePassword()
+	if err != nil {
+		return "", err
+	}
 	tlsAttrs, err := buildDSNAttr(cfg)
 	if err != nil {
 		return "", err
@@ -90,7 +104,7 @@ func buildDSN(
 	return fmt.Sprintf(
 		dsnFmt,
 		cfg.User,
-		url.QueryEscape(cfg.Password),
+		url.QueryEscape(password),
 		resolvedAddr,
 		cfg.DatabaseName,
 		tlsAttrs.Encode(),
