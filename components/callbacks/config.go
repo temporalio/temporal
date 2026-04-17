@@ -68,7 +68,7 @@ type AddressMatchRules struct {
 	Rules []AddressMatchRule
 }
 
-func (a AddressMatchRules) Validate(rawURL string) error {
+func (a AddressMatchRules) validate(rawURL string) error {
 	// Exact match only; no path, query, or fragment allowed for system URL
 	if rawURL == nexus.SystemCallbackURL || rawURL == chasm.NexusCompletionHandlerURL {
 		return nil
@@ -84,7 +84,7 @@ func (a AddressMatchRules) Validate(rawURL string) error {
 		return status.Errorf(codes.InvalidArgument, "invalid url: missing host")
 	}
 	for _, rule := range a.Rules {
-		allow, err := rule.Allow(u)
+		allow, err := rule.allow(u)
 		if err != nil {
 			return err
 		}
@@ -105,7 +105,7 @@ type AddressMatchRule struct {
 // for the given rule.
 // 2. false, nil if the URL does not match the rule.
 // 3. It false, error if there is a match and the URL fails validation
-func (a AddressMatchRule) Allow(u *url.URL) (bool, error) {
+func (a AddressMatchRule) allow(u *url.URL) (bool, error) {
 	if !a.Regexp.MatchString(u.Host) {
 		return false, nil
 	}
