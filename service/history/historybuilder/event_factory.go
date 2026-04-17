@@ -1081,3 +1081,21 @@ func (b *EventFactory) createHistoryEvent(
 
 	return historyEvent
 }
+
+func (b *EventFactory) CreateWorkflowExecutionTimeSkippingTransitionedEvent(
+	targetTime time.Time,
+	triggeredDisable bool,
+) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED, b.timeSource.Now())
+	transitionedAttr := &historypb.WorkflowExecutionTimeSkippingTransitionedEventAttributes{
+		WallClockTime:      timestamppb.New(b.timeSource.Now()),
+		DisabledAfterBound: triggeredDisable,
+	}
+	if !targetTime.IsZero() {
+		transitionedAttr.TargetTime = timestamppb.New(targetTime.UTC())
+	}
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionTimeSkippingTransitionedEventAttributes{
+		WorkflowExecutionTimeSkippingTransitionedEventAttributes: transitionedAttr,
+	}
+	return event
+}
