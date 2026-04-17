@@ -14,6 +14,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -356,6 +357,30 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileInboundStreams_Reactivate() 
 	}]
 	s.True(ok)
 	s.Equal(streamSenderValid, stream)
+}
+
+func (s *streamReceiverMonitorSuite) TestStop_StopsInboundStreams() {
+	clientKey := NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), rand.Int31())
+	serverKey := NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), rand.Int31())
+	streamSender := NewMockStreamSender(s.controller)
+	streamSender.EXPECT().Key().Return(ClusterShardKeyPair{
+		Client: clientKey,
+		Server: serverKey,
+	}).AnyTimes()
+	streamSender.EXPECT().Stop()
+	s.streamReceiverMonitor.RegisterInboundStream(streamSender)
+
+	s.streamReceiverMonitor.Lock()
+	s.Equal(1, len(s.streamReceiverMonitor.inboundStreams))
+	s.streamReceiverMonitor.Unlock()
+
+	// Transition to started state so Stop() proceeds past the CAS check.
+	s.streamReceiverMonitor.status = common.DaemonStatusStarted
+	s.streamReceiverMonitor.Stop()
+
+	s.streamReceiverMonitor.Lock()
+	defer s.streamReceiverMonitor.Unlock()
+	s.Equal(0, len(s.streamReceiverMonitor.inboundStreams))
 }
 
 func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Add() {
