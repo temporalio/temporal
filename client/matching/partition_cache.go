@@ -63,6 +63,7 @@ func (c *partitionCache) Start() {
 
 func (c *partitionCache) Stop() {
 	c.rotate.Cancel()
+	<-c.rotate.Done()
 }
 
 func (c *partitionCache) emitMetrics() {
@@ -120,6 +121,7 @@ func (s *partitionCacheShard) put(key string, pc PartitionCounts) {
 	if pc.Valid() {
 		s.active[key] = pc
 	} else {
+		// invalid PartitionCounts means disable this mechanism, so remove this key entirely
 		delete(s.active, key)
 	}
 	delete(s.prev, key)

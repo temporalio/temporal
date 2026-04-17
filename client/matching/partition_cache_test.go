@@ -36,7 +36,7 @@ func TestPartitionCache_BasicPutLookup(t *testing.T) {
 	keyc := c.makeKey(testNsID, "nonexistent", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	require.Equal(t, PartitionCounts{}, c.lookup(keyc))
 
-	// removes
+	// invalid PartitionCounts removes
 	c.put(key, PartitionCounts{Read: -3, Write: -5})
 	require.Equal(t, PartitionCounts{}, c.lookup(key))
 }
@@ -66,6 +66,13 @@ func TestPartitionCache_Rotate(t *testing.T) {
 	c.shards[c.shardFromKey(key)].rotate()
 
 	require.Equal(t, PartitionCounts{}, c.lookup(key))
+
+	// Put another value after rotate
+	pc4 := PartitionCounts{Read: 4, Write: 4}
+	c.put(key, pc4)
+
+	// Lookup should find it
+	require.Equal(t, pc4, c.lookup(key))
 }
 
 func TestPartitionCache_ConcurrentAccess(t *testing.T) {
