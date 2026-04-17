@@ -131,7 +131,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	}
 
 	completion, err := h.CallbackTokenGenerator.DecodeCompletion(token)
-	if err != nil || completion == nil {
+	if err != nil {
 		h.Logger.Error("failed to decode completion from token", tag.Error(err))
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
