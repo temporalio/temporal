@@ -33,6 +33,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/definition"
@@ -6639,6 +6640,202 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEv
 	})
 }
 
+func (s *mutableStateSuite) TestWrapTimeSourceWithTimeSkipping() {
+	const skipped = 2 * time.Hour
+	fixedBase := time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC)
+
+	// fixedTimeSource returns fixedBase and is used as the base time source for subtests
+	// that need deterministic virtual-time assertions.
+	fixedTimeSource := func() *clock.EventTimeSource {
+		ts := clock.NewEventTimeSource()
+		ts.Update(fixedBase)
+		return ts
+	}
+
+	s.Run("NoOpWhenTimeSkippingInfoNil", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		original := s.mutableState.timeSource
+
+		s.mutableState.wrapTimeSourceWithTimeSkipping()
+
+		s.Equal(original, s.mutableState.timeSource)
+		_, isWrapper := s.mutableState.timeSource.(*clock.TimeSkippingTimeSourceWrapper)
+		s.False(isWrapper)
+	})
+
+	s.Run("WrapsTimeSourceWhenTimeSkippingInfoSet", func() {
+		s.mutableState.timeSource = fixedTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(skipped),
+		}
+
+		s.mutableState.wrapTimeSourceWithTimeSkipping()
+
+		_, isWrapper := s.mutableState.timeSource.(*clock.TimeSkippingTimeSourceWrapper)
+		s.True(isWrapper)
+		s.Equal(fixedBase.Add(skipped), s.mutableState.timeSource.Now())
+	})
+
+	s.Run("IdempotentWhenAlreadyWrapped", func() {
+		s.mutableState.timeSource = fixedTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(skipped),
+		}
+		s.mutableState.wrapTimeSourceWithTimeSkipping()
+		wrappedOnce := s.mutableState.timeSource
+
+		s.mutableState.wrapTimeSourceWithTimeSkipping()
+
+		s.Equal(wrappedOnce, s.mutableState.timeSource, "second call must not double-wrap")
+	})
+
+	s.Run("HBuilderUsesVirtualTime", func() {
+		s.mutableState.timeSource = fixedTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(skipped),
+		}
+
+		s.mutableState.wrapTimeSourceWithTimeSkipping()
+
+		event := s.mutableState.hBuilder.AddHistoryEvent(
+			enumspb.EVENT_TYPE_TIMER_FIRED,
+			func(e *historypb.HistoryEvent) {
+				e.Attributes = &historypb.HistoryEvent_TimerFiredEventAttributes{
+					TimerFiredEventAttributes: &historypb.TimerFiredEventAttributes{TimerId: "t1"},
+				}
+			},
+		)
+		s.Equal(fixedBase.Add(skipped), event.GetEventTime().AsTime())
+	})
+}
+
+func (s *mutableStateSuite) TestInitTimeSkippingInfoAndWrapTimeSource() {
+	const skipped = time.Hour
+
+	s.Run("InitializesNilTimeSkippingInfo", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+
+		s.mutableState.initTimeSkippingInfoAndWrapTimeSource()
+
+		s.NotNil(s.mutableState.executionInfo.TimeSkippingInfo)
+	})
+
+	s.Run("KeepsExistingTimeSkippingInfo", func() {
+		existing := &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(skipped),
+		}
+		s.mutableState.executionInfo.TimeSkippingInfo = existing
+
+		s.mutableState.initTimeSkippingInfoAndWrapTimeSource()
+
+		s.Equal(existing, s.mutableState.executionInfo.TimeSkippingInfo)
+	})
+
+	s.Run("WrapsTimeSourceAfterInit", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+
+		s.mutableState.initTimeSkippingInfoAndWrapTimeSource()
+
+		_, isWrapper := s.mutableState.timeSource.(*clock.TimeSkippingTimeSourceWrapper)
+		s.True(isWrapper)
+	})
+}
+
+// TestRefreshExpirationTimeoutTask verifies that RefreshExpirationTimeoutTask anchors
+// WorkflowExecutionExpirationTime and WorkflowRunExpirationTime on the workflow's
+// virtual clock (ms.timeSource) rather than raw wall clock. This is required so that
+// toRealTime at the task-generator boundary produces the correct wall-clock
+// VisibilityTimestamp when AccumulatedSkippedDuration > 0.
+//
+// Downstream RefreshTasksForWorkflowStart is short-circuited by setting status !=
+// RUNNING; the expiration-field writes happen before that call.
+func (s *mutableStateSuite) TestRefreshExpirationTimeoutTask() {
+	const skipped = 30 * time.Minute
+	fixedBase := time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC)
+
+	// installFixedVirtualClock replaces ms.timeSource with a deterministic fixed-time source
+	// wrapped to add `skipped` on top, so ms.timeSource.Now() is exactly fixedBase + skipped.
+	installFixedVirtualClock := func() time.Time {
+		base := clock.NewEventTimeSource()
+		base.Update(fixedBase)
+		s.mutableState.timeSource = base
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(skipped),
+		}
+		s.mutableState.wrapTimeSourceWithTimeSkipping()
+		return fixedBase.Add(skipped)
+	}
+
+	// Make RefreshTasksForWorkflowStart a no-op: it returns early unless status == RUNNING.
+	shortCircuitRefresh := func() {
+		s.mutableState.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+		s.mutableState.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}
+
+	s.Run("ExpirationFieldsAnchoredOnVirtualTime", func() {
+		const (
+			weTimeout = 2 * time.Hour
+			wrTimeout = 90 * time.Minute
+		)
+		s.mutableState.executionInfo.WorkflowExecutionTimeout = durationpb.New(weTimeout)
+		s.mutableState.executionInfo.WorkflowRunTimeout = durationpb.New(wrTimeout)
+		virtualNow := installFixedVirtualClock()
+		shortCircuitRefresh()
+
+		s.Require().NoError(s.mutableState.RefreshExpirationTimeoutTask(context.Background()))
+
+		// Both fields should be virtualNow + timeout — i.e., (wallNow + skipped) + timeout.
+		s.Equal(
+			virtualNow.Add(weTimeout),
+			s.mutableState.executionInfo.WorkflowExecutionExpirationTime.AsTime(),
+		)
+		s.Equal(
+			virtualNow.Add(wrTimeout),
+			s.mutableState.executionInfo.WorkflowRunExpirationTime.AsTime(),
+		)
+	})
+
+	s.Run("RunExpirationClampedToExecutionExpiration", func() {
+		// WorkflowRunTimeout > WorkflowExecutionTimeout: run expiration must be clamped
+		// down to execution expiration.
+		const (
+			weTimeout = time.Hour
+			wrTimeout = 3 * time.Hour
+		)
+		s.mutableState.executionInfo.WorkflowExecutionTimeout = durationpb.New(weTimeout)
+		s.mutableState.executionInfo.WorkflowRunTimeout = durationpb.New(wrTimeout)
+		virtualNow := installFixedVirtualClock()
+		shortCircuitRefresh()
+
+		s.Require().NoError(s.mutableState.RefreshExpirationTimeoutTask(context.Background()))
+
+		s.Equal(
+			virtualNow.Add(weTimeout),
+			s.mutableState.executionInfo.WorkflowExecutionExpirationTime.AsTime(),
+		)
+		s.Equal(
+			virtualNow.Add(weTimeout),
+			s.mutableState.executionInfo.WorkflowRunExpirationTime.AsTime(),
+		)
+	})
+
+	s.Run("ZeroTimeoutsLeaveFieldsUntouched", func() {
+		// Both timeouts unset (= infinite): the fields must remain at whatever they were
+		// before — in particular, they must not be overwritten with (now + 0).
+		s.mutableState.executionInfo.WorkflowExecutionTimeout = durationpb.New(0)
+		s.mutableState.executionInfo.WorkflowRunTimeout = durationpb.New(0)
+		preExecExpiration := s.mutableState.executionInfo.WorkflowExecutionExpirationTime
+		preRunExpiration := s.mutableState.executionInfo.WorkflowRunExpirationTime
+		installFixedVirtualClock()
+		shortCircuitRefresh()
+
+		s.Require().NoError(s.mutableState.RefreshExpirationTimeoutTask(context.Background()))
+
+		s.Equal(preExecExpiration, s.mutableState.executionInfo.WorkflowExecutionExpirationTime)
+		s.Equal(preRunExpiration, s.mutableState.executionInfo.WorkflowRunExpirationTime)
+	})
+}
+
 func (s *mutableStateSuite) TestAddWorkflowExecutionTimeSkippingTransitionedEvent() {
 	s.Run("FailsWhenWorkflowNotRunning", func() {
 		s.mutableState.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
@@ -7091,10 +7288,13 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 
 	s.Run("Ordering/UserTimer_NotCreated_WithTimeSkipping", func() {
 		// Timer has TaskStatus=None AND the workflow becomes eligible for time-skipping.
-		// closeTransactionHandleActivityUserTimerTasks runs first and generates a normal
-		// UserTimerTask at ExpiryTime.  closeTransactionRegenerateTimerTasksForTimeSkipping
-		// then generates a second UserTimerTask at ExpiryTime-accumulatedDuration.
-		// Both tasks must be present; the time-skipped one has an earlier timestamp.
+		// closeTransactionHandleTimeSkipping runs first and writes the transitioned event,
+		// incrementing AccumulatedSkippedDuration. Then closeTransactionHandleActivityUserTimerTasks
+		// generates a UserTimerTask at virtualToRealTime(ExpiryTime) — i.e. the wall-clock
+		// equivalent of the virtual expiry. closeTransactionRegenerateTimerTasksForTimeSkipping
+		// then generates a second UserTimerTask at the same wall-clock value (since accumulated
+		// skip is the same at both call sites). Both tasks have identical VisibilityTimestamp;
+		// runtime dedup handles the duplicate.
 		dbState := buildRunningState()
 		dbState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
@@ -7114,16 +7314,11 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 		s.Require().Greater(accumulated.AsDuration(), time.Duration(0))
 
 		utTasks := collectUserTimerTasks(mutation.Tasks[tasks.CategoryTimer])
-		s.Require().Len(utTasks, 2, "expected one normal task and one time-skipped task")
-
-		// Sort by visibility timestamp so we can check order deterministically.
-		if utTasks[0].VisibilityTimestamp.After(utTasks[1].VisibilityTimestamp) {
-			utTasks[0], utTasks[1] = utTasks[1], utTasks[0]
-		}
+		s.Require().Len(utTasks, 2, "expected one task from normal path and one from regeneration path")
 
 		expectedShifted := timerExpiry.Add(-accumulated.AsDuration())
-		s.Equal(expectedShifted, utTasks[0].VisibilityTimestamp, "time-skipped task must fire first")
-		s.Equal(timerExpiry, utTasks[1].VisibilityTimestamp, "normal task fires at real expiry")
+		s.Equal(expectedShifted, utTasks[0].VisibilityTimestamp, "normal path uses wall-clock expiry")
+		s.Equal(expectedShifted, utTasks[1].VisibilityTimestamp, "regeneration path uses the same wall-clock expiry")
 		s.Equal(int64(1), utTasks[0].EventID)
 		s.Equal(int64(1), utTasks[1].EventID)
 	})

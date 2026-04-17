@@ -157,7 +157,7 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	}
 
 	timerSequence := t.getTimerSequence(mutableState)
-	referenceTime := t.Now()
+	referenceTime := mutableState.GetVirtualTimeNow()
 	timerFired := false
 Loop:
 	for _, timerSequenceID := range timerSequence.LoadAndSortUserTimers() {
@@ -221,7 +221,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	}
 
 	timerSequence := t.getTimerSequence(mutableState)
-	referenceTime := t.Now()
+	referenceTime := mutableState.GetVirtualTimeNow()
 	updateMutableState := false
 	scheduleWorkflowTask := false
 
@@ -682,8 +682,13 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	retryState := enumspb.RETRY_STATE_TIMEOUT
 	initiator := enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED
 
+	// Use virtual time: WorkflowExecutionExpirationTime is stored in virtual frame
+	// (consistent with event history), and the new run's StartTime below also
+	// must be virtual. Reading once keeps the two decisions consistent.
+	virtualNow := mutableState.GetVirtualTimeNow()
+
 	wfExpTime := mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime
-	if wfExpTime == nil || wfExpTime.AsTime().IsZero() || wfExpTime.AsTime().After(t.Now()) {
+	if wfExpTime == nil || wfExpTime.AsTime().IsZero() || wfExpTime.AsTime().After(virtualNow) {
 		backoffInterval, retryState = mutableState.GetRetryBackoffDuration(timeoutFailure)
 		if backoffInterval != backoff.NoBackoff {
 			// We have a retry policy and we should retry.
@@ -733,7 +738,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		mutableState.GetNamespaceEntry(),
 		mutableState.GetWorkflowKey().WorkflowID,
 		newRunID,
-		t.Now(),
+		virtualNow,
 		mutableState,
 	)
 	if err != nil {

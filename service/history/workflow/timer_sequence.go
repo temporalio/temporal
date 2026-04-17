@@ -76,7 +76,8 @@ func (t *timerSequenceImpl) CreateNextUserTimer() (bool, error) {
 	firstTimerTask := sequenceIDs[0]
 
 	// user timer after workflow timeout, skip
-	workflowRunExpirationTime := timestamp.TimeValue(t.mutableState.GetExecutionInfo().WorkflowRunExpirationTime)
+	execInfo := t.mutableState.GetExecutionInfo()
+	workflowRunExpirationTime := timestamp.TimeValue(execInfo.WorkflowRunExpirationTime)
 	if !workflowRunExpirationTime.IsZero() && firstTimerTask.Timestamp.After(workflowRunExpirationTime) {
 		return false, nil
 	}
@@ -99,7 +100,7 @@ func (t *timerSequenceImpl) CreateNextUserTimer() (bool, error) {
 	t.mutableState.AddTasks(&tasks.UserTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         t.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: firstTimerTask.Timestamp,
+		VisibilityTimestamp: virtualToRealTime(execInfo, firstTimerTask.Timestamp),
 		EventID:             firstTimerTask.EventID,
 	})
 	return true, nil
@@ -115,7 +116,8 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 	firstTimerTask := sequenceIDs[0]
 
 	// activity timer after workflow timeout, skip
-	workflowRunExpirationTime := timestamp.TimeValue(t.mutableState.GetExecutionInfo().WorkflowRunExpirationTime)
+	execInfo := t.mutableState.GetExecutionInfo()
+	workflowRunExpirationTime := timestamp.TimeValue(execInfo.WorkflowRunExpirationTime)
 	if !workflowRunExpirationTime.IsZero() && firstTimerTask.Timestamp.After(workflowRunExpirationTime) {
 		return false, nil
 	}
@@ -144,7 +146,7 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 	t.mutableState.AddTasks(&tasks.ActivityTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         t.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: firstTimerTask.Timestamp,
+		VisibilityTimestamp: virtualToRealTime(execInfo, firstTimerTask.Timestamp),
 		TimeoutType:         firstTimerTask.TimerType,
 		EventID:             firstTimerTask.EventID,
 		Attempt:             firstTimerTask.Attempt,
