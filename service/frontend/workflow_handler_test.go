@@ -3240,16 +3240,18 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistor
 func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	var unimplementedErr *serviceerror.Unimplemented
 
 	// nil config is valid
 	s.NoError(wh.validateTimeSkippingConfig(nil, s.testNamespace))
 
 	// config with enabled=false but dynamic config disabled returns error
 	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	s.Error(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
+	s.ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
 
 	// config with enabled=true but dynamic config disabled returns error
-	s.Error(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+	s.ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
 
 	// config with enabled=false and dynamic config enabled is valid
 	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
@@ -3259,11 +3261,12 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
 
 	// MaxSkippedDuration below 1 minute is rejected
+	// error tyope is InvalidArgument
 	halfMinDuration := time.Duration(0.5 * float64(namespace.MinTimeSkippingDuration))
-	s.Error(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+	s.ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
 		Enabled: true,
 		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(halfMinDuration)},
-	}, s.testNamespace))
+	}, s.testNamespace), &invalidArgumentErr)
 
 	// MaxSkippedDuration exactly 1 minute is valid
 	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
@@ -3272,10 +3275,10 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	}, s.testNamespace))
 
 	// MaxElapsedDuration below 1 minute is rejected
-	s.Error(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+	s.ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
 		Enabled: true,
 		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(halfMinDuration)},
-	}, s.testNamespace))
+	}, s.testNamespace), &invalidArgumentErr)
 
 	// MaxElapsedDuration exactly 1 minute is valid
 	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
@@ -3284,10 +3287,10 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	}, s.testNamespace))
 
 	// MaxTargetTime less than 1 minute from now is rejected
-	s.Error(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+	s.ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
 		Enabled: true,
 		Bound:   &workflowpb.TimeSkippingConfig_MaxTargetTime{MaxTargetTime: timestamppb.New(time.Now().Add(halfMinDuration))},
-	}, s.testNamespace))
+	}, s.testNamespace), &invalidArgumentErr)
 
 	// MaxTargetTime well beyond 1 minute from now is valid
 	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
