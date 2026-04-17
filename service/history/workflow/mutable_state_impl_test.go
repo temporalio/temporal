@@ -7138,3 +7138,150 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 		s.Equal(int64(1), utTasks[0].EventID)
 	})
 }
+
+// TestApplyWorkflowExecutionStartedEvent_TimeSkippingConfig verifies that when a
+// WorkflowExecutionStarted event carrying TimeSkippingConfig is replayed (e.g. during
+// reset, conflict resolution, or replication), the config is persisted onto
+// executionInfo.TimeSkippingInfo. This is the code path exercised by all mutable-state
+// rebuild flows.
+func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_TimeSkippingConfig() {
+	inputConfig := &workflowpb.TimeSkippingConfig{
+		Enabled:            true,
+		DisablePropagation: true,
+		Bound:              &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
+	}
+
+	testCases := []struct {
+		name               string
+		timeSkippingConfig *workflowpb.TimeSkippingConfig
+		wantConfig         *workflowpb.TimeSkippingConfig
+	}{
+		{
+			name:               "with config",
+			timeSkippingConfig: inputConfig,
+			wantConfig:         inputConfig,
+		},
+		{
+			name:               "without config",
+			timeSkippingConfig: nil,
+			wantConfig:         nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+			execution := &commonpb.WorkflowExecution{
+				WorkflowId: tests.WorkflowID,
+				RunId:      tests.RunID,
+			}
+			startEvent := &historypb.HistoryEvent{
+				EventId:   common.FirstEventID,
+				EventTime: timestamppb.New(time.Now().UTC()),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+						WorkflowType:        &commonpb.WorkflowType{Name: "test-workflow-type"},
+						TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+						WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+						FirstExecutionRunId: tests.RunID,
+						TimeSkippingConfig:  tc.timeSkippingConfig,
+					},
+				},
+			}
+
+			err := s.mutableState.ApplyWorkflowExecutionStartedEvent(
+				nil,
+				execution,
+				uuid.NewString(),
+				startEvent,
+			)
+			s.NoError(err)
+
+			if tc.wantConfig == nil {
+				s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo())
+			} else {
+				s.True(proto.Equal(tc.wantConfig, s.mutableState.executionInfo.GetTimeSkippingInfo().GetConfig()))
+			}
+		})
+	}
+}
+
+// TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSkippingConfig verifies that
+// replaying a WorkflowExecutionOptionsUpdated event with TimeSkippingConfig populates
+// or overwrites executionInfo.TimeSkippingInfo. This is the rebuild path for
+// time-skipping config that is set or changed after workflow start.
+func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSkippingConfig() {
+	initialConfig := &workflowpb.TimeSkippingConfig{
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
+	}
+	updatedConfig := &workflowpb.TimeSkippingConfig{
+		Enabled:            true,
+		DisablePropagation: true,
+		Bound:              &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
+	}
+
+	testCases := []struct {
+		name          string
+		existing      *workflowpb.TimeSkippingConfig
+		eventConfig   *workflowpb.TimeSkippingConfig
+		wantConfig    *workflowpb.TimeSkippingConfig
+		wantInfoIsNil bool
+	}{
+		{
+			name:        "sets when none exists",
+			existing:    nil,
+			eventConfig: initialConfig,
+			wantConfig:  initialConfig,
+		},
+		{
+			name:        "overwrites existing",
+			existing:    initialConfig,
+			eventConfig: updatedConfig,
+			wantConfig:  updatedConfig,
+		},
+		{
+			name:          "nil config leaves info untouched",
+			existing:      nil,
+			eventConfig:   nil,
+			wantInfoIsNil: true,
+		},
+		{
+			name:        "nil config preserves existing",
+			existing:    initialConfig,
+			eventConfig: nil,
+			wantConfig:  initialConfig,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			if tc.existing != nil {
+				s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: tc.existing}
+			}
+
+			event := &historypb.HistoryEvent{
+				EventId:   int64(2),
+				EventTime: timestamppb.New(time.Now().UTC()),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+					WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+						TimeSkippingConfig: tc.eventConfig,
+					},
+				},
+			}
+
+			err := s.mutableState.ApplyWorkflowExecutionOptionsUpdatedEvent(event)
+			s.NoError(err)
+
+			if tc.wantInfoIsNil {
+				s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo())
+			} else {
+				s.True(proto.Equal(tc.wantConfig, s.mutableState.executionInfo.GetTimeSkippingInfo().GetConfig()))
+			}
+		})
+	}
+}

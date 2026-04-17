@@ -3244,56 +3244,56 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	var unimplementedErr *serviceerror.Unimplemented
 
 	// nil config is valid
-	s.NoError(wh.validateTimeSkippingConfig(nil, s.testNamespace))
+	s.Require().NoError(wh.validateTimeSkippingConfig(nil, s.testNamespace))
 
 	// config with enabled=false but dynamic config disabled returns error
 	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	s.ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
 
 	// config with enabled=true but dynamic config disabled returns error
-	s.ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
 
 	// config with enabled=false and dynamic config enabled is valid
 	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
+	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
 
 	// config with enabled=true and dynamic config enabled is valid
-	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
 
 	// MaxSkippedDuration below 1 minute is rejected
-	// error tyope is InvalidArgument
+	// error type is InvalidArgument
 	halfMinDuration := time.Duration(0.5 * float64(namespace.MinTimeSkippingDuration))
-	s.ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
 		Enabled: true,
 		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(halfMinDuration)},
 	}, s.testNamespace), &invalidArgumentErr)
 
 	// MaxSkippedDuration exactly 1 minute is valid
-	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
 		Enabled: true,
 		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(namespace.MinTimeSkippingDuration)},
 	}, s.testNamespace))
 
 	// MaxElapsedDuration below 1 minute is rejected
-	s.ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
 		Enabled: true,
 		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(halfMinDuration)},
 	}, s.testNamespace), &invalidArgumentErr)
 
 	// MaxElapsedDuration exactly 1 minute is valid
-	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
 		Enabled: true,
 		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(namespace.MinTimeSkippingDuration)},
 	}, s.testNamespace))
 
 	// MaxTargetTime less than 1 minute from now is rejected
-	s.ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
 		Enabled: true,
 		Bound:   &workflowpb.TimeSkippingConfig_MaxTargetTime{MaxTargetTime: timestamppb.New(time.Now().Add(halfMinDuration))},
 	}, s.testNamespace), &invalidArgumentErr)
 
 	// MaxTargetTime well beyond 1 minute from now is valid
-	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
 		Enabled: true,
 		Bound:   &workflowpb.TimeSkippingConfig_MaxTargetTime{MaxTargetTime: timestamppb.New(time.Now().Add(2 * namespace.MinTimeSkippingDuration))},
 	}, s.testNamespace))
