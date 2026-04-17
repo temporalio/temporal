@@ -22,22 +22,22 @@ graph LR
     F -.->|7| E
 ```
 
-### History (steps 1-4)
+### History
 
-- The server decides whether to initiate a worker command based on a state change (e.g., a user requesting activity cancellation).
-- The trigger logic creates one or more `WorkerCommand` protos and calls `GenerateWorkerCommandsTasks`, which persists them as an outbound task.
-- The outbound queue executor picks up the task and dispatches it to the worker's control queue via matching.
+1. **Trigger** -- The server decides whether to initiate a worker command based on a state change (e.g., a user requesting activity cancellation).
+2. **Generate Task** -- The trigger logic creates one or more `WorkerCommand` protos and calls `GenerateWorkerCommandsTasks`, which persists them as an outbound task.
+3. **Outbound Queue** -- The outbound queue executor picks up the task.
+4. **Dispatch** -- The dispatcher sends a `DispatchNexusTask` RPC to matching. This is synchronous — matching holds the request until a worker responds or the request times out.
 
-### Matching (steps 4-5)
+### Matching
 
-- The `DispatchNexusTask` RPC is synchronous — matching holds the request until a worker polls the control queue and responds.
-- If no worker is polling, the request times out.
-- There is currently no way to distinguish a permanently gone worker from a temporarily slow one, so the dispatcher simply retries up to a maximum number of attempts before dropping the task. This is acceptable because worker commands are best-effort.
+5. **Control Queue** -- Matching holds the command on the control queue until a worker polls it. If no worker is polling, the request times out. There is currently no way to distinguish a permanently gone worker from a temporarily slow one, so the dispatcher simply retries up to a maximum number of attempts before dropping the task. This is acceptable because worker commands are best-effort.
 
-### Worker (steps 6-8)
+### Worker
 
-- The worker's poller picks up the command from the control queue.
-- The worker executes the command and sends the response back through matching to the dispatcher.
+6. **Poller** -- The worker's poller picks up the command from the control queue.
+7. **Execute** -- The worker executes the command and sends the response back to matching.
+8. **Response** -- Matching forwards the response back to the dispatcher in history.
 
 ## Adding a new command
 
