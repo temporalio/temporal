@@ -22,6 +22,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
@@ -1515,4 +1516,79 @@ func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
 	s.NotNil(actResp)
 	s.Empty(actResp.GetTaskToken(), "activity re-poll from shutdown worker should return empty response")
 	s.Less(time.Since(actStart), 2*time.Minute, "activity re-poll should be rejected quickly, not wait for timeout")
+}
+
+func (s *TaskQueueSuite) TestAdminGetTaskQueueUserData_RootPartition() {
+	tv := testvars.New(s.T())
+	ctx := testcore.NewContext()
+
+	// Write per-type config for the workflow task queue to bump user data version above 0.
+	// Rate limits are not allowed on workflow task queues, so use fairness weight overrides.
+	_, err := s.FrontendClient().UpdateTaskQueueConfig(ctx, &workflowservice.UpdateTaskQueueConfigRequest{
+		Namespace:                  s.Namespace().String(),
+		TaskQueue:                  tv.TaskQueue().GetName(),
+		TaskQueueType:              enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		SetFairnessWeightOverrides: map[string]float32{"key1": 1.5},
+	})
+	s.NoError(err)
+
+	// Root partition (partition_id=0) owns user data storage. The admin RPC resolves the
+	// namespace by name and routes to root via the bare task queue name.
+	resp, err := s.AdminClient().GetTaskQueueUserData(ctx, &adminservice.GetTaskQueueUserDataRequest{
+		Namespace:     s.Namespace().String(),
+		TaskQueue:     tv.TaskQueue().GetName(),
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		PartitionId:   0,
+	})
+	s.NoError(err)
+	s.Positive(resp.GetVersion())
+	s.NotNil(resp.GetUserData())
+}
+
+func (s *TaskQueueSuite) TestAdminGetTaskQueueUserData_NonRootPartition() {
+	tv := testvars.New(s.T())
+	ctx := testcore.NewContext()
+
+	// Write per-type config for the workflow task queue.
+	_, err := s.FrontendClient().UpdateTaskQueueConfig(ctx, &workflowservice.UpdateTaskQueueConfigRequest{
+		Namespace:                  s.Namespace().String(),
+		TaskQueue:                  tv.TaskQueue().GetName(),
+		TaskQueueType:              enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		SetFairnessWeightOverrides: map[string]float32{"key1": 1.5},
+	})
+	s.NoError(err)
+
+	// Get the root partition version to know what to expect on non-root partitions.
+	rootResp, err := s.AdminClient().GetTaskQueueUserData(ctx, &adminservice.GetTaskQueueUserDataRequest{
+		Namespace:     s.Namespace().String(),
+		TaskQueue:     tv.TaskQueue().GetName(),
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		PartitionId:   0,
+	})
+	s.NoError(err)
+	s.Positive(rootResp.GetVersion())
+
+	// partition_id=1 routes to a non-root partition via the mangled name /_sys/<queue>/1.
+	// Non-root partitions replicate user data from root asynchronously, so poll until the
+	// version matches. TaskQueueSuite sets MatchingNumTaskqueueWritePartitions=4, so
+	// partition 1 always exists.
+	s.Eventually(func() bool {
+		resp, err := s.AdminClient().GetTaskQueueUserData(testcore.NewContext(), &adminservice.GetTaskQueueUserDataRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     tv.TaskQueue().GetName(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId:   1,
+		})
+		return err == nil && resp.GetVersion() == rootResp.GetVersion()
+	}, 15*time.Second, 200*time.Millisecond)
+
+	resp, err := s.AdminClient().GetTaskQueueUserData(ctx, &adminservice.GetTaskQueueUserDataRequest{
+		Namespace:     s.Namespace().String(),
+		TaskQueue:     tv.TaskQueue().GetName(),
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		PartitionId:   1,
+	})
+	s.NoError(err)
+	s.Equal(rootResp.GetVersion(), resp.GetVersion())
+	s.NotNil(resp.GetUserData())
 }

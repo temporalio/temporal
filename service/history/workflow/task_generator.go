@@ -80,6 +80,9 @@ type (
 		GenerateActivityTimerTasks() error
 		GenerateUserTimerTasks() error
 
+		// time skipping tasks
+		RegenerateTimerTasksForTimeSkipping()
+
 		// replication tasks
 		GenerateHistoryReplicationTasks(
 			eventBatches [][]*historypb.HistoryEvent,
@@ -1026,4 +1029,34 @@ func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.St
 		}
 	}
 	return true
+}
+
+// RegenerateTimerTasksForTimeSkipping regenerates the timer tasks for time skipping.
+// This function is not idempotent, but when called twice, logically the timerTasks regenerated will have the same contents,
+// and the only difference is the TaskID.
+// TODO@time-skipping: currently not safe to call in replication context
+func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() {
+
+	if r.mutableState.GetExecutionInfo().TimeSkippingInfo == nil {
+		return
+	}
+	accumulatedSkippedDuration := r.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration()
+	if accumulatedSkippedDuration == 0 {
+		return
+	}
+
+	userTimerSequenceIDs := r.getTimerSequence().LoadAndSortUserTimers()
+	if len(userTimerSequenceIDs) == 0 {
+		// This method maybe called when there are no user timers to regenerate,
+		// time-skipping transition may happen without user timers
+		return
+	}
+	firstUserTimerSequenceID := userTimerSequenceIDs[0]
+	visibilityTimestamp := firstUserTimerSequenceID.Timestamp.Add(-accumulatedSkippedDuration)
+	r.mutableState.AddTasks(&tasks.UserTimerTask{
+		// TaskID is set by shard
+		WorkflowKey:         r.mutableState.GetWorkflowKey(),
+		VisibilityTimestamp: visibilityTimestamp,
+		EventID:             firstUserTimerSequenceID.EventID,
+	})
 }
