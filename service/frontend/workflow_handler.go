@@ -697,7 +697,6 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 	timeSkippingConfig *workflowpb.TimeSkippingConfig,
 	namespaceName namespace.Name,
 ) error {
-
 	if timeSkippingConfig == nil {
 		return nil
 	}
@@ -726,7 +725,7 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 					namespace.MinTimeSkippingDuration,
 				)
 			}
-		// todo: will need to check current virtual time in updateOptions scenario
+		// todo: need to adapt the timeSource after time-skipping timeSource is implemented
 		case *workflowpb.TimeSkippingConfig_MaxTargetTime:
 			if bound.MaxTargetTime.AsTime().Before(wh.namespaceHandler.timeSource.Now().Add(namespace.MinTimeSkippingDuration)) {
 				return serviceerror.NewUnimplementedf(
@@ -2458,6 +2457,17 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 	enums.SetDefaultResetReapplyType(&request.ResetReapplyType)
 	if _, validType := enumspb.ResetReapplyType_name[int32(request.GetResetReapplyType())]; !validType {
 		return nil, serviceerror.NewInternalf("unknown reset reapply type: %v", request.GetResetReapplyType())
+	}
+
+	for _, postOp := range request.GetPostResetOperations() {
+		if updateOpts := postOp.GetUpdateWorkflowOptions(); updateOpts != nil {
+			if err := wh.validateTimeSkippingConfig(
+				updateOpts.GetWorkflowExecutionOptions().GetTimeSkippingConfig(),
+				namespace.Name(request.GetNamespace()),
+			); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
@@ -5673,9 +5683,25 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	case *workflowservice.StartBatchOperationRequest_ResetOperation:
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_RESET
 		identity = op.ResetOperation.GetIdentity()
+		for _, postOp := range op.ResetOperation.GetPostResetOperations() {
+			if updateOpts := postOp.GetUpdateWorkflowOptions(); updateOpts != nil {
+				if err := wh.validateTimeSkippingConfig(
+					updateOpts.GetWorkflowExecutionOptions().GetTimeSkippingConfig(),
+					namespace.Name(request.GetNamespace()),
+				); err != nil {
+					return nil, err
+				}
+			}
+		}
 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
 		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
+		if err := wh.validateTimeSkippingConfig(
+			op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions().GetTimeSkippingConfig(),
+			namespace.Name(request.GetNamespace()),
+		); err != nil {
+			return nil, err
+		}
 	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY
 		identity = op.UnpauseActivitiesOperation.GetIdentity()
@@ -6823,6 +6849,9 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 		return nil, serviceerror.NewInvalidArgumentf("error parsing UpdateMask: %s", err.Error())
 	}
 	if err := priorities.Validate(opts.GetPriority()); err != nil {
+		return nil, err
+	}
+	if err := wh.validateTimeSkippingConfig(opts.GetTimeSkippingConfig(), namespace.Name(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 
