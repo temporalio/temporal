@@ -42,7 +42,7 @@ graph LR
 ## Adding a new command
 
 1. **Define the proto** -- Add a new variant to `WorkerCommand` in [`message.proto`](https://github.com/temporalio/api/blob/43b4618e84611e594929ac60c970ec163e85c17a/temporal/api/worker/v1/message.proto#L198-L207) (api repo).
-2. **Add a trigger** -- Add server-side logic to detect the condition, create the command, and call `GenerateWorkerCommandsTasks` (see [`task_generator.go`](../../service/history/workflow/task_generator.go)).
+2. **Add a trigger** -- Add server-side logic to detect the condition, create the command, and call `GenerateWorkerCommandsTasks` (see [`task_generator.go`](https://github.com/temporalio/temporal/blob/c229fcb98ac88f62aec741212aa3797071057dff/service/history/workflow/task_generator.go#L582-L597)).
 3. **Handle in the SDK** -- Add a handler for the new command variant in the SDK's worker command executor.
 
 Dispatch ([`worker_commands_task_dispatcher.go`](../../service/history/worker_commands_task_dispatcher.go)) and serialization ([`task_serializers.go`](../../common/persistence/serialization/task_serializers.go)) are command-agnostic and do not require changes.
