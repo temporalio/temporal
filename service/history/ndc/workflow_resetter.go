@@ -969,6 +969,7 @@ func reapplyEvents(
 				event.Links,
 				attr.GetIdentity(),
 				attr.GetPriority(),
+				attr.GetTimeSkippingConfig(),
 			); err != nil {
 				return reappliedEvents, err
 			}

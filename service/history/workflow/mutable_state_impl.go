@@ -35,6 +35,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -3221,7 +3222,7 @@ func (ms *MutableStateImpl) addCompletionCallbacksChasm(
 		return err
 	}
 
-	maxCallbacksPerWorkflow := ms.config.MaxCHASMCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
+	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerExecution(ms.GetNamespaceEntry().Name().String())
 	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks, maxCallbacksPerWorkflow)
 }
 
@@ -5556,6 +5557,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	links []*commonpb.Link,
 	identity string,
 	priority *commonpb.Priority,
+	timeSkippingConfig *workflowpb.TimeSkippingConfig,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
 		return nil, err
@@ -5568,6 +5570,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 		links,
 		identity,
 		priority,
+		timeSkippingConfig,
 	)
 	prevEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	prevEffectiveDeployment := ms.GetEffectiveDeployment()
@@ -5626,6 +5629,17 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 			requestReschedulePendingWorkflowTask = true
 		}
 		ms.executionInfo.Priority = attributes.GetPriority()
+	}
+
+	// Update time skipping config.
+	if tsc := attributes.GetTimeSkippingConfig(); tsc != nil {
+		if ms.executionInfo.TimeSkippingInfo == nil {
+			ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+				Config: tsc,
+			}
+		} else {
+			ms.executionInfo.TimeSkippingInfo.Config = tsc
+		}
 	}
 
 	// Finally, reschedule the pending workflow task if so requested.
@@ -6857,7 +6871,7 @@ func (ms *MutableStateImpl) processCloseCallbacksChasm() error {
 		return err
 	}
 
-	return wf.ProcessCloseCallbacks(ctx)
+	return callback.ScheduleStandbyCallbacks(ctx, wf.Callbacks)
 }
 
 func (ms *MutableStateImpl) AddTasks(

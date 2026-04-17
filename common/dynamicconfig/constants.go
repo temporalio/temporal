@@ -1010,13 +1010,6 @@ so forwarding by endpoint ID will not work out of the box.`,
 		32,
 		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
 	)
-	// NOTE (seankane): MaxCHASMCallbacksPerWorkflow is temporary, this will be removed and replaced with MaxCallbacksPerWorkflow
-	// once CHASM is fully enabled
-	MaxCHASMCallbacksPerWorkflow = NewNamespaceIntSetting(
-		"system.maxCHASMCallbacksPerWorkflow",
-		2000,
-		`MaxCHASMCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow when using the CHASM implementation.`,
-	)
 	FrontendLinkMaxSize = NewNamespaceIntSetting(
 		"frontend.linkMaxSize",
 		4000, // Links may include a workflow ID and namespace name, both of which are limited to a length of 1000.
