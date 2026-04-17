@@ -213,7 +213,9 @@ func (d CompletedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkf
 	}
 	op := field.Get(ctx)
 
-	if err := nexusoperation.TransitionSucceeded.Apply(op, ctx, nexusoperation.EventSucceeded{}); err != nil {
+	if err := nexusoperation.TransitionSucceeded.Apply(op, ctx, nexusoperation.EventSucceeded{
+		Result: attrs.GetResult(),
+	}); err != nil {
 		return err
 	}
 	wf.RemoveNexusOperation(attrs.GetScheduledEventId())
