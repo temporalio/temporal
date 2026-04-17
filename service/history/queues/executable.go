@@ -269,7 +269,7 @@ func (e *executableImpl) Execute() (retErr error) {
 		if _, ok := e.GetTask().(tasks.HasArchetypeID); ok {
 			idKey = telemetry.BusinessIDKey
 			if name := e.GetTask().GetCategory().Name(); name != "" {
-				taskLabel = strcase.ToCamel(strcase.ToSnake(name + "Task"))
+				taskLabel = strcase.ToCamel(name) + "Task"
 			}
 		}
 
