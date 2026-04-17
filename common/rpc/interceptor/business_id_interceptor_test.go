@@ -22,7 +22,7 @@ func TestBusinessIDInterceptor_AllMethods(t *testing.T) {
 	extractor := NewBusinessIDExtractor()
 	logger := log.NewTestLogger()
 	interceptor := NewBusinessIDInterceptor(
-		[]BusinessIDExtractorFunc{WorkflowServiceExtractor(extractor)},
+		[]RoutingKeyExtractorFunc{WorkflowServiceExtractor(extractor)},
 		logger,
 	)
 
@@ -311,9 +311,9 @@ func TestBusinessIDInterceptor_AllMethods(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.methodName, func(t *testing.T) {
-			var capturedBusinessID string
+			capturedBusinessID := namespace.RoutingKey{}
 			handler := func(ctx context.Context, req any) (any, error) {
-				capturedBusinessID = GetBusinessIDFromContext(ctx)
+				capturedBusinessID = GetRoutingKeyFromContext(ctx)
 				return nil, nil
 			}
 
@@ -335,7 +335,7 @@ func TestBusinessIDInterceptor_SkipsNonWorkflowServiceAndUnmappedMethods(t *test
 	extractor := NewBusinessIDExtractor()
 	logger := log.NewTestLogger()
 	interceptor := NewBusinessIDInterceptor(
-		[]BusinessIDExtractorFunc{WorkflowServiceExtractor(extractor)},
+		[]RoutingKeyExtractorFunc{WorkflowServiceExtractor(extractor)},
 		logger,
 	)
 
@@ -358,16 +358,16 @@ func TestBusinessIDInterceptor_SkipsNonWorkflowServiceAndUnmappedMethods(t *test
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var capturedBusinessID string
+			capturedBusinessID := namespace.RoutingKey{}
 			handler := func(ctx context.Context, req any) (any, error) {
-				capturedBusinessID = GetBusinessIDFromContext(ctx)
+				capturedBusinessID = GetRoutingKeyFromContext(ctx)
 				return nil, nil
 			}
 
 			info := &grpc.UnaryServerInfo{FullMethod: tc.fullMethod}
 			_, err := interceptor.Intercept(context.Background(), tc.request, info, handler)
 			require.NoError(t, err)
-			require.Equal(t, namespace.EmptyBusinessID, capturedBusinessID)
+			require.Empty(t, capturedBusinessID)
 		})
 	}
 }
@@ -376,7 +376,7 @@ func TestBusinessIDInterceptor_EdgeCases(t *testing.T) {
 	extractor := NewBusinessIDExtractor()
 	logger := log.NewTestLogger()
 	interceptor := NewBusinessIDInterceptor(
-		[]BusinessIDExtractorFunc{WorkflowServiceExtractor(extractor)},
+		[]RoutingKeyExtractorFunc{WorkflowServiceExtractor(extractor)},
 		logger,
 	)
 
@@ -384,25 +384,25 @@ func TestBusinessIDInterceptor_EdgeCases(t *testing.T) {
 		name               string
 		methodName         string
 		request            any
-		expectedBusinessID string
+		expectedRoutingKey namespace.RoutingKey
 	}{
 		{
 			name:               "NilWorkflowExecution",
 			methodName:         "TerminateWorkflowExecution",
 			request:            &workflowservice.TerminateWorkflowExecutionRequest{WorkflowExecution: nil},
-			expectedBusinessID: namespace.EmptyBusinessID,
+			expectedRoutingKey: namespace.RoutingKey{},
 		},
 		{
 			name:               "InvalidTaskToken",
 			methodName:         "RespondActivityTaskCompleted",
 			request:            &workflowservice.RespondActivityTaskCompletedRequest{TaskToken: []byte("invalid")},
-			expectedBusinessID: namespace.EmptyBusinessID,
+			expectedRoutingKey: namespace.RoutingKey{},
 		},
 		{
 			name:               "EmptyMultiOperations",
 			methodName:         "ExecuteMultiOperation",
 			request:            &workflowservice.ExecuteMultiOperationRequest{Operations: nil},
-			expectedBusinessID: namespace.EmptyBusinessID,
+			expectedRoutingKey: namespace.RoutingKey{},
 		},
 		{
 			name:       "MultiOperation_UpdateWorkflowFallback",
@@ -419,15 +419,15 @@ func TestBusinessIDInterceptor_EdgeCases(t *testing.T) {
 					},
 				},
 			},
-			expectedBusinessID: "wf-update",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-update"},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var capturedBusinessID string
+			capturedBusinessID := namespace.RoutingKey{}
 			handler := func(ctx context.Context, req any) (any, error) {
-				capturedBusinessID = GetBusinessIDFromContext(ctx)
+				capturedBusinessID = GetRoutingKeyFromContext(ctx)
 				return nil, nil
 			}
 
@@ -437,19 +437,19 @@ func TestBusinessIDInterceptor_EdgeCases(t *testing.T) {
 
 			_, err := interceptor.Intercept(context.Background(), tc.request, info, handler)
 			require.NoError(t, err)
-			require.Equal(t, tc.expectedBusinessID, capturedBusinessID)
+			require.Equal(t, tc.expectedRoutingKey, capturedBusinessID)
 		})
 	}
 }
 
 func TestBusinessIDContext(t *testing.T) {
 	t.Run("RoundTrip", func(t *testing.T) {
-		ctx := AddBusinessIDToContext(context.Background(), "test-business-id")
-		require.Equal(t, "test-business-id", GetBusinessIDFromContext(ctx))
+		ctx := AddRoutingKeyToContext(context.Background(), namespace.RoutingKey{ID: "test-business-id"})
+		require.Equal(t, "test-business-id", GetRoutingKeyFromContext(ctx))
 	})
 
-	t.Run("MissingReturnsEmptyBusinessID", func(t *testing.T) {
-		require.Equal(t, namespace.EmptyBusinessID, GetBusinessIDFromContext(context.Background()))
+	t.Run("MissingReturnsRoutingKey{}", func(t *testing.T) {
+		require.Equal(t, namespace.RoutingKey{}, GetRoutingKeyFromContext(context.Background()))
 	})
 }
 
@@ -457,58 +457,58 @@ func TestBusinessIDInterceptor_MultipleExtractors(t *testing.T) {
 	logger := log.NewTestLogger()
 
 	// Create two custom extractors
-	customExtractor1 := func(_ context.Context, req any, fullMethod string) string {
+	customExtractor1 := func(_ context.Context, req any, fullMethod string) namespace.RoutingKey {
 		if fullMethod == "/custom.service/Method1" {
-			return "extractor1-result"
+			return namespace.RoutingKey{ID: "extractor1-result"}
 		}
-		return ""
+		return namespace.RoutingKey{}
 	}
-	customExtractor2 := func(_ context.Context, req any, fullMethod string) string {
+	customExtractor2 := func(_ context.Context, req any, fullMethod string) namespace.RoutingKey {
 		if fullMethod == "/custom.service/Method2" {
-			return "extractor2-result"
+			return namespace.RoutingKey{ID: "extractor2-result"}
 		}
-		return ""
+		return namespace.RoutingKey{}
 	}
 
 	interceptor := NewBusinessIDInterceptor(
-		[]BusinessIDExtractorFunc{customExtractor1, customExtractor2},
+		[]RoutingKeyExtractorFunc{customExtractor1, customExtractor2},
 		logger,
 	)
 
 	testCases := []struct {
 		name               string
 		fullMethod         string
-		expectedBusinessID string
+		expectedRoutingKey namespace.RoutingKey
 	}{
 		{
 			name:               "FirstExtractorMatches",
 			fullMethod:         "/custom.service/Method1",
-			expectedBusinessID: "extractor1-result",
+			expectedRoutingKey: namespace.RoutingKey{ID: "extractor1-result"},
 		},
 		{
 			name:               "SecondExtractorMatches",
 			fullMethod:         "/custom.service/Method2",
-			expectedBusinessID: "extractor2-result",
+			expectedRoutingKey: namespace.RoutingKey{ID: "extractor2-result"},
 		},
 		{
 			name:               "NoExtractorMatches",
 			fullMethod:         "/custom.service/Method3",
-			expectedBusinessID: namespace.EmptyBusinessID,
+			expectedRoutingKey: namespace.RoutingKey{},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var capturedBusinessID string
+			capturedBusinessID := namespace.RoutingKey{}
 			handler := func(ctx context.Context, req any) (any, error) {
-				capturedBusinessID = GetBusinessIDFromContext(ctx)
+				capturedBusinessID = GetRoutingKeyFromContext(ctx)
 				return nil, nil
 			}
 
 			info := &grpc.UnaryServerInfo{FullMethod: tc.fullMethod}
 			_, err := interceptor.Intercept(context.Background(), nil, info, handler)
 			require.NoError(t, err)
-			require.Equal(t, tc.expectedBusinessID, capturedBusinessID)
+			require.Equal(t, tc.expectedRoutingKey, capturedBusinessID)
 		})
 	}
 }
@@ -517,24 +517,24 @@ func TestBusinessIDInterceptor_WithExtractors(t *testing.T) {
 	logger := log.NewTestLogger()
 
 	// Original extractor
-	originalExtractor := func(_ context.Context, req any, fullMethod string) string {
+	originalExtractor := func(_ context.Context, req any, fullMethod string) namespace.RoutingKey {
 		if fullMethod == "/original/Method" {
-			return "original-result"
+			return namespace.RoutingKey{ID: "original-result"}
 		}
-		return ""
+		return namespace.RoutingKey{}
 	}
 
 	// New extractor to prepend
-	newExtractor := func(_ context.Context, req any, fullMethod string) string {
+	newExtractor := func(_ context.Context, req any, fullMethod string) namespace.RoutingKey {
 		if fullMethod == "/new/Method" {
-			return "new-result"
+			return namespace.RoutingKey{ID: "new-result"}
 		}
-		return ""
+		return namespace.RoutingKey{}
 	}
 
 	// Create interceptor with original extractor
 	originalInterceptor := NewBusinessIDInterceptor(
-		[]BusinessIDExtractorFunc{originalExtractor},
+		[]RoutingKeyExtractorFunc{originalExtractor},
 		logger,
 	)
 
@@ -542,9 +542,9 @@ func TestBusinessIDInterceptor_WithExtractors(t *testing.T) {
 	extendedInterceptor := originalInterceptor.WithExtractors(newExtractor)
 
 	t.Run("NewExtractorMatchesFirst", func(t *testing.T) {
-		var capturedBusinessID string
+		capturedBusinessID := namespace.RoutingKey{}
 		handler := func(ctx context.Context, req any) (any, error) {
-			capturedBusinessID = GetBusinessIDFromContext(ctx)
+			capturedBusinessID = GetRoutingKeyFromContext(ctx)
 			return nil, nil
 		}
 
@@ -555,9 +555,9 @@ func TestBusinessIDInterceptor_WithExtractors(t *testing.T) {
 	})
 
 	t.Run("OriginalExtractorStillWorks", func(t *testing.T) {
-		var capturedBusinessID string
+		capturedBusinessID := namespace.RoutingKey{}
 		handler := func(ctx context.Context, req any) (any, error) {
-			capturedBusinessID = GetBusinessIDFromContext(ctx)
+			capturedBusinessID = GetRoutingKeyFromContext(ctx)
 			return nil, nil
 		}
 
@@ -568,9 +568,9 @@ func TestBusinessIDInterceptor_WithExtractors(t *testing.T) {
 	})
 
 	t.Run("OriginalInterceptorUnchanged", func(t *testing.T) {
-		var capturedBusinessID string
+		capturedBusinessID := namespace.RoutingKey{}
 		handler := func(ctx context.Context, req any) (any, error) {
-			capturedBusinessID = GetBusinessIDFromContext(ctx)
+			capturedBusinessID = GetRoutingKeyFromContext(ctx)
 			return nil, nil
 		}
 
@@ -578,7 +578,7 @@ func TestBusinessIDInterceptor_WithExtractors(t *testing.T) {
 		info := &grpc.UnaryServerInfo{FullMethod: "/new/Method"}
 		_, err := originalInterceptor.Intercept(context.Background(), nil, info, handler)
 		require.NoError(t, err)
-		require.Equal(t, namespace.EmptyBusinessID, capturedBusinessID)
+		require.Equal(t, namespace.RoutingKey{}, capturedBusinessID)
 	})
 }
 
@@ -586,27 +586,27 @@ func TestBusinessIDInterceptor_FirstMatchingExtractorWins(t *testing.T) {
 	logger := log.NewTestLogger()
 
 	// Both extractors match the same method, but first should win
-	extractor1 := func(_ context.Context, req any, fullMethod string) string {
+	extractor1 := func(_ context.Context, req any, fullMethod string) namespace.RoutingKey {
 		if fullMethod == "/test/Method" {
-			return "first-wins"
+			return namespace.RoutingKey{ID: "first-wins"}
 		}
-		return ""
+		return namespace.RoutingKey{}
 	}
-	extractor2 := func(_ context.Context, req any, fullMethod string) string {
+	extractor2 := func(_ context.Context, req any, fullMethod string) namespace.RoutingKey {
 		if fullMethod == "/test/Method" {
-			return "second-loses"
+			return namespace.RoutingKey{ID: "second-loses"}
 		}
-		return ""
+		return namespace.RoutingKey{}
 	}
 
 	interceptor := NewBusinessIDInterceptor(
-		[]BusinessIDExtractorFunc{extractor1, extractor2},
+		[]RoutingKeyExtractorFunc{extractor1, extractor2},
 		logger,
 	)
 
-	var capturedBusinessID string
+	capturedBusinessID := namespace.RoutingKey{}
 	handler := func(ctx context.Context, req any) (any, error) {
-		capturedBusinessID = GetBusinessIDFromContext(ctx)
+		capturedBusinessID = GetRoutingKeyFromContext(ctx)
 		return nil, nil
 	}
 

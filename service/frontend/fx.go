@@ -377,7 +377,7 @@ func BusinessIDInterceptorProvider(
 	logger log.Logger,
 ) *interceptor.BusinessIDInterceptor {
 	return interceptor.NewBusinessIDInterceptor(
-		[]interceptor.BusinessIDExtractorFunc{
+		[]interceptor.RoutingKeyExtractorFunc{
 			interceptor.WorkflowServiceExtractor(extractor),
 		},
 		logger,

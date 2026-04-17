@@ -193,7 +193,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 	}
 
 	// Get business ID from context (set by BusinessIDInterceptor)
-	businessID := GetBusinessIDFromContext(ctx)
+	businessID := GetRoutingKeyFromContext(ctx)
 
 	if _, whitelisted := selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs[apiName]; whitelisted {
 		// redirect if API is whitelisted

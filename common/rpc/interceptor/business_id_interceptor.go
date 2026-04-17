@@ -15,19 +15,19 @@ type (
 	// BusinessIDPattern defines the expected interface pattern for extracting business ID
 	BusinessIDPattern int
 
-	// BusinessIDExtractorFunc extracts business ID from a request.
-	// Returns empty string if this extractor doesn't handle the request.
-	BusinessIDExtractorFunc func(ctx context.Context, req any, fullMethod string) string
+	// RoutingKeyExtractorFunc extracts business ID from a request.
+	// Returns a zero-value RoutingKey if this extractor doesn't handle the request.
+	RoutingKeyExtractorFunc func(ctx context.Context, req any, fullMethod string) namespace.RoutingKey
 
 	// BusinessIDInterceptor extracts business ID from requests and adds it to context.
 	// It iterates through a list of extractor functions until one returns a non-empty business ID.
 	BusinessIDInterceptor struct {
-		extractors []BusinessIDExtractorFunc
+		extractors []RoutingKeyExtractorFunc
 		logger     log.Logger
 	}
 )
 
-var businessIDCtxKey = businessIDContextKey{}
+var routingKeyCtxKey = businessIDContextKey{}
 
 const (
 	// PatternNone indicates no business ID extraction is needed
@@ -141,7 +141,7 @@ var methodToPattern = map[string]BusinessIDPattern{
 // NewBusinessIDInterceptor creates a new BusinessIDInterceptor with the given extractor functions.
 // Extractors are called in order until one returns a non-empty business ID.
 func NewBusinessIDInterceptor(
-	extractors []BusinessIDExtractorFunc,
+	extractors []RoutingKeyExtractorFunc,
 	logger log.Logger,
 ) *BusinessIDInterceptor {
 	return &BusinessIDInterceptor{
@@ -152,7 +152,7 @@ func NewBusinessIDInterceptor(
 
 // WithExtractors returns a new interceptor with additional extractors prepended.
 // The new extractors will be tried before the existing ones.
-func (i *BusinessIDInterceptor) WithExtractors(extractors ...BusinessIDExtractorFunc) *BusinessIDInterceptor {
+func (i *BusinessIDInterceptor) WithExtractors(extractors ...RoutingKeyExtractorFunc) *BusinessIDInterceptor {
 	return &BusinessIDInterceptor{
 		extractors: append(extractors, i.extractors...),
 		logger:     i.logger,
@@ -171,12 +171,12 @@ func (i *BusinessIDInterceptor) Intercept(
 ) (any, error) {
 	// Try each extractor until one returns a non-empty businessID
 	for _, extractor := range i.extractors {
-		if businessID := extractor(ctx, req, info.FullMethod); businessID != "" {
+		if key := extractor(ctx, req, info.FullMethod); key.ID != "" || key.Strategy != namespace.RoutingStrategyDefault {
 			i.logger.Debug("business ID extraction: adding business ID to context",
-				tag.WorkflowID(businessID),
+				tag.WorkflowID(key.ID),
 				tag.String("grpc-method", info.FullMethod),
 			)
-			ctx = AddBusinessIDToContext(ctx, businessID)
+			ctx = AddRoutingKeyToContext(ctx, key)
 			break
 		}
 	}
@@ -184,16 +184,16 @@ func (i *BusinessIDInterceptor) Intercept(
 	return handler(ctx, req)
 }
 
-// AddBusinessIDToContext adds the business ID to the context
-func AddBusinessIDToContext(ctx context.Context, businessID string) context.Context {
-	return context.WithValue(ctx, businessIDCtxKey, businessID)
+// AddRoutingKeyToContext adds the business ID to the context
+func AddRoutingKeyToContext(ctx context.Context, routingKey namespace.RoutingKey) context.Context {
+	return context.WithValue(ctx, routingKeyCtxKey, routingKey)
 }
 
-// GetBusinessIDFromContext retrieves the business ID from the context.
-// Returns namespace.EmptyBusinessID if not found.
-func GetBusinessIDFromContext(ctx context.Context) string {
-	if businessID, ok := ctx.Value(businessIDCtxKey).(string); ok {
+// GetRoutingKeyFromContext retrieves the business ID from the context.
+// Returns a zero-value RoutingKey if not found.
+func GetRoutingKeyFromContext(ctx context.Context) namespace.RoutingKey {
+	if businessID, ok := ctx.Value(routingKeyCtxKey).(namespace.RoutingKey); ok {
 		return businessID
 	}
-	return namespace.EmptyBusinessID
+	return namespace.RoutingKey{}
 }

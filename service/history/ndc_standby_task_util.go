@@ -252,7 +252,7 @@ func getSourceClusterName(
 		return "", err
 	}
 
-	remoteClusterName := namespaceEntry.ActiveClusterName(workflowID)
+	remoteClusterName := namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: workflowID})
 	if remoteClusterName == currentCluster {
 		// namespace has turned active, retry the task
 		return "", errors.New("namespace becomes active when processing task as standby")
