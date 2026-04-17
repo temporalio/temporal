@@ -371,7 +371,7 @@ func (s *streamReceiverMonitorSuite) TestStop_StopsInboundStreams() {
 	s.streamReceiverMonitor.RegisterInboundStream(streamSender)
 
 	s.streamReceiverMonitor.Lock()
-	s.Equal(1, len(s.streamReceiverMonitor.inboundStreams))
+	s.Len(s.streamReceiverMonitor.inboundStreams, 1)
 	s.streamReceiverMonitor.Unlock()
 
 	// Transition to started state so Stop() proceeds past the CAS check.
@@ -380,7 +380,7 @@ func (s *streamReceiverMonitorSuite) TestStop_StopsInboundStreams() {
 
 	s.streamReceiverMonitor.Lock()
 	defer s.streamReceiverMonitor.Unlock()
-	s.Equal(0, len(s.streamReceiverMonitor.inboundStreams))
+	s.Empty(s.streamReceiverMonitor.inboundStreams)
 }
 
 func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Add() {
