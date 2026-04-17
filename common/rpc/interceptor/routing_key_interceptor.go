@@ -10,28 +10,28 @@ import (
 )
 
 type (
-	businessIDContextKey struct{}
+	routingKeyContextKey struct{}
 
-	// BusinessIDPattern defines the expected interface pattern for extracting business ID
-	BusinessIDPattern int
+	// RoutingKeyPattern defines the expected interface pattern for extracting routing key
+	RoutingKeyPattern int
 
-	// RoutingKeyExtractorFunc extracts business ID from a request.
+	// RoutingKeyExtractorFunc extracts routing key from a request.
 	// Returns a zero-value RoutingKey if this extractor doesn't handle the request.
 	RoutingKeyExtractorFunc func(ctx context.Context, req any, fullMethod string) namespace.RoutingKey
 
-	// BusinessIDInterceptor extracts business ID from requests and adds it to context.
-	// It iterates through a list of extractor functions until one returns a non-empty business ID.
-	BusinessIDInterceptor struct {
+	// RoutingKeyInterceptor extracts routing key from requests and adds it to context.
+	// It iterates through a list of extractor functions until one returns a non-empty routing key.
+	RoutingKeyInterceptor struct {
 		extractors []RoutingKeyExtractorFunc
 		logger     log.Logger
 	}
 )
 
-var routingKeyCtxKey = businessIDContextKey{}
+var routingKeyCtxKey = routingKeyContextKey{}
 
 const (
-	// PatternNone indicates no business ID extraction is needed
-	PatternNone BusinessIDPattern = iota
+	// PatternNone indicates no routing key extraction is needed
+	PatternNone RoutingKeyPattern = iota
 	// PatternWorkflowID indicates extraction via GetWorkflowId() method
 	PatternWorkflowID
 	// PatternWorkflowExecution indicates extraction via GetWorkflowExecution().GetWorkflowId()
@@ -58,9 +58,9 @@ const (
 	PatternUpdateRef
 )
 
-// methodToPattern maps API method names to their expected business ID extraction pattern.
-// Methods not in this map are treated as PatternNone (no business ID extraction needed).
-var methodToPattern = map[string]BusinessIDPattern{
+// methodToPattern maps API method names to their expected routing key extraction pattern.
+// Methods not in this map are treated as PatternNone (no routing key extraction needed).
+var methodToPattern = map[string]RoutingKeyPattern{
 	// Pattern: GetWorkflowId() - direct WorkflowId field
 	"StartWorkflowExecution":           PatternWorkflowID,
 	"SignalWithStartWorkflowExecution": PatternWorkflowID,
@@ -138,13 +138,13 @@ var methodToPattern = map[string]BusinessIDPattern{
 
 }
 
-// NewBusinessIDInterceptor creates a new BusinessIDInterceptor with the given extractor functions.
-// Extractors are called in order until one returns a non-empty business ID.
-func NewBusinessIDInterceptor(
+// NewRoutingKeyInterceptor creates a new RoutingKeyInterceptor with the given extractor functions.
+// Extractors are called in order until one returns a non-empty routing key.
+func NewRoutingKeyInterceptor(
 	extractors []RoutingKeyExtractorFunc,
 	logger log.Logger,
-) *BusinessIDInterceptor {
-	return &BusinessIDInterceptor{
+) *RoutingKeyInterceptor {
+	return &RoutingKeyInterceptor{
 		extractors: extractors,
 		logger:     logger,
 	}
@@ -152,18 +152,18 @@ func NewBusinessIDInterceptor(
 
 // WithExtractors returns a new interceptor with additional extractors prepended.
 // The new extractors will be tried before the existing ones.
-func (i *BusinessIDInterceptor) WithExtractors(extractors ...RoutingKeyExtractorFunc) *BusinessIDInterceptor {
-	return &BusinessIDInterceptor{
+func (i *RoutingKeyInterceptor) WithExtractors(extractors ...RoutingKeyExtractorFunc) *RoutingKeyInterceptor {
+	return &RoutingKeyInterceptor{
 		extractors: append(extractors, i.extractors...),
 		logger:     i.logger,
 	}
 }
 
-var _ grpc.UnaryServerInterceptor = (*BusinessIDInterceptor)(nil).Intercept
+var _ grpc.UnaryServerInterceptor = (*RoutingKeyInterceptor)(nil).Intercept
 
-// Intercept extracts business ID from the request and adds it to the context.
-// It tries each extractor in order until one returns a non-empty business ID.
-func (i *BusinessIDInterceptor) Intercept(
+// Intercept extracts routing key from the request and adds it to the context.
+// It tries each extractor in order until one returns a non-empty routing key.
+func (i *RoutingKeyInterceptor) Intercept(
 	ctx context.Context,
 	req any,
 	info *grpc.UnaryServerInfo,
@@ -172,7 +172,7 @@ func (i *BusinessIDInterceptor) Intercept(
 	// Try each extractor until one returns a non-empty businessID
 	for _, extractor := range i.extractors {
 		if key := extractor(ctx, req, info.FullMethod); key.ID != "" || key.Strategy != namespace.RoutingStrategyDefault {
-			i.logger.Debug("business ID extraction: adding business ID to context",
+			i.logger.Debug("routing key extraction: adding routing key to context",
 				tag.WorkflowID(key.ID),
 				tag.String("grpc-method", info.FullMethod),
 			)
@@ -184,16 +184,16 @@ func (i *BusinessIDInterceptor) Intercept(
 	return handler(ctx, req)
 }
 
-// AddRoutingKeyToContext adds the business ID to the context
+// AddRoutingKeyToContext adds the routing Key to the context
 func AddRoutingKeyToContext(ctx context.Context, routingKey namespace.RoutingKey) context.Context {
 	return context.WithValue(ctx, routingKeyCtxKey, routingKey)
 }
 
-// GetRoutingKeyFromContext retrieves the business ID from the context.
+// GetRoutingKeyFromContext retrieves the routing Key from the context.
 // Returns a zero-value RoutingKey if not found.
 func GetRoutingKeyFromContext(ctx context.Context) namespace.RoutingKey {
-	if businessID, ok := ctx.Value(routingKeyCtxKey).(namespace.RoutingKey); ok {
-		return businessID
+	if key, ok := ctx.Value(routingKeyCtxKey).(namespace.RoutingKey); ok {
+		return key
 	}
 	return namespace.RoutingKey{}
 }

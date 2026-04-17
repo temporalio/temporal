@@ -14,19 +14,19 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 )
 
-type BusinessIDExtractor struct {
+type RoutingKeyExtractor struct {
 	serializer tasktoken.Serializer
 }
 
-func NewBusinessIDExtractor() BusinessIDExtractor {
-	return BusinessIDExtractor{
+func NewRoutingKeyExtractor() RoutingKeyExtractor {
+	return RoutingKeyExtractor{
 		serializer: *tasktoken.NewSerializer(),
 	}
 }
 
 // WorkflowServiceExtractor returns a RoutingKeyExtractorFunc that extracts business ID
-// from WorkflowService API requests using the provided BusinessIDExtractor.
-func WorkflowServiceExtractor(extractor BusinessIDExtractor) RoutingKeyExtractorFunc {
+// from WorkflowService API requests using the provided RoutingKeyExtractor.
+func WorkflowServiceExtractor(extractor RoutingKeyExtractor) RoutingKeyExtractorFunc {
 	return func(_ context.Context, req any, fullMethod string) namespace.RoutingKey {
 		// Only process WorkflowService APIs
 		if !strings.HasPrefix(fullMethod, api.WorkflowServicePrefix) {
@@ -43,7 +43,7 @@ func WorkflowServiceExtractor(extractor BusinessIDExtractor) RoutingKeyExtractor
 	}
 }
 
-// Interfaces for extracting business ID from different request types.
+// Interfaces for extracting routing key from different request types.
 type (
 	workflowIDGetter interface {
 		GetWorkflowId() string
@@ -90,11 +90,11 @@ type (
 	}
 )
 
-// Extract extracts business ID from the request using the specified pattern.
+// Extract extracts routing key from the request using the specified pattern.
 // Returns a zero-value namespace.RoutingKey if not found.
 //
 //nolint:revive // cognitive-complexity
-func (e BusinessIDExtractor) Extract(req any, pattern BusinessIDPattern) namespace.RoutingKey {
+func (e RoutingKeyExtractor) Extract(req any, pattern RoutingKeyPattern) namespace.RoutingKey {
 	if req == nil {
 		return namespace.RoutingKey{}
 	}
@@ -181,9 +181,9 @@ func (e BusinessIDExtractor) Extract(req any, pattern BusinessIDPattern) namespa
 	return namespace.RoutingKey{}
 }
 
-// extractMultiOperation extracts business ID from ExecuteMultiOperationRequest.
-// The business ID is extracted from the first operation's StartWorkflow request.
-func (e BusinessIDExtractor) extractMultiOperation(req any) namespace.RoutingKey {
+// extractMultiOperation extracts routing key from ExecuteMultiOperationRequest.
+// The routing key is extracted from the first operation's StartWorkflow request.
+func (e RoutingKeyExtractor) extractMultiOperation(req any) namespace.RoutingKey {
 	multiOpReq, ok := req.(*workflowservice.ExecuteMultiOperationRequest)
 	if !ok {
 		return namespace.RoutingKey{}

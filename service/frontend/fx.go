@@ -76,7 +76,7 @@ var Module = fx.Options(
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
 	fx.Provide(NamespaceHandoverInterceptorProvider),
-	fx.Provide(interceptor.NewBusinessIDExtractor),
+	fx.Provide(interceptor.NewRoutingKeyExtractor),
 	fx.Provide(BusinessIDInterceptorProvider),
 	fx.Provide(RedirectionInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
@@ -212,7 +212,7 @@ func GrpcServerOptionsProvider(
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceHandoverInterceptor *interceptor.NamespaceHandoverInterceptor,
-	businessIDInterceptor *interceptor.BusinessIDInterceptor,
+	businessIDInterceptor *interceptor.RoutingKeyInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
@@ -373,10 +373,10 @@ func RedirectionInterceptorProvider(
 }
 
 func BusinessIDInterceptorProvider(
-	extractor interceptor.BusinessIDExtractor,
+	extractor interceptor.RoutingKeyExtractor,
 	logger log.Logger,
-) *interceptor.BusinessIDInterceptor {
-	return interceptor.NewBusinessIDInterceptor(
+) *interceptor.RoutingKeyInterceptor {
+	return interceptor.NewRoutingKeyInterceptor(
 		[]interceptor.RoutingKeyExtractorFunc{
 			interceptor.WorkflowServiceExtractor(extractor),
 		},

@@ -18,10 +18,10 @@ import (
 	"google.golang.org/grpc"
 )
 
-func TestBusinessIDInterceptor_AllMethods(t *testing.T) {
-	extractor := NewBusinessIDExtractor()
+func TestRoutingKeyInterceptor_AllMethods(t *testing.T) {
+	extractor := NewRoutingKeyExtractor()
 	logger := log.NewTestLogger()
-	interceptor := NewBusinessIDInterceptor(
+	interceptor := NewRoutingKeyInterceptor(
 		[]RoutingKeyExtractorFunc{WorkflowServiceExtractor(extractor)},
 		logger,
 	)
@@ -38,169 +38,169 @@ func TestBusinessIDInterceptor_AllMethods(t *testing.T) {
 	testCases := []struct {
 		methodName         string
 		request            any
-		expectedBusinessID string
+		expectedRoutingKey namespace.RoutingKey
 	}{
 		// PatternWorkflowID methods (direct WorkflowId field)
 		{
 			methodName:         "StartWorkflowExecution",
 			request:            &workflowservice.StartWorkflowExecutionRequest{WorkflowId: "wf-id"},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "SignalWithStartWorkflowExecution",
 			request:            &workflowservice.SignalWithStartWorkflowExecutionRequest{WorkflowId: "wf-id"},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "PauseWorkflowExecution",
 			request:            &workflowservice.PauseWorkflowExecutionRequest{WorkflowId: "wf-id"},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "UnpauseWorkflowExecution",
 			request:            &workflowservice.UnpauseWorkflowExecutionRequest{WorkflowId: "wf-id"},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "RecordActivityTaskHeartbeatById",
 			request:            &workflowservice.RecordActivityTaskHeartbeatByIdRequest{WorkflowId: "wf-id"},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "RespondActivityTaskCompletedById",
 			request:            &workflowservice.RespondActivityTaskCompletedByIdRequest{WorkflowId: "wf-id"},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "RespondActivityTaskCanceledById",
 			request:            &workflowservice.RespondActivityTaskCanceledByIdRequest{WorkflowId: "wf-id"},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "RespondActivityTaskFailedById",
 			request:            &workflowservice.RespondActivityTaskFailedByIdRequest{WorkflowId: "wf-id"},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 
 		// PatternWorkflowExecution methods (GetWorkflowExecution().GetWorkflowId())
 		{
 			methodName:         "DeleteWorkflowExecution",
 			request:            &workflowservice.DeleteWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "RequestCancelWorkflowExecution",
 			request:            &workflowservice.RequestCancelWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "ResetWorkflowExecution",
 			request:            &workflowservice.ResetWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "SignalWorkflowExecution",
 			request:            &workflowservice.SignalWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "TerminateWorkflowExecution",
 			request:            &workflowservice.TerminateWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "UpdateWorkflowExecution",
 			request:            &workflowservice.UpdateWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "UpdateWorkflowExecutionOptions",
 			request:            &workflowservice.UpdateWorkflowExecutionOptionsRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 
 		// PatternExecution methods (GetExecution().GetWorkflowId())
 		{
 			methodName:         "DescribeWorkflowExecution",
 			request:            &workflowservice.DescribeWorkflowExecutionRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "GetWorkflowExecutionHistory",
 			request:            &workflowservice.GetWorkflowExecutionHistoryRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "GetWorkflowExecutionHistoryReverse",
 			request:            &workflowservice.GetWorkflowExecutionHistoryReverseRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "QueryWorkflow",
 			request:            &workflowservice.QueryWorkflowRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "ResetStickyTaskQueue",
 			request:            &workflowservice.ResetStickyTaskQueueRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "ResetActivity",
 			request:            &workflowservice.ResetActivityRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "PauseActivity",
 			request:            &workflowservice.PauseActivityRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "UnpauseActivity",
 			request:            &workflowservice.UnpauseActivityRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "UpdateActivityOptions",
 			request:            &workflowservice.UpdateActivityOptionsRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "TriggerWorkflowRule",
 			request:            &workflowservice.TriggerWorkflowRuleRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 
 		// PatternTaskToken methods (TaskToken deserialization)
 		{
 			methodName:         "RecordActivityTaskHeartbeat",
 			request:            &workflowservice.RecordActivityTaskHeartbeatRequest{TaskToken: createTaskToken("wf-id")},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "RespondActivityTaskCompleted",
 			request:            &workflowservice.RespondActivityTaskCompletedRequest{TaskToken: createTaskToken("wf-id")},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "RespondActivityTaskCanceled",
 			request:            &workflowservice.RespondActivityTaskCanceledRequest{TaskToken: createTaskToken("wf-id")},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "RespondActivityTaskFailed",
 			request:            &workflowservice.RespondActivityTaskFailedRequest{TaskToken: createTaskToken("wf-id")},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "RespondWorkflowTaskCompleted",
 			request:            &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: createTaskToken("wf-id")},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 		{
 			methodName:         "RespondWorkflowTaskFailed",
 			request:            &workflowservice.RespondWorkflowTaskFailedRequest{TaskToken: createTaskToken("wf-id")},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 
 		// PatternMultiOperation
@@ -215,87 +215,87 @@ func TestBusinessIDInterceptor_AllMethods(t *testing.T) {
 					},
 				},
 			},
-			expectedBusinessID: "wf-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "wf-id"},
 		},
 
 		// task queue name
 		{
 			methodName:         "UpdateTaskQueueConfig",
 			request:            &workflowservice.UpdateTaskQueueConfigRequest{TaskQueue: "test-task-queue"},
-			expectedBusinessID: "test-task-queue",
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-task-queue"},
 		},
 
 		// task queue name (from TaskQueue message)
 		{
 			methodName:         "ListTaskQueuePartitions",
 			request:            &workflowservice.ListTaskQueuePartitionsRequest{TaskQueue: &taskqueuepb.TaskQueue{Name: "test-task-queue"}},
-			expectedBusinessID: "test-task-queue",
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-task-queue"},
 		},
 
 		// deployment name
 		{
 			methodName:         "DescribeWorkerDeployment",
 			request:            &workflowservice.DescribeWorkerDeploymentRequest{DeploymentName: "test-deployment"},
-			expectedBusinessID: "test-deployment",
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-deployment"},
 		},
 		{
 			methodName:         "DeleteWorkerDeployment",
 			request:            &workflowservice.DeleteWorkerDeploymentRequest{DeploymentName: "test-deployment"},
-			expectedBusinessID: "test-deployment",
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-deployment"},
 		},
 		{
 			methodName:         "SetWorkerDeploymentCurrentVersion",
 			request:            &workflowservice.SetWorkerDeploymentCurrentVersionRequest{DeploymentName: "test-deployment"},
-			expectedBusinessID: "test-deployment",
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-deployment"},
 		},
 		{
 			methodName:         "SetWorkerDeploymentManager",
 			request:            &workflowservice.SetWorkerDeploymentManagerRequest{DeploymentName: "test-deployment"},
-			expectedBusinessID: "test-deployment",
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-deployment"},
 		},
 		{
 			methodName:         "SetWorkerDeploymentRampingVersion",
 			request:            &workflowservice.SetWorkerDeploymentRampingVersionRequest{DeploymentName: "test-deployment"},
-			expectedBusinessID: "test-deployment",
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-deployment"},
 		},
 
 		// deployment name (from WorkerDeploymentVersion message)
 		{
 			methodName:         "DescribeWorkerDeploymentVersion",
 			request:            &workflowservice.DescribeWorkerDeploymentVersionRequest{DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{DeploymentName: "test-deployment"}},
-			expectedBusinessID: "test-deployment",
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-deployment"},
 		},
 		{
 			methodName:         "DeleteWorkerDeploymentVersion",
 			request:            &workflowservice.DeleteWorkerDeploymentVersionRequest{DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{DeploymentName: "test-deployment"}},
-			expectedBusinessID: "test-deployment",
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-deployment"},
 		},
 		{
 			methodName:         "UpdateWorkerDeploymentVersionMetadata",
 			request:            &workflowservice.UpdateWorkerDeploymentVersionMetadataRequest{DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{DeploymentName: "test-deployment"}},
-			expectedBusinessID: "test-deployment",
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-deployment"},
 		},
 
 		// namespace
 		{
 			methodName:         "FetchWorkerConfig",
 			request:            &workflowservice.FetchWorkerConfigRequest{Namespace: "test-namespace"},
-			expectedBusinessID: "test-namespace",
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-namespace"},
 		},
 		{
 			methodName:         "UpdateWorkerConfig",
 			request:            &workflowservice.UpdateWorkerConfigRequest{Namespace: "test-namespace"},
-			expectedBusinessID: "test-namespace",
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-namespace"},
 		},
 		{
 			methodName:         "DescribeWorker",
 			request:            &workflowservice.DescribeWorkerRequest{Namespace: "test-namespace"},
-			expectedBusinessID: "test-namespace",
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-namespace"},
 		},
 		{
 			methodName:         "RecordWorkerHeartbeat",
 			request:            &workflowservice.RecordWorkerHeartbeatRequest{Namespace: "test-namespace"},
-			expectedBusinessID: "test-namespace",
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-namespace"},
 		},
 		// workflow ID (from UpdateRef)
 		{
@@ -305,15 +305,15 @@ func TestBusinessIDInterceptor_AllMethods(t *testing.T) {
 					WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "test-workflow-id"},
 				},
 			},
-			expectedBusinessID: "test-workflow-id",
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-workflow-id"},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.methodName, func(t *testing.T) {
-			capturedBusinessID := namespace.RoutingKey{}
+			capturedRoutingKey := namespace.RoutingKey{}
 			handler := func(ctx context.Context, req any) (any, error) {
-				capturedBusinessID = GetRoutingKeyFromContext(ctx)
+				capturedRoutingKey = GetRoutingKeyFromContext(ctx)
 				return nil, nil
 			}
 
@@ -323,7 +323,7 @@ func TestBusinessIDInterceptor_AllMethods(t *testing.T) {
 
 			_, err := interceptor.Intercept(context.Background(), tc.request, info, handler)
 			require.NoError(t, err)
-			require.Equal(t, tc.expectedBusinessID, capturedBusinessID)
+			require.Equal(t, tc.expectedRoutingKey, capturedRoutingKey)
 		})
 	}
 
@@ -331,10 +331,10 @@ func TestBusinessIDInterceptor_AllMethods(t *testing.T) {
 	require.Len(t, testCases, len(methodToPattern), "test cases should cover all methods in methodToPattern")
 }
 
-func TestBusinessIDInterceptor_SkipsNonWorkflowServiceAndUnmappedMethods(t *testing.T) {
-	extractor := NewBusinessIDExtractor()
+func TestRoutingKeyInterceptor_SkipsNonWorkflowServiceAndUnmappedMethods(t *testing.T) {
+	extractor := NewRoutingKeyExtractor()
 	logger := log.NewTestLogger()
-	interceptor := NewBusinessIDInterceptor(
+	interceptor := NewRoutingKeyInterceptor(
 		[]RoutingKeyExtractorFunc{WorkflowServiceExtractor(extractor)},
 		logger,
 	)
@@ -358,24 +358,24 @@ func TestBusinessIDInterceptor_SkipsNonWorkflowServiceAndUnmappedMethods(t *test
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			capturedBusinessID := namespace.RoutingKey{}
+			capturedRoutingKey := namespace.RoutingKey{}
 			handler := func(ctx context.Context, req any) (any, error) {
-				capturedBusinessID = GetRoutingKeyFromContext(ctx)
+				capturedRoutingKey = GetRoutingKeyFromContext(ctx)
 				return nil, nil
 			}
 
 			info := &grpc.UnaryServerInfo{FullMethod: tc.fullMethod}
 			_, err := interceptor.Intercept(context.Background(), tc.request, info, handler)
 			require.NoError(t, err)
-			require.Empty(t, capturedBusinessID)
+			require.Empty(t, capturedRoutingKey)
 		})
 	}
 }
 
-func TestBusinessIDInterceptor_EdgeCases(t *testing.T) {
-	extractor := NewBusinessIDExtractor()
+func TestRoutingKeyInterceptor_EdgeCases(t *testing.T) {
+	extractor := NewRoutingKeyExtractor()
 	logger := log.NewTestLogger()
-	interceptor := NewBusinessIDInterceptor(
+	interceptor := NewRoutingKeyInterceptor(
 		[]RoutingKeyExtractorFunc{WorkflowServiceExtractor(extractor)},
 		logger,
 	)
@@ -425,9 +425,9 @@ func TestBusinessIDInterceptor_EdgeCases(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			capturedBusinessID := namespace.RoutingKey{}
+			capturedRoutingKey := namespace.RoutingKey{}
 			handler := func(ctx context.Context, req any) (any, error) {
-				capturedBusinessID = GetRoutingKeyFromContext(ctx)
+				capturedRoutingKey = GetRoutingKeyFromContext(ctx)
 				return nil, nil
 			}
 
@@ -437,15 +437,15 @@ func TestBusinessIDInterceptor_EdgeCases(t *testing.T) {
 
 			_, err := interceptor.Intercept(context.Background(), tc.request, info, handler)
 			require.NoError(t, err)
-			require.Equal(t, tc.expectedRoutingKey, capturedBusinessID)
+			require.Equal(t, tc.expectedRoutingKey, capturedRoutingKey)
 		})
 	}
 }
 
-func TestBusinessIDContext(t *testing.T) {
+func TestRoutingKeyContext(t *testing.T) {
 	t.Run("RoundTrip", func(t *testing.T) {
 		ctx := AddRoutingKeyToContext(context.Background(), namespace.RoutingKey{ID: "test-business-id"})
-		require.Equal(t, "test-business-id", GetRoutingKeyFromContext(ctx))
+		require.Equal(t, namespace.RoutingKey{ID: "test-business-id"}, GetRoutingKeyFromContext(ctx))
 	})
 
 	t.Run("MissingReturnsRoutingKey{}", func(t *testing.T) {
@@ -453,7 +453,7 @@ func TestBusinessIDContext(t *testing.T) {
 	})
 }
 
-func TestBusinessIDInterceptor_MultipleExtractors(t *testing.T) {
+func TestRoutingKeyInterceptor_MultipleExtractors(t *testing.T) {
 	logger := log.NewTestLogger()
 
 	// Create two custom extractors
@@ -470,7 +470,7 @@ func TestBusinessIDInterceptor_MultipleExtractors(t *testing.T) {
 		return namespace.RoutingKey{}
 	}
 
-	interceptor := NewBusinessIDInterceptor(
+	interceptor := NewRoutingKeyInterceptor(
 		[]RoutingKeyExtractorFunc{customExtractor1, customExtractor2},
 		logger,
 	)
@@ -499,21 +499,21 @@ func TestBusinessIDInterceptor_MultipleExtractors(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			capturedBusinessID := namespace.RoutingKey{}
+			capturedRoutingKey := namespace.RoutingKey{}
 			handler := func(ctx context.Context, req any) (any, error) {
-				capturedBusinessID = GetRoutingKeyFromContext(ctx)
+				capturedRoutingKey = GetRoutingKeyFromContext(ctx)
 				return nil, nil
 			}
 
 			info := &grpc.UnaryServerInfo{FullMethod: tc.fullMethod}
 			_, err := interceptor.Intercept(context.Background(), nil, info, handler)
 			require.NoError(t, err)
-			require.Equal(t, tc.expectedRoutingKey, capturedBusinessID)
+			require.Equal(t, tc.expectedRoutingKey, capturedRoutingKey)
 		})
 	}
 }
 
-func TestBusinessIDInterceptor_WithExtractors(t *testing.T) {
+func TestRoutingKeyInterceptor_WithExtractors(t *testing.T) {
 	logger := log.NewTestLogger()
 
 	// Original extractor
@@ -533,7 +533,7 @@ func TestBusinessIDInterceptor_WithExtractors(t *testing.T) {
 	}
 
 	// Create interceptor with original extractor
-	originalInterceptor := NewBusinessIDInterceptor(
+	originalInterceptor := NewRoutingKeyInterceptor(
 		[]RoutingKeyExtractorFunc{originalExtractor},
 		logger,
 	)
@@ -542,35 +542,35 @@ func TestBusinessIDInterceptor_WithExtractors(t *testing.T) {
 	extendedInterceptor := originalInterceptor.WithExtractors(newExtractor)
 
 	t.Run("NewExtractorMatchesFirst", func(t *testing.T) {
-		capturedBusinessID := namespace.RoutingKey{}
+		capturedRoutingKey := namespace.RoutingKey{}
 		handler := func(ctx context.Context, req any) (any, error) {
-			capturedBusinessID = GetRoutingKeyFromContext(ctx)
+			capturedRoutingKey = GetRoutingKeyFromContext(ctx)
 			return nil, nil
 		}
 
 		info := &grpc.UnaryServerInfo{FullMethod: "/new/Method"}
 		_, err := extendedInterceptor.Intercept(context.Background(), nil, info, handler)
 		require.NoError(t, err)
-		require.Equal(t, "new-result", capturedBusinessID)
+		require.Equal(t, namespace.RoutingKey{ID: "new-result"}, capturedRoutingKey)
 	})
 
 	t.Run("OriginalExtractorStillWorks", func(t *testing.T) {
-		capturedBusinessID := namespace.RoutingKey{}
+		capturedRoutingKey := namespace.RoutingKey{}
 		handler := func(ctx context.Context, req any) (any, error) {
-			capturedBusinessID = GetRoutingKeyFromContext(ctx)
+			capturedRoutingKey = GetRoutingKeyFromContext(ctx)
 			return nil, nil
 		}
 
 		info := &grpc.UnaryServerInfo{FullMethod: "/original/Method"}
 		_, err := extendedInterceptor.Intercept(context.Background(), nil, info, handler)
 		require.NoError(t, err)
-		require.Equal(t, "original-result", capturedBusinessID)
+		require.Equal(t, namespace.RoutingKey{ID: "original-result"}, capturedRoutingKey)
 	})
 
 	t.Run("OriginalInterceptorUnchanged", func(t *testing.T) {
-		capturedBusinessID := namespace.RoutingKey{}
+		capturedRoutingKey := namespace.RoutingKey{}
 		handler := func(ctx context.Context, req any) (any, error) {
-			capturedBusinessID = GetRoutingKeyFromContext(ctx)
+			capturedRoutingKey = GetRoutingKeyFromContext(ctx)
 			return nil, nil
 		}
 
@@ -578,11 +578,11 @@ func TestBusinessIDInterceptor_WithExtractors(t *testing.T) {
 		info := &grpc.UnaryServerInfo{FullMethod: "/new/Method"}
 		_, err := originalInterceptor.Intercept(context.Background(), nil, info, handler)
 		require.NoError(t, err)
-		require.Equal(t, namespace.RoutingKey{}, capturedBusinessID)
+		require.Equal(t, namespace.RoutingKey{}, capturedRoutingKey)
 	})
 }
 
-func TestBusinessIDInterceptor_FirstMatchingExtractorWins(t *testing.T) {
+func TestRoutingKeyInterceptor_FirstMatchingExtractorWins(t *testing.T) {
 	logger := log.NewTestLogger()
 
 	// Both extractors match the same method, but first should win
@@ -599,25 +599,25 @@ func TestBusinessIDInterceptor_FirstMatchingExtractorWins(t *testing.T) {
 		return namespace.RoutingKey{}
 	}
 
-	interceptor := NewBusinessIDInterceptor(
+	interceptor := NewRoutingKeyInterceptor(
 		[]RoutingKeyExtractorFunc{extractor1, extractor2},
 		logger,
 	)
 
-	capturedBusinessID := namespace.RoutingKey{}
+	capturedRoutingKey := namespace.RoutingKey{}
 	handler := func(ctx context.Context, req any) (any, error) {
-		capturedBusinessID = GetRoutingKeyFromContext(ctx)
+		capturedRoutingKey = GetRoutingKeyFromContext(ctx)
 		return nil, nil
 	}
 
 	info := &grpc.UnaryServerInfo{FullMethod: "/test/Method"}
 	_, err := interceptor.Intercept(context.Background(), nil, info, handler)
 	require.NoError(t, err)
-	require.Equal(t, "first-wins", capturedBusinessID)
+	require.Equal(t, namespace.RoutingKey{ID: "first-wins"}, capturedRoutingKey)
 }
 
 func TestMethodToPatternMapping(t *testing.T) {
-	expectedMappings := map[string]BusinessIDPattern{
+	expectedMappings := map[string]RoutingKeyPattern{
 		// PatternWorkflowID
 		"StartWorkflowExecution":           PatternWorkflowID,
 		"SignalWithStartWorkflowExecution": PatternWorkflowID,
