@@ -42,7 +42,7 @@ import (
 const nexusCompletionAPIName = configs.CompleteNexusOperation
 const nexusCompletionMethodNameForMetrics = "CompleteNexusOperation"
 
-type NexusCompletionHandler struct {
+type nexusCompletionHandler struct {
 	ClusterMetadata                      cluster.Metadata
 	NamespaceRegistry                    namespace.Registry
 	Logger                               log.Logger
@@ -64,11 +64,11 @@ type NexusCompletionHandler struct {
 	preProcessErrorsCounter              metrics.CounterIface
 }
 
-type NexusCompletionHTTPHandler struct {
+type nexusCompletionHTTPHandler struct {
 	httpHandler http.Handler
 }
 
-func NewNexusCompletionHandler(
+func newNexusCompletionHandler(
 	clusterMetadata cluster.Metadata,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
@@ -86,8 +86,8 @@ func NewNexusCompletionHandler(
 	redirectionInterceptor *interceptor.Redirection,
 	forwardingClients *cluster.FrontendHTTPClientCache,
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
-) *NexusCompletionHandler {
-	return &NexusCompletionHandler{
+) *nexusCompletionHandler {
+	return &nexusCompletionHandler{
 		ClusterMetadata:                      clusterMetadata,
 		NamespaceRegistry:                    namespaceRegistry,
 		Logger:                               logger,
@@ -110,8 +110,8 @@ func NewNexusCompletionHandler(
 	}
 }
 
-func NewNexusCompletionHTTPHandler(handler *NexusCompletionHandler, logger log.Logger) *NexusCompletionHTTPHandler {
-	return &NexusCompletionHTTPHandler{
+func newNexusCompletionHTTPHandler(handler *nexusCompletionHandler, logger log.Logger) *nexusCompletionHTTPHandler {
+	return &nexusCompletionHTTPHandler{
 		httpHandler: nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{
 			Handler:    handler,
 			Logger:     log.NewSlogLogger(logger),
@@ -122,7 +122,7 @@ func NewNexusCompletionHTTPHandler(handler *NexusCompletionHandler, logger log.L
 
 // CompleteOperation implements nexus.CompletionHandler.
 // nolint:revive // (cyclomatic complexity) This function is long but the complexity is justified.
-func (h *NexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest) (retErr error) {
+func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest) (retErr error) {
 	startTime := time.Now()
 	token, err := commonnexus.DecodeCallbackToken(r.HTTPRequest.Header.Get(commonnexus.CallbackTokenHeader))
 	if err != nil {
@@ -168,7 +168,7 @@ func (h *NexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		tag.WorkflowRunID(targetRunID),
 	)
 	rCtx := &requestContext{
-		NexusCompletionHandler: h,
+		nexusCompletionHandler: h,
 		namespace:              ns,
 		businessID:             targetBusinessID,
 		logger:                 log.With(h.Logger, tag.WorkflowNamespace(ns.Name().String())),
@@ -282,7 +282,7 @@ func (h *NexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	return commonnexus.ConvertGRPCError(err, false)
 }
 
-func (h *NexusCompletionHandler) completeHSMOperation(
+func (h *nexusCompletionHandler) completeHSMOperation(
 	ctx context.Context,
 	completion *tokenspb.NexusOperationCompletion,
 	successPayload *commonpb.Payload,
@@ -315,7 +315,7 @@ func (h *NexusCompletionHandler) completeHSMOperation(
 	return err
 }
 
-func (h *NexusCompletionHandler) completeChasmOperation(
+func (h *nexusCompletionHandler) completeChasmOperation(
 	ctx context.Context,
 	logger log.Logger,
 	completion *tokenspb.NexusOperationCompletion,
@@ -357,7 +357,7 @@ func (h *NexusCompletionHandler) completeChasmOperation(
 	return err
 }
 
-func (h *NexusCompletionHandler) forwardCompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest, rCtx *requestContext) error {
+func (h *nexusCompletionHandler) forwardCompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest, rCtx *requestContext) error {
 	client, err := h.ForwardingClients.Get(rCtx.namespace.ActiveClusterName(rCtx.businessID))
 	if err != nil {
 		h.Logger.Error("unable to get HTTP client for forward request", tag.Operation(nexusCompletionAPIName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err), tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()), tag.TargetCluster(rCtx.namespace.ActiveClusterName(rCtx.businessID)))
@@ -417,7 +417,7 @@ func (h *NexusCompletionHandler) forwardCompleteOperation(ctx context.Context, r
 	return cc.CompleteOperation(ctx, forwardURL, completion)
 }
 
-func (h *NexusCompletionHTTPHandler) RegisterRoutes(r *mux.Router) {
+func (h *nexusCompletionHTTPHandler) RegisterRoutes(r *mux.Router) {
 	r.Path("/" + commonnexus.RouteCompletionCallback.Representation()).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, rpc.MaxNexusAPIRequestBodyBytes)
 		h.httpHandler.ServeHTTP(w, r)
@@ -444,7 +444,7 @@ func (f *forwardingHTTPHeaderWrapper) Do(req *http.Request) (*http.Response, err
 }
 
 type requestContext struct {
-	*NexusCompletionHandler
+	*nexusCompletionHandler
 	logger                        log.Logger
 	metricsHandler                metrics.Handler
 	metricsHandlerForInterceptors metrics.Handler

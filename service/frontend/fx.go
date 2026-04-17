@@ -106,9 +106,9 @@ var Module = fx.Options(
 	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
 	fx.Provide(ServiceResolverProvider),
-	fx.Provide(NewNexusCompletionHandler),
+	fx.Provide(newNexusCompletionHandler),
 	fx.Provide(NewNexusOperationHTTPHandler),
-	fx.Provide(NewNexusCompletionHTTPHandler),
+	fx.Provide(newNexusCompletionHTTPHandler),
 	fx.Invoke(RegisterNexusOperationHTTPHandler),
 	fx.Invoke(RegisterNexusCompletionHTTPHandler),
 	fx.Invoke(RegisterOpenAPIHTTPHandler),
@@ -871,7 +871,7 @@ func RegisterNexusOperationHTTPHandler(
 }
 
 func RegisterNexusCompletionHTTPHandler(
-	h *NexusCompletionHTTPHandler,
+	h *nexusCompletionHTTPHandler,
 	router *mux.Router,
 ) {
 	h.RegisterRoutes(router)
