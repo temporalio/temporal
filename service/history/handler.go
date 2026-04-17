@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -385,6 +386,12 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 
 	if err := validateTaskToken(taskToken); err != nil {
 		return nil, h.convertError(err)
+	}
+
+	if !contextutil.ContextMetadataMarkActivityID(ctx, taskToken.GetActivityId()) {
+		h.throttledLogger.Warn("Failed to mark activity ID in context metadata",
+			tag.WorkflowID(taskToken.GetWorkflowId()),
+			tag.ActivityID(taskToken.GetActivityId()))
 	}
 
 	// Handle as standalone activity if token has component ref.

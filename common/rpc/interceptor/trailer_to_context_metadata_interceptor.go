@@ -2,6 +2,7 @@ package interceptor
 
 import (
 	"context"
+	"strings"
 
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
@@ -10,7 +11,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-// TrailerToContextMetadataInterceptor reads workflow metadata from gRPC response trailers
+// TrailerToContextMetadataInterceptor reads metadata from gRPC response trailers
 // and propagates it to the calling context using contextutil.ContextMetadataSet.
 //
 // Requires the context to be pre-wrapped with contextutil.WithMetadataContext() before the RPC call.
@@ -35,15 +36,15 @@ func TrailerToContextMetadataInterceptor(logger log.Logger) grpc.UnaryClientInte
 		trailerMetadata := make(map[string]string)
 		propagatedMetadata := make(map[string]string)
 
-		for _, key := range contextutil.PropagatedMetadataKeys() {
-			trailerValues := trailer.Get(key)
-			if len(trailerValues) == 0 {
+		for prefixedKey, values := range trailer {
+			key, ok := strings.CutPrefix(prefixedKey, trailerKeyPrefix)
+			if !ok || len(values) == 0 {
 				continue
 			}
 
-			trailerMetadata[key] = trailerValues[0]
-			if contextutil.ContextMetadataSet(ctx, key, trailerValues[0]) {
-				propagatedMetadata[key] = trailerValues[0]
+			trailerMetadata[key] = values[0]
+			if contextutil.ContextMetadataSet(ctx, key, values[0]) {
+				propagatedMetadata[key] = values[0]
 			}
 		}
 

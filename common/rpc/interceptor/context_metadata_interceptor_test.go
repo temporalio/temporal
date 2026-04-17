@@ -231,9 +231,3 @@ func TestNewContextMetadataInterceptor(t *testing.T) {
 		})
 	}
 }
-
-func TestContextMetadataInterceptor_PropagatedMetadataKeys(t *testing.T) {
-	require.Contains(t, contextutil.PropagatedMetadataKeys(), contextutil.MetadataKeyWorkflowType)
-	require.Contains(t, contextutil.PropagatedMetadataKeys(), contextutil.MetadataKeyWorkflowTaskQueue)
-	require.Len(t, contextutil.PropagatedMetadataKeys(), 2)
-}

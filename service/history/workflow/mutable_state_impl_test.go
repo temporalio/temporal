@@ -6173,6 +6173,94 @@ func (s *mutableStateSuite) TestSetContextMetadata() {
 	s.Equal(taskQueue, tq)
 }
 
+func (s *mutableStateSuite) TestSetContextMetadata_ActivityResolution() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	ctx := contextutil.WithMetadataContext(context.Background())
+
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:        &commonpb.WorkflowType{Name: "test-workflow"},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-queue"},
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	di, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		di.ScheduledEventID, di.RequestID, di.TaskQueue, "identity", nil, nil, nil, false, nil,
+	)
+	s.NoError(err)
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		di, &workflowservice.RespondWorkflowTaskCompletedRequest{Identity: "identity"}, workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+
+	workflowTaskCompletedEventID := int64(4)
+	_, _, err = s.mutableState.AddActivityTaskScheduledEvent(
+		workflowTaskCompletedEventID,
+		&commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:   "act-1",
+			ActivityType: &commonpb.ActivityType{Name: "SendEmail"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "email-queue"},
+		},
+		false,
+	)
+	s.NoError(err)
+
+	// Mark the activity ID and resolve
+	contextutil.ContextMetadataMarkActivityID(ctx, "act-1")
+	s.mutableState.SetContextMetadata(ctx)
+
+	actType, ok := contextutil.ContextMetadataGet(ctx, contextutil.ActivityTypeKey("act-1"))
+	s.True(ok)
+	s.Equal("SendEmail", actType)
+
+	actQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.ActivityTaskQueueKey("act-1"))
+	s.True(ok)
+	s.Equal("email-queue", actQueue)
+}
+
+func (s *mutableStateSuite) TestSetContextMetadata_ActivityNotFound() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	ctx := contextutil.WithMetadataContext(context.Background())
+
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:        &commonpb.WorkflowType{Name: "test-workflow"},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-queue"},
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	// Mark a non-existent activity ID
+	contextutil.ContextMetadataMarkActivityID(ctx, "nonexistent")
+	s.mutableState.SetContextMetadata(ctx)
+
+	// Activity type should still be the empty placeholder from MarkActivityID
+	actType, ok := contextutil.ContextMetadataGet(ctx, contextutil.ActivityTypeKey("nonexistent"))
+	s.True(ok)
+	s.Empty(actType)
+
+	// Task queue should not be set at all
+	_, ok = contextutil.ContextMetadataGet(ctx, contextutil.ActivityTaskQueueKey("nonexistent"))
+	s.False(ok)
+}
+
 func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTaskQueue() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 

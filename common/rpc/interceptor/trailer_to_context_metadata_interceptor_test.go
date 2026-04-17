@@ -38,7 +38,7 @@ func TestTrailerToContextMetadataInterceptor(t *testing.T) {
 					for _, opt := range opts {
 						if trailer, ok := opt.(grpc.TrailerCallOption); ok {
 							md := trailer.TrailerAddr
-							*md = metadata.Pairs(contextutil.MetadataKeyWorkflowType, "test-workflow-type")
+							*md = metadata.Pairs(trailerKeyPrefix+contextutil.MetadataKeyWorkflowType, "test-workflow-type")
 						}
 					}
 					return nil
@@ -59,7 +59,7 @@ func TestTrailerToContextMetadataInterceptor(t *testing.T) {
 					for _, opt := range opts {
 						if trailer, ok := opt.(grpc.TrailerCallOption); ok {
 							md := trailer.TrailerAddr
-							*md = metadata.Pairs(contextutil.MetadataKeyWorkflowTaskQueue, "test-task-queue")
+							*md = metadata.Pairs(trailerKeyPrefix+contextutil.MetadataKeyWorkflowTaskQueue, "test-task-queue")
 						}
 					}
 					return nil
@@ -81,8 +81,8 @@ func TestTrailerToContextMetadataInterceptor(t *testing.T) {
 						if trailer, ok := opt.(grpc.TrailerCallOption); ok {
 							md := trailer.TrailerAddr
 							*md = metadata.Pairs(
-								contextutil.MetadataKeyWorkflowType, "test-workflow-type",
-								contextutil.MetadataKeyWorkflowTaskQueue, "test-task-queue",
+								trailerKeyPrefix+contextutil.MetadataKeyWorkflowType, "test-workflow-type",
+								trailerKeyPrefix+contextutil.MetadataKeyWorkflowTaskQueue, "test-task-queue",
 							)
 						}
 					}
@@ -109,7 +109,7 @@ func TestTrailerToContextMetadataInterceptor(t *testing.T) {
 						if trailer, ok := opt.(grpc.TrailerCallOption); ok {
 							md := trailer.TrailerAddr
 							*md = metadata.MD{
-								contextutil.MetadataKeyWorkflowType: []string{"first-value", "second-value", "third-value"},
+								trailerKeyPrefix + contextutil.MetadataKeyWorkflowType: []string{"first-value", "second-value", "third-value"},
 							}
 						}
 					}
@@ -141,7 +141,7 @@ func TestTrailerToContextMetadataInterceptor(t *testing.T) {
 					for _, opt := range opts {
 						if trailer, ok := opt.(grpc.TrailerCallOption); ok {
 							md := trailer.TrailerAddr
-							*md = metadata.Pairs(contextutil.MetadataKeyWorkflowType, "test-workflow-type")
+							*md = metadata.Pairs(trailerKeyPrefix+contextutil.MetadataKeyWorkflowType, "test-workflow-type")
 						}
 					}
 					return errors.New("invoker error")
@@ -162,7 +162,7 @@ func TestTrailerToContextMetadataInterceptor(t *testing.T) {
 					for _, opt := range opts {
 						if trailer, ok := opt.(grpc.TrailerCallOption); ok {
 							md := trailer.TrailerAddr
-							*md = metadata.Pairs(contextutil.MetadataKeyWorkflowType, "test-workflow-type")
+							*md = metadata.Pairs(trailerKeyPrefix+contextutil.MetadataKeyWorkflowType, "test-workflow-type")
 						}
 					}
 					return nil
@@ -176,7 +176,7 @@ func TestTrailerToContextMetadataInterceptor(t *testing.T) {
 			},
 		},
 		{
-			name: "NonPropagatedKeys",
+			name: "UnprefixedKeysIgnored",
 			setupInvoker: func() grpc.UnaryInvoker {
 				return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
 					for _, opt := range opts {
@@ -201,16 +201,16 @@ func TestTrailerToContextMetadataInterceptor(t *testing.T) {
 			},
 		},
 		{
-			name: "MixedPropagatedAndNonPropagated",
+			name: "MixedPrefixedAndUnprefixed",
 			setupInvoker: func() grpc.UnaryInvoker {
 				return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
 					for _, opt := range opts {
 						if trailer, ok := opt.(grpc.TrailerCallOption); ok {
 							md := trailer.TrailerAddr
 							*md = metadata.Pairs(
-								contextutil.MetadataKeyWorkflowType, "test-workflow-type",
+								trailerKeyPrefix+contextutil.MetadataKeyWorkflowType, "test-workflow-type",
 								"some-other-key", "some-value",
-								contextutil.MetadataKeyWorkflowTaskQueue, "test-task-queue",
+								trailerKeyPrefix+contextutil.MetadataKeyWorkflowTaskQueue, "test-task-queue",
 								"another-key", "another-value",
 							)
 						}
@@ -243,7 +243,7 @@ func TestTrailerToContextMetadataInterceptor(t *testing.T) {
 						if trailer, ok := opt.(grpc.TrailerCallOption); ok {
 							md := trailer.TrailerAddr
 							*md = metadata.MD{
-								contextutil.MetadataKeyWorkflowType: []string{},
+								trailerKeyPrefix + contextutil.MetadataKeyWorkflowType: []string{},
 							}
 						}
 					}

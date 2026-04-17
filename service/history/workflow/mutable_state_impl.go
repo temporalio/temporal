@@ -7240,9 +7240,17 @@ func (ms *MutableStateImpl) SetContextMetadata(
 			contextutil.ContextMetadataSet(ctx, contextutil.MetadataKeyWorkflowTaskQueue, ms.executionInfo.TaskQueue)
 		}
 
-		ms.GetPendingActivityInfos()
-		// TODO: To set activity_type/activity_task_queue metadata, the history gRPC handler should
-		// set the relevant activity information on the metadata context before calling mutable state.
+		for _, activityID := range contextutil.ContextMetadataGetActivityIDs(ctx) {
+			if ai, ok := ms.GetActivityByActivityID(activityID); ok {
+				contextutil.ContextMetadataSet(ctx, contextutil.ActivityTypeKey(activityID), ai.ActivityType.GetName())
+				contextutil.ContextMetadataSet(ctx, contextutil.ActivityTaskQueueKey(activityID), ai.TaskQueue)
+			} else {
+				ms.logger.Warn("Activity ID marked for metadata but not found",
+					tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+					tag.WorkflowID(ms.executionInfo.WorkflowId),
+					tag.ActivityID(activityID))
+			}
+		}
 	default:
 		// No metadata to set for other archetype types
 	}

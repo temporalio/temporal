@@ -2,6 +2,7 @@ package contextutil
 
 import (
 	"context"
+	"strings"
 	"sync"
 )
 
@@ -22,16 +23,55 @@ const (
 	MetadataKeyWorkflowType = "workflow-type"
 	// MetadataKeyWorkflowTaskQueue is the context metadata key for workflow task queue
 	MetadataKeyWorkflowTaskQueue = "workflow-task-queue"
+
+	activityTypePrefix      = "activity-type-"
+	activityTaskQueuePrefix = "activity-task-queue-"
 )
 
-// PropagatedMetadataKeys returns the explicit allowlist of context metadata keys propagated
-// via gRPC trailers across service boundaries. Only selected keys are included to avoid
-// accidentally sending large payloads.
-func PropagatedMetadataKeys() []string {
-	return []string{
-		MetadataKeyWorkflowType,
-		MetadataKeyWorkflowTaskQueue,
+// ActivityTypeKey returns the metadata key for the given activity ID's type.
+func ActivityTypeKey(activityID string) string {
+	return activityTypePrefix + activityID
+}
+
+// ActivityTaskQueueKey returns the metadata key for the given activity ID's task queue.
+func ActivityTaskQueueKey(activityID string) string {
+	return activityTaskQueuePrefix + activityID
+}
+
+// ContextMetadataMarkActivityID marks an activity ID on the context for metadata resolution.
+// The handler knows which activity (from the task token) but not its type or task queue.
+// Mutable state knows the activity details but not which activity the request targets.
+// This bridges the two: the handler marks the ID, and SetContextMetadata (during
+// closeTransaction) resolves it to type and task queue from pending activity infos.
+func ContextMetadataMarkActivityID(ctx context.Context, activityID string) bool {
+	return ContextMetadataSet(ctx, activityTypePrefix+activityID, "")
+}
+
+// ContextMetadataGetActivityIDs returns the unique activity IDs present in the context metadata.
+func ContextMetadataGetActivityIDs(ctx context.Context) []string {
+	metadataCtx := getMetadataContext(ctx)
+	if metadataCtx == nil {
+		return nil
 	}
+
+	metadataCtx.Lock()
+	defer metadataCtx.Unlock()
+
+	seen := make(map[string]struct{})
+	for key := range metadataCtx.Metadata {
+		if id, ok := strings.CutPrefix(key, activityTypePrefix); ok {
+			seen[id] = struct{}{}
+		}
+	}
+
+	if len(seen) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(seen))
+	for id := range seen {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 // getMetadataContext extracts metadata context from golang context.
@@ -62,8 +102,6 @@ func ContextHasMetadata(ctx context.Context) bool {
 }
 
 // ContextMetadataSet sets a metadata key-value pair in the context, overwriting any existing value.
-// This is used by TrailerToContextMetadataInterceptor which propagates all trailer keys generically
-// without special-casing individual keys.
 func ContextMetadataSet(ctx context.Context, key string, value any) bool {
 	metadataCtx := getMetadataContext(ctx)
 	if metadataCtx == nil {

@@ -360,3 +360,89 @@ func TestContextHasMetadata(t *testing.T) {
 		require.False(t, ContextHasMetadata(ctx3))
 	})
 }
+
+func TestActivityTypeKey(t *testing.T) {
+	require.Equal(t, "activity-type-act-1", ActivityTypeKey("act-1"))
+	require.Equal(t, "activity-type-", ActivityTypeKey(""))
+}
+
+func TestActivityTaskQueueKey(t *testing.T) {
+	require.Equal(t, "activity-task-queue-act-1", ActivityTaskQueueKey("act-1"))
+	require.Equal(t, "activity-task-queue-", ActivityTaskQueueKey(""))
+}
+
+func TestContextMetadataMarkActivityID(t *testing.T) {
+	t.Run("marks activity ID on valid context", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		require.True(t, ContextMetadataMarkActivityID(ctx, "act-1"))
+
+		value, ok := ContextMetadataGet(ctx, ActivityTypeKey("act-1"))
+		require.True(t, ok)
+		require.Empty(t, value)
+	})
+
+	t.Run("returns false without metadata context", func(t *testing.T) {
+		ctx := context.Background()
+		require.False(t, ContextMetadataMarkActivityID(ctx, "act-1"))
+	})
+
+	t.Run("marks multiple activity IDs", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		require.True(t, ContextMetadataMarkActivityID(ctx, "act-1"))
+		require.True(t, ContextMetadataMarkActivityID(ctx, "act-2"))
+
+		_, ok := ContextMetadataGet(ctx, ActivityTypeKey("act-1"))
+		require.True(t, ok)
+		_, ok = ContextMetadataGet(ctx, ActivityTypeKey("act-2"))
+		require.True(t, ok)
+	})
+}
+
+func TestContextMetadataGetActivityIDs(t *testing.T) {
+	t.Run("returns nil without metadata context", func(t *testing.T) {
+		ctx := context.Background()
+		require.Nil(t, ContextMetadataGetActivityIDs(ctx))
+	})
+
+	t.Run("returns nil when no activities marked", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		require.Nil(t, ContextMetadataGetActivityIDs(ctx))
+	})
+
+	t.Run("returns single marked activity ID", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		ContextMetadataMarkActivityID(ctx, "act-1")
+
+		ids := ContextMetadataGetActivityIDs(ctx)
+		require.Equal(t, []string{"act-1"}, ids)
+	})
+
+	t.Run("returns multiple marked activity IDs", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		ContextMetadataMarkActivityID(ctx, "act-1")
+		ContextMetadataMarkActivityID(ctx, "act-2")
+
+		ids := ContextMetadataGetActivityIDs(ctx)
+		require.Len(t, ids, 2)
+		require.ElementsMatch(t, []string{"act-1", "act-2"}, ids)
+	})
+
+	t.Run("ignores non-activity keys", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		ContextMetadataSet(ctx, MetadataKeyWorkflowType, "my-workflow")
+		ContextMetadataSet(ctx, MetadataKeyWorkflowTaskQueue, "my-queue")
+		ContextMetadataMarkActivityID(ctx, "act-1")
+
+		ids := ContextMetadataGetActivityIDs(ctx)
+		require.Equal(t, []string{"act-1"}, ids)
+	})
+
+	t.Run("deduplicates when type and task queue set for same ID", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		ContextMetadataMarkActivityID(ctx, "act-1")
+		ContextMetadataSet(ctx, ActivityTaskQueueKey("act-1"), "my-queue")
+
+		ids := ContextMetadataGetActivityIDs(ctx)
+		require.Equal(t, []string{"act-1"}, ids)
+	})
+}

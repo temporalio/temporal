@@ -11,6 +11,10 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+// trailerKeyPrefix namespaces context metadata keys in gRPC trailers so the client-side
+// interceptor can distinguish them from gRPC-internal and other interceptor trailer keys.
+const trailerKeyPrefix = "contextmetadata-"
+
 type ContextMetadataInterceptor struct {
 	setTrailer      bool
 	logger          log.Logger
@@ -31,7 +35,8 @@ func NewContextMetadataInterceptor(setTrailer bool, logger log.Logger) *ContextM
 	return cmi
 }
 
-// Intercept adds metadata context to all incoming gRPC requests
+// Intercept wraps the request context with metadata storage and invokes the handler.
+// When setTrailer is enabled, accumulated metadata is written to gRPC response trailers.
 func (c *ContextMetadataInterceptor) Intercept(
 	ctx context.Context,
 	req any,
@@ -52,10 +57,8 @@ func (c *ContextMetadataInterceptor) Intercept(
 func (c *ContextMetadataInterceptor) appendContextMetadataToTrailer(ctx context.Context, info *grpc.UnaryServerInfo) {
 	var trailerPairs []string
 
-	for _, key := range contextutil.PropagatedMetadataKeys() {
-		if value, ok := contextutil.ContextMetadataGet(ctx, key); ok {
-			trailerPairs = append(trailerPairs, key, fmt.Sprint(value))
-		}
+	for key, value := range contextutil.ContextMetadataGetAll(ctx) {
+		trailerPairs = append(trailerPairs, trailerKeyPrefix+key, fmt.Sprint(value))
 	}
 
 	if len(trailerPairs) == 0 {
@@ -73,6 +76,7 @@ func (c *ContextMetadataInterceptor) appendContextMetadataToTrailer(ctx context.
 
 	if err := grpc.SetTrailer(ctx, trailer); err != nil {
 		c.logger.Error("ContextMetadataInterceptor: Failed to set trailer",
-			tag.Error(err))
+			tag.Error(err),
+			tag.NewStringTag("fullMethod", info.FullMethod))
 	}
 }
