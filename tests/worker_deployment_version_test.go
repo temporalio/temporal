@@ -3077,6 +3077,10 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_WithUnpinn
 }
 
 // The following tests verify that the version_reactivation_signal_cache works as intended.
+// Setup note: v1 is left INACTIVE (never made current) rather than forced through a full
+// CURRENT → DRAINING → DRAINED transition. The cache and the reactivation-signal handler
+// both treat INACTIVE and DRAINED identically, and this shaves the drainage wait off every
+// test. DRAINED-side coverage lives in the unit test Test_ReactivateVersion_FromDrained.
 func (s *DeploymentVersionSuite) TestReactivationSignalCache_Deduplication_StartWorkflow() {
 	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, testVersionDrainageVisibilityGracePeriod)
 	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, testLongVersionDrainageRefreshInterval)
@@ -3087,23 +3091,8 @@ func (s *DeploymentVersionSuite) TestReactivationSignalCache_Deduplication_Start
 	// Use shorter, explicit deployment series names to avoid truncation issues
 	deploymentName := fmt.Sprintf("test-cache-dedup-wfv%d", s.workflowVersion)
 	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-cache-dedup-tq")
-	tv2 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v2").WithTaskQueue("test-cache-dedup-tq")
 
-	// Set version 1 as current
 	s.startVersionWorkflow(ctx, tv1)
-	err := s.setCurrent(tv1, true)
-	s.NoError(err)
-
-	// Set version 2 as current → version 1 starts draining
-	s.startVersionWorkflow(ctx, tv2)
-	err = s.setCurrent(tv2, true)
-	s.NoError(err)
-
-	// Wait for version 1 to become DRAINED
-	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
-		&deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED},
-		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
-		testVersionDrainageVisibilityGracePeriod+testLongVersionDrainageRefreshInterval)
 
 	// Workflow that waits for a signal before completing
 	wf := func(ctx workflow.Context) (string, error) {
@@ -3203,23 +3192,8 @@ func (s *DeploymentVersionSuite) TestReactivationSignalCache_Deduplication_Signa
 	// Use shorter, explicit deployment series names to avoid truncation issues
 	deploymentName := fmt.Sprintf("test-sws-cache-dedup-wfv%d", s.workflowVersion)
 	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-sws-cache-dedup-tq")
-	tv2 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v2").WithTaskQueue("test-sws-cache-dedup-tq")
 
-	// Set version 1 as current
 	s.startVersionWorkflow(ctx, tv1)
-	err := s.setCurrent(tv1, true)
-	s.NoError(err)
-
-	// Set version 2 as current → version 1 starts draining
-	s.startVersionWorkflow(ctx, tv2)
-	err = s.setCurrent(tv2, true)
-	s.NoError(err)
-
-	// Wait for version 1 to become DRAINED
-	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
-		&deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED},
-		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
-		testVersionDrainageVisibilityGracePeriod+testLongVersionDrainageRefreshInterval)
 
 	// Workflow that waits for a signal before completing
 	wf := func(ctx workflow.Context) (string, error) {
@@ -3331,21 +3305,12 @@ func (s *DeploymentVersionSuite) TestReactivationSignalCache_Deduplication_Updat
 	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-opts-cache-dedup-tq")
 	tv2 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v2").WithTaskQueue("test-opts-cache-dedup-tq")
 
-	// Set version 1 as current
 	s.startVersionWorkflow(ctx, tv1)
-	err := s.setCurrent(tv1, true)
-	s.NoError(err)
 
-	// Set version 2 as current → version 1 starts draining
+	// Set version 2 as current so workflows can start on it before being pinned/updated to v1
 	s.startVersionWorkflow(ctx, tv2)
-	err = s.setCurrent(tv2, true)
+	err := s.setCurrent(tv2, true)
 	s.NoError(err)
-
-	// Wait for version 1 to become DRAINED
-	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
-		&deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED},
-		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
-		testVersionDrainageVisibilityGracePeriod+testLongVersionDrainageRefreshInterval)
 
 	// Workflow that waits for a signal before completing
 	wf := func(ctx workflow.Context) (string, error) {
@@ -3353,7 +3318,7 @@ func (s *DeploymentVersionSuite) TestReactivationSignalCache_Deduplication_Updat
 		return "done", nil
 	}
 
-	// Register worker for version 1 (DRAINED)
+	// Register worker for version 1 (INACTIVE)
 	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().String(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
 			Version:       tv1.SDKDeploymentVersion(),
@@ -3484,7 +3449,7 @@ func (s *DeploymentVersionSuite) TestReactivationSignalCache_Deduplication_Updat
 
 // TestReactivationSignalCache_Deduplication_Reset verifies that the version reactivation signal cache
 // deduplicates signals when ResetWorkflowExecution is called multiple times with a pinned override
-// to a DRAINED version.
+// to a non-current (INACTIVE or DRAINED) version.
 func (s *DeploymentVersionSuite) TestReactivationSignalCache_Deduplication_Reset() {
 	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, testVersionDrainageVisibilityGracePeriod)
 	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, testLongVersionDrainageRefreshInterval)
@@ -3497,21 +3462,12 @@ func (s *DeploymentVersionSuite) TestReactivationSignalCache_Deduplication_Reset
 	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-reset-cache-dedup-tq")
 	tv2 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v2").WithTaskQueue("test-reset-cache-dedup-tq")
 
-	// Set version 1 as current
 	s.startVersionWorkflow(ctx, tv1)
-	err := s.setCurrent(tv1, true)
-	s.NoError(err)
 
-	// Set version 2 as current → version 1 starts draining
+	// Set version 2 as current so workflows can start on it before being reset with a pinned override to v1
 	s.startVersionWorkflow(ctx, tv2)
-	err = s.setCurrent(tv2, true)
+	err := s.setCurrent(tv2, true)
 	s.NoError(err)
-
-	// Wait for version 1 to become DRAINED
-	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
-		&deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED},
-		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
-		testVersionDrainageVisibilityGracePeriod+testLongVersionDrainageRefreshInterval)
 
 	// Workflow that waits for a signal before completing
 	wf := func(ctx workflow.Context) (string, error) {
@@ -3519,7 +3475,7 @@ func (s *DeploymentVersionSuite) TestReactivationSignalCache_Deduplication_Reset
 		return "done", nil
 	}
 
-	// Register worker for version 1 (DRAINED)
+	// Register worker for version 1 (INACTIVE)
 	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().String(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
 			Version:       tv1.SDKDeploymentVersion(),
