@@ -544,11 +544,11 @@ func (s *specSuite) TestCanonicalizeDeduplicates() {
 	spec, err := canonicalizeSpec(&schedulepb.ScheduleSpec{
 		StructuredCalendar: []*schedulepb.StructuredCalendarSpec{
 			{Hour: []*schedulepb.Range{{Start: 9, End: 9, Step: 1}}},
-			{Hour: []*schedulepb.Range{{Start: 9}}}, // same after normalization
+			{Hour: []*schedulepb.Range{{Start: 9}}},  // same after normalization
 			{Hour: []*schedulepb.Range{{Start: 17}}}, // different
 		},
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Len(spec.StructuredCalendar, 2)
 
 	// also deduplicates ExcludeStructuredCalendar
@@ -558,6 +558,6 @@ func (s *specSuite) TestCanonicalizeDeduplicates() {
 			{Hour: []*schedulepb.Range{{Start: 12}}},
 		},
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Len(spec.ExcludeStructuredCalendar, 1)
 }
