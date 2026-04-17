@@ -6661,7 +6661,7 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionTimeSkippingTransitionedEven
 		}
 		targetTime := s.mockShard.GetTimeSource().Now().Add(time.Hour)
 		// Build an event with DisabledAfterBound=true directly via the history builder.
-		event := s.mutableState.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(&targetTime, true)
+		event := s.mutableState.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(targetTime, true)
 		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(context.Background(), event)
 		s.NoError(err)
 		s.False(s.mutableState.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)
@@ -6672,7 +6672,7 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionTimeSkippingTransitionedEven
 // TestCloseTransactionTimeSkipping exercises the time-skipping logic that runs inside
 // closeTransaction:
 //
-//   - closeTransactionHandlerTimeSkipping: decides whether to fire time skipping and, if so,
+//   - closeTransactionHandleTimeSkipping: decides whether to fire time skipping and, if so,
 //     calls AddWorkflowExecutionTimeSkippingTransitionedEvent to write the history event and
 //     accumulate the skipped duration.
 //   - closeTransactionRegenerateTimerTasksForTimeSkipping: regenerates UserTimerTask entries
@@ -6845,10 +6845,296 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 		s.Nil(ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration)
 
 		// No regenerated UserTimerTask: the passive path skips both
-		// closeTransactionHandlerTimeSkipping and closeTransactionRegenerateTimerTasksForTimeSkipping.
+		// closeTransactionHandleTimeSkipping and closeTransactionRegenerateTimerTasksForTimeSkipping.
 		for _, task := range mutation.Tasks[tasks.CategoryTimer] {
 			_, ok := task.(*tasks.UserTimerTask)
 			s.False(ok, "passive cluster must not produce regenerated UserTimerTask")
 		}
+	})
+}
+
+// TestCloseTransactionPrepareTasks exercises closeTransactionPrepareTasks and
+// closeTransactionHandleActivityUserTimerTasks together.
+//
+// closeTransactionHandleActivityUserTimerTasks is responsible for generating exactly one
+// ActivityTimeoutTask and one UserTimerTask (the earliest-firing ones) per transaction.
+// closeTransactionPrepareTasks orchestrates this call and then, when time-skipping is
+// active, calls closeTransactionRegenerateTimerTasksForTimeSkipping afterward — testing
+// that the ordering is correct.
+func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
+	failoverVersion := s.namespaceEntry.FailoverVersion(tests.WorkflowID)
+	now := s.mockShard.GetTimeSource().Now()
+	timerExpiry := now.Add(time.Hour)
+
+	// buildRunningState returns a minimal running workflow with no pending workflow task,
+	// activities, or timers.  Individual sub-tests layer what they need on top.
+	buildRunningState := func() *persistencespb.WorkflowMutableState {
+		return &persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				NamespaceId:                      s.namespaceEntry.ID().String(),
+				WorkflowId:                       tests.WorkflowID,
+				TaskQueue:                        "testTaskQueue",
+				WorkflowTypeName:                 "testWorkflowType",
+				WorkflowExecutionTimerTaskStatus: TimerTaskStatusCreated,
+				VersionHistories: &historyspb.VersionHistories{
+					Histories: []*historyspb.VersionHistory{
+						{
+							BranchToken: []byte("token#1"),
+							Items:       []*historyspb.VersionHistoryItem{{EventId: 2, Version: failoverVersion}},
+						},
+					},
+				},
+				TransitionHistory: []*persistencespb.VersionedTransition{
+					{NamespaceFailoverVersion: failoverVersion, TransitionCount: 1},
+				},
+			},
+			ExecutionState: &persistencespb.WorkflowExecutionState{
+				RunId:  tests.RunID,
+				State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			},
+			NextEventId: 3,
+		}
+	}
+
+	// pendingTimer returns a timer map with one timer whose TaskStatus is as given.
+	pendingTimer := func(taskStatus int64) map[string]*persistencespb.TimerInfo {
+		return map[string]*persistencespb.TimerInfo{
+			"t1": {
+				TimerId:        "t1",
+				StartedEventId: 1,
+				ExpiryTime:     timestamppb.New(timerExpiry),
+				TaskStatus:     taskStatus,
+			},
+		}
+	}
+
+	// pendingScheduledActivity returns an activity map with one scheduled (not-started)
+	// activity whose TimerTaskStatus is as given.
+	// ScheduleToStart fires at now+1h, ScheduleToClose fires at now+2h — so
+	// ScheduleToStart is always the earliest timer for this activity.
+	pendingScheduledActivity := func(timerTaskStatus int32) map[int64]*persistencespb.ActivityInfo {
+		return map[int64]*persistencespb.ActivityInfo{
+			5: {
+				Version:                failoverVersion,
+				ScheduledEventId:       5,
+				ScheduledTime:          timestamppb.New(now),
+				StartedEventId:         common.EmptyEventID,
+				ActivityId:             "act1",
+				ScheduleToStartTimeout: durationpb.New(time.Hour),
+				ScheduleToCloseTimeout: durationpb.New(2 * time.Hour),
+				TimerTaskStatus:        timerTaskStatus,
+				Stamp:                  1,
+			},
+		}
+	}
+
+	collectUserTimerTasks := func(timerTasks []tasks.Task) []*tasks.UserTimerTask {
+		var result []*tasks.UserTimerTask
+		for _, task := range timerTasks {
+			if ut, ok := task.(*tasks.UserTimerTask); ok {
+				result = append(result, ut)
+			}
+		}
+		return result
+	}
+
+	collectActivityTimerTasks := func(timerTasks []tasks.Task) []*tasks.ActivityTimeoutTask {
+		var result []*tasks.ActivityTimeoutTask
+		for _, task := range timerTasks {
+			if at, ok := task.(*tasks.ActivityTimeoutTask); ok {
+				result = append(result, at)
+			}
+		}
+		return result
+	}
+
+	// ── closeTransactionHandleActivityUserTimerTasks scenarios ──────────────────
+
+	s.Run("HandleActivityUserTimerTasks/Active_Running_UserTimer_NotCreated", func() {
+		// TaskStatus=None: CreateNextUserTimer generates a UserTimerTask and marks the
+		// timer as created so the next transaction skips it.
+		dbState := buildRunningState()
+		dbState.TimerInfos = pendingTimer(TimerTaskStatusNone)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		utTasks := collectUserTimerTasks(mutation.Tasks[tasks.CategoryTimer])
+		s.Require().Len(utTasks, 1)
+		s.Equal(int64(1), utTasks[0].EventID)
+		s.Equal(timerExpiry, utTasks[0].VisibilityTimestamp)
+
+		// The timer must be marked as created in mutable state.
+		s.Equal(int64(TimerTaskStatusCreated), ms.pendingTimerInfoIDs["t1"].TaskStatus)
+	})
+
+	s.Run("HandleActivityUserTimerTasks/Active_Running_UserTimer_AlreadyCreated", func() {
+		// TaskStatus=Created: CreateNextUserTimer skips generation — no duplicate task.
+		dbState := buildRunningState()
+		dbState.TimerInfos = pendingTimer(TimerTaskStatusCreated)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		s.Empty(collectUserTimerTasks(mutation.Tasks[tasks.CategoryTimer]))
+	})
+
+	s.Run("HandleActivityUserTimerTasks/Active_Running_Activity_NotCreated", func() {
+		// No timer task status bits set: CreateNextActivityTimer generates an
+		// ActivityTimeoutTask for the earliest-firing timeout (ScheduleToStart).
+		dbState := buildRunningState()
+		dbState.ActivityInfos = pendingScheduledActivity(0)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		atTasks := collectActivityTimerTasks(mutation.Tasks[tasks.CategoryTimer])
+		s.Require().Len(atTasks, 1)
+		s.Equal(int64(5), atTasks[0].EventID)
+		s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, atTasks[0].TimeoutType)
+	})
+
+	s.Run("HandleActivityUserTimerTasks/Active_Running_Activity_AlreadyCreated", func() {
+		// ScheduleToStart bit set: that timer is already created, CreateNextActivityTimer
+		// returns without generating a task.
+		dbState := buildRunningState()
+		dbState.ActivityInfos = pendingScheduledActivity(TimerTaskStatusCreatedScheduleToStart)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		s.Empty(collectActivityTimerTasks(mutation.Tasks[tasks.CategoryTimer]))
+	})
+
+	s.Run("HandleActivityUserTimerTasks/Active_NotRunning", func() {
+		// Completed workflow: closeTransactionHandleActivityUserTimerTasks short-circuits
+		// on !IsWorkflowExecutionRunning(), generating no timer tasks.
+		dbState := buildRunningState()
+		dbState.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+		dbState.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		dbState.TimerInfos = pendingTimer(TimerTaskStatusNone)
+		dbState.ActivityInfos = pendingScheduledActivity(0)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		// StartTransaction is needed to initialize currentVersion so closeTransactionWithPolicyCheck
+		// can call ClusterNameForFailoverVersion with the right version.
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		s.Empty(collectUserTimerTasks(mutation.Tasks[tasks.CategoryTimer]))
+		s.Empty(collectActivityTimerTasks(mutation.Tasks[tasks.CategoryTimer]))
+	})
+
+	s.Run("HandleActivityUserTimerTasks/Passive", func() {
+		// Passive policy: closeTransactionHandleActivityUserTimerTasks returns immediately,
+		// generating no timer tasks regardless of pending timers or activities.
+		dbState := buildRunningState()
+		dbState.TimerInfos = pendingTimer(TimerTaskStatusNone)
+		dbState.ActivityInfos = pendingScheduledActivity(0)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+
+		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyPassive)
+		s.Require().NoError(err)
+
+		s.Empty(collectUserTimerTasks(mutation.Tasks[tasks.CategoryTimer]))
+		s.Empty(collectActivityTimerTasks(mutation.Tasks[tasks.CategoryTimer]))
+	})
+
+	// ── Ordering: closeTransactionHandleActivityUserTimerTasks runs before
+	//             closeTransactionRegenerateTimerTasksForTimeSkipping ───────────
+
+	s.Run("Ordering/UserTimer_NotCreated_WithTimeSkipping", func() {
+		// Timer has TaskStatus=None AND the workflow becomes eligible for time-skipping.
+		// closeTransactionHandleActivityUserTimerTasks runs first and generates a normal
+		// UserTimerTask at ExpiryTime.  closeTransactionRegenerateTimerTasksForTimeSkipping
+		// then generates a second UserTimerTask at ExpiryTime-accumulatedDuration.
+		// Both tasks must be present; the time-skipped one has an earlier timestamp.
+		dbState := buildRunningState()
+		dbState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		dbState.TimerInfos = pendingTimer(TimerTaskStatusNone)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		accumulated := ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
+		s.Require().NotNil(accumulated)
+		s.Require().Greater(accumulated.AsDuration(), time.Duration(0))
+
+		utTasks := collectUserTimerTasks(mutation.Tasks[tasks.CategoryTimer])
+		s.Require().Len(utTasks, 2, "expected one normal task and one time-skipped task")
+
+		// Sort by visibility timestamp so we can check order deterministically.
+		if utTasks[0].VisibilityTimestamp.After(utTasks[1].VisibilityTimestamp) {
+			utTasks[0], utTasks[1] = utTasks[1], utTasks[0]
+		}
+
+		expectedShifted := timerExpiry.Add(-accumulated.AsDuration())
+		s.Equal(expectedShifted, utTasks[0].VisibilityTimestamp, "time-skipped task must fire first")
+		s.Equal(timerExpiry, utTasks[1].VisibilityTimestamp, "normal task fires at real expiry")
+		s.Equal(int64(1), utTasks[0].EventID)
+		s.Equal(int64(1), utTasks[1].EventID)
+	})
+
+	s.Run("Ordering/UserTimer_AlreadyCreated_WithTimeSkipping", func() {
+		// Timer has TaskStatus=Created: closeTransactionHandleActivityUserTimerTasks skips
+		// it (already created).  closeTransactionRegenerateTimerTasksForTimeSkipping still
+		// generates the time-shifted task.  Only the time-skipped task appears.
+		dbState := buildRunningState()
+		dbState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		dbState.TimerInfos = pendingTimer(TimerTaskStatusCreated)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		accumulated := ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
+		s.Require().NotNil(accumulated)
+
+		utTasks := collectUserTimerTasks(mutation.Tasks[tasks.CategoryTimer])
+		s.Require().Len(utTasks, 1, "only the time-skipped task must be present")
+
+		expectedShifted := timerExpiry.Add(-accumulated.AsDuration())
+		s.Equal(expectedShifted, utTasks[0].VisibilityTimestamp)
+		s.Equal(int64(1), utTasks[0].EventID)
 	})
 }

@@ -1036,6 +1036,7 @@ func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.St
 // and the only difference is the TaskID.
 // TODO@time-skipping: currently not safe to call in replication context
 func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() {
+
 	if r.mutableState.GetExecutionInfo().TimeSkippingInfo == nil {
 		return
 	}
@@ -1043,6 +1044,7 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() {
 	if accumulatedSkippedDuration == 0 {
 		return
 	}
+
 	userTimerSequenceIDs := r.getTimerSequence().LoadAndSortUserTimers()
 	if len(userTimerSequenceIDs) == 0 {
 		// This method maybe called when there are no user timers to regenerate,

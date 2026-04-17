@@ -1178,7 +1178,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping(t *testing.T) {
 	now := time.Now().UTC()
 	skippedDuration := time.Hour
 
-	// Two pending timers: expiry at now+1h and now+2h.
+	// Two pending timers: expiry at now+1h and now+2h; only the earliest is regenerated.
 	timer1ExpiryTime := now.Add(1 * time.Hour)
 	timer2ExpiryTime := now.Add(2 * time.Hour)
 
