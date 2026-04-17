@@ -54,7 +54,7 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 		chasm.NewRegistrableSideEffectTask(
 			"invocation",
 			l.operationInvocationTaskHandler,
-			chasm.SideEffectTaskGroupRegisterOpt(TaskGroupName),
+			chasm.WithSideEffectTaskGroup(TaskGroupName),
 		),
 		chasm.NewRegistrablePureTask("invocationBackoff", l.operationBackoffTaskHandler),
 		chasm.NewRegistrablePureTask("scheduleToStartTimeout", l.operationScheduleToStartTimeoutTaskHandler),
@@ -63,7 +63,7 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 		chasm.NewRegistrableSideEffectTask(
 			"cancellation",
 			l.cancellationInvocationTaskHandler,
-			chasm.SideEffectTaskGroupRegisterOpt(TaskGroupName),
+			chasm.WithSideEffectTaskGroup(TaskGroupName),
 		),
 		chasm.NewRegistrablePureTask("cancellationBackoff", l.cancellationBackoffTaskHandler),
 	}

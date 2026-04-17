@@ -36,9 +36,9 @@ type (
 		GetVersion() int64
 	}
 
-	// HasStateMachineTaskGroup must be implemented by all tasks that participate in outbound task grouping.
-	HasStateMachineTaskGroup interface {
-		StateMachineTaskGroup() string
+	// HasOutboundTaskGroup must be implemented by all tasks that participate in outbound task grouping.
+	HasOutboundTaskGroup interface {
+		OutboundTaskGroup() string
 	}
 
 	// HasDestination must be implemented by all tasks used in the outbound queue.

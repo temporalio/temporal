@@ -16,7 +16,7 @@ type (
 		sideEffectTaskExecuteFn sideEffectTaskExecuteFn
 		sideEffectTaskDiscardFn sideEffectTaskDiscardFn
 		isPureTask              bool
-		sideEffectTaskGroup     string
+		outboundTaskGroup       string // For grouping on the outbound queue. See [WithSideEffectTaskGroup] for details.
 
 		// Those two fields are initialized when the component is registered to a library.
 		library    namer
@@ -156,12 +156,17 @@ func (rt *RegistrableTask) registerToLibrary(
 
 	fqn := rt.fqType()
 	rt.taskTypeID = GenerateTypeID(fqn)
+	// If outboundTaskGroup wasn't set on creation default it here,
+	// since this is the first place we will have the fqn.
+	if rt.outboundTaskGroup == "" {
+		rt.outboundTaskGroup = fqn
+	}
 	return fqn, rt.taskTypeID, nil
 }
 
-// TaskGroup returns the task group string for this registrable task.
+// TaskGroup returns the side-effect task group for the task.
 func (rt *RegistrableTask) TaskGroup() string {
-	return rt.sideEffectTaskGroup
+	return rt.outboundTaskGroup
 }
 
 // GoType returns the reflect.Type of the task's Go struct.
@@ -180,9 +185,12 @@ func (rt *RegistrableTask) fqType() string {
 	return FullyQualifiedName(rt.library.Name(), rt.taskType)
 }
 
-// SideEffectTaskGroupRegisterOpt sets the side-effect task group on the registered registrable task to taskgroup
-func SideEffectTaskGroupRegisterOpt(taskgroup string) RegistrableTaskOption {
+// WithSideEffectTaskGroup sets the task group for the task. The task group is used when
+// the side effect's destination is specified for grouping semantics on the outbound queue,
+// affects multi-cursor and the circuit breaker.
+// If task group isn't provided, the task group will default to the fully qualified name at library registration.
+func WithSideEffectTaskGroup(taskgroup string) RegistrableTaskOption {
 	return func(rt *RegistrableTask) {
-		rt.sideEffectTaskGroup = taskgroup
+		rt.outboundTaskGroup = taskgroup
 	}
 }

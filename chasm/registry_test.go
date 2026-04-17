@@ -120,7 +120,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
 		chasm.NewRegistrableSideEffectTask(
 			"Task1",
 			chasm.NewMockSideEffectTaskHandler[*chasm.MockComponent, testTask1](ctrl),
-			chasm.SideEffectTaskGroupRegisterOpt("test-task-group"),
+			chasm.WithSideEffectTaskGroup("test-task-group"),
 		),
 		chasm.NewRegistrablePureTask(
 			"Task2",
@@ -144,11 +144,11 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
 	rt2, ok := r.TaskFor(tInstance1)
 	require.True(s.T(), ok)
 	require.Equal(s.T(), "TestLibrary.Task2", rt2.FqType())
+	s.Require().Equal(rt2.FqType(), rt2.TaskGroup())
 
 	rt2, ok = r.TaskOf(reflect.TypeOf(tInstance1))
 	require.True(s.T(), ok)
 	require.Equal(s.T(), "TestLibrary.Task2", rt2.FqType())
-	s.Require().Empty(rt2.TaskGroup())
 
 	tInstance2 := "invalid task instance"
 	rt3, ok := r.TaskFor(tInstance2)

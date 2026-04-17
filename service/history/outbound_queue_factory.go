@@ -308,7 +308,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		logger,
 		metricsHandler,
 		factory,
-		chasmTaskGroupPostProcessor(f.ChasmRegistry),
+		outboundTaskGroupPostProcessor(f.ChasmRegistry),
 	)
 }
 
@@ -362,7 +362,7 @@ func getNamespaceNameOrDefault(
 	return nsName.String()
 }
 
-func chasmTaskGroupPostProcessor(registry *chasm.Registry) func([]tasks.Task) {
+func outboundTaskGroupPostProcessor(registry *chasm.Registry) func([]tasks.Task) {
 	if registry == nil {
 		return nil
 	}
@@ -370,7 +370,7 @@ func chasmTaskGroupPostProcessor(registry *chasm.Registry) func([]tasks.Task) {
 		for _, t := range taskSlice {
 			if ct, ok := t.(*tasks.ChasmTask); ok {
 				if rt, ok := registry.TaskByID(ct.Info.GetTypeId()); ok {
-					ct.TaskGroup = rt.TaskGroup()
+					ct.SetOutboundTaskGroup(rt.TaskGroup())
 				}
 			}
 		}
