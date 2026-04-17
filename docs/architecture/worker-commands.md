@@ -41,7 +41,7 @@ graph LR
 
 ## Adding a new command
 
-1. **Define the proto** -- Add a new variant to `WorkerCommand` in [`message.proto`](https://github.com/temporalio/api/blob/master/temporal/api/worker/v1/message.proto) (api repo).
+1. **Define the proto** -- Add a new variant to `WorkerCommand` in [`message.proto`](https://github.com/temporalio/api/blob/43b4618e84611e594929ac60c970ec163e85c17a/temporal/api/worker/v1/message.proto#L198-L207) (api repo).
 2. **Add a trigger** -- Add server-side logic to detect the condition, create the command, and call `GenerateWorkerCommandsTasks` (see [`task_generator.go`](../../service/history/workflow/task_generator.go)).
 3. **Handle in the SDK** -- Add a handler for the new command variant in the SDK's worker command executor.
 
