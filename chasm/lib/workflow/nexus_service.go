@@ -8,7 +8,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
-	systemnexus "go.temporal.io/api/workflowservice/v1/workflowservicenexus/json"
+	"go.temporal.io/api/workflowservice/v1/workflowservicenexus"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
@@ -22,17 +22,17 @@ type workflowServiceNexusHandler struct {
 }
 
 // signalWithStartWorkflowExecution implements the SignalWithStartWorkflowExecution Nexus operation.
-// Returning the SDK-generated output type directly ensures the JSON field names match what the
-// calling workflow's data converter expects (both use camelCase "runId").
+// It returns the proto response type directly; chasmNexusHandler in service/history/fx.go
+// re-encodes it as json/plain so SDK callers can decode it via standard json.Unmarshal.
 func (h *workflowServiceNexusHandler) signalWithStartWorkflowExecution(
 	ctx context.Context,
 	req *workflowservice.SignalWithStartWorkflowExecutionRequest,
 	options nexus.StartOperationOptions,
-) (systemnexus.WorkflowServiceSignalWithStartWorkflowExecutionOutput, error) {
-	fmt.Printf("TESTING: signalWithStartWorkflowExecution")
+) (*workflowservice.SignalWithStartWorkflowExecutionResponse, error) {
+	fmt.Printf("TESTING: signalWithStartWorkflowExecution\n")
 	nsID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
-		return systemnexus.WorkflowServiceSignalWithStartWorkflowExecutionOutput{}, serviceerror.NewInvalidArgumentf("Invalid namespace %q: %v", req.GetNamespace(), err)
+		return nil, serviceerror.NewInvalidArgumentf("Invalid namespace %q: %v", req.GetNamespace(), err)
 	}
 	res, err := h.historyHandler.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId:            nsID.String(),
@@ -40,7 +40,7 @@ func (h *workflowServiceNexusHandler) signalWithStartWorkflowExecution(
 	})
 	fmt.Printf("TESTING: signalWithStartWorkflowExecution result res=%v err=%v conflictPolicy=%v\n", res, err, req.GetWorkflowIdConflictPolicy())
 	if err != nil {
-		return systemnexus.WorkflowServiceSignalWithStartWorkflowExecutionOutput{}, err
+		return nil, err
 	}
 	link := commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
 		Namespace:  req.GetNamespace(),
@@ -54,15 +54,18 @@ func (h *workflowServiceNexusHandler) signalWithStartWorkflowExecution(
 	})
 	nexus.AddHandlerLinks(ctx, link)
 	fmt.Printf("TESTING: signal with start response: run_id=%s started=%v\n", res.GetRunId(), res.GetStarted())
-	return systemnexus.WorkflowServiceSignalWithStartWorkflowExecutionOutput{RunID: res.GetRunId(), Started: res.GetStarted()}, nil
+	return &workflowservice.SignalWithStartWorkflowExecutionResponse{
+		RunId:   res.GetRunId(),
+		Started: res.GetStarted(),
+	}, nil
 }
 
 func mustNewWorkflowServiceNexusHandler(
 	handler *workflowServiceNexusHandler,
 ) *nexus.Service {
-	svc := nexus.NewService(systemnexus.WorkflowService.ServiceName)
+	svc := nexus.NewService(workflowservicenexus.WorkflowService.ServiceName)
 	svc.MustRegister(nexus.NewSyncOperation(
-		systemnexus.WorkflowService.SignalWithStartWorkflowExecution.Name(),
+		workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name(),
 		handler.signalWithStartWorkflowExecution,
 	))
 	return svc
@@ -77,7 +80,7 @@ type SignalWithStartOperationProcessor struct {
 }
 
 func (o SignalWithStartOperationProcessor) ProcessInput(ctx chasm.NexusOperationProcessorContext, request *workflowservice.SignalWithStartWorkflowExecutionRequest) (*chasm.NexusOperationProcessorResult, error) {
-	fmt.Printf("TESTING: ProcessInput")
+	fmt.Println("TESTING: ProcessInput")
 	if request == nil {
 		return nil, serviceerror.NewInvalidArgument("Request is empty")
 	}
@@ -125,11 +128,11 @@ func NewWorkflowServiceNexusServiceProcessor(
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 ) *chasm.NexusServiceProcessor {
-	sp := chasm.NewNexusServiceProcessor(systemnexus.WorkflowService.ServiceName)
-	fmt.Printf("TESTING: signal with start name: %s\n", systemnexus.WorkflowService.SignalWithStartWorkflowExecution.Name())
+	sp := chasm.NewNexusServiceProcessor(workflowservicenexus.WorkflowService.ServiceName)
+	fmt.Printf("TESTING: signal with start name: %s\n", workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name())
 	op := SignalWithStartOperationProcessor{validator: NewValidator(config, saMapperProvider, saValidator)}
 	sp.MustRegisterOperation(
-		systemnexus.WorkflowService.SignalWithStartWorkflowExecution.Name(),
+		workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name(),
 		chasm.NewRegisterableNexusOperationProcessor(op),
 	)
 	return sp
