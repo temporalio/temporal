@@ -400,6 +400,10 @@ func (o *Operation) buildPollResponse(
 }
 
 func (o *Operation) describeOutcome(ctx chasm.Context) (*commonpb.Payload, *failurepb.Failure) {
+	if !o.isClosed() {
+		return nil, nil
+	}
+
 	outcome, hasOutcome := o.Outcome.TryGet(ctx)
 
 	switch {

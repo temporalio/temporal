@@ -165,39 +165,34 @@ func TestHandleNexusCompletion(t *testing.T) {
 func TestDescribeOutcome(t *testing.T) {
 	t.Parallel()
 
-	successResult := payload.EncodeString("result")
-	outcomeFailure := &failurepb.Failure{Message: "outcome failure"}
-
-	successOutcome := &nexusoperationpb.OperationOutcome{
-		Variant: &nexusoperationpb.OperationOutcome_Successful_{
-			Successful: &nexusoperationpb.OperationOutcome_Successful{Result: successResult},
-		},
-	}
-	failedOutcome := &nexusoperationpb.OperationOutcome{
-		Variant: &nexusoperationpb.OperationOutcome_Failed_{
-			Failed: &nexusoperationpb.OperationOutcome_Failed{Failure: outcomeFailure},
-		},
-	}
-
 	tests := []struct {
 		name            string
 		status          nexusoperationpb.OperationStatus
 		outcome         *nexusoperationpb.OperationOutcome // nil means no outcome set
-		lastAttempt     *failurepb.Failure
 		expectedResult  *commonpb.Payload
 		expectedFailure *failurepb.Failure
 	}{
 		{
-			name:           "Successful",
-			status:         nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
-			outcome:        successOutcome,
-			expectedResult: successResult,
+			name:   "Successful",
+			status: nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
+			outcome: &nexusoperationpb.OperationOutcome{
+				Variant: &nexusoperationpb.OperationOutcome_Successful_{
+					Successful: &nexusoperationpb.OperationOutcome_Successful{Result: payload.EncodeString("result")},
+				},
+			},
+			expectedResult: payload.EncodeString("result"),
 		},
 		{
-			name:            "Failed",
-			status:          nexusoperationpb.OPERATION_STATUS_FAILED,
-			outcome:         failedOutcome,
-			expectedFailure: outcomeFailure,
+			name:   "Failed",
+			status: nexusoperationpb.OPERATION_STATUS_FAILED,
+			outcome: &nexusoperationpb.OperationOutcome{
+				Variant: &nexusoperationpb.OperationOutcome_Failed_{
+					Failed: &nexusoperationpb.OperationOutcome_Failed{
+						Failure: &failurepb.Failure{Message: "outcome failure"},
+					},
+				},
+			},
+			expectedFailure: &failurepb.Failure{Message: "outcome failure"},
 		},
 		{
 			name:   "NoOutcome_ReturnsNil",
@@ -209,7 +204,7 @@ func TestDescribeOutcome(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := &chasm.MockMutableContext{}
-			op := NewOperation(&nexusoperationpb.OperationState{Status: tc.status, LastAttemptFailure: tc.lastAttempt})
+			op := NewOperation(&nexusoperationpb.OperationState{Status: tc.status})
 			if tc.outcome != nil {
 				op.Outcome = chasm.NewDataField(ctx, tc.outcome)
 			}
