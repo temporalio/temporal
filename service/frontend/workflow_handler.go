@@ -169,7 +169,7 @@ type (
 func (wh *WorkflowHandler) CheckHealth() []internalhealth.HealthCheck {
 	checks := make([]internalhealth.HealthCheck, 10)
 	whState := internalhealth.HealthCheck{
-		CheckName: "WorkflowHandler state",
+		CheckName: "handler-state",
 		State:     enumsspb.HEALTH_STATE_SERVING,
 	}
 	handlerState := atomic.LoadInt32(&wh.status)
@@ -190,7 +190,7 @@ func (wh *WorkflowHandler) CheckHealth() []internalhealth.HealthCheck {
 	checks = append(checks, whState)
 	if handlerState == common.DaemonStatusInitialized {
 		initializeTimeCheck := internalhealth.HealthCheck{
-			CheckName: "WorkflowHandler initialization delay",
+			CheckName: "initialization-delay",
 			Value:     time.Since(wh.internalHealthState.creationTime).Seconds(),
 			Threshold: (5 * time.Second).Seconds(),
 			State:     enumsspb.HEALTH_STATE_SERVING,
