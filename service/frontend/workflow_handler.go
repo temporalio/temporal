@@ -713,14 +713,14 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 		switch bound := timeSkippingConfig.GetBound().(type) {
 		case *workflowpb.TimeSkippingConfig_MaxSkippedDuration:
 			if bound.MaxSkippedDuration.AsDuration() < namespace.MinTimeSkippingDuration {
-				return serviceerror.NewUnimplementedf(
+				return serviceerror.NewInvalidArgumentf(
 					"Max skipped duration must be at least %s",
 					namespace.MinTimeSkippingDuration,
 				)
 			}
 		case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
 			if bound.MaxElapsedDuration.AsDuration() < namespace.MinTimeSkippingDuration {
-				return serviceerror.NewUnimplementedf(
+				return serviceerror.NewInvalidArgumentf(
 					"Max elapsed duration must be at least %s",
 					namespace.MinTimeSkippingDuration,
 				)
@@ -728,7 +728,7 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 		// todo: need to adapt the timeSource after time-skipping timeSource is implemented
 		case *workflowpb.TimeSkippingConfig_MaxTargetTime:
 			if bound.MaxTargetTime.AsTime().Before(wh.namespaceHandler.timeSource.Now().Add(namespace.MinTimeSkippingDuration)) {
-				return serviceerror.NewUnimplementedf(
+				return serviceerror.NewInvalidArgumentf(
 					"Max target time must be at least %s from current time of the workflow",
 					namespace.MinTimeSkippingDuration,
 				)
