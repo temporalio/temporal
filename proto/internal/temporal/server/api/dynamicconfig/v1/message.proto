@@ -10,8 +10,8 @@ import "temporal/server/api/enums/v1/task.proto";
 message Constraints {
 	string namespace = 1;
 	string namespace_id = 2;
-	temporal.api.enums.v1.TaskQueueType task_queue_name = 3;
-	int32 task_queue_type = 4;
+	string task_queue_name = 3;
+	temporal.api.enums.v1.TaskQueueType task_queue_type = 4;
 	int32 shard_id = 5;
 	temporal.server.api.enums.v1.TaskType task_type = 6;
 	string destination = 7;

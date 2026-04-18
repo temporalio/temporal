@@ -11,6 +11,8 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	v1 "go.temporal.io/api/enums/v1"
+	v11 "go.temporal.io/server/api/enums/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -28,9 +30,9 @@ type Constraints struct {
 	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	NamespaceId   string                 `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	TaskQueueName string                 `protobuf:"bytes,3,opt,name=task_queue_name,json=taskQueueName,proto3" json:"task_queue_name,omitempty"`
-	TaskQueueType int32                  `protobuf:"varint,4,opt,name=task_queue_type,json=taskQueueType,proto3" json:"task_queue_type,omitempty"`
+	TaskQueueType v1.TaskQueueType       `protobuf:"varint,4,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
 	ShardId       int32                  `protobuf:"varint,5,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	TaskType      int32                  `protobuf:"varint,6,opt,name=task_type,json=taskType,proto3" json:"task_type,omitempty"`
+	TaskType      v11.TaskType           `protobuf:"varint,6,opt,name=task_type,json=taskType,proto3,enum=temporal.server.api.enums.v1.TaskType" json:"task_type,omitempty"`
 	Destination   string                 `protobuf:"bytes,7,opt,name=destination,proto3" json:"destination,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -87,11 +89,11 @@ func (x *Constraints) GetTaskQueueName() string {
 	return ""
 }
 
-func (x *Constraints) GetTaskQueueType() int32 {
+func (x *Constraints) GetTaskQueueType() v1.TaskQueueType {
 	if x != nil {
 		return x.TaskQueueType
 	}
-	return 0
+	return v1.TaskQueueType(0)
 }
 
 func (x *Constraints) GetShardId() int32 {
@@ -101,11 +103,11 @@ func (x *Constraints) GetShardId() int32 {
 	return 0
 }
 
-func (x *Constraints) GetTaskType() int32 {
+func (x *Constraints) GetTaskType() v11.TaskType {
 	if x != nil {
 		return x.TaskType
 	}
-	return 0
+	return v11.TaskType(0)
 }
 
 func (x *Constraints) GetDestination() string {
@@ -215,14 +217,14 @@ var File_temporal_server_api_dynamicconfig_v1_message_proto protoreflect.FileDes
 
 const file_temporal_server_api_dynamicconfig_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"2temporal/server/api/dynamicconfig/v1/message.proto\x12$temporal.server.api.dynamicconfig.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xf8\x01\n" +
+	"2temporal/server/api/dynamicconfig/v1/message.proto\x12$temporal.server.api.dynamicconfig.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a'temporal/server/api/enums/v1/task.proto\"\xc6\x02\n" +
 	"\vConstraints\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12!\n" +
 	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12&\n" +
-	"\x0ftask_queue_name\x18\x03 \x01(\tR\rtaskQueueName\x12&\n" +
-	"\x0ftask_queue_type\x18\x04 \x01(\x05R\rtaskQueueType\x12\x19\n" +
-	"\bshard_id\x18\x05 \x01(\x05R\ashardId\x12\x1b\n" +
-	"\ttask_type\x18\x06 \x01(\x05R\btaskType\x12 \n" +
+	"\x0ftask_queue_name\x18\x03 \x01(\tR\rtaskQueueName\x12L\n" +
+	"\x0ftask_queue_type\x18\x04 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12\x19\n" +
+	"\bshard_id\x18\x05 \x01(\x05R\ashardId\x12C\n" +
+	"\ttask_type\x18\x06 \x01(\x0e2&.temporal.server.api.enums.v1.TaskTypeR\btaskType\x12 \n" +
 	"\vdestination\x18\a \x01(\tR\vdestination\"\x95\x01\n" +
 	"\x10ConstrainedValue\x12S\n" +
 	"\vconstraints\x18\x01 \x01(\v21.temporal.server.api.dynamicconfig.v1.ConstraintsR\vconstraints\x12,\n" +
@@ -247,17 +249,21 @@ var file_temporal_server_api_dynamicconfig_v1_message_proto_goTypes = []any{
 	(*Constraints)(nil),       // 0: temporal.server.api.dynamicconfig.v1.Constraints
 	(*ConstrainedValue)(nil),  // 1: temporal.server.api.dynamicconfig.v1.ConstrainedValue
 	(*ConstrainedValues)(nil), // 2: temporal.server.api.dynamicconfig.v1.ConstrainedValues
-	(*structpb.Value)(nil),    // 3: google.protobuf.Value
+	(v1.TaskQueueType)(0),     // 3: temporal.api.enums.v1.TaskQueueType
+	(v11.TaskType)(0),         // 4: temporal.server.api.enums.v1.TaskType
+	(*structpb.Value)(nil),    // 5: google.protobuf.Value
 }
 var file_temporal_server_api_dynamicconfig_v1_message_proto_depIdxs = []int32{
-	0, // 0: temporal.server.api.dynamicconfig.v1.ConstrainedValue.constraints:type_name -> temporal.server.api.dynamicconfig.v1.Constraints
-	3, // 1: temporal.server.api.dynamicconfig.v1.ConstrainedValue.value:type_name -> google.protobuf.Value
-	1, // 2: temporal.server.api.dynamicconfig.v1.ConstrainedValues.items:type_name -> temporal.server.api.dynamicconfig.v1.ConstrainedValue
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	3, // 0: temporal.server.api.dynamicconfig.v1.Constraints.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	4, // 1: temporal.server.api.dynamicconfig.v1.Constraints.task_type:type_name -> temporal.server.api.enums.v1.TaskType
+	0, // 2: temporal.server.api.dynamicconfig.v1.ConstrainedValue.constraints:type_name -> temporal.server.api.dynamicconfig.v1.Constraints
+	5, // 3: temporal.server.api.dynamicconfig.v1.ConstrainedValue.value:type_name -> google.protobuf.Value
+	1, // 4: temporal.server.api.dynamicconfig.v1.ConstrainedValues.items:type_name -> temporal.server.api.dynamicconfig.v1.ConstrainedValue
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_dynamicconfig_v1_message_proto_init() }
