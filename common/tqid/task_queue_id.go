@@ -198,13 +198,13 @@ func PartitionFromProto(proto *taskqueuepb.TaskQueue, namespaceId string, taskTy
 	}
 }
 
-// TODO: TaskQueuePartition proto doesn't have a worker-commands variant in its oneof yet.
-// When added, handle it here to return WorkerCommandsPartition.
 func PartitionFromPartitionProto(proto *taskqueuespb.TaskQueuePartition, namespaceId string) Partition {
 	tq := &TaskQueue{TaskQueueFamily{namespaceId, proto.GetTaskQueue()}, proto.GetTaskQueueType()}
 	switch proto.GetPartitionId().(type) {
 	case *taskqueuespb.TaskQueuePartition_StickyName:
 		return tq.StickyPartition(proto.GetStickyName())
+	case *taskqueuespb.TaskQueuePartition_WorkerCommands:
+		return tq.WorkerCommandsPartition()
 	default:
 		return tq.NormalPartition(int(proto.GetNormalPartitionId()))
 	}
