@@ -157,7 +157,7 @@ type (
 		ChasmRegistry                       *chasm.Registry
 		NamespaceDataMerger                 nsreplication.NamespaceDataMerger
 		SchedulerClient                     schedulerpb.SchedulerServiceClient
-		dynamicClient                       dynamicconfig.Client
+		DynamicClient                       dynamicconfig.Client
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -228,7 +228,7 @@ func NewAdminHandler(
 		healthServer:         args.HealthServer,
 		historyHealthChecker: historyHealthChecker,
 		taskCategoryRegistry: args.CategoryRegistry,
-		dynamicClient:        args.dynamicClient,
+		dynamicClient:        args.DynamicClient,
 		matchingClient:       args.matchingClient,
 		chasmRegistry:        args.ChasmRegistry,
 		schedulerClient:      args.SchedulerClient,
@@ -2401,21 +2401,19 @@ func (adh *AdminHandler) GetDynamicConfigurations(
 	req *adminservice.GetDynamicConfigurationsRequest,
 ) (*adminservice.GetDynamicConfigurationsResponse, error) {
 	requestedKeys := req.GetDynamicConfigKeys()
-	dynamicConfig := make(map[string]*dynamicconfigspb.ConstrainedValues, len(requestedKeys))
-	adh.logger.Info("Received request for dynamic config values", tag.Int("numKeys", len(requestedKeys)))	
+	adh.logger.Info("Received request for dynamic config values", tag.Int("numKeys", len(requestedKeys)))
+	configMap := make(map[string]*dynamicconfigspb.ConstrainedValues, len(requestedKeys))
 	for _, key := range requestedKeys {
-		var dcEntry []dynamicconfig.ConstrainedValue
 		k := dynamicconfig.MakeKey(key)
-		dcEntry = adh.dynamicClient.GetValue(k)
 
-		// get global default value
-		if dcEntry == nil {
-			dcEntry = dynamicconfig.GetDefaultValues(k)
-		}
-
+		dcEntry := adh.dynamicClient.GetValue(k)
 		protoValues := make([]*dynamicconfigspb.ConstrainedValue, 0, len(dcEntry))
 		for _, cv := range dcEntry {
-			s, err := structpb.NewValue(normalizeValue(cv.Value))
+			val := cv.Value
+			if d, ok := val.(time.Duration); ok {
+				val = d.String()
+			}
+			s, err := structpb.NewValue(val)
 			if err != nil {
 				adh.logger.Error("Failed to convert dynamic config value to structpb.Value", tag.Error(err), tag.Key(key))
 				continue
@@ -2427,32 +2425,23 @@ func (adh *AdminHandler) GetDynamicConfigurations(
 					NamespaceId:   cv.Constraints.NamespaceID,
 					TaskQueueName: cv.Constraints.TaskQueueName,
 					TaskQueueType: int32(cv.Constraints.TaskQueueType),
-					ShardId:       cv.Constraints.ShardID,
 					TaskType:      int32(cv.Constraints.TaskType),
+					ShardId:       cv.Constraints.ShardID,
 					Destination:   cv.Constraints.Destination,
 				},
 			})
 		}
-		dynamicConfig[key] = &dynamicconfigspb.ConstrainedValues{Items: protoValues}
+		configMap[key] = &dynamicconfigspb.ConstrainedValues{Items: protoValues}
 	}
 
 	hostConfig := &adminservice.HostConfig{
 		Hostname:      adh.hostInfoProvider.HostInfo().Identity(),
-		DynamicConfig: dynamicConfig,
+		DynamicConfig: configMap,
 	}
 
 	return &adminservice.GetDynamicConfigurationsResponse{
 		HostConfig: []*adminservice.HostConfig{hostConfig},
 	}, nil
-}
-
-func normalizeValue(v interface{}) interface{} {
-	switch val := v.(type) {
-	case time.Duration:
-		return val.String()
-	default:
-		return val
-	}
 }
 
 func validateHistoryDLQKey(

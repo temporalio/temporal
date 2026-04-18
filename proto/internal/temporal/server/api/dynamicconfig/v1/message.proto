@@ -4,14 +4,16 @@ package temporal.server.api.dynamicconfig.v1;
 option go_package = "go.temporal.io/server/api/dynamicconfig/v1;dynamicconfig";
 
 import "google/protobuf/struct.proto";
+import "temporal/api/enums/v1/task_queue.proto";
+import "temporal/server/api/enums/v1/task.proto";
 
 message Constraints {
 	string namespace = 1;
 	string namespace_id = 2;
-	string task_queue_name = 3;
+	temporal.api.enums.v1.TaskQueueType task_queue_name = 3;
 	int32 task_queue_type = 4;
 	int32 shard_id = 5;
-	int32 task_type = 6;
+	temporal.server.api.enums.v1.TaskType task_type = 6;
 	string destination = 7;
 }
 

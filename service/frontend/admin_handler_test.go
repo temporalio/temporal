@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -87,6 +88,7 @@ type (
 		mockProducer               *persistence.MockNamespaceReplicationQueue
 		mockMatchingClient         *matchingservicemock.MockMatchingServiceClient
 		mockSaMapper               *searchattribute.MockMapper
+		dynamicConfigClient        dynamicconfig.StaticClient
 
 		namespace      namespace.Name
 		namespaceID    namespace.ID
@@ -131,6 +133,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockVisibilityMgr = s.mockResource.VisibilityManager
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.mockMatchingClient = s.mockResource.MatchingClient
+	s.dynamicConfigClient = dynamicconfig.StaticClient{}
 
 	mockSaMapperProvider := searchattribute.NewMockMapperProvider(s.controller)
 	s.mockSaMapper = searchattribute.NewMockMapper(s.controller)
@@ -184,6 +187,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		chasmRegistry,
 		nsreplication.NewNoopDataMerger(),
 		nil, // schedulerClient - not needed for most admin handler tests
+		s.dynamicConfigClient,
 		tasks.NewDefaultTaskCategoryRegistry(),
 		s.mockResource.GetMatchingClient(),
 	}
@@ -2188,4 +2192,80 @@ func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowError() {
 	s.Error(err)
 	var notFoundErr *serviceerror.NotFound
 	s.ErrorAs(err, &notFoundErr)
+}
+
+func (s *adminHandlerSuite) Test_GetDynamicConfigurations() {
+	intKey := dynamicconfig.MakeKey("test.int.key")
+	bookKey := dynamicconfig.MakeKey("test.bool.key")
+	stringKey := dynamicconfig.MakeKey("test.string.key")
+	floatKey := dynamicconfig.MakeKey("test.float.key")
+	durationKey := dynamicconfig.MakeKey("test.duration.key")
+	sliceKey := dynamicconfig.MakeKey("test.slice.key")
+	mapKey := dynamicconfig.MakeKey("test.map.key")
+	constrainedKey := dynamicconfig.MakeKey("test.constrained.key")
+	unsetKey := dynamicconfig.MakeKey("test.unset.key")
+
+	s.dynamicConfigClient[intKey] = 42
+	s.dynamicConfigClient[bookKey] = false
+	s.dynamicConfigClient[stringKey] = "Hi Temporal!"
+	s.dynamicConfigClient[floatKey] = 3.14
+	s.dynamicConfigClient[durationKey] = 5 * time.Second
+	s.dynamicConfigClient[sliceKey] = []string{"a", "b", "c"}
+	s.dynamicConfigClient[mapKey] = map[string]interface{}{"key1": "value1", "key2": 1}
+	s.dynamicConfigClient[constrainedKey] = []dynamicconfig.ConstrainedValue{
+		{Constraints: dynamicconfig.Constraints{
+			Namespace:     "ns-defautl",
+			TaskQueueName: "tq-default",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		}, Value: 69},
+		{Constraints: dynamicconfig.Constraints{TaskType: enumsspb.TaskType(enumspb.TASK_QUEUE_KIND_NORMAL)}, Value: 6969},
+	}
+
+	s.mockResource.HostInfoProvider.EXPECT().HostInfo().Return(membership.NewHostInfoFromAddress("test-temporal"))
+	resp, err := s.handler.GetDynamicConfigurations(context.Background(), &adminservice.GetDynamicConfigurationsRequest{
+		DynamicConfigKeys: []string{
+			intKey.String(),
+			bookKey.String(),
+			stringKey.String(),
+			floatKey.String(),
+			durationKey.String(),
+			sliceKey.String(),
+			mapKey.String(),
+			constrainedKey.String(),
+			unsetKey.String(),
+		},
+	})
+
+	s.NoError(err)
+	s.Require().Len(resp.HostConfig, 1)
+	s.Equal("test-temporal", resp.HostConfig[0].Hostname)
+	cfg := resp.HostConfig[0].DynamicConfig
+
+	s.Require().Len(cfg[intKey.String()].Items, 1)
+	s.EqualValues(42, cfg[intKey.String()].Items[0].Value.GetNumberValue())
+	s.Equal(false, cfg[bookKey.String()].Items[0].Value.GetBoolValue())
+	s.Equal("Hi Temporal!", cfg[stringKey.String()].Items[0].Value.GetStringValue())
+	s.InDelta(3.14, cfg[floatKey.String()].Items[0].Value.GetNumberValue(), 0.001)
+	s.Equal("5s", cfg[durationKey.String()].Items[0].Value.GetStringValue())
+
+	listVal := cfg[sliceKey.String()].Items[0].Value.GetListValue()
+	s.Require().Len(listVal.Values, 3)
+	s.Equal("a", listVal.Values[0].GetStringValue())
+	s.Equal("b", listVal.Values[1].GetStringValue())
+	s.Equal("c", listVal.Values[2].GetStringValue())
+
+	structVal := cfg[mapKey.String()].Items[0].Value.GetStructValue()
+	s.Equal("value1", structVal.Fields["key1"].GetStringValue())
+	s.Equal(1, int(structVal.Fields["key2"].GetNumberValue()))
+
+	items := cfg[constrainedKey.String()].Items
+	s.Require().Len(items, 2)
+	s.Equal("ns-defautl", items[0].Constraints.Namespace)
+	s.EqualValues(69, int(items[0].Value.GetNumberValue()))
+	s.Equal("tq-default", items[0].Constraints.TaskQueueName)
+	s.Equal(enumspb.TASK_QUEUE_TYPE_ACTIVITY, items[0].Constraints.TaskQueueType)
+	s.Equal(enumsspb.TaskType(enumspb.TASK_QUEUE_KIND_NORMAL), items[1].Constraints.TaskType)
+
+	s.Require().Contains(cfg, unsetKey)
+	s.Empty(cfg[unsetKey.String()].Items)
 }
