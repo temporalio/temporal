@@ -175,6 +175,7 @@ func isExpectedErrorByType(err error) bool {
 		*serviceerrors.StickyWorkerUnavailable,
 		*serviceerrors.TaskAlreadyStarted,
 		*serviceerrors.RetryReplication,
+		*serviceerrors.StalePartitionCounts,
 		*serviceerrors.SyncState:
 		return true
 	default:

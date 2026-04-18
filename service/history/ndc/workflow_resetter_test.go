@@ -1203,6 +1203,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 						event.Links,
 						attr.GetIdentity(),
 						attr.GetPriority(),
+						attr.GetTimeSkippingConfig(),
 					).Return(&historypb.HistoryEvent{}, nil)
 				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 					attr := event.GetWorkflowExecutionSignaledEventAttributes()
@@ -1700,4 +1701,40 @@ func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_Complet
 	appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, events, nil, "", true)
 	s.NoError(err)
 	s.Empty(appliedEvents) // Event should be skipped
+}
+
+func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_WithTimeSkippingConfig() {
+	timeSkippingConfig := &workflowpb.TimeSkippingConfig{Enabled: true}
+	event := &historypb.HistoryEvent{
+		EventId:   101,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+			WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+				AttachedRequestId:  "test-request-id",
+				TimeSkippingConfig: timeSkippingConfig,
+			},
+		},
+	}
+	attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+
+	ms := historyi.NewMockMutableState(s.controller)
+	smReg := hsm.NewRegistry()
+	s.NoError(workflow.RegisterStateMachine(smReg))
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
+	s.NoError(err)
+	ms.EXPECT().HSM().Return(root).AnyTimes()
+	ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
+		attr.GetVersioningOverride(),
+		attr.GetUnsetVersioningOverride(),
+		attr.GetAttachedRequestId(),
+		attr.GetAttachedCompletionCallbacks(),
+		event.Links,
+		attr.GetIdentity(),
+		attr.GetPriority(),
+		timeSkippingConfig,
+	).Return(&historypb.HistoryEvent{}, nil)
+
+	appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, []*historypb.HistoryEvent{event}, nil, "", true)
+	s.NoError(err)
+	s.Len(appliedEvents, 1)
 }

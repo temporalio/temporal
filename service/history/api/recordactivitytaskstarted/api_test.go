@@ -4,14 +4,23 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/worker_versioning"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -264,4 +273,107 @@ func TestGetDeploymentVersionForWorkflowID_UnversionedTaskQueue(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, targetVersion, "Unversioned task queue should return nil version")
 	assert.Equal(t, int64(0), targetRevNum, "Unversioned task queue should return 0 revision number")
+}
+
+const testClusterName = "active"
+
+// setupMutableStateWithStartedActivity creates mock shard and mutable state with an activity
+// that is already started (StartedEventId != EmptyEventID). The activity's StartedClock is set
+// to the provided value. Returns the mocks and a request whose RequestId matches the activity's,
+// so the call will hit the duplicate-request early-return path in recordActivityTaskStarted.
+func setupMutableStateWithStartedActivity(t *testing.T, startedClock *clockspb.VectorClock) (
+	*historyi.MockShardContext,
+	*historyi.MockMutableState,
+	*historyservice.RecordActivityTaskStartedRequest,
+) {
+	t.Helper()
+	ctrl := gomock.NewController(t)
+
+	mockShard := historyi.NewMockShardContext(ctrl)
+	mockMS := historyi.NewMockMutableState(ctrl)
+
+	nsID := uuid.New().String()
+	scheduledEventID := int64(5)
+	requestID := "test-request-id"
+
+	// Namespace registry
+	nsEntry := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: nsID, Name: "test-namespace"},
+		&persistencespb.NamespaceConfig{},
+		testClusterName,
+	)
+	mockNSReg := namespace.NewMockRegistry(ctrl)
+	mockNSReg.EXPECT().GetNamespaceByID(namespace.ID(nsID)).Return(nsEntry, nil)
+
+	// Cluster metadata
+	mockClusterMeta := cluster.NewMockMetadata(ctrl)
+	mockClusterMeta.EXPECT().GetCurrentClusterName().Return(testClusterName)
+
+	mockShard.EXPECT().GetNamespaceRegistry().Return(mockNSReg)
+	mockShard.EXPECT().GetClusterMetadata().Return(mockClusterMeta)
+	mockShard.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
+
+	ai := &persistencespb.ActivityInfo{
+		ScheduledEventId: scheduledEventID,
+		StartedEventId:   7, // already started
+		RequestId:        requestID,
+		StartedTime:      timestamppb.Now(),
+		Attempt:          1,
+		StartedClock:     startedClock,
+	}
+
+	mockMS.EXPECT().GetActivityInfo(scheduledEventID).Return(ai, true)
+	mockMS.EXPECT().GetActivityScheduledEvent(gomock.Any(), scheduledEventID).Return(
+		&historypb.HistoryEvent{EventId: scheduledEventID}, nil,
+	)
+	mockMS.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{})
+
+	request := &historyservice.RecordActivityTaskStartedRequest{
+		NamespaceId: nsID,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-wf-id",
+			RunId:      "test-run-id",
+		},
+		ScheduledEventId: scheduledEventID,
+		RequestId:        requestID,
+	}
+
+	return mockShard, mockMS, request
+}
+
+// TestRecordActivityTaskStarted_DuplicateRequest_NilStartedClock verifies that
+// when a duplicate RecordActivityTaskStarted request arrives for an activity
+// started before the StartedClock field was added (StartedClock is nil), the response
+// still contains a non-nil Clock for the shard staleness check.
+func TestRecordActivityTaskStarted_DuplicateRequest_NilStartedClock(t *testing.T) {
+	mockShard, mockMS, request := setupMutableStateWithStartedActivity(t, nil /* no StartedClock */)
+
+	// Should call NewVectorClock as fallback for nil StartedClock
+	fallbackClock := &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 42}
+	mockShard.EXPECT().NewVectorClock().Return(fallbackClock, nil)
+
+	resp, code, err := recordActivityTaskStarted(
+		context.Background(), mockShard, mockMS, request, nil, nil,
+	)
+	require.NoError(t, err)
+	require.Equal(t, rejectCodeAccepted, code)
+	require.NotNil(t, resp.Clock, "Clock must be non-nil even for pre-deploy activities")
+	require.Equal(t, fallbackClock, resp.Clock)
+}
+
+// TestRecordActivityTaskStarted_DuplicateRequest_WithStartedClock verifies that
+// when StartedClock is stored, the stored clock is returned without creating a new one.
+func TestRecordActivityTaskStarted_DuplicateRequest_WithStartedClock(t *testing.T) {
+	storedClock := &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 100}
+	mockShard, mockMS, request := setupMutableStateWithStartedActivity(t, storedClock)
+
+	// Should NOT call NewVectorClock since StartedClock is available
+	mockShard.EXPECT().NewVectorClock().Times(0)
+
+	resp, code, err := recordActivityTaskStarted(
+		context.Background(), mockShard, mockMS, request, nil, nil,
+	)
+	require.NoError(t, err)
+	require.Equal(t, rejectCodeAccepted, code)
+	require.Equal(t, storedClock, resp.Clock, "Should return the stored StartedClock")
 }
