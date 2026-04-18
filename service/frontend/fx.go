@@ -288,9 +288,8 @@ func GrpcServerOptionsProvider(
 		callerInfoInterceptor.Intercept,
 		slowRequestLoggerInterceptor.Intercept,
 		chasmRequestVisibilityInterceptor.Intercept,
+		contextMetadataInterceptor.Intercept,
 	}
-
-	unaryInterceptors = append(unaryInterceptors, contextMetadataInterceptor.Intercept)
 	if len(customInterceptors) > 0 {
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
 		unaryInterceptors = append(unaryInterceptors, customInterceptors...)

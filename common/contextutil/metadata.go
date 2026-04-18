@@ -42,7 +42,9 @@ func ActivityTaskQueueKey(activityID string) string {
 // The handler knows which activity (from the task token) but not its type or task queue.
 // Mutable state knows the activity details but not which activity the request targets.
 // This bridges the two: the handler marks the ID, and SetContextMetadata (during
-// closeTransaction) resolves it to type and task queue from pending activity infos.
+// closeTransaction) resolves it to type and task queue from mutable state.
+// Cannot be used for transactions that remove the activity from mutable state
+// (e.g., activity completion), since it won't be available for resolution.
 func ContextMetadataMarkActivityID(ctx context.Context, activityID string) bool {
 	return ContextMetadataSet(ctx, activityTypePrefix+activityID, "")
 }

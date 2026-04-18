@@ -388,12 +388,6 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 		return nil, h.convertError(err)
 	}
 
-	if !contextutil.ContextMetadataMarkActivityID(ctx, taskToken.GetActivityId()) {
-		h.throttledLogger.Warn("Failed to mark activity ID in context metadata",
-			tag.WorkflowID(taskToken.GetWorkflowId()),
-			tag.ActivityID(taskToken.GetActivityId()))
-	}
-
 	// Handle as standalone activity if token has component ref.
 	if componentRef := taskToken.GetComponentRef(); len(componentRef) > 0 {
 		response, _, err := chasm.UpdateComponent(
@@ -406,6 +400,12 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 			},
 		)
 		return response, h.convertError(err)
+	}
+
+	if !contextutil.ContextMetadataMarkActivityID(ctx, taskToken.GetActivityId()) {
+		h.throttledLogger.Warn("Failed to mark activity ID in context metadata",
+			tag.WorkflowID(taskToken.GetWorkflowId()),
+			tag.ActivityID(taskToken.GetActivityId()))
 	}
 
 	// Handle worklow activity (mutable state backed implementation).
