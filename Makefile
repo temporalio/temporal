@@ -1,6 +1,7 @@
 ############################# Main targets #############################
 # Install all tools and builds binaries.
 install: bins
+
 # Rebuild binaries (used by Dockerfile).
 bins: temporal-server temporal-cassandra-tool temporal-sql-tool temporal-elasticsearch-tool tdbg
 
