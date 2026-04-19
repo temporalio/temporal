@@ -1072,22 +1072,17 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() {
 	// (1) next user timer
 	// (2) execution and run timeout timers
 
-	// (1) next user timer
-	userTimerSequenceIDs := r.getTimerSequence().LoadAndSortUserTimers()
-	if len(userTimerSequenceIDs) == 0 {
-		// This method maybe called when there are no user timers to regenerate,
-		// time-skipping transition may happen without user timers
-		return
+	// (1) user timers — regenerate one task per pending user timer. User timers
+	// are only one of the task types that may need regeneration, so continue to
+	// the timeout timers below even when none are pending.
+	for _, userTimerSequenceID := range r.getTimerSequence().LoadAndSortUserTimers() {
+		r.mutableState.AddTasks(&tasks.UserTimerTask{
+			// TaskID is set by shard
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: r.toRealTime(userTimerSequenceID.Timestamp),
+			EventID:             userTimerSequenceID.EventID,
+		})
 	}
-	firstUserTimerSequenceID := userTimerSequenceIDs[0]
-	// Equivalent to r.toRealTime(firstUserTimerSequenceID.Timestamp), but reuses
-	// accumulatedSkippedDuration read above to avoid a second GetExecutionInfo call.
-	r.mutableState.AddTasks(&tasks.UserTimerTask{
-		// TaskID is set by shard
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: r.toRealTime(firstUserTimerSequenceID.Timestamp),
-		EventID:             firstUserTimerSequenceID.EventID,
-	})
 
 	// (2) execution and run timeout timers
 	executionTimeoutTimer := r.mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime
@@ -1110,6 +1105,6 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() {
 	}
 }
 
-func timeNotSet(timestamp *timestamppb.Timestamp) bool {
-	return timestamp == nil || timestamp.AsTime().IsZero()
+func timeNotSet(ts *timestamppb.Timestamp) bool {
+	return ts == nil || ts.AsTime().IsZero()
 }

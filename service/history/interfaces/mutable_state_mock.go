@@ -2826,20 +2826,6 @@ func (mr *MockMutableStateMockRecorder) GetVersioningRevisionNumber() *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersioningRevisionNumber", reflect.TypeOf((*MockMutableState)(nil).GetVersioningRevisionNumber))
 }
 
-// GetVirtualTimeNow mocks base method.
-func (m *MockMutableState) GetVirtualTimeNow() time.Time {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVirtualTimeNow")
-	ret0, _ := ret[0].(time.Time)
-	return ret0
-}
-
-// GetVirtualTimeNow indicates an expected call of GetVirtualTimeNow.
-func (mr *MockMutableStateMockRecorder) GetVirtualTimeNow() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVirtualTimeNow", reflect.TypeOf((*MockMutableState)(nil).GetVirtualTimeNow))
-}
-
 // GetWorkflowCloseTime mocks base method.
 func (m *MockMutableState) GetWorkflowCloseTime(ctx context.Context) (time.Time, error) {
 	m.ctrl.T.Helper()
@@ -3345,6 +3331,20 @@ func (m *MockMutableState) NextTransitionCount() int64 {
 func (mr *MockMutableStateMockRecorder) NextTransitionCount() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextTransitionCount", reflect.TypeOf((*MockMutableState)(nil).NextTransitionCount))
+}
+
+// Now mocks base method.
+func (m *MockMutableState) Now() time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Now")
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// Now indicates an expected call of Now.
+func (mr *MockMutableStateMockRecorder) Now() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Now", reflect.TypeOf((*MockMutableState)(nil).Now))
 }
 
 // PopTasks mocks base method.

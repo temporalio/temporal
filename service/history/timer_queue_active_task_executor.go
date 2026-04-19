@@ -157,7 +157,7 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	}
 
 	timerSequence := t.getTimerSequence(mutableState)
-	referenceTime := mutableState.GetVirtualTimeNow()
+	referenceTime := mutableState.Now()
 	timerFired := false
 Loop:
 	for _, timerSequenceID := range timerSequence.LoadAndSortUserTimers() {
@@ -221,7 +221,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	}
 
 	timerSequence := t.getTimerSequence(mutableState)
-	referenceTime := mutableState.GetVirtualTimeNow()
+	referenceTime := mutableState.Now()
 	updateMutableState := false
 	scheduleWorkflowTask := false
 
@@ -685,7 +685,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	// Use virtual time: WorkflowExecutionExpirationTime is stored in virtual frame
 	// (consistent with event history), and the new run's StartTime below also
 	// must be virtual. Reading once keeps the two decisions consistent.
-	virtualNow := mutableState.GetVirtualTimeNow()
+	virtualNow := mutableState.Now()
 
 	wfExpTime := mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime
 	if wfExpTime == nil || wfExpTime.AsTime().IsZero() || wfExpTime.AsTime().After(virtualNow) {

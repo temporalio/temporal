@@ -1798,7 +1798,7 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 	return event, nil
 }
 
-func (ms *MutableStateImpl) GetVirtualTimeNow() time.Time {
+func (ms *MutableStateImpl) Now() time.Time {
 	return ms.timeSource.Now()
 }
 

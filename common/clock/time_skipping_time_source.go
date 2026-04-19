@@ -8,10 +8,11 @@ import (
 
 // TimeSkippingTimeSourceWrapper is a wrapper TimeSource that accepts a base TimeSource and an optional TimeSkippingInfo.
 // If no valid TimeSkippingInfo is provided, the TimeSkippingTimeSourceWrapper will not apply time-skipping effects.
-// If provided, the TimeSkippingTimeSourceWrapper will offset Now() by the accumulated skipped duration.
-// Methods of Since, AfterFunc, and NewTimer will not be wrapped with time-skipping effects.
+// If provided, the TimeSkippingTimeSourceWrapper will offset Now() and Since() by the accumulated skipped duration.
+// Methods of AfterFunc and NewTimer will not be wrapped with time-skipping effects.
 type TimeSkippingTimeSourceWrapper struct {
-	base             TimeSource
+	base TimeSource
+	// holding the timeSkippingInfo of mutableState to keep track of the accumulated skipped duration
 	timeSkippingInfo *persistencespb.TimeSkippingInfo
 }
 
@@ -33,11 +34,8 @@ func (ts *TimeSkippingTimeSourceWrapper) Now() time.Time {
 	return t
 }
 
-// Since leverages the base TimeSource's Since method, and
-// time-skipping related features are not supported.
-// TODO@time-skipping: examine if there is any need to skip time for this method
 func (ts *TimeSkippingTimeSourceWrapper) Since(t time.Time) time.Duration {
-	return ts.base.Since(t)
+	return ts.Now().Sub(t)
 }
 
 // AfterFunc leverages the base TimeSource's AfterFunc method, and
