@@ -7,29 +7,29 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/util"
 	"go.uber.org/fx"
 )
 
-type activityDispatchTaskExecutorOptions struct {
+type activityDispatchTaskHandlerOptions struct {
 	fx.In
 
 	MatchingClient resource.MatchingClient
 }
 
-type activityDispatchTaskExecutor struct {
-	opts activityDispatchTaskExecutorOptions
+type activityDispatchTaskHandler struct {
+	chasm.SideEffectTaskHandlerBase[*activitypb.ActivityDispatchTask]
+	opts activityDispatchTaskHandlerOptions
 }
 
-func newActivityDispatchTaskExecutor(opts activityDispatchTaskExecutorOptions) *activityDispatchTaskExecutor {
-	return &activityDispatchTaskExecutor{
-		opts,
+func newActivityDispatchTaskHandler(opts activityDispatchTaskHandlerOptions) *activityDispatchTaskHandler {
+	return &activityDispatchTaskHandler{
+		opts: opts,
 	}
 }
 
-func (e *activityDispatchTaskExecutor) Validate(
+func (h *activityDispatchTaskHandler) Validate(
 	ctx chasm.Context,
 	activity *Activity,
 	_ chasm.TaskAttributes,
@@ -40,11 +40,29 @@ func (e *activityDispatchTaskExecutor) Validate(
 		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp()), nil
 }
 
-func (e *activityDispatchTaskExecutor) Execute(
+func (h *activityDispatchTaskHandler) Execute(
 	ctx context.Context,
 	activityRef chasm.ComponentRef,
 	_ chasm.TaskAttributes,
 	_ *activitypb.ActivityDispatchTask,
+) error {
+	return h.pushToMatching(ctx, activityRef)
+}
+
+// Discard spills the task to matching instead of silently discarding it on standby clusters when the activity
+// dispatch task has been pending past the discard delay.
+func (h *activityDispatchTaskHandler) Discard(
+	ctx context.Context,
+	activityRef chasm.ComponentRef,
+	_ chasm.TaskAttributes,
+	_ *activitypb.ActivityDispatchTask,
+) error {
+	return h.pushToMatching(ctx, activityRef)
+}
+
+func (h *activityDispatchTaskHandler) pushToMatching(
+	ctx context.Context,
+	activityRef chasm.ComponentRef,
 ) error {
 	request, err := chasm.ReadComponent(
 		ctx,
@@ -56,30 +74,20 @@ func (e *activityDispatchTaskExecutor) Execute(
 		return err
 	}
 
-	_, err = e.opts.MatchingClient.AddActivityTask(ctx, request)
+	_, err = h.opts.MatchingClient.AddActivityTask(ctx, request)
 
 	return err
 }
 
-type timeoutTaskExecutorOptions struct {
-	fx.In
-
-	Config            *Config
-	MetricsHandler    metrics.Handler
-	NamespaceRegistry namespace.Registry
+type scheduleToStartTimeoutTaskHandler struct {
+	chasm.PureTaskHandlerBase
 }
 
-type scheduleToStartTimeoutTaskExecutor struct {
-	opts timeoutTaskExecutorOptions
+func newScheduleToStartTimeoutTaskHandler() *scheduleToStartTimeoutTaskHandler {
+	return &scheduleToStartTimeoutTaskHandler{}
 }
 
-func newScheduleToStartTimeoutTaskExecutor(opts timeoutTaskExecutorOptions) *scheduleToStartTimeoutTaskExecutor {
-	return &scheduleToStartTimeoutTaskExecutor{
-		opts,
-	}
-}
-
-func (e *scheduleToStartTimeoutTaskExecutor) Validate(
+func (h *scheduleToStartTimeoutTaskHandler) Validate(
 	ctx chasm.Context,
 	activity *Activity,
 	_ chasm.TaskAttributes,
@@ -89,24 +97,16 @@ func (e *scheduleToStartTimeoutTaskExecutor) Validate(
 		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp()), nil
 }
 
-func (e *scheduleToStartTimeoutTaskExecutor) Execute(
+func (h *scheduleToStartTimeoutTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	activity *Activity,
 	_ chasm.TaskAttributes,
 	_ *activitypb.ScheduleToStartTimeoutTask,
 ) error {
-	nsID := namespace.ID(ctx.ExecutionKey().NamespaceID)
-	namespaceName, err := e.opts.NamespaceRegistry.GetNamespaceName(nsID)
+	metricsHandler, err := activity.enrichMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
 	if err != nil {
 		return err
 	}
-
-	metricsHandler := enrichMetricsHandler(
-		activity,
-		e.opts.MetricsHandler,
-		namespaceName.String(),
-		metrics.TimerActiveTaskActivityTimeoutScope,
-		e.opts.Config.BreakdownMetricsByTaskQueue)
 
 	event := timeoutEvent{
 		timeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -117,17 +117,13 @@ func (e *scheduleToStartTimeoutTaskExecutor) Execute(
 	return TransitionTimedOut.Apply(activity, ctx, event)
 }
 
-type scheduleToCloseTimeoutTaskExecutor struct {
-	opts timeoutTaskExecutorOptions
+type scheduleToCloseTimeoutTaskHandler struct{ chasm.PureTaskHandlerBase }
+
+func newScheduleToCloseTimeoutTaskHandler() *scheduleToCloseTimeoutTaskHandler {
+	return &scheduleToCloseTimeoutTaskHandler{}
 }
 
-func newScheduleToCloseTimeoutTaskExecutor(opts timeoutTaskExecutorOptions) *scheduleToCloseTimeoutTaskExecutor {
-	return &scheduleToCloseTimeoutTaskExecutor{
-		opts,
-	}
-}
-
-func (e *scheduleToCloseTimeoutTaskExecutor) Validate(
+func (h *scheduleToCloseTimeoutTaskHandler) Validate(
 	_ chasm.Context,
 	activity *Activity,
 	_ chasm.TaskAttributes,
@@ -136,25 +132,16 @@ func (e *scheduleToCloseTimeoutTaskExecutor) Validate(
 	return TransitionTimedOut.Possible(activity), nil
 }
 
-func (e *scheduleToCloseTimeoutTaskExecutor) Execute(
+func (h *scheduleToCloseTimeoutTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	activity *Activity,
 	_ chasm.TaskAttributes,
 	_ *activitypb.ScheduleToCloseTimeoutTask,
 ) error {
-	nsID := namespace.ID(ctx.ExecutionKey().NamespaceID)
-	namespaceName, err := e.opts.NamespaceRegistry.GetNamespaceName(nsID)
+	metricsHandler, err := activity.enrichMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
 	if err != nil {
 		return err
 	}
-
-	metricsHandler := enrichMetricsHandler(
-		activity,
-		e.opts.MetricsHandler,
-		namespaceName.String(),
-		metrics.TimerActiveTaskActivityTimeoutScope,
-		e.opts.Config.BreakdownMetricsByTaskQueue)
-
 	event := timeoutEvent{
 		timeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		metricsHandler: metricsHandler,
@@ -164,30 +151,27 @@ func (e *scheduleToCloseTimeoutTaskExecutor) Execute(
 	return TransitionTimedOut.Apply(activity, ctx, event)
 }
 
-type startToCloseTimeoutTaskExecutor struct {
-	opts timeoutTaskExecutorOptions
+type startToCloseTimeoutTaskHandler struct{ chasm.PureTaskHandlerBase }
+
+func newStartToCloseTimeoutTaskHandler() *startToCloseTimeoutTaskHandler {
+	return &startToCloseTimeoutTaskHandler{}
 }
 
-func newStartToCloseTimeoutTaskExecutor(opts timeoutTaskExecutorOptions) *startToCloseTimeoutTaskExecutor {
-	return &startToCloseTimeoutTaskExecutor{
-		opts,
-	}
-}
-
-func (e *startToCloseTimeoutTaskExecutor) Validate(
+func (h *startToCloseTimeoutTaskHandler) Validate(
 	ctx chasm.Context,
 	activity *Activity,
 	_ chasm.TaskAttributes,
 	task *activitypb.StartToCloseTimeoutTask,
 ) (bool, error) {
-	valid := (activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
+	valid := ((activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
+		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED) &&
 		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp())
 	return valid, nil
 }
 
 // Execute executes a StartToCloseTimeoutTask. It fails the attempt, leading to retry or activity
 // failure.
-func (e *startToCloseTimeoutTaskExecutor) Execute(
+func (h *startToCloseTimeoutTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	activity *Activity,
 	_ chasm.TaskAttributes,
@@ -198,18 +182,10 @@ func (e *startToCloseTimeoutTaskExecutor) Execute(
 		return err
 	}
 
-	nsID := namespace.ID(ctx.ExecutionKey().NamespaceID)
-	namespaceName, err := e.opts.NamespaceRegistry.GetNamespaceName(nsID)
+	metricsHandler, err := activity.enrichMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
 	if err != nil {
 		return err
 	}
-
-	metricsHandler := enrichMetricsHandler(
-		activity,
-		e.opts.MetricsHandler,
-		namespaceName.String(),
-		metrics.TimerActiveTaskActivityTimeoutScope,
-		e.opts.Config.BreakdownMetricsByTaskQueue)
 
 	if rescheduled {
 		activity.emitOnAttemptTimedOutMetrics(ctx, metricsHandler, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
@@ -225,18 +201,14 @@ func (e *startToCloseTimeoutTaskExecutor) Execute(
 }
 
 // HeartbeatTimeoutTask is a pure task that enforces heartbeat timeouts.
-type heartbeatTimeoutTaskExecutor struct {
-	opts timeoutTaskExecutorOptions
-}
+type heartbeatTimeoutTaskHandler struct{ chasm.PureTaskHandlerBase }
 
-func newHeartbeatTimeoutTaskExecutor(opts timeoutTaskExecutorOptions) *heartbeatTimeoutTaskExecutor {
-	return &heartbeatTimeoutTaskExecutor{
-		opts,
-	}
+func newHeartbeatTimeoutTaskHandler() *heartbeatTimeoutTaskHandler {
+	return &heartbeatTimeoutTaskHandler{}
 }
 
 // Validate validates a HeartbeatTimeoutTask.
-func (e *heartbeatTimeoutTaskExecutor) Validate(
+func (h *heartbeatTimeoutTaskHandler) Validate(
 	ctx chasm.Context,
 	activity *Activity,
 	taskAttrs chasm.TaskAttributes,
@@ -278,7 +250,7 @@ func (e *heartbeatTimeoutTaskExecutor) Validate(
 
 // Execute executes a HeartbeatTimeoutTask. It fails the attempt, leading to retry or activity
 // failure.
-func (e *heartbeatTimeoutTaskExecutor) Execute(
+func (h *heartbeatTimeoutTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	activity *Activity,
 	_ chasm.TaskAttributes,
@@ -289,18 +261,10 @@ func (e *heartbeatTimeoutTaskExecutor) Execute(
 		return err
 	}
 
-	nsID := namespace.ID(ctx.ExecutionKey().NamespaceID)
-	namespaceName, err := e.opts.NamespaceRegistry.GetNamespaceName(nsID)
+	metricsHandler, err := activity.enrichMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
 	if err != nil {
 		return err
 	}
-
-	metricsHandler := enrichMetricsHandler(
-		activity,
-		e.opts.MetricsHandler,
-		namespaceName.String(),
-		metrics.TimerActiveTaskActivityTimeoutScope,
-		e.opts.Config.BreakdownMetricsByTaskQueue)
 
 	if rescheduled {
 		activity.emitOnAttemptTimedOutMetrics(ctx, metricsHandler, enumspb.TIMEOUT_TYPE_HEARTBEAT)

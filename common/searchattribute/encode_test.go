@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 func Test_Encode_Success(t *testing.T) {
@@ -170,7 +171,7 @@ func Test_Decode_NilMap(t *testing.T) {
 	r.Nil(vals["key6"])
 }
 
-func Test_Decode_SkipsUnknownSearchAttributes(t *testing.T) {
+func Test_Decode_FallsBackToMetadataTypeForUnknownSA(t *testing.T) {
 	r := require.New(t)
 
 	typeMap := &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
@@ -185,7 +186,8 @@ func Test_Decode_SkipsUnknownSearchAttributes(t *testing.T) {
 	}, typeMap)
 	r.NoError(err)
 
-	// Decode with a typeMap that doesn't include key2: key2 should be silently skipped.
+	// Decode with a typeMap that doesn't include key2. key2 was encoded with INT
+	// metadata type, so it should be decoded via the MetadataType fallback.
 	vals, err := Decode(
 		sa,
 		&NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
@@ -195,9 +197,45 @@ func Test_Decode_SkipsUnknownSearchAttributes(t *testing.T) {
 		true,
 	)
 	r.NoError(err)
-	r.Len(vals, 2)
+	r.Len(vals, 3)
 	r.Equal("val1", vals["key1"])
-	r.NotContains(vals, "key2")
+	r.Equal(int64(2), vals["key2"])
+	r.Equal(true, vals["key3"])
+}
+
+func Test_Decode_SkipsUnknownSAWithNoMetadataType(t *testing.T) {
+	r := require.New(t)
+
+	typeMap := &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
+		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
+		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
+		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+	}}
+	sa, err := Encode(map[string]any{
+		"key1": "val1",
+		"key2": 2,
+		"key3": true,
+	}, typeMap)
+	r.NoError(err)
+
+	// Remove the MetadataType from key2 so it is truly unknown.
+	delete(sa.IndexedFields["key2"].Metadata, "type")
+
+	// Decode with a typeMap that doesn't include key2. Without a MetadataType,
+	// DecodeValue returns ErrInvalidType and key2 is excluded from the result.
+	vals, err := Decode(
+		sa,
+		&NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
+			"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
+			"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+		}},
+		true,
+	)
+	r.Error(err)
+	r.ErrorIs(err, sadefs.ErrInvalidType)
+	r.Len(vals, 3)
+	r.Equal("val1", vals["key1"])
+	r.Nil(vals["key2"])
 	r.Equal(true, vals["key3"])
 }
 
@@ -222,7 +260,7 @@ func Test_Decode_Error(t *testing.T) {
 
 	vals, err := Decode(sa, nil, true)
 	r.Error(err)
-	r.ErrorIs(err, ErrInvalidType)
+	r.ErrorIs(err, sadefs.ErrInvalidType)
 	r.Len(vals, 3)
 	r.Nil(vals["key1"])
 	r.Nil(vals["key2"])

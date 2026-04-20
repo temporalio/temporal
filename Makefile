@@ -87,6 +87,7 @@ ifeq ($(OTEL),true)
 	export OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
 	export OTEL_TRACES_EXPORTER=otlp
 	export TEMPORAL_OTEL_DEBUG=true
+	export TEMPORAL_TEST_DATA_ENCODING=json
 endif
 
 MODULE_ROOT := $(lastword $(shell grep -e "^module " go.mod))
@@ -345,6 +346,7 @@ clean-bins:
 	@rm -f temporal-server-debug
 	@rm -f temporal-cassandra-tool
 	@rm -f tdbg
+	@rm -f fairsim
 	@rm -f temporal-sql-tool
 	@rm -f temporal-elasticsearch-tool
 
@@ -407,7 +409,7 @@ lint-protos: $(BUF) $(INTERNAL_BINPB) $(CHASM_BINPB)
 	@$(BUF) lint $(INTERNAL_BINPB)
 	@$(BUF) lint --config chasm/lib/buf.yaml $(CHASM_BINPB)
 
-fmt: fmt-gofix fmt-imports fmt-yaml
+fmt: fmt-gofix fmt-imports fmt-protos fmt-yaml
 
 # Some fixes enable others (e.g. rangeint may expose minmax opportunities),
 # so - as recommended by the Go team - we run go fix in a loop until it reaches
@@ -435,6 +437,11 @@ fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, w
 parallelize-tests:
 	@printf $(COLOR) "Add t.Parallel() to tests..."
 	@go run ./cmd/tools/parallelize $(INTEGRATION_TEST_DIRS)
+
+fmt-protos: $(BUF)
+	@printf $(COLOR) "Formatting proto files..."
+	@$(BUF) format -w $(PROTO_ROOT)/internal
+	@$(BUF) format -w --config chasm/lib/buf.yaml chasm/lib
 
 fmt-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Formatting YAML files..."
@@ -550,6 +557,10 @@ report-test-crash: $(TEST_OUTPUT_ROOT)
 		--junitfile=$(TEST_OUTPUT_ROOT)/junit.crash.xml \
 		--crashreportname=$(CRASH_REPORT_NAME)
 
+print-test-summary: $(TEST_OUTPUT_ROOT)
+	@go run ./cmd/tools/test-runner print-summary \
+		--junit-glob=$(TEST_OUTPUT_ROOT)/junit.*.xml
+
 ##### Schema #####
 install-schema-cass-es: temporal-cassandra-tool install-schema-es
 	@printf $(COLOR) "Install Cassandra schema..."
@@ -650,6 +661,9 @@ start: start-sqlite
 start-cass-es: temporal-server
 	./temporal-server --config-file config/development-cass-es.yaml --allow-no-auth start
 
+start-cass-archival: temporal-server
+	./temporal-server --config-file config/development-cass-archival.yaml --allow-no-auth start
+
 start-cass-es-dual: temporal-server
 	./temporal-server --config-file config/development-cass-es-dual.yaml --allow-no-auth start
 
@@ -687,6 +701,10 @@ start-xdc-cluster-b: temporal-server
 start-xdc-cluster-c: temporal-server
 	./temporal-server --config-file config/development-cluster-c.yaml --allow-no-auth start
 
+start-jwt: temporal-server
+	@./config/jwt/setup-keys.sh
+	./temporal-server --config-file config/development-jwt.yaml start --service frontend --service internal-frontend --service history --service matching --service worker
+
 ##### Grafana #####
 update-dashboards:
 	@printf $(COLOR) "Update dashboards submodule from remote..."
@@ -718,4 +736,4 @@ ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."
 	@printf $(COLOR) "========================================================================"
 	@git status --porcelain
-	@test -z "`git status --porcelain`" || (printf $(COLOR) "========================================================================"; printf $(RED) "Above files are not regenerated properly. Regenerate them and try again."; exit 1)
+	@test -z "`git status --porcelain`" || (printf $(COLOR) "========================================================================"; printf $(RED) "Above files are not regenerated properly. Regenerate them and try again."; git diff HEAD ; exit 1)

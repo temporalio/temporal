@@ -3,7 +3,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"slices"
 	"sync"
 	"time"
 
@@ -32,10 +31,11 @@ type (
 
 		lock sync.Mutex
 
-		readPending  bool
-		backoffTimer *time.Timer
-		retrier      backoff.Retrier
-		addRetries   *semaphore.Weighted
+		readPending     bool
+		backoffTimer    *time.Timer
+		retrier         backoff.Retrier
+		throttleRetrier backoff.Retrier
+		addRetries      *semaphore.Weighted
 
 		backlogAge       backlogAgeTracker
 		outstandingTasks treemap.Map // fairLevel -> *internalTask if unacked, or nil if acked
@@ -90,7 +90,15 @@ func newFairTaskReader(
 		subqueue:   subqueue,
 		logger:     backlogMgr.logger,
 		retrier: backoff.NewRetrier(
-			common.CreateReadTaskRetryPolicy(),
+			backoff.NewExponentialRetryPolicy(50*time.Millisecond).
+				WithMaximumInterval(10*time.Second).
+				WithExpirationInterval(backoff.NoInterval),
+			clock.NewRealTimeSource(),
+		),
+		throttleRetrier: backoff.NewRetrier(
+			backoff.NewExponentialRetryPolicy(2*time.Second).
+				WithMaximumInterval(30*time.Second).
+				WithExpirationInterval(backoff.NoInterval),
 			clock.NewRealTimeSource(),
 		),
 		backlogAge: newBacklogAgeTracker(),
@@ -237,6 +245,10 @@ func (tr *fairTaskReader) readTasksImpl() {
 		tr.advanceAckLevelLocked()
 	}
 
+	// If a backoff timer fired while readPending was still true, its maybeReadTasksLocked call
+	// was a no-op. Re-check now that readPending is false to avoid getting stuck.
+	tr.maybeReadTasksLocked()
+
 	// unlock before calling addTaskToMatcher
 	tr.lock.Unlock()
 
@@ -254,13 +266,14 @@ func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) er
 		if tr.backlogMgr.signalIfFatal(err) || common.IsContextCanceledErr(err) {
 			// don't retry
 		} else if common.IsResourceExhausted(err) {
-			tr.retryReadAfter(taskReaderThrottleRetryDelay)
+			tr.retryReadAfter(tr.throttleRetrier.NextBackOff(err))
 		} else {
 			tr.retryReadAfter(tr.retrier.NextBackOff(err))
 		}
 		return err
 	}
 	tr.retrier.Reset()
+	tr.throttleRetrier.Reset()
 
 	// If we got less than we asked for, we know we hit the end.
 	// If there was a concurrent write such that we incorrectly think we hit the end here,
@@ -270,20 +283,11 @@ func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) er
 		mode = mergeReadToEnd
 	}
 
-	// filter out expired
-	// TODO(fairness): if we have _only_ expired tasks, and we filter them out here, we won't move
-	// the ack level and delete them. maybe we should put them in outstandingTasks as pre-acked.
-	tasks := slices.DeleteFunc(res.Tasks, func(t *persistencespb.AllocatedTaskInfo) bool {
-		if IsTaskExpired(t) {
-			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1, metrics.TaskExpireStageReadTag)
-			return true
-		}
-		return false
-	})
-
 	// Note: even if (especially if) len(tasks) == 0, we should go through the mergeTasks logic
-	// to update atEnd and the backlog size estimate.
-	tr.mergeTasks(tasks, mode)
+	// to update atEnd and the backlog size estimate. Expired tasks are passed through to
+	// mergeTasksLocked where they'll be added as pre-acked (nil) entries so they advance the
+	// ack level and get GC'd.
+	tr.mergeTasks(res.Tasks, mode)
 
 	return nil
 }
@@ -477,16 +481,31 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 		tr.evictedAcks.PopMax()
 	}
 
-	internalTasks := make([]*internalTask, len(tasks))
-	for i, t := range tasks {
+	var hasExpired bool
+	internalTasks := make([]*internalTask, 0, len(tasks))
+	for _, t := range tasks {
 		level := fairLevelFromAllocatedTask(t)
-		internalTasks[i] = newInternalTaskFromBacklog(t, tr.completeTask)
-		tr.backlogMgr.setPriority(internalTasks[i])
+		if IsTaskExpired(t) {
+			// Expired tasks are added as pre-acked (nil) so they participate in
+			// readLevel calculation above and advance ackLevel + get GC'd below.
+			tr.outstandingTasks.Put(level, nil)
+			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1, metrics.TaskExpireStageReadTag)
+			hasExpired = true
+			continue
+		}
+		task := newInternalTaskFromBacklog(t, tr.completeTask)
+		tr.backlogMgr.setPriority(task)
 		// After we get to this point, we must eventually call task.finish or
 		// task.finishForwarded, which will call tr.completeTask.
-		tr.outstandingTasks.Put(level, internalTasks[i])
+		tr.outstandingTasks.Put(level, task)
 		tr.loadedTasks++
 		tr.backlogAge.record(t.Data.CreateTime, 1)
+		internalTasks = append(internalTasks, task)
+	}
+
+	if hasExpired {
+		// Advance ack level past any expired tasks we just added as pre-acked.
+		tr.advanceAckLevelLocked()
 	}
 
 	// Update atEnd:

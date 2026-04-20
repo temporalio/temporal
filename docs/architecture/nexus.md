@@ -92,22 +92,6 @@ the 1.31.0 release and will be made the default.
            AllowInsecure: true # In production, set to false and ensure traffic is HTTPS/TLS encrypted
     ```
 
-
-## Disabling Nexus
-
-To disable Nexus completely a server restart is required as the outbound queue processor (detailed below) is started
-if `system.enableNexus` is on, but does not shut itself down when this config is disabled. See [Disabling
-the Outbound Queue Processor](#disabling-the-outbound-queue-processor) for shutting off processing on a running server.
-
-## Downgrading to a Pre-Nexus Server Release
-
-In order to safely downgrade the server version to `1.24.x`, first disable nexus via dynamic config
-(`system.enableNexus`). This ensures that no experimental functionality while Nexus was still being developed is
-triggered.
-
-After disabling Nexus, outbound tasks currently scheduled will not be run and timer tasks will immediately go to the
-[DLQ](../admin/dlq.md) without any retries. Workflows with pending Nexus operations will be stuck.
-
 # Components
 
 ## Nexus Endpoint Registry

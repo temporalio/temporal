@@ -23,19 +23,30 @@ inputs:
     required: false
     default: "false"
   cli-version:
-    description: "Temporal CLI version to download"
+    description: "Temporal CLI version to download (uses default from build helper if empty)"
     required: false
-    default: "1.5.1"
+    default: ""
   alpine-tag:
     description: "Alpine base image tag"
     required: false
-    default: "3.23.3"
+    default: ""
   dockerhub-username:
     description: "Docker Hub username"
     required: false
   dockerhub-token:
     description: "Docker Hub token"
     required: false
+
+outputs:
+  branch-tag:
+    description: "Docker-safe branch tag (e.g., branch-main, branch-release-v1.30.0)"
+    value: ${{ steps.image-tags.outputs.tag }}
+  sha-tag:
+    description: "Docker SHA tag (e.g., sha-abc1234)"
+    value: ${{ steps.image-tags.outputs.sha }}
+  sha-full-tag:
+    description: "Docker full SHA tag (e.g., sha-abcdef123456...)"
+    value: ${{ steps.image-tags.outputs.sha-full }}
 
 runs:
   using: composite
@@ -70,12 +81,19 @@ runs:
       run: |
         .github/actions/build-docker-images/scripts/docker-build-helper download-cli
 
+    - name: Extract CLI version from binary
+      id: extract-cli-version
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        .github/actions/build-docker-images/scripts/docker-build-helper extract-binary-version temporal cli-version
+
     - name: Extract server version from binary
       id: extract-version
       shell: bash
       working-directory: ${{ github.workspace }}
       run: |
-        .github/actions/build-docker-images/scripts/docker-build-helper extract-version
+        .github/actions/build-docker-images/scripts/docker-build-helper extract-binary-version temporal-server server-version
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
@@ -96,22 +114,30 @@ runs:
       working-directory: ${{ github.workspace }}
       env:
         IMAGE_REPO: temporaliotest
-        IMAGE_SHA_TAG: ${{ steps.image-tags.outputs.sha }}
+        IMAGE_SHA_SHORT_TAG: ${{ steps.image-tags.outputs.sha }}
+        IMAGE_SHA_FULL_TAG: ${{ steps.image-tags.outputs.sha-full }}
         IMAGE_BRANCH_TAG: ${{ steps.image-tags.outputs.tag }}
-        TEMPORAL_SHA: ${{ github.sha }}
+        TEMPORAL_SHA: ${{ steps.image-tags.outputs.git-sha }}
         TAG_LATEST: ${{ inputs.tag-latest }}
         ALPINE_TAG: ${{ inputs.alpine-tag }}
+        PLATFORM: ${{ inputs.platform }}
+        LOAD: ${{ inputs.load }}
         SERVER_VERSION: ${{ steps.extract-version.outputs.server-version }}
+        CLI_VERSION: ${{ steps.extract-cli-version.outputs.cli-version }}
       run: |
-        if [ -n "${{ inputs.platform }}" ]; then
+        if [ -z "${ALPINE_TAG}" ]; then
+          unset ALPINE_TAG
+        fi
+
+        if [ -n "${PLATFORM}" ]; then
           docker buildx bake \
-            --set "*.platform=${{ inputs.platform }}" \
-            ${{ inputs.load == 'true' && '--load' || '' }} \
+            --set "*.platform=${PLATFORM}" \
+            $( [ "${LOAD}" = "true" ] && echo --load ) \
             -f docker/docker-bake.hcl \
             server admin-tools
         else
           docker buildx bake \
-            ${{ inputs.load == 'true' && '--load' || '' }} \
+            $( [ "${LOAD}" = "true" ] && echo --load ) \
             -f docker/docker-bake.hcl \
             server admin-tools
         fi
@@ -122,14 +148,30 @@ runs:
       working-directory: ${{ github.workspace }}
       env:
         IMAGE_REPO: temporaliotest
-        IMAGE_SHA_TAG: ${{ steps.image-tags.outputs.sha }}
+        IMAGE_SHA_SHORT_TAG: ${{ steps.image-tags.outputs.sha }}
+        IMAGE_SHA_FULL_TAG: ${{ steps.image-tags.outputs.sha-full }}
         IMAGE_BRANCH_TAG: ${{ steps.image-tags.outputs.tag }}
-        TEMPORAL_SHA: ${{ github.sha }}
+        TEMPORAL_SHA: ${{ steps.image-tags.outputs.git-sha }}
         TAG_LATEST: ${{ inputs.tag-latest }}
         ALPINE_TAG: ${{ inputs.alpine-tag }}
         SERVER_VERSION: ${{ steps.extract-version.outputs.server-version }}
+        CLI_VERSION: ${{ steps.extract-cli-version.outputs.cli-version }}
       run: |
-        docker buildx bake \
-          --push \
-          -f docker/docker-bake.hcl \
-          server admin-tools
+        if [ -z "${ALPINE_TAG}" ]; then
+          unset ALPINE_TAG
+        fi
+
+        for attempt in 1 2 3; do
+          echo "Docker build/push attempt $attempt/3"
+          if timeout 1200 docker buildx bake \
+              --push \
+              -f docker/docker-bake.hcl \
+              server admin-tools; then
+            exit 0
+          fi
+          if [ "$attempt" -lt 3 ]; then
+            echo "Attempt $attempt failed, retrying in 30s..."
+            sleep 30
+          fi
+        done
+        exit 1

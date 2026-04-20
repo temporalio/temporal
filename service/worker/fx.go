@@ -4,8 +4,10 @@ import (
 	"context"
 	"os"
 
+	wcicomponent "go.temporal.io/auto-scaled-workers/wci/workercomponent"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -46,8 +48,10 @@ var Module = fx.Options(
 	scheduler.Module,
 	batcher.Module,
 	workerdeployment.Module,
+	wcicomponent.Module,
 	dlq.Module,
 	dummy.Module,
+	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	fx.Provide(
 		func(c resource.HistoryClient) dlq.HistoryClient {
 			return c
@@ -80,14 +84,17 @@ var Module = fx.Options(
 	fx.Provide(func(
 		clusterMetadata cluster.Metadata,
 		metadataManager persistence.MetadataManager,
+		dataMerger nsreplication.NamespaceDataMerger,
 		logger log.Logger,
 	) nsreplication.TaskExecutor {
 		return nsreplication.NewTaskExecutor(
 			clusterMetadata.GetCurrentClusterName(),
 			metadataManager,
+			dataMerger,
 			logger,
 		)
 	}),
+	fx.Provide(nsreplication.NewNoopDataMerger),
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(fx.Annotate(NewWorkerManager, fx.ParamTags(workercommon.WorkerComponentTag))),

@@ -3,6 +3,7 @@ package history
 import (
 	"fmt"
 
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -10,6 +11,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/resource"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
@@ -30,7 +32,9 @@ type outboundQueueFactoryParams struct {
 	fx.In
 
 	QueueFactoryBaseParams
+	ClientBean         client.Bean
 	CircuitBreakerPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool
+	MatchingClient     resource.MatchingClient
 }
 
 type groupLimiter struct {
@@ -227,6 +231,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		logger,
 		metricsHandler,
 		f.ChasmEngine,
+		f.MatchingClient,
 	)
 
 	standbyExecutor := newOutboundQueueStandbyTaskExecutor(
@@ -236,6 +241,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		logger,
 		metricsHandler,
 		f.ChasmEngine,
+		f.ClientBean,
 	)
 
 	executor := queues.NewActiveStandbyExecutor(

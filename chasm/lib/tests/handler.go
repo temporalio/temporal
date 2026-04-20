@@ -28,7 +28,8 @@ type (
 	}
 
 	DescribePayloadStoreResponse struct {
-		State *testspb.TestPayloadStore
+		State                *testspb.TestPayloadStore
+		ApproximateStateSize int
 	}
 
 	ClosePayloadStoreRequest struct {
@@ -76,6 +77,13 @@ type (
 	RemovePayloadResponse struct {
 		State *testspb.TestPayloadStore
 	}
+
+	DeletePayloadStoreRequest struct {
+		NamespaceID namespace.ID
+		StoreID     string
+		Reason      string
+		Identity    string
+	}
 )
 
 func NewPayloadStoreHandler(
@@ -107,7 +115,7 @@ func DescribePayloadStoreHandler(
 	ctx context.Context,
 	request DescribePayloadStoreRequest,
 ) (DescribePayloadStoreResponse, error) {
-	state, err := chasm.ReadComponent(
+	return chasm.ReadComponent(
 		ctx,
 		chasm.NewComponentRef[*PayloadStore](
 			chasm.ExecutionKey{
@@ -118,12 +126,6 @@ func DescribePayloadStoreHandler(
 		(*PayloadStore).Describe,
 		request,
 	)
-	if err != nil {
-		return DescribePayloadStoreResponse{}, err
-	}
-	return DescribePayloadStoreResponse{
-		State: state,
-	}, nil
 }
 
 func ClosePayloadStoreHandler(
@@ -206,6 +208,25 @@ func GetPayloadHandler(
 	return GetPayloadResponse{
 		Payload: payload,
 	}, nil
+}
+
+func DeletePayloadStoreHandler(
+	ctx context.Context,
+	request DeletePayloadStoreRequest,
+) error {
+	return chasm.DeleteExecution[*PayloadStore](
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: request.NamespaceID.String(),
+			BusinessID:  request.StoreID,
+		},
+		chasm.DeleteExecutionRequest{
+			TerminateComponentRequest: chasm.TerminateComponentRequest{
+				Reason:   request.Reason,
+				Identity: request.Identity,
+			},
+		},
+	)
 }
 
 func RemovePayloadHandler(

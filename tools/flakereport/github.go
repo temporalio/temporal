@@ -13,21 +13,25 @@ import (
 	"time"
 )
 
-// fetchWorkflowRuns retrieves all completed workflow runs within date range
-// Implements proper pagination to fix the 100-run limit bug
-func fetchWorkflowRuns(ctx context.Context, repo string, workflowID int64, branch string, sinceDays int) ([]WorkflowRun, error) {
+// fetchWorkflowRuns retrieves all completed workflow runs within a date range.
+// since is the oldest bound (inclusive); until is the newest bound (zero means open-ended).
+// Implements proper pagination to fix the 100-run limit bug.
+func fetchWorkflowRuns(ctx context.Context, repo string, workflowID int64, branch string, since, until time.Time) ([]WorkflowRun, error) {
 	var allRuns []WorkflowRun
-	sinceDate := time.Now().AddDate(0, 0, -sinceDays).Format("2006-01-02")
 
-	fmt.Printf("Fetching workflow runs since %s...\n", sinceDate)
+	createdFilter := ">=" + since.Format("2006-01-02")
+	if !until.IsZero() {
+		createdFilter = since.Format("2006-01-02") + ".." + until.Format("2006-01-02")
+	}
+	fmt.Printf("Fetching workflow runs created %s...\n", createdFilter)
 
 	page := 1
 	for {
 		ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
 
 		cmd := exec.CommandContext(ctxTimeout, "gh", "api",
-			fmt.Sprintf("/repos/%s/actions/workflows/%d/runs?branch=%s&created=>=%s&per_page=100&page=%d",
-				repo, workflowID, branch, sinceDate, page),
+			fmt.Sprintf("/repos/%s/actions/workflows/%d/runs?branch=%s&created=%s&per_page=100&page=%d",
+				repo, workflowID, branch, createdFilter, page),
 		)
 
 		output, err := cmd.Output()
@@ -191,20 +195,33 @@ func extractArtifactZip(zipPath, outputDir string) ([]string, error) {
 	return xmlFiles, nil
 }
 
-// parseArtifactName extracts run_id and job_id from artifact name
-// Format: {prefix}--{run_id}--{job_id}--{suffix}
-// Returns: runID, jobID (or "unknown" if not parseable)
-func parseArtifactName(artifactName string) (runID string, jobID string) {
+// parseArtifactName extracts run_id, job_id, and matrix_name from artifact name.
+// Functional tests: junit-xml--{run_id}--{job_id}--{run_attempt}--{matrix_name}--{display_name}--functional-test
+// Unit/integration:  junit-xml--{run_id}--{job_id}--{run_attempt}--unit-test
+// Returns: runID, jobID, matrixName ("unknown" for fields that are absent or unparseable)
+func parseArtifactName(artifactName string) (runID string, jobID string, matrixName string) {
 	parts := strings.Split(artifactName, "--")
-	if len(parts) >= 3 {
-		runID = parts[1]
-		jobID = parts[2]
-		if jobID == "" {
-			jobID = "unknown"
-		}
-		return runID, jobID
+	if len(parts) < 3 {
+		return "unknown", "unknown", "unknown"
 	}
-	return "unknown", "unknown"
+
+	runID = parts[1]
+
+	jobID = parts[2]
+	if jobID == "" {
+		jobID = "unknown"
+	}
+
+	// Functional test artifacts carry a matrix name (DB config) at parts[4].
+	// Unit/integration artifacts have only 5 parts where parts[4] is the test type
+	// (e.g. "unit-test"), not a matrix name. Functional artifacts have >=7 parts.
+	if len(parts) >= 6 {
+		matrixName = parts[4]
+	} else {
+		matrixName = "unknown"
+	}
+
+	return runID, jobID, matrixName
 }
 
 // buildGitHubURL constructs GitHub Actions URL from run/job IDs
@@ -216,4 +233,60 @@ func buildGitHubURL(repo, runID, jobID string) string {
 		return fmt.Sprintf("%s/job/%s", baseURL, jobID)
 	}
 	return baseURL
+}
+
+// fetchCommitMeta fetches commit title, author, and changed file list for a single commit SHA.
+// Uses: GET /repos/{owner}/{repo}/commits/{sha}
+func fetchCommitMeta(ctx context.Context, repo, sha string) (CommitMeta, error) {
+	ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctxTimeout, "gh", "api",
+		fmt.Sprintf("/repos/%s/commits/%s", repo, sha),
+	)
+
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return CommitMeta{SHA: sha}, fmt.Errorf("gh api failed for commit %s: %w\nstderr: %s", sha, err, string(exitErr.Stderr))
+		}
+		return CommitMeta{SHA: sha}, fmt.Errorf("failed to execute gh command for commit %s: %w", sha, err)
+	}
+
+	var response struct {
+		SHA    string `json:"sha"`
+		Commit struct {
+			Message string `json:"message"`
+			Author  struct {
+				Name string    `json:"name"`
+				Date time.Time `json:"date"`
+			} `json:"author"`
+		} `json:"commit"`
+		Files []struct {
+			Filename string `json:"filename"`
+		} `json:"files"`
+	}
+
+	if err := json.Unmarshal(output, &response); err != nil {
+		return CommitMeta{SHA: sha}, fmt.Errorf("failed to parse commit response for %s: %w", sha, err)
+	}
+
+	// Extract just the first line of the commit message as the title
+	title := response.Commit.Message
+	if idx := strings.IndexByte(title, '\n'); idx >= 0 {
+		title = title[:idx]
+	}
+
+	files := make([]string, 0, len(response.Files))
+	for _, f := range response.Files {
+		files = append(files, f.Filename)
+	}
+
+	return CommitMeta{
+		SHA:         sha,
+		Title:       title,
+		Author:      response.Commit.Author.Name,
+		CommittedAt: response.Commit.Author.Date,
+		Files:       files,
+	}, nil
 }

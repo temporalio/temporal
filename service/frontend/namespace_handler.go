@@ -254,6 +254,7 @@ func (d *namespaceHandler) RegisterNamespace(
 		namespaceRequest.Namespace.FailoverVersion,
 		namespaceRequest.IsGlobalNamespace,
 		nil,
+		false, // forceReplicate
 	)
 	if err != nil {
 		return nil, err
@@ -594,6 +595,7 @@ func (d *namespaceHandler) UpdateNamespace(
 		failoverVersion,
 		isGlobalNamespace,
 		failoverHistory,
+		false, // forceReplicate
 	)
 	if err != nil {
 		return nil, err
@@ -865,6 +867,7 @@ func (d *namespaceHandler) createResponse(
 			WorkflowPause:                   d.config.WorkflowPauseEnabled(info.Name),
 			StandaloneActivities:            d.config.Activity.Enabled(info.Name),
 			WorkerPollCompleteOnShutdown:    d.config.EnableCancelWorkerPollsOnShutdown(info.Name),
+			PollerAutoscaling:               true,
 		},
 		Limits: &namespacepb.NamespaceInfo_Limits{
 			BlobSizeLimitError: int64(d.config.BlobSizeLimitError(info.Name)),

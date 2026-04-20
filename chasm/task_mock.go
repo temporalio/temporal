@@ -16,32 +16,46 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-// MockSideEffectTaskExecutor is a mock of SideEffectTaskExecutor interface.
-type MockSideEffectTaskExecutor[C any, T any] struct {
+// MockSideEffectTaskHandler is a mock of SideEffectTaskHandler interface.
+type MockSideEffectTaskHandler[C any, T any] struct {
 	ctrl     *gomock.Controller
-	recorder *MockSideEffectTaskExecutorMockRecorder[C, T]
+	recorder *MockSideEffectTaskHandlerMockRecorder[C, T]
 	isgomock struct{}
 }
 
-// MockSideEffectTaskExecutorMockRecorder is the mock recorder for MockSideEffectTaskExecutor.
-type MockSideEffectTaskExecutorMockRecorder[C any, T any] struct {
-	mock *MockSideEffectTaskExecutor[C, T]
+// MockSideEffectTaskHandlerMockRecorder is the mock recorder for MockSideEffectTaskHandler.
+type MockSideEffectTaskHandlerMockRecorder[C any, T any] struct {
+	mock *MockSideEffectTaskHandler[C, T]
 }
 
-// NewMockSideEffectTaskExecutor creates a new mock instance.
-func NewMockSideEffectTaskExecutor[C any, T any](ctrl *gomock.Controller) *MockSideEffectTaskExecutor[C, T] {
-	mock := &MockSideEffectTaskExecutor[C, T]{ctrl: ctrl}
-	mock.recorder = &MockSideEffectTaskExecutorMockRecorder[C, T]{mock}
+// NewMockSideEffectTaskHandler creates a new mock instance.
+func NewMockSideEffectTaskHandler[C any, T any](ctrl *gomock.Controller) *MockSideEffectTaskHandler[C, T] {
+	mock := &MockSideEffectTaskHandler[C, T]{ctrl: ctrl}
+	mock.recorder = &MockSideEffectTaskHandlerMockRecorder[C, T]{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockSideEffectTaskExecutor[C, T]) EXPECT() *MockSideEffectTaskExecutorMockRecorder[C, T] {
+func (m *MockSideEffectTaskHandler[C, T]) EXPECT() *MockSideEffectTaskHandlerMockRecorder[C, T] {
 	return m.recorder
 }
 
+// Discard mocks base method.
+func (m *MockSideEffectTaskHandler[C, T]) Discard(arg0 context.Context, arg1 ComponentRef, arg2 TaskAttributes, arg3 T) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Discard", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Discard indicates an expected call of Discard.
+func (mr *MockSideEffectTaskHandlerMockRecorder[C, T]) Discard(arg0, arg1, arg2, arg3 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Discard", reflect.TypeOf((*MockSideEffectTaskHandler[C, T])(nil).Discard), arg0, arg1, arg2, arg3)
+}
+
 // Execute mocks base method.
-func (m *MockSideEffectTaskExecutor[C, T]) Execute(arg0 context.Context, arg1 ComponentRef, arg2 TaskAttributes, arg3 T) error {
+func (m *MockSideEffectTaskHandler[C, T]) Execute(arg0 context.Context, arg1 ComponentRef, arg2 TaskAttributes, arg3 T) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Execute", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
@@ -49,37 +63,64 @@ func (m *MockSideEffectTaskExecutor[C, T]) Execute(arg0 context.Context, arg1 Co
 }
 
 // Execute indicates an expected call of Execute.
-func (mr *MockSideEffectTaskExecutorMockRecorder[C, T]) Execute(arg0, arg1, arg2, arg3 any) *gomock.Call {
+func (mr *MockSideEffectTaskHandlerMockRecorder[C, T]) Execute(arg0, arg1, arg2, arg3 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockSideEffectTaskExecutor[C, T])(nil).Execute), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockSideEffectTaskHandler[C, T])(nil).Execute), arg0, arg1, arg2, arg3)
 }
 
-// MockPureTaskExecutor is a mock of PureTaskExecutor interface.
-type MockPureTaskExecutor[C any, T any] struct {
+// Validate mocks base method.
+func (m *MockSideEffectTaskHandler[C, T]) Validate(arg0 Context, arg1 C, arg2 TaskAttributes, arg3 T) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Validate", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Validate indicates an expected call of Validate.
+func (mr *MockSideEffectTaskHandlerMockRecorder[C, T]) Validate(arg0, arg1, arg2, arg3 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockSideEffectTaskHandler[C, T])(nil).Validate), arg0, arg1, arg2, arg3)
+}
+
+// sideEffectTaskHandler mocks base method.
+func (m *MockSideEffectTaskHandler[C, T]) sideEffectTaskHandler() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "sideEffectTaskHandler")
+}
+
+// sideEffectTaskHandler indicates an expected call of sideEffectTaskHandler.
+func (mr *MockSideEffectTaskHandlerMockRecorder[C, T]) sideEffectTaskHandler() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "sideEffectTaskHandler", reflect.TypeOf((*MockSideEffectTaskHandler[C, T])(nil).sideEffectTaskHandler))
+}
+
+// MockPureTaskHandler is a mock of PureTaskHandler interface.
+type MockPureTaskHandler[C any, T any] struct {
 	ctrl     *gomock.Controller
-	recorder *MockPureTaskExecutorMockRecorder[C, T]
+	recorder *MockPureTaskHandlerMockRecorder[C, T]
 	isgomock struct{}
 }
 
-// MockPureTaskExecutorMockRecorder is the mock recorder for MockPureTaskExecutor.
-type MockPureTaskExecutorMockRecorder[C any, T any] struct {
-	mock *MockPureTaskExecutor[C, T]
+// MockPureTaskHandlerMockRecorder is the mock recorder for MockPureTaskHandler.
+type MockPureTaskHandlerMockRecorder[C any, T any] struct {
+	mock *MockPureTaskHandler[C, T]
 }
 
-// NewMockPureTaskExecutor creates a new mock instance.
-func NewMockPureTaskExecutor[C any, T any](ctrl *gomock.Controller) *MockPureTaskExecutor[C, T] {
-	mock := &MockPureTaskExecutor[C, T]{ctrl: ctrl}
-	mock.recorder = &MockPureTaskExecutorMockRecorder[C, T]{mock}
+// NewMockPureTaskHandler creates a new mock instance.
+func NewMockPureTaskHandler[C any, T any](ctrl *gomock.Controller) *MockPureTaskHandler[C, T] {
+	mock := &MockPureTaskHandler[C, T]{ctrl: ctrl}
+	mock.recorder = &MockPureTaskHandlerMockRecorder[C, T]{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockPureTaskExecutor[C, T]) EXPECT() *MockPureTaskExecutorMockRecorder[C, T] {
+func (m *MockPureTaskHandler[C, T]) EXPECT() *MockPureTaskHandlerMockRecorder[C, T] {
 	return m.recorder
 }
 
 // Execute mocks base method.
-func (m *MockPureTaskExecutor[C, T]) Execute(arg0 MutableContext, arg1 C, arg2 TaskAttributes, arg3 T) error {
+func (m *MockPureTaskHandler[C, T]) Execute(arg0 MutableContext, arg1 C, arg2 TaskAttributes, arg3 T) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Execute", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
@@ -87,9 +128,36 @@ func (m *MockPureTaskExecutor[C, T]) Execute(arg0 MutableContext, arg1 C, arg2 T
 }
 
 // Execute indicates an expected call of Execute.
-func (mr *MockPureTaskExecutorMockRecorder[C, T]) Execute(arg0, arg1, arg2, arg3 any) *gomock.Call {
+func (mr *MockPureTaskHandlerMockRecorder[C, T]) Execute(arg0, arg1, arg2, arg3 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockPureTaskExecutor[C, T])(nil).Execute), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockPureTaskHandler[C, T])(nil).Execute), arg0, arg1, arg2, arg3)
+}
+
+// Validate mocks base method.
+func (m *MockPureTaskHandler[C, T]) Validate(arg0 Context, arg1 C, arg2 TaskAttributes, arg3 T) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Validate", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Validate indicates an expected call of Validate.
+func (mr *MockPureTaskHandlerMockRecorder[C, T]) Validate(arg0, arg1, arg2, arg3 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockPureTaskHandler[C, T])(nil).Validate), arg0, arg1, arg2, arg3)
+}
+
+// pureTaskHandler mocks base method.
+func (m *MockPureTaskHandler[C, T]) pureTaskHandler() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "pureTaskHandler")
+}
+
+// pureTaskHandler indicates an expected call of pureTaskHandler.
+func (mr *MockPureTaskHandlerMockRecorder[C, T]) pureTaskHandler() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "pureTaskHandler", reflect.TypeOf((*MockPureTaskHandler[C, T])(nil).pureTaskHandler))
 }
 
 // MockTaskValidator is a mock of TaskValidator interface.
