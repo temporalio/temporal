@@ -405,6 +405,7 @@ var TransitionPaused = chasm.NewTransition(
 	activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 	func(a *Activity, ctx chasm.MutableContext, event pauseEvent) error {
 		a.pause(ctx, event)
+		a.Stamp++
 		return nil
 	},
 )

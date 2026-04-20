@@ -749,16 +749,11 @@ func (a *Activity) pause(
 	ctx chasm.MutableContext,
 	event pauseEvent,
 ) error {
-	attempt := a.LastAttempt.Get(ctx)
-	attempt.Stamp++
-
 	a.PauseState = &activitypb.ActivityPauseState{
 		PauseTime: timestamppb.New(ctx.Now(a)),
 		Identity:  event.req.GetIdentity(),
 		Reason:    event.req.GetReason(),
 	}
-	a.emitOnPausedMetrics(event.metricsHandler)
-
 	a.emitOnPausedMetrics(event.metricsHandler)
 	return nil
 }
