@@ -422,6 +422,7 @@ var TransitionUnpaused = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, event unpauseEvent) error {
-		return a.unpause(ctx, event)
+		a.unpause(ctx, event)
+		return nil
 	},
 )

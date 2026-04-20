@@ -708,16 +708,17 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 		a.emitOnUnpausedMetrics(metricsHandler)
 		return &activitypb.UnpauseActivityExecutionResponse{}, nil
 	}
-	return &activitypb.UnpauseActivityExecutionResponse{}, a.unpause(ctx, unpauseEvent{
+	a.unpause(ctx, unpauseEvent{
 		req:            req.GetFrontendRequest(),
 		metricsHandler: metricsHandler,
 	})
+	return &activitypb.UnpauseActivityExecutionResponse{}, nil
 }
 
 func (a *Activity) unpause(
 	ctx chasm.MutableContext,
 	event unpauseEvent,
-) error {
+) {
 	a.PauseState = nil
 	attempt := a.LastAttempt.Get(ctx)
 	if event.req.GetResetAttempts() {
@@ -743,7 +744,6 @@ func (a *Activity) unpause(
 		chasm.TaskAttributes{ScheduledTime: scheduleTime},
 		&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()})
 	a.emitOnUnpausedMetrics(event.metricsHandler)
-	return nil
 }
 func (a *Activity) pause(
 	ctx chasm.MutableContext,
