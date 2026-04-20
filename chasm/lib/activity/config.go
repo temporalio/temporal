@@ -3,6 +3,7 @@ package activity
 import (
 	"time"
 
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/retrypolicy"
 )
@@ -37,6 +38,7 @@ type Config struct {
 	LongPollBuffer              dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	LongPollTimeout             dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit            dynamicconfig.IntPropertyFn
+	MaxCallbacksPerExecution    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DefaultActivityRetryPolicy  dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 	VisibilityMaxPageSize       dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
@@ -51,6 +53,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		LongPollBuffer:              LongPollBuffer.Get(dc),
 		LongPollTimeout:             LongPollTimeout.Get(dc),
 		MaxIDLengthLimit:            dynamicconfig.MaxIDLengthLimit.Get(dc),
+		MaxCallbacksPerExecution:    callback.MaxPerExecution.Get(dc),
 		VisibilityMaxPageSize:       dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 	}
 }

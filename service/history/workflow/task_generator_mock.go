@@ -358,3 +358,15 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateWorkflowStartTasks(startEvent a
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateWorkflowStartTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateWorkflowStartTasks), startEvent)
 }
+
+// RegenerateTimerTasksForTimeSkipping mocks base method.
+func (m *MockTaskGenerator) RegenerateTimerTasksForTimeSkipping() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RegenerateTimerTasksForTimeSkipping")
+}
+
+// RegenerateTimerTasksForTimeSkipping indicates an expected call of RegenerateTimerTasksForTimeSkipping.
+func (mr *MockTaskGeneratorMockRecorder) RegenerateTimerTasksForTimeSkipping() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegenerateTimerTasksForTimeSkipping", reflect.TypeOf((*MockTaskGenerator)(nil).RegenerateTimerTasksForTimeSkipping))
+}
