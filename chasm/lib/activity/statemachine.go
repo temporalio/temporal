@@ -460,12 +460,13 @@ type resetEvent struct {
 	resetHeartbeats bool
 }
 
-// TransitionReset resets a SCHEDULED activity back to attempt 1. The stamp is bumped to invalidate
-// any pending dispatch task, then a new dispatch task is added at the given schedule time.
+// TransitionReset resets a SCHEDULED or PAUSED activity back to attempt 1. The stamp is bumped to
+// invalidate any pending dispatch task, then a new dispatch task is added at the given schedule time.
 // For STARTED/CANCEL_REQUESTED activities the reset is deferred — see Activity.ActivityReset flag.
 var TransitionReset = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, event resetEvent) error {
