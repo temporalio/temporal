@@ -79,13 +79,16 @@ func (s *healthCheckerSuite) Test_Unique_Host_Health() {
 	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{
 		membership.NewHostInfoFromAddress("servingA"),
 		membership.NewHostInfoFromAddress("errorB"),
-	}).Times(2)
+	}).Times(4)
 	result, err := s.checker.Check(context.Background(), time.Unix(1, 0))
 	s.Require().NoError(err)
 	s.Equal(enumsspb.HEALTH_STATE_SERVING, result.State)
-	result, err = s.checker.Check(context.Background(), time.Unix(2, 0))
-	s.Require().NoError(err)
-	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, result.State)
+	// Make sure a consistent unhealthy host keeps the state in NOT_SERVING
+	for i := range 3 {
+		result, err = s.checker.Check(context.Background(), time.Unix(int64(i)+2, 0))
+		s.Require().NoError(err)
+		s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, result.State)
+	}
 	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{
 		membership.NewHostInfoFromAddress("servingA"),
 		membership.NewHostInfoFromAddress("errorC"),
@@ -100,6 +103,52 @@ func (s *healthCheckerSuite) Test_Unique_Host_Health() {
 	result, err = s.checker.Check(context.Background(), time.Unix(4, 0))
 	s.Require().NoError(err)
 	s.Equal(enumsspb.HEALTH_STATE_SERVING, result.State)
+}
+
+func (s *healthCheckerSuite) Test_Unhealthy_Host_Tracker() {
+	tracker := &unhealthyHostTracker{hosts: make(map[string]unhealthyHostRecord)}
+	tracker.trackUnhealthyHost("A", time.Unix(1, 0), enumsspb.HEALTH_STATE_NOT_SERVING)
+	tracker.trackUnhealthyHost("B", time.Unix(1, 0), enumsspb.HEALTH_STATE_DECLINED_SERVING)
+	tracker.trackUnhealthyHost("C", time.Unix(1, 0), enumsspb.HEALTH_STATE_INTERNAL_ERROR)
+	declinedServing, otherUnhealthy := tracker.unhealthyHosts(time.Unix(2, 0), 1*time.Second)
+	s.Require().Len(declinedServing, 1, "Should be one declined host. Instead found: %+v", declinedServing)
+	s.Require().Len(otherUnhealthy, 2, "Should be two other unhealthy hosts. Instead found: %+v", otherUnhealthy)
+	declinedServing, otherUnhealthy = tracker.unhealthyHosts(time.Unix(1, 0), 1*time.Second)
+	s.Require().Len(declinedServing, 0, "Should be no declined hosts. Instead found: %+v", declinedServing)
+	s.Require().Len(otherUnhealthy, 0, "Should be no other unhealthy hosts. Instead found: %+v", otherUnhealthy)
+
+	// Demonstrate status updates to existing host
+	tracker.trackUnhealthyHost("A", time.Unix(2, 0), enumsspb.HEALTH_STATE_NOT_SERVING)
+	s.Require().Equal(tracker.hosts["A"].failedAt, time.Unix(1, 0), "Host A should keep original time, but was %v", tracker.hosts["A"].failedAt.Unix())
+	tracker.trackUnhealthyHost("A", time.Unix(3, 0), enumsspb.HEALTH_STATE_DECLINED_SERVING)
+	s.Require().Equal(tracker.hosts["A"].lastSeenHealth, enumsspb.HEALTH_STATE_DECLINED_SERVING, "Host A should now be DECLINED_SERVING, but was %s", tracker.hosts["A"].lastSeenHealth.String())
+	s.Require().Equal(tracker.hosts["A"].failedAt, time.Unix(1, 0), "Host A should keep original time, but was %v", tracker.hosts["A"].failedAt.Unix())
+
+	// Test stale entries
+	tracker.clearStaleEntries([]*healthspb.HostHealthDetail{
+		{Address: "A", State: enumsspb.HEALTH_STATE_DECLINED_SERVING},
+		{Address: "B", State: enumsspb.HEALTH_STATE_DECLINED_SERVING},
+		{Address: "C", State: enumsspb.HEALTH_STATE_INTERNAL_ERROR},
+	})
+	declinedServing, otherUnhealthy = tracker.unhealthyHosts(time.Unix(2, 0), 1*time.Second)
+	// No change
+	s.Require().Len(declinedServing, 2, "Should be two declined hosts. Instead found: %+v", declinedServing)
+	s.Require().Len(otherUnhealthy, 1, "Should be one other unhealthy host. Instead found: %+v", otherUnhealthy)
+	tracker.clearStaleEntries([]*healthspb.HostHealthDetail{
+		{Address: "A", State: enumsspb.HEALTH_STATE_DECLINED_SERVING},
+		{Address: "B", State: enumsspb.HEALTH_STATE_SERVING},
+		{Address: "C", State: enumsspb.HEALTH_STATE_INTERNAL_ERROR},
+	})
+	declinedServing, otherUnhealthy = tracker.unhealthyHosts(time.Unix(2, 0), 1*time.Second)
+	// Declined host is healthy now!
+	s.Require().Len(declinedServing, 1, "Should be one declined host. Instead found: %+v", declinedServing)
+	s.Require().Len(otherUnhealthy, 1, "Should be one other unhealthy host. Instead found: %+v", otherUnhealthy)
+
+	tracker.clearStaleEntries([]*healthspb.HostHealthDetail{})
+	// Host list empty -> No more unhealthy hosts
+	declinedServing, otherUnhealthy = tracker.unhealthyHosts(time.Unix(2, 0), 1*time.Second)
+	s.Require().Len(declinedServing, 0, "Should be no declined hosts. Instead found: %+v", declinedServing)
+	s.Require().Len(otherUnhealthy, 0, "Should be no other unhealthy hosts. Instead found: %+v", otherUnhealthy)
 }
 
 func (s *healthCheckerSuite) Test_Check_Serving() {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"sync"
 	"time"
 
@@ -59,11 +60,18 @@ var _ HealthChecker = (*healthCheckerImpl)(nil)
 func (u *unhealthyHostTracker) trackUnhealthyHost(address string, now time.Time, state enumsspb.HealthState) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if existing, present := u.hosts[address]; !present && existing.lastSeenHealth != state {
+	if existing, present := u.hosts[address]; !present || existing.lastSeenHealth != state {
+		// Preserve the earliest time that the host failed, even if it changes states
+		var failedAt time.Time
+		if present {
+			failedAt = slices.MinFunc([]time.Time{now, existing.failedAt}, time.Time.Compare)
+		} else {
+			failedAt = now
+		}
 		u.hosts[address] = unhealthyHostRecord{
 			address:        address,
 			lastSeenHealth: state,
-			failedAt:       now,
+			failedAt:       failedAt,
 		}
 	}
 }
@@ -183,9 +191,7 @@ func (h *healthCheckerImpl) Check(ctx context.Context, now time.Time) (HealthChe
 		if detail.State != enumsspb.HEALTH_STATE_SERVING {
 			// NOT_SERVING, UNSPECIFIED, INTERNAL_ERROR, or any unknown state.
 			h.recentUnhealthyHosts.trackUnhealthyHost(result.address, now, state)
-			if exampleFailedHost == nil {
-				exampleFailedHost = detail
-			}
+			exampleFailedHost = detail
 		}
 	}
 	close(receiveCh)
