@@ -482,7 +482,7 @@ func (s *ContextImpl) UpdateHandoverNamespace(ns *namespace.Namespace, deletedFr
 	// it here to be more safe in case above assumption no longer holds in the future.
 	isHandoverNamespace := ns.IsGlobalNamespace() &&
 		ns.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) &&
-		ns.ReplicationState("") == enumspb.REPLICATION_STATE_HANDOVER
+		ns.ReplicationState(namespace.EmptyBusinessID) == enumspb.REPLICATION_STATE_HANDOVER
 
 	s.wLock()
 	if deletedFromDb || !isHandoverNamespace {
