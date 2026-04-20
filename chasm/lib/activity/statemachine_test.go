@@ -884,6 +884,67 @@ func TestTerminalTransitionsClearResetFlags(t *testing.T) {
 	})
 }
 
+// TestTransitionResetFromPaused verifies that TransitionReset applied to a PAUSED activity
+// transitions it to SCHEDULED and adds a dispatch task so it can be picked up by a worker.
+func TestTransitionResetFromPaused(t *testing.T) {
+	testCases := []struct {
+		name                   string
+		scheduleToStartTimeout time.Duration
+		expectedTaskCount      int
+	}{
+		{
+			name:                   "with schedule-to-start timeout",
+			scheduleToStartTimeout: defaultScheduleToStartTimeout,
+			expectedTaskCount:      2, // ScheduleToStartTimeoutTask + ActivityDispatchTask
+		},
+		{
+			name:                   "without schedule-to-start timeout",
+			scheduleToStartTimeout: 0,
+			expectedTaskCount:      1, // ActivityDispatchTask only
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{}
+			ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+			attemptState := &activitypb.ActivityAttemptState{
+				Count:                3,
+				CurrentRetryInterval: durationpb.New(30 * time.Second),
+			}
+
+			act := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+					RetryPolicy:            defaultRetryPolicy,
+					ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+					ScheduleToStartTimeout: durationpb.New(tc.scheduleToStartTimeout),
+					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+					Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+					PauseState: &activitypb.ActivityPauseState{
+						Identity: "test-identity",
+						Reason:   "test reason",
+					},
+				},
+				LastAttempt: chasm.NewDataField(ctx, attemptState),
+				Outcome:     chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+			}
+
+			err := TransitionReset.Apply(act, ctx, resetEvent{scheduleTime: defaultTime})
+			require.NoError(t, err)
+			require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, act.Status)
+			require.Equal(t, int32(1), attemptState.Count)
+			require.Nil(t, attemptState.GetCurrentRetryInterval())
+			require.Len(t, ctx.Tasks, tc.expectedTaskCount)
+
+			// Last task is always the dispatch task
+			_, ok := ctx.Tasks[tc.expectedTaskCount-1].Payload.(*activitypb.ActivityDispatchTask)
+			require.True(t, ok, "expected ActivityDispatchTask as last task")
+		})
+	}
+}
+
 // TestTransitionResetClearsCurrentRetryInterval verifies that TransitionReset clears the retry
 // interval so a reset activity is not delayed by a previous backoff period.
 func TestTransitionResetClearsCurrentRetryInterval(t *testing.T) {

@@ -7600,11 +7600,9 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 	})
 
 	t.Run("KeepPaused", func(t *testing.T) {
-		t.Skip("TODO seankane: remove after merging pause/unpause functionality")
 		// Reset while activity is paused, with keepPaused=true.
 		// Verifies that the activity remains paused after reset and that the attempt
-		// count is reset to 1. This test will fail until PauseActivityExecution and
-		// UnpauseActivityExecution are implemented for standalone activities.
+		// count is reset to 1.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 

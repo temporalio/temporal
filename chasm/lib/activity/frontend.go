@@ -517,7 +517,10 @@ func (h *frontendHandler) ResetActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	// TODO: validate request fields (e.g. namespace, identity length)
+	if err := validateResetActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err
