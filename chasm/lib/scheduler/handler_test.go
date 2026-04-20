@@ -120,7 +120,7 @@ func TestHandler_CreateFromMigrationState_Sentinel(t *testing.T) {
 	h := scheduler.NewTestHandler(logger)
 	testEngine := chasmtest.NewEngine(t, registry)
 	engineCtx := chasm.NewEngineContext(context.Background(), testEngine)
-	_, err := chasm.StartExecution[*scheduler.Scheduler, struct{}](
+	_, err := chasm.StartExecution(
 		engineCtx,
 		chasm.ExecutionKey{
 			NamespaceID: namespaceID,
@@ -158,7 +158,7 @@ func TestHandler_MigrateToWorkflow_Sentinel(t *testing.T) {
 	h := scheduler.NewTestHandler(logger)
 	testEngine := chasmtest.NewEngine(t, registry)
 	engineCtx := chasm.NewEngineContext(context.Background(), testEngine)
-	_, err := chasm.StartExecution[*scheduler.Scheduler, struct{}](
+	_, err := chasm.StartExecution(
 		engineCtx,
 		chasm.ExecutionKey{
 			NamespaceID: namespaceID,

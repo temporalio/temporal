@@ -225,7 +225,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			}
 			testEngine := chasmtest.NewEngine(t, chasmRegistry)
 			engineCtx := chasm.NewEngineContext(context.Background(), testEngine)
-			_, err = chasm.StartExecution[*mockNexusCompletionGetterComponent, struct{}](
+			_, err = chasm.StartExecution(
 				engineCtx,
 				executionKey,
 				func(ctx chasm.MutableContext, _ struct{}) (*mockNexusCompletionGetterComponent, error) {
@@ -239,34 +239,38 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			require.NoError(t, err)
 
 			rootRef := chasm.NewComponentRef[*mockNexusCompletionGetterComponent](executionKey)
-			var callbackRef chasm.ComponentRef
-			require.NoError(t, testEngine.ReadComponent(engineCtx, rootRef, func(chasmCtx chasm.Context, _ chasm.Component) error {
-				serialized, err := chasmCtx.Ref(callback)
-				if err != nil {
-					return err
-				}
-				callbackRef, err = chasm.DeserializeComponentRef(serialized)
-				return err
-			}))
+			callbackRef, err := chasm.ReadComponent(
+				engineCtx,
+				rootRef,
+				func(_ *mockNexusCompletionGetterComponent, chasmCtx chasm.Context, _ struct{}) (chasm.ComponentRef, error) {
+					serialized, err := chasmCtx.Ref(callback)
+					if err != nil {
+						return chasm.ComponentRef{}, err
+					}
+					return chasm.DeserializeComponentRef(serialized)
+				},
+				struct{}{},
+			)
+			require.NoError(t, err)
 
-			err = handler.Execute(
+			executeErr := handler.Execute(
 				engineCtx,
 				callbackRef,
 				chasm.TaskAttributes{Destination: "http://localhost"},
 				&callbackspb.InvocationTask{Attempt: 0},
 			)
 
-			// Verify outcome by reading component state directly
-			var resultCallback *Callback
-			require.NoError(t, testEngine.ReadComponent(
+			// Verify outcome by reading component state directly.
+			resultCallback, err := chasm.ReadComponent(
 				engineCtx,
 				callbackRef,
-				func(_ chasm.Context, c chasm.Component) error {
-					resultCallback = c.(*Callback)
-					return nil
+				func(c *Callback, _ chasm.Context, _ struct{}) (*Callback, error) {
+					return c, nil
 				},
-			))
-			tc.assertOutcome(t, resultCallback, err)
+				struct{}{},
+			)
+			require.NoError(t, err)
+			tc.assertOutcome(t, resultCallback, executeErr)
 		})
 	}
 }

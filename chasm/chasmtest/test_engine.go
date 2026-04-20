@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -59,9 +60,11 @@ type (
 	}
 )
 
-// WithTimeSource overrides the engine's default realtime clock with the provided time source.
-// Pass a *clock.EventTimeSource when tests need to control what ctx.Now() returns inside handlers.
-// The caller holds the reference and calls ts.Update(...) directly to advance time.
+// WithTimeSource overrides the engine's default time source.
+// The default is a [clock.EventTimeSource] initialized to [time.Now] at engine creation,
+// which gives deterministic, frozen time suitable for most unit tests.
+// Pass a *clock.EventTimeSource when tests need to advance time explicitly;
+// the caller holds the reference and calls ts.Update(...) directly.
 func WithTimeSource(ts clock.TimeSource) EngineOption {
 	return func(e *Engine) {
 		e.timeSource = ts
@@ -82,12 +85,14 @@ func NewEngine(
 ) *Engine {
 	t.Helper()
 
+	ts := clock.NewEventTimeSource()
+	ts.Update(time.Now())
 	e := &Engine{
 		t:                 t,
 		registry:          registry,
 		logger:            testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly),
 		metrics:           metrics.NoopMetricsHandler,
-		timeSource:        clock.NewRealTimeSource(),
+		timeSource:        ts,
 		currentExecutions: make(map[businessKey]*execution),
 		allExecutions:     make(map[runKey]*execution),
 		notifier:          newExecutionNotifier(),
