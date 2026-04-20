@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"math/rand"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -88,8 +89,8 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringBackoff
 		return "done!", err
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFunction)
 
 	wfId := "functional-test-gethistoryreverse"
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -106,9 +107,9 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringBackoff
 
 	s.Error(err)
 	var wfExecutionError *temporal.WorkflowExecutionError
-	s.True(errors.As(err, &wfExecutionError))
+	s.ErrorAs(err, &wfExecutionError)
 	var activityError *temporal.ActivityError
-	s.True(errors.As(wfExecutionError.Unwrap(), &activityError))
+	s.ErrorAs(wfExecutionError, &activityError)
 	s.Equal(enumspb.RETRY_STATE_TIMEOUT, activityError.RetryState())
 
 	s.Equal(int32(2), activityCompleted.Load())
@@ -158,8 +159,8 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringActivit
 		return "done!", err
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFunction)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        s.T().Name(),
@@ -173,10 +174,10 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringActivit
 	var out string
 	err = workflowRun.Get(ctx, &out)
 	var activityError *temporal.ActivityError
-	s.True(errors.As(err, &activityError))
+	s.ErrorAs(err, &activityError)
 	s.Equal(enumspb.RETRY_STATE_TIMEOUT, activityError.RetryState())
 	var timeoutError *temporal.TimeoutError
-	s.True(errors.As(activityError.Unwrap(), &timeoutError))
+	s.ErrorAs(activityError, &timeoutError)
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutError.TimeoutType())
 	// schedule to close timeout should fire while last activity is still running.
 	s.Equal(int32(2), activityCompleted.Load())
@@ -191,7 +192,7 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringActivit
 func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	activityFn := func(ctx context.Context) error {
 		info := activity.GetInfo(ctx)
-		if info.ActivityID == "Heartbeat" {
+		if strings.HasPrefix(info.ActivityID, "Heartbeat") {
 			go func() {
 				// NOTE: due to client side heartbeat batching, heartbeat may be sent
 				// later than expected.
@@ -206,7 +207,7 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 				// so here, we reduce the duration between two heartbeats, so that they are
 				// more likely be sent in the heartbeat batch at 1.6s
 				// (basically increasing the room for delay in heartbeat goroutine from 0.1s to 1s)
-				for i := 0; i < 3; i++ {
+				for i := range 3 {
 					activity.RecordHeartbeat(ctx, i)
 					time.Sleep(200 * time.Millisecond) //nolint:forbidigo
 				}
@@ -217,7 +218,7 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 		return nil
 	}
 
-	var err1, err2, err3, err4, err5, err6 error
+	var err1, err2, err3, err4, err5, err6, err7, err8 error
 	workflowFn := func(ctx workflow.Context) error {
 		noRetryPolicy := &temporal.RetryPolicy{
 			MaximumAttempts: 1, // disable retry
@@ -269,18 +270,36 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 		})
 		f6 := workflow.ExecuteActivity(ctx6, activityFn)
 
+		ctx7 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:             "HeartbeatWithScheduleToClose",
+			ScheduleToCloseTimeout: 2 * time.Second,
+			HeartbeatTimeout:       1 * time.Second,
+		})
+		f7 := workflow.ExecuteActivity(ctx7, activityFn)
+
+		ctx8 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:             "StartToCloseWithScheduleToClose",
+			ScheduleToCloseTimeout: 3 * time.Second,
+			StartToCloseTimeout:    2 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval: 2 * time.Second,
+			},
+		})
+		f8 := workflow.ExecuteActivity(ctx8, activityFn)
+
 		err1 = f1.Get(ctx1, nil)
 		err2 = f2.Get(ctx2, nil)
 		err3 = f3.Get(ctx3, nil)
 		err4 = f4.Get(ctx4, nil)
 		err5 = f5.Get(ctx5, nil)
 		err6 = f6.Get(ctx6, nil)
-
+		err7 = f7.Get(ctx7, nil)
+		err8 = f8.Get(ctx8, nil)
 		return nil
 	}
 
-	s.Worker().RegisterActivity(activityFn)
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 "functional-test-activity-timeouts",
@@ -293,54 +312,43 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 	err = workflowRun.Get(ctx, nil)
 	s.NoError(err)
 
 	// verify activity timeout type
-	s.Error(err1)
-	activityErr, ok := err1.(*temporal.ActivityError)
-	s.True(ok)
+	var activityErr *temporal.ActivityError
+	s.ErrorAs(err1, &activityErr)
 	s.Equal("ScheduleToStart", activityErr.ActivityID())
 	timeoutErr, ok := activityErr.Unwrap().(*temporal.TimeoutError)
 	s.True(ok)
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, timeoutErr.TimeoutType())
 
-	s.Error(err2)
-	activityErr, ok = err2.(*temporal.ActivityError)
-	s.True(ok)
+	s.ErrorAs(err2, &activityErr)
 	s.Equal("StartToClose", activityErr.ActivityID())
 	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
 	s.True(ok)
 	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutErr.TimeoutType())
 
-	s.Error(err3)
-	activityErr, ok = err3.(*temporal.ActivityError)
-	s.True(ok)
+	s.ErrorAs(err3, &activityErr)
 	s.Equal("ScheduleToClose", activityErr.ActivityID())
 	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
 	s.True(ok)
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
 
-	s.Error(err4)
-	activityErr, ok = err4.(*temporal.ActivityError)
-	s.True(ok)
+	s.ErrorAs(err4, &activityErr)
 	s.Equal("ScheduleToCloseNotSet", activityErr.ActivityID())
 	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
 	s.True(ok)
 	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutErr.TimeoutType())
 
-	s.Error(err5)
-	activityErr, ok = err5.(*temporal.ActivityError)
-	s.True(ok)
+	s.ErrorAs(err5, &activityErr)
 	s.Equal("StartToCloseNotSet", activityErr.ActivityID())
 	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
 	s.True(ok)
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
 
-	s.Error(err6)
-	activityErr, ok = err6.(*temporal.ActivityError)
-	s.True(ok)
+	s.ErrorAs(err6, &activityErr)
 	s.Equal("Heartbeat", activityErr.ActivityID())
 	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
 	s.True(ok)
@@ -349,6 +357,24 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	var v int
 	s.NoError(timeoutErr.LastHeartbeatDetails(&v))
 	s.Equal(2, v)
+
+	s.ErrorAs(err7, &activityErr)
+	s.Equal("HeartbeatWithScheduleToClose", activityErr.ActivityID())
+	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
+	s.Equal("Not enough time to schedule next retry before activity ScheduleToClose timeout, giving up retrying (type: ScheduleToClose)", timeoutErr.Error())
+	s.True(timeoutErr.HasLastHeartbeatDetails())
+	v = 0
+	s.NoError(timeoutErr.LastHeartbeatDetails(&v))
+	s.Equal(2, v)
+
+	s.ErrorAs(err8, &activityErr)
+	s.Equal("StartToCloseWithScheduleToClose", activityErr.ActivityID())
+	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
+	s.Equal("Not enough time to schedule next retry before activity ScheduleToClose timeout, giving up retrying (type: ScheduleToClose)", timeoutErr.Error())
 }
 
 func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
@@ -423,8 +449,8 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
 		s.Equal(activityName, task.ActivityType.GetName())
-		for i := 0; i < 10; i++ {
-			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.ActivityId), tag.Counter(i))
+		for i := range 10 {
+			s.Logger.Info("Heartbeating for activity", tag.ActivityID(task.ActivityId), tag.Counter(i))
 			_, err := s.FrontendClient().RecordActivityTaskHeartbeat(testcore.NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 				Namespace: s.Namespace().String(),
 				TaskToken: task.TaskToken,
@@ -652,10 +678,10 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 	descResp, err = describeWorkflowExecution()
 	s.NoError(err)
 	s.Len(descResp.GetPendingActivities(), 1)
-	s.Equal(descResp.GetPendingActivities()[0].GetActivityId(), "B")
+	s.Equal("B", descResp.GetPendingActivities()[0].GetActivityId())
 
 	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		s.False(workflowComplete)
 
 		s.Logger.Info("Processing workflow task:", tag.Counter(i))
@@ -818,7 +844,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -882,6 +908,8 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 }
 
 func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
+	ctx := testcore.NewContext()
+
 	id := "functional-activity-cancellation-test"
 	wt := "functional-activity-cancellation-test-type"
 	tl := "functional-activity-cancellation-test-taskqueue"
@@ -904,7 +932,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(ctx, request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution: response", tag.WorkflowRunID(we.GetRunId()))
@@ -918,7 +946,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 		if scheduleActivity {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			activityScheduledID = task.StartedEventId + 2
 			return []*commandpb.Command{{
@@ -959,8 +987,8 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
 		s.Equal(activityName, task.ActivityType.GetName())
-		for i := 0; i < 10; i++ {
-			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.ActivityId), tag.Counter(i))
+		for i := range 10 {
+			s.Logger.Info("Heartbeating for activity", tag.ActivityID(task.ActivityId), tag.Counter(i))
 			response, err := s.FrontendClient().RecordActivityTaskHeartbeat(testcore.NewContext(),
 				&workflowservice.RecordActivityTaskHeartbeatRequest{
 					Namespace: s.Namespace().String(),
@@ -1019,7 +1047,12 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
 	s.Logger.Info("Waiting for cancel to complete.", tag.WorkflowRunID(we.RunId))
-	<-cancelCh
+	select {
+	case <-cancelCh:
+	case <-ctx.Done():
+		s.Fail("Test timed out for activity cancellation", ctx.Err())
+		return
+	}
 	s.True(activityCanceled, "Activity was not cancelled.")
 	s.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.RunId))
 }
@@ -1061,7 +1094,7 @@ func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
 		if scheduleActivity {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 			s.Logger.Info("Scheduling activity")
 			activityScheduledID = task.StartedEventId + 2
 			return []*commandpb.Command{{
@@ -1205,8 +1238,8 @@ func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
 		return nil
 	}
 
-	s.Worker().RegisterActivity(activityFn)
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	wfId := "functional-test-heartbeat-details-during-retry"
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -1220,7 +1253,7 @@ func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	runId := workflowRun.GetRunID()
 
@@ -1409,7 +1442,8 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(description.PendingActivities))
+		require.Len(t, description.PendingActivities, 1)
+		require.NotNil(t, description.PendingActivities[0].LastFailure)
 		require.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
 	},
 		10*time.Second,
@@ -1440,7 +1474,8 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteRejectCompletion() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(description.PendingActivities))
+		require.Len(t, description.PendingActivities, 1)
+		require.NotNil(t, description.PendingActivities[0].LastFailure)
 		require.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
 	},
 		10*time.Second,
@@ -1480,4 +1515,46 @@ func (s *ActivityTestSuite) mockWorkflowWithErrorActivity(activityInfo chan<- ac
 	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
 	w.RegisterActivity(mockErrorActivity)
 	return w, wf
+}
+
+func (s *ActivityClientTestSuite) TestActivity_AttemptsExceeded() {
+	activityFunction := func(ctx context.Context) error {
+		return errors.New("non-retryable-error") //nolint:err113
+	}
+
+	workflowFn := func(ctx workflow.Context) error {
+		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 10 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				MaximumAttempts: 1,
+			},
+		}), activityFunction).Get(ctx, nil)
+		return err
+	}
+
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFunction)
+
+	wfID := testcore.RandomizeStr(s.T().Name())
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        wfID,
+		TaskQueue: s.TaskQueue(),
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	s.NoError(err)
+
+	err = workflowRun.Get(ctx, nil)
+	var wfExecutionError *temporal.WorkflowExecutionError
+	s.ErrorAs(err, &wfExecutionError)
+	var activityError *temporal.ActivityError
+	s.ErrorAs(wfExecutionError, &activityError)
+	s.Equal(enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, activityError.RetryState())
+	var applicationErr *temporal.ApplicationError
+	s.ErrorAs(activityError, &applicationErr)
+	s.Equal("non-retryable-error", applicationErr.Message())
+
+	history := s.GetHistory(string(s.Namespace()), &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()})
+	s.ContainsHistory(`ActivityTaskFailed`, &historypb.History{Events: history})
 }

@@ -79,6 +79,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shardContext.GetNamespaceRegistry(),
 		executable.GetNamespaceID(),
+		executable.GetWorkflowID(),
 	)
 	metricsTags := []metrics.Tag{
 		namespaceTag,
@@ -301,6 +302,17 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 	retryState, err := mutableState.RetryActivity(ai, timeoutFailure)
 	if err != nil {
 		return result, nil
+	}
+
+	// Convert the timeout type to schedule to close for historical reasons, this signals that there is not enough time
+	// for another attempt.
+	// This is in contrast to when an activity attempt fails (via e.g. RespondActivityTaskFailed) where the activity is
+	// always resolved as failed.
+	if retryState == enumspb.RETRY_STATE_TIMEOUT && timerSequenceID.TimerType != enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
+		timeoutFailure = failure.NewTimeoutFailure(
+			"Not enough time to schedule next retry before activity ScheduleToClose timeout, giving up retrying",
+			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		)
 	}
 
 	workflow.RecordActivityCompletionMetrics(
@@ -1003,7 +1015,6 @@ func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
 	return executeChasmSideEffectTask(
 		ctx,
 		t.chasmEngine,
-		t.shardContext.ChasmRegistry(),
 		tree,
 		task,
 	)

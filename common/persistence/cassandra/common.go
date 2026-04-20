@@ -15,7 +15,7 @@ func (f FieldNotFoundError) Error() string {
 	return f.Msg
 }
 
-func newFieldNotFoundError(fieldName string, payload map[string]interface{}) error {
+func newFieldNotFoundError(fieldName string, payload map[string]any) error {
 	return &FieldNotFoundError{Msg: fmt.Sprintf("Unable to find field '%s' in payload - '%v'", fieldName, payload)}
 }
 
@@ -32,9 +32,9 @@ func (f PersistedTypeMismatchError) Error() string {
 
 func newPersistedTypeMismatchError(
 	fieldName string,
-	expectedType interface{},
-	received interface{},
-	payload map[string]interface{},
+	expectedType any,
+	received any,
+	payload map[string]any,
 ) *PersistedTypeMismatchError {
 	return &PersistedTypeMismatchError{
 		Msg: fmt.Sprintf("Field '%s' is of type '%T' but expected type '%T' in payload - '%v'",
@@ -44,7 +44,7 @@ func newPersistedTypeMismatchError(
 // Returns a correctly typed value for fieldName retrieved from a row populated by a MapScan operation.
 // Returns the zero value for the provided type and an appropriate error if the field is not found in
 // the row or if the value cannot be cast to the provided type.
-func getTypedFieldFromRow[T any](fieldName string, row map[string]interface{}) (T, error) {
+func getTypedFieldFromRow[T any](fieldName string, row map[string]any) (T, error) {
 	var zeroVal T // used as a placeholder for zero value of type T since we can't directly return nil
 
 	raw, ok := row[fieldName]

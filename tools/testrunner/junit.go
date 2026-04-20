@@ -13,6 +13,24 @@ import (
 	"github.com/jstemmer/go-junit-report/v2/junit"
 )
 
+// alertsSuiteName is the JUnit suite name used for structural alerts (data
+// races, panics, fatal errors).
+const alertsSuiteName = "ALERTS"
+
+const junitAlertDetailsMaxBytes = 64 * 1024
+
+type failureType string
+
+const (
+	// failureTypeFailed marks a failed assertion.
+	failureTypeFailed   failureType = "Failed"
+	failureTypeTimeout  failureType = "TIMEOUT"
+	failureTypeCrash    failureType = "CRASH"
+	failureTypeDataRace failureType = "DATA RACE"
+	failureTypePanic    failureType = "PANIC"
+	failureTypeFatal    failureType = "FATAL"
+)
+
 type junitReport struct {
 	junit.Testsuites
 	path          string
@@ -33,12 +51,16 @@ func (j *junitReport) read() error {
 	return nil
 }
 
-func generateStatic(names []string, suffix string, message string) *junitReport {
+// generateReport builds a JUnit report for failures that the runner
+// derives itself, such as timeouts and crashes. Failure.Type stores the
+// canonical failure type (for example TIMEOUT or CRASH), and Failure.Data is
+// intentionally left empty.
+func generateReport(names []string, suffix string, kind failureType) *junitReport {
 	var testcases []junit.Testcase
 	for _, name := range names {
 		testcases = append(testcases, junit.Testcase{
 			Name:    fmt.Sprintf("%s (%s)", name, suffix),
-			Failure: &junit.Result{Message: message},
+			Failure: generateFailure(kind, ""),
 		})
 	}
 	return &junitReport{
@@ -50,6 +72,14 @@ func generateStatic(names []string, suffix string, message string) *junitReport 
 				},
 			},
 		},
+	}
+}
+
+func generateFailure(kind failureType, data string) *junit.Result {
+	return &junit.Result{
+		Message: string(kind),
+		Type:    string(kind),
+		Data:    data,
 	}
 }
 
@@ -72,30 +102,37 @@ func (j *junitReport) write() error {
 // appendAlertsSuite adds a synthetic JUnit suite summarizing high-priority alerts
 // (data races, panics, fatals) so that CI surfaces them prominently.
 func (j *junitReport) appendAlertsSuite(alerts []alert) {
-	// Deduplicate by kind+details to avoid noisy repeats across retries.
+	// Deduplicate by type+details to avoid noisy repeats across retries.
 	alerts = dedupeAlerts(alerts)
 	if len(alerts) == 0 {
 		return
 	}
+
+	// Convert alerts to JUnit test cases.
 	var cases []junit.Testcase
 	for _, a := range alerts {
-		name := fmt.Sprintf("%s: %s", a.Kind, a.Summary)
+		name := fmt.Sprintf("%s: %s", a.Type, a.Summary)
 		if p := primaryTestName(a.Tests); p != "" {
 			name = fmt.Sprintf("%s — in %s", name, p)
 		}
-		// Include only test names for context, not the full log details to avoid XML malformation
-		var details string
-		if len(a.Tests) > 0 {
-			details = fmt.Sprintf("Detected in tests:\n\t%s", strings.Join(a.Tests, "\n\t"))
+		var sb strings.Builder
+		if a.Details != "" {
+			sb.WriteString(truncateAlertDetails(sanitizeXML(a.Details)))
+			sb.WriteByte('\n')
 		}
-		r := &junit.Result{Message: string(a.Kind), Data: details}
+		if len(a.Tests) > 0 {
+			fmt.Fprintf(&sb, "Detected in tests:\n\t%s", strings.Join(a.Tests, "\n\t"))
+		}
+		f := generateFailure(a.Type, strings.TrimRight(sb.String(), "\n"))
 		cases = append(cases, junit.Testcase{
 			Name:    name,
-			Failure: r,
+			Failure: f,
 		})
 	}
+
+	// Append the alerts suite to the report.
 	suite := junit.Testsuite{
-		Name:      "ALERTS",
+		Name:      alertsSuiteName,
 		Failures:  len(cases),
 		Tests:     len(cases),
 		Testcases: cases,
@@ -105,13 +142,41 @@ func (j *junitReport) appendAlertsSuite(alerts []alert) {
 	j.Tests += suite.Tests
 }
 
+// sanitizeXML removes characters that are invalid in XML 1.0. Go's xml.Encoder
+// escapes <, >, & etc., but control characters other than \t, \n, \r are not
+// legal XML and cause parsers to reject the document.
+func sanitizeXML(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case '\t', '\n', '\r':
+			return r
+		case 0xFFFE, 0xFFFF:
+			return -1 // Reserved Unicode noncharacters; disallowed in XML 1.0.
+		}
+		if r < 0x20 {
+			// 0x20 is space; lower code points are ASCII control characters.
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// truncateAlertDetails keeps alert payloads from bloating the JUnit artifact.
+func truncateAlertDetails(s string) string {
+	if len(s) <= junitAlertDetailsMaxBytes {
+		return s
+	}
+	const marker = "\n... (truncated) ...\n"
+	return s[:junitAlertDetailsMaxBytes-len(marker)] + marker
+}
+
 // dedupeAlerts removes duplicate alerts (e.g., repeated across retries) based
-// on kind and details while preserving the first-seen order.
+// on type and details while preserving the first-seen order.
 func dedupeAlerts(alerts []alert) []alert {
 	seen := make(map[string]struct{}, len(alerts))
 	var out []alert
 	for _, a := range alerts {
-		key := string(a.Kind) + "\n" + a.Details
+		key := string(a.Type) + "\n" + a.Details
 		if _, ok := seen[key]; ok {
 			continue
 		}
@@ -183,6 +248,9 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 		var suffix string
 		if i > 0 {
 			suffix = fmt.Sprintf(" (retry %d)", i)
+			if i == len(reports)-1 {
+				suffix += " (final)"
+			}
 			prevFailures := reports[i-1].collectTestCaseFailures()
 			currCases := report.collectTestCases()
 
@@ -220,6 +288,24 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 				if j != len(suite.Testcases)-1 && strings.HasPrefix(suite.Testcases[j+1].Name, testCase.Name+"/") {
 					// Discard test case parents since they provide no value.
 					continue
+				}
+
+				// Parse failure details from Failure.Data, if present.
+				if testCase.Failure != nil && testCase.Failure.Data != "" {
+					if details := parseFailureDetails(testCase.Failure.Data); details != noFailureDetails {
+						testCase.Failure.Data = details
+					}
+				}
+
+				// Failure.Type carries the canonical kind in merged JUnit.
+				if testCase.Failure != nil {
+					if suite.Name == alertsSuiteName {
+						if testCase.Failure.Type == "" {
+							testCase.Failure.Type = testCase.Failure.Message
+						}
+					} else {
+						testCase.Failure.Type = string(failureTypeFailed)
+					}
 				}
 				testCase.Name += suffix
 				newSuite.Testcases = append(newSuite.Testcases, testCase)

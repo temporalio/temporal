@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
@@ -109,6 +110,10 @@ func (c *ContextImpl) Clear() {
 		c.updateRegistry.Clear()
 		c.updateRegistry = nil
 	}
+}
+
+func (c *ContextImpl) GetArchetypeID() chasm.ArchetypeID {
+	return c.archetypeID
 }
 
 func (c *ContextImpl) GetWorkflowKey() definition.WorkflowKey {
@@ -242,7 +247,25 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	newMutableState historyi.MutableState,
 	newWorkflow *persistence.WorkflowSnapshot,
 	newWorkflowEvents []*persistence.WorkflowEvents,
+	transactionPolicy historyi.TransactionPolicy,
 ) (retError error) {
+
+	if transactionPolicy == historyi.TransactionPolicyActive {
+		if rl := shardContext.BusinessIDReuseRateLimiter(
+			namespace.ID(c.workflowKey.NamespaceID),
+			c.workflowKey.WorkflowID,
+			c.archetypeID,
+		); rl != nil && !rl.Allow() {
+			archetypeName, _ := shardContext.ChasmRegistry().ArchetypeDisplayName(c.archetypeID)
+			metrics.BusinessIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
+				1,
+				metrics.ResourceExhaustedCauseTag(consts.ErrBusinessIDRateLimitExceeded.Cause),
+				metrics.ResourceExhaustedScopeTag(consts.ErrBusinessIDRateLimitExceeded.Scope),
+				metrics.StringTag("archetype", archetypeName),
+			)
+			return consts.ErrBusinessIDRateLimitExceeded
+		}
+	}
 
 	defer func() {
 		if retError != nil {
@@ -535,6 +558,24 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	}()
 
 	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
+		if *newWorkflowTransactionPolicy == historyi.TransactionPolicyActive {
+			execInfo := newMutableState.GetExecutionInfo()
+			newArchetypeID := newContext.GetArchetypeID()
+			if rl := shardContext.BusinessIDReuseRateLimiter(
+				namespace.ID(execInfo.NamespaceId),
+				execInfo.WorkflowId,
+				newArchetypeID,
+			); rl != nil && !rl.Allow() {
+				archetypeName, _ := shardContext.ChasmRegistry().ArchetypeDisplayName(newArchetypeID)
+				metrics.BusinessIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
+					1,
+					metrics.ResourceExhaustedCauseTag(consts.ErrBusinessIDRateLimitExceeded.Cause),
+					metrics.ResourceExhaustedScopeTag(consts.ErrBusinessIDRateLimitExceeded.Scope),
+					metrics.StringTag("archetype", archetypeName),
+				)
+				return consts.ErrBusinessIDRateLimitExceeded
+			}
+		}
 		c.MutableState.SetSuccessorRunID(newMutableState.GetExecutionState().RunId)
 	}
 
@@ -737,7 +778,7 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 	}
 	taskUpdated := false
 
-	updateTask := func(task interface{}) bool {
+	updateTask := func(task any) bool {
 		switch t := task.(type) {
 		case *tasks.HistoryReplicationTask:
 			t.NewRunBranchToken = newRunBranchToken
@@ -886,7 +927,7 @@ func (c *ContextImpl) ReapplyEvents(
 		return err
 	}
 
-	activeCluster := namespaceEntry.ActiveClusterName(workflowID)
+	activeCluster := namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: workflowID})
 	if activeCluster == shardContext.GetClusterMetadata().GetCurrentClusterName() {
 		engine, err := shardContext.GetEngine(ctx)
 		if err != nil {
@@ -968,6 +1009,7 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 
 		c.updateRegistry = update.NewRegistry(
 			c.MutableState,
+			update.WithNamespace(nsName),
 			update.WithLogger(c.logger),
 			update.WithMetrics(c.metricsHandler),
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),
@@ -1135,9 +1177,10 @@ func (c *ContextImpl) forceTerminateWorkflow(
 
 	if !mutableState.IsWorkflow() {
 		return mutableState.ChasmTree().Terminate(chasm.TerminateComponentRequest{
-			Identity: consts.IdentityHistoryService,
-			Reason:   failureReason,
-			Details:  nil,
+			Identity:  consts.IdentityHistoryService,
+			Reason:    failureReason,
+			Details:   nil,
+			RequestID: primitives.NewUUID().String(),
 		})
 	}
 

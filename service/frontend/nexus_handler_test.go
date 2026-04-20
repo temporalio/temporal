@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -128,6 +129,8 @@ func newOperationContext(options contextOptions) *operationContext {
 		"",
 		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalPropagation
+		dynamicconfig.GetBoolPropertyFn(false),                    // disableStreamingAuthorizer
 	)
 	oc.namespaceConcurrencyLimitInterceptor = interceptor.NewConcurrentRequestLimitInterceptor(
 		nil,
@@ -143,6 +146,9 @@ func newOperationContext(options contextOptions) *operationContext {
 		nil,
 		mockRateLimiter{options.namespaceRateLimitAllow},
 		make(map[string]int),
+		map[string]struct{}{},
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		metrics.NoopMetricsHandler,
 	)
 	oc.rateLimitInterceptor = interceptor.NewRateLimitInterceptor(
 		mockRateLimiter{options.rateLimitAllow},
@@ -189,7 +195,7 @@ func TestNexusInterceptRequest_InvalidNamespaceState_ResultsInBadRequest(t *test
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerError.Type)
-	require.Equal(t, "bad request", handlerError.Cause.Error())
+	require.Equal(t, "bad request", handlerError.Message)
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
@@ -213,7 +219,7 @@ func TestNexusInterceptRequest_NamespaceConcurrencyLimited_ResultsInResourceExha
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
-	require.Equal(t, "resource exhausted", handlerError.Cause.Error())
+	require.Equal(t, "resource exhausted", handlerError.Message)
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
@@ -237,7 +243,7 @@ func TestNexusInterceptRequest_NamespaceRateLimited_ResultsInResourceExhausted(t
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
-	require.Equal(t, "namespace rate limit exceeded", handlerError.Cause.Error())
+	require.Equal(t, "namespace rate limit exceeded", handlerError.Message)
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
@@ -261,7 +267,7 @@ func TestNexusInterceptRequest_GlobalRateLimited_ResultsInResourceExhausted(t *t
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
-	require.Equal(t, "service rate limit exceeded", handlerError.Cause.Error())
+	require.Equal(t, "service rate limit exceeded", handlerError.Message)
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)

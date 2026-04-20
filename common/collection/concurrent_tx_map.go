@@ -36,7 +36,7 @@ type (
 	// of thread safe map
 	mapShard struct {
 		sync.RWMutex
-		items map[interface{}]interface{}
+		items map[any]any
 	}
 )
 
@@ -62,10 +62,10 @@ func NewShardedConcurrentTxMap(initialCap int, hashfn HashFunc) ConcurrentTxMap 
 }
 
 // Get returns the value corresponding to the key, if it exist
-func (cmap *ShardedConcurrentTxMap) Get(key interface{}) (interface{}, bool) {
+func (cmap *ShardedConcurrentTxMap) Get(key any) (any, bool) {
 	shard := cmap.getShard(key)
 	var ok bool
-	var value interface{}
+	var value any
 	shard.RLock()
 	if shard.items != nil {
 		value, ok = shard.items[key]
@@ -75,13 +75,13 @@ func (cmap *ShardedConcurrentTxMap) Get(key interface{}) (interface{}, bool) {
 }
 
 // Contains returns true if the key exist and false otherwise
-func (cmap *ShardedConcurrentTxMap) Contains(key interface{}) bool {
+func (cmap *ShardedConcurrentTxMap) Contains(key any) bool {
 	_, ok := cmap.Get(key)
 	return ok
 }
 
 // Put records the given key value mapping. Overwrites previous values
-func (cmap *ShardedConcurrentTxMap) Put(key interface{}, value interface{}) {
+func (cmap *ShardedConcurrentTxMap) Put(key any, value any) {
 	shard := cmap.getShard(key)
 	shard.Lock()
 	cmap.lazyInitShard(shard)
@@ -95,7 +95,7 @@ func (cmap *ShardedConcurrentTxMap) Put(key interface{}, value interface{}) {
 
 // PutIfNotExist records the mapping, if there is no mapping for this key already
 // Returns true if the mapping was recorded, false otherwise
-func (cmap *ShardedConcurrentTxMap) PutIfNotExist(key interface{}, value interface{}) bool {
+func (cmap *ShardedConcurrentTxMap) PutIfNotExist(key any, value any) bool {
 	shard := cmap.getShard(key)
 	var ok bool
 	shard.Lock()
@@ -110,7 +110,7 @@ func (cmap *ShardedConcurrentTxMap) PutIfNotExist(key interface{}, value interfa
 }
 
 // Remove deletes the given key from the map
-func (cmap *ShardedConcurrentTxMap) Remove(key interface{}) {
+func (cmap *ShardedConcurrentTxMap) Remove(key any) {
 	shard := cmap.getShard(key)
 	shard.Lock()
 	cmap.lazyInitShard(shard)
@@ -124,9 +124,9 @@ func (cmap *ShardedConcurrentTxMap) Remove(key interface{}) {
 
 // GetAndDo returns the value corresponding to the key, and apply fn to key value before return value
 // return (value, value exist or not, error when evaluation fn)
-func (cmap *ShardedConcurrentTxMap) GetAndDo(key interface{}, fn ActionFunc) (interface{}, bool, error) {
+func (cmap *ShardedConcurrentTxMap) GetAndDo(key any, fn ActionFunc) (any, bool, error) {
 	shard := cmap.getShard(key)
-	var value interface{}
+	var value any
 	var ok bool
 	var err error
 	shard.Lock()
@@ -142,7 +142,7 @@ func (cmap *ShardedConcurrentTxMap) GetAndDo(key interface{}, fn ActionFunc) (in
 
 // PutOrDo put the key value in the map, if key does not exists, otherwise, call fn with existing key and value
 // return (value, fn evaluated or not, error when evaluation fn)
-func (cmap *ShardedConcurrentTxMap) PutOrDo(key interface{}, value interface{}, fn ActionFunc) (interface{}, bool, error) {
+func (cmap *ShardedConcurrentTxMap) PutOrDo(key any, value any, fn ActionFunc) (any, bool, error) {
 	shard := cmap.getShard(key)
 	var err error
 	shard.Lock()
@@ -160,7 +160,7 @@ func (cmap *ShardedConcurrentTxMap) PutOrDo(key interface{}, value interface{}, 
 }
 
 // RemoveIf deletes the given key from the map if fn return true
-func (cmap *ShardedConcurrentTxMap) RemoveIf(key interface{}, fn PredicateFunc) bool {
+func (cmap *ShardedConcurrentTxMap) RemoveIf(key any, fn PredicateFunc) bool {
 	shard := cmap.getShard(key)
 	var removed bool
 	shard.Lock()
@@ -196,7 +196,7 @@ func (cmap *ShardedConcurrentTxMap) Iter() MapIterator {
 	iterator.stopCh = make(chan struct{})
 
 	go func(iterator *mapIteratorImpl) {
-		for i := 0; i < nShards; i++ {
+		for i := range nShards {
 			cmap.shards[i].RLock()
 			for k, v := range cmap.shards[i].items {
 				entry := &MapEntry{Key: k, Value: v}
@@ -221,13 +221,13 @@ func (cmap *ShardedConcurrentTxMap) Len() int {
 	return int(atomic.LoadInt32(&cmap.size))
 }
 
-func (cmap *ShardedConcurrentTxMap) getShard(key interface{}) *mapShard {
+func (cmap *ShardedConcurrentTxMap) getShard(key any) *mapShard {
 	shardIdx := cmap.hashfn(key) % nShards
 	return &cmap.shards[shardIdx]
 }
 
 func (cmap *ShardedConcurrentTxMap) lazyInitShard(shard *mapShard) {
 	if shard.items == nil {
-		shard.items = make(map[interface{}]interface{}, cmap.initialCap)
+		shard.items = make(map[any]any, cmap.initialCap)
 	}
 }

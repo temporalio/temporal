@@ -59,7 +59,7 @@ func (s *UserTimersTestSuite) TestUserTimers_Sequential() {
 		if timerCounter < timerCount {
 			timerCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, timerCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, timerCounter))
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 				Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
@@ -89,7 +89,7 @@ func (s *UserTimersTestSuite) TestUserTimers_Sequential() {
 		T:                   s.T(),
 	}
 
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		_, err := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask: completed")
 		s.NoError(err)

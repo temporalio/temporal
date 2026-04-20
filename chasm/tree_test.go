@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoassert"
@@ -47,6 +48,7 @@ type (
 		timeSource      *clock.EventTimeSource
 		nodePathEncoder NodePathEncoder
 		logger          log.Logger
+		metricsHandler  metrics.Handler
 	}
 )
 
@@ -61,6 +63,7 @@ func (s *nodeSuite) SetupTest() {
 	s.testLibrary = newTestLibrary(s.controller)
 
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+	s.metricsHandler = metrics.NoopMetricsHandler
 	s.registry = NewRegistry(s.logger)
 	err := s.registry.Register(s.testLibrary)
 	s.NoError(err)
@@ -218,12 +221,12 @@ func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 }
 
 func (s *nodeSuite) TestSetRootComponent_SetsArchetypeID() {
-	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 	s.Equal(WorkflowArchetypeID, rootNode.ArchetypeID())
 	rootComponent := &TestComponent{
 		MSPointer: NewMSPointer(s.nodeBackend),
 	}
-	rootNode.SetRootComponent(rootComponent)
+	s.NoError(rootNode.SetRootComponent(rootComponent))
 	s.Equal(testComponentTypeID, rootNode.ArchetypeID())
 	s.NotEqual(WorkflowArchetypeID, rootNode.ArchetypeID())
 }
@@ -465,7 +468,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 			SubComponentInterfacePointer: NewComponentField[Component](nil, sc1),
 			SubComponent11Pointer:        ComponentPointerTo(ctx, sc11),
 		}
-		rootNode.SetRootComponent(rootComponent)
+		s.NoError(rootNode.SetRootComponent(rootComponent))
 
 		s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.ft)
 
@@ -1009,6 +1012,61 @@ func (s *nodeSuite) TestApplyMutation() {
 	s.Len(root.taskValueCache, 1)
 }
 
+func (s *nodeSuite) TestApplyMutation_DeleteUpdateSamePath() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+					},
+				},
+			},
+		},
+		"SubComponent1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
+			},
+		},
+	}
+	root, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+
+	// First apply a mutation to delete "SubComponent1" node.
+	err = root.ApplyMutation(NodesMutation{
+		DeletedNodes: map[string]struct{}{
+			"SubComponent1": {},
+		},
+	})
+	s.NoError(err)
+	s.Empty(root.mutation.UpdatedNodes)
+	s.Len(root.mutation.DeletedNodes, 1)
+
+	// Then apply another mutation to update "SubComponent1" node.
+	// This simulates the applyMutation logic in mutable state where the logic
+	// first applies a deletion only mutation for recorded chasm node tombstones,
+	// and then applies an update only mutation for updated nodes.
+
+	mutation := NodesMutation{
+		UpdatedNodes: map[string]*persistencespb.ChasmNode{
+			"SubComponent1": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 20},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 20},
+				},
+			},
+		},
+	}
+	err = root.ApplyMutation(mutation)
+	s.NoError(err)
+	s.Len(root.mutation.UpdatedNodes, 1)
+	s.Empty(root.mutation.DeletedNodes, 1)
+
+}
+
 func (s *nodeSuite) TestApplySnapshot() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
@@ -1458,7 +1516,9 @@ func (s *nodeSuite) TestValidateAccess() {
 		name            string
 		valid           bool
 		intent          OperationIntent
-		lifecycleStatus enumspb.WorkflowExecutionStatus // TestComponent borrows the WorkflowExecutionStatus struct
+		componentStatus enumspb.WorkflowExecutionStatus // TestComponent borrows the WorkflowExecutionStatus struct
+		executionStatus enumspb.WorkflowExecutionStatus
+		executionState  enumsspb.WorkflowExecutionState
 		terminated      bool
 
 		setup func(*Node, Context) error
@@ -1467,7 +1527,9 @@ func (s *nodeSuite) TestValidateAccess() {
 			name:            "access check applies only to ancestors (terminated)",
 			valid:           true,
 			intent:          OperationIntentProgress,
-			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			componentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionState:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			terminated:      false,
 			setup: func(target *Node, ctx Context) error {
 				// Set the terminated flag on the target node instead of an ancestor
@@ -1479,7 +1541,9 @@ func (s *nodeSuite) TestValidateAccess() {
 			name:            "access check applies only to ancestors (closed)",
 			valid:           true,
 			intent:          OperationIntentProgress,
-			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			componentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionState:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			terminated:      false,
 			setup: func(target *Node, ctx Context) error {
 				if err := target.prepareComponentValue(ctx); err != nil {
@@ -1493,36 +1557,55 @@ func (s *nodeSuite) TestValidateAccess() {
 		{
 			name:            "read-only always succeeds",
 			intent:          OperationIntentObserve,
-			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			componentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			executionState:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			terminated:      true,
 			valid:           true,
 		},
 		{
 			name:            "valid write access",
 			intent:          OperationIntentProgress,
-			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			componentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionState:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			terminated:      false,
 			valid:           true,
 		},
 		{
 			name:            "invalid write access (parent closed)",
 			intent:          OperationIntentProgress,
-			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			componentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			executionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			executionState:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			terminated:      false,
 			valid:           false,
 		},
 		{
 			name:            "invalid write access (component terminated)",
 			intent:          OperationIntentProgress,
-			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			terminated:      true,
+			componentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionState:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			terminated:      true, // terminated in current transaction
+			valid:           false,
+		},
+		{
+			name:            "invalid write access (component terminated and reload)",
+			intent:          OperationIntentProgress,
+			componentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			executionState:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			terminated:      false, // terminated in previous transaction and mutable state reloaded
 			valid:           false,
 		},
 		{
 			name:            "detached node skips parent validation",
 			valid:           true,
 			intent:          OperationIntentProgress,
-			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, // root is closed
+			componentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			executionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, // root is closed
+			executionState:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			terminated:      false,
 			setup: func(target *Node, _ Context) error {
 				// Set the parent node (SubComponent1) as detached.
@@ -1550,7 +1633,7 @@ func (s *nodeSuite) TestValidateAccess() {
 			root.terminated = tc.terminated
 			component, ok := root.value.(*TestComponent)
 			if ok {
-				component.ComponentData.Status = tc.lifecycleStatus
+				component.ComponentData.Status = tc.componentStatus
 			}
 
 			// Find target node
@@ -1561,6 +1644,13 @@ func (s *nodeSuite) TestValidateAccess() {
 
 			if tc.setup != nil {
 				s.NoError(tc.setup(node, ctx))
+			}
+
+			s.nodeBackend.HandleGetExecutionState = func() *persistencespb.WorkflowExecutionState {
+				return &persistencespb.WorkflowExecutionState{
+					State:  tc.executionState,
+					Status: tc.executionStatus,
+				}
 			}
 
 			// Validation begins on the target node, checking ancestors only.
@@ -1698,7 +1788,7 @@ func (s *nodeSuite) TestGetComponent() {
 					NamespaceFailoverVersion: 1,
 					TransitionCount:          1,
 				},
-				validationFn: func(_ NodeBackend, _ Context, _ Component) error {
+				validationFn: func(_ NodeBackend, _ Context, _ Component, _ *Registry) error {
 					return errValidation
 				},
 			},
@@ -1715,7 +1805,7 @@ func (s *nodeSuite) TestGetComponent() {
 					NamespaceFailoverVersion: 1,
 					TransitionCount:          1,
 				},
-				validationFn: func(_ NodeBackend, _ Context, _ Component) error {
+				validationFn: func(_ NodeBackend, _ Context, _ Component, _ *Registry) error {
 					return nil
 				},
 			},
@@ -2205,11 +2295,11 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 	_, err = root.Component(mutableContext, ComponentRef{})
 	s.NoError(err)
 
-	s.testLibrary.mockSideEffectTaskValidator.EXPECT().
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(2)
-	s.testLibrary.mockOutboundSideEffectTaskValidator.EXPECT().
+	s.testLibrary.mockOutboundSideEffectTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
-	s.testLibrary.mockPureTaskValidator.EXPECT().
+	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(2)
 
 	mutation, err := root.CloseTransaction()
@@ -2282,7 +2372,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	s.NoError(err)
 
 	// Add a valid side effect task.
-	s.testLibrary.mockSideEffectTaskValidator.EXPECT().
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	testComponent := c.(*TestComponent)
 	mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSideEffectTask{
@@ -2291,7 +2381,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 
 	// Add an invalid outbound side effect task.
 	// the invalid task should not be created.
-	s.testLibrary.mockOutboundSideEffectTaskValidator.EXPECT().
+	s.testLibrary.mockOutboundSideEffectTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
 	mutableContext.AddTask(
 		testComponent,
@@ -2300,7 +2390,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	)
 
 	// Add a valid pure task.
-	s.testLibrary.mockPureTaskValidator.EXPECT().
+	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	mutableContext.AddTask(
 		testComponent,
@@ -2314,7 +2404,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 
 	// Add an invalid pure task.
 	// the invalid task should not be created.
-	s.testLibrary.mockPureTaskValidator.EXPECT().
+	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
 	mutableContext.AddTask(
 		testComponent,
@@ -2327,7 +2417,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	)
 
 	// Add a valid outbound side effect task to a sub-component.
-	s.testLibrary.mockOutboundSideEffectTaskValidator.EXPECT().
+	s.testLibrary.mockOutboundSideEffectTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	subComponent2 := testComponent.SubComponent2.Get(mutableContext)
 	mutableContext.AddTask(
@@ -2600,6 +2690,28 @@ func (s *nodeSuite) TestTerminate() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, s.nodeBackend.LastUpdateWorkflowStatus())
 
+	// Test updating a terminated node will NOT change the state & status in mutable state.
+	// Here we simulate mutable state reload case since the terminate flag is not persisted.
+	s.nodeBackend.HandleGetExecutionState = func() *persistencespb.WorkflowExecutionState {
+		return &persistencespb.WorkflowExecutionState{
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		}
+	}
+
+	snapshot := node.Snapshot(nil)
+	node, err = s.newTestTree(snapshot.Nodes)
+	s.NoError(err)
+
+	mutableContext := NewMutableContext(context.Background(), node)
+	_, err = node.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+
+	mutations, err = node.CloseTransaction()
+	s.NoError(err)
+	s.Len(mutations.UpdatedNodes, 1)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, s.nodeBackend.LastUpdateWorkflowStatus())
 }
 
 func (s *nodeSuite) preorderAndAssertParent(
@@ -2730,11 +2842,11 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 	)
 
 	// One valid task, one invalid task
-	s.testLibrary.mockPureTaskValidator.EXPECT().
+	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(false, nil).Times(1)
-	s.testLibrary.mockPureTaskValidator.EXPECT().
+	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(true, nil).Times(1)
-	s.testLibrary.mockPureTaskExecutor.EXPECT().
+	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Execute(
 			gomock.AssignableToTypeOf(&mutableCtx{}),
 			gomock.Any(),
@@ -2885,8 +2997,8 @@ func (s *nodeSuite) TestEachPureTask() {
 	s.NotNil(root)
 
 	processedTaskData := [][]byte{}
-	err = root.EachPureTask(now.Add(time.Minute), func(executor NodePureTask, taskAttributes TaskAttributes, task any) (bool, error) {
-		s.NotNil(executor)
+	err = root.EachPureTask(now.Add(time.Minute), func(handler NodePureTask, taskAttributes TaskAttributes, task any) (bool, error) {
+		s.NotNil(handler)
 		s.NotNil(taskAttributes)
 
 		testPureTask, ok := task.(*TestPureTask)
@@ -2956,7 +3068,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 	ctx := context.Background()
 
 	expectExecute := func(result error) {
-		s.testLibrary.mockPureTaskExecutor.EXPECT().
+		s.testLibrary.mockPureTaskHandler.EXPECT().
 			Execute(
 				gomock.AssignableToTypeOf(&mutableCtx{}),
 				gomock.AssignableToTypeOf(&TestComponent{}),
@@ -2966,7 +3078,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 	}
 
 	expectValidate := func(retValue bool, errValue error) {
-		s.testLibrary.mockPureTaskValidator.EXPECT().
+		s.testLibrary.mockPureTaskHandler.EXPECT().
 			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(retValue, errValue).Times(1)
 	}
 
@@ -3019,7 +3131,7 @@ func (s *nodeSuite) TestValidatePureTask() {
 
 	ctx := context.Background()
 	expectValidate := func(retValue bool, errValue error) {
-		s.testLibrary.mockPureTaskValidator.EXPECT().
+		s.testLibrary.mockPureTaskHandler.EXPECT().
 			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(retValue, errValue).Times(1)
 	}
 
@@ -3124,7 +3236,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	}
 	expectValidate := func(valid bool, validationErr error) {
 		backendValidtionFnCalled = false
-		s.testLibrary.mockSideEffectTaskValidator.EXPECT().Validate(
+		s.testLibrary.mockSideEffectTaskHandler.EXPECT().Validate(
 			gomock.Any(),
 			gomock.Any(),
 			gomock.Any(),
@@ -3132,7 +3244,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 		).Return(valid, validationErr).Times(1)
 	}
 	expectExecute := func(result error) {
-		s.testLibrary.mockSideEffectTaskExecutor.EXPECT().
+		s.testLibrary.mockSideEffectTaskHandler.EXPECT().
 			Execute(
 				gomock.Any(),
 				gomock.Any(),
@@ -3157,7 +3269,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	// Succeed task execution.
 	expectValidate(true, nil)
 	expectExecute(nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, executionKey, chasmTask, dummyValidationFn)
 	s.NoError(err)
 	s.True(backendValidtionFnCalled)
 	s.True(chasmTask.DeserializedTask.IsValid())
@@ -3165,7 +3277,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	// Invalid task.
 	expectValidate(false, nil)
 	expectExecute(nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, executionKey, chasmTask, dummyValidationFn)
 	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.True(chasmTask.DeserializedTask.IsValid())
@@ -3174,7 +3286,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	validationErr := errors.New("validation error")
 	expectValidate(false, validationErr)
 	expectExecute(nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, executionKey, chasmTask, dummyValidationFn)
 	s.ErrorIs(validationErr, err)
 	s.False(chasmTask.DeserializedTask.IsValid())
 
@@ -3182,10 +3294,167 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	expectValidate(true, nil)
 	executionErr := errors.New("execution error")
 	expectExecute(executionErr)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, executionKey, chasmTask, dummyValidationFn)
 	s.ErrorIs(executionErr, err)
 	s.True(backendValidtionFnCalled)
 	s.False(chasmTask.DeserializedTask.IsValid())
+}
+
+func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
+	setup := func() (*Node, *tasks.ChasmTask, ExecutionKey, context.Context, Context) {
+		persistenceNodes := map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testComponentTypeID,
+						},
+					},
+				},
+			},
+		}
+
+		root, err := s.newTestTree(persistenceNodes)
+		s.NoError(err)
+		s.NotNil(root)
+
+		workflowKey := definition.NewWorkflowKey(
+			primitives.NewUUID().String(),
+			primitives.NewUUID().String(),
+			primitives.NewUUID().String(),
+		)
+		chasmTask := &tasks.ChasmTask{
+			WorkflowKey:         workflowKey,
+			VisibilityTimestamp: s.timeSource.Now(),
+			TaskID:              123,
+			Category:            tasks.CategoryOutbound,
+			Destination:         "destination",
+			Info: &persistencespb.ChasmTaskInfo{
+				ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount: 1,
+				},
+				ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount: 1,
+				},
+				Path:   rootPath,
+				TypeId: testDiscardableSideEffectTaskTypeID,
+				Data: &commonpb.DataBlob{
+					Data:         nil,
+					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+				},
+			},
+		}
+		executionKey := ExecutionKey{
+			NamespaceID: chasmTask.NamespaceID,
+			BusinessID:  chasmTask.WorkflowID,
+			RunID:       chasmTask.RunID,
+		}
+
+		mockEngine := NewMockEngine(s.controller)
+		ctx := NewEngineContext(context.Background(), mockEngine)
+		chasmContext := NewMutableContext(ctx, root)
+
+		return root, chasmTask, executionKey, ctx, chasmContext
+	}
+
+	s.Run("Success", func() {
+		root, chasmTask, executionKey, ctx, chasmContext := setup()
+
+		var validationFnCalled bool
+		dummyValidationFn := func(_ NodeBackend, _ Context, _ Component) error {
+			validationFnCalled = true
+			return nil
+		}
+
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Validate(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(true, nil).Times(1)
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Discard(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).DoAndReturn(func(
+			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
+		) error {
+			s.NotNil(ref.validationFn)
+			_, err := root.Component(chasmContext, ref)
+			return err
+		}).Times(1)
+
+		err := root.ExecuteSideEffectDiscardTask(ctx, executionKey, chasmTask, dummyValidationFn)
+		s.NoError(err)
+		s.True(validationFnCalled)
+		s.True(chasmTask.DeserializedTask.IsValid())
+	})
+
+	s.Run("InvalidTask", func() {
+		root, chasmTask, executionKey, ctx, chasmContext := setup()
+
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Validate(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(false, nil).Times(1)
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Discard(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).DoAndReturn(func(
+			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
+		) error {
+			_, err := root.Component(chasmContext, ref)
+			return err
+		}).Times(1)
+
+		err := root.ExecuteSideEffectDiscardTask(ctx, executionKey, chasmTask, func(_ NodeBackend, _ Context, _ Component) error { return nil })
+		s.ErrorAs(err, new(*serviceerror.NotFound))
+	})
+
+	s.Run("ValidationError", func() {
+		root, chasmTask, executionKey, ctx, chasmContext := setup()
+
+		validationErr := errors.New("validation error")
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Validate(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(false, validationErr).Times(1)
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Discard(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).DoAndReturn(func(
+			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
+		) error {
+			_, err := root.Component(chasmContext, ref)
+			return err
+		}).Times(1)
+
+		err := root.ExecuteSideEffectDiscardTask(
+			ctx, executionKey, chasmTask, func(_ NodeBackend, _ Context, _ Component) error { return nil })
+		s.ErrorIs(err, validationErr)
+	})
+
+	s.Run("DiscardHandlerError", func() {
+		root, chasmTask, executionKey, ctx, chasmContext := setup()
+
+		var validationFnCalled bool
+		dummyValidationFn := func(_ NodeBackend, _ Context, _ Component) error {
+			validationFnCalled = true
+			return nil
+		}
+
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Validate(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(true, nil).Times(1)
+		discardErr := errors.New("discard error")
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Discard(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).DoAndReturn(func(
+			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
+		) error {
+			s.NotNil(ref.validationFn)
+			if _, err := root.Component(chasmContext, ref); err != nil {
+				return err
+			}
+			return discardErr
+		}).Times(1)
+
+		err := root.ExecuteSideEffectDiscardTask(ctx, executionKey, chasmTask, dummyValidationFn)
+		s.ErrorIs(err, discardErr)
+		s.True(validationFnCalled)
+	})
 }
 
 func (s *nodeSuite) TestValidateSideEffectTask() {
@@ -3224,7 +3493,7 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	ctx := NewEngineContext(context.Background(), mockEngine)
 
 	expectValidate := func(componentType any, retValue bool, errValue error) {
-		s.testLibrary.mockSideEffectTaskValidator.EXPECT().
+		s.testLibrary.mockSideEffectTaskHandler.EXPECT().
 			Validate(
 				gomock.AssignableToTypeOf((*immutableCtx)(nil)),
 				gomock.AssignableToTypeOf(componentType),
@@ -3292,11 +3561,44 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	s.True(childChasmTask.DeserializedTask.IsValid())
 }
 
+func (s *nodeSuite) TestAndAllChildren_PathIndependence() {
+	// Build a tree deep enough to trigger Go's slice capacity doubling.
+	// append grows cap: 0→1→2→4. At depth 3, the path slice has len=3, cap=4,
+	// so a 4th append reuses the backing array. If node P at depth 3 has siblings
+	// S1 and S2 at depth 4, the second sibling's append overwrites S1's path.
+	//
+	// Tree: root → A → B → C → {S1, S2}
+	root := &Node{
+		nodeName: "",
+		children: map[string]*Node{
+			"A": {nodeName: "A", children: map[string]*Node{
+				"B": {nodeName: "B", children: map[string]*Node{
+					"C": {nodeName: "C", children: map[string]*Node{
+						"S1": {nodeName: "S1", children: map[string]*Node{}},
+						"S2": {nodeName: "S2", children: map[string]*Node{}},
+					}},
+				}},
+			}},
+		},
+	}
+
+	// Store raw path slices (not copies!) so we can detect mutation.
+	collected := make(map[string][]string)
+	for path, node := range root.andAllChildren() {
+		collected[node.nodeName] = path
+	}
+
+	// Verify S1/S2 do not have a corrupted path
+	// because append reused the backing array at depth 3→4.
+	s.Equal([]string{"A", "B", "C", "S1"}, collected["S1"])
+	s.Equal([]string{"A", "B", "C", "S2"}, collected["S2"])
+}
+
 func (s *nodeSuite) newTestTree(
 	serializedNodes map[string]*persistencespb.ChasmNode,
 ) (*Node, error) {
 	if len(serializedNodes) == 0 {
-		return NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger), nil
+		return NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler), nil
 	}
-	return NewTreeFromDB(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	return NewTreeFromDB(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 }

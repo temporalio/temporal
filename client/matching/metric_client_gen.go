@@ -37,6 +37,20 @@ func (c *metricClient) CancelOutstandingPoll(
 	return c.client.CancelOutstandingPoll(ctx, request, opts...)
 }
 
+func (c *metricClient) CancelOutstandingWorkerPolls(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.CancelOutstandingWorkerPollsResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientCancelOutstandingWorkerPolls")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CancelOutstandingWorkerPolls(ctx, request, opts...)
+}
+
 func (c *metricClient) CheckTaskQueueUserDataPropagation(
 	ctx context.Context,
 	request *matchingservice.CheckTaskQueueUserDataPropagationRequest,
@@ -147,20 +161,6 @@ func (c *metricClient) DescribeWorker(
 	}()
 
 	return c.client.DescribeWorker(ctx, request, opts...)
-}
-
-func (c *metricClient) DispatchNexusTask(
-	ctx context.Context,
-	request *matchingservice.DispatchNexusTaskRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.DispatchNexusTaskResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientDispatchNexusTask")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.DispatchNexusTask(ctx, request, opts...)
 }
 
 func (c *metricClient) ForceLoadTaskQueuePartition(
@@ -301,20 +301,6 @@ func (c *metricClient) ListWorkers(
 	}()
 
 	return c.client.ListWorkers(ctx, request, opts...)
-}
-
-func (c *metricClient) PollNexusTaskQueue(
-	ctx context.Context,
-	request *matchingservice.PollNexusTaskQueueRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.PollNexusTaskQueueResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientPollNexusTaskQueue")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.PollNexusTaskQueue(ctx, request, opts...)
 }
 
 func (c *metricClient) RecordWorkerHeartbeat(

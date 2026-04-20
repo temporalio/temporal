@@ -8,7 +8,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -24,6 +23,8 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
 	versionMembershipCache worker_versioning.VersionMembershipCache,
+	reactivationSignalCache worker_versioning.ReactivationSignalCache,
+	reactivationSignaler api.VersionReactivationSignalerFn,
 ) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(signalWithStartRequest.GetNamespaceId()), signalWithStartRequest.SignalWithStartRequest.WorkflowId)
 	if err != nil {
@@ -50,15 +51,6 @@ func Invoke(
 	default:
 		return nil, err
 	}
-
-	// TODO: remove this call in 1.25
-	enums.SetDefaultWorkflowIdConflictPolicy(
-		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdConflictPolicy,
-		enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)
-
-	api.MigrateWorkflowIdReusePolicyForRunningWorkflow(
-		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdReusePolicy,
-		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdConflictPolicy)
 
 	startRequest := ConvertToStartRequest(
 		namespaceID,
@@ -91,6 +83,12 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
+
+	// Notify version workflow if we're starting a new workflow pinned to a potentially drained version
+	if started {
+		api.ReactivateVersionWorkflowIfPinned(ctx, namespaceEntry, request.GetVersioningOverride(), reactivationSignalCache, reactivationSignaler, shard.GetConfig().EnableVersionReactivationSignals())
+	}
+
 	return &historyservice.SignalWithStartWorkflowExecutionResponse{
 		RunId:   runID,
 		Started: started,

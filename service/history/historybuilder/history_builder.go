@@ -53,7 +53,7 @@ type (
 
 	TaskIDGenerator func(number int) ([]int64, error)
 
-	BufferedEventFilter func(*historypb.HistoryEvent) bool
+	BufferedEventFilter = func(*historypb.HistoryEvent) bool
 )
 
 func New(
@@ -198,6 +198,7 @@ func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	buildIdRedirectCounter int64,
 	suggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason,
+	targetWorkerDeploymentVersionChanged bool,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowTaskStartedEvent(
 		scheduledEventID,
@@ -209,6 +210,7 @@ func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
 		versioningStamp,
 		buildIdRedirectCounter,
 		suggestContinueAsNewReasons,
+		targetWorkerDeploymentVersionChanged,
 	)
 	event, _ = b.EventStore.add(event)
 	return event
@@ -317,6 +319,17 @@ func (b *HistoryBuilder) AddActivityTaskScheduledEvent(
 			metrics.NamespaceTag(ns.String()))
 	}
 
+	return event
+}
+
+func (b *HistoryBuilder) AddWorkflowExecutionTimeSkippingTransitionedEvent(
+	targetTime time.Time,
+	triggeredDisable bool,
+) *historypb.HistoryEvent {
+	event := b.CreateWorkflowExecutionTimeSkippingTransitionedEvent(targetTime, triggeredDisable)
+	event.WorkerMayIgnore = true
+	event, _ = b.add(event)
+	b.metricsHandler.Counter(metrics.ExecutionTimeSkippingTransitionedCounter.Name()).Record(1)
 	return event
 }
 
@@ -456,6 +469,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 	links []*commonpb.Link,
 	identity string,
 	priority *commonpb.Priority,
+	timeSkippingConfig *workflowpb.TimeSkippingConfig,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowExecutionOptionsUpdatedEvent(
 		worker_versioning.ConvertOverrideToV32(versioningOverride),
@@ -465,6 +479,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 		links,
 		identity,
 		priority,
+		timeSkippingConfig,
 	)
 	event, _ = b.EventStore.add(event)
 	return event

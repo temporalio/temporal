@@ -161,40 +161,44 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"GetWorkerVersioningRules":         {},
 		"GetWorkerTaskReachability":        {},
 
-		"StartBatchOperation":                   {},
-		"StopBatchOperation":                    {},
-		"DescribeBatchOperation":                {},
-		"ListBatchOperations":                   {},
-		"UpdateActivityOptions":                 {},
-		"PauseActivity":                         {},
-		"UnpauseActivity":                       {},
-		"ResetActivity":                         {},
-		"UpdateWorkflowExecutionOptions":        {},
-		"DescribeDeployment":                    {},
-		"ListDeployments":                       {},
-		"GetDeploymentReachability":             {},
-		"GetCurrentDeployment":                  {},
-		"SetCurrentDeployment":                  {},
-		"DescribeWorkerDeploymentVersion":       {},
-		"SetWorkerDeploymentCurrentVersion":     {},
-		"SetWorkerDeploymentRampingVersion":     {},
-		"SetWorkerDeploymentManager":            {},
-		"DescribeWorkerDeployment":              {},
-		"ListWorkerDeployments":                 {},
-		"DeleteWorkerDeployment":                {},
-		"DeleteWorkerDeploymentVersion":         {},
-		"UpdateWorkerDeploymentVersionMetadata": {},
-		"CreateWorkflowRule":                    {},
-		"DescribeWorkflowRule":                  {},
-		"DeleteWorkflowRule":                    {},
-		"ListWorkflowRules":                     {},
-		"TriggerWorkflowRule":                   {},
-		"RecordWorkerHeartbeat":                 {},
-		"ListWorkers":                           {},
-		"DescribeWorker":                        {},
-		"UpdateTaskQueueConfig":                 {},
-		"FetchWorkerConfig":                     {},
-		"UpdateWorkerConfig":                    {},
+		"StartBatchOperation":                          {},
+		"StopBatchOperation":                           {},
+		"DescribeBatchOperation":                       {},
+		"ListBatchOperations":                          {},
+		"UpdateActivityOptions":                        {},
+		"PauseActivity":                                {},
+		"UnpauseActivity":                              {},
+		"ResetActivity":                                {},
+		"UpdateWorkflowExecutionOptions":               {},
+		"DescribeDeployment":                           {},
+		"ListDeployments":                              {},
+		"GetDeploymentReachability":                    {},
+		"GetCurrentDeployment":                         {},
+		"SetCurrentDeployment":                         {},
+		"DescribeWorkerDeploymentVersion":              {},
+		"SetWorkerDeploymentCurrentVersion":            {},
+		"SetWorkerDeploymentRampingVersion":            {},
+		"SetWorkerDeploymentManager":                   {},
+		"DescribeWorkerDeployment":                     {},
+		"ListWorkerDeployments":                        {},
+		"CreateWorkerDeployment":                       {},
+		"DeleteWorkerDeployment":                       {},
+		"CreateWorkerDeploymentVersion":                {},
+		"UpdateWorkerDeploymentVersionComputeConfig":   {},
+		"ValidateWorkerDeploymentVersionComputeConfig": {},
+		"DeleteWorkerDeploymentVersion":                {},
+		"UpdateWorkerDeploymentVersionMetadata":        {},
+		"CreateWorkflowRule":                           {},
+		"DescribeWorkflowRule":                         {},
+		"DeleteWorkflowRule":                           {},
+		"ListWorkflowRules":                            {},
+		"TriggerWorkflowRule":                          {},
+		"RecordWorkerHeartbeat":                        {},
+		"ListWorkers":                                  {},
+		"DescribeWorker":                               {},
+		"UpdateTaskQueueConfig":                        {},
+		"FetchWorkerConfig":                            {},
+		"UpdateWorkerConfig":                           {},
 
 		"StartActivityExecution":         {},
 		"CountActivityExecutions":        {},
@@ -210,12 +214,12 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 func (s *redirectionInterceptorSuite) TestAPIResultMapping() {
 	var service workflowservice.WorkflowServiceServer
 	t := reflect.TypeOf(&service).Elem()
-	expectedAPIs := make(map[string]interface{}, t.NumMethod())
+	expectedAPIs := make(map[string]any, t.NumMethod())
 	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
 		expectedAPIs[m.Name] = m.Type.Out(0)
 	})
 
-	actualAPIs := make(map[string]interface{})
+	actualAPIs := make(map[string]any)
 	for api, respAllocFn := range localAPIResponses {
 		actualAPIs[api] = reflect.TypeOf(respAllocFn())
 	}
@@ -230,7 +234,7 @@ func (s *redirectionInterceptorSuite) TestHandleLocalAPIInvocation() {
 	ctx := context.Background()
 	req := &workflowservice.RegisterNamespaceRequest{}
 	functionInvoked := false
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		functionInvoked = true
 		return &workflowservice.RegisterNamespaceResponse{}, nil
 	}
@@ -252,7 +256,7 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_Local() {
 	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{}
 	info := &grpc.UnaryServerInfo{}
 	functionInvoked := false
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		functionInvoked = true
 		return &workflowservice.SignalWithStartWorkflowExecutionResponse{}, nil
 	}
@@ -386,7 +390,7 @@ type (
 	mockClientConnInterface struct {
 		*suite.Suite
 		targetMethod   string
-		targetResponse interface{}
+		targetResponse any
 	}
 )
 
@@ -395,8 +399,8 @@ var _ grpc.ClientConnInterface = (*mockClientConnInterface)(nil)
 func (s *mockClientConnInterface) Invoke(
 	_ context.Context,
 	method string,
-	_ interface{},
-	reply interface{},
+	_ any,
+	reply any,
 	_ ...grpc.CallOption,
 ) error {
 	s.Equal(s.targetMethod, method)
@@ -433,7 +437,7 @@ func (s *redirectionInterceptorSuite) TestHandleLocalAPIInvocation_NoRedirection
 
 	ctx := context.Background()
 	req := &workflowservice.RegisterNamespaceRequest{}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		return &workflowservice.RegisterNamespaceResponse{}, nil
 	}
 	methodName := "RegisterNamespace"
@@ -469,7 +473,7 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_LocalRouting
 	ctx := context.Background()
 	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{}
 	info := &grpc.UnaryServerInfo{}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		return &workflowservice.SignalWithStartWorkflowExecutionResponse{}, nil
 	}
 	namespaceName := namespace.Name("test-namespace")
@@ -586,7 +590,7 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_LocalRouting
 	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{}
 	info := &grpc.UnaryServerInfo{}
 	expectedError := serviceerror.NewInternal("local processing error")
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		return nil, expectedError
 	}
 	namespaceName := namespace.Name("test-namespace")

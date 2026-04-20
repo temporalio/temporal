@@ -189,6 +189,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		gomock.Any(),
 		gomock.Any(),
 		[]*persistence.WorkflowEvents{},
+		gomock.Any(),
 	).Return(nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{Name: namespaceName},
@@ -307,6 +308,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 		gomock.Any(),
 		gomock.Any(),
 		[]*persistence.WorkflowEvents{},
+		gomock.Any(),
 	).Return(nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{Name: namespaceName},
@@ -580,7 +582,7 @@ type VersionedTransitionMatcher struct {
 }
 
 // Matches implements gomock.Matcher
-func (m *VersionedTransitionMatcher) Matches(x interface{}) bool {
+func (m *VersionedTransitionMatcher) Matches(x any) bool {
 	// Type assertion to ensure the argument is of the correct type
 	got, ok := x.(*persistencespb.VersionedTransition)
 	if !ok {
@@ -1044,7 +1046,7 @@ type historyEventMatcher struct {
 	expected *historypb.HistoryEvent
 }
 
-func (m *historyEventMatcher) Matches(x interface{}) bool {
+func (m *historyEventMatcher) Matches(x any) bool {
 	evt, ok := x.(*historypb.HistoryEvent)
 	return ok && proto.Equal(evt, m.expected)
 }

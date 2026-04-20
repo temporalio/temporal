@@ -88,6 +88,7 @@ func LoadSchema(t *testing.T, db sqlplugin.AdminDB, schemaFile string) {
 }
 
 func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
@@ -121,6 +122,7 @@ func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
 }
 
 func TestSQLiteExecutionMutableStateTaskStoreSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
@@ -154,6 +156,7 @@ func TestSQLiteExecutionMutableStateTaskStoreSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryStoreSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
@@ -177,6 +180,7 @@ func TestSQLiteHistoryStoreSuite(t *testing.T) {
 }
 
 func TestSQLiteTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
@@ -200,6 +204,7 @@ func TestSQLiteTaskQueueSuite(t *testing.T) {
 }
 
 func TestSQLiteFairTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
@@ -223,6 +228,7 @@ func TestSQLiteFairTaskQueueSuite(t *testing.T) {
 }
 
 func TestSQLiteTaskQueueTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
@@ -246,6 +252,7 @@ func TestSQLiteTaskQueueTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteTaskQueueFairTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
@@ -269,6 +276,7 @@ func TestSQLiteTaskQueueFairTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteTaskQueueUserDataSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
@@ -292,6 +300,7 @@ func TestSQLiteTaskQueueUserDataSuite(t *testing.T) {
 }
 
 func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	defer func() {
@@ -329,6 +338,7 @@ func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
 }
 
 func TestSQLiteFileExecutionMutableStateTaskStoreSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	defer func() {
@@ -366,6 +376,7 @@ func TestSQLiteFileExecutionMutableStateTaskStoreSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryStoreSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	defer func() {
@@ -393,6 +404,7 @@ func TestSQLiteFileHistoryStoreSuite(t *testing.T) {
 }
 
 func TestSQLiteFileTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	defer func() {
@@ -420,6 +432,7 @@ func TestSQLiteFileTaskQueueSuite(t *testing.T) {
 }
 
 func TestSQLiteFileFairTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	defer func() {
@@ -447,6 +460,7 @@ func TestSQLiteFileFairTaskQueueSuite(t *testing.T) {
 }
 
 func TestSQLiteFileTaskQueueTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	defer func() {
@@ -474,6 +488,7 @@ func TestSQLiteFileTaskQueueTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteFileTaskQueueFairTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	defer func() {
@@ -501,6 +516,7 @@ func TestSQLiteFileTaskQueueFairTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteFileTaskQueueUserDataSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	defer func() {
@@ -530,12 +546,14 @@ func TestSQLiteFileTaskQueueUserDataSuite(t *testing.T) {
 // TODO: Merge persistence-tests into the tests directory.
 
 func TestSQLiteVisibilityPersistenceSuite(t *testing.T) {
+	t.Parallel()
 	s := new(VisibilityPersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
 	suite.Run(t, s)
 }
 
 func TestSQLiteHistoryV2PersistenceSuite(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
 	s.TestBase.Setup(nil)
@@ -543,6 +561,7 @@ func TestSQLiteHistoryV2PersistenceSuite(t *testing.T) {
 }
 
 func TestSQLiteMetadataPersistenceSuiteV2(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
 	s.TestBase.Setup(nil)
@@ -550,6 +569,7 @@ func TestSQLiteMetadataPersistenceSuiteV2(t *testing.T) {
 }
 
 func TestSQLiteClusterMetadataPersistence(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.ClusterMetadataManagerSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
 	s.TestBase.Setup(nil)
@@ -557,6 +577,7 @@ func TestSQLiteClusterMetadataPersistence(t *testing.T) {
 }
 
 func TestSQLiteQueuePersistence(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.QueuePersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
 	s.TestBase.Setup(nil)
@@ -564,6 +585,7 @@ func TestSQLiteQueuePersistence(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryV2PersistenceSuite(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
 	s.TestBase.Setup(nil)
@@ -571,6 +593,7 @@ func TestSQLiteFileHistoryV2PersistenceSuite(t *testing.T) {
 }
 
 func TestSQLiteFileMetadataPersistenceSuiteV2(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
 	s.TestBase.Setup(nil)
@@ -578,6 +601,7 @@ func TestSQLiteFileMetadataPersistenceSuiteV2(t *testing.T) {
 }
 
 func TestSQLiteFileClusterMetadataPersistence(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.ClusterMetadataManagerSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
 	s.TestBase.Setup(nil)
@@ -585,6 +609,7 @@ func TestSQLiteFileClusterMetadataPersistence(t *testing.T) {
 }
 
 func TestSQLiteFileQueuePersistence(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.QueuePersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
 	s.TestBase.Setup(nil)
@@ -594,6 +619,7 @@ func TestSQLiteFileQueuePersistence(t *testing.T) {
 // SQL store tests
 
 func TestSQLiteNamespaceSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -608,6 +634,7 @@ func TestSQLiteNamespaceSuite(t *testing.T) {
 }
 
 func TestSQLiteQueueMessageSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -622,6 +649,7 @@ func TestSQLiteQueueMessageSuite(t *testing.T) {
 }
 
 func TestSQLiteQueueMetadataSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -636,6 +664,7 @@ func TestSQLiteQueueMetadataSuite(t *testing.T) {
 }
 
 func TestSQLiteMatchingTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -650,6 +679,7 @@ func TestSQLiteMatchingTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteMatchingTaskV2Suite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -664,6 +694,7 @@ func TestSQLiteMatchingTaskV2Suite(t *testing.T) {
 }
 
 func TestSQLiteMatchingTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -678,6 +709,7 @@ func TestSQLiteMatchingTaskQueueSuite(t *testing.T) {
 }
 
 func TestSQLiteMatchingTaskQueueV2Suite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -692,6 +724,7 @@ func TestSQLiteMatchingTaskQueueV2Suite(t *testing.T) {
 }
 
 func TestSQLiteHistoryShardSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -706,6 +739,7 @@ func TestSQLiteHistoryShardSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryNodeSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -720,6 +754,7 @@ func TestSQLiteHistoryNodeSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryTreeSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -734,6 +769,7 @@ func TestSQLiteHistoryTreeSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryCurrentExecutionSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -748,6 +784,7 @@ func TestSQLiteHistoryCurrentExecutionSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryCurrentChasmExecutionSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -762,6 +799,7 @@ func TestSQLiteHistoryCurrentChasmExecutionSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryExecutionSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -776,6 +814,7 @@ func TestSQLiteHistoryExecutionSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryTransferTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -790,6 +829,7 @@ func TestSQLiteHistoryTransferTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryTimerTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -804,6 +844,7 @@ func TestSQLiteHistoryTimerTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryReplicationTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -818,6 +859,7 @@ func TestSQLiteHistoryReplicationTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryVisibilityTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -832,6 +874,7 @@ func TestSQLiteHistoryVisibilityTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryReplicationDLQTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -846,6 +889,7 @@ func TestSQLiteHistoryReplicationDLQTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryExecutionBufferSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -860,6 +904,7 @@ func TestSQLiteHistoryExecutionBufferSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryExecutionActivitySuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -874,6 +919,7 @@ func TestSQLiteHistoryExecutionActivitySuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryExecutionChildWorkflowSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -888,6 +934,7 @@ func TestSQLiteHistoryExecutionChildWorkflowSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryExecutionTimerSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -902,6 +949,7 @@ func TestSQLiteHistoryExecutionTimerSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryExecutionChasmSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -916,6 +964,7 @@ func TestSQLiteHistoryExecutionChasmSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryExecutionRequestCancelSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -930,6 +979,7 @@ func TestSQLiteHistoryExecutionRequestCancelSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryExecutionSignalSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -944,6 +994,7 @@ func TestSQLiteHistoryExecutionSignalSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryExecutionSignalRequestSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -958,6 +1009,7 @@ func TestSQLiteHistoryExecutionSignalRequestSuite(t *testing.T) {
 }
 
 func TestSQLiteVisibilitySuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	store, err := sql.NewSQLDB(sqlplugin.DbKindVisibility, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
@@ -972,6 +1024,7 @@ func TestSQLiteVisibilitySuite(t *testing.T) {
 }
 
 func TestSQLiteFileNamespaceSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -987,6 +1040,7 @@ func TestSQLiteFileNamespaceSuite(t *testing.T) {
 }
 
 func TestSQLiteFileQueueMessageSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1002,6 +1056,7 @@ func TestSQLiteFileQueueMessageSuite(t *testing.T) {
 }
 
 func TestSQLiteFileQueueMetadataSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1017,6 +1072,7 @@ func TestSQLiteFileQueueMetadataSuite(t *testing.T) {
 }
 
 func TestSQLiteFileMatchingTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1032,6 +1088,7 @@ func TestSQLiteFileMatchingTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteFileMatchingTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1047,6 +1104,7 @@ func TestSQLiteFileMatchingTaskQueueSuite(t *testing.T) {
 }
 
 func TestSQLiteFileMatchingTaskQueueV2Suite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1062,6 +1120,7 @@ func TestSQLiteFileMatchingTaskQueueV2Suite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryShardSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1077,6 +1136,7 @@ func TestSQLiteFileHistoryShardSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryNodeSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1092,6 +1152,7 @@ func TestSQLiteFileHistoryNodeSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryTreeSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1107,6 +1168,7 @@ func TestSQLiteFileHistoryTreeSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryCurrentExecutionSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1122,6 +1184,7 @@ func TestSQLiteFileHistoryCurrentExecutionSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryCurrentChasmExecutionSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1137,6 +1200,7 @@ func TestSQLiteFileHistoryCurrentChasmExecutionSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryExecutionSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1152,6 +1216,7 @@ func TestSQLiteFileHistoryExecutionSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryTransferTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1167,6 +1232,7 @@ func TestSQLiteFileHistoryTransferTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryTimerTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1182,6 +1248,7 @@ func TestSQLiteFileHistoryTimerTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryReplicationTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1197,6 +1264,7 @@ func TestSQLiteFileHistoryReplicationTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryVisibilityTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1212,6 +1280,7 @@ func TestSQLiteFileHistoryVisibilityTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryReplicationDLQTaskSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1227,6 +1296,7 @@ func TestSQLiteFileHistoryReplicationDLQTaskSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryExecutionBufferSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1242,6 +1312,7 @@ func TestSQLiteFileHistoryExecutionBufferSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryExecutionActivitySuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1257,6 +1328,7 @@ func TestSQLiteFileHistoryExecutionActivitySuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryExecutionChildWorkflowSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1272,6 +1344,7 @@ func TestSQLiteFileHistoryExecutionChildWorkflowSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryExecutionTimerSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1287,6 +1360,7 @@ func TestSQLiteFileHistoryExecutionTimerSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryExecutionChasmSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1302,6 +1376,7 @@ func TestSQLiteFileHistoryExecutionChasmSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryExecutionRequestCancelSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1317,6 +1392,7 @@ func TestSQLiteFileHistoryExecutionRequestCancelSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryExecutionSignalSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1332,6 +1408,7 @@ func TestSQLiteFileHistoryExecutionSignalSuite(t *testing.T) {
 }
 
 func TestSQLiteFileHistoryExecutionSignalRequestSuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1347,6 +1424,7 @@ func TestSQLiteFileHistoryExecutionSignalRequestSuite(t *testing.T) {
 }
 
 func TestSQLiteFileVisibilitySuite(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindVisibility, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
@@ -1362,6 +1440,7 @@ func TestSQLiteFileVisibilitySuite(t *testing.T) {
 }
 
 func TestSQLiteQueueV2(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	logger := log.NewNoopLogger()
@@ -1381,6 +1460,7 @@ func TestSQLiteQueueV2(t *testing.T) {
 }
 
 func TestSQLiteNexusEndpointPersistence(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
 	logger := log.NewNoopLogger()
@@ -1403,6 +1483,7 @@ func TestSQLiteNexusEndpointPersistence(t *testing.T) {
 // connection to the sqlite database, we will lose the db in this case. We fixed this by extending the driver in
 // modernc.org/sqlite. This test verifies that fix.
 func TestSQLiteTransactionContextCancellation(t *testing.T) {
+	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
 	db, err := sql.NewSQLDB(sqlplugin.DbKindVisibility, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {

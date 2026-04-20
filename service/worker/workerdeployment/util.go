@@ -8,6 +8,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -30,6 +31,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	update2 "go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -44,7 +46,10 @@ const (
 	RegisterWorkerInDeploymentVersion = "register-task-queue-worker"    // for Worker Deployment Version wf
 	SyncVersionState                  = "sync-version-state"            // for Worker Deployment Version wfs
 	UpdateVersionMetadata             = "update-version-metadata"       // for Worker Deployment Version wfs
+	UpdateVersionComputeConfig        = "update-version-compute-config" // for Worker Deployment Version wfs
 	RegisterWorkerInWorkerDeployment  = "register-worker-in-deployment" // for Worker Deployment wfs
+	CreateWorkerDeployment            = "create-deployment"             // for Worker Deployment wfs
+	CreateWorkerDeploymentVersion     = "create-deployment-version"     // for Worker Deployment wfs
 	SetCurrentVersion                 = "set-current-version"           // for Worker Deployment wfs
 	SetRampingVersion                 = "set-ramping-version"           // for Worker Deployment wfs
 	DeleteVersion                     = "delete-version"                // for WorkerDeployment wfs
@@ -54,15 +59,17 @@ const (
 	// of a version exceeds the max number of versions allowed in a worker-deployment (defaultMaxVersions)
 
 	// Signals
-	ForceCANSignalName        = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
-	SyncDrainageSignalName    = "sync-drainage-status"
-	TerminateDrainageSignal   = "terminate-drainage"
-	SyncVersionSummarySignal  = "sync-version-summary"
-	PropagationCompleteSignal = "propagation-complete"
+	ForceCANSignalName          = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
+	SyncDrainageSignalName      = "sync-drainage-status"
+	TerminateDrainageSignal     = "terminate-drainage"
+	SyncVersionSummarySignal    = "sync-version-summary"
+	PropagationCompleteSignal   = "propagation-complete"
+	ReactivateVersionSignalName = "reactivate-version" // for Worker Deployment Version wfs
 
 	// Queries
 	QueryDescribeVersion    = "describe-version"    // for Worker Deployment Version wf
 	QueryDescribeDeployment = "describe-deployment" // for Worker Deployment wf
+	QueryCreateRequestID    = "create-request-id"   // for Worker Deployment wf
 
 	// Memos
 	WorkerDeploymentMemoField = "WorkerDeploymentMemo" // for Worker Deployment wf
@@ -74,13 +81,16 @@ const (
 	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
 	errVersionNotFound            = "Version not found in deployment"
-	errDeploymentDeleted          = "worker deployment deleted"         // returned in the race condition that the deployment is deleted but the workflow is not yet closed.
+	errDeploymentDeleted          = "worker deployment deleted"        // returned in the race condition that the deployment is deleted but the workflow is not yet closed.
+	errDeploymentAlreadyExists    = "worker deployment already exists" // returned in the race condition that the deployment exists with a different request ID.
+	errVersionAlreadyExists       = "worker deployment version already exists"
 	errVersionDeleted             = "worker deployment version deleted" // returned in the race condition that the deployment version is deleted but the workflow is not yet closed.
 	errLongHistory                = "errLongHistory"                    // update is not accepted until CaN happens. client should retry
 	errVersionIsDraining          = "errVersionIsDraining"
 	errVersionHasPollers          = "errVersionHasPollersSuffix"
 
-	errFailedPrecondition = "FailedPrecondition"
+	errFailedPrecondition   = "FailedPrecondition"
+	errInvalidComputeConfig = "errInvalidComputeConfig"
 
 	ErrVersionIsDraining         = "version '%s' cannot be deleted since it is draining"
 	ErrVersionHasPollers         = "version '%s' cannot be deleted since it has active pollers"
@@ -92,6 +102,10 @@ const (
 	ErrWorkerDeploymentNotFound               = "no Worker Deployment found with name '%s'; does your Worker Deployment have pollers?"
 	ErrWorkerDeploymentVersionNotFound        = "build ID '%s' not found in Worker Deployment '%s'"
 	ErrTooManyRequests                        = "too many requests issued to Worker Deployment '%s'. Please try again later"
+	ErrWorkerDeploymentAlreadyExists          = "Worker Deployment with name %q already exists"
+	ErrWorkerDeploymentVersionAlreadyExists   = "Worker Deployment Version %q already exists"
+
+	AutoCreateRequestIDPrefix = "_auto_create_"
 )
 
 var (
@@ -129,15 +143,15 @@ func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit in
 	return worker_versioning.ValidateDeploymentVersionFields(fieldName, field, maxIDLengthLimit)
 }
 
+func GetDeploymentNameFromWorkflowID(workflowID string) string {
+	_, deploymentName, _ := strings.Cut(workflowID, worker_versioning.WorkerDeploymentVersionDelimiter)
+	return deploymentName
+}
+
 // GenerateDeploymentWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our Worker Deployment workflows
 func GenerateDeploymentWorkflowID(deploymentName string) string {
 	return worker_versioning.WorkerDeploymentWorkflowIDPrefix + worker_versioning.WorkerDeploymentVersionDelimiter + deploymentName
-}
-
-func GetDeploymentNameFromWorkflowID(workflowID string) string {
-	_, deploymentName, _ := strings.Cut(workflowID, worker_versioning.WorkerDeploymentVersionDelimiter)
-	return deploymentName
 }
 
 // GenerateVersionWorkflowID is a helper that generates a system accepted
@@ -163,7 +177,7 @@ func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) (*deploymentspb.WorkerDeplo
 }
 
 func getSafeDurationConfig(ctx workflow.Context, id string, unsafeGetter func() time.Duration, defaultValue time.Duration) (time.Duration, error) {
-	get := func(_ workflow.Context) interface{} {
+	get := func(_ workflow.Context) any {
 		return unsafeGetter()
 	}
 	var value time.Duration
@@ -424,4 +438,31 @@ func buildSearchAttributes() *commonpb.SearchAttributes {
 	sa := &commonpb.SearchAttributes{}
 	searchattribute.AddSearchAttribute(&sa, sadefs.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentNamespaceDivision))
 	return sa
+}
+
+func makeNewVersionState(
+	deploymentName, buildID string,
+	createTime time.Time,
+	identity string,
+	initialStatus enumspb.WorkerDeploymentVersionStatus,
+	computeConfig *computepb.ComputeConfigSummary,
+	syncBatchSize int32,
+) *deploymentspb.VersionLocalState {
+	return &deploymentspb.VersionLocalState{
+		Version: &deploymentspb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        buildID,
+		},
+		CreateTime:           timestamppb.New(createTime),
+		Status:               initialStatus,
+		RoutingUpdateTime:    nil,
+		CurrentSinceTime:     nil,                                 // not current
+		RampingSinceTime:     nil,                                 // not ramping
+		RampPercentage:       0,                                   // not ramping
+		DrainageInfo:         &deploymentpb.VersionDrainageInfo{}, // not draining or drained
+		Metadata:             nil,
+		SyncBatchSize:        syncBatchSize,
+		LastModifierIdentity: identity,
+		ComputeConfig:        computeConfig,
+	}
 }

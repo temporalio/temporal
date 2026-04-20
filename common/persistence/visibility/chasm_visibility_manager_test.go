@@ -9,14 +9,19 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	chasmspb "go.temporal.io/server/api/chasm/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -26,6 +31,7 @@ type (
 		controller *gomock.Controller
 
 		registry          *chasm.Registry
+		nsRegistry        *namespace.MockRegistry
 		visibilityManager *manager.MockVisibilityManager
 		visibilityMgr     *ChasmVisibilityManager
 	}
@@ -85,6 +91,8 @@ func (s *ChasmVisibilityManagerSuite) SetupTest() {
 		),
 	}).AnyTimes()
 	library.EXPECT().Tasks().Return(nil).AnyTimes()
+	library.EXPECT().NexusServices().Return(nil).AnyTimes()
+	library.EXPECT().NexusServiceProcessors().Return(nil).AnyTimes()
 
 	s.registry = chasm.NewRegistry(log.NewNoopLogger())
 	err := s.registry.Register(library)
@@ -92,8 +100,12 @@ func (s *ChasmVisibilityManagerSuite) SetupTest() {
 
 	s.visibilityManager = manager.NewMockVisibilityManager(s.controller)
 
+	s.nsRegistry = namespace.NewMockRegistry(s.controller)
+	s.nsRegistry.EXPECT().GetNamespaceID(testChasmNamespace).Return(testChasmNamespaceID, nil).AnyTimes()
+
 	s.visibilityMgr = NewChasmVisibilityManager(
 		s.registry,
+		s.nsRegistry,
 		s.visibilityManager,
 	)
 }
@@ -136,33 +148,37 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_Success() {
 	s.True(ok)
 
 	// Create chasm search attributes map
-	chasmSearchAttributes := chasm.NewSearchAttributesMap(map[string]chasm.VisibilityValue{
-		testChasmSA1Name: chasm.VisibilityValueInt64(123),
-		testChasmSA2Name: chasm.VisibilityValueString("test-value"),
-	})
+	chasmSearchAttributes := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			testChasmSA1Name: sadefs.MustEncodeValue(int64(123), enumspb.INDEXED_VALUE_TYPE_INT),
+			testChasmSA2Name: sadefs.MustEncodeValue("test-value", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+		},
+	}
 
 	// Create custom search attributes map
-	customSearchAttributes := map[string]*commonpb.Payload{
-		testCustomSAName: customSAPayload,
+	customSearchAttributes := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			testCustomSAName: customSAPayload,
+		},
 	}
 
 	// Setup visibility manager mock
-	expectedRequest := &manager.ListChasmExecutionsRequest{
-		ArchetypeID:   archetypeID,
-		NamespaceID:   testChasmNamespaceID,
-		Namespace:     testChasmNamespace,
-		PageSize:      pageSize,
+	expectedRequest := &visibilityservice.ListChasmExecutionsRequest{
+		ArchetypeId:   archetypeID,
+		NamespaceId:   testChasmNamespaceID.String(),
+		Namespace:     testChasmNamespace.String(),
+		PageSize:      int32(pageSize),
 		NextPageToken: pageToken,
 		Query:         query,
 	}
 
-	expectedResponse := &chasm.ListExecutionsResponse[*commonpb.Payload]{
-		Executions: []*chasm.ExecutionInfo[*commonpb.Payload]{
+	expectedResponse := &visibilityservice.ListChasmExecutionsResponse{
+		Executions: []*chasmspb.VisibilityExecutionInfo{
 			{
-				BusinessID:             testBusinessID,
-				RunID:                  testRunID,
-				StartTime:              testComponentStartTime,
-				CloseTime:              testComponentCloseTime,
+				BusinessId:             testBusinessID,
+				RunId:                  testRunID,
+				StartTime:              timestamppb.New(testComponentStartTime),
+				CloseTime:              timestamppb.New(testComponentCloseTime),
 				HistoryLength:          100,
 				HistorySizeBytes:       5000,
 				StateTransitionCount:   42,
@@ -177,9 +193,12 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_Success() {
 
 	s.visibilityManager.EXPECT().
 		ListChasmExecutions(ctx, gomock.Any()).
-		DoAndReturn(func(_ context.Context, req *manager.ListChasmExecutionsRequest) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
-			s.Equal(expectedRequest.ArchetypeID, req.ArchetypeID)
-			s.Equal(expectedRequest.NamespaceID, req.NamespaceID)
+		DoAndReturn(func(
+			_ context.Context,
+			req *visibilityservice.ListChasmExecutionsRequest,
+		) (*visibilityservice.ListChasmExecutionsResponse, error) {
+			s.Equal(expectedRequest.ArchetypeId, req.ArchetypeId)
+			s.Equal(expectedRequest.NamespaceId, req.NamespaceId)
 			s.Equal(expectedRequest.Namespace, req.Namespace)
 			s.Equal(expectedRequest.PageSize, req.PageSize)
 			s.Equal(expectedRequest.NextPageToken, req.NextPageToken)
@@ -189,7 +208,6 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_Success() {
 
 	// Call ListExecutions
 	request := &chasm.ListExecutionsRequest{
-		NamespaceID:   string(testChasmNamespaceID),
 		NamespaceName: string(testChasmNamespace),
 		Query:         query,
 		PageSize:      pageSize,
@@ -209,10 +227,10 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_Success() {
 	s.Equal([]byte("next-token"), response.NextPageToken)
 
 	execution := response.Executions[0]
-	s.Equal(testBusinessID, execution.BusinessID)
-	s.Equal(testRunID, execution.RunID)
-	s.Equal(testComponentStartTime, execution.StartTime)
-	s.Equal(testComponentCloseTime, execution.CloseTime)
+	s.Equal(testBusinessID, execution.BusinessId)
+	s.Equal(testRunID, execution.RunId)
+	s.Equal(testComponentStartTime, execution.StartTime.AsTime())
+	s.Equal(testComponentCloseTime, execution.CloseTime.AsTime())
 	s.Equal(int64(100), execution.HistoryLength)
 	s.Equal(int64(5000), execution.HistorySizeBytes)
 	s.Equal(int64(42), execution.StateTransitionCount)
@@ -244,22 +262,25 @@ func (s *ChasmVisibilityManagerSuite) TestCountExecutions_Success() {
 	expectedCount := int64(42)
 
 	// Setup visibility manager mock
-	expectedRequest := &manager.CountChasmExecutionsRequest{
-		ArchetypeID: archetypeID,
-		NamespaceID: testChasmNamespaceID,
-		Namespace:   testChasmNamespace,
+	expectedRequest := &visibilityservice.CountChasmExecutionsRequest{
+		ArchetypeId: archetypeID,
+		NamespaceId: testChasmNamespaceID.String(),
+		Namespace:   testChasmNamespace.String(),
 		Query:       query,
 	}
 
-	expectedResponse := &chasm.CountExecutionsResponse{
+	expectedResponse := &visibilityservice.CountChasmExecutionsResponse{
 		Count: expectedCount,
 	}
 
 	s.visibilityManager.EXPECT().
 		CountChasmExecutions(ctx, gomock.Any()).
-		DoAndReturn(func(_ context.Context, req *manager.CountChasmExecutionsRequest) (*chasm.CountExecutionsResponse, error) {
-			s.Equal(expectedRequest.ArchetypeID, req.ArchetypeID)
-			s.Equal(expectedRequest.NamespaceID, req.NamespaceID)
+		DoAndReturn(func(
+			_ context.Context,
+			req *visibilityservice.CountChasmExecutionsRequest,
+		) (*visibilityservice.CountChasmExecutionsResponse, error) {
+			s.Equal(expectedRequest.ArchetypeId, req.ArchetypeId)
+			s.Equal(expectedRequest.NamespaceId, req.NamespaceId)
 			s.Equal(expectedRequest.Namespace, req.Namespace)
 			s.Equal(expectedRequest.Query, req.Query)
 			return expectedResponse, nil
@@ -267,7 +288,6 @@ func (s *ChasmVisibilityManagerSuite) TestCountExecutions_Success() {
 
 	// Call CountExecutions
 	request := &chasm.CountExecutionsRequest{
-		NamespaceID:   string(testChasmNamespaceID),
 		NamespaceName: string(testChasmNamespace),
 		Query:         query,
 	}
@@ -291,7 +311,6 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_InvalidArchetypeType() 
 	invalidType := reflect.TypeFor[struct{ Field string }]()
 
 	request := &chasm.ListExecutionsRequest{
-		NamespaceID:   string(testChasmNamespaceID),
 		NamespaceName: string(testChasmNamespace),
 		Query:         "StartTime > '2024-01-01T00:00:00Z'",
 	}
@@ -313,7 +332,6 @@ func (s *ChasmVisibilityManagerSuite) TestCountExecutions_InvalidArchetypeType()
 	invalidType := reflect.TypeFor[struct{ Field string }]()
 
 	request := &chasm.CountExecutionsRequest{
-		NamespaceID:   string(testChasmNamespaceID),
 		NamespaceName: string(testChasmNamespace),
 		Query:         "StartTime > '2024-01-01T00:00:00Z'",
 	}
@@ -340,13 +358,15 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_VisibilityManagerError(
 	// Setup visibility manager mock to return an error
 	s.visibilityManager.EXPECT().
 		ListChasmExecutions(ctx, gomock.Any()).
-		DoAndReturn(func(_ context.Context, req *manager.ListChasmExecutionsRequest) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
-			s.Equal(archetypeID, req.ArchetypeID)
+		DoAndReturn(func(
+			_ context.Context,
+			req *visibilityservice.ListChasmExecutionsRequest,
+		) (*visibilityservice.ListChasmExecutionsResponse, error) {
+			s.Equal(archetypeID, req.ArchetypeId)
 			return nil, errTestVisibilityError
 		})
 
 	request := &chasm.ListExecutionsRequest{
-		NamespaceID:   string(testChasmNamespaceID),
 		NamespaceName: string(testChasmNamespace),
 		Query:         query,
 	}
@@ -374,13 +394,15 @@ func (s *ChasmVisibilityManagerSuite) TestCountExecutions_VisibilityManagerError
 	// Setup visibility manager mock to return an error
 	s.visibilityManager.EXPECT().
 		CountChasmExecutions(ctx, gomock.Any()).
-		DoAndReturn(func(_ context.Context, req *manager.CountChasmExecutionsRequest) (*chasm.CountExecutionsResponse, error) {
-			s.Equal(archetypeID, req.ArchetypeID)
+		DoAndReturn(func(
+			_ context.Context,
+			req *visibilityservice.CountChasmExecutionsRequest,
+		) (*visibilityservice.CountChasmExecutionsResponse, error) {
+			s.Equal(archetypeID, req.ArchetypeId)
 			return nil, errTestVisibilityError
 		})
 
 	request := &chasm.CountExecutionsRequest{
-		NamespaceID:   string(testChasmNamespaceID),
 		NamespaceName: string(testChasmNamespace),
 		Query:         query,
 	}
@@ -421,13 +443,17 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_WithTaskQueueSearchAttr
 		),
 	}).AnyTimes()
 	library.EXPECT().Tasks().Return(nil).AnyTimes()
+	library.EXPECT().NexusServices().Return(nil).AnyTimes()
+	library.EXPECT().NexusServiceProcessors().Return(nil).AnyTimes()
 
 	registry := chasm.NewRegistry(log.NewNoopLogger())
 	err := registry.Register(library)
 	s.NoError(err)
 
 	visibilityMgr := manager.NewMockVisibilityManager(ctrl)
-	chasmVisMgr := NewChasmVisibilityManager(registry, visibilityMgr)
+	nsRegistry := namespace.NewMockRegistry(ctrl)
+	nsRegistry.EXPECT().GetNamespaceID(testChasmNamespace).Return(testChasmNamespaceID, nil).AnyTimes()
+	chasmVisMgr := NewChasmVisibilityManager(registry, nsRegistry, visibilityMgr)
 
 	ctx := context.Background()
 	query := "TaskQueue = 'my-task-queue'"
@@ -437,17 +463,19 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_WithTaskQueueSearchAttr
 	s.True(ok)
 
 	expectedTaskQueue := "my-task-queue"
-	chasmSearchAttributes := chasm.NewSearchAttributesMap(map[string]chasm.VisibilityValue{
-		"TaskQueue": chasm.VisibilityValueString(expectedTaskQueue),
-	})
+	chasmSearchAttributes := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			sadefs.TaskQueue: sadefs.MustEncodeValue(expectedTaskQueue, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+		},
+	}
 
-	expectedResponse := &chasm.ListExecutionsResponse[*commonpb.Payload]{
-		Executions: []*chasm.ExecutionInfo[*commonpb.Payload]{
+	expectedResponse := &visibilityservice.ListChasmExecutionsResponse{
+		Executions: []*chasmspb.VisibilityExecutionInfo{
 			{
-				BusinessID:            testBusinessID,
-				RunID:                 testRunID,
-				StartTime:             testComponentStartTime,
-				CloseTime:             testComponentCloseTime,
+				BusinessId:            testBusinessID,
+				RunId:                 testRunID,
+				StartTime:             timestamppb.New(testComponentStartTime),
+				CloseTime:             timestamppb.New(testComponentCloseTime),
 				ChasmSearchAttributes: chasmSearchAttributes,
 			},
 		},
@@ -456,14 +484,16 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_WithTaskQueueSearchAttr
 
 	visibilityMgr.EXPECT().
 		ListChasmExecutions(ctx, gomock.Any()).
-		DoAndReturn(func(_ context.Context, req *manager.ListChasmExecutionsRequest) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
-			s.Equal(archetypeID, req.ArchetypeID)
+		DoAndReturn(func(
+			_ context.Context,
+			req *visibilityservice.ListChasmExecutionsRequest,
+		) (*visibilityservice.ListChasmExecutionsResponse, error) {
+			s.Equal(archetypeID, req.ArchetypeId)
 			return expectedResponse, nil
 		})
 
 	// Call ListExecutions
 	request := &chasm.ListExecutionsRequest{
-		NamespaceID:   string(testChasmNamespaceID),
 		NamespaceName: string(testChasmNamespace),
 		Query:         query,
 		PageSize:      pageSize,
@@ -481,8 +511,13 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_WithTaskQueueSearchAttr
 
 	execution := response.Executions[0]
 	s.NotNil(execution.ChasmSearchAttributes)
-	// Verify TaskQueue is in the CHASM search attributes using GetValue with the preallocated search attribute
-	taskQueueVal, ok := chasm.SearchAttributeValue(execution.ChasmSearchAttributes, chasm.SearchAttributeTaskQueue)
-	s.True(ok)
+	// Verify TaskQueue is in the CHASM search attributes
+	s.Contains(execution.ChasmSearchAttributes.GetIndexedFields(), sadefs.TaskQueue)
+	taskQueueVal, err := sadefs.DecodeValue(
+		execution.ChasmSearchAttributes.IndexedFields[sadefs.TaskQueue],
+		enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED,
+		false,
+	)
+	s.NoError(err)
 	s.Equal(expectedTaskQueue, taskQueueVal)
 }

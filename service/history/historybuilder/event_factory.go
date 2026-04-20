@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -67,19 +68,25 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		FirstWorkflowTaskBackoff:        request.FirstWorkflowTaskBackoff,
 		FirstExecutionRunId:             firstRunID,
 		OriginalExecutionRunId:          originalRunID,
-		Memo:                            req.Memo,
-		SearchAttributes:                req.SearchAttributes,
-		WorkflowId:                      req.WorkflowId,
-		SourceVersionStamp:              request.SourceVersionStamp,
-		CompletionCallbacks:             req.CompletionCallbacks,
-		RootWorkflowExecution:           request.RootExecutionInfo.GetExecution(),
-		InheritedBuildId:                request.InheritedBuildId,
-		VersioningOverride:              worker_versioning.ConvertOverrideToV32(nonNilVersioningOverride),
-		Priority:                        req.GetPriority(),
-		InheritedPinnedVersion:          request.InheritedPinnedVersion,
+		// Filter nil values here rather than in the API layer because not all
+		// creation paths go through the frontend (e.g. continue-as-new, child workflows, replication).
+		Memo:                   payload.FilterNilMemo(req.Memo),
+		SearchAttributes:       payload.FilterNilSearchAttributes(req.SearchAttributes),
+		WorkflowId:             req.WorkflowId,
+		SourceVersionStamp:     request.SourceVersionStamp,
+		CompletionCallbacks:    req.CompletionCallbacks,
+		RootWorkflowExecution:  request.RootExecutionInfo.GetExecution(),
+		InheritedBuildId:       request.InheritedBuildId,
+		VersioningOverride:     worker_versioning.ConvertOverrideToV32(nonNilVersioningOverride),
+		Priority:               req.GetPriority(),
+		InheritedPinnedVersion: request.InheritedPinnedVersion,
 		// We expect the API handler to unset RequestEagerExecution if eager execution cannot be accepted.
-		EagerExecutionAccepted:   req.GetRequestEagerExecution(),
-		InheritedAutoUpgradeInfo: request.InheritedAutoUpgradeInfo,
+		EagerExecutionAccepted:       req.GetRequestEagerExecution(),
+		InheritedAutoUpgradeInfo:     request.InheritedAutoUpgradeInfo,
+		DeclinedTargetVersionUpgrade: request.DeclinedTargetVersionUpgrade,
+	}
+	if req.TimeSkippingConfig != nil {
+		attributes.TimeSkippingConfig = req.TimeSkippingConfig
 	}
 
 	parentInfo := request.ParentExecutionInfo
@@ -125,6 +132,7 @@ func (b *EventFactory) CreateWorkflowTaskStartedEvent(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	buildIdRedirectCounter int64,
 	suggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason,
+	targetWorkerDeploymentVersionChanged bool,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, startTime)
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
@@ -137,6 +145,8 @@ func (b *EventFactory) CreateWorkflowTaskStartedEvent(
 			HistorySizeBytes:            historySizeBytes,
 			WorkerVersion:               versioningStamp,
 			BuildIdRedirectCounter:      buildIdRedirectCounter,
+
+			TargetWorkerDeploymentVersionChanged: targetWorkerDeploymentVersionChanged,
 		},
 	}
 	return event
@@ -397,6 +407,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 	links []*commonpb.Link,
 	identity string,
 	priority *commonpb.Priority,
+	timeSkippingConfig *workflowpb.TimeSkippingConfig,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
@@ -407,6 +418,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 			AttachedCompletionCallbacks: attachCompletionCallbacks,
 			Identity:                    identity,
 			Priority:                    priority,
+			TimeSkippingConfig:          timeSkippingConfig,
 		},
 	}
 	event.Links = links
@@ -477,9 +489,12 @@ func (b EventFactory) CreateContinuedAsNewEvent(
 		Initiator:                    command.Initiator,
 		Failure:                      command.Failure,
 		LastCompletionResult:         command.LastCompletionResult,
-		Memo:                         command.Memo,
-		SearchAttributes:             command.SearchAttributes,
-		InheritBuildId:               command.InheritBuildId,
+		// Filter nil values here rather than in the API layer because not all
+		// creation paths go through the frontend (continue-as-new, child workflows, replication).
+		// This CaN event is created on the source workflow, so we need to filter nil values here.
+		Memo:             payload.FilterNilMemo(command.Memo),
+		SearchAttributes: payload.FilterNilSearchAttributes(command.SearchAttributes),
+		InheritBuildId:   command.InheritBuildId, //nolint:staticcheck // SA1019: worker versioning v0.2
 	}
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
 		WorkflowExecutionContinuedAsNewEventAttributes: attributes,
@@ -844,11 +859,14 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 			WorkflowIdReusePolicy:        command.WorkflowIdReusePolicy,
 			RetryPolicy:                  command.RetryPolicy,
 			CronSchedule:                 command.CronSchedule,
-			Memo:                         command.Memo,
-			SearchAttributes:             command.SearchAttributes,
-			ParentClosePolicy:            command.GetParentClosePolicy(),
-			InheritBuildId:               command.InheritBuildId,
-			Priority:                     command.Priority,
+			// Filter nil values here rather than in the API layer because not all
+			// creation paths go through the frontend (continue-as-new, child workflows, replication).
+			// This CaN event is created on the parent workflow, so we need to filter nil values here.
+			Memo:              payload.FilterNilMemo(command.Memo),
+			SearchAttributes:  payload.FilterNilSearchAttributes(command.SearchAttributes),
+			ParentClosePolicy: command.GetParentClosePolicy(),
+			InheritBuildId:    command.InheritBuildId, //nolint:staticcheck // SA1019: worker versioning v0.2
+			Priority:          command.Priority,
 		},
 	}
 	return event
@@ -1065,4 +1083,22 @@ func (b *EventFactory) createHistoryEvent(
 	historyEvent.TaskId = common.EmptyEventTaskID
 
 	return historyEvent
+}
+
+func (b *EventFactory) CreateWorkflowExecutionTimeSkippingTransitionedEvent(
+	targetTime time.Time,
+	triggeredDisable bool,
+) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED, b.timeSource.Now())
+	transitionedAttr := &historypb.WorkflowExecutionTimeSkippingTransitionedEventAttributes{
+		WallClockTime:      timestamppb.New(b.timeSource.Now()),
+		DisabledAfterBound: triggeredDisable,
+	}
+	if !targetTime.IsZero() {
+		transitionedAttr.TargetTime = timestamppb.New(targetTime.UTC())
+	}
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionTimeSkippingTransitionedEventAttributes{
+		WorkflowExecutionTimeSkippingTransitionedEventAttributes: transitionedAttr,
+	}
+	return event
 }

@@ -13,8 +13,10 @@ The `LoadBalancer` distributes add/poll API calls across available task queue pa
 The load balancer tracks outstanding polls per partition
 and sends new polls to the partition with the fewest active polls.
 
-The number of partitions is controlled by dynamic config
-(`matching.numTaskqueueWritePartitions`, `matching.numTaskqueueReadPartitions`).
+The number of partitions is controlled by one of two mechanisms:
+
+1. Managed partition scaling
+2. Dynamic config (`matching.numTaskqueueWritePartitions`, `matching.numTaskqueueReadPartitions`)
 
 There are test hooks to force specific partition selection for testing.
 
@@ -80,3 +82,12 @@ The `Route(partition)` method on the client computes the owning node address for
 This is used internally by the grpc client, and can be used by other code to
 determine the owner for other purposes (e.g. matching engine knowing when to
 unload non-owned partitions).
+
+## Managed partition scaling
+
+If managed partition scaling is in use, the server communicates the current
+read/write partition counts to the client (in a grpc trailer).
+The client also communicates it back to the server (in a grpc header) to ensure
+the client isn't using stale counts.
+The client maintains a cache of the current counts for each task queue.
+

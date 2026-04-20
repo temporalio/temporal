@@ -873,7 +873,7 @@ func (s *WorkflowTestSuite) TestTerminateWorkflow() {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -932,7 +932,7 @@ func (s *WorkflowTestSuite) TestTerminateWorkflow() {
 
 	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: tv.WorkflowID(),
 			RunId:      we.RunId,
@@ -961,7 +961,7 @@ GetHistoryLoop:
 
 	newExecutionStarted := false
 StartNewExecutionLoop:
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		request := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:           uuid.NewString(),
 			Namespace:           s.Namespace().String(),
@@ -1081,7 +1081,7 @@ func (s *WorkflowTestSuite) TestSequentialWorkflow() {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -1109,7 +1109,7 @@ func (s *WorkflowTestSuite) TestSequentialWorkflow() {
 
 	expectedActivity := int32(1)
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-		s.EqualValues(tv.WorkflowID(), task.WorkflowExecution.WorkflowId)
+		s.Equal(tv.WorkflowID(), task.WorkflowExecution.WorkflowId)
 		s.Equal(tv.ActivityType().Name, task.ActivityType.Name)
 		s.Equal(tv.WithActivityIDNumber(int(expectedActivity)).ActivityID(), task.ActivityId)
 		s.Equal(expectedActivity, s.DecodePayloadsByteSliceInt32(task.Input))
@@ -1131,7 +1131,7 @@ func (s *WorkflowTestSuite) TestSequentialWorkflow() {
 		T:                   s.T(),
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		_, err := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
@@ -1208,7 +1208,7 @@ func (s *WorkflowTestSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 
 	s.Equal(int64(3), newTask.WorkflowTask.GetPreviousStartedEventId())
 	s.Equal(int64(7), newTask.WorkflowTask.GetStartedEventId())
-	s.Equal(4, len(newTask.WorkflowTask.History.Events))
+	s.Len(newTask.WorkflowTask.History.Events, 4)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, newTask.WorkflowTask.History.Events[0].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_MARKER_RECORDED, newTask.WorkflowTask.History.Events[1].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
@@ -1216,6 +1216,9 @@ func (s *WorkflowTestSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 }
 
 func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
@@ -1229,7 +1232,7 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		Identity:            tv.WorkerIdentity(),
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(ctx, request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -1242,7 +1245,7 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -1271,9 +1274,9 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-		s.EqualValues(tv.WorkflowID(), task.WorkflowExecution.WorkflowId)
+		s.Equal(tv.WorkflowID(), task.WorkflowExecution.WorkflowId)
 		s.Equal(tv.ActivityType().Name, task.ActivityType.Name)
-		s.Logger.Info("Activity ID", tag.WorkflowActivityID(task.ActivityId))
+		s.Logger.Info("Activity ID", tag.ActivityID(task.ActivityId))
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
@@ -1294,7 +1297,14 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	const testTag = "[TestWorkflowTaskAndActivityTaskTimeoutsWorkflow] "
 	testStart := time.Now()
 	var lastDropTime time.Time
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
+		// Check if test context has been cancelled/timed out
+		select {
+		case <-ctx.Done():
+			s.FailNow("Test timeout exceeded", "context deadline exceeded after %v", time.Since(testStart))
+		default:
+		}
+
 		iterStart := time.Now()
 		dropWorkflowTask := (i%2 == 0)
 		s.Logger.Info(testTag+"iteration starting",
@@ -1337,6 +1347,13 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	}
 
 	s.Logger.Info(testTag+"waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
+
+	// Check if test context has been cancelled/timed out before final poll
+	select {
+	case <-ctx.Done():
+		s.FailNow("Test timeout exceeded", "context deadline exceeded after %v", time.Since(testStart))
+	default:
+	}
 
 	s.False(workflowComplete)
 	_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
@@ -1451,7 +1468,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetry() {
 	}
 
 	// Check run id links
-	for i := 0; i < maximumAttempts; i++ {
+	for i := range maximumAttempts {
 		events := s.GetHistory(s.Namespace().String(), executions[i])
 		if i == 0 {
 			s.EqualHistoryEvents(fmt.Sprintf(`
@@ -1709,7 +1726,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_InternalTaskQueue() {
 	tv := testvars.New(s.T())
-	errorMessageKeyword := "internal per namespace task queue"
+	errorMessageKeyword := "internal per-namespace task queue"
 
 	// Test StartWorkflowExecution with internal task queue
 	s.Run("StartWorkflowExecution_PerNSWorkerTaskQueue", func() {
@@ -1807,13 +1824,13 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_InternalTaskQueue() {
 func requireNotStartedButRunning(t *testing.T, resp *workflowservice.StartWorkflowExecutionResponse) {
 	t.Helper()
 	require.False(t, resp.Started)
-	require.Equalf(t, resp.Status, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	require.Equalf(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, resp.Status,
 		"Expected workflow to be running, but got %s", resp.Status)
 }
 
 func requireStartedAndRunning(t *testing.T, resp *workflowservice.StartWorkflowExecutionResponse) {
 	t.Helper()
 	require.True(t, resp.Started)
-	require.Equalf(t, resp.Status, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	require.Equalf(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, resp.Status,
 		"Expected workflow to be running, but got %s", resp.Status)
 }

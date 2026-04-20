@@ -2,6 +2,7 @@ package worker_versioning
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -261,12 +262,14 @@ func MakeDirectiveForWorkflowTask(
 	behavior enumspb.VersioningBehavior,
 	deployment *deploymentpb.Deployment,
 	revisionNumber int64,
+	useRampingVersion bool,
 ) *taskqueuespb.TaskVersionDirective {
 	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		return &taskqueuespb.TaskVersionDirective{
 			Behavior:          behavior,
 			DeploymentVersion: DeploymentVersionFromDeployment(deployment),
 			RevisionNumber:    revisionNumber,
+			UseRampingVersion: useRampingVersion,
 		}
 	}
 	if id := BuildIdIfUsingVersioning(stamp); id != "" && assignedBuildId == "" {
@@ -285,24 +288,91 @@ func MakeDirectiveForWorkflowTask(
 
 type IsWFTaskQueueInVersionDetector = func(ctx context.Context, namespaceID, tq string, version *deploymentpb.WorkerDeploymentVersion) (bool, error)
 
-func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient) IsWFTaskQueueInVersionDetector {
+func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient, versionMembershipCache VersionMembershipCache) IsWFTaskQueueInVersionDetector {
 	return func(ctx context.Context,
 		namespaceID, tq string,
 		version *deploymentpb.WorkerDeploymentVersion) (bool, error) {
-		resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
-			NamespaceId:   namespaceID,
-			TaskQueue:     tq,
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version)),
-		})
+
+		// Check cache first.
+		if isMember, ok := versionMembershipCache.Get(
+			namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			version.GetDeploymentName(), version.GetBuildId(),
+		); ok {
+			return isMember, nil
+		}
+
+		// Cache miss — resolve via matching RPC.
+		isMember, err := checkTaskQueueVersionMembership(ctx, matchingClient, namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW, version)
 		if err != nil {
 			return false, err
 		}
-		return resp.GetIsMember(), nil
+
+		// Add result to cache
+		versionMembershipCache.Put(
+			namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			version.GetDeploymentName(), version.GetBuildId(),
+			isMember,
+		)
+		return isMember, nil
 	}
 }
 
-func FindDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) int {
+// checkTaskQueueVersionMembership calls matching to check if a task queue belongs to a version,
+// falling back to fetching the full user data if the CheckTaskQueueVersionMembership RPC is not implemented. (this can happen
+// during rolling upgrades of matching and history services where in history would be on a higher version than matching)
+func checkTaskQueueVersionMembership(
+	ctx context.Context,
+	matchingClient resource.MatchingClient,
+	namespaceID, tq string,
+	tqType enumspb.TaskQueueType,
+	version *deploymentpb.WorkerDeploymentVersion,
+) (bool, error) {
+	resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
+		NamespaceId:   namespaceID,
+		TaskQueue:     tq,
+		TaskQueueType: tqType,
+		Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version)),
+	})
+	if err != nil {
+		// If matching is on an older version that doesn't have this RPC,
+		// fall back to fetching full user data and checking version membership based on the received information.
+		var unimplErr *serviceerror.Unimplemented
+		if errors.As(err, &unimplErr) {
+			return checkVersionMembershipViaUserData(ctx, matchingClient, namespaceID, tq, tqType, version)
+		}
+		return false, err
+	}
+	return resp.GetIsMember(), nil
+}
+
+// checkVersionMembershipViaUserData is the fallback for when matching doesn't support
+// CheckTaskQueueVersionMembership (e.g. during rolling deployments). It fetches the full
+// Task Queue User Data and checks version membership based on the receieved information.
+func checkVersionMembershipViaUserData(
+	ctx context.Context,
+	matchingClient resource.MatchingClient,
+	namespaceID string,
+	tq string,
+	tqType enumspb.TaskQueueType,
+	version *deploymentpb.WorkerDeploymentVersion,
+) (bool, error) {
+	resp, err := matchingClient.GetTaskQueueUserData(ctx,
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:   namespaceID,
+			TaskQueue:     tq,
+			TaskQueueType: tqType,
+		})
+	if err != nil {
+		return false, err
+	}
+	tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(tqType)]
+	if !ok {
+		return false, nil
+	}
+	return HasDeploymentVersion(tqData.GetDeploymentData(), DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version))), nil
+}
+
+func FindOldDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) int {
 	for i, vd := range deployments.GetVersions() {
 		if proto.Equal(v, vd.GetVersion()) {
 			return i
@@ -417,16 +487,20 @@ func MakeBuildIdDirective(buildId string) *taskqueuespb.TaskVersionDirective {
 	return &taskqueuespb.TaskVersionDirective{BuildId: &taskqueuespb.TaskVersionDirective_AssignedBuildId{AssignedBuildId: buildId}}
 }
 
-func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.WorkerVersionStamp {
-	if cap.GetUseVersioning() && cap.GetDeploymentSeriesName() != "" {
+func StampFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities, options *deploymentpb.WorkerDeploymentOptions) *commonpb.WorkerVersionStamp {
+	if options.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED && options.GetDeploymentName() != "" {
 		// Versioning 3, do not return stamp.
 		return nil
 	}
-	// TODO: remove `cap.BuildId != ""` condition after old versioning cleanup. this condition is used to differentiate
+	if capabilities.GetUseVersioning() && capabilities.GetDeploymentSeriesName() != "" {
+		// Versioning 3, do not return stamp.
+		return nil
+	}
+	// TODO: remove `capabilities.BuildId != ""` condition after old versioning cleanup. this condition is used to differentiate
 	// between old and new versioning in Record*TaskStart calls. [cleanup-old-wv]
 	// we don't want to add stamp for task started events in old versioning
-	if cap.GetBuildId() != "" {
-		return &commonpb.WorkerVersionStamp{UseVersioning: cap.UseVersioning, BuildId: cap.BuildId}
+	if capabilities.GetBuildId() != "" {
+		return &commonpb.WorkerVersionStamp{UseVersioning: capabilities.UseVersioning, BuildId: capabilities.BuildId}
 	}
 	return nil
 }
@@ -573,12 +647,7 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 		)
 	}
 
-	resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
-		NamespaceId:   namespaceID,
-		TaskQueue:     tq,
-		TaskQueueType: tqType,
-		Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(pinnedVersion)),
-	})
+	isMember, err := checkTaskQueueVersionMembership(ctx, matchingClient, namespaceID, tq, tqType, pinnedVersion)
 	if err != nil {
 		return err
 	}
@@ -590,9 +659,9 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 		tqType,
 		pinnedVersion.DeploymentName,
 		pinnedVersion.BuildId,
-		resp.GetIsMember(),
+		isMember,
 	)
-	if !resp.GetIsMember() {
+	if !isMember {
 		return serviceerror.NewFailedPrecondition(
 			FormatPinnedVersionNotInTaskQueueError(pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId(), tq, tqType),
 		)
@@ -664,7 +733,11 @@ func FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
 	rampingPercentage float32,
 	rampingRevisionNumber int64,
 	workflowId string,
+	useRampingVersion bool,
 ) (*deploymentspb.WorkerDeploymentVersion, int64) {
+	if useRampingVersion && ramping != nil {
+		return ramping, rampingRevisionNumber
+	}
 
 	// Apply ramp logic using final values
 	if rampingPercentage <= 0 {
@@ -1076,6 +1149,8 @@ func WorkerDeploymentVersionFromStringV32(s string) (*deploymentspb.WorkerDeploy
 
 // CleanupOldDeletedVersions removes versions deleted more than 7 days ago. Also removes more deleted versions if
 // the limit is being exceeded. Never removes undeleted versions.
+// Deprecated. Versions now are deleted serially without using the deleted flag in versionData.
+// TODO: remove this cleanup logic after next major release.
 func CleanupOldDeletedVersions(deploymentData *persistencespb.WorkerDeploymentData, maxVersions int) bool {
 	now := time.Now()
 	aWeekAgo := now.Add(-time.Hour * 24 * 7)

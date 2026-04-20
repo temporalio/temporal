@@ -1,6 +1,8 @@
 package searchattribute
 
 import (
+	"errors"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/payload"
@@ -10,7 +12,7 @@ import (
 // Encode encodes map of search attribute values to search attributes.
 // typeMap can be nil (then MetadataType field won't be set).
 // In case of error, it will continue to next search attribute and return last error.
-func Encode(searchAttributes map[string]interface{}, typeMap *NameTypeMap) (*commonpb.SearchAttributes, error) {
+func Encode(searchAttributes map[string]any, typeMap *NameTypeMap) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributes) == 0 {
 		return nil, nil
 	}
@@ -30,6 +32,13 @@ func Encode(searchAttributes map[string]interface{}, typeMap *NameTypeMap) (*com
 		if typeMap != nil {
 			saType, err = typeMap.getType(saName, customCategory|predefinedCategory)
 			if err != nil {
+				if errors.Is(err, sadefs.ErrInvalidName) {
+					// Silently skip unknown search attributes. This can happen due to
+					// version mismatches where a newer server wrote a predefined SA
+					// that this server doesn't recognize.
+					delete(indexedFields, saName)
+					continue
+				}
 				lastErr = err
 				continue
 			}
@@ -47,25 +56,39 @@ func Decode(
 	searchAttributes *commonpb.SearchAttributes,
 	typeMap *NameTypeMap,
 	allowList bool,
-) (map[string]interface{}, error) {
+) (map[string]any, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil, nil
 	}
 
-	result := make(map[string]interface{}, len(searchAttributes.GetIndexedFields()))
+	result := make(map[string]any, len(searchAttributes.GetIndexedFields()))
 	var lastErr error
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
 		saType := enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
 		if typeMap != nil {
 			var err error
 			saType, err = typeMap.getType(saName, customCategory|predefinedCategory)
-			// TODO: Evaluate if we should get the chasm search attribute mapper when upserting search attributes.
-			if err != nil && !sadefs.IsChasmSearchAttribute(saName) {
-				lastErr = err
+			if err != nil {
+				if sadefs.IsChasmSearchAttribute(saName) {
+					// Chasm search attributes are not in the standard type map;
+					// allow them through with UNSPECIFIED type.
+				} else if errors.Is(err, sadefs.ErrInvalidName) {
+					// SA not found in the type map. Fall through to DecodeValue with
+					// UNSPECIFIED type, which uses the payload's MetadataType as a
+					// fallback. This handles two cases:
+					//   1. Version mismatch: a newer server wrote a predefined SA that
+					//      this server's constants don't recognize.
+					//   2. Cache lag: a recently registered custom SA that hasn't yet
+					//      propagated to this server's SA manager cache.
+					// If MetadataType is also UNSPECIFIED (truly unknown payload),
+					// DecodeValue returns an error and the SA is excluded from the result.
+				} else {
+					lastErr = err
+				}
 			}
 		}
 
-		searchAttributeValue, err := DecodeValue(saPayload, saType, allowList)
+		searchAttributeValue, err := sadefs.DecodeValue(saPayload, saType, allowList)
 		if err != nil {
 			lastErr = err
 			result[saName] = nil

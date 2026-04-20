@@ -34,7 +34,7 @@ linters:
       forbid:
         - pattern: time.Sleep
           msg: "Please use require.Eventually or assert.Eventually instead unless you've no other option"
-        - pattern: panic
+        - pattern: "^panic$"
           msg: "Please avoid using panic in application code"
         - pattern: time\.Now
           msg: "Using time.Now is not allowed in chasm/lib package (non-test files), use ctx.Now(component) instead"
@@ -46,6 +46,10 @@ linters:
           msg: "Do not use .UnixNano() for Cassandra timestamps. Use p.UnixMilliseconds() which returns milliseconds."
         - pattern: FunctionalTestBase
           msg: "FunctionalTestBase is deprecated. Use testcore.NewEnv(t) instead. See docs/development/testing.md for details."
+        - pattern: context\.Background\(\)
+          msg: "Avoid context.Background() in tests; use t.Context() to respect test timeouts and cancellation"
+        - pattern: 'assert\.\w+'
+          msg: "Use require.X / protorequire.X instead of assert.X / protoassert.X — assert doesn't stop the test on failure. assert.CollectT is still allowed for EventuallyWithT callbacks."
     depguard:
       rules:
         main:
@@ -67,6 +71,9 @@ linters:
         # internal server pbs have their own suffix to avoid naming conflicts
         - pkg: go.temporal.io/server/api/(\w+)/v1
           alias: ${1}spb
+    testifylint:
+      disable:
+        - suite-method-signature # parallelsuite.Run supports extra args passed to Test* methods
     exhaustive:
       # Presence of "default" case in switch statements satisfies exhaustiveness,
       # even if all enum members are not listed.
@@ -189,6 +196,16 @@ linters:
           - forbidigo
       - path: tests/testcore/.*\.go$ # still needed in tests/testcore/ until we remove testify suites entirely
         text: "FunctionalTestBase"
+        linters:
+          - forbidigo
+      - path-except: tests/.+_test\.go # only enforce in test files
+        text: "context.Background"
+        linters:
+          - forbidigo
+      - text: "use of `assert\\.CollectT`" # allowed for EventuallyWithT callbacks
+        linters:
+          - forbidigo
+      - text: "use of `softassert\\.\\w+`"
         linters:
           - forbidigo
       - path: _test\.go|tests/.+\.go|common/testing/

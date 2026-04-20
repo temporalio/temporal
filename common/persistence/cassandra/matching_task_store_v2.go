@@ -20,24 +20,24 @@ const (
 		`WHERE namespace_id = ? ` +
 		`and task_queue_name = ? ` +
 		`and task_queue_type = ? ` +
-		`and type = ? ` +
-		`and (pass, task_id) >= (?, ?)`
+		`and (type, pass, task_id) >= (?, ?, ?) ` +
+		`and (type, pass, task_id) < (?, ?, ?)`
 
 	templateGetTasksQuery_v2_limit = `SELECT task_id, task, task_encoding ` +
 		`FROM tasks_v2 ` +
 		`WHERE namespace_id = ? ` +
 		`and task_queue_name = ? ` +
 		`and task_queue_type = ? ` +
-		`and type = ? ` +
-		`and (pass, task_id) >= (?, ?) ` +
+		`and (type, pass, task_id) >= (?, ?, ?) ` +
+		`and (type, pass, task_id) < (?, ?, ?) ` +
 		`LIMIT ?`
 
 	templateCompleteTasksLessThanQuery_v2 = `DELETE FROM tasks_v2 ` +
 		`WHERE namespace_id = ? ` +
 		`AND task_queue_name = ? ` +
 		`AND task_queue_type = ? ` +
-		`AND type = ? ` +
-		`and (pass, task_id) < (?, ?)`
+		`AND (type, pass, task_id) >= (?, ?, ?) ` +
+		`AND (type, pass, task_id) < (?, ?, ?)`
 )
 
 // matchingTaskStoreV2 is a fork of matchingTaskStoreV1 that uses a new task schema.
@@ -97,7 +97,7 @@ func (d *matchingTaskStoreV2) CreateTasks(
 		request.RangeID,
 	)
 
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, _, err := d.Session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
 		return nil, gocql.ConvertError("CreateTasks", err)
@@ -128,14 +128,18 @@ func (d *matchingTaskStoreV2) GetTasks(
 
 	// Reading taskqueue tasks need to be quorum level consistent, otherwise we could lose tasks
 	var query gocql.Query
+	rowType := rowTypeTaskInSubqueue(request.Subqueue)
 	if request.UseLimit {
 		query = d.Session.Query(templateGetTasksQuery_v2_limit,
 			request.NamespaceID,
 			request.TaskQueue,
 			request.TaskType,
-			rowTypeTaskInSubqueue(request.Subqueue),
+			rowType,
 			request.InclusiveMinPass,
 			request.InclusiveMinTaskID,
+			rowType,
+			int64(math.MaxInt64),
+			int64(math.MaxInt64),
 			request.PageSize,
 		)
 	} else {
@@ -143,15 +147,18 @@ func (d *matchingTaskStoreV2) GetTasks(
 			request.NamespaceID,
 			request.TaskQueue,
 			request.TaskType,
-			rowTypeTaskInSubqueue(request.Subqueue),
+			rowType,
 			request.InclusiveMinPass,
 			request.InclusiveMinTaskID,
+			rowType,
+			int64(math.MaxInt64),
+			int64(math.MaxInt64),
 		)
 	}
 	iter := query.WithContext(ctx).PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalGetTasksResponse{}
-	task := make(map[string]interface{})
+	task := make(map[string]any)
 	for iter.MapScan(task) {
 		_, ok := task["task_id"]
 		if !ok { // no tasks, but static column record returned
@@ -179,14 +186,14 @@ func (d *matchingTaskStoreV2) GetTasks(
 		}
 		response.Tasks = append(response.Tasks, p.NewDataBlob(taskVal, encodingVal))
 
-		task = make(map[string]interface{}) // Reinitialize map as initialized fails on unmarshalling
+		task = make(map[string]any) // Reinitialize map as initialized fails on unmarshalling
 	}
 	if len(iter.PageState()) > 0 {
 		response.NextPageToken = iter.PageState()
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailablef("GetTasks operation failed. Error: %v", err)
+		return nil, gocql.ConvertError("GetTasks", err)
 	}
 	return response, nil
 }
@@ -203,12 +210,16 @@ func (d *matchingTaskStoreV2) CompleteTasksLessThan(
 		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on fair queue")
 	}
 
+	rowType := rowTypeTaskInSubqueue(request.Subqueue)
 	query := d.Session.Query(
 		templateCompleteTasksLessThanQuery_v2,
 		request.NamespaceID,
 		request.TaskQueueName,
 		request.TaskType,
-		rowTypeTaskInSubqueue(request.Subqueue),
+		rowType,
+		int64(0),
+		int64(0),
+		rowType,
 		request.ExclusiveMaxPass,
 		request.ExclusiveMaxTaskID,
 	).WithContext(ctx)

@@ -9,6 +9,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -18,6 +19,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
 )
@@ -29,6 +31,8 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
 	versionMembershipCache worker_versioning.VersionMembershipCache,
+	reactivationSignalCache worker_versioning.ReactivationSignalCache,
+	reactivationSignaler api.VersionReactivationSignalerFn,
 ) (_ *historyservice.ResetWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -38,6 +42,17 @@ func Invoke(
 
 	request := resetRequest.ResetRequest
 	workflowID := request.WorkflowExecution.GetWorkflowId()
+
+	if rl := shardContext.BusinessIDReuseRateLimiter(namespaceID, workflowID, chasm.WorkflowArchetypeID); rl != nil && !rl.Allow() {
+		archetypeName, _ := shardContext.ChasmRegistry().ArchetypeDisplayName(chasm.WorkflowArchetypeID)
+		metrics.BusinessIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
+			1,
+			metrics.ResourceExhaustedCauseTag(consts.ErrBusinessIDRateLimitExceeded.Cause),
+			metrics.ResourceExhaustedScopeTag(consts.ErrBusinessIDRateLimitExceeded.Scope),
+			metrics.StringTag("archetype", archetypeName),
+		)
+		return nil, consts.ErrBusinessIDRateLimitExceeded
+	}
 	baseRunID := request.WorkflowExecution.GetRunId()
 
 	baseWorkflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
@@ -161,7 +176,6 @@ func Invoke(
 		baseRebuildLastEventVersion,
 		baseNextEventID,
 		resetRunID,
-		request.GetRequestId(),
 		baseWorkflow,
 		ndc.NewWorkflow(
 			shardContext.GetClusterMetadata(),
@@ -177,6 +191,15 @@ func Invoke(
 	); err != nil {
 		return nil, err
 	}
+
+	// Notify version workflow if we're pinning to a potentially drained version via post-reset operations
+	for _, operation := range request.GetPostResetOperations() {
+		if updateOpts, ok := operation.GetVariant().(*workflowpb.PostResetOperation_UpdateWorkflowOptions_); ok {
+			api.ReactivateVersionWorkflowIfPinned(ctx, namespaceEntry,
+				updateOpts.UpdateWorkflowOptions.GetWorkflowExecutionOptions().GetVersioningOverride(), reactivationSignalCache, reactivationSignaler, shardContext.GetConfig().EnableVersionReactivationSignals())
+		}
+	}
+
 	return &historyservice.ResetWorkflowExecutionResponse{
 		RunId: resetRunID,
 	}, nil

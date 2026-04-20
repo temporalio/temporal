@@ -8,7 +8,9 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/worker_versioning"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
@@ -25,11 +27,12 @@ type (
 
 		QueueFactoryBaseParams
 
-		ClientBean        client.Bean
-		SdkClientFactory  sdk.ClientFactory
-		HistoryRawClient  resource.HistoryRawClient
-		MatchingRawClient resource.MatchingRawClient
-		VisibilityManager manager.VisibilityManager
+		ClientBean             client.Bean
+		SdkClientFactory       sdk.ClientFactory
+		HistoryRawClient       resource.HistoryRawClient
+		MatchingRawClient      resource.MatchingRawClient
+		VisibilityManager      manager.VisibilityManager
+		VersionMembershipCache worker_versioning.VersionMembershipCache
 	}
 
 	transferQueueFactory struct {
@@ -51,9 +54,17 @@ func NewTransferQueueFactory(
 					ActiveNamespaceWeights:         params.Config.TransferProcessorSchedulerActiveRoundRobinWeights,
 					StandbyNamespaceWeights:        params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
 					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
+					ExecutionAwareSchedulerOptions: ctasks.ExecutionAwareSchedulerOptions{
+						Enabled:          params.Config.TaskSchedulerEnableExecutionQueueScheduler,
+						MaxQueues:        params.Config.TaskSchedulerExecutionQueueSchedulerMaxQueues,
+						QueueTTL:         params.Config.TaskSchedulerExecutionQueueSchedulerQueueTTL,
+						QueueConcurrency: params.Config.TaskSchedulerExecutionQueueSchedulerQueueConcurrency,
+					},
 				},
 				params.NamespaceRegistry,
 				params.Logger,
+				params.MetricsHandler,
+				params.TimeSource,
 			),
 			HostPriorityAssigner: queues.NewPriorityAssigner(
 				params.NamespaceRegistry,
@@ -114,6 +125,7 @@ func (f *transferQueueFactory) CreateQueue(
 		f.MatchingRawClient,
 		f.VisibilityManager,
 		f.ChasmEngine,
+		f.VersionMembershipCache,
 	)
 
 	standbyExecutor := newTransferQueueStandbyTaskExecutor(
@@ -190,5 +202,6 @@ func (f *transferQueueFactory) CreateQueue(
 		logger,
 		metricsHandler,
 		factory,
+		nil, // taskPostProcessor
 	)
 }

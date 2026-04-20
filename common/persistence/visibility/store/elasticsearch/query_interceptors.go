@@ -115,7 +115,7 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 	return fieldName, nil
 }
 
-func (vi *valuesInterceptor) Values(name string, fieldName string, values ...interface{}) ([]interface{}, error) {
+func (vi *valuesInterceptor) Values(name string, fieldName string, values ...any) ([]any, error) {
 	var fieldType enumspb.IndexedValueType
 	var err error
 
@@ -124,7 +124,7 @@ func (vi *valuesInterceptor) Values(name string, fieldName string, values ...int
 		return nil, query.NewConverterError("invalid search attribute: %s", name)
 	}
 
-	var result []interface{}
+	var result []any
 	for _, value := range values {
 		value, err = parseSystemSearchAttributeValues(name, value)
 		if err != nil {

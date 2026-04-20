@@ -44,11 +44,12 @@ type (
 		UserDataChanged()
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
-		DispatchQueryTask(ctx context.Context, taskId string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
+		DispatchQueryTask(ctx context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error)
 		// DispatchNexusTask dispatches a nexus task to a local or remote poller. If forwarded then result or
 		// error is returned, if dispatched to local poller then nil and nil is returned.
-		DispatchNexusTask(ctx context.Context, taskId string, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error)
+		DispatchNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error)
 		UpdatePollerInfo(pollerIdentity, *pollMetadata)
+		RemovePoller(pollerIdentity)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue

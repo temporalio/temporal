@@ -237,6 +237,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				attributes.GetWorkerVersion(),
 				attributes.GetBuildIdRedirectCounter(),
 				attributes.GetSuggestContinueAsNewReasons(),
+				attributes.GetTargetWorkerDeploymentVersionChanged(),
 			)
 			if err != nil {
 				return nil, err
@@ -669,6 +670,10 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED:
 			if err := b.mutableState.ApplyWorkflowExecutionUnpausedEvent(event); err != nil {
+				return nil, err
+			}
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED:
+			if err := b.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx, event); err != nil {
 				return nil, err
 			}
 

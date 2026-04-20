@@ -1,9 +1,12 @@
 package history
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -13,8 +16,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	healthspb "go.temporal.io/server/api/health/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -30,12 +35,15 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
+	healthcheck "go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -59,7 +67,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
 	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type (
@@ -97,6 +105,7 @@ type (
 		dlqMetricsEmitter            *persistence.DLQMetricsEmitter
 		chasmEngine                  chasm.Engine
 		chasmRegistry                *chasm.Registry
+		nexusHandler                 nexus.Handler
 
 		replicationTaskFetcherFactory    replication.TaskFetcherFactory
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
@@ -199,45 +208,123 @@ func (h *Handler) DeepHealthCheck(
 	_ *historyservice.DeepHealthCheckRequest,
 ) (*historyservice.DeepHealthCheckResponse, error) {
 
-	status, err := h.healthServer.Check(ctx, &healthpb.HealthCheckRequest{Service: serviceName})
+	var checks []*healthspb.HealthCheck
+	overallState := enumsspb.HEALTH_STATE_SERVING
+
+	// Check 1: gRPC health (graceful shutdown / hysteresis).
+	// If this fails, return early with only this check — no point running
+	// metric checks if we can't even reach the gRPC health server.
+	status, err := h.healthServer.Check(ctx, &grpchealthspb.HealthCheckRequest{Service: serviceName})
 	if err != nil {
-		return nil, err
-	}
-	if status.Status != healthpb.HealthCheckResponse_SERVING {
-		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_DECLINED_SERVING))
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_DECLINED_SERVING}, nil
-	}
-
-	rsp := h.checkHistoryHealthSignals()
-	if rsp != nil {
-		return rsp, nil
-	}
-
-	latency := h.persistenceHealthSignal.AverageLatency()
-	errRatio := h.persistenceHealthSignal.ErrorRatio()
-
-	if latency > h.config.HealthPersistenceLatencyFailure() || errRatio > h.config.HealthPersistenceErrorRatio() {
+		checks = append(checks, &healthspb.HealthCheck{
+			CheckType: healthcheck.CheckTypeGRPCHealth,
+			State:     enumsspb.HEALTH_STATE_NOT_SERVING,
+			Message:   fmt.Sprintf("gRPC health check failed: %v", err),
+		})
 		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}, nil
+		return &historyservice.DeepHealthCheckResponse{
+			State:  enumsspb.HEALTH_STATE_NOT_SERVING,
+			Checks: checks,
+		}, nil
 	}
-	metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_SERVING))
-	return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
-}
+	grpcState := enumsspb.HEALTH_STATE_SERVING
+	grpcMsg := ""
+	if status.Status != grpchealthspb.HealthCheckResponse_SERVING {
+		grpcState = enumsspb.HEALTH_STATE_DECLINED_SERVING
+		overallState = enumsspb.HEALTH_STATE_DECLINED_SERVING
+		grpcMsg = "gRPC health server not serving"
+	}
+	checks = append(checks, &healthspb.HealthCheck{
+		CheckType: healthcheck.CheckTypeGRPCHealth,
+		State:     grpcState,
+		Message:   grpcMsg,
+	})
 
-// checkHistoryHealthSignals checks the history health signal that is captured by the interceptor.
-func (h *Handler) checkHistoryHealthSignals() *historyservice.DeepHealthCheckResponse {
-	// Check that the RPC latency doesn't exceed the threshold.
-	if h.historyHealthSignal.AverageLatency() > h.config.HealthRPCLatencyFailure() {
-		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}
+	// Check 2: RPC latency
+	rpcLatency := h.historyHealthSignal.AverageLatency()
+	rpcLatencyThreshold := h.config.HealthRPCLatencyFailure()
+	rpcLatencyState := enumsspb.HEALTH_STATE_SERVING
+	rpcLatencyMsg := ""
+	if rpcLatency > rpcLatencyThreshold {
+		rpcLatencyState = enumsspb.HEALTH_STATE_NOT_SERVING
+		rpcLatencyMsg = fmt.Sprintf("RPC latency %.2fms exceeded %.2fms threshold", rpcLatency, rpcLatencyThreshold)
+		if overallState != enumsspb.HEALTH_STATE_DECLINED_SERVING {
+			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
+		}
 	}
+	checks = append(checks, &healthspb.HealthCheck{
+		CheckType: healthcheck.CheckTypeRPCLatency,
+		State:     rpcLatencyState,
+		Value:     rpcLatency,
+		Threshold: rpcLatencyThreshold,
+		Message:   rpcLatencyMsg,
+	})
 
-	// Check if the RPC error ratio exceeds the threshold
-	if h.historyHealthSignal.ErrorRatio() > h.config.HealthRPCErrorRatio() {
-		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}
+	// Check 3: RPC error ratio
+	rpcErrRatio := h.historyHealthSignal.ErrorRatio()
+	rpcErrThreshold := h.config.HealthRPCErrorRatio()
+	rpcErrState := enumsspb.HEALTH_STATE_SERVING
+	rpcErrMsg := ""
+	if rpcErrRatio > rpcErrThreshold {
+		rpcErrState = enumsspb.HEALTH_STATE_NOT_SERVING
+		rpcErrMsg = fmt.Sprintf("RPC error ratio %.4f exceeded %.4f threshold", rpcErrRatio, rpcErrThreshold)
+		if overallState != enumsspb.HEALTH_STATE_DECLINED_SERVING {
+			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
+		}
 	}
-	return nil
+	checks = append(checks, &healthspb.HealthCheck{
+		CheckType: healthcheck.CheckTypeRPCErrorRatio,
+		State:     rpcErrState,
+		Value:     rpcErrRatio,
+		Threshold: rpcErrThreshold,
+		Message:   rpcErrMsg,
+	})
+
+	// Check 4: Persistence latency
+	persLatency := h.persistenceHealthSignal.AverageLatency()
+	persLatencyThreshold := h.config.HealthPersistenceLatencyFailure()
+	persLatencyState := enumsspb.HEALTH_STATE_SERVING
+	persLatencyMsg := ""
+	if persLatency > persLatencyThreshold {
+		persLatencyState = enumsspb.HEALTH_STATE_NOT_SERVING
+		persLatencyMsg = fmt.Sprintf("Persistence latency %.2fms exceeded %.2fms threshold", persLatency, persLatencyThreshold)
+		if overallState != enumsspb.HEALTH_STATE_DECLINED_SERVING {
+			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
+		}
+	}
+	checks = append(checks, &healthspb.HealthCheck{
+		CheckType: healthcheck.CheckTypePersistenceLatency,
+		State:     persLatencyState,
+		Value:     persLatency,
+		Threshold: persLatencyThreshold,
+		Message:   persLatencyMsg,
+	})
+
+	// Check 5: Persistence error ratio
+	persErrRatio := h.persistenceHealthSignal.ErrorRatio()
+	persErrThreshold := h.config.HealthPersistenceErrorRatio()
+	persErrState := enumsspb.HEALTH_STATE_SERVING
+	persErrMsg := ""
+	if persErrRatio > persErrThreshold {
+		persErrState = enumsspb.HEALTH_STATE_NOT_SERVING
+		persErrMsg = fmt.Sprintf("Persistence error ratio %.4f exceeded %.4f threshold", persErrRatio, persErrThreshold)
+		if overallState != enumsspb.HEALTH_STATE_DECLINED_SERVING {
+			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
+		}
+	}
+	checks = append(checks, &healthspb.HealthCheck{
+		CheckType: healthcheck.CheckTypePersistenceErrRatio,
+		State:     persErrState,
+		Value:     persErrRatio,
+		Threshold: persErrThreshold,
+		Message:   persErrMsg,
+	})
+
+	metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(overallState))
+	return &historyservice.DeepHealthCheckResponse{
+		State:  overallState,
+		Checks: checks,
+	}, nil
 }
 
 // IsWorkflowTaskValid - whether workflow task is still valid
@@ -372,10 +459,6 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	response.Clock, err = shardContext.NewVectorClock()
-	if err != nil {
-		return nil, h.convertError(err)
-	}
 	return response, nil
 }
 
@@ -431,11 +514,6 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 
 	// Handle standalone activity if component ref is present in the token.
 	if componentRef := taskToken.GetComponentRef(); len(componentRef) > 0 {
-		namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
-		if err != nil {
-			return nil, err
-		}
-
 		response, _, err := chasm.UpdateComponent(
 			ctx,
 			componentRef,
@@ -443,11 +521,6 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 			activity.RespondCompletedEvent{
 				Request: request,
 				Token:   taskToken,
-				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
-					Handler:                     h.metricsHandler,
-					NamespaceName:               namespaceName.String(),
-					BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
-				},
 			},
 		)
 		if err != nil {
@@ -492,11 +565,6 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 
 	// Handle standalone activity if component ref is present in the token.
 	if componentRef := taskToken.GetComponentRef(); len(componentRef) > 0 {
-		namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
-		if err != nil {
-			return nil, err
-		}
-
 		response, _, err := chasm.UpdateComponent(
 			ctx,
 			componentRef,
@@ -504,11 +572,6 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 			activity.RespondFailedEvent{
 				Request: request,
 				Token:   taskToken,
-				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
-					Handler:                     h.metricsHandler,
-					NamespaceName:               namespaceName.String(),
-					BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
-				},
 			},
 		)
 		if err != nil {
@@ -553,11 +616,6 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 
 	// Handle standalone activity if component ref is present in the token.
 	if componentRef := taskToken.GetComponentRef(); len(componentRef) > 0 {
-		namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
-		if err != nil {
-			return nil, err
-		}
-
 		response, _, err := chasm.UpdateComponent(
 			ctx,
 			componentRef,
@@ -565,11 +623,6 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 			activity.RespondCancelledEvent{
 				Request: request,
 				Token:   taskToken,
-				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
-					Handler:                     h.metricsHandler,
-					NamespaceName:               namespaceName.String(),
-					BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
-				},
 			},
 		)
 		if err != nil {
@@ -1581,7 +1634,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 	wg.Wait()
 
 	messagesByShard := make(map[int32]*replicationspb.ReplicationMessages)
-	result.Range(func(key, value interface{}) bool {
+	result.Range(func(key, value any) bool {
 		shardID := key.(int32)
 		messagesByShard[shardID] = value.(*replicationspb.ReplicationMessages)
 		return true
@@ -2157,11 +2210,22 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 	}
 	var opErr *nexus.OperationError
 	if request.State != string(nexus.OperationStateSucceeded) {
-		opErr = &nexus.OperationError{
-			State: nexus.OperationState(request.GetState()),
-			Cause: &nexus.FailureError{
-				Failure: commonnexus.ProtoFailureToNexusFailure(request.GetFailure()),
-			},
+		failure := commonnexus.ProtoFailureToNexusFailure(request.GetFailure())
+		recvdErr, err := nexusrpc.DefaultFailureConverter().FailureToError(failure)
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgument("unable to convert failure to error")
+		}
+		// Backward compatibility: if the received error is not of type OperationError, wrap the error in OperationError.
+		var ok bool
+		if opErr, ok = recvdErr.(*nexus.OperationError); !ok {
+			opErr = &nexus.OperationError{
+				State:   nexus.OperationState(request.GetState()),
+				Message: "nexus operation completed unsuccessfully",
+				Cause:   recvdErr,
+			}
+			if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
+				return nil, serviceerror.NewInvalidArgument("unable to convert operation error to failure")
+			}
 		}
 	}
 	err = nexusoperations.CompletionHandler(
@@ -2223,6 +2287,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.
+// NOTE: Keep in sync with ChasmEngine.convertError in chasm_engine.go, which is a superset of this function.
 func (h *Handler) convertError(err error) error {
 	switch err := err.(type) {
 	case *persistence.ShardOwnershipLostError:
@@ -2458,4 +2523,157 @@ func (h *Handler) UnpauseWorkflowExecution(ctx context.Context, request *history
 	}
 
 	return unpauseResp, nil
+}
+
+func (h *Handler) StartNexusOperation(
+	ctx context.Context,
+	req *historyservice.StartNexusOperationRequest,
+) (*historyservice.StartNexusOperationResponse, error) {
+	requestID := req.GetRequest().GetRequestId()
+	// Build nexus.StartOperationOptions from the request
+	options := nexus.StartOperationOptions{
+		// Header not supported for system endpoint operations.
+		Header:         make(nexus.Header),
+		RequestID:      requestID,
+		CallbackURL:    req.GetRequest().GetCallback(),
+		CallbackHeader: nexus.Header(req.GetRequest().GetCallbackHeader()),
+		Links:          commonnexus.ConvertLinksFromProto(req.GetRequest().GetLinks()),
+	}
+
+	// Wrap the payload in a LazyValue
+	input := createLazyValueFromPayload(req.GetRequest().GetPayload())
+
+	// Set up handler context before invoking the handler
+	ctx = nexus.WithHandlerContext(ctx, nexus.HandlerInfo{
+		Service:   req.GetRequest().GetService(),
+		Operation: req.GetRequest().GetOperation(),
+		Header:    options.Header,
+	})
+
+	// Invoke the operation via the handler
+	if h.nexusHandler == nil {
+		return nil, serviceerror.NewUnimplemented("no nexus services registered")
+	}
+	result, err := h.nexusHandler.StartOperation(ctx, req.GetRequest().GetService(), req.GetRequest().GetOperation(), input, options)
+	if err != nil {
+		var opErr *nexus.OperationError
+		if errors.As(err, &opErr) {
+			nexusFailure, convErr := nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
+			if convErr != nil {
+				return nil, convErr
+			}
+			temporalFailure, convErr := commonnexus.NexusFailureToTemporalFailure(nexusFailure)
+			if convErr != nil {
+				return nil, convErr
+			}
+			return &historyservice.StartNexusOperationResponse{
+				Response: &nexuspb.StartOperationResponse{
+					Variant: &nexuspb.StartOperationResponse_Failure{
+						Failure: temporalFailure,
+					},
+				},
+			}, nil
+		}
+		// TODO: redact certain errors
+		return nil, err
+	}
+	links := nexus.HandlerLinks(ctx)
+
+	// Convert the result to the response
+	response := &nexuspb.StartOperationResponse{}
+	switch r := result.(type) {
+	case interface{ ValueAsAny() any }:
+		ps, err := payloads.Encode(r.ValueAsAny())
+		if err != nil {
+			h.logger.Error("failed to encode payload", tag.Error(err), tag.RequestID(requestID))
+			return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")
+		}
+		var payload *commonpb.Payload
+		if len(ps.GetPayloads()) == 1 {
+			payload = ps.GetPayloads()[0]
+		}
+		response.Variant = &nexuspb.StartOperationResponse_SyncSuccess{
+			SyncSuccess: &nexuspb.StartOperationResponse_Sync{
+				Payload: payload,
+				Links:   commonnexus.ConvertLinksToProto(links),
+			},
+		}
+	case *nexus.HandlerStartOperationResultAsync:
+		response.Variant = &nexuspb.StartOperationResponse_AsyncSuccess{
+			AsyncSuccess: &nexuspb.StartOperationResponse_Async{
+				OperationToken: r.OperationToken,
+				Links:          commonnexus.ConvertLinksToProto(links),
+			},
+		}
+	default:
+		h.logger.Error(fmt.Sprintf("invalid result type: %T", result), tag.RequestID(req.Request.RequestId))
+		return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")
+	}
+
+	return &historyservice.StartNexusOperationResponse{
+		Response: response,
+	}, nil
+}
+
+func (h *Handler) CancelNexusOperation(
+	ctx context.Context,
+	req *historyservice.CancelNexusOperationRequest,
+) (*historyservice.CancelNexusOperationResponse, error) {
+	// Build nexus.CancelOperationOptions from the request
+	options := nexus.CancelOperationOptions{
+		// Header not supported for system endpoint operations.
+		Header: make(nexus.Header),
+	}
+
+	// Set up handler context before invoking the handler
+	ctx = nexus.WithHandlerContext(ctx, nexus.HandlerInfo{
+		Service:   req.GetRequest().GetService(),
+		Operation: req.GetRequest().GetOperation(),
+		// Header not supported for system endpoint operations.
+		Header: make(nexus.Header),
+	})
+
+	// Invoke the cancel operation via the handler
+	if h.nexusHandler == nil {
+		return nil, serviceerror.NewUnimplemented("no nexus services registered")
+	}
+	err := h.nexusHandler.CancelOperation(ctx, req.GetRequest().GetService(), req.GetRequest().GetOperation(), req.GetRequest().GetOperationToken(), options)
+	if err != nil {
+		// TODO: redact certain errors
+		return nil, err
+	}
+
+	return &historyservice.CancelNexusOperationResponse{
+		Response: &nexuspb.CancelOperationResponse{},
+	}, nil
+}
+
+func createLazyValueFromPayload(payload *commonpb.Payload) *nexus.LazyValue {
+	// Create a serializer that wraps the payload.
+	// When Deserialize is called, it will directly unmarshal the payload.
+	// This avoids unnecessary serialization/deserialization since the payload is already in the correct format.
+	serializer := &payloadSerializer{payload: payload}
+	return nexus.NewLazyValue(
+		serializer,
+		&nexus.Reader{
+			ReadCloser: io.NopCloser(bytes.NewReader(nil)),
+		},
+	)
+}
+
+// payloadSerializer is a nexus.Serializer that wraps a commonpb.Payload.
+// It only implements Deserialize since CHASM operations work directly with payloads.
+type payloadSerializer struct {
+	payload *commonpb.Payload
+}
+
+// Deserialize unmarshals the wrapped payload into the provided value using the SDK's default data converter.
+func (p *payloadSerializer) Deserialize(_ *nexus.Content, v any) error {
+	return payloads.Decode(&commonpb.Payloads{Payloads: []*commonpb.Payload{p.payload}}, v)
+}
+
+// Serialize should never be called since we only use this serializer for deserialization.
+func (p *payloadSerializer) Serialize(v any) (*nexus.Content, error) {
+	// nolint:forbidigo // Panic is expected as this method should never be called.
+	panic("Serialize not supported on payloadSerializer")
 }

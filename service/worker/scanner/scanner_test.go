@@ -230,7 +230,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 					_ context.Context,
 					_ client.StartWorkflowOptions,
 					_ string,
-					_ ...interface{},
+					_ ...any,
 				) {
 					wg.Done()
 				})
@@ -304,7 +304,7 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 		ctx context.Context,
 		_ client.StartWorkflowOptions,
 		_ string,
-		_ ...interface{},
+		_ ...any,
 	) (client.WorkflowRun, error) {
 		wg.Done()
 		<-ctx.Done()
