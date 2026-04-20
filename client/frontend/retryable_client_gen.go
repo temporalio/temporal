@@ -71,6 +71,36 @@ func (c *retryableClient) CreateSchedule(
 	return resp, err
 }
 
+func (c *retryableClient) CreateWorkerDeployment(
+	ctx context.Context,
+	request *workflowservice.CreateWorkerDeploymentRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CreateWorkerDeploymentResponse, error) {
+	var resp *workflowservice.CreateWorkerDeploymentResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CreateWorkerDeployment(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) CreateWorkerDeploymentVersion(
+	ctx context.Context,
+	request *workflowservice.CreateWorkerDeploymentVersionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CreateWorkerDeploymentVersionResponse, error) {
+	var resp *workflowservice.CreateWorkerDeploymentVersionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CreateWorkerDeploymentVersion(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CreateWorkflowRule(
 	ctx context.Context,
 	request *workflowservice.CreateWorkflowRuleRequest,
@@ -1526,6 +1556,21 @@ func (c *retryableClient) UpdateWorkerConfig(
 	return resp, err
 }
 
+func (c *retryableClient) UpdateWorkerDeploymentVersionComputeConfig(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerDeploymentVersionComputeConfigResponse, error) {
+	var resp *workflowservice.UpdateWorkerDeploymentVersionComputeConfigResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateWorkerDeploymentVersionComputeConfig(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) UpdateWorkerDeploymentVersionMetadata(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest,
@@ -1580,6 +1625,21 @@ func (c *retryableClient) UpdateWorkflowExecutionOptions(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.UpdateWorkflowExecutionOptions(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ValidateWorkerDeploymentVersionComputeConfig(
+	ctx context.Context,
+	request *workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ValidateWorkerDeploymentVersionComputeConfigResponse, error) {
+	var resp *workflowservice.ValidateWorkerDeploymentVersionComputeConfigResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ValidateWorkerDeploymentVersionComputeConfig(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

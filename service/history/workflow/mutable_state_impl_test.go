@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
@@ -193,6 +194,7 @@ func (s *mutableStateSuite) SetupTest() {
 	reg := hsm.NewRegistry()
 	s.Require().NoError(RegisterStateMachine(reg))
 	s.Require().NoError(callbacks.RegisterStateMachine(reg))
+	s.Require().NoError(nexusoperations.RegisterStateMachines(reg))
 	s.mockShard.SetStateMachineRegistry(reg)
 
 	s.mockConfig.MutableStateActivityFailureSizeLimitWarn = func(namespace string) int { return 1 * 1024 }
@@ -1141,7 +1143,7 @@ func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmpty
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
 	// set pinned override
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions2.GetVersioningOverride(), false, "", nil, nil, id, nil)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions2.GetVersioningOverride(), false, "", nil, nil, id, nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1156,7 +1158,7 @@ func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmpty
 
 	// unset pinned override with boolean
 	id = uuid.NewString()
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id, nil)
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id, nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, baseBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1178,7 +1180,7 @@ func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithEmpty
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
 	// set unpinned override
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unpinnedOptions.GetVersioningOverride(), false, "", nil, nil, id, nil)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unpinnedOptions.GetVersioningOverride(), false, "", nil, nil, id, nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1193,7 +1195,7 @@ func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithEmpty
 
 	// unset pinned override with empty
 	id = uuid.NewString()
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id, nil)
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id, nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, baseBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1214,7 +1216,7 @@ func (s *mutableStateSuite) TestOverride_RedirectFails() {
 	id := uuid.NewString()
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false, "", nil, nil, id, nil)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false, "", nil, nil, id, nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1241,7 +1243,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 	id := uuid.NewString()
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false, "", nil, nil, id, nil)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false, "", nil, nil, id, nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1294,7 +1296,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 
 	// now we unset the override and check that the base deployment/behavior is in effect
 	id = uuid.NewString()
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id, nil)
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id, nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, baseBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -2878,6 +2880,7 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 		nil,
 		nil,
 		nil,
+		"",
 	)
 	s.NoError(err)
 
@@ -2943,6 +2946,7 @@ func (s *mutableStateSuite) TestRetryActivity_PausedIncrementsStamp() {
 		nil,
 		nil,
 		nil,
+		"",
 	)
 	s.NoError(err)
 
@@ -6151,6 +6155,79 @@ func (s *mutableStateSuite) TestSetContextMetadata() {
 	s.Equal(taskQueue, tq)
 }
 
+func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTaskQueue() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	// Setup workflow execution
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:        &commonpb.WorkflowType{Name: "workflow-type"},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: "task-queue"},
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	di, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		di.ScheduledEventID,
+		di.RequestID,
+		di.TaskQueue,
+		"identity",
+		nil,
+		nil,
+		nil,
+		false,
+		nil,
+	)
+	s.NoError(err)
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		di,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{Identity: "identity"},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+
+	// Schedule activity
+	workflowTaskCompletedEventID := int64(4)
+	_, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
+		workflowTaskCompletedEventID,
+		&commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:   "test-activity-1",
+			ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+		},
+		false,
+	)
+	s.NoError(err)
+	s.Empty(activityInfo.WorkerControlTaskQueue, "WorkerControlTaskQueue should be empty before activity starts")
+
+	// Start activity with workerControlTaskQueue
+	expectedWorkerControlTaskQueue := "test-control-queue"
+	_, err = s.mutableState.AddActivityTaskStartedEvent(
+		activityInfo,
+		activityInfo.ScheduledEventId,
+		uuid.NewString(),
+		"worker-identity",
+		nil,
+		nil,
+		nil,
+		expectedWorkerControlTaskQueue,
+	)
+	s.NoError(err)
+
+	// Verify workerControlTaskQueue is stored
+	updatedActivityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
+	s.True(ok)
+	s.Equal(expectedWorkerControlTaskQueue, updatedActivityInfo.WorkerControlTaskQueue)
+}
+
 func (s *mutableStateSuite) TestCloseTransaction_PrincipalStamped() {
 	for _, tc := range []struct {
 		name   string
@@ -6288,4 +6365,923 @@ func (s *mutableStateSuite) TestCloseTransaction_PrincipalPreserved() {
 	s.True(foundWorkerEvent, "expected to find non-signal events in workflowEventsSeq")
 	s.Equal("alice", principalBySignalName["signal-from-alice"], "alice's signal should retain her principal")
 	s.Equal("bob", principalBySignalName["signal-from-bob"], "bob's signal should retain his principal")
+}
+
+func (s *mutableStateSuite) TestHasInflightWorkToPreventTimeSkipping() {
+	// Each s.Run() gets a fresh mutable state via SetupSubTest().
+
+	s.Run("FalseWhenNoPendingWork", func() {
+		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
+		s.False(hasPendingWork)
+		s.Empty(reason)
+	})
+
+	s.Run("TrueWhenPendingWorkflowTask", func() {
+		s.mutableState.executionInfo.WorkflowTaskScheduledEventId = 1
+		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
+		s.True(hasPendingWork)
+		s.Equal("has pending workflow task", reason)
+	})
+
+	s.Run("TrueWhenPendingActivity", func() {
+		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{}
+		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
+		s.True(hasPendingWork)
+		s.Equal("has pending activity", reason)
+	})
+
+	s.Run("TrueWhenPendingChildExecution", func() {
+		s.mutableState.pendingChildExecutionInfoIDs[1] = &persistencespb.ChildExecutionInfo{}
+		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
+		s.True(hasPendingWork)
+		s.Equal("has pending child execution", reason)
+	})
+
+	s.Run("TrueWhenPendingNexusOperation", func() {
+		_, err := nexusoperations.AddChild(s.mutableState.HSM(), "op-1", &historypb.HistoryEvent{
+			EventTime: timestamppb.Now(),
+			Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+				NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{},
+			},
+		}, []byte("token"))
+		s.Require().NoError(err)
+		hasPendingWork, reason := s.mutableState.hasInflightWorkToPreventTimeSkipping()
+		s.True(hasPendingWork)
+		s.Equal("has pending nexus operations", reason)
+	})
+}
+
+func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
+	// Each s.Run() gets a fresh mutable state via SetupSubTest().
+	// The default state is RUNNING with no pending work.
+
+	s.Run("FalseWhenTimeSkippingInfoNil", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
+	})
+
+	s.Run("FalseWhenConfigNil", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: nil}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
+	})
+
+	s.Run("FalseWhenConfigDisabled", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: false},
+		}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
+	})
+
+	s.Run("FalseWhenWorkflowNotRunning", func() {
+		s.mutableState.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+		s.mutableState.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
+	})
+
+	s.Run("FalseWhenPendingWorkflowTask", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		s.mutableState.executionInfo.WorkflowTaskScheduledEventId = 1
+		s.True(s.mutableState.HasPendingWorkflowTask())
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
+	})
+
+	s.Run("FalseWhenPendingActivity", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{}
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
+	})
+
+	s.Run("FalseWhenPendingChildExecution", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		s.mutableState.pendingChildExecutionInfoIDs[1] = &persistencespb.ChildExecutionInfo{}
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
+	})
+
+	s.Run("FalseWhenPendingNexusOperation", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		_, err := nexusoperations.AddChild(s.mutableState.HSM(), "op-1", &historypb.HistoryEvent{
+			EventTime: timestamppb.Now(),
+			Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+				NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{},
+			},
+		}, []byte("token"))
+		s.Require().NoError(err)
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
+	})
+
+	s.Run("FalseWhenNoPendingTimers", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		// No pending timers — nothing to skip to.
+		// TODO@time-skipping: bound support will add another path to return true here.
+		s.False(s.mutableState.shouldExecuteTimeSkipping())
+	})
+
+	s.Run("TrueWhenPendingTimerAndNoPendingWork", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		s.True(s.mutableState.shouldExecuteTimeSkipping())
+	})
+}
+
+func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEvent() {
+	// Use fixed UTC times so duration arithmetic is exact.
+	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	makeEvent := func(eventTime time.Time, targetTime *time.Time, disabledAfterBound bool) *historypb.HistoryEvent {
+		attr := &historypb.WorkflowExecutionTimeSkippingTransitionedEventAttributes{
+			DisabledAfterBound: disabledAfterBound,
+		}
+		if targetTime != nil {
+			attr.TargetTime = timestamppb.New(*targetTime)
+		}
+		return &historypb.HistoryEvent{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED,
+			EventTime: timestamppb.New(eventTime),
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionTimeSkippingTransitionedEventAttributes{
+				WorkflowExecutionTimeSkippingTransitionedEventAttributes: attr,
+			},
+		}
+	}
+
+	s.Run("ErrorWhenTimeSkippingInfoNil", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		targetTime := baseTime.Add(2 * time.Hour)
+		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(),
+			makeEvent(baseTime, &targetTime, false),
+		)
+		s.Require().Error(err)
+	})
+
+	s.Run("AccumulatesDurationFirstTime", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.mutableState.timeSkippingInfoUpdated = false
+		targetTime := baseTime.Add(2 * time.Hour)
+
+		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(),
+			makeEvent(baseTime, &targetTime, false),
+		)
+		s.Require().NoError(err)
+
+		accumulated := s.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
+		s.Require().NotNil(accumulated)
+		s.Require().Equal(2*time.Hour, accumulated.AsDuration())
+		s.Require().True(s.mutableState.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)
+		s.Require().True(s.mutableState.timeSkippingInfoUpdated)
+	})
+
+	s.Run("AccumulatesDurationAdditively", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		}
+		targetTime := baseTime.Add(2 * time.Hour)
+
+		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(),
+			makeEvent(baseTime, &targetTime, false),
+		)
+		s.Require().NoError(err)
+
+		accumulated := s.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
+		s.Require().Equal(3*time.Hour, accumulated.AsDuration()) // 1h pre-existing + 2h new
+	})
+
+	s.Run("ErrorWhenNilTargetTimeAndNotDisabledAfterBound", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+
+		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(),
+			makeEvent(baseTime, nil, false),
+		)
+		s.Require().Error(err)
+	})
+
+	s.Run("NilTargetTimeWithDisabledAfterBoundDoesNotAccumulateDuration", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		}
+
+		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(),
+			makeEvent(baseTime, nil, true),
+		)
+		s.Require().NoError(err)
+
+		accumulated := s.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
+		s.Require().Equal(time.Hour, accumulated.AsDuration())
+		s.Require().False(s.mutableState.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)
+	})
+
+	s.Run("DisabledAfterBoundDisablesConfigAndAccumulatesDuration", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		targetTime := baseTime.Add(2 * time.Hour)
+
+		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(),
+			makeEvent(baseTime, &targetTime, true),
+		)
+		s.Require().NoError(err)
+
+		s.Require().False(s.mutableState.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)
+		accumulated := s.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
+		s.Require().Equal(2*time.Hour, accumulated.AsDuration())
+	})
+}
+
+func (s *mutableStateSuite) TestAddWorkflowExecutionTimeSkippingTransitionedEvent() {
+	s.Run("FailsWhenWorkflowNotRunning", func() {
+		s.mutableState.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+		s.mutableState.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+
+		_, err := s.mutableState.AddWorkflowExecutionTimeSkippingTransitionedEvent(context.Background())
+		s.ErrorIs(err, ErrWorkflowFinished)
+	})
+
+	s.Run("SucceedsAndAccumulatesDuration", func() {
+		targetTime := s.mockShard.GetTimeSource().Now().Add(2 * time.Hour)
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{
+			TimerId:    "t1",
+			ExpiryTime: timestamppb.New(targetTime),
+		}
+
+		event, err := s.mutableState.AddWorkflowExecutionTimeSkippingTransitionedEvent(context.Background())
+		s.NoError(err)
+		s.NotNil(event)
+		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED, event.GetEventType())
+
+		// Duration is the gap between the event's recorded time and the target time.
+		expectedDuration := targetTime.Sub(event.GetEventTime().AsTime())
+		accumulated := s.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
+		s.NotNil(accumulated)
+		s.Equal(expectedDuration, accumulated.AsDuration())
+		s.True(s.mutableState.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)
+	})
+
+	s.Run("ApplyDisablesConfigWhenDisabledAfterBound", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		targetTime := s.mockShard.GetTimeSource().Now().Add(time.Hour)
+		// Build an event with DisabledAfterBound=true directly via the history builder.
+		event := s.mutableState.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(targetTime, true)
+		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(context.Background(), event)
+		s.NoError(err)
+		s.False(s.mutableState.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)
+	})
+
+}
+
+// TestCloseTransactionTimeSkipping exercises the time-skipping logic that runs inside
+// closeTransaction:
+//
+//   - closeTransactionHandleTimeSkipping: decides whether to fire time skipping and, if so,
+//     calls AddWorkflowExecutionTimeSkippingTransitionedEvent to write the history event and
+//     accumulate the skipped duration.
+//   - closeTransactionRegenerateTimerTasksForTimeSkipping: regenerates UserTimerTask entries
+//     with timestamps shifted back by AccumulatedSkippedDuration.
+func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
+	failoverVersion := s.namespaceEntry.FailoverVersion(tests.WorkflowID)
+
+	// buildEligibleState returns a minimal running workflow state that satisfies
+	// ShouldExecuteTimeSkipping(): time-skipping enabled, one pending timer, no pending
+	// workflow task / activities / child executions.
+	//
+	// The timer's TaskStatus is pre-set to TimerTaskStatusCreated so that
+	// closeTransactionHandleActivityUserTimerTasks does NOT add a second UserTimerTask for it.
+	// That way the only timer task in the mutation is the regenerated (time-shifted) one.
+	buildEligibleState := func(timerExpiry time.Time) *persistencespb.WorkflowMutableState {
+		return &persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				NamespaceId:                      s.namespaceEntry.ID().String(),
+				WorkflowId:                       tests.WorkflowID,
+				TaskQueue:                        "testTaskQueue",
+				WorkflowTypeName:                 "testWorkflowType",
+				WorkflowExecutionTimerTaskStatus: TimerTaskStatusCreated,
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+				},
+				VersionHistories: &historyspb.VersionHistories{
+					Histories: []*historyspb.VersionHistory{
+						{
+							BranchToken: []byte("token#1"),
+							Items:       []*historyspb.VersionHistoryItem{{EventId: 2, Version: failoverVersion}},
+						},
+					},
+				},
+				TransitionHistory: []*persistencespb.VersionedTransition{
+					{NamespaceFailoverVersion: failoverVersion, TransitionCount: 1},
+				},
+			},
+			ExecutionState: &persistencespb.WorkflowExecutionState{
+				RunId:  tests.RunID,
+				State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			},
+			NextEventId: 3,
+			TimerInfos: map[string]*persistencespb.TimerInfo{
+				"t1": {
+					TimerId:        "t1",
+					StartedEventId: 1,
+					ExpiryTime:     timestamppb.New(timerExpiry),
+					TaskStatus:     TimerTaskStatusCreated,
+				},
+			},
+		}
+	}
+
+	s.Run("Active_Eligible_WritesEventAndRegeneratesTimerTask", func() {
+		// Happy path: active cluster, running workflow, time-skipping enabled, one pending
+		// timer, no other in-flight work.  Expect:
+		//   1. A WorkflowExecutionTimeSkippingTransitioned event in the event batch.
+		//   2. AccumulatedSkippedDuration set on execution info.
+		//   3. A regenerated UserTimerTask at (timerExpiry - accumulatedDuration).
+		now := s.mockShard.GetTimeSource().Now()
+		timerExpiry := now.Add(2 * time.Hour)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, buildEligibleState(timerExpiry), 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		mutation, workflowEventsSeq, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		// AccumulatedSkippedDuration must be positive.
+		accumulated := ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
+		s.Require().NotNil(accumulated)
+		s.Greater(accumulated.AsDuration(), time.Duration(0))
+
+		// A WorkflowExecutionTimeSkippingTransitioned event must appear in the written batches.
+		var tsEvent *historypb.HistoryEvent
+		for _, we := range workflowEventsSeq {
+			for _, ev := range we.Events {
+				if ev.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED {
+					tsEvent = ev
+				}
+			}
+		}
+		s.Require().NotNil(tsEvent, "expected WorkflowExecutionTimeSkippingTransitioned event in workflowEventsSeq")
+		s.Equal(timerExpiry, tsEvent.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetTargetTime().AsTime())
+
+		// The mutation must contain a regenerated UserTimerTask shifted back by the accumulated duration.
+		expectedTS := timerExpiry.Add(-accumulated.AsDuration())
+		var regenerated *tasks.UserTimerTask
+		for _, task := range mutation.Tasks[tasks.CategoryTimer] {
+			if ut, ok := task.(*tasks.UserTimerTask); ok && ut.EventID == 1 {
+				regenerated = ut
+			}
+		}
+		s.Require().NotNil(regenerated, "expected regenerated UserTimerTask for EventID=1")
+		s.Equal(expectedTS, regenerated.VisibilityTimestamp)
+		s.Equal(int64(0), regenerated.TaskID, "TaskID must be zero — assigned by shard, not the generator")
+	})
+
+	s.Run("Active_TimeSkippingDisabled_NoEvent", func() {
+		// When TimeSkippingInfo is nil, ShouldExecuteTimeSkipping returns false immediately.
+		// No time-skipping event should be emitted and AccumulatedSkippedDuration stays nil.
+		now := s.mockShard.GetTimeSource().Now()
+		timerExpiry := now.Add(2 * time.Hour)
+
+		dbState := buildEligibleState(timerExpiry)
+		dbState.ExecutionInfo.TimeSkippingInfo = nil // time skipping not configured
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		_, workflowEventsSeq, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		for _, we := range workflowEventsSeq {
+			for _, ev := range we.Events {
+				s.NotEqual(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED, ev.GetEventType(),
+					"unexpected WorkflowExecutionTimeSkippingTransitioned event when time skipping is disabled")
+			}
+		}
+	})
+
+	s.Run("Active_NoPendingTimers_NoEvent", func() {
+		// ShouldExecuteTimeSkipping returns false when there are no pending timers and no
+		// time bound configured.  No event should be emitted.
+		now := s.mockShard.GetTimeSource().Now()
+
+		dbState := buildEligibleState(now.Add(time.Hour))
+		dbState.TimerInfos = nil // no pending timers → nothing to skip to
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		_, workflowEventsSeq, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		for _, we := range workflowEventsSeq {
+			for _, ev := range we.Events {
+				s.NotEqual(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED, ev.GetEventType(),
+					"unexpected WorkflowExecutionTimeSkippingTransitioned event when there are no pending timers")
+			}
+		}
+		s.Nil(ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration)
+	})
+
+	s.Run("Passive_EligibleState_NoEvent", func() {
+		// Passive policy always short-circuits time skipping.
+		// Even with an otherwise eligible state, no event or regenerated timer task is produced.
+		now := s.mockShard.GetTimeSource().Now()
+		timerExpiry := now.Add(2 * time.Hour)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, buildEligibleState(timerExpiry), 1)
+		s.Require().NoError(err)
+
+		mutation, workflowEventsSeq, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyPassive)
+		s.Require().NoError(err)
+
+		for _, we := range workflowEventsSeq {
+			for _, ev := range we.Events {
+				s.NotEqual(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED, ev.GetEventType(),
+					"passive cluster must not emit WorkflowExecutionTimeSkippingTransitioned event")
+			}
+		}
+		s.Nil(ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration)
+
+		// No regenerated UserTimerTask: the passive path skips both
+		// closeTransactionHandleTimeSkipping and closeTransactionRegenerateTimerTasksForTimeSkipping.
+		for _, task := range mutation.Tasks[tasks.CategoryTimer] {
+			_, ok := task.(*tasks.UserTimerTask)
+			s.False(ok, "passive cluster must not produce regenerated UserTimerTask")
+		}
+	})
+}
+
+// TestCloseTransactionPrepareTasks exercises closeTransactionPrepareTasks and
+// closeTransactionHandleActivityUserTimerTasks together.
+//
+// closeTransactionHandleActivityUserTimerTasks is responsible for generating exactly one
+// ActivityTimeoutTask and one UserTimerTask (the earliest-firing ones) per transaction.
+// closeTransactionPrepareTasks orchestrates this call and then, when time-skipping is
+// active, calls closeTransactionRegenerateTimerTasksForTimeSkipping afterward — testing
+// that the ordering is correct.
+func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
+	failoverVersion := s.namespaceEntry.FailoverVersion(tests.WorkflowID)
+	now := s.mockShard.GetTimeSource().Now()
+	timerExpiry := now.Add(time.Hour)
+
+	// buildRunningState returns a minimal running workflow with no pending workflow task,
+	// activities, or timers.  Individual sub-tests layer what they need on top.
+	buildRunningState := func() *persistencespb.WorkflowMutableState {
+		return &persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				NamespaceId:                      s.namespaceEntry.ID().String(),
+				WorkflowId:                       tests.WorkflowID,
+				TaskQueue:                        "testTaskQueue",
+				WorkflowTypeName:                 "testWorkflowType",
+				WorkflowExecutionTimerTaskStatus: TimerTaskStatusCreated,
+				VersionHistories: &historyspb.VersionHistories{
+					Histories: []*historyspb.VersionHistory{
+						{
+							BranchToken: []byte("token#1"),
+							Items:       []*historyspb.VersionHistoryItem{{EventId: 2, Version: failoverVersion}},
+						},
+					},
+				},
+				TransitionHistory: []*persistencespb.VersionedTransition{
+					{NamespaceFailoverVersion: failoverVersion, TransitionCount: 1},
+				},
+			},
+			ExecutionState: &persistencespb.WorkflowExecutionState{
+				RunId:  tests.RunID,
+				State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			},
+			NextEventId: 3,
+		}
+	}
+
+	// pendingTimer returns a timer map with one timer whose TaskStatus is as given.
+	pendingTimer := func(taskStatus int64) map[string]*persistencespb.TimerInfo {
+		return map[string]*persistencespb.TimerInfo{
+			"t1": {
+				TimerId:        "t1",
+				StartedEventId: 1,
+				ExpiryTime:     timestamppb.New(timerExpiry),
+				TaskStatus:     taskStatus,
+			},
+		}
+	}
+
+	// pendingScheduledActivity returns an activity map with one scheduled (not-started)
+	// activity whose TimerTaskStatus is as given.
+	// ScheduleToStart fires at now+1h, ScheduleToClose fires at now+2h — so
+	// ScheduleToStart is always the earliest timer for this activity.
+	pendingScheduledActivity := func(timerTaskStatus int32) map[int64]*persistencespb.ActivityInfo {
+		return map[int64]*persistencespb.ActivityInfo{
+			5: {
+				Version:                failoverVersion,
+				ScheduledEventId:       5,
+				ScheduledTime:          timestamppb.New(now),
+				StartedEventId:         common.EmptyEventID,
+				ActivityId:             "act1",
+				ScheduleToStartTimeout: durationpb.New(time.Hour),
+				ScheduleToCloseTimeout: durationpb.New(2 * time.Hour),
+				TimerTaskStatus:        timerTaskStatus,
+				Stamp:                  1,
+			},
+		}
+	}
+
+	collectUserTimerTasks := func(timerTasks []tasks.Task) []*tasks.UserTimerTask {
+		var result []*tasks.UserTimerTask
+		for _, task := range timerTasks {
+			if ut, ok := task.(*tasks.UserTimerTask); ok {
+				result = append(result, ut)
+			}
+		}
+		return result
+	}
+
+	collectActivityTimerTasks := func(timerTasks []tasks.Task) []*tasks.ActivityTimeoutTask {
+		var result []*tasks.ActivityTimeoutTask
+		for _, task := range timerTasks {
+			if at, ok := task.(*tasks.ActivityTimeoutTask); ok {
+				result = append(result, at)
+			}
+		}
+		return result
+	}
+
+	// ── closeTransactionHandleActivityUserTimerTasks scenarios ──────────────────
+
+	s.Run("HandleActivityUserTimerTasks/Active_Running_UserTimer_NotCreated", func() {
+		// TaskStatus=None: CreateNextUserTimer generates a UserTimerTask and marks the
+		// timer as created so the next transaction skips it.
+		dbState := buildRunningState()
+		dbState.TimerInfos = pendingTimer(TimerTaskStatusNone)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		utTasks := collectUserTimerTasks(mutation.Tasks[tasks.CategoryTimer])
+		s.Require().Len(utTasks, 1)
+		s.Equal(int64(1), utTasks[0].EventID)
+		s.Equal(timerExpiry, utTasks[0].VisibilityTimestamp)
+
+		// The timer must be marked as created in mutable state.
+		s.Equal(int64(TimerTaskStatusCreated), ms.pendingTimerInfoIDs["t1"].TaskStatus)
+	})
+
+	s.Run("HandleActivityUserTimerTasks/Active_Running_UserTimer_AlreadyCreated", func() {
+		// TaskStatus=Created: CreateNextUserTimer skips generation — no duplicate task.
+		dbState := buildRunningState()
+		dbState.TimerInfos = pendingTimer(TimerTaskStatusCreated)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		s.Empty(collectUserTimerTasks(mutation.Tasks[tasks.CategoryTimer]))
+	})
+
+	s.Run("HandleActivityUserTimerTasks/Active_Running_Activity_NotCreated", func() {
+		// No timer task status bits set: CreateNextActivityTimer generates an
+		// ActivityTimeoutTask for the earliest-firing timeout (ScheduleToStart).
+		dbState := buildRunningState()
+		dbState.ActivityInfos = pendingScheduledActivity(0)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		atTasks := collectActivityTimerTasks(mutation.Tasks[tasks.CategoryTimer])
+		s.Require().Len(atTasks, 1)
+		s.Equal(int64(5), atTasks[0].EventID)
+		s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, atTasks[0].TimeoutType)
+	})
+
+	s.Run("HandleActivityUserTimerTasks/Active_Running_Activity_AlreadyCreated", func() {
+		// ScheduleToStart bit set: that timer is already created, CreateNextActivityTimer
+		// returns without generating a task.
+		dbState := buildRunningState()
+		dbState.ActivityInfos = pendingScheduledActivity(TimerTaskStatusCreatedScheduleToStart)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		s.Empty(collectActivityTimerTasks(mutation.Tasks[tasks.CategoryTimer]))
+	})
+
+	s.Run("HandleActivityUserTimerTasks/Active_NotRunning", func() {
+		// Completed workflow: closeTransactionHandleActivityUserTimerTasks short-circuits
+		// on !IsWorkflowExecutionRunning(), generating no timer tasks.
+		dbState := buildRunningState()
+		dbState.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+		dbState.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		dbState.TimerInfos = pendingTimer(TimerTaskStatusNone)
+		dbState.ActivityInfos = pendingScheduledActivity(0)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		// StartTransaction is needed to initialize currentVersion so closeTransactionWithPolicyCheck
+		// can call ClusterNameForFailoverVersion with the right version.
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		s.Empty(collectUserTimerTasks(mutation.Tasks[tasks.CategoryTimer]))
+		s.Empty(collectActivityTimerTasks(mutation.Tasks[tasks.CategoryTimer]))
+	})
+
+	s.Run("HandleActivityUserTimerTasks/Passive", func() {
+		// Passive policy: closeTransactionHandleActivityUserTimerTasks returns immediately,
+		// generating no timer tasks regardless of pending timers or activities.
+		dbState := buildRunningState()
+		dbState.TimerInfos = pendingTimer(TimerTaskStatusNone)
+		dbState.ActivityInfos = pendingScheduledActivity(0)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+
+		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyPassive)
+		s.Require().NoError(err)
+
+		s.Empty(collectUserTimerTasks(mutation.Tasks[tasks.CategoryTimer]))
+		s.Empty(collectActivityTimerTasks(mutation.Tasks[tasks.CategoryTimer]))
+	})
+
+	// ── Ordering: closeTransactionHandleActivityUserTimerTasks runs before
+	//             closeTransactionRegenerateTimerTasksForTimeSkipping ───────────
+
+	s.Run("Ordering/UserTimer_NotCreated_WithTimeSkipping", func() {
+		// Timer has TaskStatus=None AND the workflow becomes eligible for time-skipping.
+		// closeTransactionHandleActivityUserTimerTasks runs first and generates a normal
+		// UserTimerTask at ExpiryTime.  closeTransactionRegenerateTimerTasksForTimeSkipping
+		// then generates a second UserTimerTask at ExpiryTime-accumulatedDuration.
+		// Both tasks must be present; the time-skipped one has an earlier timestamp.
+		dbState := buildRunningState()
+		dbState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		dbState.TimerInfos = pendingTimer(TimerTaskStatusNone)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		accumulated := ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
+		s.Require().NotNil(accumulated)
+		s.Require().Greater(accumulated.AsDuration(), time.Duration(0))
+
+		utTasks := collectUserTimerTasks(mutation.Tasks[tasks.CategoryTimer])
+		s.Require().Len(utTasks, 2, "expected one normal task and one time-skipped task")
+
+		// Sort by visibility timestamp so we can check order deterministically.
+		if utTasks[0].VisibilityTimestamp.After(utTasks[1].VisibilityTimestamp) {
+			utTasks[0], utTasks[1] = utTasks[1], utTasks[0]
+		}
+
+		expectedShifted := timerExpiry.Add(-accumulated.AsDuration())
+		s.Equal(expectedShifted, utTasks[0].VisibilityTimestamp, "time-skipped task must fire first")
+		s.Equal(timerExpiry, utTasks[1].VisibilityTimestamp, "normal task fires at real expiry")
+		s.Equal(int64(1), utTasks[0].EventID)
+		s.Equal(int64(1), utTasks[1].EventID)
+	})
+
+	s.Run("Ordering/UserTimer_AlreadyCreated_WithTimeSkipping", func() {
+		// Timer has TaskStatus=Created: closeTransactionHandleActivityUserTimerTasks skips
+		// it (already created).  closeTransactionRegenerateTimerTasksForTimeSkipping still
+		// generates the time-shifted task.  Only the time-skipped task appears.
+		dbState := buildRunningState()
+		dbState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		dbState.TimerInfos = pendingTimer(TimerTaskStatusCreated)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+
+		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		accumulated := ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
+		s.Require().NotNil(accumulated)
+
+		utTasks := collectUserTimerTasks(mutation.Tasks[tasks.CategoryTimer])
+		s.Require().Len(utTasks, 1, "only the time-skipped task must be present")
+
+		expectedShifted := timerExpiry.Add(-accumulated.AsDuration())
+		s.Equal(expectedShifted, utTasks[0].VisibilityTimestamp)
+		s.Equal(int64(1), utTasks[0].EventID)
+	})
+}
+
+// TestApplyWorkflowExecutionStartedEvent_TimeSkippingConfig verifies that when a
+// WorkflowExecutionStarted event carrying TimeSkippingConfig is replayed (e.g. during
+// reset, conflict resolution, or replication), the config is persisted onto
+// executionInfo.TimeSkippingInfo. This is the code path exercised by all mutable-state
+// rebuild flows.
+func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_TimeSkippingConfig() {
+	inputConfig := &workflowpb.TimeSkippingConfig{
+		Enabled:            true,
+		DisablePropagation: true,
+		Bound:              &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
+	}
+
+	testCases := []struct {
+		name               string
+		timeSkippingConfig *workflowpb.TimeSkippingConfig
+		wantConfig         *workflowpb.TimeSkippingConfig
+	}{
+		{
+			name:               "with config",
+			timeSkippingConfig: inputConfig,
+			wantConfig:         inputConfig,
+		},
+		{
+			name:               "without config",
+			timeSkippingConfig: nil,
+			wantConfig:         nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+			execution := &commonpb.WorkflowExecution{
+				WorkflowId: tests.WorkflowID,
+				RunId:      tests.RunID,
+			}
+			startEvent := &historypb.HistoryEvent{
+				EventId:   common.FirstEventID,
+				EventTime: timestamppb.New(time.Now().UTC()),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+						WorkflowType:        &commonpb.WorkflowType{Name: "test-workflow-type"},
+						TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+						WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+						FirstExecutionRunId: tests.RunID,
+						TimeSkippingConfig:  tc.timeSkippingConfig,
+					},
+				},
+			}
+
+			err := s.mutableState.ApplyWorkflowExecutionStartedEvent(
+				nil,
+				execution,
+				uuid.NewString(),
+				startEvent,
+			)
+			s.NoError(err)
+
+			if tc.wantConfig == nil {
+				s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo())
+			} else {
+				s.True(proto.Equal(tc.wantConfig, s.mutableState.executionInfo.GetTimeSkippingInfo().GetConfig()))
+			}
+		})
+	}
+}
+
+// TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSkippingConfig verifies that
+// replaying a WorkflowExecutionOptionsUpdated event with TimeSkippingConfig populates
+// or overwrites executionInfo.TimeSkippingInfo. This is the rebuild path for
+// time-skipping config that is set or changed after workflow start.
+func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSkippingConfig() {
+	initialConfig := &workflowpb.TimeSkippingConfig{
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
+	}
+	updatedConfig := &workflowpb.TimeSkippingConfig{
+		Enabled:            true,
+		DisablePropagation: true,
+		Bound:              &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
+	}
+
+	testCases := []struct {
+		name          string
+		existing      *workflowpb.TimeSkippingConfig
+		eventConfig   *workflowpb.TimeSkippingConfig
+		wantConfig    *workflowpb.TimeSkippingConfig
+		wantInfoIsNil bool
+	}{
+		{
+			name:        "sets when none exists",
+			existing:    nil,
+			eventConfig: initialConfig,
+			wantConfig:  initialConfig,
+		},
+		{
+			name:        "overwrites existing",
+			existing:    initialConfig,
+			eventConfig: updatedConfig,
+			wantConfig:  updatedConfig,
+		},
+		{
+			name:          "nil config leaves info untouched",
+			existing:      nil,
+			eventConfig:   nil,
+			wantInfoIsNil: true,
+		},
+		{
+			name:        "nil config preserves existing",
+			existing:    initialConfig,
+			eventConfig: nil,
+			wantConfig:  initialConfig,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			if tc.existing != nil {
+				s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: tc.existing}
+			}
+
+			event := &historypb.HistoryEvent{
+				EventId:   int64(2),
+				EventTime: timestamppb.New(time.Now().UTC()),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+					WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+						TimeSkippingConfig: tc.eventConfig,
+					},
+				},
+			}
+
+			err := s.mutableState.ApplyWorkflowExecutionOptionsUpdatedEvent(event)
+			s.NoError(err)
+
+			if tc.wantInfoIsNil {
+				s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo())
+			} else {
+				s.True(proto.Equal(tc.wantConfig, s.mutableState.executionInfo.GetTimeSkippingInfo().GetConfig()))
+			}
+		})
+	}
 }

@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -37,6 +38,7 @@ var ErrStandaloneActivityDisabled = serviceerror.NewUnimplemented("Standalone ac
 
 type frontendHandler struct {
 	FrontendHandler
+	callbackValidator *callback.Validator
 	client            activitypb.ActivityServiceClient
 	config            *Config
 	logger            log.Logger
@@ -48,6 +50,7 @@ type frontendHandler struct {
 
 // NewFrontendHandler creates a new FrontendHandler instance for processing activity frontend requests.
 func NewFrontendHandler(
+	callbackValidator *callback.Validator,
 	client activitypb.ActivityServiceClient,
 	config *Config,
 	logger log.Logger,
@@ -57,6 +60,7 @@ func NewFrontendHandler(
 	saValidator *searchattribute.Validator,
 ) FrontendHandler {
 	return &frontendHandler{
+		callbackValidator: callbackValidator,
 		client:            client,
 		config:            config,
 		logger:            logger,
@@ -258,7 +262,7 @@ func (h *frontendHandler) DeleteActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	if err := validateDeleteActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+	if err := validateAndNormalizeDeleteRequest(req, h.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 
@@ -293,13 +297,7 @@ func (h *frontendHandler) TerminateActivityExecution(
 		return nil, err
 	}
 
-	if req.GetRequestId() == "" {
-		// Since this mutates the request, we clone it first so that any retries use the original request.
-		req = common.CloneProto(req)
-		req.RequestId = uuid.NewString()
-	}
-
-	if err := validateTerminateActivityExecutionRequest(
+	if err := validateAndNormalizeTerminateRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 		h.config.BlobSizeLimitError,
@@ -332,13 +330,7 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 		return nil, err
 	}
 
-	if req.GetRequestId() == "" {
-		// Since this mutates the request, we clone it first so that any retries use the original request.
-		req = common.CloneProto(req)
-		req.RequestId = uuid.NewString()
-	}
-
-	if err := validateRequestCancelActivityExecutionRequest(
+	if err := validateAndNormalizeCancelRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 		h.config.BlobSizeLimitError,
@@ -362,7 +354,12 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	req *workflowservice.StartActivityExecutionRequest,
 	namespaceID namespace.ID,
 ) (*workflowservice.StartActivityExecutionRequest, error) {
-	// Since validation includes mutation of the request, we clone it first so that any retries use the original request.
+	// Since validation mutates the request, clone it first so that retries use the original
+	// request. However if the client did not set a request ID then set that before cloning so that
+	// retries use the same request ID.
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	}
 	req = common.CloneProto(req)
 	activityType := req.ActivityType.GetName()
 
@@ -386,61 +383,26 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 	applyActivityOptionsToStartRequest(opts, req)
 
-	err = h.validateAndNormalizeStartActivityExecutionRequest(req)
+	err = validateAndNormalizeStartRequest(
+		req,
+		h.config.MaxIDLengthLimit(),
+		h.config.BlobSizeLimitError,
+		h.config.BlobSizeLimitWarn,
+		h.logger,
+		h.saMapperProvider,
+		h.saValidator,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return req, nil
-}
-
-// validateAndNormalizeStartActivityExecutionRequest validates and normalizes the standalone
-// activity specific attributes. Note that this method mutates the input params; the caller must
-// clone the request if necessary (e.g. if it may be retried).
-func (h *frontendHandler) validateAndNormalizeStartActivityExecutionRequest(
-	req *workflowservice.StartActivityExecutionRequest,
-) error {
-	if req.GetRequestId() == "" {
-		req.RequestId = uuid.NewString()
-	}
-
-	maxIDLengthLimit := h.config.MaxIDLengthLimit()
-
-	if len(req.GetRequestId()) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
-			len(req.GetRequestId()), maxIDLengthLimit)
-	}
-
-	if len(req.GetIdentity()) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
-			len(req.GetIdentity()), maxIDLengthLimit)
-	}
-
-	if err := normalizeAndValidateIDPolicy(req); err != nil {
-		return err
-	}
-
-	if err := validateBlobSize(
-		req.GetActivityId(),
-		"StartActivityExecution",
-		h.config.BlobSizeLimitError,
-		h.config.BlobSizeLimitWarn,
-		req.Input.Size(),
-		h.logger,
-		req.GetNamespace()); err != nil {
-		return serviceerror.NewInvalidArgument("input exceeds length limit")
-	}
-
-	if req.GetSearchAttributes() != nil {
-		if err := validateAndNormalizeSearchAttributes(
-			req,
-			h.saMapperProvider,
-			h.saValidator); err != nil {
-			return err
+	if cbs := req.GetCompletionCallbacks(); len(cbs) > 0 {
+		if err := h.callbackValidator.Validate(req.GetNamespace(), cbs); err != nil {
+			return nil, err
 		}
 	}
 
-	return nil
+	return req, nil
 }
 
 // activityOptionsFromStartRequest builds an ActivityOptions from the inlined fields

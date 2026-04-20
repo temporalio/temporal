@@ -66,6 +66,7 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 	namespaceTag, _ := getNamespaceTagAndReplicationStateByID(
 		e.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
+		executable.GetWorkflowID(),
 	)
 	respond := func(err error) queues.ExecuteResponse {
 		metricsTags := []metrics.Tag{
@@ -103,6 +104,10 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 		return respond(e.executeStateMachineTask(ctx, task, nsName))
 	case *tasks.ChasmTask:
 		return respond(e.executeChasmSideEffectTask(ctx, task))
+	case *tasks.WorkerCommandsTask:
+		// Worker commands are best-effort and only executed on the active cluster.
+		// On standby, simply drop the task.
+		return respond(nil)
 	}
 
 	return respond(queueserrors.NewUnprocessableTaskError(fmt.Sprintf("unknown task type '%T'", task)))

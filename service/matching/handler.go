@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -23,6 +25,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/service/matching/hooks"
 	"go.temporal.io/server/service/matching/workers"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
@@ -70,6 +73,7 @@ type (
 		RateLimiter                   TaskDispatchRateLimiter `optional:"true"`
 		WorkersRegistry               workers.Registry
 		Serializer                    serialization.Serializer
+		TaskHookFactories             []hooks.TaskHookFactory `group:"TaskHookFactories"`
 	}
 )
 
@@ -112,6 +116,7 @@ func NewHandler(
 			params.SearchAttributeMapperProvider,
 			params.RateLimiter,
 			params.Serializer,
+			params.TaskHookFactories,
 		),
 		namespaceRegistry: params.NamespaceRegistry,
 		workersRegistry:   params.WorkersRegistry,
@@ -148,6 +153,26 @@ func (h *Handler) opMetricsHandler(
 		partition,
 		h.config.BreakdownMetricsByTaskQueue(nsName.String(), partition.TaskQueue().Name(), partition.TaskType()),
 		h.config.BreakdownMetricsByPartition(nsName.String(), partition.TaskQueue().Name(), partition.TaskType()),
+	)
+}
+
+// internalTaskQueuePrefix identifies server-internal task queues
+// (e.g. /temporal-sys/worker-commands/{namespace}/{worker_grouping_key}).
+// Note: BreakdownMetricsByTaskQueue should NOT be enabled for these queues as
+// they are per-worker and will cause cardinality explosion.
+const internalTaskQueuePrefix = "/temporal-sys/"
+
+// recordNexusTaskRequest emits the nexus_task_requests metric with namespace,
+// operation, client_name, and is_internal tags.
+func (h *Handler) recordNexusTaskRequest(ctx context.Context, namespaceID string, taskQueueName string, operation string) {
+	nsName := h.namespaceName(namespace.ID(namespaceID))
+	clientName, _ := headers.GetClientNameAndVersion(ctx)
+	isInternal := strings.HasPrefix(taskQueueName, internalTaskQueuePrefix)
+	metrics.NexusTaskRequests.With(h.metricsHandler).Record(1,
+		metrics.NamespaceTag(nsName.String()),
+		metrics.OperationTag(operation),
+		metrics.ClientNameTag(clientName),
+		metrics.IsInternalTag(isInternal),
 	)
 }
 
@@ -503,6 +528,11 @@ func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservi
 		enumspb.TASK_QUEUE_TYPE_NEXUS,
 		metrics.MatchingPollWorkflowTaskQueueScope,
 	)
+	// Only record on the initial handler call (ForwardedSource == ""), not on
+	// the forwarded call to the root partition, to avoid double-counting.
+	if request.GetForwardedSource() == "" {
+		h.recordNexusTaskRequest(ctx, request.GetNamespaceId(), request.GetRequest().GetTaskQueue().GetName(), "PollNexusTaskQueue")
+	}
 
 	if request.GetForwardedSource() != "" {
 		h.reportForwardedPerTaskQueueCounter(opMetrics, namespace.ID(request.GetNamespaceId()))
@@ -526,6 +556,7 @@ func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchi
 		enumspb.TASK_QUEUE_TYPE_NEXUS,
 		metrics.MatchingRespondNexusTaskCompletedScope,
 	)
+	h.recordNexusTaskRequest(ctx, request.GetNamespaceId(), request.GetTaskQueue().GetName(), "RespondNexusTaskCompleted")
 
 	return h.engine.RespondNexusTaskCompleted(ctx, request, opMetrics)
 }
@@ -538,6 +569,7 @@ func (h *Handler) RespondNexusTaskFailed(ctx context.Context, request *matchings
 		enumspb.TASK_QUEUE_TYPE_NEXUS,
 		metrics.MatchingRespondNexusTaskFailedScope,
 	)
+	h.recordNexusTaskRequest(ctx, request.GetNamespaceId(), request.GetTaskQueue().GetName(), "RespondNexusTaskFailed")
 
 	return h.engine.RespondNexusTaskFailed(ctx, request, opMetrics)
 }

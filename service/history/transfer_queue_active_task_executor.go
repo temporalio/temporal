@@ -106,6 +106,7 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
+		executable.GetWorkflowID(),
 	)
 	metricsTags := []metrics.Tag{
 		namespaceTag,
@@ -954,8 +955,9 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
 		if effectiveVersioningBehavior := mutableState.GetEffectiveVersioningBehavior(); effectiveVersioningBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
 			inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
-				SourceDeploymentVersion:        sourceDeploymentVersion,
-				SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
+				SourceDeploymentVersion:                sourceDeploymentVersion,
+				SourceDeploymentRevisionNumber:         sourceDeploymentRevisionNumber,
+				ContinueAsNewInitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_UNSPECIFIED, // don't pass to child
 			}
 
 			newTQ := attributes.GetTaskQueue().GetName()
@@ -1631,15 +1633,16 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
 
 		// Use the same request ID to dedupe StartWorkflowExecution calls
-		RequestId:             childRequestID,
-		WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
-		RetryPolicy:           attributes.RetryPolicy,
-		CronSchedule:          attributes.CronSchedule,
-		Memo:                  attributes.Memo,
-		SearchAttributes:      attributes.SearchAttributes,
-		UserMetadata:          userMetadata,
-		VersioningOverride:    inheritedPinnedOverride,
-		Priority:              priority,
+		RequestId:                childRequestID,
+		WorkflowIdReusePolicy:    attributes.WorkflowIdReusePolicy,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		RetryPolicy:              attributes.RetryPolicy,
+		CronSchedule:             attributes.CronSchedule,
+		Memo:                     attributes.Memo,
+		SearchAttributes:         attributes.SearchAttributes,
+		UserMetadata:             userMetadata,
+		VersioningOverride:       inheritedPinnedOverride,
+		Priority:                 priority,
 	}
 
 	request := common.CreateHistoryStartWorkflowRequest(
