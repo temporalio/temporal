@@ -1242,7 +1242,8 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
 }
 
-// cancelOutstandingWorkerPollsForAllPartitions fans out to all partitions and aggregates CancelledCount.
+// cancelOutstandingWorkerPollsForAllPartitions initiates tree-based fan-out from the root partition.
+// Root cancels its own polls and propagates to direct children, which in turn propagate to theirs.
 func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 	ctx context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsRequest,
@@ -1256,53 +1257,98 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 		// Root not loaded means no pending polls anywhere.
 		return &matchingservice.CancelOutstandingWorkerPollsResponse{}, nil
 	}
-	numPartitions := max(1, rootPM.GetConfig().NumReadPartitions())
+	cfg := rootPM.GetConfig()
+	numPartitions := max(1, cfg.NumReadPartitions())
+	degree := max(1, cfg.ForwarderMaxChildrenPerNode())
 
-	var totalCancelled atomic.Int32
-	var wg sync.WaitGroup
-	for partitionID := range numPartitions {
-		wg.Go(func() {
-			partitionReq := &matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
-				NamespaceId: request.GetNamespaceId(),
-				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-					TaskQueue:     rootPartition.TaskQueue().Name(),
-					TaskQueueType: request.GetTaskQueueType(),
-					PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(partitionID)},
-				},
-				WorkerInstanceKey: request.GetWorkerInstanceKey(),
-				WorkerIdentity:    request.GetWorkerIdentity(),
-			}
-			var resp *matchingservice.CancelOutstandingWorkerPollsPartitionResponse
-			var err error
-			// Optimization: Root partition is handled locally, other partitions are handled remotely.
-			if partitionID == 0 {
-				resp, err = e.CancelOutstandingWorkerPollsPartition(ctx, partitionReq)
-			} else {
-				resp, err = e.matchingRawClient.CancelOutstandingWorkerPollsPartition(ctx, partitionReq)
-			}
-			if err != nil {
-				partition := rootPartition.TaskQueue().NormalPartition(partitionID)
-				e.logger.Warn("Failed to cancel outstanding worker polls for partition",
-					tag.WorkflowTaskQueueName(partition.RpcName()),
-					tag.String("worker-instance-key", request.GetWorkerInstanceKey()),
-					tag.Error(err))
-				return
-			}
-			totalCancelled.Add(resp.CancelledCount)
-		})
+	e.logger.Info("Initiating tree fan-out for worker poll cancellation",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowTaskQueueName(rootPartition.TaskQueue().Name()),
+		tag.WorkflowTaskQueueType(request.GetTaskQueueType()),
+		tag.NewStringTag("worker-instance-key", request.GetWorkerInstanceKey()),
+		tag.NewInt32("partition-count", int32(numPartitions)),
+		tag.NewInt32("degree", int32(degree)),
+	)
+
+	resp, err := e.CancelOutstandingWorkerPollsPartition(ctx, &matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+		NamespaceId: request.GetNamespaceId(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     rootPartition.TaskQueue().Name(),
+			TaskQueueType: request.GetTaskQueueType(),
+			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+		},
+		WorkerInstanceKey: request.GetWorkerInstanceKey(),
+		WorkerIdentity:    request.GetWorkerIdentity(),
+		PartitionCount:    int32(numPartitions),
+		Degree:            int32(degree),
+	})
+	if err != nil {
+		return nil, err
 	}
-	wg.Wait()
-	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: totalCancelled.Load()}, nil
+	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: resp.CancelledCount}, nil
 }
 
-// CancelOutstandingWorkerPollsPartition cancels outstanding polls for a worker on a specific partition.
+// CancelOutstandingWorkerPollsPartition cancels outstanding polls for a worker on this partition
+// and propagates to child partitions in the partition tree.
 func (e *matchingEngineImpl) CancelOutstandingWorkerPollsPartition(
 	ctx context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsPartitionRequest,
 ) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
 	partition := tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId())
+	partitionID := int(request.GetTaskQueuePartition().GetNormalPartitionId())
+	numPartitions := int(request.GetPartitionCount())
+	degree := int(request.GetDegree())
+
+	e.logger.Info("Cancelling worker polls on partition",
+		tag.WorkflowTaskQueueName(partition.RpcName()),
+		tag.NewStringTag("worker-instance-key", request.GetWorkerInstanceKey()),
+		tag.NewInt32("partition-id", int32(partitionID)),
+		tag.NewInt32("partition-count", int32(numPartitions)),
+		tag.NewInt32("degree", int32(degree)),
+	)
+
 	cancelledCount := e.workerInstancePollers.CancelAll(request.GetWorkerInstanceKey())
 	e.removePollerFromHistory(ctx, partition, request.GetWorkerIdentity())
+
+	// Fan out to child partitions in the tree. Children of partition P are [P*D+1, ..., P*D+D].
+	if degree <= 0 || numPartitions <= 0 {
+		return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: cancelledCount}, nil
+	}
+
+	var totalChildCancelled atomic.Int32
+	var wg sync.WaitGroup
+	firstChild := partitionID*degree + 1
+	for childID := firstChild; childID < firstChild+degree && childID < numPartitions; childID++ {
+		wg.Go(func() {
+			childReq := &matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+				NamespaceId: request.GetNamespaceId(),
+				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+					TaskQueue:     request.GetTaskQueuePartition().GetTaskQueue(),
+					TaskQueueType: request.GetTaskQueuePartition().GetTaskQueueType(),
+					PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(childID)},
+				},
+				WorkerInstanceKey: request.GetWorkerInstanceKey(),
+				WorkerIdentity:    request.GetWorkerIdentity(),
+				PartitionCount:    request.GetPartitionCount(),
+				Degree:            request.GetDegree(),
+			}
+			resp, err := e.matchingRawClient.CancelOutstandingWorkerPollsPartition(ctx, childReq)
+			if err != nil {
+				childPartition := partition.TaskQueue().NormalPartition(childID)
+				e.logger.Warn("Failed to cancel outstanding worker polls for child partition",
+					tag.WorkflowTaskQueueName(childPartition.RpcName()),
+					tag.NewStringTag("worker-instance-key", request.GetWorkerInstanceKey()),
+					tag.NewInt32("partition-count", int32(numPartitions)),
+					tag.NewInt32("degree", int32(degree)),
+					tag.Error(err))
+				return
+			}
+			totalChildCancelled.Add(resp.CancelledCount)
+		})
+	}
+	wg.Wait()
+	cancelledCount += totalChildCancelled.Load()
+
 	return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: cancelledCount}, nil
 }
 

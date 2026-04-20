@@ -259,12 +259,26 @@ message CancelOutstandingWorkerPollsResponse {
     int32 cancelled_count = 1;
 }
 
-// CancelOutstandingWorkerPollsPartition cancels outstanding polls for a worker on a specific partition.
+// CancelOutstandingWorkerPollsPartition cancels outstanding polls for a worker on a specific partition
+// and propagates to child partitions in the partition tree.
 message CancelOutstandingWorkerPollsPartitionRequest {
     string namespace_id = 1;
     temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
     string worker_instance_key = 3;
     string worker_identity = 4;
+    // Tree fan-out parameters, set by root and passed down so each node can compute
+    // its children without loading config.
+    // Children of partition P are [P*degree+1, ..., P*degree+degree], capped at partition_count.
+    // Each node cancels locally, then sends RPCs to its direct children only.
+    // Example with partition_count=7, degree=2:
+    //         0
+    //        / \
+    //       1   2
+    //      / \ / \
+    //     3  4 5  6
+    // Root sends RPCs to {1, 2}. Node 1 propagates to {3, 4}. Node 2 propagates to {5, 6}.
+    int32 partition_count = 5;
+    int32 degree = 6;
 }
 
 message CancelOutstandingWorkerPollsPartitionResponse {
