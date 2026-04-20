@@ -229,8 +229,8 @@ func TestIsVersionDrainedOrInactive(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, revisionNumber := IsVersionDrainedOrInactive(tt.deployments, tt.deploymentName, tt.buildID)
-			assert.Equal(t, tt.expected, result)
-			assert.Equal(t, tt.expectedRevisionNumber, revisionNumber)
+			require.Equal(t, tt.expected, result)
+			require.Equal(t, tt.expectedRevisionNumber, revisionNumber)
 		})
 	}
 }
@@ -1441,8 +1441,8 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 				}
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, tt.expectedIsDrainedOrInactive, isDrainedOrInactive)
-				assert.Equal(t, tt.expectedRevisionNumber, revisionNumber)
+				require.Equal(t, tt.expectedIsDrainedOrInactive, isDrainedOrInactive)
+				require.Equal(t, tt.expectedRevisionNumber, revisionNumber)
 			}
 		})
 	}
