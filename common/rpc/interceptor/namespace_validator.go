@@ -80,7 +80,9 @@ var (
 		"CountWorkflowExecutions":        {},
 		"ListSchedules":                  {},
 		"ListBatchOperations":            {},
+
 		// Matching
+		// All poller-group-based APIs are automatically allowed.
 		"ShutdownWorker": {},
 	}
 )
