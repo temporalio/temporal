@@ -13,6 +13,24 @@ import (
 // cycle. Each drainage cycle increments the version's revisionNumber in matching's deployment
 // data, so distinct cycles occupy distinct cache entries and signal independently.
 //
+// NOTE: EFFECTIVE DEDUP WINDOW TIME:
+// This cache's configured TTL (VersionReactivationSignalCacheTTL, default 10s) is dependent
+// on how frequently the version workflow changes its status. Every change to the version
+// workflow's status — current/ramping updates, drainage transitions, etc. — bumps the
+// revisionNumber in matching's deployment data. The pod reads the current revision from
+// VersionMembershipAndReactivationStatusCache on each validation; when that cache's entry
+// expires (VersionMembershipCacheTTL, default 1s) and the version's status has changed
+// since, the pod re-fetches from matching and may see a fresh revision. Lookups here then
+// use a new key, so the effective dedup window collapses to the membership cache's TTL under
+// revision churn — which is intentional, since a new revision represents a new reactivation
+// scenario that warrants a new signal.
+//
+// In practice this rarely fires at sub-second cadence because version_workflow.go enforces
+// graceful intervals for drainage-related checks (VersionDrainageStatusRefreshInterval and
+// VersionDrainageStatusVisibilityGracePeriod), so status changes do not cascade every
+// second. Cross-pod duplicates within the same revision are caught by receiver-side dedup
+// via pendingSignalRequestedIDs regardless of this cache's state.
+//
 // Implementations are expected to be safe for concurrent use.
 type (
 	ReactivationSignalCache interface {

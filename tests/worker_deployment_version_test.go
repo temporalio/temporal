@@ -2214,35 +2214,23 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSet
 }
 
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_ReactivateVersionOnPinned() {
-	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, testLongVersionDrainageVisibilityGracePeriod)
-	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, testLongVersionDrainageRefreshInterval)
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
 	// Use shorter, explicit deployment series names to avoid truncation issues
 	// Include workflow version in deployment name to avoid conflicts in parallel tests
 	deploymentName := fmt.Sprintf("test-reactivate-wfv%d", s.workflowVersion)
-	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-task-queue") // First version (will become DRAINED)
-	tv2 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v2").WithTaskQueue("test-task-queue") // Second version (will become CURRENT)
+	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-task-queue") // Pinned target (INACTIVE)
+	tv2 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v2").WithTaskQueue("test-task-queue") // Current version
 
-	// set version 1 as current
+	// v1 starts INACTIVE (never set as current). The reactivation signal handler in
+	// version_workflow.go treats DRAINED and INACTIVE identically — both flip to DRAINING.
 	s.startVersionWorkflow(ctx, tv1)
-	err := s.setCurrent(tv1, true)
-	s.NoError(err)
 
-	// set version 2 as current which shall cause version 1 to be in 'Draining' state
+	// v2 becomes the current version so the initial (non-pinned) workflow has a target.
 	s.startVersionWorkflow(ctx, tv2)
-	err = s.setCurrent(tv2, true)
+	err := s.setCurrent(tv2, true)
 	s.NoError(err)
-
-	// Wait for version 1 to become DRAINED
-	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
-		&deploymentpb.VersionDrainageInfo{
-			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
-		},
-		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
-		testLongVersionDrainageVisibilityGracePeriod+testLongVersionDrainageRefreshInterval) // wait for grace period and refresh interval
 
 	wf := func(version string) func(ctx workflow.Context) (string, error) {
 		return func(ctx workflow.Context) (string, error) {
@@ -2251,7 +2239,7 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_ReactivateVe
 		}
 	}
 
-	// Register a worker for version 1 (DRAINED) so it can accept workflows when
+	// Register a worker for version 1 (INACTIVE) so it can accept workflows when
 	// UpdateWorkflowExecutionOptions is called to pin the workflow to version 1.
 	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().String(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
@@ -2290,7 +2278,7 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_ReactivateVe
 	}, "waitingWorkflow")
 	s.NoError(err)
 
-	// Pin the running workflow to version 1 (DRAINED) using UpdateWorkflowExecutionOptions.
+	// Pin the running workflow to version 1 (INACTIVE) using UpdateWorkflowExecutionOptions.
 	pinnedOverride := &workflowpb.VersioningOverride{
 		Override: &workflowpb.VersioningOverride_Pinned{
 			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
@@ -2348,35 +2336,15 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_ReactivateVe
 }
 
 func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnPinned() {
-	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, testLongVersionDrainageVisibilityGracePeriod)
-	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, testLongVersionDrainageRefreshInterval)
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	// Use shorter, explicit deployment series names to avoid truncation issues
-	// Include workflow version in deployment name to avoid conflicts in parallel tests
 	deploymentName := fmt.Sprintf("test-start-reactivate-wfv%d", s.workflowVersion)
-	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-start-task-queue") // First version (will become DRAINED)
-	tv2 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v2").WithTaskQueue("test-start-task-queue") // Second version (will become CURRENT)
+	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-start-task-queue")
 
-	// set version 1 as current
+	// v1 starts INACTIVE (never set as current). The reactivation signal handler in
+	// version_workflow.go treats DRAINED and INACTIVE identically — both flip to DRAINING.
 	s.startVersionWorkflow(ctx, tv1)
-	err := s.setCurrent(tv1, true)
-	s.NoError(err)
-
-	// set version 2 as current which shall cause version 1 to be in 'Draining' state
-	s.startVersionWorkflow(ctx, tv2)
-	err = s.setCurrent(tv2, true)
-	s.NoError(err)
-
-	// Wait for version 1 to become DRAINED
-	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
-		&deploymentpb.VersionDrainageInfo{
-			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
-		},
-		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
-		testLongVersionDrainageVisibilityGracePeriod+testLongVersionDrainageRefreshInterval) // wait for grace period and refresh interval
 
 	wf := func(version string) func(ctx workflow.Context) (string, error) {
 		return func(ctx workflow.Context) (string, error) {
@@ -2385,7 +2353,7 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 		}
 	}
 
-	// Register a worker for version 1 (DRAINED) so it can accept workflows when
+	// Register a worker for version 1 (INACTIVE) so it can accept workflows when
 	// StartWorkflowExecution is called with a pinned override to version 1.
 	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().String(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
@@ -2400,7 +2368,7 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	// Start a new workflow with the pinned override pointing to version 1 (DRAINED).
+	// Start a new workflow with the pinned override pointing to version 1 (INACTIVE).
 	wfTV := testvars.New(s)
 	var run sdkclient.WorkflowRun
 	s.Eventually(func() bool {
@@ -2430,7 +2398,7 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 			},
 		})
 
-	// Wait for version 1 to show up as DRAINING (reactivated from DRAINED)
+	// Wait for version 1 to show up as DRAINING (reactivated from INACTIVE)
 	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
 		&deploymentpb.VersionDrainageInfo{
 			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
@@ -2452,9 +2420,6 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 }
 
 func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnPinned_WithConflictPolicy() {
-	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, testLongVersionDrainageVisibilityGracePeriod)
-	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, testLongVersionDrainageRefreshInterval)
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
@@ -2462,23 +2427,14 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-conflict-task-queue")
 	tv2 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v2").WithTaskQueue("test-conflict-task-queue")
 
-	// set version 1 as current
+	// v1 starts INACTIVE (never set as current). The reactivation signal handler in
+	// version_workflow.go treats DRAINED and INACTIVE identically — both flip to DRAINING.
 	s.startVersionWorkflow(ctx, tv1)
-	err := s.setCurrent(tv1, true)
-	s.NoError(err)
 
-	// set version 2 as current which shall cause version 1 to be in 'Draining' state
+	// v2 becomes the current version so the initial (non-pinned) workflow has a target.
 	s.startVersionWorkflow(ctx, tv2)
-	err = s.setCurrent(tv2, true)
+	err := s.setCurrent(tv2, true)
 	s.NoError(err)
-
-	// Wait for version 1 to become DRAINED
-	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
-		&deploymentpb.VersionDrainageInfo{
-			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
-		},
-		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
-		testLongVersionDrainageVisibilityGracePeriod+testLongVersionDrainageRefreshInterval)
 
 	wf := func(version string) func(ctx workflow.Context) (string, error) {
 		return func(ctx workflow.Context) (string, error) {
@@ -2487,7 +2443,7 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 		}
 	}
 
-	// Register a worker for version 1 (DRAINED) so it can accept workflows
+	// Register a worker for version 1 (INACTIVE) so it can accept workflows
 	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().String(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
 			Version:       tv1.SDKDeploymentVersion(),
@@ -2525,7 +2481,7 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 		return startErr == nil
 	}, 10*time.Second, 500*time.Millisecond)
 
-	// Now start a second workflow with the SAME workflow ID, pinned to v1 (DRAINED),
+	// Now start a second workflow with the SAME workflow ID, pinned to v1 (INACTIVE),
 	// using TERMINATE_EXISTING conflict policy. This goes through the handleConflict method in api.go.
 	var run sdkclient.WorkflowRun
 	s.Eventually(func() bool {
@@ -2556,7 +2512,7 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 			},
 		})
 
-	// Wait for version 1 to show up as DRAINING (reactivated from DRAINED)
+	// Wait for version 1 to show up as DRAINING (reactivated from INACTIVE)
 	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
 		&deploymentpb.VersionDrainageInfo{
 			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
@@ -2578,35 +2534,15 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 }
 
 func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_ReactivateVersionOnPinned() {
-	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, testLongVersionDrainageVisibilityGracePeriod)
-	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, testLongVersionDrainageRefreshInterval)
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	// Use shorter, explicit deployment series names to avoid truncation issues
-	// Include workflow version in deployment name to avoid conflicts in parallel tests
 	deploymentName := fmt.Sprintf("test-sws-reactivate-wfv%d", s.workflowVersion)
-	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-sws-task-queue") // First version (will become DRAINED)
-	tv2 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v2").WithTaskQueue("test-sws-task-queue") // Second version (will become CURRENT)
+	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-sws-task-queue")
 
-	// set version 1 as current
+	// v1 starts INACTIVE (never set as current). The reactivation signal handler in
+	// version_workflow.go treats DRAINED and INACTIVE identically — both flip to DRAINING.
 	s.startVersionWorkflow(ctx, tv1)
-	err := s.setCurrent(tv1, true)
-	s.NoError(err)
-
-	// set version 2 as current which shall cause version 1 to be in 'Draining' state
-	s.startVersionWorkflow(ctx, tv2)
-	err = s.setCurrent(tv2, true)
-	s.NoError(err)
-
-	// Wait for version 1 to become DRAINED
-	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
-		&deploymentpb.VersionDrainageInfo{
-			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
-		},
-		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
-		testLongVersionDrainageVisibilityGracePeriod+testLongVersionDrainageRefreshInterval) // wait for grace period and refresh interval
 
 	wf := func(version string) func(ctx workflow.Context) (string, error) {
 		return func(ctx workflow.Context) (string, error) {
@@ -2615,7 +2551,7 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_Reactivate
 		}
 	}
 
-	// Register a worker for version 1 (DRAINED) so it can accept workflows when
+	// Register a worker for version 1 (INACTIVE) so it can accept workflows when
 	// SignalWithStartWorkflowExecution is called with a pinned override to version 1.
 	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().String(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
@@ -2630,7 +2566,7 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_Reactivate
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	// Use SignalWithStart with the pinned override pointing to version 1 (DRAINED).
+	// Use SignalWithStart with the pinned override pointing to version 1 (INACTIVE).
 	// This should START a new workflow (not signal an existing one) since no workflow exists yet.
 	wfTV := testvars.New(s)
 	var run sdkclient.WorkflowRun
@@ -2666,7 +2602,7 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_Reactivate
 			},
 		})
 
-	// Wait for version 1 to show up as DRAINING (reactivated from DRAINED)
+	// Wait for version 1 to show up as DRAINING (reactivated from INACTIVE)
 	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
 		&deploymentpb.VersionDrainageInfo{
 			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
@@ -2688,35 +2624,23 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_Reactivate
 }
 
 func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnPinned() {
-	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, testLongVersionDrainageVisibilityGracePeriod)
-	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, testLongVersionDrainageRefreshInterval)
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
 	// Use shorter, explicit deployment series names to avoid truncation issues
 	// Include workflow version in deployment name to avoid conflicts in parallel tests
 	deploymentName := fmt.Sprintf("test-reset-reactivate-wfv%d", s.workflowVersion)
-	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-reset-task-queue") // First version (will become DRAINED)
-	tv2 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v2").WithTaskQueue("test-reset-task-queue") // Second version (will become CURRENT)
+	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-reset-task-queue") // Pinned target (INACTIVE)
+	tv2 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v2").WithTaskQueue("test-reset-task-queue") // Current version
 
-	// set version 1 as current
+	// v1 starts INACTIVE (never set as current). The reactivation signal handler in
+	// version_workflow.go treats DRAINED and INACTIVE identically — both flip to DRAINING.
 	s.startVersionWorkflow(ctx, tv1)
-	err := s.setCurrent(tv1, true)
-	s.NoError(err)
 
-	// set version 2 as current which shall cause version 1 to be in 'Draining' state
+	// v2 becomes the current version so the initial (non-pinned) workflow has a target.
 	s.startVersionWorkflow(ctx, tv2)
-	err = s.setCurrent(tv2, true)
+	err := s.setCurrent(tv2, true)
 	s.NoError(err)
-
-	// Wait for version 1 to become DRAINED
-	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
-		&deploymentpb.VersionDrainageInfo{
-			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
-		},
-		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
-		testLongVersionDrainageVisibilityGracePeriod+testLongVersionDrainageRefreshInterval) // wait for grace period and refresh interval
 
 	// Workflow that waits for a signal, used for both versions.
 	// Returns a string indicating which version completed it.
@@ -2727,7 +2651,7 @@ func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnP
 		}
 	}
 
-	// Register a worker for version 1 (DRAINED) so it can accept workflows when
+	// Register a worker for version 1 (INACTIVE) so it can accept workflows when
 	// ResetWorkflowExecution is called with a pinned override to version 1.
 	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().String(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
@@ -2794,7 +2718,7 @@ func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnP
 	}
 	s.Positive(resetEventID, "Should have found a workflow task complete event")
 
-	// Reset the workflow with PostResetOperations containing a versioning override pinned to v1 (which is currently DRAINED)
+	// Reset the workflow with PostResetOperations containing a versioning override pinned to v1 (which is currently INACTIVE)
 	var resetResp *workflowservice.ResetWorkflowExecutionResponse
 	s.Eventually(func() bool {
 		var resetErr error
@@ -2849,7 +2773,7 @@ func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnP
 			},
 		})
 
-	// Wait for version 1 to show up as DRAINING (reactivated from DRAINED)
+	// Wait for version 1 to show up as DRAINING (reactivated from INACTIVE)
 	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
 		&deploymentpb.VersionDrainageInfo{
 			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
