@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gocql/gocql"
+	gocql "github.com/apache/cassandra-gocql-driver/v2"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -126,7 +126,7 @@ func (s *session) Query(
 func (s *session) NewBatch(
 	batchType BatchType,
 ) *Batch {
-	b := s.Value.Load().(*gocql.Session).NewBatch(mustConvertBatchType(batchType))
+	b := s.Value.Load().(*gocql.Session).Batch(mustConvertBatchType(batchType))
 	if b == nil {
 		return nil
 	}
@@ -134,24 +134,6 @@ func (s *session) NewBatch(
 		session:    s,
 		gocqlBatch: b,
 	}
-}
-
-func (s *session) ExecuteBatch(
-	b *Batch,
-) (retError error) {
-	defer func() { s.handleError(retError) }()
-
-	return s.Value.Load().(*gocql.Session).ExecuteBatch(b.gocqlBatch)
-}
-
-func (s *session) MapExecuteBatchCAS(
-	b *Batch,
-	previous map[string]any,
-) (_ bool, _ Iter, retError error) {
-	defer func() { s.handleError(retError) }()
-
-	applied, iter, err := s.Value.Load().(*gocql.Session).MapExecuteBatchCAS(b.gocqlBatch, previous)
-	return applied, iter, err
 }
 
 func (s *session) AwaitSchemaAgreement(
