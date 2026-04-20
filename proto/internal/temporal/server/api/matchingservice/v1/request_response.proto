@@ -62,6 +62,9 @@ message PollWorkflowTaskQueueResponse {
   // Raw history bytes sent from matching service when history.sendRawHistoryBetweenInternalServices is enabled.
   // Matching client will deserialize this to History when it receives the response.
   temporal.api.history.v1.History raw_history = 22;
+  // When true, this empty response was caused by the server completing the poll
+  // because the worker has been shut down via the ShutdownWorker API.
+  bool completed_by_worker_shutdown = 23;
 }
 
 // PollWorkflowTaskQueueResponseWithRawHistory is wire-compatible with PollWorkflowTaskQueueResponse.
@@ -112,6 +115,9 @@ message PollWorkflowTaskQueueResponseWithRawHistory {
   // When matching client deserializes this to PollWorkflowTaskQueueResponse, this field
   // will be automatically deserialized to the raw_history field as History.
   repeated bytes raw_history = 22;
+  // When true, this empty response was caused by the server completing the poll
+  // because the worker has been shut down via the ShutdownWorker API.
+  bool completed_by_worker_shutdown = 23;
 }
 
 message PollActivityTaskQueueRequest {
@@ -149,6 +155,9 @@ message PollActivityTaskQueueResponse {
   temporal.api.common.v1.RetryPolicy retry_policy = 19;
   // ID of the activity run (applicable for standalone activities only)
   string activity_run_id = 20;
+  // When true, this empty response was caused by the server completing the poll
+  // because the worker has been shut down via the ShutdownWorker API.
+  bool completed_by_worker_shutdown = 21;
 }
 
 message AddWorkflowTaskRequest {
@@ -579,6 +588,9 @@ message PollNexusTaskQueueRequest {
 message PollNexusTaskQueueResponse {
   // Response that should be delivered to the worker containing a request from DispatchNexusTaskRequest.
   temporal.api.workflowservice.v1.PollNexusTaskQueueResponse response = 1;
+  // When true, this empty response was caused by the server completing the poll
+  // because the worker has been shut down via the ShutdownWorker API.
+  bool completed_by_worker_shutdown = 2;
 }
 
 message RespondNexusTaskCompletedRequest {

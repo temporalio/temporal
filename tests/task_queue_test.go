@@ -1496,10 +1496,6 @@ func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
 	s.NoError(err)
 	s.NotNil(rePollResp)
 	s.Empty(rePollResp.GetTaskToken(), "re-poll from shutdown worker should return empty response")
-	// TODO: Replace timing assertion with an explicit poll response field indicating
-	// shutdown rejection, so we don't rely on timing to distinguish cache rejection
-	// from natural poll timeout. Requires adding a field to PollWorkflowTaskQueueResponse
-	// and PollActivityTaskQueueResponse in the public API proto.
 	s.Less(time.Since(wfStart), 2*time.Minute, "workflow re-poll should be rejected quickly, not wait for timeout")
 
 	// Activity poll should also be rejected immediately.
