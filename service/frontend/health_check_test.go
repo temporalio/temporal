@@ -76,6 +76,36 @@ func (s *healthCheckerSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
+func (s *healthCheckerSuite) Test_Health_Delay() {
+	s.checker.hostFailureTimeThreshold = func() time.Duration {
+		return 1 * time.Second
+	}
+	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{
+		membership.NewHostInfoFromAddress("servingA"),
+		membership.NewHostInfoFromAddress("errorB"),
+	}).Times(2)
+	result, err := s.checker.Check(context.Background(), time.Unix(1, 0))
+	s.Require().NoError(err)
+	s.Equal(enumsspb.HEALTH_STATE_SERVING, result.State)
+	result, err = s.checker.Check(context.Background(), time.Unix(2, 0))
+	s.Require().NoError(err)
+	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, result.State)
+	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{
+		membership.NewHostInfoFromAddress("servingA"),
+		membership.NewHostInfoFromAddress("errorC"),
+	})
+	result, err = s.checker.Check(context.Background(), time.Unix(3, 0))
+	s.Require().NoError(err)
+	s.Equal(enumsspb.HEALTH_STATE_SERVING, result.State)
+	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{
+		membership.NewHostInfoFromAddress("servingA"),
+		membership.NewHostInfoFromAddress("errorD"),
+	})
+	result, err = s.checker.Check(context.Background(), time.Unix(4, 0))
+	s.Require().NoError(err)
+	s.Equal(enumsspb.HEALTH_STATE_SERVING, result.State)
+}
+
 func (s *healthCheckerSuite) Test_Check_Serving() {
 	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{
 		membership.NewHostInfoFromAddress("servingA"),
@@ -95,7 +125,7 @@ func (s *healthCheckerSuite) Test_Check_Not_Serving() {
 		membership.NewHostInfoFromAddress("errorB"),
 		membership.NewHostInfoFromAddress("servingC"),
 		membership.NewHostInfoFromAddress("declinedD"),
-		membership.NewHostInfoFromAddress("E"), //not-serving
+		membership.NewHostInfoFromAddress("E"), // not-serving
 	})
 
 	result, err := s.checker.Check(context.Background(), time.Now())
