@@ -275,24 +275,11 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	return nil
 }
 
-// toRealTime converts a virtual-frame timestamp to real wall-clock by
-// subtracting the workflow's accumulated skipped duration. The timer queue
-// dispatches tasks based on real wall-clock, so every timer task's
-// VisibilityTimestamp must be expressed in real time.
-func (r *TaskGeneratorImpl) toRealTime(virtualTime time.Time) time.Time {
-	return virtualToRealTime(r.mutableState.GetExecutionInfo(), virtualTime)
-}
-
-// virtualToRealTime is the package-level converter shared by callers outside
-// TaskGeneratorImpl (timer_sequence, state_machine_timers). Every write to a
-// timer-task VisibilityTimestamp must go through this helper — or toRealTime —
-// so the timer queue (which runs on wall clock) fires the task at the moment
-// corresponding to its intended virtual time.
-func virtualToRealTime(execInfo *persistencespb.WorkflowExecutionInfo, virtualTime time.Time) time.Time {
-	if info := execInfo.GetTimeSkippingInfo(); info != nil {
-		return virtualTime.Add(-info.AccumulatedSkippedDuration.AsDuration())
-	}
-	return virtualTime
+// toRealTime tries to convert a timestampe of mutable state which is possibly virtual-framed
+// to real wall-clock by subtracting the workflow's accumulated skipped duration.
+// The returned time is guaranteed to be in real wall-clock, and should be used as the VisibilityTimestamp for tasks.
+func (r *TaskGeneratorImpl) toRealTime(msTimestamp time.Time) time.Time {
+	return virtualToRealTime(r.mutableState.GetExecutionInfo(), msTimestamp)
 }
 
 // getRetention returns the retention period for this task generator's workflow execution.

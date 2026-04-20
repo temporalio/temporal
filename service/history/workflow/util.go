@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -348,4 +349,14 @@ func PersistenceCallbackToAPICallback(cb *persistencespb.Callback) (*commonpb.Ca
 		}
 	}
 	return res, nil
+}
+
+// virtualToRealTime tries to convert a mutable state time which is possibly virtual-framed
+// to real wall-clock by subtracting the workflow's accumulated skipped duration.
+// If the workflow has no time skipped, the time is returned unchanged and this means the time is already in real wall-clock.
+func virtualToRealTime(execInfo *persistencespb.WorkflowExecutionInfo, msTimestamp time.Time) time.Time {
+	if info := execInfo.GetTimeSkippingInfo(); info != nil && info.AccumulatedSkippedDuration != nil {
+		return msTimestamp.Add(-info.AccumulatedSkippedDuration.AsDuration())
+	}
+	return msTimestamp
 }

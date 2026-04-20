@@ -682,13 +682,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	retryState := enumspb.RETRY_STATE_TIMEOUT
 	initiator := enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED
 
-	// Use virtual time: WorkflowExecutionExpirationTime is stored in virtual frame
-	// (consistent with event history), and the new run's StartTime below also
-	// must be virtual. Reading once keeps the two decisions consistent.
-	virtualNow := mutableState.Now()
-
 	wfExpTime := mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime
-	if wfExpTime == nil || wfExpTime.AsTime().IsZero() || wfExpTime.AsTime().After(virtualNow) {
+	if wfExpTime == nil || wfExpTime.AsTime().IsZero() || wfExpTime.AsTime().After(mutableState.Now()) {
 		backoffInterval, retryState = mutableState.GetRetryBackoffDuration(timeoutFailure)
 		if backoffInterval != backoff.NoBackoff {
 			// We have a retry policy and we should retry.
@@ -731,6 +726,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
+	// TODO@time-skipping: if time skipping happened, the virtual time is
+	// propagated to the new mutable state, need to check the bound works correctly in the retry.
 	newMutableState, err := workflow.NewMutableStateInChain(
 		t.shardContext,
 		t.shardContext.GetEventsCache(),
@@ -738,7 +735,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		mutableState.GetNamespaceEntry(),
 		mutableState.GetWorkflowKey().WorkflowID,
 		newRunID,
-		virtualNow,
+		mutableState.Now(),
 		mutableState,
 	)
 	if err != nil {
@@ -1029,6 +1026,7 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 	ctx context.Context,
 	task *tasks.ChasmTaskPure,
 ) error {
+	// TODO@time-skipping: if time skipping happened, check if virtual time is needed here.
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
