@@ -64,8 +64,8 @@ func TestReactivationSignalCache_ShouldSendSignal_FiresAgainAfterTTLExpiry(t *te
 	require.True(t, c.ShouldSendSignal("ns", "dep", "build", 5))
 	require.False(t, c.ShouldSendSignal("ns", "dep", "build", 5))
 
-	time.Sleep(100 * time.Millisecond)
-
-	// After TTL, the entry is gone — same tuple fires again.
-	require.True(t, c.ShouldSendSignal("ns", "dep", "build", 5))
+	// After TTL, the entry is evicted — same tuple fires again.
+	require.Eventually(t, func() bool {
+		return c.ShouldSendSignal("ns", "dep", "build", 5)
+	}, time.Second, 10*time.Millisecond)
 }
