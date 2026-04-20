@@ -120,12 +120,8 @@ func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(
 	if err != nil {
 		return nil, err
 	}
-	routingKey := GetRoutingKeyFromContext(ctx)
-	if routingKey.Strategy == namespace.RoutingStrategyPollerGroup {
-		// All poller group requests are allowed to proceed without waiting for handover
-		return nil, nil
-	}
-	if namespaceData.ReplicationState(routingKey.ID) == enumspb.REPLICATION_STATE_HANDOVER {
+	businessID := GetRoutingKeyFromContext(ctx).ID
+	if namespaceData.ReplicationState(businessID) == enumspb.REPLICATION_STATE_HANDOVER {
 		cbID := uuid.New()
 		waitReplicationStateUpdate := make(chan struct{})
 		i.namespaceRegistry.RegisterStateChangeCallback(cbID, func(ns *namespace.Namespace, deletedFromDb bool) {
@@ -134,7 +130,7 @@ func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(
 			}
 			if ns.State() != enumspb.NAMESPACE_STATE_REGISTERED ||
 				deletedFromDb ||
-				ns.ReplicationState(routingKey.ID) != enumspb.REPLICATION_STATE_HANDOVER ||
+				ns.ReplicationState(businessID) != enumspb.REPLICATION_STATE_HANDOVER ||
 				!ns.IsGlobalNamespace() {
 				// Stop wait on state change if:
 				// 1. namespace is deleting/deleted
