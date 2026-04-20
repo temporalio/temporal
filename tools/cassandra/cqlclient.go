@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gocql/gocql"
+	gocql "github.com/apache/cassandra-gocql-driver/v2"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -172,7 +172,7 @@ func (client *cqlClient) CreateSchemaVersionTables() error {
 func (client *cqlClient) ReadSchemaVersion() (string, error) {
 	query := client.session.Query(readSchemaVersionCQL, client.keyspace)
 
-	iter := query.Iter()
+	iter := query.Iter(context.Background())
 	var version string
 	success := iter.Scan(&version)
 	err := iter.Close()
@@ -188,7 +188,7 @@ func (client *cqlClient) ReadSchemaVersion() (string, error) {
 // UpdateShemaVersion updates the schema version for the Keyspace
 func (client *cqlClient) UpdateSchemaVersion(newVersion string, minCompatibleVersion string) error {
 	query := client.session.Query(writeSchemaVersionCQL, client.keyspace, time.Now().UTC(), newVersion, minCompatibleVersion)
-	return query.Exec()
+	return query.Exec(context.Background())
 }
 
 // WriteSchemaUpdateLog adds an entry to the schema update history table
@@ -196,12 +196,12 @@ func (client *cqlClient) WriteSchemaUpdateLog(oldVersion string, newVersion stri
 	now := time.Now().UTC()
 	query := client.session.Query(writeSchemaUpdateHistoryCQL)
 	query.Bind(now.Year(), int(now.Month()), now, oldVersion, newVersion, manifestMD5, desc)
-	return query.Exec()
+	return query.Exec(context.Background())
 }
 
 // Exec executes a cql statement
 func (client *cqlClient) Exec(stmt string, args ...any) error {
-	if err := client.session.Query(stmt, args...).Exec(); err != nil {
+	if err := client.session.Query(stmt, args...).Exec(context.Background()); err != nil {
 		return err
 	}
 	return client.waitSchemaAgreement()
@@ -217,7 +217,7 @@ func (client *cqlClient) Close() {
 // ListTables lists the table names in a Keyspace
 func (client *cqlClient) ListTables() ([]string, error) {
 	query := client.session.Query(listTablesCQL, client.keyspace)
-	iter := query.Iter()
+	iter := query.Iter(context.Background())
 	var names []string
 	var name string
 	for iter.Scan(&name) {
@@ -232,7 +232,7 @@ func (client *cqlClient) ListTables() ([]string, error) {
 // listTypes lists the User defined types in a Keyspace
 func (client *cqlClient) listTypes() ([]string, error) {
 	qry := client.session.Query(listTypesCQL, client.keyspace)
-	iter := qry.Iter()
+	iter := qry.Iter(context.Background())
 	var names []string
 	var name string
 	for iter.Scan(&name) {
