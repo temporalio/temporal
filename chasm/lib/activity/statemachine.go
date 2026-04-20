@@ -456,6 +456,7 @@ type resetEvent struct {
 var TransitionReset = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, event resetEvent) error {
