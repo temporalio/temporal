@@ -3,7 +3,7 @@ package gocql
 import (
 	"context"
 
-	"github.com/gocql/gocql"
+	gocql "github.com/apache/cassandra-gocql-driver/v2"
 )
 
 // Note: this file defines the minimal interface that is needed by Temporal's cassandra
@@ -16,23 +16,20 @@ type (
 	Session interface {
 		Query(string, ...any) Query
 		NewBatch(BatchType) *Batch
-		ExecuteBatch(*Batch) error
-		MapExecuteBatchCAS(*Batch, map[string]any) (bool, Iter, error)
 		AwaitSchemaAgreement(ctx context.Context) error
 		Close()
 	}
 
 	// Query is the interface for query object.
 	Query interface {
-		Exec() error
-		Scan(...any) error
-		ScanCAS(...any) (bool, error)
-		MapScan(map[string]any) error
-		MapScanCAS(map[string]any) (bool, error)
-		Iter() Iter
+		Exec(context.Context) error
+		Scan(context.Context, ...any) error
+		ScanCAS(context.Context, ...any) (bool, error)
+		MapScan(context.Context, map[string]any) error
+		MapScanCAS(context.Context, map[string]any) (bool, error)
+		Iter(context.Context) Iter
 		PageSize(int) Query
 		PageState([]byte) Query
-		WithContext(context.Context) Query
 		WithTimestamp(int64) Query
 		Consistency(Consistency) Query
 		Bind(...any) Query

@@ -101,9 +101,9 @@ func (m *MetadataStore) CreateNamespace(
 	request *p.InternalCreateNamespaceRequest,
 ) (*p.CreateNamespaceResponse, error) {
 
-	query := m.session.Query(templateCreateNamespaceQuery, request.ID, request.Name).WithContext(ctx)
+	query := m.session.Query(templateCreateNamespaceQuery, request.ID, request.Name)
 	existingRow := make(map[string]any)
-	applied, err := query.MapScanCAS(existingRow)
+	applied, err := query.MapScanCAS(ctx, existingRow)
 	if err != nil {
 		return nil, gocql.ConvertError("CreateNamespace", err)
 	}
@@ -134,7 +134,7 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 		return nil, err
 	}
 
-	batch := m.session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+	batch := m.session.NewBatch(gocql.LoggedBatch)
 	batch.Query(templateCreateNamespaceByNameQueryWithinBatchV2,
 		constNamespacePartition,
 		request.ID,
@@ -147,14 +147,14 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 	m.updateMetadataBatch(batch, metadata.NotificationVersion)
 
 	previous := make(map[string]any)
-	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
+	applied, iter, err := batch.MapExecCAS(ctx, previous)
 	if err != nil {
 		return nil, gocql.ConvertError("CreateNamespace", err)
 	}
 	defer func() { _ = iter.Close() }()
 	deleteOrphanNamespace := func() {
 		// Delete namespace from `namespaces_by_id`
-		if errDelete := m.session.Query(templateDeleteNamespaceQuery, request.ID).WithContext(ctx).Exec(); errDelete != nil {
+		if errDelete := m.session.Query(templateDeleteNamespaceQuery, request.ID).Exec(ctx); errDelete != nil {
 			m.logger.Warn("Unable to delete orphan namespace record. Error", tag.Error(errDelete))
 		}
 	}
@@ -207,7 +207,7 @@ func (m *MetadataStore) UpdateNamespace(
 	ctx context.Context,
 	request *p.InternalUpdateNamespaceRequest,
 ) error {
-	batch := m.session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+	batch := m.session.NewBatch(gocql.LoggedBatch)
 	batch.Query(templateUpdateNamespaceByNameQueryWithinBatchV2,
 		request.Namespace.Data,
 		request.Namespace.EncodingType.String(),
@@ -219,7 +219,7 @@ func (m *MetadataStore) UpdateNamespace(
 	m.updateMetadataBatch(batch, request.NotificationVersion)
 
 	previous := make(map[string]any)
-	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
+	applied, iter, err := batch.MapExecCAS(ctx, previous)
 	if err != nil {
 		return gocql.ConvertError("UpdateNamespace", err)
 	}
@@ -251,12 +251,12 @@ func (m *MetadataStore) RenameNamespace(
 	if updateErr := m.session.Query(templateUpdateNamespaceByIdQuery,
 		request.Name,
 		request.Id,
-	).WithContext(ctx).Exec(); updateErr != nil {
+	).Exec(ctx); updateErr != nil {
 		return gocql.ConvertError("RenameNamespace", updateErr)
 	}
 
 	// Step 2.
-	batch := m.session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+	batch := m.session.NewBatch(gocql.LoggedBatch)
 	batch.Query(templateCreateNamespaceByNameQueryWithinBatchV2,
 		constNamespacePartition,
 		request.Id,
@@ -273,7 +273,7 @@ func (m *MetadataStore) RenameNamespace(
 	m.updateMetadataBatch(batch, request.NotificationVersion)
 
 	previous := make(map[string]any)
-	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
+	applied, iter, err := batch.MapExecCAS(ctx, previous)
 	if err != nil {
 		return gocql.ConvertError("RenameNamespace", err)
 	}
@@ -316,15 +316,16 @@ func (m *MetadataStore) GetNamespace(
 
 	namespace := request.Name
 	if len(request.ID) > 0 {
-		query = m.session.Query(templateGetNamespaceQuery, request.ID).WithContext(ctx)
-		err = query.Scan(&namespace)
+		query = m.session.Query(templateGetNamespaceQuery, request.ID)
+		err = query.Scan(ctx, &namespace)
 		if err != nil {
 			return nil, handleError(request.Name, request.ID, err)
 		}
 	}
 
-	query = m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, namespace).WithContext(ctx)
+	query = m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, namespace)
 	err = query.Scan(
+		ctx,
 		nil,
 		nil,
 		&detail,
@@ -352,13 +353,13 @@ func (m *MetadataStore) ListNamespaces(
 	ctx context.Context,
 	request *p.InternalListNamespacesRequest,
 ) (*p.InternalListNamespacesResponse, error) {
-	query := m.session.Query(templateListNamespaceQueryV2, constNamespacePartition).WithContext(ctx)
+	query := m.session.Query(templateListNamespaceQueryV2, constNamespacePartition)
 	pageSize := request.PageSize
 	nextPageToken := request.NextPageToken
 	response := &p.InternalListNamespacesResponse{}
 
 	for {
-		iter := query.PageSize(pageSize).PageState(nextPageToken).Iter()
+		iter := query.PageSize(pageSize).PageState(nextPageToken).Iter(ctx)
 		skippedRows := 0
 
 		for {
@@ -418,8 +419,8 @@ func (m *MetadataStore) DeleteNamespace(
 	request *p.DeleteNamespaceRequest,
 ) error {
 	var name string
-	query := m.session.Query(templateGetNamespaceQuery, request.ID).WithContext(ctx)
-	err := query.Scan(&name)
+	query := m.session.Query(templateGetNamespaceQuery, request.ID)
+	err := query.Scan(ctx, &name)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
 			return nil
@@ -439,8 +440,8 @@ func (m *MetadataStore) DeleteNamespaceByName(
 	request *p.DeleteNamespaceByNameRequest,
 ) error {
 	var ID []byte
-	query := m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, request.Name).WithContext(ctx)
-	err := query.Scan(&ID, nil, nil, nil, nil, nil)
+	query := m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, request.Name)
+	err := query.Scan(ctx, &ID, nil, nil, nil, nil, nil)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
 			return nil
@@ -454,8 +455,8 @@ func (m *MetadataStore) GetMetadata(
 	ctx context.Context,
 ) (*p.GetMetadataResponse, error) {
 	var notificationVersion int64
-	query := m.session.Query(templateGetMetadataQueryV2, constNamespacePartition, namespaceMetadataRecordName).WithContext(ctx)
-	err := query.Scan(&notificationVersion)
+	query := m.session.Query(templateGetMetadataQueryV2, constNamespacePartition, namespaceMetadataRecordName)
+	err := query.Scan(ctx, &notificationVersion)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
 			// this error can be thrown in the very beginning,
@@ -486,13 +487,13 @@ func (m *MetadataStore) updateMetadataBatch(
 }
 
 func (m *MetadataStore) deleteNamespace(ctx context.Context, name string, ID []byte) error {
-	query := m.session.Query(templateDeleteNamespaceByNameQueryV2, constNamespacePartition, name).WithContext(ctx)
-	if err := query.Exec(); err != nil {
+	query := m.session.Query(templateDeleteNamespaceByNameQueryV2, constNamespacePartition, name)
+	if err := query.Exec(ctx); err != nil {
 		return gocql.ConvertError("DeleteNamespaceByName", err)
 	}
 
-	query = m.session.Query(templateDeleteNamespaceQuery, ID).WithContext(ctx)
-	if err := query.Exec(); err != nil {
+	query = m.session.Query(templateDeleteNamespaceQuery, ID)
+	if err := query.Exec(ctx); err != nil {
 		return gocql.ConvertError("DeleteNamespace", err)
 	}
 

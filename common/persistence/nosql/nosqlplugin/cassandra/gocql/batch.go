@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gocql/gocql"
+	gocql "github.com/apache/cassandra-gocql-driver/v2"
 )
 
 type (
@@ -36,8 +36,20 @@ func (b *Batch) Query(stmt string, args ...any) {
 	b.gocqlBatch.Query(stmt, args...)
 }
 
-func (b *Batch) WithContext(ctx context.Context) *Batch {
-	return newBatch(b.session, b.gocqlBatch.WithContext(ctx))
+func (b *Batch) Exec(ctx context.Context) (retError error) {
+	defer func() { b.session.handleError(retError) }()
+
+	return b.gocqlBatch.ExecContext(ctx)
+}
+
+func (b *Batch) MapExecCAS(ctx context.Context, dest map[string]any) (_ bool, _ Iter, retError error) {
+	defer func() { b.session.handleError(retError) }()
+
+	applied, iter, err := b.gocqlBatch.MapExecCASContext(ctx, dest)
+	if iter != nil {
+		return applied, newIter(b.session, iter), err
+	}
+	return applied, nil, err
 }
 
 func (b *Batch) WithTimestamp(timestamp int64) *Batch {

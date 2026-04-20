@@ -1,11 +1,12 @@
 package cassandra
 
 import (
+	"context"
 	"path"
 	"strings"
 	"time"
 
-	"github.com/gocql/gocql"
+	gocql "github.com/apache/cassandra-gocql-driver/v2"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/debug"
@@ -174,7 +175,7 @@ func (s *TestCluster) LoadSchema(schemaFile string) {
 		s.logger.Fatal("LoadSchema", tag.Error(err))
 	}
 	for _, stmt := range statements {
-		if err = s.session.Query(stmt).Exec(); err != nil {
+		if err = s.session.Query(stmt).Exec(context.Background()); err != nil {
 			s.logger.Fatal("LoadSchema", tag.Error(err))
 		}
 	}

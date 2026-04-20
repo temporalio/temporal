@@ -121,10 +121,10 @@ func (d *taskQueueStore) CreateTaskQueue(
 		request.RangeID,
 		request.TaskQueueInfo.Data,
 		request.TaskQueueInfo.EncodingType.String(),
-	).WithContext(ctx)
+	)
 
 	previous := make(map[string]any)
-	applied, err := query.MapScanCAS(previous)
+	applied, err := query.MapScanCAS(ctx, previous)
 	if err != nil {
 		return gocql.ConvertError("CreateTaskQueue", err)
 	}
@@ -150,12 +150,12 @@ func (d *taskQueueStore) GetTaskQueue(
 		request.TaskType,
 		rowTypeTaskQueue,
 		taskQueueTaskID,
-	).WithContext(ctx)
+	)
 
 	var rangeID int64
 	var tlBytes []byte
 	var tlEncoding string
-	if err := query.Scan(&rangeID, &tlBytes, &tlEncoding); err != nil {
+	if err := query.Scan(ctx, &rangeID, &tlBytes, &tlEncoding); err != nil {
 		return nil, gocql.ConvertError("GetTaskQueue", err)
 	}
 
@@ -182,7 +182,7 @@ func (d *taskQueueStore) UpdateTaskQueue(
 		if expiryTTL >= maxCassandraTTL {
 			expiryTTL = maxCassandraTTL
 		}
-		batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+		batch := d.Session.NewBatch(gocql.LoggedBatch)
 
 		batch.Query(switchTasksTable(templateUpdateTaskQueueQueryWithTTLPart1, d.version),
 			request.NamespaceID,
@@ -205,7 +205,7 @@ func (d *taskQueueStore) UpdateTaskQueue(
 			taskQueueTaskID,
 			request.PrevRangeID,
 		)
-		applied, _, err = d.Session.MapExecuteBatchCAS(batch, previous)
+		applied, _, err = batch.MapExecCAS(ctx, previous)
 	} else {
 		// Regular update logic for both V1 and V2
 		query := d.Session.Query(switchTasksTable(templateUpdateTaskQueueQuery, d.version),
@@ -218,8 +218,8 @@ func (d *taskQueueStore) UpdateTaskQueue(
 			rowTypeTaskQueue,
 			taskQueueTaskID,
 			request.PrevRangeID,
-		).WithContext(ctx)
-		applied, err = query.MapScanCAS(previous)
+		)
+		applied, err = query.MapScanCAS(ctx, previous)
 	}
 
 	if err != nil {
@@ -259,10 +259,10 @@ func (d *taskQueueStore) DeleteTaskQueue(
 		rowTypeTaskQueue,
 		taskQueueTaskID,
 		request.RangeID,
-	).WithContext(ctx)
+	)
 
 	previous := make(map[string]any)
-	applied, err := query.MapScanCAS(previous)
+	applied, err := query.MapScanCAS(ctx, previous)
 	if err != nil {
 		return gocql.ConvertError("DeleteTaskQueue", err)
 	}
