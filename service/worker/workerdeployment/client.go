@@ -175,10 +175,14 @@ type Client interface {
 	// SignalVersionReactivation sends a reactivation signal to a version workflow.
 	// Used when workflows are pinned to a potentially DRAINED/INACTIVE version.
 	// This is a fire-and-forget operation - errors are logged but returned for caller handling.
+	// revisionNumber is used to compose a stable RequestId on the signal so concurrent signals
+	// for the same (deployment, buildID, revisionNumber) tuple are deduplicated by the receiver
+	// via Temporal's built-in pendingSignalRequestedIDs mechanism.
 	SignalVersionReactivation(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		deploymentName, buildID string,
+		revisionNumber int64,
 	) error
 }
 
@@ -1640,11 +1644,20 @@ func (d *ClientImpl) SignalVersionReactivation(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deploymentName, buildID string,
+	revisionNumber int64,
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("SignalVersionReactivation", deploymentName, &retErr, buildID)()
 
 	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
+
+	// Compose a cluster-wide-deterministic RequestId so that concurrent reactivation signals
+	// from multiple history pods for the same version at the same revision converge on one
+	// dedup key. The version workflow's mutable state tracks pendingSignalRequestedIDs; if a
+	// signal with this RequestId already arrived, subsequent ones are full no-ops (no event,
+	// no WFT). On CaN the set resets, so a later drain-reactivate cycle (new revision) is
+	// accepted as a new signal.
+	requestID := fmt.Sprintf("reactivate:%s:%s:%d", deploymentName, buildID, revisionNumber)
 
 	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
 		NamespaceId: namespaceEntry.ID().String(),
@@ -1656,6 +1669,7 @@ func (d *ClientImpl) SignalVersionReactivation(
 			SignalName: ReactivateVersionSignalName,
 			Input:      nil,
 			Identity:   "history-service",
+			RequestId:  requestID,
 		},
 	}
 

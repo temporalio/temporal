@@ -1,6 +1,7 @@
 package workerdeployment
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -13,14 +14,17 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
 	update2 "go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 )
 
 // testMaxIDLengthLimit is the current default value used by dynamic config for
@@ -68,6 +72,7 @@ func (d *deploymentWorkflowClientSuite) SetupTest() {
 		BuildId:    testBuildID,
 	}
 	d.deploymentClient = &ClientImpl{
+		logger:            log.NewNoopLogger(),
 		historyClient:     d.mockHistoryClient,
 		visibilityManager: d.VisibilityManager,
 	}
@@ -381,4 +386,58 @@ func TestIsRetryableQueryError(t *testing.T) {
 		})
 		require.False(t, isRetryableQueryError(err))
 	})
+}
+
+// TestSignalVersionReactivation_RequestIdFormat verifies that SignalVersionReactivation
+// composes a cluster-wide-deterministic RequestId from (deploymentName, buildID, revisionNumber).
+// Every history pod that observes the same (deployment, buildID, revisionNumber) tuple must
+// produce the same RequestId so Temporal's built-in pendingSignalRequestedIDs dedup collapses
+// concurrent signals on the receiver side.
+func (d *deploymentWorkflowClientSuite) TestSignalVersionReactivation_RequestIdFormat() {
+	testCases := []struct {
+		name           string
+		deploymentName string
+		buildID        string
+		revisionNumber int64
+		expectedReqID  string
+	}{
+		{
+			name:           "new format with non-zero revision",
+			deploymentName: "my-deployment",
+			buildID:        "build-42",
+			revisionNumber: 7,
+			expectedReqID:  "reactivate:my-deployment:build-42:7",
+		},
+		{
+			name:           "zero revision (old matching or legacy format)",
+			deploymentName: "my-deployment",
+			buildID:        "build-42",
+			revisionNumber: 0,
+			expectedReqID:  "reactivate:my-deployment:build-42:0",
+		},
+	}
+
+	for _, tc := range testCases {
+		d.Run(tc.name, func() {
+			var capturedReqID string
+			d.mockHistoryClient.EXPECT().
+				SignalWorkflowExecution(gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, req *historyservice.SignalWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.SignalWorkflowExecutionResponse, error) {
+					capturedReqID = req.GetSignalRequest().GetRequestId()
+					d.Equal(ReactivateVersionSignalName, req.GetSignalRequest().GetSignalName())
+					d.Equal(GenerateVersionWorkflowID(tc.deploymentName, tc.buildID), req.GetSignalRequest().GetWorkflowExecution().GetWorkflowId())
+					return &historyservice.SignalWorkflowExecutionResponse{}, nil
+				})
+
+			err := d.deploymentClient.SignalVersionReactivation(
+				context.Background(),
+				d.ns,
+				tc.deploymentName,
+				tc.buildID,
+				tc.revisionNumber,
+			)
+			d.NoError(err)
+			d.Equal(tc.expectedReqID, capturedReqID)
+		})
+	}
 }

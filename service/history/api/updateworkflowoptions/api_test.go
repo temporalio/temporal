@@ -39,8 +39,8 @@ func (noopVersionCache) Get(
 	_ enumspb.TaskQueueType,
 	_ string,
 	_ string,
-) (isMember bool, isDrainedOrInactive *bool, ok bool) {
-	return false, nil, false
+) (isMember bool, isDrainedOrInactive *bool, revisionNumber int64, ok bool) {
+	return false, nil, 0, false
 }
 
 func (noopVersionCache) Put(
@@ -51,17 +51,18 @@ func (noopVersionCache) Put(
 	_ string,
 	_ bool,
 	_ *bool,
+	_ int64,
 ) {
 }
 
 type noopReactivationSignalCache struct{}
 
-func (noopReactivationSignalCache) ShouldSendSignal(_, _, _ string) bool {
+func (noopReactivationSignalCache) ShouldSendSignal(_, _, _ string, _ int64) bool {
 	return false // Always return false to skip sending signals in tests
 }
 
 // noopReactivationSignaler is a no-op signaler function for tests
-func noopReactivationSignaler(_ context.Context, _ *namespace.Namespace, _, _ string) error {
+func noopReactivationSignaler(_ context.Context, _ *namespace.Namespace, _, _ string, _ int64) error {
 	return nil
 }
 

@@ -5376,8 +5376,16 @@ func (x *CheckTaskQueueVersionMembershipRequest) GetVersion() *v110.WorkerDeploy
 type VersionReactivationEligibility struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	IsDrainedOrInactive bool                   `protobuf:"varint,1,opt,name=is_drained_or_inactive,json=isDrainedOrInactive,proto3" json:"is_drained_or_inactive,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// revision_number is the version's current revision as tracked in matching's per-TQ
+	// deployment data. It is returned so history can compose a stable, cluster-wide-deterministic
+	// RequestId on the reactivation signal. All history pods querying the same version at the
+	// same point in time converge on the same revision_number, so Temporal's built-in
+	// SignalRequestedIds dedup (see signalworkflow/api.go) collapses the N-pod signal fan-out
+	// into exactly one event on the version workflow. Zero when unknown (old matching server or
+	// legacy DeploymentVersionData format that does not carry revision_number).
+	RevisionNumber int64 `protobuf:"varint,2,opt,name=revision_number,json=revisionNumber,proto3" json:"revision_number,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *VersionReactivationEligibility) Reset() {
@@ -5415,6 +5423,13 @@ func (x *VersionReactivationEligibility) GetIsDrainedOrInactive() bool {
 		return x.IsDrainedOrInactive
 	}
 	return false
+}
+
+func (x *VersionReactivationEligibility) GetRevisionNumber() int64 {
+	if x != nil {
+		return x.RevisionNumber
+	}
+	return 0
 }
 
 type CheckTaskQueueVersionMembershipResponse struct {
@@ -6216,9 +6231,10 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\n" +
 	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12L\n" +
 	"\x0ftask_queue_type\x18\x03 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12T\n" +
-	"\aversion\x18\x04 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\"U\n" +
+	"\aversion\x18\x04 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\"~\n" +
 	"\x1eVersionReactivationEligibility\x123\n" +
-	"\x16is_drained_or_inactive\x18\x01 \x01(\bR\x13isDrainedOrInactive\"\xca\x01\n" +
+	"\x16is_drained_or_inactive\x18\x01 \x01(\bR\x13isDrainedOrInactive\x12'\n" +
+	"\x0frevision_number\x18\x02 \x01(\x03R\x0erevisionNumber\"\xca\x01\n" +
 	"'CheckTaskQueueVersionMembershipResponse\x12\x1b\n" +
 	"\tis_member\x18\x01 \x01(\bR\bisMember\x12\x81\x01\n" +
 	"\x18reactivation_eligibility\x18\x02 \x01(\v2F.temporal.server.api.matchingservice.v1.VersionReactivationEligibilityR\x17reactivationEligibility\"L\n" +

@@ -3479,15 +3479,18 @@ func (e *matchingEngineImpl) CheckTaskQueueVersionMembership(
 
 	// Check the version's status so callers can skip sending reactivation signals
 	// for versions that are not drained or inactive, avoiding unnecessary RPCs and
-	// workflow history events on the version workflow.
+	// workflow history events on the version workflow. The revision number flows
+	// back so history can compose a cluster-wide-deterministic RequestId on the
+	// reactivation signal for receiver-side dedup.
 	var reactivationEligibility *matchingservice.VersionReactivationEligibility
-	if isDrainedOrInactive := worker_versioning.IsVersionDrainedOrInactive(
+	if isDrainedOrInactive, revisionNumber := worker_versioning.IsVersionDrainedOrInactive(
 		deploymentData,
 		request.GetVersion().GetDeploymentName(),
 		request.GetVersion().GetBuildId(),
 	); isDrainedOrInactive != nil {
 		reactivationEligibility = &matchingservice.VersionReactivationEligibility{
 			IsDrainedOrInactive: *isDrainedOrInactive,
+			RevisionNumber:      revisionNumber,
 		}
 	}
 

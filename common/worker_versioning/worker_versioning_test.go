@@ -61,7 +61,7 @@ func (c *testVersionMembershipCache) Get(
 	taskQueueType enumspb.TaskQueueType,
 	deploymentName string,
 	buildID string,
-) (isMember bool, isDrainedOrInactive *bool, ok bool) {
+) (isMember bool, isDrainedOrInactive *bool, revisionNumber int64, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.getCalls++
@@ -72,7 +72,7 @@ func (c *testVersionMembershipCache) Get(
 		deploymentName: deploymentName,
 		buildID:        buildID,
 	}]
-	return v.isMember, v.isDrainedOrInactive, ok
+	return v.isMember, v.isDrainedOrInactive, v.revisionNumber, ok
 }
 
 func (c *testVersionMembershipCache) Put(
@@ -83,6 +83,7 @@ func (c *testVersionMembershipCache) Put(
 	buildID string,
 	isMember bool,
 	isDrainedOrInactive *bool,
+	revisionNumber int64,
 ) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -93,71 +94,77 @@ func (c *testVersionMembershipCache) Put(
 		taskQueueType:  taskQueueType,
 		deploymentName: deploymentName,
 		buildID:        buildID,
-	}] = versionTaskQueueInfoCacheValue{isMember: isMember, isDrainedOrInactive: isDrainedOrInactive}
+	}] = versionTaskQueueInfoCacheValue{isMember: isMember, isDrainedOrInactive: isDrainedOrInactive, revisionNumber: revisionNumber}
 }
 
 func TestIsVersionDrainedOrInactive(t *testing.T) {
 	tests := []struct {
-		name           string
-		deployments    *persistencespb.DeploymentData
-		deploymentName string
-		buildID        string
-		expected       *bool
+		name                   string
+		deployments            *persistencespb.DeploymentData
+		deploymentName         string
+		buildID                string
+		expected               *bool
+		expectedRevisionNumber int64
 	}{
 		{
-			name:           "nil deployments returns nil",
-			deployments:    nil,
-			deploymentName: "dep",
-			buildID:        "build",
-			expected:       nil,
+			name:                   "nil deployments returns nil",
+			deployments:            nil,
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               nil,
+			expectedRevisionNumber: 0,
 		},
 		{
 			name: "version not found returns nil",
 			deployments: &persistencespb.DeploymentData{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{},
 			},
-			deploymentName: "dep",
-			buildID:        "build",
-			expected:       nil,
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               nil,
+			expectedRevisionNumber: 0,
 		},
 		{
-			name: "new format: DRAINED returns true",
+			name: "new format: DRAINED returns true with revision_number",
 			deployments: &persistencespb.DeploymentData{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
 					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED},
+						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED, RevisionNumber: 42},
 					}},
 				},
 			},
-			deploymentName: "dep",
-			buildID:        "build",
-			expected:       boolPtr(true),
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               boolPtr(true),
+			expectedRevisionNumber: 42,
 		},
 		{
-			name: "new format: INACTIVE returns true",
+			name: "new format: INACTIVE returns true with revision_number",
 			deployments: &persistencespb.DeploymentData{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
 					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE},
+						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, RevisionNumber: 7},
 					}},
 				},
 			},
-			deploymentName: "dep",
-			buildID:        "build",
-			expected:       boolPtr(true),
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               boolPtr(true),
+			expectedRevisionNumber: 7,
 		},
 		{
-			name: "new format: CURRENT returns false",
+			name: "new format: CURRENT returns false with revision_number",
 			deployments: &persistencespb.DeploymentData{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
 					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT},
+						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, RevisionNumber: 3},
 					}},
 				},
 			},
-			deploymentName: "dep",
-			buildID:        "build",
-			expected:       boolPtr(false),
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               boolPtr(false),
+			expectedRevisionNumber: 3,
 		},
 		{
 			name: "new format: RAMPING returns false",
@@ -168,25 +175,27 @@ func TestIsVersionDrainedOrInactive(t *testing.T) {
 					}},
 				},
 			},
-			deploymentName: "dep",
-			buildID:        "build",
-			expected:       boolPtr(false),
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               boolPtr(false),
+			expectedRevisionNumber: 0,
 		},
 		{
 			name: "new format: deleted version returns nil",
 			deployments: &persistencespb.DeploymentData{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
 					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED, Deleted: true},
+						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED, Deleted: true, RevisionNumber: 99},
 					}},
 				},
 			},
-			deploymentName: "dep",
-			buildID:        "build",
-			expected:       nil,
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               nil,
+			expectedRevisionNumber: 0,
 		},
 		{
-			name: "old format: DRAINED returns true",
+			name: "old format: DRAINED returns true with revision_number 0 (no field in old format)",
 			deployments: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					{
@@ -195,12 +204,13 @@ func TestIsVersionDrainedOrInactive(t *testing.T) {
 					},
 				},
 			},
-			deploymentName: "dep",
-			buildID:        "build",
-			expected:       boolPtr(true),
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               boolPtr(true),
+			expectedRevisionNumber: 0,
 		},
 		{
-			name: "old format: CURRENT returns false",
+			name: "old format: CURRENT returns false with revision_number 0",
 			deployments: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					{
@@ -209,16 +219,18 @@ func TestIsVersionDrainedOrInactive(t *testing.T) {
 					},
 				},
 			},
-			deploymentName: "dep",
-			buildID:        "build",
-			expected:       boolPtr(false),
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               boolPtr(false),
+			expectedRevisionNumber: 0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := IsVersionDrainedOrInactive(tt.deployments, tt.deploymentName, tt.buildID)
+			result, revisionNumber := IsVersionDrainedOrInactive(tt.deployments, tt.deploymentName, tt.buildID)
 			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, tt.expectedRevisionNumber, revisionNumber)
 		})
 	}
 }
@@ -937,6 +949,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 		expectError                 bool
 		errorContains               string
 		expectedIsDrainedOrInactive *bool // nil means we expect nil returned
+		expectedRevisionNumber      int64
 	}{
 		{
 			name:        "nil override returns nil",
@@ -957,7 +970,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "v0.32: Pinned override, with cache hit (drained), returns isDrainedOrInactive=true",
+			name: "v0.32: Pinned override, with cache hit (drained), returns isDrainedOrInactive=true and cached revision",
 			override: &workflowpb.VersioningOverride{
 				Override: &workflowpb.VersioningOverride_Pinned{
 					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
@@ -968,13 +981,14 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 			},
 			setupCache: func(c *testVersionMembershipCache) {
 				drainedOrInactive := true
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true, &drainedOrInactive)
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true, &drainedOrInactive, 42)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
 			},
 			expectError:                 false,
 			expectedIsDrainedOrInactive: boolPtr(true),
+			expectedRevisionNumber:      42,
 		},
 		{
 			name: "v0.32: Pinned override, with cache hit (active), returns isDrainedOrInactive=false",
@@ -988,7 +1002,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 			},
 			setupCache: func(c *testVersionMembershipCache) {
 				active := false
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true, &active)
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true, &active, 0)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
@@ -1007,7 +1021,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 				},
 			},
 			setupCache: func(c *testVersionMembershipCache) {
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, false, nil)
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, false, nil, 0)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
@@ -1027,7 +1041,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 				},
 			},
 			setupCache: func(c *testVersionMembershipCache) {
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true, nil)
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true, nil, 0)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(
@@ -1062,7 +1076,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 			errorContains: getPinnedVersionErrorMsg(testVersion, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 		},
 		{
-			name: "v0.32: Pinned override, with cache miss, RPC returns member and drained",
+			name: "v0.32: Pinned override, with cache miss, RPC returns member and drained with revision",
 			override: &workflowpb.VersioningOverride{
 				Override: &workflowpb.VersioningOverride_Pinned{
 					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
@@ -1080,11 +1094,13 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 					IsMember: true,
 					ReactivationEligibility: &matchingservice.VersionReactivationEligibility{
 						IsDrainedOrInactive: true,
+						RevisionNumber:      7,
 					},
 				}, nil)
 			},
 			expectError:                 false,
 			expectedIsDrainedOrInactive: boolPtr(true),
+			expectedRevisionNumber:      7,
 		},
 		{
 			name: "v0.32: Pinned override, with cache miss, RPC returns member and active",
@@ -1204,7 +1220,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 				PinnedVersion: "test-deployment.test-build-id",
 			},
 			setupCache: func(c *testVersionMembershipCache) {
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "test-deployment", "test-build-id", true, nil)
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "test-deployment", "test-build-id", true, nil, 0)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0)
@@ -1218,7 +1234,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 				PinnedVersion: "test-deployment.test-build-id",
 			},
 			setupCache: func(c *testVersionMembershipCache) {
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "test-deployment", "test-build-id", false, nil)
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "test-deployment", "test-build-id", false, nil, 0)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0)
@@ -1378,7 +1394,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 			if tqType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
 				tqType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
 			}
-			isDrainedOrInactive, err := ValidateVersioningOverrideAndGetReactivationEligibility(
+			isDrainedOrInactive, revisionNumber, err := ValidateVersioningOverrideAndGetReactivationEligibility(
 				context.Background(),
 				tt.override,
 				mockMatchingClient,
@@ -1396,6 +1412,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				assert.Equal(t, tt.expectedIsDrainedOrInactive, isDrainedOrInactive)
+				assert.Equal(t, tt.expectedRevisionNumber, revisionNumber)
 			}
 		})
 	}
@@ -1591,7 +1608,7 @@ func TestGetIsWFTaskQueueInVersionDetector(t *testing.T) {
 		assert.Equal(t, 1, cache.putCalls)
 
 		// Verify the value was actually stored.
-		cached, _, ok := cache.Get(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId)
+		cached, _, _, ok := cache.Get(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId)
 		assert.True(t, ok)
 		assert.True(t, cached)
 	})

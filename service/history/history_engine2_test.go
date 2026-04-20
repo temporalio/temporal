@@ -103,7 +103,7 @@ type (
 // by the history engine as a function value.
 type noopWorkerDeploymentClient struct{ workerdeployment.Client }
 
-func (noopWorkerDeploymentClient) SignalVersionReactivation(context.Context, *namespace.Namespace, string, string) error {
+func (noopWorkerDeploymentClient) SignalVersionReactivation(context.Context, *namespace.Namespace, string, string, int64) error {
 	return nil
 }
 

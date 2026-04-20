@@ -8,18 +8,25 @@ import (
 
 // ReactivationSignalCache deduplicates reactivation signals to version workflows.
 //
+// The key includes revisionNumber so that a rapid drain → reactivate → drain cycle within
+// the cache TTL does not have its second signal suppressed by a stale entry from the first
+// cycle. Each drainage cycle increments the version's revisionNumber in matching's deployment
+// data, so distinct cycles occupy distinct cache entries and signal independently.
+//
 // Implementations are expected to be safe for concurrent use.
 type (
 	ReactivationSignalCache interface {
 		// ShouldSendSignal returns true if signal should be sent (not recently sent)
-		// and atomically marks it as sent. Returns false if recently sent.
-		ShouldSendSignal(namespaceID, deploymentName, buildID string) bool
+		// and atomically marks it as sent. Returns false if recently sent for the same
+		// (namespaceID, deploymentName, buildID, revisionNumber) tuple.
+		ShouldSendSignal(namespaceID, deploymentName, buildID string, revisionNumber int64) bool
 	}
 
 	reactivationSignalCacheKey struct {
 		namespaceID    string
 		deploymentName string
 		buildID        string
+		revisionNumber int64
 	}
 
 	ReactivationSignalCacheImpl struct {
@@ -39,6 +46,7 @@ func NewReactivationSignalCache(c cache.Cache, metricsHandler metrics.Handler) R
 
 func (c *ReactivationSignalCacheImpl) ShouldSendSignal(
 	namespaceID, deploymentName, buildID string,
+	revisionNumber int64,
 ) bool {
 	handler := c.metricsHandler.WithTags(
 		metrics.OperationTag(metrics.VersionReactivationSignalCacheShouldSendScope),
@@ -50,6 +58,7 @@ func (c *ReactivationSignalCacheImpl) ShouldSendSignal(
 		namespaceID:    namespaceID,
 		deploymentName: deploymentName,
 		buildID:        buildID,
+		revisionNumber: revisionNumber,
 	}
 
 	// Check if we recently sent a signal for this version

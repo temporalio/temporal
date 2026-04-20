@@ -738,6 +738,14 @@ message CheckTaskQueueVersionMembershipRequest {
 
 message VersionReactivationEligibility {
   bool is_drained_or_inactive = 1;
+  // revision_number is the version's current revision as tracked in matching's per-TQ
+  // deployment data. It is returned so history can compose a stable, cluster-wide-deterministic
+  // RequestId on the reactivation signal. All history pods querying the same version at the
+  // same point in time converge on the same revision_number, so Temporal's built-in
+  // SignalRequestedIds dedup (see signalworkflow/api.go) collapses the N-pod signal fan-out
+  // into exactly one event on the version workflow. Zero when unknown (old matching server or
+  // legacy DeploymentVersionData format that does not carry revision_number).
+  int64 revision_number = 2;
 }
 
 message CheckTaskQueueVersionMembershipResponse {
