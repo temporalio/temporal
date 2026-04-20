@@ -952,45 +952,8 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 		}
 		return &activitypb.ResetActivityExecutionResponse{}, nil
 
-	// TODO(saa-preview): Handle paused activities when PauseActivityExecution is implemented for SAA.
-	// PR #9851 introduces two pause sub-states:
-	//   - Real PAUSED status (TransitionPaused: SCHEDULED→PAUSED): no running worker.
-	//   - Flag-based: STARTED+PauseState (worker running, notified on heartbeat).
-	//   - Flag-based: SCHEDULED+PauseState (retry landed while pause flag was set).
-	//
-	// case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
-	//     // Real PAUSED (no running worker) — Count can be reset immediately.
-	//     scheduleTime := ctx.Now(a)
-	//     if jitter := frontendReq.GetJitter().AsDuration(); jitter > 0 {
-	//         scheduleTime = scheduleTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
-	//     }
-	//     if keepPaused {
-	//         // Stay paused at attempt 1; stamp bump invalidates any stale tasks.
-	//         attempt := a.LastAttempt.Get(ctx)
-	//         attempt.Count = 1
-	//         attempt.Stamp++
-	//         if resetHeartbeats { /* clear heartbeat */ }
-	//         return &activitypb.ResetActivityExecutionResponse{}, nil
-	//     }
-	//     // keepPaused=false: clear PauseState then use TransitionReset to re-dispatch.
-	//     a.PauseState = nil
-	//     if err := TransitionReset.Apply(a, ctx, resetEvent{scheduleTime: scheduleTime, resetHeartbeats: resetHeartbeats}); err != nil {
-	//         return nil, err
-	//     }
-	//     return &activitypb.ResetActivityExecutionResponse{}, nil
-	//
-	// For STARTED+PauseState (flag-based pause, worker running): the STARTED case above handles
-	// deferral via ActivityReset=true. Also:
-	//   - keepPaused=false: clear a.PauseState so the retry starts unpaused.
-	//   - keepPaused=true: leave a.PauseState intact.
-	//
-	// For SCHEDULED+PauseState (retry while flag-paused): the SCHEDULED case calls TransitionReset
-	// which enqueues a dispatch task. ActivityDispatchTask.Validate blocks it while PauseState!=nil.
-	// If keepPaused=false: clear a.PauseState before calling TransitionReset so the task fires.
-
 	default:
 		// Terminal or unspecified state.
-		_ = keepPaused // used once paused state is implemented above
 		return nil, serviceerror.NewNotFound("activity execution is not running")
 	}
 }

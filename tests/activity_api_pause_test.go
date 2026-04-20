@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -18,6 +19,8 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 // activityPauseAPI groups pause/unpause adapters so the same test body can run
@@ -797,6 +800,134 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 				// Second pause with the same request ID — must succeed (idempotent no-op).
 				s.NoError(api.pause(ctx, s, workflowRun.GetID(), "activity-id", "identity", "reason", "my-pause-request-id"))
+			})
+
+			t.Run("TestActivityPauseUpdateOptionsResetUnpause", func(t *testing.T) {
+				// End-to-end test: pause → update-options → reset → unpause all work together.
+				// Verifies that the updated options persist through a reset and that the activity
+				// completes at attempt 1 with the new options after unpause.
+				s := testcore.NewEnv(t)
+
+				initialRetryInterval := 1 * time.Minute
+				origScheduleToClose := 30 * time.Minute
+				updatedScheduleToClose := 25 * time.Minute
+				activityRetryPolicy := &temporal.RetryPolicy{
+					InitialInterval:    initialRetryInterval,
+					BackoffCoefficient: 1,
+				}
+
+				makeWorkflowFunc := func(activityFunction ActivityFunctions) WorkflowFunction {
+					return func(ctx workflow.Context) error {
+						var ret string
+						return workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+							ActivityID:             "activity-id",
+							DisableEagerExecution:  true,
+							StartToCloseTimeout:    15 * time.Minute,
+							ScheduleToCloseTimeout: origScheduleToClose,
+							RetryPolicy:            activityRetryPolicy,
+						}), activityFunction).Get(ctx, &ret)
+					}
+				}
+
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+
+				var activityWasReset atomic.Bool
+				activityCompleteCh := make(chan struct{})
+
+				activityFunction := func() (string, error) {
+					if !activityWasReset.Load() {
+						return "", errors.New("bad-luck-please-retry")
+					}
+					s.WaitForChannel(ctx, activityCompleteCh)
+					return "done!", nil
+				}
+
+				workflowFn := makeWorkflowFunc(activityFunction)
+				s.SdkWorker().RegisterWorkflow(workflowFn)
+				s.SdkWorker().RegisterActivity(activityFunction)
+
+				wfID := testcore.RandomizeStr("wf_id-" + t.Name())
+				workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+					ID:        wfID,
+					TaskQueue: s.WorkerTaskQueue(),
+				}, workflowFn)
+				require.NoError(t, err)
+
+				// wait for activity to fail and enter retry backoff
+				require.EventuallyWithT(t, func(c *assert.CollectT) {
+					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+					require.NoError(c, err)
+					require.Len(c, desc.PendingActivities, 1)
+					assert.Equal(c, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, desc.PendingActivities[0].State)
+					assert.Greater(c, desc.PendingActivities[0].Attempt, int32(1))
+				}, 5*time.Second, 200*time.Millisecond)
+
+				// step 1: pause
+				require.NoError(t, api.pause(ctx, s, wfID, "activity-id", "", "", ""))
+
+				require.EventuallyWithT(t, func(c *assert.CollectT) {
+					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+					require.NoError(c, err)
+					require.Len(c, desc.PendingActivities, 1)
+					assert.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, desc.PendingActivities[0].State)
+				}, 5*time.Second, 100*time.Millisecond)
+
+				// step 2: update-options (reduce schedule-to-close timeout while paused)
+				_, err = s.FrontendClient().UpdateActivityOptions(ctx, &workflowservice.UpdateActivityOptionsRequest{
+					Namespace: s.Namespace().String(),
+					Execution: &commonpb.WorkflowExecution{WorkflowId: wfID},
+					Activity:  &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity-id"},
+					ActivityOptions: &activitypb.ActivityOptions{
+						ScheduleToCloseTimeout: durationpb.New(updatedScheduleToClose),
+					},
+					UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout"}},
+				})
+				require.NoError(t, err)
+
+				require.EventuallyWithT(t, func(c *assert.CollectT) {
+					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+					require.NoError(c, err)
+					require.Len(c, desc.PendingActivities, 1)
+					assert.Equal(c, updatedScheduleToClose, desc.PendingActivities[0].ActivityOptions.GetScheduleToCloseTimeout().AsDuration())
+				}, 5*time.Second, 100*time.Millisecond)
+
+				// step 3: reset while paused — stays PAUSED (keepPaused=true), attempt resets to 1
+				_, err = s.FrontendClient().ResetActivity(ctx, &workflowservice.ResetActivityRequest{
+					Namespace:  s.Namespace().String(),
+					Execution:  &commonpb.WorkflowExecution{WorkflowId: wfID},
+					Activity:   &workflowservice.ResetActivityRequest_Id{Id: "activity-id"},
+					KeepPaused: true,
+				})
+				require.NoError(t, err)
+
+				require.EventuallyWithT(t, func(c *assert.CollectT) {
+					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+					require.NoError(c, err)
+					require.Len(c, desc.PendingActivities, 1)
+					assert.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, desc.PendingActivities[0].State)
+					assert.Equal(c, int32(1), desc.PendingActivities[0].Attempt)
+					// updated options must survive the reset
+					assert.Equal(c, updatedScheduleToClose, desc.PendingActivities[0].ActivityOptions.GetScheduleToCloseTimeout().AsDuration())
+				}, 5*time.Second, 100*time.Millisecond)
+
+				// step 4: unpause
+				activityWasReset.Store(true)
+				require.NoError(t, api.unpause(ctx, s, wfID, "activity-id", "", false))
+
+				require.EventuallyWithT(t, func(c *assert.CollectT) {
+					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+					require.NoError(c, err)
+					require.Len(c, desc.PendingActivities, 1)
+					assert.Equal(c, enumspb.PENDING_ACTIVITY_STATE_STARTED, desc.PendingActivities[0].State)
+					assert.Equal(c, int32(1), desc.PendingActivities[0].Attempt)
+				}, 5*time.Second, 100*time.Millisecond)
+
+				activityCompleteCh <- struct{}{}
+
+				var out string
+				err = workflowRun.Get(ctx, &out)
+				require.NoError(t, err)
 			})
 		})
 	}

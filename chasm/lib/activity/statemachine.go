@@ -198,6 +198,8 @@ var TransitionCompleted = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, event completeEvent) error {
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			a.PauseState = nil
+			a.ActivityReset = false
+			a.ResetHeartbeats = false
 
 			req := event.req.GetCompleteRequest()
 
@@ -234,6 +236,8 @@ var TransitionFailed = chasm.NewTransition(
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			req := event.req.GetFailedRequest()
 			a.PauseState = nil
+			a.ActivityReset = false
+			a.ResetHeartbeats = false
 
 			if details := req.GetLastHeartbeatDetails(); details != nil {
 				heartbeat := a.getOrCreateLastHeartbeat(ctx)
@@ -275,6 +279,8 @@ var TransitionTerminated = chasm.NewTransition(
 				RequestId: event.request.RequestID,
 			}
 			a.PauseState = nil
+			a.ActivityReset = false
+			a.ResetHeartbeats = false
 			outcome := a.Outcome.Get(ctx)
 			failure := &failurepb.Failure{
 				Message: event.request.Reason,
@@ -350,6 +356,8 @@ var TransitionCanceled = chasm.NewTransition(
 				},
 			}
 			a.PauseState = nil
+			a.ActivityReset = false
+			a.ResetHeartbeats = false
 
 			a.emitOnCanceledMetrics(ctx, event.handler, event.fromStatus)
 
@@ -396,6 +404,8 @@ var TransitionTimedOut = chasm.NewTransition(
 			}
 
 			a.PauseState = nil
+			a.ActivityReset = false
+			a.ResetHeartbeats = false
 
 			a.emitOnTimedOutMetrics(ctx, event.metricsHandler, timeoutType, event.fromStatus)
 
@@ -462,6 +472,7 @@ var TransitionReset = chasm.NewTransition(
 		attempt := a.LastAttempt.Get(ctx)
 		attempt.Count = 1
 		attempt.Stamp++
+		attempt.CurrentRetryInterval = nil
 		if event.resetHeartbeats {
 			if hb, ok := a.LastHeartbeat.TryGet(ctx); ok {
 				hb.Details = nil
