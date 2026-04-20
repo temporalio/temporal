@@ -1233,7 +1233,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 	}
 	if e.config.EnableMatchingFanOutForPollCancellation(ns.String()) {
 		if partition.IsRoot() && partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
-			return e.cancelOutstandingWorkerPollsForAllPartitions(ctx, request, partition, ns)
+			return e.cancelOutstandingWorkerPollsForAllPartitions(ctx, request, partition)
 		}
 	}
 	// TODO: Delete this code path after EnableMatchingFanOutForPollCancellation is rolled out.
@@ -1247,10 +1247,16 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 	ctx context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsRequest,
 	rootPartition tqid.Partition,
-	ns namespace.Name,
 ) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
-	tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, ns)
-	numPartitions := max(1, tqConfig.NumReadPartitions())
+	rootPM, _, err := e.getTaskQueuePartitionManager(ctx, rootPartition, false, loadCauseOtherWrite)
+	if err != nil {
+		return nil, err
+	}
+	if rootPM == nil {
+		// Root not loaded means no pending polls anywhere.
+		return &matchingservice.CancelOutstandingWorkerPollsResponse{}, nil
+	}
+	numPartitions := max(1, rootPM.GetConfig().NumReadPartitions())
 
 	var totalCancelled atomic.Int32
 	var wg sync.WaitGroup

@@ -5899,6 +5899,13 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			}).
 			Times(numPartitions - 1)
 
+		// Set up a mock root partition manager so getTaskQueuePartitionManager finds it.
+		rootPartition := tqid.UnsafeTaskQueueFamily(namespaceID, "test-queue").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
+		mockPM := NewMocktaskQueuePartitionManager(ctrl)
+		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
+		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition.TaskQueue(), config, nsName))
+		mockPM.EXPECT().RemovePoller(gomock.Any()).AnyTimes()
+
 		engine := &matchingEngineImpl{
 			config:                config,
 			namespaceRegistry:     mockNamespaceCache,
@@ -5906,6 +5913,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			logger:                log.NewNoopLogger(),
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			partitions:            map[tqid.PartitionKey]taskQueuePartitionManager{rootPartition.Key(): mockPM},
 		}
 		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
 
@@ -5944,6 +5952,12 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
 			Return(nil, errors.New("partition unavailable"))
 
+		// Set up a mock root partition manager so getTaskQueuePartitionManager finds it.
+		rootPartition := tqid.UnsafeTaskQueueFamily(namespaceID, "test-queue").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
+		mockPM := NewMocktaskQueuePartitionManager(ctrl)
+		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
+		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition.TaskQueue(), config, nsName))
+
 		engine := &matchingEngineImpl{
 			config:                config,
 			namespaceRegistry:     mockNamespaceCache,
@@ -5951,6 +5965,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			logger:                log.NewNoopLogger(),
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			partitions:            map[tqid.PartitionKey]taskQueuePartitionManager{rootPartition.Key(): mockPM},
 		}
 		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
 		engine.workerInstancePollers.Add("worker-key", "poller-1", func() {})
