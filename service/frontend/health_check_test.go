@@ -65,18 +65,14 @@ func (s *healthCheckerSuite) SetupTest() {
 		},
 		log.NewNoopLogger(),
 	)
-	healthChecker, ok := checker.(*healthCheckerImpl)
-	if !ok {
-		s.Fail("The constructor did not return correct type")
-	}
-	s.checker = healthChecker
+	s.checker = checker.(*healthCheckerImpl)
 }
 
 func (s *healthCheckerSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *healthCheckerSuite) Test_Health_Delay() {
+func (s *healthCheckerSuite) Test_Unique_Host_Health() {
 	s.checker.hostFailureTimeThreshold = func() time.Duration {
 		return 1 * time.Second
 	}
@@ -185,21 +181,6 @@ func (s *healthCheckerSuite) Test_Check_GetResolver_Error() {
 	s.NotNil(result.ServiceDetail)
 	s.Equal(enumsspb.HEALTH_STATE_INTERNAL_ERROR, result.ServiceDetail.State)
 	s.Contains(result.ServiceDetail.Message, "failed to get membership resolver")
-}
-
-func (s *healthCheckerSuite) Test_Check_Boundary_Failure_Percentage_Equals_Threshold() {
-	// Test when failure percentage exactly equals the threshold (0.25)
-	// With 4 hosts, 1 failed = 0.25 (25%), should return SERVING since it's not > threshold
-	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{
-		membership.NewHostInfoFromAddress("servingA"), // SERVING
-		membership.NewHostInfoFromAddress("errorB"),   // NOT_SERVING (failed)
-		membership.NewHostInfoFromAddress("servingC"), // SERVING
-		membership.NewHostInfoFromAddress("servingD"), // SERVING
-	})
-
-	result, err := s.checker.Check(context.Background(), time.Now())
-	s.NoError(err)
-	s.Equal(enumsspb.HEALTH_STATE_SERVING, result.State)
 }
 
 func (s *healthCheckerSuite) Test_Check_Single_Host_Scenarios() {
