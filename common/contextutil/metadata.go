@@ -2,7 +2,8 @@ package contextutil
 
 import (
 	"context"
-	"strings"
+	"fmt"
+	"hash/fnv"
 	"sync"
 )
 
@@ -12,7 +13,8 @@ type (
 	// metadataContext is used to store workflow and activity metadata
 	metadataContext struct {
 		sync.Mutex
-		Metadata map[string]any
+		Metadata          map[string]any
+		MarkedActivityIDs map[string]struct{}
 	}
 )
 
@@ -28,14 +30,27 @@ const (
 	activityTaskQueuePrefix = "activity-task-queue-"
 )
 
+// hashActivityID returns a gRPC-trailer-safe key suffix from an arbitrary activity ID.
+// Uses FNV-64a: standard library, fast, deterministic, 16 hex chars ([0-9a-f]).
+// Collision probability ~1 in 340 trillion for 1,000 activities per request.
+// Alternatives: SHA-256 (overkill, 64 chars), CRC-32 (worse distribution),
+// raw encoding (unbounded length, may contain invalid gRPC key chars).
+func hashActivityID(activityID string) string {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(activityID))
+	return fmt.Sprintf("%016x", h.Sum64())
+}
+
 // ActivityTypeKey returns the metadata key for the given activity ID's type.
+// The activity ID is hashed to produce a gRPC-trailer-safe key suffix.
 func ActivityTypeKey(activityID string) string {
-	return activityTypePrefix + activityID
+	return activityTypePrefix + hashActivityID(activityID)
 }
 
 // ActivityTaskQueueKey returns the metadata key for the given activity ID's task queue.
+// The activity ID is hashed to produce a gRPC-trailer-safe key suffix.
 func ActivityTaskQueueKey(activityID string) string {
-	return activityTaskQueuePrefix + activityID
+	return activityTaskQueuePrefix + hashActivityID(activityID)
 }
 
 // ContextMetadataMarkActivityID marks an activity ID on the context for metadata resolution.
@@ -46,10 +61,17 @@ func ActivityTaskQueueKey(activityID string) string {
 // Cannot be used for transactions that remove the activity from mutable state
 // (e.g., activity completion), since it won't be available for resolution.
 func ContextMetadataMarkActivityID(ctx context.Context, activityID string) bool {
-	return ContextMetadataSet(ctx, activityTypePrefix+activityID, "")
+	metadataCtx := getMetadataContext(ctx)
+	if metadataCtx == nil {
+		return false
+	}
+	metadataCtx.Lock()
+	defer metadataCtx.Unlock()
+	metadataCtx.MarkedActivityIDs[activityID] = struct{}{}
+	return true
 }
 
-// ContextMetadataGetActivityIDs returns the unique activity IDs present in the context metadata.
+// ContextMetadataGetActivityIDs returns the marked activity IDs from the context.
 func ContextMetadataGetActivityIDs(ctx context.Context) []string {
 	metadataCtx := getMetadataContext(ctx)
 	if metadataCtx == nil {
@@ -59,18 +81,11 @@ func ContextMetadataGetActivityIDs(ctx context.Context) []string {
 	metadataCtx.Lock()
 	defer metadataCtx.Unlock()
 
-	seen := make(map[string]struct{})
-	for key := range metadataCtx.Metadata {
-		if id, ok := strings.CutPrefix(key, activityTypePrefix); ok {
-			seen[id] = struct{}{}
-		}
-	}
-
-	if len(seen) == 0 {
+	if len(metadataCtx.MarkedActivityIDs) == 0 {
 		return nil
 	}
-	ids := make([]string, 0, len(seen))
-	for id := range seen {
+	ids := make([]string, 0, len(metadataCtx.MarkedActivityIDs))
+	for id := range metadataCtx.MarkedActivityIDs {
 		ids = append(ids, id)
 	}
 	return ids
@@ -92,7 +107,8 @@ func getMetadataContext(ctx context.Context) *metadataContext {
 // WithMetadataContext adds a metadata context to the given context.
 func WithMetadataContext(ctx context.Context) context.Context {
 	metadataCtx := &metadataContext{
-		Metadata: make(map[string]any),
+		Metadata:          make(map[string]any),
+		MarkedActivityIDs: make(map[string]struct{}),
 	}
 	return context.WithValue(ctx, metadataCtxKey, metadataCtx)
 }

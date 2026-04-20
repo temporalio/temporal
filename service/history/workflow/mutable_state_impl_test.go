@@ -6251,12 +6251,9 @@ func (s *mutableStateSuite) TestSetContextMetadata_ActivityNotFound() {
 	contextutil.ContextMetadataMarkActivityID(ctx, "nonexistent")
 	s.mutableState.SetContextMetadata(ctx)
 
-	// Activity type should still be the empty placeholder from MarkActivityID
-	actType, ok := contextutil.ContextMetadataGet(ctx, contextutil.ActivityTypeKey("nonexistent"))
-	s.True(ok)
-	s.Empty(actType)
-
-	// Task queue should not be set at all
+	// Neither type nor task queue should be set for non-existent activity
+	_, ok := contextutil.ContextMetadataGet(ctx, contextutil.ActivityTypeKey("nonexistent"))
+	s.False(ok)
 	_, ok = contextutil.ContextMetadataGet(ctx, contextutil.ActivityTaskQueueKey("nonexistent"))
 	s.False(ok)
 }

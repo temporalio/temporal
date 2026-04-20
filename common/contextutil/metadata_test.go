@@ -362,13 +362,23 @@ func TestContextHasMetadata(t *testing.T) {
 }
 
 func TestActivityTypeKey(t *testing.T) {
-	require.Equal(t, "activity-type-act-1", ActivityTypeKey("act-1"))
-	require.Equal(t, "activity-type-", ActivityTypeKey(""))
+	key := ActivityTypeKey("act-1")
+	require.Regexp(t, `^activity-type-[0-9a-f]{16}$`, key)
+	require.Equal(t, key, ActivityTypeKey("act-1"))
+	require.NotEqual(t, ActivityTypeKey("act-1"), ActivityTypeKey("act-2"))
+
+	unsafeKey := ActivityTypeKey("send email #1 (urgent)! / 订单-42 + foo 🚀")
+	require.Regexp(t, `^activity-type-[0-9a-f]{16}$`, unsafeKey)
 }
 
 func TestActivityTaskQueueKey(t *testing.T) {
-	require.Equal(t, "activity-task-queue-act-1", ActivityTaskQueueKey("act-1"))
-	require.Equal(t, "activity-task-queue-", ActivityTaskQueueKey(""))
+	key := ActivityTaskQueueKey("act-1")
+	require.Regexp(t, `^activity-task-queue-[0-9a-f]{16}$`, key)
+	require.Equal(t, key, ActivityTaskQueueKey("act-1"))
+	require.NotEqual(t, ActivityTaskQueueKey("act-1"), ActivityTaskQueueKey("act-2"))
+
+	unsafeKey := ActivityTaskQueueKey("send email #1 (urgent)! / 订单-42 + foo 🚀")
+	require.Regexp(t, `^activity-task-queue-[0-9a-f]{16}$`, unsafeKey)
 }
 
 func TestContextMetadataMarkActivityID(t *testing.T) {
@@ -376,9 +386,8 @@ func TestContextMetadataMarkActivityID(t *testing.T) {
 		ctx := WithMetadataContext(context.Background())
 		require.True(t, ContextMetadataMarkActivityID(ctx, "act-1"))
 
-		value, ok := ContextMetadataGet(ctx, ActivityTypeKey("act-1"))
-		require.True(t, ok)
-		require.Empty(t, value)
+		ids := ContextMetadataGetActivityIDs(ctx)
+		require.Equal(t, []string{"act-1"}, ids)
 	})
 
 	t.Run("returns false without metadata context", func(t *testing.T) {
@@ -391,10 +400,8 @@ func TestContextMetadataMarkActivityID(t *testing.T) {
 		require.True(t, ContextMetadataMarkActivityID(ctx, "act-1"))
 		require.True(t, ContextMetadataMarkActivityID(ctx, "act-2"))
 
-		_, ok := ContextMetadataGet(ctx, ActivityTypeKey("act-1"))
-		require.True(t, ok)
-		_, ok = ContextMetadataGet(ctx, ActivityTypeKey("act-2"))
-		require.True(t, ok)
+		ids := ContextMetadataGetActivityIDs(ctx)
+		require.ElementsMatch(t, []string{"act-1", "act-2"}, ids)
 	})
 }
 
@@ -437,12 +444,17 @@ func TestContextMetadataGetActivityIDs(t *testing.T) {
 		require.Equal(t, []string{"act-1"}, ids)
 	})
 
-	t.Run("deduplicates when type and task queue set for same ID", func(t *testing.T) {
+	t.Run("marked IDs are separate from resolved metadata", func(t *testing.T) {
 		ctx := WithMetadataContext(context.Background())
 		ContextMetadataMarkActivityID(ctx, "act-1")
 		ContextMetadataSet(ctx, ActivityTaskQueueKey("act-1"), "my-queue")
 
 		ids := ContextMetadataGetActivityIDs(ctx)
 		require.Equal(t, []string{"act-1"}, ids)
+
+		// Resolved metadata uses hashed keys, separate from marked IDs
+		val, ok := ContextMetadataGet(ctx, ActivityTaskQueueKey("act-1"))
+		require.True(t, ok)
+		require.Equal(t, "my-queue", val)
 	})
 }
