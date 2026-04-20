@@ -562,3 +562,64 @@ func validateTerminateActivityExecutionRequest(
 
 	return nil
 }
+
+func validatePauseActivityExecutionRequest(
+	req *workflowservice.PauseActivityExecutionRequest,
+	maxIDLengthLimit int,
+	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	logger log.Logger,
+) error {
+	if req.GetActivityId() == "" {
+		return serviceerror.NewInvalidArgument("activity ID is required")
+	}
+	if len(req.GetActivityId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("activity ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetActivityId()), maxIDLengthLimit)
+	}
+	if len(req.GetIdentity()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
+	}
+	if runID := req.GetRunId(); runID != "" {
+		_, err := uuid.Parse(runID)
+		if err != nil {
+			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
+		}
+	}
+	if err := validateBlobSize(
+		req.GetActivityId(),
+		"PauseActivityExecution",
+		blobSizeLimitError,
+		blobSizeLimitWarn,
+		len(req.GetReason()),
+		logger,
+		req.GetNamespace()); err != nil {
+		return serviceerror.NewInvalidArgument("reason exceeds length limit")
+	}
+	return nil
+}
+
+func validateUnpauseActivityExecutionRequest(
+	req *workflowservice.UnpauseActivityExecutionRequest,
+	maxIDLengthLimit int,
+) error {
+	if req.GetActivityId() == "" {
+		return serviceerror.NewInvalidArgument("activity ID is required")
+	}
+	if len(req.GetActivityId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("activity ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetActivityId()), maxIDLengthLimit)
+	}
+	if len(req.GetIdentity()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
+	}
+	if runID := req.GetRunId(); runID != "" {
+		_, err := uuid.Parse(runID)
+		if err != nil {
+			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
+		}
+	}
+	return nil
+}

@@ -430,7 +430,15 @@ func (h *frontendHandler) PauseActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	// TODO: validate request fields (e.g. namespace, identity length)
+	if err := validatePauseActivityExecutionRequest(
+		req,
+		h.config.MaxIDLengthLimit(),
+		h.config.BlobSizeLimitError,
+		h.config.BlobSizeLimitWarn,
+		h.logger); err != nil {
+		return nil, err
+	}
+
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -454,7 +462,10 @@ func (h *frontendHandler) UnpauseActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	// TODO: validate request fields (e.g. namespace, identity length)
+	if err := validateUnpauseActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err

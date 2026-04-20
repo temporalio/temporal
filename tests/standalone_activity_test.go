@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	activitypb "go.temporal.io/api/activity/v1"
@@ -5570,10 +5571,121 @@ func (s *standaloneActivityTestSuite) startActivityWithType(ctx context.Context,
 
 func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 	t := s.T()
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
 
-	t.Run("StandaloneActivityReturnsError", func(t *testing.T) {
+	t.Run("PauseWhileStarted", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		pollResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+		_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		// DescribeActivityExecution should reflect PAUSE_REQUESTED run state: the activity is still
+		// STARTED (worker token valid) but a pause has been requested via the flag.
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED, descResp.GetInfo().GetRunState())
+
+		// Heartbeat should report ActivityPaused=true.
+		heartbeatResp, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+		})
+		require.NoError(t, err)
+		require.True(t, heartbeatResp.GetActivityPaused(), "expected ActivityPaused=true after pause")
+
+		// DescribeActivityExecution should still reflect PAUSE_REQUESTED.
+		descResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED, descResp.GetInfo().GetRunState())
+	})
+
+	t.Run("PauseWhileScheduled", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		// DescribeActivityExecution should reflect PAUSED run state.
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, descResp.GetInfo().GetRunState())
+
+		// Attempt to poll — the dispatch task was invalidated by the stamp bump, so no task should
+		// be available. Use a short-lived context to avoid blocking the test.
+		shortCtx, shortCancel := context.WithTimeout(ctx, 2*time.Second)
+		defer shortCancel()
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(shortCtx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		// Either the poll times out (deadline exceeded) or returns an empty response.
+		if err == nil {
+			require.Empty(t, pollResp.GetActivityId(), "expected no task to be dispatched while paused")
+		}
+	})
+
+	t.Run("PauseIdempotent", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		pauseReq := &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		}
+		_, err := s.FrontendClient().PauseActivityExecution(ctx, pauseReq)
+		require.NoError(t, err)
+
+		// Second pause should succeed with no error (idempotent).
+		_, err = s.FrontendClient().PauseActivityExecution(ctx, pauseReq)
+		require.NoError(t, err)
+	})
+
+	t.Run("PauseNotFound", func(t *testing.T) {
+		ctx := testcore.NewContext()
+
 		_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
 			Namespace:  s.Namespace().String(),
 			ActivityId: testcore.RandomizeStr(t.Name()),
@@ -5581,25 +5693,1404 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 			Reason:     "test",
 		})
 		require.Error(t, err)
-		var unimplementedErr *serviceerror.Unimplemented
-		require.ErrorAs(t, err, &unimplementedErr)
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
+	})
+
+	t.Run("PauseTerminalState", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		// Poll and complete the activity so it reaches a terminal state.
+		pollResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+		_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		// Pause should fail with FailedPrecondition on a terminal activity.
+		_, err = s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test",
+		})
+		require.Error(t, err)
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
+	})
+
+	// PauseWhileRunning: pause a STARTED activity, fail the attempt, then verify the activity
+	// stays paused (SCHEDULED + paused = RunState PAUSED) and is not dispatched until unpause.
+	t.Run("PauseWhileRunning", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			Identity:            s.tv.WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           s.tv.RequestID(),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts:    10,
+				InitialInterval:    durationpb.New(1 * time.Second),
+				BackoffCoefficient: 1.0,
+			},
+		})
+		require.NoError(t, err)
+
+		// Poll – activity is now STARTED at attempt=1.
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+
+		// Pause while STARTED.
+		_, err = s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Identity:   "test-identity",
+			Reason:     "test-reason",
+		})
+		require.NoError(t, err)
+
+		// Heartbeat should report ActivityPaused=true.
+		heartbeatResp, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+		})
+		require.NoError(t, err)
+		require.True(t, heartbeatResp.GetActivityPaused())
+
+		// Describe should show PAUSE_REQUESTED: status is STARTED with PauseState set.
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED, descResp.GetInfo().GetRunState())
+
+		// Fail the attempt – this triggers a retry (attempt=2) but the activity stays paused.
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+				},
+			},
+			Identity: s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		// After fail, activity should be PAUSED (SCHEDULED + paused) at attempt=2 with a recorded failure.
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			dr, dErr := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+			})
+			assert.NoError(c, dErr)
+			assert.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, dr.GetInfo().GetRunState())
+			assert.EqualValues(c, 2, dr.GetInfo().GetAttempt())
+			assert.NotNil(c, dr.GetInfo().GetLastFailure())
+		}, 10*time.Second, 200*time.Millisecond)
+
+		// Unpause – activity should be dispatched.
+		_, err = s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Identity:   "test-identity",
+		})
+		require.NoError(t, err)
+
+		// Poll and complete the second attempt.
+		poll2Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, activityID, poll2Resp.GetActivityId())
+		require.EqualValues(t, 2, poll2Resp.Attempt)
+	})
+
+	// PauseIncreaseAttemptsOnFailure: verify that attempt count increases and LastFailure is populated
+	// when an activity fails while paused.
+	t.Run("PauseIncreaseAttemptsOnFailure", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			Identity:            s.tv.WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           s.tv.RequestID(),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts:    10,
+				InitialInterval:    durationpb.New(1 * time.Second),
+				BackoffCoefficient: 1.0,
+			},
+		})
+		require.NoError(t, err)
+
+		// Poll – attempt=1.
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+
+		// Pause while STARTED.
+		_, err = s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Identity:   "test-identity",
+			Reason:     "test-reason",
+		})
+		require.NoError(t, err)
+
+		// Describe should show PAUSE_REQUESTED: status is STARTED with PauseState set.
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED, descResp.GetInfo().GetRunState())
+		require.EqualValues(t, 1, descResp.GetInfo().GetAttempt())
+
+		failureMsg := "activity-failed-while-paused"
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: failureMsg,
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+				},
+			},
+			Identity: s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		// Verify attempt is now 2, activity is still paused, and LastFailure is populated.
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			dr, dErr := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+			})
+			assert.NoError(c, dErr)
+			assert.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, dr.GetInfo().GetRunState())
+			assert.EqualValues(c, 2, dr.GetInfo().GetAttempt())
+			assert.Equal(c, failureMsg, dr.GetInfo().GetLastFailure().GetMessage())
+		}, 10*time.Second, 200*time.Millisecond)
+
+		// Unpause and complete.
+		_, err = s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Identity:   "test-identity",
+		})
+		require.NoError(t, err)
+
+		poll2Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, activityID, poll2Resp.GetActivityId())
+		require.EqualValues(t, 2, poll2Resp.Attempt)
+	})
+
+	// PauseWhileWaiting: pause an activity that has already failed and is waiting in retry backoff
+	// (SCHEDULED). Verify it is not dispatched while paused, then unpause and poll.
+	// Uses a 30s retry interval (matching PauseWhileRetryNoWait) to eliminate the race between
+	// "confirm attempt==2" and "pause call" — with 30s backoff the dispatch task cannot fire in
+	// the window between those two operations.
+	t.Run("PauseWhileWaiting", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			Identity:            s.tv.WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           s.tv.RequestID(),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts:    10,
+				InitialInterval:    durationpb.New(30 * time.Second),
+				BackoffCoefficient: 1.0,
+			},
+		})
+		require.NoError(t, err)
+
+		// Poll and fail attempt=1.
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+				},
+			},
+			Identity: s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		// Wait for the activity to be rescheduled at attempt=2 (in retry backoff).
+		require.Eventually(t, func() bool {
+			dr, dErr := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+			})
+			return dErr == nil && dr.GetInfo().GetAttempt() == 2
+		}, 10*time.Second, 200*time.Millisecond)
+
+		// Pause while in SCHEDULED retry backoff.
+		_, err = s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Identity:   "test-identity",
+			Reason:     "test-reason",
+		})
+		require.NoError(t, err)
+
+		// Verify activity is PAUSED at attempt=2 (not dispatched while paused).
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			dr, dErr := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+			})
+			assert.NoError(c, dErr)
+			assert.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, dr.GetInfo().GetRunState())
+			assert.EqualValues(c, 2, dr.GetInfo().GetAttempt())
+		}, 10*time.Second, 200*time.Millisecond)
+
+		// Unpause – activity should be dispatched.
+		_, err = s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Identity:   "test-identity",
+		})
+		require.NoError(t, err)
+
+		// Poll and complete attempt=2.
+		poll2Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, activityID, poll2Resp.GetActivityId())
+		require.EqualValues(t, 2, poll2Resp.Attempt)
+	})
+
+	// PauseWhileRetryNoWait: pause an activity during a long retry backoff (30s), then immediately
+	// unpause. The activity should be dispatched quickly — well before the 30s retry interval elapses.
+	t.Run("PauseWhileRetryNoWait", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			Identity:            s.tv.WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           s.tv.RequestID(),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts:    10,
+				InitialInterval:    durationpb.New(30 * time.Second),
+				BackoffCoefficient: 1.0,
+			},
+		})
+		require.NoError(t, err)
+
+		// Poll and fail attempt=1 – activity enters a 30s retry backoff.
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+				},
+			},
+			Identity: s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		// Wait for activity to be rescheduled at attempt=2.
+		require.Eventually(t, func() bool {
+			dr, dErr := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+			})
+			return dErr == nil && dr.GetInfo().GetAttempt() == 2
+		}, 10*time.Second, 200*time.Millisecond)
+
+		// Pause, then immediately unpause – this should skip the remaining 30s backoff.
+		_, err = s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Identity:   "test-identity",
+		})
+		require.NoError(t, err)
+
+		_, err = s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Identity:   "test-identity",
+		})
+		require.NoError(t, err)
+
+		// Activity should be dispatched quickly (well within the 30s retry backoff window).
+		poll2Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, activityID, poll2Resp.GetActivityId())
+		require.EqualValues(t, 2, poll2Resp.Attempt)
+	})
+
+	// PauseWhileCancelRequested: pausing a CANCEL_REQUESTED activity must be rejected with
+	// FailedPrecondition — cancellation takes precedence and cannot be overridden by a pause.
+	t.Run("PauseWhileCancelRequested", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		// Poll so the activity is STARTED.
+		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+		// Request cancellation — activity transitions to CANCEL_REQUESTED.
+		_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-cancel",
+			RequestId:  s.tv.RequestID(),
+		})
+		require.NoError(t, err)
+
+		// Pause must be rejected — cannot pause an activity with a pending cancellation.
+		_, err = s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.Error(t, err)
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
+	})
+
+	// CancelWhilePaused: mirrors workflow activity behavior — cancelling a PAUSED activity
+	// succeeds and takes effect immediately (no worker token is active).
+	t.Run("CancelWhilePaused", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		// Pause while SCHEDULED → activity becomes PAUSED.
+		_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		// Cancel should succeed and take effect immediately (no worker to notify).
+		_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-cancel",
+			RequestId:  s.tv.RequestID(),
+		})
+		require.NoError(t, err)
+
+		// Activity should be CANCELED immediately.
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			dr, dErr := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      runID,
+			})
+			assert.NoError(c, dErr)
+			assert.Equal(c, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, dr.GetInfo().GetStatus())
+		}, 10*time.Second, 200*time.Millisecond)
+	})
+
+	// TerminateWhilePaused: design doc says PAUSED + terminate → TERMINATED.
+	t.Run("TerminateWhilePaused", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		// Pause while SCHEDULED → PAUSED.
+		_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, descResp.GetInfo().GetRunState())
+
+		// Terminate while PAUSED → TERMINATED.
+		_, err = s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Reason:     "test-terminate",
+			Identity:   "test-identity",
+		})
+		require.NoError(t, err)
+
+		descResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED, descResp.GetInfo().GetStatus())
+	})
+
+	// ScheduleToCloseTimeoutWhilePaused: design doc says PAUSED + S2C timeout → TIMED_OUT.
+	// The S2C task is created with a.Stamp (not attempt.Stamp), and TransitionPaused only bumps
+	// attempt.Stamp, so the S2C task remains valid and fires even while the activity is PAUSED.
+	t.Run("ScheduleToCloseTimeoutWhilePaused", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(testcore.NewContext(), 30*time.Second)
+		defer cancel()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              s.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           s.tv.ActivityType(),
+			Identity:               s.tv.WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
+			RequestId:              s.tv.RequestID(),
+		})
+		require.NoError(t, err)
+		runID := startResp.RunId
+
+		// Pause immediately while SCHEDULED — the S2C timer is still running.
+		_, err = s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		// Long-poll for the activity outcome — the S2C timeout fires while the activity is PAUSED.
+		pollActivityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			pollActivityResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+			"expected ScheduleToCloseTimeout while paused")
+	})
+
+	// CompleteWhileStartedAndPaused: design doc says STARTED + paused + worker completes → COMPLETED.
+	// The PauseWhileRunning test only covers the fail+retry path; this covers the success path.
+	t.Run("CompleteWhileStartedAndPaused", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		// Poll → STARTED.
+		pollResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+		// Pause while STARTED → PAUSE_REQUESTED (flag-only; worker token stays valid).
+		_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED, descResp.GetInfo().GetRunState())
+
+		// Worker completes despite the pause flag — pause is advisory, the token is still valid.
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		// Activity must be COMPLETED.
+		descResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+	})
+
+	// NonRetryableFailWhilePaused: design doc says STARTED + paused + non-retryable fail → FAILED.
+	t.Run("NonRetryableFailWhilePaused", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			Identity:            s.tv.WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           s.tv.RequestID(),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts: 10,
+			},
+		})
+		require.NoError(t, err)
+
+		// Poll → STARTED.
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+
+		// Pause while STARTED → PAUSE_REQUESTED.
+		_, err = s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		// Worker fails with a non-retryable error — must transition to FAILED, not retry or stay paused.
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "non-retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: true},
+				},
+			},
+			Identity: s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, descResp.GetInfo().GetStatus())
+		require.EqualValues(t, 1, descResp.GetInfo().GetAttempt(), "non-retryable fail must not increment attempt")
+	})
+
+	// PauseRequestValidation: validate that Pause rejects invalid request fields.
+	t.Run("PauseRequestValidation", func(t *testing.T) {
+		ctx := testcore.NewContext()
+
+		t.Run("EmptyActivityID", func(t *testing.T) {
+			_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+				Namespace: s.Namespace().String(),
+				Identity:  "test-identity",
+				Reason:    "test-pause",
+			})
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, "activity ID is required", invalidArgErr.Message)
+		})
+
+		t.Run("ActivityIDTooLong", func(t *testing.T) {
+			_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)),
+				Identity:   "test-identity",
+			})
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, fmt.Sprintf("activity ID exceeds length limit. Length=%d Limit=%d",
+				defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
+		})
+
+		t.Run("IdentityTooLong", func(t *testing.T) {
+			_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: testcore.RandomizeStr(t.Name()),
+				Identity:   string(make([]byte, defaultMaxIDLengthLimit+1)),
+			})
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, fmt.Sprintf("identity exceeds length limit. Length=%d Limit=%d",
+				defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
+		})
+
+		t.Run("ReasonTooLong", func(t *testing.T) {
+			blobSizeLimitError := 1000
+			cleanup := s.OverrideDynamicConfig(
+				dynamicconfig.BlobSizeLimitError,
+				blobSizeLimitError,
+			)
+			defer cleanup()
+
+			_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: testcore.RandomizeStr(t.Name()),
+				Identity:   "test-identity",
+				Reason:     string(make([]byte, blobSizeLimitError+1)),
+			})
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, "reason exceeds length limit", invalidArgErr.Message)
+		})
+
+		t.Run("InvalidRunID", func(t *testing.T) {
+			_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: testcore.RandomizeStr(t.Name()),
+				RunId:      "invalid-run-id",
+				Identity:   "test-identity",
+			})
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, "invalid run id: must be a valid UUID", invalidArgErr.Message)
+		})
+	})
+
+	// PauseUpdateOptionsAndUnpause: pause an activity while it's in retry backoff, update the
+	// retry interval while paused, then unpause and verify the update took effect — the activity
+	// is dispatched immediately (short interval) and runs to completion.
+	t.Run("PauseUpdateOptionsAndUnpause", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			Identity:            s.tv.WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           s.tv.RequestID(),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts:    10,
+				InitialInterval:    durationpb.New(10 * time.Minute),
+				BackoffCoefficient: 1.0,
+			},
+		})
+		require.NoError(t, err)
+
+		// Poll and fail attempt 1 — activity enters the 10-minute retry backoff.
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+				},
+			},
+			Identity: s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		// Wait for attempt 2 (rescheduled in long backoff, not yet dispatched).
+		require.Eventually(t, func() bool {
+			dr, dErr := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+			})
+			return dErr == nil && dr.GetInfo().GetAttempt() == 2
+		}, 10*time.Second, 200*time.Millisecond)
+
+		// Pause while SCHEDULED (in 10-minute retry backoff).
+		_, err = s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		// Update retry interval to 1ms while paused.
+		_, err = s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval: durationpb.New(1 * time.Millisecond),
+				},
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}},
+		})
+		require.NoError(t, err)
+
+		// Verify the update was persisted while the activity remains paused.
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, descResp.GetInfo().GetRunState())
+		require.Equal(t, durationpb.New(1*time.Millisecond), descResp.GetInfo().GetRetryPolicy().GetInitialInterval())
+
+		// Unpause — the shortened interval means the activity is dispatched immediately.
+		_, err = s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Identity:   "test-identity",
+		})
+		require.NoError(t, err)
+
+		// Poll attempt 2 — available immediately because the retry interval is now 1ms.
+		poll2Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, activityID, poll2Resp.GetActivityId())
+		require.EqualValues(t, 2, poll2Resp.Attempt)
+
+		// Complete the activity.
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: poll2Resp.TaskToken,
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		// Verify terminal COMPLETED state with updated retry policy.
+		descResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+		require.Equal(t, durationpb.New(1*time.Millisecond), descResp.GetInfo().GetRetryPolicy().GetInitialInterval())
 	})
 }
 
 func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 	t := s.T()
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
 
-	t.Run("StandaloneActivityReturnsError", func(t *testing.T) {
+	t.Run("UnpauseWhileScheduled", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		// Pause while SCHEDULED.
+		_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		// Unpause — this should re-dispatch the activity.
+		_, err = s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+		})
+		require.NoError(t, err)
+
+		// Poll should now succeed.
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, activityID, pollResp.GetActivityId(), "expected activity to be dispatched after unpause")
+	})
+
+	t.Run("UnpauseWhileStarted", func(t *testing.T) {
+		ctx := testcore.NewContext()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		pollResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+		// Pause while STARTED.
+		_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		heartbeatResp, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+		})
+		require.NoError(t, err)
+		require.True(t, heartbeatResp.GetActivityPaused(), "expected ActivityPaused=true after pause")
+
+		// Unpause.
+		_, err = s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+		})
+		require.NoError(t, err)
+
+		// After unpause of a STARTED+PauseState activity, the status stays STARTED (the worker's
+		// token is still valid — no stamp bump). Verify via describe that the activity is no longer paused.
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, descResp.GetInfo().GetRunState(),
+			"expected activity to be STARTED after unpause")
+	})
+
+	t.Run("UnpauseIdempotent", func(t *testing.T) {
+		ctx := testcore.NewContext()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		// Unpause a non-paused activity — should succeed with no error.
+		_, err := s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("UnpauseWithResetAttempts", func(t *testing.T) {
+		ctx := testcore.NewContext()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			Identity:            s.tv.WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           s.tv.RequestID(),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts:    10,
+				InitialInterval:    durationpb.New(1 * time.Second),
+				BackoffCoefficient: 1.0,
+			},
+		})
+		require.NoError(t, err)
+
+		// Poll and fail the first attempt to advance the attempt count.
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+				},
+			},
+			Identity: s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		// Wait for the activity to enter SCHEDULED state for retry.
+		require.Eventually(t, func() bool {
+			descResp, descErr := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+			})
+			if descErr != nil {
+				return false
+			}
+			return descResp.GetInfo().GetAttempt() == 2
+		}, 15*time.Second, 200*time.Millisecond)
+
+		// Pause while SCHEDULED (attempt=2).
+		_, err = s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		// Unpause with ResetAttempts=true.
+		_, err = s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:     s.Namespace().String(),
+			ActivityId:    activityID,
+			Identity:      "test-identity",
+			ResetAttempts: true,
+		})
+		require.NoError(t, err)
+
+		// Poll — attempt count should be reset to 1.
+		poll2Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, poll2Resp.Attempt, "expected attempt reset to 1 after UnpauseWithResetAttempts")
+	})
+
+	t.Run("UnpauseWithJitter", func(t *testing.T) {
+		ctx := testcore.NewContext()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		_, err = s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Jitter:     durationpb.New(500 * time.Millisecond),
+		})
+		require.NoError(t, err)
+
+		// Activity should eventually be dispatched despite the jitter.
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, activityID, pollResp.GetActivityId())
+	})
+
+	t.Run("UnpauseNotFound", func(t *testing.T) {
+		ctx := testcore.NewContext()
+
 		_, err := s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
 			Namespace:  s.Namespace().String(),
 			ActivityId: testcore.RandomizeStr(t.Name()),
 			Identity:   "test-identity",
 		})
 		require.Error(t, err)
-		var unimplementedErr *serviceerror.Unimplemented
-		require.ErrorAs(t, err, &unimplementedErr)
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
+	})
+
+	t.Run("UnpauseTerminalState", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		// Poll and complete the activity so it reaches a terminal state.
+		pollResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+		_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		// Unpause should fail with FailedPrecondition on a terminal activity.
+		_, err = s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+		})
+		require.Error(t, err)
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
+	})
+
+	// UnpauseWithResetHeartbeat: verify that unpause with reset_heartbeat=true clears heartbeat
+	// details recorded during a prior attempt.
+	t.Run("UnpauseWithResetHeartbeat", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			Identity:            s.tv.WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           s.tv.RequestID(),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts:    10,
+				InitialInterval:    durationpb.New(30 * time.Second),
+				BackoffCoefficient: 1.0,
+			},
+		})
+		require.NoError(t, err)
+
+		// Poll attempt 1.
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+
+		// Record a heartbeat with details.
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Details:   defaultHeartbeatDetails,
+		})
+		require.NoError(t, err)
+
+		// Fail attempt 1 — activity enters 30s retry backoff at attempt 2.
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+				},
+			},
+			Identity: s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		// Wait for attempt 2 (count increments immediately on reschedule, even during backoff).
+		require.Eventually(t, func() bool {
+			dr, dErr := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+			})
+			return dErr == nil && dr.GetInfo().GetAttempt() == 2
+		}, 10*time.Second, 200*time.Millisecond)
+
+		// Heartbeat details should still be set before the unpause.
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, descResp.GetInfo().GetLastHeartbeatTime(), "expected heartbeat time before unpause")
+		require.NotNil(t, descResp.GetInfo().GetHeartbeatDetails(), "expected heartbeat details before unpause")
+
+		// Pause while SCHEDULED (in 30s backoff).
+		_, err = s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		// Unpause with ResetHeartbeat=true — clears the recorded heartbeat state.
+		_, err = s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			ActivityId:     activityID,
+			Identity:       "test-identity",
+			ResetHeartbeat: true,
+		})
+		require.NoError(t, err)
+
+		// Heartbeat details must be cleared after unpause.
+		descResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		require.Nil(t, descResp.GetInfo().GetLastHeartbeatTime(),
+			"expected heartbeat time cleared after UnpauseWithResetHeartbeat")
+		require.Nil(t, descResp.GetInfo().GetHeartbeatDetails(),
+			"expected heartbeat details cleared after UnpauseWithResetHeartbeat")
+
+		// Poll attempt 2 — heartbeat details must be nil in the poll response too.
+		poll2Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, activityID, poll2Resp.GetActivityId())
+		require.Nil(t, poll2Resp.GetHeartbeatDetails(), "expected nil heartbeat details in poll after reset")
+	})
+
+	// UnpauseWhileCancelRequested: CANCEL_REQUESTED+PauseState is reached by pausing while STARTED
+	// (flag-only, PauseState set) and then cancelling (status → CANCEL_REQUESTED, PauseState stays).
+	// Pausing directly on a CANCEL_REQUESTED activity is now rejected (FailedPrecondition), so this
+	// is the only valid path into this state. Unpause must be a no-op — cancel takes precedence and
+	// the activity must not be re-dispatched.
+	t.Run("UnpauseWhileCancelRequested", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		// Poll → STARTED.
+		pollResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+		// Pause while STARTED → flag-only (PauseState set, status stays STARTED).
+		_, err := s.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		// Cancel → CANCEL_REQUESTED. PauseState remains set from the prior pause.
+		_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-cancel",
+			RequestId:  s.tv.RequestID(),
+		})
+		require.NoError(t, err)
+
+		// Confirm both flags are set via heartbeat.
+		hbResp, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+		})
+		require.NoError(t, err)
+		require.True(t, hbResp.GetCancelRequested())
+		require.True(t, hbResp.GetActivityPaused())
+
+		// Unpause — must be a no-op: status stays CANCEL_REQUESTED, no new dispatch task.
+		_, err = s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+		})
+		require.NoError(t, err)
+
+		// RunState must still be CANCEL_REQUESTED after the unpause.
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED, descResp.GetInfo().GetRunState(),
+			"unpause of a CANCEL_REQUESTED activity must be a no-op")
+
+		// Heartbeat must show CancelRequested=true, ActivityPaused=false after the unpause.
+		hbResp2, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+		})
+		require.NoError(t, err)
+		require.True(t, hbResp2.GetCancelRequested(), "cancel must remain after unpause")
+		require.False(t, hbResp2.GetActivityPaused(), "pause flag must be cleared after unpause")
+	})
+
+	// UnpauseRequestValidation: validate that Unpause rejects invalid request fields.
+	t.Run("UnpauseRequestValidation", func(t *testing.T) {
+		ctx := testcore.NewContext()
+
+		t.Run("EmptyActivityID", func(t *testing.T) {
+			_, err := s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+				Namespace: s.Namespace().String(),
+				Identity:  "test-identity",
+			})
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, "activity ID is required", invalidArgErr.Message)
+		})
+
+		t.Run("ActivityIDTooLong", func(t *testing.T) {
+			_, err := s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)),
+				Identity:   "test-identity",
+			})
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, fmt.Sprintf("activity ID exceeds length limit. Length=%d Limit=%d",
+				defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
+		})
+
+		t.Run("IdentityTooLong", func(t *testing.T) {
+			_, err := s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: testcore.RandomizeStr(t.Name()),
+				Identity:   string(make([]byte, defaultMaxIDLengthLimit+1)),
+			})
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, fmt.Sprintf("identity exceeds length limit. Length=%d Limit=%d",
+				defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
+		})
+
+		t.Run("InvalidRunID", func(t *testing.T) {
+			_, err := s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: testcore.RandomizeStr(t.Name()),
+				RunId:      "invalid-run-id",
+				Identity:   "test-identity",
+			})
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, "invalid run id: must be a valid UUID", invalidArgErr.Message)
+		})
 	})
 }
 

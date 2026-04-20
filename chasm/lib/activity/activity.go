@@ -3,6 +3,7 @@ package activity
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"slices"
 	"time"
 
@@ -102,6 +103,19 @@ type RespondFailedEvent struct {
 type RespondCancelledEvent struct {
 	Request *historyservice.RespondActivityTaskCanceledRequest
 	Token   *tokenspb.Task
+}
+
+func (a *Activity) isTerminal() bool {
+	switch a.GetStatus() {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
+		return true
+	default:
+		return false
+	}
 }
 
 // LifecycleState implements the chasm.Component interface.
@@ -714,8 +728,11 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 		return &activitypb.RequestCancelActivityExecutionResponse{}, nil
 	}
 
-	// If in scheduled state, cancel immediately right after marking cancel requested
-	isCancelImmediately := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
+	// SCHEDULED and PAUSED activities have no active worker token so cancel immediately.
+	// STARTED and CANCEL_REQUESTED activities wait for the worker to respond.
+	originalStatus := a.GetStatus()
+	isCancelImmediately := originalStatus == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED ||
+		originalStatus == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED
 
 	if err := TransitionCancelRequested.Apply(a, ctx, req); err != nil {
 		return nil, err
@@ -735,7 +752,7 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 		err = TransitionCanceled.Apply(a, ctx, cancelEvent{
 			details:    details,
 			handler:    metricsHandler,
-			fromStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, // if we're here the original status was scheduled
+			fromStatus: originalStatus,
 		})
 		if err != nil {
 			return nil, err
@@ -743,6 +760,125 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 	}
 
 	return &activitypb.RequestCancelActivityExecutionResponse{}, nil
+}
+
+func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activitypb.PauseActivityExecutionRequest) (
+	*activitypb.PauseActivityExecutionResponse, error,
+) {
+	if a.isTerminal() {
+		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
+	}
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		return nil, serviceerror.NewFailedPrecondition("cannot pause an activity with a pending cancellation")
+	}
+	if a.PauseState != nil {
+		return &activitypb.PauseActivityExecutionResponse{}, nil
+	}
+
+	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityPausedScope)
+	if err != nil {
+		return nil, err
+	}
+
+	if TransitionPaused.Possible(a) {
+		// SCHEDULED → real PAUSED status; stamp bumped to invalidate the pending dispatch task.
+		if err := TransitionPaused.Apply(a, ctx, pauseEvent{
+			req:            req.GetFrontendRequest(),
+			metricsHandler: metricsHandler,
+		}); err != nil {
+			return nil, err
+		}
+		return &activitypb.PauseActivityExecutionResponse{}, nil
+	}
+	// STARTED → flag-only pause. Status stays STARTED so the worker's token remains valid.
+	// The worker will see ActivityPaused=true on the next heartbeat.
+	a.pause(ctx, pauseEvent{req.GetFrontendRequest(), metricsHandler})
+	return &activitypb.PauseActivityExecutionResponse{}, nil
+}
+
+func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activitypb.UnpauseActivityExecutionRequest) (
+	*activitypb.UnpauseActivityExecutionResponse, error,
+) {
+	if a.isTerminal() {
+		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
+	}
+	// Not paused → no-op.
+	if a.PauseState == nil {
+		return &activitypb.UnpauseActivityExecutionResponse{}, nil
+	}
+
+	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityUnpausedScope)
+	if err != nil {
+		return nil, err
+	}
+
+	if TransitionUnpaused.Possible(a) {
+		if err := TransitionUnpaused.Apply(a, ctx, unpauseEvent{
+			req:            req.GetFrontendRequest(),
+			metricsHandler: metricsHandler,
+		}); err != nil {
+			return nil, err
+		}
+		return &activitypb.UnpauseActivityExecutionResponse{}, nil
+	}
+
+	// Flag-based pause (status is STARTED, CANCEL_REQUESTED, or SCHEDULED after retry while paused).
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
+		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		// Worker continues with its existing token — no stamp bump needed, no dispatch task.
+		// Cancel takes precedence over pause. Unpause clears the pause flag but does not re-dispatch;
+		// the activity remains CANCEL_REQUESTED and will be cancelled when the worker responds.
+		a.PauseState = nil
+		a.emitOnUnpausedMetrics(metricsHandler)
+		return &activitypb.UnpauseActivityExecutionResponse{}, nil
+	}
+	a.unpause(ctx, unpauseEvent{
+		req:            req.GetFrontendRequest(),
+		metricsHandler: metricsHandler,
+	})
+	return &activitypb.UnpauseActivityExecutionResponse{}, nil
+}
+
+func (a *Activity) unpause(
+	ctx chasm.MutableContext,
+	event unpauseEvent,
+) {
+	a.PauseState = nil
+	attempt := a.LastAttempt.Get(ctx)
+	if event.req.GetResetAttempts() {
+		attempt.Count = 1
+	}
+	if event.req.GetResetHeartbeat() {
+		a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{})
+	}
+	attempt.Stamp++
+	attempt.CurrentRetryInterval = nil
+	scheduleTime := ctx.Now(a)
+	if jitter := event.req.GetJitter().AsDuration(); jitter > 0 {
+		scheduleTime = scheduleTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
+	}
+	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{ScheduledTime: scheduleTime.Add(timeout)},
+			&activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()})
+	}
+	ctx.AddTask(
+		a,
+		chasm.TaskAttributes{ScheduledTime: scheduleTime},
+		&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()})
+	a.emitOnUnpausedMetrics(event.metricsHandler)
+}
+func (a *Activity) pause(
+	ctx chasm.MutableContext,
+	event pauseEvent,
+) {
+	a.PauseState = &activitypb.ActivityPauseState{
+		PauseTime: timestamppb.New(ctx.Now(a)),
+		Identity:  event.req.GetIdentity(),
+		Reason:    event.req.GetReason(),
+	}
+	a.emitOnPausedMetrics(event.metricsHandler)
 }
 
 // recordScheduleToStartOrCloseTimeoutFailure records schedule-to-start or schedule-to-close timeouts. Such timeouts are not retried so we
@@ -795,7 +931,9 @@ func (a *Activity) recordFailedAttempt(
 }
 
 // tryReschedule attempts to reschedule the activity for retry. Returns true if rescheduled, false
-// if retry is not possible.
+// if retry is not possible. When the activity has PauseState set (flag-based pause from STARTED),
+// the retry transitions to SCHEDULED normally but the dispatch task is blocked by the pause flag
+// until the activity is unpaused.
 func (a *Activity) tryReschedule(
 	ctx chasm.MutableContext,
 	overridingRetryInterval time.Duration,
@@ -891,7 +1029,8 @@ func (a *Activity) RecordHeartbeat(
 	}
 	return &historyservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-		// TODO(saa-preview): ActivityPaused, ActivityReset
+		ActivityPaused:  a.PauseState != nil,
+		// TODO(saa-preview): ActivityReset
 	}, nil
 }
 
@@ -900,7 +1039,8 @@ func InternalStatusToAPIStatus(status activitypb.ActivityExecutionStatus) enumsp
 	switch status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
 		return enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING
 	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
 		return enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED
@@ -927,6 +1067,8 @@ func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb
 		return enumspb.PENDING_ACTIVITY_STATE_STARTED
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
 		return enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
+		return enumspb.PENDING_ACTIVITY_STATE_PAUSED
 	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
@@ -940,9 +1082,20 @@ func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb
 }
 
 func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.ActivityExecutionInfo {
-	// TODO(saa-preview): support pause states
 	status := InternalStatusToAPIStatus(a.GetStatus())
-	runState := internalStatusToRunState(a.GetStatus())
+	// Derive the external run state with hybrid pause logic:
+	//   PAUSED status (real) → PAUSED
+	//   STARTED + PauseState != nil (pause requested while running) → PAUSE_REQUESTED
+	//   SCHEDULED + PauseState != nil (retry while paused flag set) → PAUSED
+	//   All other cases → derived from internal status directly
+	var runState enumspb.PendingActivityState
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED && a.PauseState != nil {
+		runState = enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED
+	} else if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED && a.PauseState != nil {
+		runState = enumspb.PENDING_ACTIVITY_STATE_PAUSED
+	} else {
+		runState = internalStatusToRunState(a.GetStatus())
+	}
 
 	requestData := a.RequestData.Get(ctx)
 	attempt := a.LastAttempt.Get(ctx)
@@ -1291,6 +1444,20 @@ func (a *Activity) emitOnTimedOutMetrics(
 	timeoutTag := metrics.StringTag("timeout_type", timeoutType.String())
 	metrics.ActivityTaskTimeout.With(handler).Record(1, timeoutTag)
 	metrics.ActivityTimeout.With(handler).Record(1, timeoutTag)
+}
+
+func (a *Activity) emitOnPausedMetrics(
+	handler metrics.Handler,
+) {
+	metrics.ActivityPauseRequests.With(handler).Record(1)
+	metrics.ActivityPause.With(handler).Record(1)
+}
+
+func (a *Activity) emitOnUnpausedMetrics(
+	handler metrics.Handler,
+) {
+	metrics.ActivityUnpauseRequests.With(handler).Record(1)
+	metrics.ActivityUnpause.With(handler).Record(1)
 }
 
 // SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface.
