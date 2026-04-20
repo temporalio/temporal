@@ -748,14 +748,13 @@ func (a *Activity) unpause(
 func (a *Activity) pause(
 	ctx chasm.MutableContext,
 	event pauseEvent,
-) error {
+) {
 	a.PauseState = &activitypb.ActivityPauseState{
 		PauseTime: timestamppb.New(ctx.Now(a)),
 		Identity:  event.req.GetIdentity(),
 		Reason:    event.req.GetReason(),
 	}
 	a.emitOnPausedMetrics(event.metricsHandler)
-	return nil
 }
 
 // recordScheduleToStartOrCloseTimeoutFailure records schedule-to-start or schedule-to-close timeouts. Such timeouts are not retried so we
