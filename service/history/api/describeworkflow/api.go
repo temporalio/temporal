@@ -17,6 +17,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -287,20 +288,39 @@ func Invoke(
 	result.Callbacks = append(result.Callbacks, hsmCallbackInfos...)
 
 	result.PendingNexusOperations = make([]*workflowpb.PendingNexusOperationInfo, 0)
-
 	// Check for CHASM nexus operations
 	if mutableState.ChasmEnabled() {
-		chasmNexusOpInfos, err := buildPendingNexusOperationInfosFromChasm(
-			ctx,
-			namespaceID,
-			mutableState,
-			executionInfo,
-			executionState,
-			outboundQueueCBPool,
-			shard.GetLogger(),
-		)
+		wf, chasmCtx, err := mutableState.ChasmWorkflowComponentReadOnly(ctx)
 		if err != nil {
-			return nil, err
+			shard.GetLogger().Error(
+				"failed to get workflow component from CHASM tree",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		}
+
+		outboundCB := func(endpoint string) bool {
+			cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
+				TaskGroup:   nexusoperation.TaskGroupName,
+				NamespaceID: namespaceID.String(),
+				Destination: endpoint,
+			})
+			return cb.State() != gobreaker.StateClosed
+		}
+
+		chasmNexusOpInfos, err := wf.BuildPendingNexusOperationInfos(chasmCtx, outboundCB)
+		if err != nil {
+			shard.GetLogger().Error(
+				"failed to build Nexus operation info from CHASM tree",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
 		result.PendingNexusOperations = append(result.PendingNexusOperations, chasmNexusOpInfos...)
 	}
@@ -559,70 +579,6 @@ func buildChasmCallbackInfo(
 		NextAttemptScheduleTime: cb.NextAttemptScheduleTime,
 		BlockedReason:           blockedReason,
 	}, nil
-}
-
-// buildPendingNexusOperationInfosFromChasm reads nexus operations from the CHASM tree and converts them to API format.
-func buildPendingNexusOperationInfosFromChasm(
-	ctx context.Context,
-	namespaceID namespace.ID,
-	mutableState historyi.MutableState,
-	executionInfo *persistencespb.WorkflowExecutionInfo,
-	executionState *persistencespb.WorkflowExecutionState,
-	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
-	logger log.Logger,
-) ([]*workflowpb.PendingNexusOperationInfo, error) {
-	wf, chasmCtx, err := mutableState.ChasmWorkflowComponentReadOnly(ctx)
-	if err != nil {
-		logger.Error(
-			"failed to get workflow component from CHASM tree",
-			tag.WorkflowNamespaceID(namespaceID.String()),
-			tag.WorkflowID(executionInfo.WorkflowId),
-			tag.WorkflowRunID(executionState.RunId),
-			tag.Error(err),
-		)
-		return nil, serviceerror.NewInternal("failed to construct describe response")
-	}
-
-	invocationBreaker := func(endpoint string) bool {
-		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
-			TaskGroup:   nexusoperations.TaskTypeInvocation,
-			NamespaceID: namespaceID.String(),
-			Destination: endpoint,
-		})
-		return cb.State() != gobreaker.StateClosed
-	}
-
-	cancellationBreaker := func(endpoint string) bool {
-		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
-			TaskGroup:   nexusoperations.TaskTypeCancelation,
-			NamespaceID: namespaceID.String(),
-			Destination: endpoint,
-		})
-		return cb.State() != gobreaker.StateClosed
-	}
-
-	var result []*workflowpb.PendingNexusOperationInfo
-	for key, field := range wf.Operations {
-		op := field.Get(chasmCtx)
-
-		opInfo, err := op.ToPendingNexusOperationInfo(chasmCtx, key, invocationBreaker, cancellationBreaker)
-		if err != nil {
-			logger.Error(
-				"failed to build Nexus operation info from CHASM operation",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(executionInfo.WorkflowId),
-				tag.WorkflowRunID(executionState.RunId),
-				tag.Error(err),
-			)
-			return nil, serviceerror.NewInternal("failed to construct describe response")
-		}
-		if opInfo == nil {
-			continue
-		}
-		result = append(result, opInfo)
-	}
-
-	return result, nil
 }
 
 // buildPendingNexusOperationInfosFromHSM reads nexus operations from HSM and converts them to API format.

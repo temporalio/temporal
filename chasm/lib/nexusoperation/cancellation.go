@@ -7,7 +7,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
@@ -149,7 +148,8 @@ func (c *Cancellation) saveResult(
 	}
 }
 
-func cancellationAPIState(status nexusoperationpb.CancellationStatus) enumspb.NexusOperationCancellationState {
+func CancellationAPIState(status nexusoperationpb.CancellationStatus) enumspb.NexusOperationCancellationState {
+	// TODO(samm): deduplicate against standalone nexus operations
 	switch status {
 	case nexusoperationpb.CANCELLATION_STATUS_SCHEDULED:
 		return enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED
@@ -165,26 +165,5 @@ func cancellationAPIState(status nexusoperationpb.CancellationStatus) enumspb.Ne
 		return enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
 	default:
 		return enumspb.NEXUS_OPERATION_CANCELLATION_STATE_UNSPECIFIED
-	}
-}
-
-// ToCancellationInfo converts a CHASM Cancellation to the API NexusOperationCancellationInfo format.
-func (o *Cancellation) ToCancellationInfo(circuitBreakerOpen func(endpoint string) bool, endpoint string) *workflowpb.NexusOperationCancellationInfo {
-	state := cancellationAPIState(o.Status)
-	blockedReason := ""
-
-	if state == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED && circuitBreakerOpen(endpoint) {
-		state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
-		blockedReason = "The circuit breaker is open."
-	}
-
-	return &workflowpb.NexusOperationCancellationInfo{
-		RequestedTime:           o.RequestedTime,
-		State:                   state,
-		Attempt:                 o.Attempt,
-		LastAttemptCompleteTime: o.LastAttemptCompleteTime,
-		LastAttemptFailure:      o.LastAttemptFailure,
-		NextAttemptScheduleTime: o.NextAttemptScheduleTime,
-		BlockedReason:           blockedReason,
 	}
 }
