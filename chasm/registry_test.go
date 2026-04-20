@@ -120,7 +120,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
 		chasm.NewRegistrableSideEffectTask(
 			"Task1",
 			chasm.NewMockSideEffectTaskHandler[*chasm.MockComponent, testTask1](ctrl),
-			chasm.WithSideEffectTaskGroup("test-task-group"),
+			chasm.WithTaskGroup("test-task-group"),
 		),
 		chasm.NewRegistrablePureTask(
 			"Task2",
