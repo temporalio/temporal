@@ -168,6 +168,8 @@ Loop:
 			return serviceerror.NewInternal(errString)
 		}
 
+		// when time-skipping happens, the task.FireTime is way before the timerSequenceID.Timestamp,
+		// but using the virtual time of ms as the reference time, this function will still return true.
 		if !queues.IsTimeExpired(task, referenceTime, timerSequenceID.Timestamp) {
 			// Timer sequence IDs are sorted; once we encounter a timer whose
 			// sequence ID has not expired, all subsequent timers will not have

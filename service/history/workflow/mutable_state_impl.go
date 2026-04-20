@@ -1649,6 +1649,8 @@ func (ms *MutableStateImpl) GetRetryBackoffDuration(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET
 	}
 
+	// todo@time-skipping: time skipping is naturally supported for cron backoff, and need to
+	// confirm it is the best default policy for cron
 	return getBackoffInterval(
 		ms.timeSource.Now(),
 		info.Attempt,
@@ -1667,6 +1669,8 @@ func (ms *MutableStateImpl) GetCronBackoffDuration() time.Duration {
 		return backoff.NoBackoff
 	}
 	executionTime := timestamp.TimeValue(ms.GetExecutionInfo().GetExecutionTime())
+	// todo@time-skipping: time skipping is naturally supported for cron backoff, and need to
+	// confirm it is the best default policy for cron
 	return backoff.GetBackoffForNextSchedule(ms.executionInfo.CronSchedule, executionTime, ms.timeSource.Now())
 }
 
@@ -2694,6 +2698,8 @@ func computeDeclinedTargetVersionUpgrade(info *persistencespb.WorkflowExecutionI
 
 func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration {
 	// lifetime of previous execution
+	// todo@time-skipping: time skipping is naturally supported for continue as new backoff, and need to
+	// make sure the backoff is correctly applied in the time skipping case
 	lifetime := ms.timeSource.Now().Sub(ms.executionState.StartTime.AsTime().UTC())
 	if ms.executionInfo.ExecutionTime != nil {
 		lifetime = ms.timeSource.Now().Sub(ms.executionInfo.ExecutionTime.AsTime().UTC())
@@ -3393,6 +3399,8 @@ func (ms *MutableStateImpl) addResetPointFromCompletion(
 		}
 	}
 
+	// todo@time-skipping: time skipping is naturally supported for auto reset points, and need to
+	// decide if this the best default policy for auto reset points
 	newPoint := &workflowpb.ResetPointInfo{
 		BinaryChecksum:               binaryChecksum,
 		BuildId:                      buildId,
@@ -9561,7 +9569,7 @@ func (ms *MutableStateImpl) initTimeSkippingInfoAndWrapTimeSource() {
 // And this method will only wrap the time source if the time skipping info is set, and if the time source is not already wrapped.
 func (ms *MutableStateImpl) wrapTimeSourceWithTimeSkipping() {
 	// no time skipping info, no need to wrap
-	if ms.executionInfo.TimeSkippingInfo == nil {
+	if ms.executionInfo == nil || ms.executionInfo.TimeSkippingInfo == nil {
 		return
 	}
 	// idempotency check

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk END {print NR} *)",
+      "Bash(git *)"
+    ]
+  }
+}

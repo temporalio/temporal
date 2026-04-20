@@ -277,8 +277,8 @@ func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
 	// truncated to a common (millisecond) precision later on.
 	//
 	// See also queues.IsTimeExpired.
-	// TODO@time-skipping: review needed, used ms.Now() instead of t.Now() for consistency.
-	referenceTime := util.MaxTime(ms.Now(), task.GetKey().FireTime)
+	// TODO@time-skipping: hasn's supported time skipping for CHASM system yet
+	referenceTime := util.MaxTime(t.Now(), task.GetKey().FireTime)
 
 	return tree.EachPureTask(referenceTime, callback)
 }

@@ -355,8 +355,8 @@ func PersistenceCallbackToAPICallback(cb *persistencespb.Callback) (*commonpb.Ca
 // to real wall-clock by subtracting the workflow's accumulated skipped duration.
 // If the workflow has no time skipped, the time is returned unchanged and this means the time is already in real wall-clock.
 func virtualToRealTime(execInfo *persistencespb.WorkflowExecutionInfo, msTimestamp time.Time) time.Time {
-	if info := execInfo.GetTimeSkippingInfo(); info != nil && info.AccumulatedSkippedDuration != nil {
-		return msTimestamp.Add(-info.AccumulatedSkippedDuration.AsDuration())
+	if execInfo == nil || execInfo.TimeSkippingInfo == nil || execInfo.TimeSkippingInfo.AccumulatedSkippedDuration == nil {
+		return msTimestamp
 	}
-	return msTimestamp
+	return msTimestamp.Add(-execInfo.TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration())
 }
