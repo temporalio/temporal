@@ -38,7 +38,13 @@ func TrailerToContextMetadataInterceptor(logger log.Logger) grpc.UnaryClientInte
 
 		for prefixedKey, values := range trailer {
 			key, ok := strings.CutPrefix(prefixedKey, trailerKeyPrefix)
-			if !ok || len(values) == 0 {
+			if !ok {
+				if prefixedKey != contextutil.MetadataKeyWorkflowType && prefixedKey != contextutil.MetadataKeyWorkflowTaskQueue {
+					continue
+				}
+				key = prefixedKey
+			}
+			if len(values) == 0 {
 				continue
 			}
 

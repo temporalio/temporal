@@ -176,6 +176,34 @@ func TestTrailerToContextMetadataInterceptor(t *testing.T) {
 			},
 		},
 		{
+			name: "UnprefixedWellKnownKeysAccepted",
+			setupInvoker: func() grpc.UnaryInvoker {
+				return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+					for _, opt := range opts {
+						if trailer, ok := opt.(grpc.TrailerCallOption); ok {
+							md := trailer.TrailerAddr
+							*md = metadata.Pairs(
+								contextutil.MetadataKeyWorkflowType, "test-workflow-type",
+								contextutil.MetadataKeyWorkflowTaskQueue, "test-task-queue",
+							)
+						}
+					}
+					return nil
+				}
+			},
+			contextWrapped: true,
+			wantErr:        false,
+			validateMetadata: func(t *testing.T, ctx context.Context) {
+				workflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+				require.True(t, ok)
+				require.Equal(t, "test-workflow-type", workflowType)
+
+				taskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+				require.True(t, ok)
+				require.Equal(t, "test-task-queue", taskQueue)
+			},
+		},
+		{
 			name: "UnprefixedKeysIgnored",
 			setupInvoker: func() grpc.UnaryInvoker {
 				return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {

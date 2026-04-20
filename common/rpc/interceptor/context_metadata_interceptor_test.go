@@ -2,6 +2,7 @@ package interceptor
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -197,6 +198,35 @@ func TestContextMetadataInterceptor_appendContextMetadataToTrailer(t *testing.T)
 			interceptor.appendContextMetadataToTrailer(ctx, info)
 		})
 	}
+}
+
+func TestContextMetadataInterceptor_backwardCompatTrailerKeys(t *testing.T) {
+	ctx := contextutil.WithMetadataContext(t.Context())
+	contextutil.ContextMetadataSet(ctx, contextutil.MetadataKeyWorkflowType, "test-workflow")
+	contextutil.ContextMetadataSet(ctx, contextutil.MetadataKeyWorkflowTaskQueue, "test-queue")
+	contextutil.ContextMetadataSet(ctx, "other-key", "other-value")
+
+	allMetadata := contextutil.ContextMetadataGetAll(ctx)
+	var trailerPairs []string
+	for key, value := range allMetadata {
+		valStr := fmt.Sprint(value)
+		trailerPairs = append(trailerPairs, trailerKeyPrefix+key, valStr)
+		if key == contextutil.MetadataKeyWorkflowType || key == contextutil.MetadataKeyWorkflowTaskQueue {
+			trailerPairs = append(trailerPairs, key, valStr)
+		}
+	}
+
+	trailer := metadata.Pairs(trailerPairs...)
+
+	// Well-known keys appear both with and without prefix
+	require.Contains(t, trailer, trailerKeyPrefix+contextutil.MetadataKeyWorkflowType)
+	require.Contains(t, trailer, contextutil.MetadataKeyWorkflowType)
+	require.Contains(t, trailer, trailerKeyPrefix+contextutil.MetadataKeyWorkflowTaskQueue)
+	require.Contains(t, trailer, contextutil.MetadataKeyWorkflowTaskQueue)
+
+	// Other keys only appear with prefix
+	require.Contains(t, trailer, trailerKeyPrefix+"other-key")
+	require.NotContains(t, trailer, "other-key")
 }
 
 func TestNewContextMetadataInterceptor(t *testing.T) {
