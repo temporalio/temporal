@@ -84,7 +84,7 @@ const file_temporal_server_chasm_lib_workflow_proto_v1_update_state_proto_rawDes
 	">temporal/server/chasm/lib/workflow/proto/v1/update_state.proto\x12+temporal.server.chasm.lib.workflow.proto.v1\x1a%temporal/api/failure/v1/message.proto\"y\n" +
 	"\vUpdateState\x12\x1b\n" +
 	"\tupdate_id\x18\x01 \x01(\tR\bupdateId\x12M\n" +
-	"\x11rejection_failure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\x10rejectionFailureBGZEgo.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1;workflowpbb\x06proto3"
+	"\x11rejection_failure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\x10rejectionFailureBDZBgo.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_workflow_proto_v1_update_state_proto_rawDescOnce sync.Once
