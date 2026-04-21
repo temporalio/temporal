@@ -181,10 +181,8 @@ var TransitionSucceeded = chasm.NewTransition(
 		o.NextAttemptScheduleTime = nil
 		o.ClosedTime = timestamppb.New(closeTime)
 
-		if event.Result != nil {
-			o.getOrCreateOutcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Successful_{
-				Successful: &nexusoperationpb.OperationOutcome_Successful{Result: event.Result},
-			}
+		o.getOrCreateOutcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Successful_{
+			Successful: &nexusoperationpb.OperationOutcome_Successful{Result: event.Result},
 		}
 
 		// Terminal state - no tasks to emit.
