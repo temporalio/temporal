@@ -1668,8 +1668,9 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_MultipleHooksInvoked() {
 
 type mockUserDataManager struct {
 	sync.Mutex
-	data     *persistencespb.VersionedTaskQueueUserData
-	onChange UserDataOnChangeFunc
+	data      *persistencespb.VersionedTaskQueueUserData
+	onChange  UserDataOnChangeFunc
+	scaleInfo *taskqueuespb.PartitionScaleInfo
 }
 
 func (m *mockUserDataManager) Start() {
@@ -1715,6 +1716,18 @@ func (m *mockUserDataManager) CheckTaskQueueUserDataPropagation(ctx context.Cont
 
 func (m *mockUserDataManager) LocalBacklogPriorityChanged(map[PhysicalTaskQueueVersion]int64) {
 	panic("unused")
+}
+
+func (m *mockUserDataManager) SetPartitionScale(scaleInfo *taskqueuespb.PartitionScaleInfo) {
+	m.Lock()
+	defer m.Unlock()
+	m.scaleInfo = scaleInfo
+}
+
+func (m *mockUserDataManager) PartitionScale() *taskqueuespb.PartitionScaleInfo {
+	m.Lock()
+	defer m.Unlock()
+	return m.scaleInfo
 }
 
 func (m *mockUserDataManager) updateVersioningData(data *persistencespb.VersioningData) {
