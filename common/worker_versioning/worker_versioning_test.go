@@ -40,8 +40,6 @@ var (
 	}
 )
 
-func boolPtr(b bool) *bool { return &b }
-
 type testVersionMembershipCache struct {
 	mu       sync.Mutex
 	m        map[versionMembershipCacheKey]versionTaskQueueInfoCacheValue
@@ -985,15 +983,15 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                        string
-		override                    *workflowpb.VersioningOverride
-		taskQueueType               enumspb.TaskQueueType
-		setupCache                  func(c *testVersionMembershipCache)
-		setupMock                   func(m *matchingservicemock.MockMatchingServiceClient)
-		expectError                      bool
-		errorContains                    string
+		name                              string
+		override                          *workflowpb.VersioningOverride
+		taskQueueType                     enumspb.TaskQueueType
+		setupCache                        func(c *testVersionMembershipCache)
+		setupMock                         func(m *matchingservicemock.MockMatchingServiceClient)
+		expectError                       bool
+		errorContains                     string
 		expectedIsVersionActiveOrDraining bool
-		expectedRevisionNumber           int64
+		expectedRevisionNumber            int64
 	}{
 		{
 			name:        "nil override returns nil",
@@ -1031,9 +1029,9 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
 			},
-			expectError:                 false,
+			expectError:                       false,
 			expectedIsVersionActiveOrDraining: false,
-			expectedRevisionNumber:      42,
+			expectedRevisionNumber:            42,
 		},
 		{
 			name: "v0.32: Pinned override, with cache hit (active), returns isDrainedOrInactive=false",
@@ -1052,7 +1050,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
 			},
-			expectError:                 false,
+			expectError:                       false,
 			expectedIsVersionActiveOrDraining: true,
 		},
 		{
@@ -1187,7 +1185,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 					IsMember: true,
 				}, nil)
 			},
-			expectError:                 false,
+			expectError:                       false,
 			expectedIsVersionActiveOrDraining: false, // old matching server — zero-value treated as "don't know, send signal"
 		},
 		{

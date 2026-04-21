@@ -357,7 +357,7 @@ func checkVersionMembershipViaUserData(
 	tq string,
 	tqType enumspb.TaskQueueType,
 	version *deploymentpb.WorkerDeploymentVersion,
-) (bool, bool, int64, error) {
+) (isMember bool, isVersionActiveOrDraining bool, revisionNumber int64, err error) {
 	resp, err := matchingClient.GetTaskQueueUserData(ctx,
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:   namespaceID,
@@ -372,8 +372,8 @@ func checkVersionMembershipViaUserData(
 		return false, false, 0, nil
 	}
 	deploymentData := tqData.GetDeploymentData()
-	isMember := HasDeploymentVersion(deploymentData, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version)))
-	isVersionActiveOrDraining, revisionNumber := IsVersionActiveOrDraining(deploymentData, version.GetDeploymentName(), version.GetBuildId())
+	isMember = HasDeploymentVersion(deploymentData, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version)))
+	isVersionActiveOrDraining, revisionNumber = IsVersionActiveOrDraining(deploymentData, version.GetDeploymentName(), version.GetBuildId())
 	return isMember, isVersionActiveOrDraining, revisionNumber, nil
 }
 

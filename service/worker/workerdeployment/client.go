@@ -24,10 +24,10 @@ import (
 	"go.temporal.io/sdk/temporal"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -2020,7 +2020,7 @@ func (d *ClientImpl) SignalVersionReactivation(
 		buildID:        buildID,
 	}
 	if stored := d.highestRevSignaledToVersionWf.Get(key); stored != nil {
-		if revisionNumber <= stored.(int64) {
+		if storedRev, ok := stored.(int64); ok && revisionNumber <= storedRev {
 			// This pod has already signaled the target version workflow at this revision
 			// or a newer one; skip to avoid a redundant RPC. Another pod may still send;
 			// the receiver dedups via the deterministic UUID RequestId.
