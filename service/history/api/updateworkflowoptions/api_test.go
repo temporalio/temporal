@@ -420,7 +420,7 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 					Config: tc.initialConfig,
 				},
 			}).AnyTimes()
-			ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, "", nil, gomock.Any()).Return(&historypb.HistoryEvent{}, nil)
+			ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, "", nil, gomock.Any(), gomock.Any()).Return(&historypb.HistoryEvent{}, nil)
 
 			result, hasChanges, err := MergeAndApply(ms, tc.updateOptions, tc.updateMask, "")
 			require.NoError(t, err)

@@ -65,7 +65,6 @@ func (w *Workflow) LifecycleState(
 	return chasm.LifecycleStateRunning
 }
 
-<<<<<<< HEAD
 func (w *Workflow) ContextMetadata(_ chasm.Context) map[string]string {
 	// TODO: Export workflow metadata from the CHASM workflow root instead of CloseTransaction().
 	return nil
@@ -78,19 +77,6 @@ func (w *Workflow) Terminate(
 	return chasm.TerminateComponentResponse{}, serviceerror.NewInternal("workflow root Terminate should not be called")
 }
 
-// AddCompletionCallbacks creates completion callbacks using the CHASM implementation.
-// maxCallbacksPerWorkflow is the configured maximum number of callbacks allowed per workflow.
-func (w *Workflow) AddCompletionCallbacks(
-	ctx chasm.MutableContext,
-	eventTime *timestamppb.Timestamp,
-	requestID string,
-	completionCallbacks []*commonpb.Callback,
-	maxCallbacksPerWorkflow int,
-) error {
-	// Check CHASM max callbacks limit
-	currentCallbackCount := len(w.Callbacks)
-	if len(completionCallbacks)+currentCallbackCount > maxCallbacksPerWorkflow {
-=======
 // scheduleStandbyCallbacks transitions all STANDBY callbacks in the map to SCHEDULED state.
 func scheduleStandbyCallbacks(ctx chasm.MutableContext, callbacks chasm.Map[string, *callback.Callback]) error {
 	for _, field := range callbacks {
@@ -166,7 +152,6 @@ func (w *Workflow) totalCallbackCount(ctx chasm.Context) int {
 func (w *Workflow) checkWorkflowCallbackLimit(ctx chasm.Context, newCount, maxCallbacksPerWorkflow int) error {
 	current := w.totalCallbackCount(ctx)
 	if newCount+current > maxCallbacksPerWorkflow {
->>>>>>> c3db1d092 (Nexus Workflow Update code -- squashed)
 		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
 			maxCallbacksPerWorkflow,
@@ -198,11 +183,7 @@ func addCallbacksToMap(
 				},
 			}
 		default:
-<<<<<<< HEAD
-			return serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", variant)
-=======
-			return target, fmt.Errorf("unsupported callback variant: %T", variant)
->>>>>>> c3db1d092 (Nexus Workflow Update code -- squashed)
+			return target, serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", variant)
 		}
 
 		// requestID (unique per API call) + idx (position within the request) ensures unique, idempotent callback IDs.

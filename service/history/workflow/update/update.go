@@ -456,6 +456,7 @@ func (u *Update) AttachCallbacks(
 			nil,
 			"",  // identity
 			nil, // priority
+			nil, // timeSkippingConfig
 			um,
 		)
 		if err != nil {
@@ -506,6 +507,7 @@ func (u *Update) flushPendingCallbacks(eventStore EventStore) error {
 			nil,
 			"",  // identity
 			nil, // priority
+			nil, // timeSkippingConfig
 			um,
 		); err != nil {
 			return err

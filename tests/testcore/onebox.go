@@ -975,6 +975,11 @@ func (c *TemporalImpl) overrideDynamicConfigForTest(t *testing.T, name dynamicco
 	return cleanup
 }
 
+// overrideDynamicConfigForClusterLifetime overrides a dynamic config value for the duration of the cluster lifetime (i.e. until Stop() is called).
+func (c *TemporalImpl) overrideDynamicConfigForClusterLifetime(name dynamicconfig.Key, value any) {
+	c.dcClient.PartialOverrideValue(name, value)
+}
+
 func (c *TemporalImpl) injectHook(t *testing.T, hook testhooks.Hook, scope any) func() {
 	cleanup := hook.Apply(c.testHooks, scope)
 	t.Cleanup(cleanup)
