@@ -2,6 +2,7 @@ package chasmtest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -615,6 +616,24 @@ func (e *Engine) updateComponentInExecution(
 	}
 
 	return mutableCtx.Ref(component)
+}
+
+// refForComponent looks up the ComponentRef for a component instance by scanning
+// all executions. It works because Node.CloseTransaction (called after every mutation)
+// runs syncSubComponents, which populates the node's valueToNode map for all
+// subcomponents. Returns an error if the component is not found in any execution.
+func (e *Engine) refForComponent(component chasm.Component) (chasm.ComponentRef, error) {
+	for _, exec := range e.allExecutions {
+		serialized, err := exec.node.Ref(component)
+		if err != nil {
+			if errors.As(err, new(*serviceerror.NotFound)) {
+				continue // component not registered in this execution's node
+			}
+			return chasm.ComponentRef{}, err
+		}
+		return chasm.DeserializeComponentRef(serialized)
+	}
+	return chasm.ComponentRef{}, fmt.Errorf("component %T not found in any execution managed by this engine", component)
 }
 
 func constructTransitionOptions(opts ...chasm.TransitionOption) chasm.TransitionOptions {

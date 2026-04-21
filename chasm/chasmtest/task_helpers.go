@@ -11,9 +11,8 @@ import (
 // It returns taskDropped set to true if [chasm.PureTaskHandler.Validate] returns (false, nil),
 // indicating the task is no longer relevant and was not executed.
 //
-// For root components, construct the ref with [chasm.NewComponentRef]. For subcomponents, obtain
-// the ref via [chasm.Context.Ref] inside a [Engine.ReadComponent] or [Engine.UpdateComponent]
-// callback and deserialize it with [chasm.DeserializeComponentRef].
+// The component ref is resolved automatically — no separate [Engine.ReadComponent] call to
+// obtain a ref is needed. Pass the component pointer directly.
 //
 // This helper ensures that Validate is always exercised alongside Execute, matching the real
 // engine's behavior. Use [chasm.MockMutableContext] directly when you need to inspect the
@@ -21,11 +20,16 @@ import (
 func ExecutePureTask[C chasm.Component, T any](
 	ctx context.Context,
 	e *Engine,
-	ref chasm.ComponentRef,
+	component C,
 	handler chasm.PureTaskHandler[C, T],
 	attrs chasm.TaskAttributes,
 	task T,
 ) (taskDropped bool, err error) {
+	ref, err := e.refForComponent(component)
+	if err != nil {
+		return false, err
+	}
+
 	engineCtx := chasm.NewEngineContext(ctx, e)
 	_, err = e.UpdateComponent(
 		engineCtx,
@@ -59,20 +63,24 @@ func ExecutePureTask[C chasm.Component, T any](
 // It returns taskDropped set to true if [chasm.SideEffectTaskHandler.Validate] returns (false, nil),
 // indicating the task is no longer relevant and was not executed.
 //
-// For root components, construct the ref with [chasm.NewComponentRef]. For subcomponents, obtain
-// the ref via [chasm.Context.Ref] inside a [Engine.ReadComponent] or [Engine.UpdateComponent]
-// callback and deserialize it with [chasm.DeserializeComponentRef].
+// The component ref is resolved automatically — no separate [Engine.ReadComponent] call to
+// obtain a ref is needed. Pass the component pointer directly.
 //
 // Use [chasm.MockMutableContext] directly when you need to inspect typed task payloads added
 // during execution, since the real engine serializes them into history layer tasks.
 func ExecuteSideEffectTask[C chasm.Component, T any](
 	ctx context.Context,
 	e *Engine,
-	ref chasm.ComponentRef,
+	component C,
 	handler chasm.SideEffectTaskHandler[C, T],
 	attrs chasm.TaskAttributes,
 	task T,
 ) (taskDropped bool, err error) {
+	ref, err := e.refForComponent(component)
+	if err != nil {
+		return false, err
+	}
+
 	engineCtx := chasm.NewEngineContext(ctx, e)
 
 	var valid bool
