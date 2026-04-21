@@ -220,7 +220,10 @@ func (d CompletedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkf
 	op := field.Get(ctx)
 
 	completeTime := event.GetEventTime().AsTime()
-	evt := nexusoperation.EventSucceeded{CompleteTime: &completeTime}
+	evt := nexusoperation.EventSucceeded{
+		Result:       attrs.GetResult(),
+		CompleteTime: &completeTime,
+	}
 	if err := nexusoperation.TransitionSucceeded.Apply(op, ctx, evt); err != nil {
 		return err
 	}

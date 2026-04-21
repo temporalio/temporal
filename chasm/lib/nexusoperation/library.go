@@ -6,6 +6,8 @@ import (
 	"google.golang.org/grpc"
 )
 
+const TaskGroupName = "nexusoperation"
+
 // componentOnlyLibrary registers just the components without task executors or gRPC handlers.
 // Used in the frontend to enable component ref serialization.
 type componentOnlyLibrary struct {
