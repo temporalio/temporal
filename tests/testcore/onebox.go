@@ -827,6 +827,7 @@ func (c *TemporalImpl) newRPCFactory(
 		options,
 		map[primitives.ServiceName][]grpc.DialOption{},
 		monitor,
+		nil,
 	), nil
 }
 
