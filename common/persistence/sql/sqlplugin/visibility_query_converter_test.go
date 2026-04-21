@@ -10,11 +10,12 @@ import (
 func TestSerializeVisibilityPageToken(t *testing.T) {
 	r := require.New(t)
 
+	qt := time.Date(2023, 3, 21, 14, 0, 32, 0, time.UTC)
 	token := VisibilityPageToken{
 		CloseTime: time.Date(2023, 3, 21, 14, 20, 32, 0, time.UTC),
 		StartTime: time.Date(2023, 3, 21, 14, 10, 32, 0, time.UTC),
 		RunID:     "test-run-id",
-		QueryTime: time.Date(2023, 3, 21, 14, 0, 32, 0, time.UTC),
+		QueryTime: &qt,
 	}
 	data, err := SerializeVisibilityPageToken(&token)
 	r.NoError(err)
@@ -40,12 +41,13 @@ func TestDeserializeVisibilityPageToken(t *testing.T) {
 	)
 	r.NoError(err)
 	r.NotNil(token)
+	qt := time.Date(2023, 3, 21, 14, 0, 32, 0, time.UTC)
 	r.Equal(
 		VisibilityPageToken{
 			CloseTime: time.Date(2023, 3, 21, 14, 20, 32, 0, time.UTC),
 			StartTime: time.Date(2023, 3, 21, 14, 10, 32, 0, time.UTC),
 			RunID:     "test-run-id",
-			QueryTime: time.Date(2023, 3, 21, 14, 0, 32, 0, time.UTC),
+			QueryTime: &qt,
 		},
 		*token,
 	)

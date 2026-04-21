@@ -31,5 +31,7 @@ message BatchOperationInput {
   // Mutually exclusive with StartBatchOperationRequest request.
   temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest admin_request = 8;
 
+  // The time at which the batch workflow started. Used as the anchor for resolving
+  // NOW() based relative timestamps in the visibility query.
   google.protobuf.Timestamp batch_start_time = 9;
 }

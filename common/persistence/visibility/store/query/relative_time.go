@@ -136,7 +136,7 @@ func isASCIISpace(b byte) bool {
 
 // parseRelativeDuration parses a compound duration string such as "1h30m" or "2w3d".
 // Mirrors Go's time.ParseDuration: consume an integer, then consume the unit as bytes until
-// the next digit. Digit bytes (0x30–0x39) never appear in multi byte UTF-8 sequences, so
+// the next digit. Digit bytes (0x30 to 0x39) never appear in multi byte UTF-8 sequences, so
 // multi byte suffixes like µs/μs are consumed whole. Unit matching is case insensitive.
 func parseRelativeDuration(input string) (time.Duration, error) {
 	if input == "" {
