@@ -5,8 +5,24 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
+// RoutingStrategy determines how a business ID is used for routing decisions.
+type RoutingStrategy int
+
+const (
+	// RoutingStrategyDefault is the default routing strategy.
+	RoutingStrategyDefault RoutingStrategy = iota
+	// RoutingStrategyPollerGroup routes based on the poller group.
+	RoutingStrategyPollerGroup
+)
+
+// RoutingKey holds routing ID (either the business ID or the poller group ID) and the routing strategy.
+type RoutingKey struct {
+	ID       string
+	Strategy RoutingStrategy
+}
+
 type ReplicationResolver interface {
-	ActiveClusterName(businessID string) string
+	ActiveClusterName(routingKey RoutingKey) string
 	ActiveInCluster(clusterName string) bool
 	ClusterNames(businessID string) []string
 	ReplicationState(businessID string) enumspb.ReplicationState
@@ -45,7 +61,7 @@ func NewDefaultReplicationResolverFactory() ReplicationResolverFactory {
 	}
 }
 
-func (r *defaultReplicationResolver) ActiveClusterName(businessID string) string {
+func (r *defaultReplicationResolver) ActiveClusterName(_ RoutingKey) string {
 	if r.replicationConfig == nil {
 		return ""
 	}

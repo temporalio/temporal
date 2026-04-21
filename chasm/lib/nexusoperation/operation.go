@@ -34,6 +34,9 @@ type InvocationData struct {
 	NexusLink nexus.Link
 }
 
+// TaskGroupName groups invocation and cancellation together for the outbound queue
+const TaskGroupName = "nexus"
+
 // OperationStore defines the interface that must be implemented by any parent component that wants to manage Nexus operations.
 // It's the responsibility of the parrent component to apply the appropriate state transitions to the operation.
 type OperationStore interface {

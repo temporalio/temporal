@@ -76,7 +76,7 @@ func routeSystemCallbackRequest(
 			}
 			return nil, commonnexus.ConvertGRPCError(err, false)
 		}
-		clusterName := ns.ActiveClusterName(businessID)
+		clusterName := ns.ActiveClusterName(namespace.RoutingKey{ID: businessID})
 		if clusterMetadata.GetCurrentClusterName() == clusterName {
 			frontendClient = localClient
 		} else {
