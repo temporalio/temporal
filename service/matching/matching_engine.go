@@ -1307,6 +1307,9 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPollsPartition(
 		tag.NewInt32("degree", int32(degree)),
 	)
 
+	if request.WorkerInstanceKey != "" {
+		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
+	}
 	cancelledCount := e.workerInstancePollers.CancelAll(request.GetWorkerInstanceKey())
 	e.removePollerFromHistory(ctx, partition, request.GetWorkerIdentity())
 

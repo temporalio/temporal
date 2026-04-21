@@ -5819,16 +5819,33 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 	})
 
 	t.Run("adds worker to shutdown cache", func(t *testing.T) {
+		// Exercises the matching fan-out path (flag=true, root partition).
 		t.Parallel()
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
+
+		nsName := namespace.Name("test-namespace")
 		mockNsRegistry := namespace.NewMockRegistry(ctrl)
-		mockNsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil)
+		mockNsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(nsName, nil)
+
+		config := defaultTestConfig()
+		config.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+		config.NumTaskqueueReadPartitions = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
+
+		rootPartition := tqid.UnsafeTaskQueueFamily("test-namespace-id", "test-queue").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
+		mockPM := NewMocktaskQueuePartitionManager(ctrl)
+		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
+		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition.TaskQueue(), config, nsName))
+		mockPM.EXPECT().RemovePoller(gomock.Any()).AnyTimes()
+
 		engine := &matchingEngineImpl{
-			config:                defaultTestConfig(),
+			config:                config,
 			namespaceRegistry:     mockNsRegistry,
+			matchingRawClient:     matchingservicemock.NewMockMatchingServiceClient(ctrl),
+			logger:                log.NewNoopLogger(),
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+			partitions:            map[tqid.PartitionKey]taskQueuePartitionManager{rootPartition.Key(): mockPM},
 		}
 
 		workerKey := "test-worker"
@@ -5836,13 +5853,40 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		_, err := engine.CancelOutstandingWorkerPolls(context.Background(),
 			&matchingservice.CancelOutstandingWorkerPollsRequest{
 				NamespaceId:       "test-namespace-id",
-				TaskQueue:         &taskqueuepb.TaskQueue{Name: "/_sys/test-queue/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				WorkerInstanceKey: workerKey,
 			})
 
 		require.NoError(t, err)
 		require.NotNil(t, engine.shutdownWorkers.Get(workerKey), "worker should be in shutdown cache")
+	})
+
+	t.Run("partition API adds worker to shutdown cache", func(t *testing.T) {
+		// CancelOutstandingWorkerPollsPartition should also populate the shutdown cache
+		// so that child matching hosts reject new polls from shutting-down workers.
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			logger:                log.NewNoopLogger(),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+		}
+
+		workerKey := "test-worker"
+
+		_, err := engine.CancelOutstandingWorkerPollsPartition(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+				NamespaceId: "test-namespace-id",
+				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+					TaskQueue:     "test-queue",
+					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+					PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 1},
+				},
+				WorkerInstanceKey: workerKey,
+			})
+
+		require.NoError(t, err)
+		require.NotNil(t, engine.shutdownWorkers.Get(workerKey), "worker should be in shutdown cache on child host")
 	})
 
 	t.Run("empty worker key does not populate shutdown cache", func(t *testing.T) {
@@ -6061,6 +6105,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			matchingRawClient:     mockMatchingClient,
 			logger:                log.NewNoopLogger(),
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		}
 		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
 
