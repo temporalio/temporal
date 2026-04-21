@@ -1715,6 +1715,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Existing() {
 func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Running() {
 	s.setupStartWorkflowExecutionForTerminate()
 
+	//nolint:staticcheck // SA1019: intentional coverage for deprecated policy migration
 	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING, enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED)
 
 	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
@@ -1829,6 +1830,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 
 				resp, err := s.historyEngine.StartWorkflowExecution(
 					metrics.AddMetricsContext(context.Background()),
+					//nolint:staticcheck // SA1019: intentional coverage for deprecated policy migration
 					makeStartRequest(enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL))
 
 				s.NoError(err)

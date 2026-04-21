@@ -59,7 +59,7 @@ func Invoke(
 	)
 	request := startRequest.StartRequest
 
-	api.MigrateWorkflowIdReusePolicyForRunningWorkflow(
+	api.MigrateWorkflowIDReusePolicyForRunningWorkflow(
 		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdReusePolicy,
 		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdConflictPolicy)
 
