@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	gocql "github.com/apache/cassandra-gocql-driver/v2"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSQLValidate_MutualExclusivity(t *testing.T) {
