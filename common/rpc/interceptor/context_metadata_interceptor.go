@@ -60,6 +60,7 @@ func (c *ContextMetadataInterceptor) appendContextMetadataToTrailer(ctx context.
 	for key, value := range contextutil.ContextMetadataGetAll(ctx) {
 		valStr := fmt.Sprint(value)
 		trailerPairs = append(trailerPairs, trailerKeyPrefix+key, valStr)
+		// Backward compatibility: also emit unprefixed keys for older readers.
 		if key == contextutil.MetadataKeyWorkflowType || key == contextutil.MetadataKeyWorkflowTaskQueue {
 			trailerPairs = append(trailerPairs, key, valStr)
 		}

@@ -31,10 +31,7 @@ const (
 )
 
 // hashActivityID returns a gRPC-trailer-safe key suffix from an arbitrary activity ID.
-// Uses FNV-64a: standard library, fast, deterministic, 16 hex chars ([0-9a-f]).
-// Collision probability ~1 in 340 trillion for 1,000 activities per request.
-// Alternatives: SHA-256 (overkill, 64 chars), CRC-32 (worse distribution),
-// raw encoding (unbounded length, may contain invalid gRPC key chars).
+// FNV-64a: deterministic, 16 hex chars, ~0 collision risk at expected cardinality.
 func hashActivityID(activityID string) string {
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(activityID))
