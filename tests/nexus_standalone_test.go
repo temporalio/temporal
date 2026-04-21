@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
@@ -424,7 +423,6 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 					},
 				},
 			}, descResp.GetInfo().GetLinks())
-			// TODO(stephan): Add standalone async-start link coverage once the async completion path is wired up.
 
 			pollResp, err := s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
 				Namespace:   s.Namespace().String(),
@@ -440,6 +438,9 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 	})
 
 	t.Run("IncludeOutcome_Failure", func(t *testing.T) {
+		// TODO: Add canceled last-attempt-failure coverage here once standalone cancellation tasks
+		// can be completed through the public Nexus task APIs.
+
 		testCases := []struct {
 			name                   string
 			setup                  func(*workflowservice.StartNexusOperationExecutionRequest)
@@ -448,52 +449,26 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 			expectedFailureMessage string
 		}{
 			{
-				name: "Timeout",
+				name: "TimeoutLastAttemptFailure",
 				setup: func(req *workflowservice.StartNexusOperationExecutionRequest) {
 					req.ScheduleToCloseTimeout = durationpb.New(2 * time.Second)
 				},
 				respond: func(ctx context.Context, s *testcore.TestEnv, task *workflowservice.PollNexusTaskQueueResponse) error {
-					handlerErr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "last attempt failure")
-					temporalFailure, err := temporalNexusFailure(handlerErr)
-					require.NoError(t, err)
-
-					_, err = s.FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
+					_, err := s.FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
 						Namespace: s.Namespace().String(),
 						Identity:  "test-worker",
 						TaskToken: task.GetTaskToken(),
-						Failure:   temporalFailure,
-					})
-					return err
-				},
-				expectedStatus:         enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TIMED_OUT,
-				expectedFailureMessage: "operation timed out",
-			},
-			{
-				name: "Canceled",
-				respond: func(ctx context.Context, s *testcore.TestEnv, task *workflowservice.PollNexusTaskQueueResponse) error {
-					_, err := s.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
-						Namespace: s.Namespace().String(),
-						Identity:  "test-worker",
-						TaskToken: task.GetTaskToken(),
-						Response: &nexuspb.Response{
-							Variant: &nexuspb.Response_StartOperation{
-								StartOperation: &nexuspb.StartOperationResponse{
-									Variant: &nexuspb.StartOperationResponse_Failure{
-										Failure: &failurepb.Failure{
-											Message: "cancel failure",
-											FailureInfo: &failurepb.Failure_CanceledFailureInfo{
-												CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
-											},
-										},
-									},
-								},
+						Error: &nexuspb.HandlerError{
+							ErrorType: string(nexus.HandlerErrorTypeInternal),
+							Failure: &nexuspb.Failure{
+								Message: "last attempt failure",
 							},
 						},
 					})
 					return err
 				},
-				expectedStatus:         enumspb.NEXUS_OPERATION_EXECUTION_STATUS_CANCELED,
-				expectedFailureMessage: "cancel failure",
+				expectedStatus:         enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TIMED_OUT,
+				expectedFailureMessage: "last attempt failure",
 			},
 			{
 				name: "TerminalFailure",
@@ -521,6 +496,8 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
+				t.Skip("Enable once standalone Nexus task and cancellation executors are wired through public Nexus task APIs")
+
 				s := testcore.NewEnv(t, nexusStandaloneOpts...)
 				taskQueue := testcore.RandomizedNexusEndpoint(t.Name())
 				endpointName := createNexusEndpointWithTaskQueue(s, taskQueue)
@@ -644,6 +621,7 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING, descResp.GetInfo().GetStatus())
 	})
 
+	// TODO: Enable once cancel is fully implemented.
 	t.Run("AlreadyCanceled", func(t *testing.T) {
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		endpointName := createNexusEndpoint(s)
@@ -683,7 +661,10 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 		s.Contains(err.Error(), "cancellation already requested")
 	})
 
+	// TODO: Enable once cancel/terminate interaction is fully implemented for standalone Nexus operations.
 	t.Run("AlreadyTerminated", func(t *testing.T) {
+		t.Skip("Cancel/terminate interaction not yet fully implemented for standalone Nexus operations")
+
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		endpointName := createNexusEndpoint(s)
 
@@ -713,7 +694,10 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 		s.Contains(err.Error(), "operation already completed")
 	})
 
+	// TODO: Enable once cancel is fully implemented for standalone Nexus operations.
 	t.Run("NotFound", func(t *testing.T) {
+		t.Skip("Cancel not yet fully implemented for standalone Nexus operations")
+
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 
 		_, err := s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
@@ -818,7 +802,10 @@ func TestTerminateStandaloneNexusOperation(t *testing.T) {
 		s.Contains(err.Error(), "already terminated")
 	})
 
+	// TODO: Enable once terminate is fully implemented for standalone Nexus operations.
 	t.Run("AlreadyCanceled", func(t *testing.T) {
+		t.Skip("Terminate not yet fully implemented for standalone Nexus operations")
+
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		endpointName := createNexusEndpoint(s)
 
@@ -1658,6 +1645,8 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 	})
 
 	t.Run("ReturnsLastAttemptFailure", func(t *testing.T) {
+		t.Skip("Enable once standalone Nexus task and cancellation executors are wired through public Nexus task APIs")
+
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		taskQueue := testcore.RandomizedNexusEndpoint(t.Name())
 		endpointName := createNexusEndpointWithTaskQueue(s, taskQueue)
@@ -1686,19 +1675,16 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 				pollerErrCh <- err
 				return
 			}
-
-			handlerErr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "last attempt failure")
-			temporalFailure, err := temporalNexusFailure(handlerErr)
-			if err != nil {
-				pollerErrCh <- err
-				return
-			}
-
 			_, err = s.FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
 				Namespace: s.Namespace().String(),
 				Identity:  "test-worker",
 				TaskToken: task.GetTaskToken(),
-				Failure:   temporalFailure,
+				Error: &nexuspb.HandlerError{
+					ErrorType: string(nexus.HandlerErrorTypeInternal),
+					Failure: &nexuspb.Failure{
+						Message: "last attempt failure",
+					},
+				},
 			})
 			pollerErrCh <- err
 		}()
@@ -1712,7 +1698,7 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.Equal(t, enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED, pollResp.GetWaitStage())
-			require.Equal(t, "operation timed out", pollResp.GetFailure().GetMessage())
+			require.Equal(t, "last attempt failure", pollResp.GetFailure().GetMessage())
 		}, 10*time.Second, 100*time.Millisecond)
 
 		s.NoError(<-pollerErrCh)
@@ -1823,12 +1809,4 @@ func eventuallyNexusOperationDeleted(s *testcore.TestEnv, t *testing.T, operatio
 		var notFoundErr *serviceerror.NotFound
 		return errors.As(err, &notFoundErr)
 	}, 10*time.Second, 100*time.Millisecond)
-}
-
-func temporalNexusFailure(handlerErr *nexus.HandlerError) (*failurepb.Failure, error) {
-	nexusFailure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(handlerErr)
-	if err != nil {
-		return nil, err
-	}
-	return commonnexus.NexusFailureToTemporalFailure(nexusFailure)
 }

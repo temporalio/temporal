@@ -236,13 +236,14 @@ func (o *Operation) loadStartArgs(
 		invocationData = InvocationData{
 			Input:  requestData.GetInput(),
 			Header: requestData.GetNexusHeader(),
-			NexusLinks: []nexus.Link{commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
-				Namespace:   ctx.NamespaceEntry().Name().String(),
-				OperationId: ctx.ExecutionKey().BusinessID,
-				RunId:       ctx.ExecutionKey().RunID,
-			})},
 		}
 	}
+	invocationData.NexusLinks = append(invocationData.NexusLinks,
+		commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
+			Namespace:   ctx.NamespaceEntry().Name().String(),
+			OperationId: ctx.ExecutionKey().BusinessID,
+			RunId:       ctx.ExecutionKey().RunID,
+		}))
 
 	serializedRef, err := ctx.Ref(o)
 	if err != nil {

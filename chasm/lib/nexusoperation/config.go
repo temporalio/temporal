@@ -15,7 +15,7 @@ import (
 
 var LongPollTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	"nexusoperation.longPollTimeout",
-	60*time.Second,
+	20*time.Second,
 	`Maximum timeout for nexus operation long-poll requests. Actual wait may be shorter to leave
 longPollBuffer before the caller deadline.`,
 )

@@ -258,7 +258,8 @@ var TransitionTerminated = chasm.NewTransition(
 		}
 		o.ClosedTime = timestamppb.New(ctx.Now(o))
 		o.NextAttemptScheduleTime = nil
-		o.getOrCreateOutcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
+		outcome := o.Outcome.Get(ctx)
+		outcome.Variant = &nexusoperationpb.OperationOutcome_Failed_{
 			Failed: &nexusoperationpb.OperationOutcome_Failed{
 				Failure: &failurepb.Failure{
 					Message: event.Reason,
