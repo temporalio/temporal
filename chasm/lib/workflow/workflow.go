@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -424,9 +425,9 @@ func (w *Workflow) NexusOperationInvocationData(
 	})
 
 	return nexusoperation.InvocationData{
-		Input:     attrs.GetInput(),
-		Header:    attrs.GetNexusHeader(),
-		NexusLink: nexusLink,
+		Input:      attrs.GetInput(),
+		Header:     attrs.GetNexusHeader(),
+		NexusLinks: []nexus.Link{nexusLink},
 	}, nil
 }
 
