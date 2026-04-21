@@ -42,8 +42,7 @@ func NewSession(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) (*session, error) {
-
-	gocqlSession, err := initSession(logger, newClusterConfigFunc, metricsHandler)
+	gocqlSession, err := initSession(newClusterConfigFunc, metricsHandler)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +75,7 @@ func (s *session) refresh() {
 		return
 	}
 
-	newSession, err := initSession(s.logger, s.newClusterConfigFunc, s.metricsHandler)
+	newSession, err := initSession(s.newClusterConfigFunc, s.metricsHandler)
 	if err != nil {
 		s.logger.Error("gocql wrapper: unable to refresh gocql session", tag.Error(err))
 		handler := s.metricsHandler.WithTags(metrics.FailureTag(refreshErrorTagValue))
@@ -92,11 +91,9 @@ func (s *session) refresh() {
 }
 
 func initSession(
-	logger log.Logger,
 	newClusterConfigFunc func() (*gocql.ClusterConfig, error),
 	metricsHandler metrics.Handler,
 ) (gs *gocql.Session, retErr error) {
-	defer log.CapturePanic(logger, &retErr)
 	cluster, err := newClusterConfigFunc()
 	if err != nil {
 		return nil, err

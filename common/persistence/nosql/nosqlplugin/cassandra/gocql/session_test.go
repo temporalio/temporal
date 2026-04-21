@@ -49,11 +49,12 @@ func TestSessionEmitsMetricOnRefreshThrottle(t *testing.T) {
 	controller.Finish()
 }
 
-func TestPanicCapture(t *testing.T) {
-	_, err := initSession(log.NewNoopLogger(), func() (*gocql.ClusterConfig, error) {
+func TestInvalidHostGeneratesError(t *testing.T) {
+	_, err := initSession(func() (*gocql.ClusterConfig, error) {
 		return &gocql.ClusterConfig{Hosts: []string{"0.0.0.0"}}, nil
 	}, metrics.NoopMetricsHandler)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "panic:")
+	// This used to panic, but now should simply return an error.
+	assert.Contains(t, err.Error(), "invalid host address")
 }
