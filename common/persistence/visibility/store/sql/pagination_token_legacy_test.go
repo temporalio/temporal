@@ -10,11 +10,12 @@ import (
 func TestSerializePageToken(t *testing.T) {
 	s := assert.New(t)
 
+	qt := time.Date(2023, 3, 21, 14, 0, 32, 0, time.UTC)
 	token := pageTokenLegacy{
 		CloseTime: time.Date(2023, 3, 21, 14, 20, 32, 0, time.UTC),
 		StartTime: time.Date(2023, 3, 21, 14, 10, 32, 0, time.UTC),
 		RunID:     "test-run-id",
-		QueryTime: time.Date(2023, 3, 21, 14, 0, 32, 0, time.UTC),
+		QueryTime: &qt,
 	}
 	data, err := serializePageTokenLegacy(&token)
 	s.NoError(err)
@@ -40,12 +41,13 @@ func TestDeserializePageToken(t *testing.T) {
 	)
 	s.NoError(err)
 	s.NotNil(token)
+	qt2 := time.Date(2023, 3, 21, 14, 0, 32, 0, time.UTC)
 	s.Equal(
 		pageTokenLegacy{
 			CloseTime: time.Date(2023, 3, 21, 14, 20, 32, 0, time.UTC),
 			StartTime: time.Date(2023, 3, 21, 14, 10, 32, 0, time.UTC),
 			RunID:     "test-run-id",
-			QueryTime: time.Date(2023, 3, 21, 14, 0, 32, 0, time.UTC),
+			QueryTime: &qt2,
 		},
 		*token,
 	)

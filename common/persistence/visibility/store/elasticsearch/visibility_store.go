@@ -58,7 +58,7 @@ type (
 
 	visibilityPageToken struct {
 		SearchAfter []any
-		QueryTime   time.Time `json:",omitempty"`
+		QueryTime   *time.Time
 	}
 
 	esQueryParams struct {
@@ -631,7 +631,7 @@ func (s *VisibilityStore) buildSearchParametersInternal(
 		return nil, time.Time{}, err
 	}
 	queryTime := time.Now().UTC()
-	if pageToken != nil && !pageToken.QueryTime.IsZero() {
+	if pageToken != nil && pageToken.QueryTime != nil {
 		queryTime = pageToken.QueryTime.UTC()
 	}
 
@@ -915,7 +915,7 @@ func (s *VisibilityStore) GetListWorkflowExecutionsResponse(
 	if len(searchResult.Hits.Hits) == pageSize { // this means the response might not the last page
 		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
 			SearchAfter: lastHitSort,
-			QueryTime:   queryTime.UTC(),
+			QueryTime:   &queryTime,
 		})
 		if err != nil {
 			return nil, err

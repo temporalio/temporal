@@ -401,7 +401,7 @@ func (s *VisibilityStore) listExecutionsInternal(
 		return nil, err
 	}
 	queryTime := time.Now().UTC()
-	if pageToken != nil && !pageToken.QueryTime.IsZero() {
+	if pageToken != nil && pageToken.QueryTime != nil {
 		queryTime = pageToken.QueryTime.UTC()
 	}
 
@@ -471,7 +471,7 @@ func (s *VisibilityStore) listExecutionsInternal(
 			CloseTime: closeTime,
 			StartTime: lastRow.StartTime,
 			RunID:     lastRow.RunID,
-			QueryTime: queryTime,
+			QueryTime: &queryTime,
 		})
 		if err != nil {
 			return nil, err
@@ -517,7 +517,7 @@ func (s *VisibilityStore) listExecutionsInternalLegacy(
 		return nil, err
 	}
 	queryTime := time.Now().UTC()
-	if pageToken != nil && !pageToken.QueryTime.IsZero() {
+	if pageToken != nil && pageToken.QueryTime != nil {
 		queryTime = pageToken.QueryTime.UTC()
 	}
 
@@ -577,7 +577,7 @@ func (s *VisibilityStore) listExecutionsInternalLegacy(
 			CloseTime: closeTime,
 			StartTime: lastRow.StartTime,
 			RunID:     lastRow.RunID,
-			QueryTime: queryTime,
+			QueryTime: &queryTime,
 		})
 		if err != nil {
 			return nil, err

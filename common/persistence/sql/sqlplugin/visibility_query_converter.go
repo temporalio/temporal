@@ -15,7 +15,7 @@ type (
 		CloseTime time.Time
 		StartTime time.Time
 		RunID     string
-		QueryTime time.Time `json:",omitempty"`
+		QueryTime *time.Time
 	}
 )
 

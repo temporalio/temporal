@@ -64,6 +64,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	visquery "go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/priorities"
@@ -5622,10 +5623,13 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	}
 
 	// Validate visibility query syntax before starting the batch workflow.
-	// Malformed queries (e.g. "()") would otherwise cause the batch activity
-	// to retry indefinitely since the error is not marked non-retryable.
+	// Malformed queries would otherwise cause the batch activity to retry
+	// indefinitely since the error is not marked non retryable.
 	if q := request.GetVisibilityQuery(); len(q) > 0 {
 		if _, err := sqlparser.Parse("select * from dummy where " + q); err != nil {
+			return nil, serviceerror.NewInvalidArgumentf("invalid visibility query: %v", err)
+		}
+		if _, err := visquery.ResolveRelativeTimes(q, time.Now()); err != nil {
 			return nil, serviceerror.NewInvalidArgumentf("invalid visibility query: %v", err)
 		}
 	}

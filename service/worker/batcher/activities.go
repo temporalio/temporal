@@ -268,6 +268,8 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	return hbd, nil
 }
 
+// updateHeartbeatCheckpoint advances the heartbeat checkpoint to the next unprocessed page
+// once completedPage and all its predecessors are done. Returns true if the checkpoint changed.
 func updateHeartbeatCheckpoint(hbd *HeartBeatDetails, completedPage *page) bool {
 	if completedPage == nil || hbd == nil {
 		return false
@@ -355,14 +357,14 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	if batchParams.AdminRequest != nil {
 		ctx = headers.SetCallerType(ctx, headers.CallerTypePreemptable)
 		adminReq := batchParams.AdminRequest
-		rawQuery, err := resolveQuery(adminReq.GetVisibilityQuery(), batchParams)
+		rawQuery, err := resolveRelativeTimestamps(adminReq.GetVisibilityQuery(), batchParams)
 		if err != nil {
 			return hbd, err
 		}
 		visibilityQuery = rawQuery
 		executions = adminReq.GetExecutions()
 	} else {
-		rawQuery, err := resolveQuery(batchParams.Request.VisibilityQuery, batchParams)
+		rawQuery, err := resolveRelativeTimestamps(batchParams.Request.VisibilityQuery, batchParams)
 		if err != nil {
 			return hbd, err
 		}
@@ -427,9 +429,9 @@ func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
 	)
 }
 
-// resolveQuery resolves NOW() based expressions in query using BatchStartTime as the anchor.
+// resolveRelativeTimestamps resolves NOW() based expressions in query using BatchStartTime as the anchor.
 // Returns the query unchanged if BatchStartTime is not set or the query contains no NOW().
-func resolveQuery(query string, batchParams *batchspb.BatchOperationInput) (string, error) {
+func resolveRelativeTimestamps(query string, batchParams *batchspb.BatchOperationInput) (string, error) {
 	if batchParams.GetBatchStartTime() == nil || query == "" {
 		return query, nil
 	}

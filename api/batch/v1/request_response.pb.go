@@ -41,8 +41,10 @@ type BatchOperationInput struct {
 	Request *v11.StartBatchOperationRequest `protobuf:"bytes,7,opt,name=request,proto3" json:"request,omitempty"`
 	// The request to start an admin batch operation.
 	// Mutually exclusive with StartBatchOperationRequest request.
-	AdminRequest   *v12.StartAdminBatchOperationRequest `protobuf:"bytes,8,opt,name=admin_request,json=adminRequest,proto3" json:"admin_request,omitempty"`
-	BatchStartTime *timestamppb.Timestamp               `protobuf:"bytes,9,opt,name=batch_start_time,json=batchStartTime,proto3" json:"batch_start_time,omitempty"`
+	AdminRequest *v12.StartAdminBatchOperationRequest `protobuf:"bytes,8,opt,name=admin_request,json=adminRequest,proto3" json:"admin_request,omitempty"`
+	// The time at which the batch workflow started. Used as the anchor for resolving
+	// NOW() based relative timestamps in the visibility query.
+	BatchStartTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=batch_start_time,json=batchStartTime,proto3" json:"batch_start_time,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }

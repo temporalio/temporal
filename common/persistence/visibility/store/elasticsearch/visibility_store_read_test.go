@@ -679,7 +679,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.NoError(err)
 	serializedToken, _ := s.visibilityStore.serializePageToken(&visibilityPageToken{
 		SearchAfter: []any{1547596872371234567, "e481009e-14b3-45ae-91af-dce6e2a88365"},
-		QueryTime:   queryTime,
+		QueryTime:   &queryTime,
 	})
 	s.Equal(serializedToken, resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
@@ -705,7 +705,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.NoError(err)
 	s.Equal(int64(1547596872371234567), resultSortValue)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", nextPageToken.SearchAfter[1])
-	s.Equal(queryTime, nextPageToken.QueryTime)
+	s.Equal(&queryTime, nextPageToken.QueryTime)
 	// for last page
 	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits+1, nil, queryTime)
 	s.NoError(err)
@@ -726,9 +726,10 @@ func (s *ESVisibilitySuite) TestDeserializePageToken() {
 	s.NoError(err)
 	s.Nil(result)
 
+	tokenQueryTime := time.Date(2026, 3, 31, 17, 0, 0, 0, time.UTC)
 	token := &visibilityPageToken{
 		SearchAfter: []any{int64(1629936710090695939), "unique"},
-		QueryTime:   time.Date(2026, 3, 31, 17, 0, 0, 0, time.UTC),
+		QueryTime:   &tokenQueryTime,
 	}
 	data, err := s.visibilityStore.serializePageToken(token)
 	s.NoError(err)
@@ -750,9 +751,10 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 
 	sortTime := int64(123)
 	tieBreaker := "unique"
+	newTokenQueryTime := time.Date(2026, 3, 31, 17, 0, 0, 0, time.UTC)
 	newToken := &visibilityPageToken{
 		SearchAfter: []any{sortTime, tieBreaker},
-		QueryTime:   time.Date(2026, 3, 31, 17, 0, 0, 0, time.UTC),
+		QueryTime:   &newTokenQueryTime,
 	}
 	data, err = s.visibilityStore.serializePageToken(newToken)
 	s.NoError(err)
