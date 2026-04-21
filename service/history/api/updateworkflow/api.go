@@ -287,7 +287,7 @@ func (u *Updater) OnSuccess(
 					Namespace:  u.req.Request.Namespace,
 					WorkflowId: u.wfKey.WorkflowID,
 					RunId:      u.wfKey.RunID,
-					Reason:     enumspb.LINK_REASON_UPDATE_REJECTED,
+					Reason:     "Update rejected",
 				},
 			},
 		}

@@ -121,7 +121,7 @@ func makeUpdateWithCallbackHandler(
 			} else if wfLink := link.GetWorkflow(); wfLink != nil {
 				// Rejected update: link points to the workflow with a reason.
 				require.Equal(t, cfg.childWfID, wfLink.GetWorkflowId())
-				require.Equal(t, enumspb.LINK_REASON_UPDATE_REJECTED, wfLink.GetReason())
+				require.Equal(t, "Update rejected", wfLink.GetReason())
 			} else {
 				require.Fail(t, "link should be a workflow event or workflow link")
 			}

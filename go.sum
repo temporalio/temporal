@@ -290,8 +290,8 @@ github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+
 github.com/lib/pq v1.10.9/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
 github.com/lib/pq v1.12.3 h1:tTWxr2YLKwIvK90ZXEw8GP7UFHtcbTtty8zsI+YjrfQ=
 github.com/lib/pq v1.12.3/go.mod h1:/p+8NSbOcwzAEI7wiMXFlgydTwcgTr3OSKMsD2BitpA=
-github.com/long-nt-tran/api-go v0.0.0-20260420151320-834f1c6a9ade h1:xPIYRANUyT4WUvYv7Xh8YqTaH1jYNfflJtbAtBpiUU8=
-github.com/long-nt-tran/api-go v0.0.0-20260420151320-834f1c6a9ade/go.mod h1:iaxoP/9OXMJcQkETTECfwYq4cw/bj4nwov8b3ZLVnXM=
+github.com/long-nt-tran/api-go v0.0.0-20260428020446-9a210c7b2dac h1:swzL7gPCOVcXah4RraommlFZOyzEHrMn0JwKooE+xKo=
+github.com/long-nt-tran/api-go v0.0.0-20260428020446-9a210c7b2dac/go.mod h1:iaxoP/9OXMJcQkETTECfwYq4cw/bj4nwov8b3ZLVnXM=
 github.com/mailru/easyjson v0.9.2 h1:dX8U45hQsZpxd80nLvDGihsQ/OxlvTkVUXH2r/8cb2M=
 github.com/mailru/easyjson v0.9.2/go.mod h1:1+xMtQp2MRNVL/V1bOzuP3aP8VNwRW55fQUto+XFtTU=
 github.com/maruel/panicparse/v2 v2.5.0 h1:yCtuS0FWjfd0RTYMXGpDvWcb0kINm8xJGu18/xMUh00=
