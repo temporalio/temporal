@@ -271,7 +271,50 @@ func validateAndNormalizeSearchAttributes(
 	return saValidator.ValidateSize(saToValidate, namespaceName)
 }
 
-func validateAndNormalizeDescribeActivityExecutionRequest(
+func validateAndNormalizeStartRequest(
+	req *workflowservice.StartActivityExecutionRequest,
+	maxIDLengthLimit int,
+	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	logger log.Logger,
+	saMapperProvider searchattribute.MapperProvider,
+	saValidator *searchattribute.Validator,
+) error {
+	if len(req.GetRequestId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRequestId()), maxIDLengthLimit)
+	}
+
+	if len(req.GetIdentity()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
+	}
+
+	if err := normalizeAndValidateIDPolicy(req); err != nil {
+		return err
+	}
+
+	if err := validateBlobSize(
+		req.GetActivityId(),
+		"StartActivityExecution",
+		blobSizeLimitError,
+		blobSizeLimitWarn,
+		req.Input.Size(),
+		logger,
+		req.GetNamespace()); err != nil {
+		return serviceerror.NewInvalidArgument("input exceeds length limit")
+	}
+
+	if req.GetSearchAttributes() != nil {
+		if err := validateAndNormalizeSearchAttributes(req, saMapperProvider, saValidator); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateDescribeActivityExecutionRequest(
 	req *workflowservice.DescribeActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
@@ -297,7 +340,7 @@ func validateAndNormalizeDescribeActivityExecutionRequest(
 	return nil
 }
 
-func validateAndNormalizePollActivityExecutionRequest(
+func validatePollActivityExecutionRequest(
 	req *workflowservice.PollActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
@@ -317,17 +360,13 @@ func validateAndNormalizePollActivityExecutionRequest(
 	return nil
 }
 
-func validateAndNormalizeRequestCancelActivityExecutionRequest(
+func validateRequestCancelActivityExecutionRequest(
 	req *workflowservice.RequestCancelActivityExecutionRequest,
 	maxIDLengthLimit int,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 ) error {
-	if req.GetRequestId() == "" {
-		req.RequestId = uuid.NewString()
-	}
-
 	if req.GetActivityId() == "" {
 		return serviceerror.NewInvalidArgument("activity ID is required")
 	}
@@ -370,7 +409,7 @@ func validateAndNormalizeRequestCancelActivityExecutionRequest(
 }
 
 //nolint:revive // cyclomatic: per-field validation of a field-mask update requires explicit handling of each field
-func validateAndNormalizeUpdateActivityExecutionOptionsRequest(
+func validateUpdateActivityExecutionOptionsRequest(
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
 	maxIDLengthLimit int,
 ) error {
@@ -495,7 +534,7 @@ func validateAndNormalizeUpdateActivityExecutionOptionsRequest(
 	return nil
 }
 
-func validateAndNormalizeDeleteActivityExecutionRequest(
+func validateDeleteActivityExecutionRequest(
 	req *workflowservice.DeleteActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
@@ -518,17 +557,13 @@ func validateAndNormalizeDeleteActivityExecutionRequest(
 	return nil
 }
 
-func validateAndNormalizeTerminateActivityExecutionRequest(
+func validateTerminateActivityExecutionRequest(
 	req *workflowservice.TerminateActivityExecutionRequest,
 	maxIDLengthLimit int,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 ) error {
-	if req.GetRequestId() == "" {
-		req.RequestId = uuid.NewString()
-	}
-
 	if req.GetActivityId() == "" {
 		return serviceerror.NewInvalidArgument("activity ID is required")
 	}
@@ -570,7 +605,7 @@ func validateAndNormalizeTerminateActivityExecutionRequest(
 	return nil
 }
 
-func validateAndNormalizePauseActivityExecutionRequest(
+func validatePauseActivityExecutionRequest(
 	req *workflowservice.PauseActivityExecutionRequest,
 	maxIDLengthLimit int,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
@@ -631,7 +666,7 @@ func validateResetActivityExecutionRequest(
 	return nil
 }
 
-func validateAndNormalizeUnpauseActivityExecutionRequest(
+func validateUnpauseActivityExecutionRequest(
 	req *workflowservice.UnpauseActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
