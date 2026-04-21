@@ -1205,6 +1205,8 @@ message CompleteNexusOperationChasmRequest {
   }
   // Time when the operation was closed.
   google.protobuf.Timestamp close_time = 4;
+  // Links from the Nexus completion callback (e.g. references to the handler workflow).
+  repeated temporal.api.common.v1.Link links = 5;
 }
 
 message CompleteNexusOperationChasmResponse {}

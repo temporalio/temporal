@@ -48,7 +48,6 @@ const (
 	testVersionDrainageVisibilityGracePeriod     = 3 * time.Second
 	testLongVersionDrainageRefreshInterval       = 10 * time.Second
 	testLongVersionDrainageVisibilityGracePeriod = 10 * time.Second
-	testExtraLongVersionDrainageRefreshInterval  = 30 * time.Second
 	testVersionMembershipCacheTTL                = 5 * time.Second
 	testMaxVersionsInDeployment                  = 4
 )

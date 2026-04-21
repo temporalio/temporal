@@ -209,6 +209,8 @@ func TestRouteSystemCallbackRequest_NamespaceNotFound(t *testing.T) {
 	tokenStr, err := tokenGen.Tokenize(&tokenspb.NexusOperationCompletion{
 		NamespaceId: "ns-id-1",
 		WorkflowId:  "wf-1",
+		RunId:       "run-1",
+		Ref:         &persistencespb.StateMachineRef{},
 	})
 	require.NoError(t, err)
 
@@ -250,6 +252,8 @@ func TestRouteSystemCallbackRequest_Success(t *testing.T) {
 	tokenStr, err := tokenGen.Tokenize(&tokenspb.NexusOperationCompletion{
 		NamespaceId: "ns-id-1",
 		WorkflowId:  "wf-1",
+		RunId:       "run-1",
+		Ref:         &persistencespb.StateMachineRef{},
 	})
 	require.NoError(t, err)
 
