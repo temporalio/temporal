@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -389,33 +390,38 @@ func TestIsRetryableQueryError(t *testing.T) {
 }
 
 // TestSignalVersionReactivation_RequestIdFormat verifies that SignalVersionReactivation
-// composes a cluster-wide-deterministic RequestId from (deploymentName, buildID, revisionNumber).
-// Every history pod that observes the same (deployment, buildID, revisionNumber) tuple must
-// produce the same RequestId so Temporal's built-in pendingSignalRequestedIDs dedup collapses
-// concurrent signals on the receiver side.
+// produces a deterministic UUID v5 RequestId derived from the revision number. Every
+// history pod that observes the same revisionNumber must produce the same RequestId so
+// the receiver collapses concurrent signals on the same dedup key.
 func (d *deploymentWorkflowClientSuite) TestSignalVersionReactivation_RequestIdFormat() {
 	testCases := []struct {
 		name           string
 		deploymentName string
 		buildID        string
 		revisionNumber int64
-		expectedReqID  string
 	}{
 		{
-			name:           "new format with non-zero revision",
+			name:           "non-zero revision",
 			deploymentName: "my-deployment",
 			buildID:        "build-42",
 			revisionNumber: 7,
-			expectedReqID:  "reactivate:my-deployment:build-42:7",
 		},
 		{
-			name:           "zero revision (old matching or legacy format)",
+			name:           "zero revision (legacy format / never synced)",
 			deploymentName: "my-deployment",
 			buildID:        "build-42",
 			revisionNumber: 0,
-			expectedReqID:  "reactivate:my-deployment:build-42:0",
+		},
+		{
+			name:           "same revision, different deployment/build — same RequestId (workflow scoping comes from WorkflowID)",
+			deploymentName: "other-deployment",
+			buildID:        "build-1",
+			revisionNumber: 7,
 		},
 	}
+
+	uuidRe := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	reqIDsByRevision := map[int64]string{}
 
 	for _, tc := range testCases {
 		d.Run(tc.name, func() {
@@ -437,7 +443,17 @@ func (d *deploymentWorkflowClientSuite) TestSignalVersionReactivation_RequestIdF
 				tc.revisionNumber,
 			)
 			d.NoError(err)
-			d.Equal(tc.expectedReqID, capturedReqID)
+
+			// RequestId must be a UUID v5 (the "5" in the third group marks name-based SHA-1).
+			d.Regexp(uuidRe, capturedReqID)
+
+			// Determinism: identical revisionNumber across calls must produce identical RequestIds,
+			// regardless of deploymentName/buildID.
+			if prev, ok := reqIDsByRevision[tc.revisionNumber]; ok {
+				d.Equal(prev, capturedReqID)
+			} else {
+				reqIDsByRevision[tc.revisionNumber] = capturedReqID
+			}
 		})
 	}
 }

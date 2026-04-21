@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1999,13 +2000,18 @@ func (d *ClientImpl) SignalVersionReactivation(
 
 	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
 
-	// Compose a cluster-wide-deterministic RequestId so that concurrent reactivation signals
-	// from multiple history pods for the same version at the same revision converge on one
-	// dedup key. The version workflow's mutable state tracks pendingSignalRequestedIDs; if a
-	// signal with this RequestId already arrived, subsequent ones are full no-ops (no event,
-	// no WFT). On CaN the set resets, so a later drain-reactivate cycle (new revision) is
-	// accepted as a new signal.
-	requestID := fmt.Sprintf("reactivate:%s:%s:%d", deploymentName, buildID, revisionNumber)
+	// Deterministic UUID v5 RequestId derived from the revision number. Multiple history
+	// pods that independently decide to reactivate the same version at the same revision
+	// compute the same RequestId and fold into a single signal delivery, since the receiver
+	// dedups on RequestId.
+	//
+	// Revision alone is enough input because the dedup is scoped to this one version
+	// workflow (addressed by workflowID); different (deployment, build) pairs at the same
+	// revision don't collide because they're different workflows.
+	requestID := uuid.NewSHA1(
+		uuid.NameSpaceOID,
+		[]byte("reactivation-signal:"+strconv.FormatInt(revisionNumber, 10)),
+	).String()
 
 	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
 		NamespaceId: namespaceEntry.ID().String(),
