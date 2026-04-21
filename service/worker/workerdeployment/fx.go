@@ -1,6 +1,7 @@
 package workerdeployment
 
 import (
+	"context"
 	"time"
 
 	wciclient "go.temporal.io/auto-scaled-workers/wci/client"
@@ -68,6 +69,7 @@ var Module = fx.Options(
 )
 
 func ClientProvider(
+	lc fx.Lifecycle,
 	logger log.Logger,
 	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
@@ -77,6 +79,13 @@ func ClientProvider(
 	testHooks testhooks.TestHooks,
 	metricsHandler metrics.Handler,
 ) Client {
+	highestRevSignaledToVersionWf := cache.New(dynamicconfig.VersionReactivationSignalCacheMaxSize.Get(dc)(), nil)
+	lc.Append(fx.Hook{
+		OnStop: func(context.Context) error {
+			highestRevSignaledToVersionWf.Stop()
+			return nil
+		},
+	})
 	return &ClientImpl{
 		logger:                           logger,
 		historyClient:                    historyClient,
@@ -89,7 +98,7 @@ func ClientProvider(
 		maxDeployments:                   dynamicconfig.MatchingMaxDeployments.Get(dc),
 		testHooks:                        testHooks,
 		metricsHandler:                   metricsHandler,
-		highestRevSignaledToVersionWf:    cache.New(dynamicconfig.VersionReactivationSignalCacheMaxSize.Get(dc)(), nil),
+		highestRevSignaledToVersionWf:    highestRevSignaledToVersionWf,
 	}
 }
 
