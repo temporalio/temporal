@@ -139,12 +139,23 @@ func (e *invocationTaskTestEnv) setupReadComponent() {
 		gomock.Any(),
 		gomock.Any(),
 	).DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, readFn func(chasm.Context, chasm.Component) error, _ ...chasm.TransitionOption) error {
+		executionKey := chasm.ExecutionKey{
+			NamespaceID: "ns-id",
+			BusinessID:  "wf-id",
+			RunID:       "run-id",
+		}
 		mockCtx := &chasm.MockContext{
+			HandleExecutionKey: func() chasm.ExecutionKey {
+				return executionKey
+			},
 			HandleNow: func(_ chasm.Component) time.Time {
 				return e.timeSource.Now()
 			},
 			HandleRef: func(_ chasm.Component) ([]byte, error) {
 				return []byte{}, nil
+			},
+			HandleNamespaceEntry: func() *namespace.Namespace {
+				return namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0)
 			},
 		}
 		return readFn(mockCtx, e.op)
@@ -519,9 +530,9 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 
 			env := newInvocationTaskTestEnv(t, op,
 				InvocationData{
-					Input:     mustToPayload(t, "input"),
-					Header:    tc.header,
-					NexusLink: callerLink,
+					Input:      mustToPayload(t, "input"),
+					Header:     tc.header,
+					NexusLinks: []nexus.Link{callerLink},
 				},
 				endpointReg, clientProvider, metricsHandler, cmp.Or(tc.requestTimeout, time.Hour))
 
@@ -919,8 +930,11 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 			name: "async start",
 			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
 				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
-				client.EXPECT().StartNexusOperation(gomock.Any(), gomock.Any(), gomock.Any()).Return(
-					&historyservice.StartNexusOperationResponse{
+				client.EXPECT().StartNexusOperation(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *historyservice.StartNexusOperationRequest, _ ...grpc.CallOption) (*historyservice.StartNexusOperationResponse, error) {
+					require.Len(t, request.GetRequest().GetLinks(), 1)
+					require.Equal(t, "temporal.api.common.v1.Link.WorkflowEvent", request.GetRequest().GetLinks()[0].GetType())
+
+					return &historyservice.StartNexusOperationResponse{
 						Response: &nexuspb.StartOperationResponse{
 							Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
 								AsyncSuccess: &nexuspb.StartOperationResponse_Async{
@@ -931,8 +945,8 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 								},
 							},
 						},
-					}, nil,
-				)
+					}, nil
+				})
 				return client
 			},
 			setupChasmRegistry: func() *chasm.Registry {
@@ -954,6 +968,9 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
 				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
 				client.EXPECT().StartNexusOperation(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *historyservice.StartNexusOperationRequest, opts ...grpc.CallOption) (*historyservice.StartNexusOperationResponse, error) {
+					require.Len(t, request.GetRequest().GetLinks(), 1)
+					require.Equal(t, "temporal.api.common.v1.Link.WorkflowEvent", request.GetRequest().GetLinks()[0].GetType())
+
 					var input testProcessorInput
 					if err := payloads.Decode(&commonpb.Payloads{Payloads: []*commonpb.Payload{request.Request.Payload}}, &input); err != nil {
 						return nil, err
@@ -1118,7 +1135,7 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 			})
 
 			env := newInvocationTaskTestEnv(t, op,
-				InvocationData{Input: input, NexusLink: callerLink},
+				InvocationData{Input: input, NexusLinks: []nexus.Link{callerLink}},
 				nexustest.FakeEndpointRegistry{}, nil, metricsHandler, time.Hour)
 
 			// Set up system endpoint dependencies.

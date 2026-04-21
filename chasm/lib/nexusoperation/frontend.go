@@ -86,11 +86,13 @@ func (h *frontendHandler) StartNexusOperationExecution(
 	}
 
 	// Verify the endpoint exists before creating the operation.
-	if _, err := h.endpointRegistry.GetByName(ctx, namespaceID, req.GetEndpoint()); err != nil {
+	endpointEntry, err := h.endpointRegistry.GetByName(ctx, namespaceID, req.GetEndpoint())
+	if err != nil {
 		return nil, err
 	}
 
 	resp, err := h.client.StartNexusOperation(ctx, &nexusoperationpb.StartNexusOperationRequest{
+		EndpointId:      endpointEntry.GetId(),
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
 	})

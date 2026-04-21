@@ -69,8 +69,8 @@ func (m *mockStoreComponent) OnNexusOperationStarted(ctx chasm.MutableContext, o
 	return TransitionStarted.Apply(op, ctx, EventStarted{OperationToken: operationToken})
 }
 
-func (m *mockStoreComponent) OnNexusOperationCompleted(ctx chasm.MutableContext, op *Operation, _ *commonpb.Payload, _ []*commonpb.Link) error {
-	return TransitionSucceeded.Apply(op, ctx, EventSucceeded{})
+func (m *mockStoreComponent) OnNexusOperationCompleted(ctx chasm.MutableContext, op *Operation, result *commonpb.Payload, _ []*commonpb.Link) error {
+	return TransitionSucceeded.Apply(op, ctx, EventSucceeded{Result: result})
 }
 
 func (m *mockStoreComponent) OnNexusOperationFailed(ctx chasm.MutableContext, op *Operation, cause *failurepb.Failure) error {
