@@ -59,6 +59,10 @@ func Invoke(
 	)
 	request := startRequest.StartRequest
 
+	api.MigrateWorkflowIdReusePolicyForRunningWorkflow(
+		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdReusePolicy,
+		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdConflictPolicy)
+
 	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistorySignalWithStartWorkflowExecutionScope, shard, shard.GetMetricsHandler())
 
 	err = api.ValidateStartWorkflowExecutionRequest(ctx, request, shard, namespaceEntry, "SignalWithStartWorkflowExecution")
