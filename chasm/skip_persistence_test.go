@@ -6,15 +6,16 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
 )
 
-func (s *nodeSuite) TestSkipPersistenceIfUnchanged_NewNode() {
+func (s *nodeSuite) TestSkipPersistenceIfClean_NewNode() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
 	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
-	rootComponent := &TestSkipIfUnchangedComponent{
+	rootComponent := &TestSkipIfCleanComponent{
 		Data: &persistencespb.WorkflowExecutionState{
 			RunId: "initial-run-id",
 		},
@@ -28,13 +29,13 @@ func (s *nodeSuite) TestSkipPersistenceIfUnchanged_NewNode() {
 	s.Contains(mutation.UpdatedNodes, "", "root node must be in UpdatedNodes for new component")
 	s.NotNil(mutation.UpdatedNodes[""].GetData(), "data must be serialized")
 }
-func (s *nodeSuite) TestSkipPersistenceIfUnchanged_LoadedUnmodified() {
+func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedUnmodified() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
 	// ---- First transaction: create and persist the component. ----
 	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
-	rootComponent := &TestSkipIfUnchangedComponent{
+	rootComponent := &TestSkipIfCleanComponent{
 		Data: &persistencespb.WorkflowExecutionState{
 			RunId: "some-run-id",
 		},
@@ -61,7 +62,7 @@ func (s *nodeSuite) TestSkipPersistenceIfUnchanged_LoadedUnmodified() {
 	ctx := NewMutableContext(context.Background(), rootNode2)
 	component, err := rootNode2.Component(ctx, ComponentRef{})
 	s.NoError(err)
-	s.IsType(&TestSkipIfUnchangedComponent{}, component, "should deserialize as TestSkipIfUnchangedComponent")
+	s.IsType(&TestSkipIfCleanComponent{}, component, "should deserialize as TestSkipIfCleanComponent")
 
 	secondMutation, err := rootNode2.CloseTransaction()
 	s.NoError(err)
@@ -77,13 +78,13 @@ func (s *nodeSuite) TestSkipPersistenceIfUnchanged_LoadedUnmodified() {
 	)
 }
 
-func (s *nodeSuite) TestSkipPersistenceIfUnchanged_LoadedModified() {
+func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedModified() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
 	// ---- First transaction: create and persist. ----
 	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
-	rootComponent := &TestSkipIfUnchangedComponent{
+	rootComponent := &TestSkipIfCleanComponent{
 		Data: &persistencespb.WorkflowExecutionState{
 			RunId: "original-run-id",
 		},
@@ -106,7 +107,7 @@ func (s *nodeSuite) TestSkipPersistenceIfUnchanged_LoadedModified() {
 	s.NoError(err)
 
 	// Mutate the data field.
-	component.(*TestSkipIfUnchangedComponent).Data.RunId = "modified-run-id"
+	component.(*TestSkipIfCleanComponent).Data.RunId = "modified-run-id"
 
 	secondMutation, err := rootNode2.CloseTransaction()
 	s.NoError(err)
@@ -120,13 +121,59 @@ func (s *nodeSuite) TestSkipPersistenceIfUnchanged_LoadedModified() {
 	)
 }
 
-func (s *nodeSuite) TestSkipPersistenceIfUnchanged_WithoutFlag() {
+func (s *nodeSuite) TestSkipPersistenceIfClean_WithNewTask() {
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
+	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
+
+	// ---- First transaction: create and persist. ----
+	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	rootComponent := &TestSkipIfCleanComponent{
+		Data: &persistencespb.WorkflowExecutionState{
+			RunId: "some-run-id",
+		},
+	}
+	s.NoError(rootNode.SetRootComponent(rootComponent))
+
+	firstMutation, err := rootNode.CloseTransaction()
+	s.NoError(err)
+	persistedNodes := common.CloneProtoMap(firstMutation.UpdatedNodes)
+
+	// ---- Second transaction: load, do NOT mutate data, but schedule a task. ----
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
+
+	rootNode2, err := NewTreeFromDB(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	s.NoError(err)
+
+	ctx := NewMutableContext(context.Background(), rootNode2)
+	component, err := rootNode2.Component(ctx, ComponentRef{})
+	s.NoError(err)
+
+	skipComponent := component.(*TestSkipIfCleanComponent)
+
+	// Data is unchanged, but schedule a side-effect task on this component.
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+	ctx.AddTask(skipComponent, TaskAttributes{}, &TestSideEffectTask{
+		Data: []byte("task-payload"),
+	})
+
+	secondMutation, err := rootNode2.CloseTransaction()
+	s.NoError(err)
+
+	// Despite unchanged data, the node must appear in UpdatedNodes so the task is persisted.
+	s.Contains(secondMutation.UpdatedNodes, "", "node with a new task must be in UpdatedNodes even if data is unchanged")
+	componentAttr := secondMutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
+	s.Len(componentAttr.SideEffectTasks, 1, "side-effect task must be written to the persisted node")
+}
+
+func (s *nodeSuite) TestSkipPersistenceIfClean_WithoutFlag() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
 	// ---- First transaction: create and persist a TestSubComponent2 (no skip flag). ----
 	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
-	// Use TestSubComponent2 which does NOT have WithSkipPersistenceIfUnchanged.
+	// Use TestSubComponent2 which does NOT have WithSkipPersistenceIfClean.
 	sc2 := &TestSubComponent2{
 		SubComponent2Data: &persistencespb.WorkflowExecutionState{
 			RunId: "sc2-run-id",
