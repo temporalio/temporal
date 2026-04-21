@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 )
@@ -83,6 +84,8 @@ func TestCallbackTokenGenerator_DecodeCompletion(t *testing.T) {
 		}
 
 		require.ErrorContains(t, err, tc.wantErr, tc.name)
+		var invalidArgumentErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgumentErr, tc.name)
 		require.Nil(t, completion, tc.name)
 	}
 }

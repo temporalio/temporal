@@ -3,8 +3,8 @@ package nexus
 import (
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 
+	"go.temporal.io/api/serviceerror"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -81,13 +81,13 @@ func validateCompletion(completion *tokenspb.NexusOperationCompletion) error {
 
 	switch {
 	case hasCHASMRef && hasHSMRef:
-		return errors.New("callback token contains both HSM and CHASM fields")
+		return serviceerror.NewInvalidArgument("callback token contains both HSM and CHASM fields")
 	case hasCHASMRef:
 		return nil
 	case isCompleteHSM:
 		return nil
 	default:
-		return errors.New("callback token must contain either all HSM fields or a component ref")
+		return serviceerror.NewInvalidArgument("callback token must contain either all HSM fields or a component ref")
 	}
 }
 
