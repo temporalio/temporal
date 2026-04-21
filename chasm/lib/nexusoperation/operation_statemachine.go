@@ -3,6 +3,7 @@ package nexusoperation
 import (
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
@@ -160,7 +161,7 @@ type EventSucceeded struct {
 	// If not nil, uses the provided time instead of the current component time.
 	// Used when a completion comes in before start is recorded (rare race).
 	CompleteTime *time.Time
-	// TODO(stephan): Store result
+	Result       *commonpb.Payload
 }
 
 var TransitionSucceeded = chasm.NewTransition(
@@ -179,6 +180,11 @@ var TransitionSucceeded = chasm.NewTransition(
 		}
 		o.NextAttemptScheduleTime = nil
 		o.ClosedTime = timestamppb.New(closeTime)
+
+		o.getOrCreateOutcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Successful_{
+			Successful: &nexusoperationpb.OperationOutcome_Successful{Result: event.Result},
+		}
+
 		// Terminal state - no tasks to emit.
 		return nil
 	},

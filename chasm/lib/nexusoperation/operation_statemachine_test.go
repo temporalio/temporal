@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
@@ -335,15 +336,18 @@ func TestTransitionSucceeded(t *testing.T) {
 	testCases := []struct {
 		name               string
 		completeTime       *time.Time
+		result             *commonpb.Payload
 		expectedClosedTime time.Time
 	}{
 		{
 			name:               "uses default time",
+			result:             mustToPayload(t, "result"),
 			expectedClosedTime: defaultTime,
 		},
 		{
 			name:               "uses event CompleteTime",
 			completeTime:       &customCompleteTime,
+			result:             mustToPayload(t, "result"),
 			expectedClosedTime: customCompleteTime,
 		},
 	}
@@ -361,11 +365,16 @@ func TestTransitionSucceeded(t *testing.T) {
 
 			err := TransitionSucceeded.Apply(operation, ctx, EventSucceeded{
 				CompleteTime: tc.completeTime,
+				Result:       tc.result,
 			})
 			require.NoError(t, err)
-
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, operation.Status)
 			require.Equal(t, tc.expectedClosedTime, operation.ClosedTime.AsTime())
+
+			outcome, ok := operation.Outcome.TryGet(ctx)
+			require.True(t, ok)
+			require.NotNil(t, outcome.GetSuccessful())
+			protorequire.ProtoEqual(t, tc.result, outcome.GetSuccessful().GetResult())
 			require.Empty(t, ctx.Tasks)
 		})
 	}
