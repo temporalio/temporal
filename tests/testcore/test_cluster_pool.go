@@ -1,6 +1,7 @@
 package testcore
 
 import (
+	"fmt"
 	"os"
 	"runtime"
 	"strconv"
@@ -8,7 +9,9 @@ import (
 	"sync/atomic"
 	"testing"
 
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/components/nexusoperations"
 )
 
 var testClusterPool *clusterPool
@@ -184,6 +187,13 @@ func (p *clusterPool) createCluster(t *testing.T, dynamicConfig map[dynamicconfi
 	}
 
 	tbase.setupCluster(opts...)
+
+	// Set Nexus callback URL now that we have the cluster's HTTP address. Note that we set
+	// a default for the global config here so callers that rely on this can still use a shared cluster.
+	//nolint:revive // test callback endpoints are served by the local HTTP API in functional tests
+	nexusCallbackTemplate := fmt.Sprintf("http://%s/namespaces/{{.NamespaceName}}/nexus/callback", tbase.HttpAPIAddress())
+	tbase.testCluster.host.overrideDynamicConfigForClusterLifetime(nexusoperations.CallbackURLTemplate.Key(), nexusCallbackTemplate)
+	tbase.testCluster.host.overrideDynamicConfigForClusterLifetime(chasmnexus.CallbackURLTemplate.Key(), nexusCallbackTemplate)
 
 	return tbase
 }
