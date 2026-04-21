@@ -30,11 +30,10 @@ type (
 const (
 	// minCalendarYear is the smallest year that can appear in a calendar spec.
 	minCalendarYear = 2000
-	// maxCalendarYear is the latest year that will be calculated for calendar dates.
-	// This protects against DoS from calculating far into the future. Specs can reference
+	// MaxCalendarYear is the upper limit for calendar date computation. Specs can reference
 	// years beyond this limit, but actual calculation will stop here. Future server versions
 	// can safely increase this limit.
-	maxCalendarYear = 2100
+	MaxCalendarYear = 2100
 	// maxSpecYear is the largest year allowed in a schedule spec. This is set to a very
 	// large value to effectively remove the restriction while still preventing absurd values.
 	maxSpecYear = 9999
@@ -161,7 +160,7 @@ Outer:
 		if mo > time.December {
 			y, mo = y+1, time.January
 		}
-		if y > maxCalendarYear {
+		if y > MaxCalendarYear {
 			break Outer
 		}
 		// try to match year, month, etc. from outside in

@@ -506,3 +506,58 @@ func (s *specSuite) TestSpecFarFutureYear() {
 		time.Time{}, // returns zero time since 2150 is beyond calculation bound
 	)
 }
+
+func (s *specSuite) TestSpecMaxSpecYearBoundary() {
+	// Year 9999 (maxSpecYear) should be accepted.
+	_, err := canonicalizeSpec(&schedulepb.ScheduleSpec{
+		StructuredCalendar: []*schedulepb.StructuredCalendarSpec{
+			{Year: []*schedulepb.Range{{Start: 9999}}},
+		},
+	})
+	s.NoError(err)
+
+	// Year 10000 (beyond maxSpecYear) should be rejected.
+	_, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
+		StructuredCalendar: []*schedulepb.StructuredCalendarSpec{
+			{Year: []*schedulepb.Range{{Start: 10000}}},
+		},
+	})
+	s.Error(err)
+}
+
+func (s *specSuite) TestSpecYearStraddlesMaxCalendarYear() {
+	s.checkSequenceFull(
+		"",
+		&schedulepb.ScheduleSpec{
+			Calendar: []*schedulepb.CalendarSpec{
+				{Hour: "0", Minute: "0", DayOfMonth: "1", Month: "1", Year: "2098-2150"},
+			},
+		},
+		time.Date(2097, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2098, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Time{}, // stops at MaxCalendarYear
+	)
+}
+
+func (s *specSuite) TestSpecFullYearRange() {
+	_, err := canonicalizeSpec(&schedulepb.ScheduleSpec{
+		StructuredCalendar: []*schedulepb.StructuredCalendarSpec{
+			{Year: []*schedulepb.Range{{Start: 2000, End: 9999}}},
+		},
+	})
+	s.NoError(err)
+
+	s.checkSequenceFull(
+		"",
+		&schedulepb.ScheduleSpec{
+			Calendar: []*schedulepb.CalendarSpec{
+				{Hour: "0", Minute: "0", DayOfMonth: "1", Month: "1", Year: "2000-9999"},
+			},
+		},
+		time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Time{}, // stops at MaxCalendarYear
+	)
+}
