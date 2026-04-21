@@ -114,14 +114,14 @@ func (s *healthCheckerSuite) Test_Unhealthy_Host_Tracker() {
 	s.Require().Len(declinedServing, 1, "Should be one declined host. Instead found: %+v", declinedServing)
 	s.Require().Len(otherUnhealthy, 2, "Should be two other unhealthy hosts. Instead found: %+v", otherUnhealthy)
 	declinedServing, otherUnhealthy = tracker.unhealthyHosts(time.Unix(1, 0), 1*time.Second)
-	s.Require().Len(declinedServing, 0, "Should be no declined hosts. Instead found: %+v", declinedServing)
-	s.Require().Len(otherUnhealthy, 0, "Should be no other unhealthy hosts. Instead found: %+v", otherUnhealthy)
+	s.Require().Empty(declinedServing, "Should be no declined hosts. Instead found: %+v", declinedServing)
+	s.Require().Empty(otherUnhealthy, "Should be no other unhealthy hosts. Instead found: %+v", otherUnhealthy)
 
 	// Demonstrate status updates to existing host
 	tracker.trackUnhealthyHost("A", time.Unix(2, 0), enumsspb.HEALTH_STATE_NOT_SERVING)
 	s.Require().Equal(tracker.hosts["A"].failedAt, time.Unix(1, 0), "Host A should keep original time, but was %v", tracker.hosts["A"].failedAt.Unix())
 	tracker.trackUnhealthyHost("A", time.Unix(3, 0), enumsspb.HEALTH_STATE_DECLINED_SERVING)
-	s.Require().Equal(tracker.hosts["A"].lastSeenHealth, enumsspb.HEALTH_STATE_DECLINED_SERVING, "Host A should now be DECLINED_SERVING, but was %s", tracker.hosts["A"].lastSeenHealth.String())
+	s.Require().Equal(enumsspb.HEALTH_STATE_DECLINED_SERVING, tracker.hosts["A"].lastSeenHealth, "Host A should now be DECLINED_SERVING, but was %s", tracker.hosts["A"].lastSeenHealth.String())
 	s.Require().Equal(tracker.hosts["A"].failedAt, time.Unix(1, 0), "Host A should keep original time, but was %v", tracker.hosts["A"].failedAt.Unix())
 
 	// Test stale entries
@@ -147,8 +147,8 @@ func (s *healthCheckerSuite) Test_Unhealthy_Host_Tracker() {
 	tracker.clearStaleEntries([]*healthspb.HostHealthDetail{})
 	// Host list empty -> No more unhealthy hosts
 	declinedServing, otherUnhealthy = tracker.unhealthyHosts(time.Unix(2, 0), 1*time.Second)
-	s.Require().Len(declinedServing, 0, "Should be no declined hosts. Instead found: %+v", declinedServing)
-	s.Require().Len(otherUnhealthy, 0, "Should be no other unhealthy hosts. Instead found: %+v", otherUnhealthy)
+	s.Require().Empty(declinedServing, "Should be no declined hosts. Instead found: %+v", declinedServing)
+	s.Require().Empty(otherUnhealthy, "Should be no other unhealthy hosts. Instead found: %+v", otherUnhealthy)
 }
 
 func (s *healthCheckerSuite) Test_Check_Serving() {

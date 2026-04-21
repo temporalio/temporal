@@ -57,9 +57,9 @@ type (
 
 var _ HealthChecker = (*healthCheckerImpl)(nil)
 
+// trackUnhealthyHost tracks the last time a host failed health check.
+// Must be called with mu held.
 func (u *unhealthyHostTracker) trackUnhealthyHost(address string, now time.Time, state enumsspb.HealthState) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
 	if existing, present := u.hosts[address]; !present || existing.lastSeenHealth != state {
 		// Preserve the earliest time that the host failed, even if it changes states
 		var failedAt time.Time
@@ -76,17 +76,17 @@ func (u *unhealthyHostTracker) trackUnhealthyHost(address string, now time.Time,
 	}
 }
 
-func (u *unhealthyHostTracker) clearStaleEntries(details []*healthspb.HostHealthDetail) {
+// clearStaleEntries removes any entries from the tracker that are no longer in the list of hosts.
+// Must be called with mu held.
+func (u *unhealthyHostTracker) clearStaleEntries(hosts []*healthspb.HostHealthDetail) {
 	validAddresses := make(map[string]struct{})
-	for _, detail := range details {
+	for _, host := range hosts {
 		// Keep any addresses that are failing or declined serving.
-		if detail.GetState() == enumsspb.HEALTH_STATE_SERVING {
+		if host.GetState() == enumsspb.HEALTH_STATE_SERVING {
 			continue
 		}
-		validAddresses[detail.GetAddress()] = struct{}{}
+		validAddresses[host.GetAddress()] = struct{}{}
 	}
-	u.mu.Lock()
-	defer u.mu.Unlock()
 	for address := range u.hosts {
 		if _, present := validAddresses[address]; !present {
 			delete(u.hosts, address)
@@ -94,9 +94,9 @@ func (u *unhealthyHostTracker) clearStaleEntries(details []*healthspb.HostHealth
 	}
 }
 
+// unhealthyHosts returns a list of hosts that have failed health check recently.
+// Must be called with mu held.
 func (u *unhealthyHostTracker) unhealthyHosts(now time.Time, duration time.Duration) (declinedServing []unhealthyHostRecord, otherUnhealthy []unhealthyHostRecord) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
 	for _, record := range u.hosts {
 		if now.Sub(record.failedAt) >= duration {
 			if record.lastSeenHealth == enumsspb.HEALTH_STATE_DECLINED_SERVING {
@@ -107,6 +107,18 @@ func (u *unhealthyHostTracker) unhealthyHosts(now time.Time, duration time.Durat
 		}
 	}
 	return
+}
+
+// filterUnhealthyHosts updates the local host health entries while holding mu, then returns the unhealthy hosts.
+func (u *unhealthyHostTracker) filterUnhealthyHosts(hostHealths []*healthspb.HostHealthDetail, now time.Time,
+	threshold time.Duration) (declinedServing []unhealthyHostRecord, otherUnhealthy []unhealthyHostRecord) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	for _, result := range hostHealths {
+		u.trackUnhealthyHost(result.Address, now, result.State)
+	}
+	u.clearStaleEntries(hostHealths)
+	return u.unhealthyHosts(now, threshold)
 }
 
 func NewHealthChecker(
@@ -155,49 +167,8 @@ func (h *healthCheckerImpl) Check(ctx context.Context, now time.Time) (HealthChe
 		}, nil
 	}
 
-	receiveCh := make(chan hostResult, len(hosts))
-	for _, host := range hosts {
-		go func(hostAddress string) {
-			resp, err := h.checkHost(ctx, hostAddress)
-			if err != nil {
-				resp = &historyservice.DeepHealthCheckResponse{
-					State: enumsspb.HEALTH_STATE_NOT_SERVING,
-					Checks: []*healthspb.HealthCheck{
-						{
-							CheckType: health.CheckTypeHostAvailability,
-							State:     enumsspb.HEALTH_STATE_NOT_SERVING,
-							Message:   fmt.Sprintf("failed to reach host for health check: %v", err),
-						},
-					},
-				}
-			}
-			receiveCh <- hostResult{address: hostAddress, response: resp}
-		}(host.GetAddress())
-	}
-
-	var hostDetails []*healthspb.HostHealthDetail
-	var exampleFailedHost *healthspb.HostHealthDetail
-	for range hosts {
-		result := <-receiveCh
-		state := result.response.GetState()
-
-		detail := &healthspb.HostHealthDetail{
-			Address: result.address,
-			State:   state,
-			Checks:  result.response.GetChecks(),
-		}
-		hostDetails = append(hostDetails, detail)
-
-		if detail.State != enumsspb.HEALTH_STATE_SERVING {
-			// NOT_SERVING, UNSPECIFIED, INTERNAL_ERROR, or any unknown state.
-			h.recentUnhealthyHosts.trackUnhealthyHost(result.address, now, state)
-			exampleFailedHost = detail
-		}
-	}
-	close(receiveCh)
-
-	h.recentUnhealthyHosts.clearStaleEntries(hostDetails)
-	declinedServing, otherUnhealthy := h.recentUnhealthyHosts.unhealthyHosts(now, h.hostFailureTimeThreshold())
+	hostDetails := h.collectHostHealth(ctx, hosts)
+	declinedServing, otherUnhealthy := h.recentUnhealthyHosts.filterUnhealthyHosts(hostDetails, now, h.hostFailureTimeThreshold())
 
 	// Make sure that at lease 2 hosts must be not ready to trigger this check.
 	proportionOfDeclinedServiceHosts := ensureMinimumProportionOfHosts(h.hostDeclinedServingProportion(), len(hosts))
@@ -213,6 +184,13 @@ func (h *healthCheckerImpl) Check(ctx context.Context, now time.Time) (HealthChe
 		overallState = enumsspb.HEALTH_STATE_DECLINED_SERVING
 	}
 	if overallState != enumsspb.HEALTH_STATE_SERVING {
+		var exampleFailedHost *healthspb.HostHealthDetail
+		for _, host := range hostDetails {
+			if host.State != enumsspb.HEALTH_STATE_SERVING {
+				exampleFailedHost = host
+				break
+			}
+		}
 		h.logger.Warn("Health check determined the service is unhealthy!",
 			tag.Int("host failure count", len(otherUnhealthy)),
 			tag.Float64("host failure percentage threshold", h.hostFailurePercentage()),
@@ -232,6 +210,43 @@ func (h *healthCheckerImpl) Check(ctx context.Context, now time.Time) (HealthChe
 			Hosts:   hostDetails,
 		},
 	}, nil
+}
+
+func (h *healthCheckerImpl) collectHostHealth(ctx context.Context, hosts []membership.HostInfo) []*healthspb.HostHealthDetail {
+	hostDetails := make([]*healthspb.HostHealthDetail, 0, len(hosts))
+	receiveCh := make(chan hostResult, len(hosts))
+	defer close(receiveCh)
+	for _, host := range hosts {
+		go func(hostAddress string) {
+			resp, err := h.checkHost(ctx, hostAddress)
+			if err != nil {
+				resp = &historyservice.DeepHealthCheckResponse{
+					State: enumsspb.HEALTH_STATE_NOT_SERVING,
+					Checks: []*healthspb.HealthCheck{
+						{
+							CheckType: health.CheckTypeHostAvailability,
+							State:     enumsspb.HEALTH_STATE_NOT_SERVING,
+							Message:   fmt.Sprintf("failed to reach host for health check: %v", err),
+						},
+					},
+				}
+			}
+			receiveCh <- hostResult{address: hostAddress, response: resp}
+		}(host.GetAddress())
+	}
+
+	for range hosts {
+		result := <-receiveCh
+		state := result.response.GetState()
+
+		detail := &healthspb.HostHealthDetail{
+			Address: result.address,
+			State:   state,
+			Checks:  result.response.GetChecks(),
+		}
+		hostDetails = append(hostDetails, detail)
+	}
+	return hostDetails
 }
 
 func (h *healthCheckerImpl) checkHost(ctx context.Context, hostAddress string) (resp *historyservice.DeepHealthCheckResponse, retErr error) {
