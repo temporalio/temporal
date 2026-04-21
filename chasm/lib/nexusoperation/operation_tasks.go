@@ -11,6 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
@@ -181,17 +182,7 @@ func (h *operationInvocationTaskHandler) Execute(
 	endpoint, err := h.lookupEndpoint(ctx, ns.ID(), args.endpointID, args.endpointName)
 	if err != nil {
 		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
-			h.logger.Error("endpoint not found while processing invocation task", tag.Error(err))
-			handlerErr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
-			result, err := newStartResult(nil, handlerErr)
-			if err != nil {
-				return fmt.Errorf("failed to construct invocation result: %w", err)
-			}
-			_, _, err = chasm.UpdateComponent(ctx, opRef, (*Operation).saveInvocationResult, saveInvocationResultInput{
-				result:      result,
-				retryPolicy: h.config.RetryPolicy(),
-			})
-			return err
+			return h.handleMissingEndpoint(ctx, opRef, err)
 		}
 		return err
 	}
@@ -302,6 +293,24 @@ func (h *operationInvocationTaskHandler) Execute(
 	return saveErr
 }
 
+func (h *operationInvocationTaskHandler) handleMissingEndpoint(
+	ctx context.Context,
+	opRef chasm.ComponentRef,
+	lookupErr error,
+) error {
+	h.logger.Error("endpoint not found while processing invocation task", tag.Error(lookupErr))
+	handlerErr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
+	result, err := newStartResult(nil, handlerErr)
+	if err != nil {
+		return fmt.Errorf("failed to construct invocation result: %w", err)
+	}
+	_, _, err = chasm.UpdateComponent(ctx, opRef, (*Operation).saveInvocationResult, saveInvocationResultInput{
+		result:      result,
+		retryPolicy: h.config.RetryPolicy(),
+	})
+	return err
+}
+
 func (h *operationInvocationTaskHandler) validateStartResult(
 	ns *namespace.Namespace,
 	result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload],
@@ -324,8 +333,23 @@ func (h *operationInvocationTaskHandler) generateCallbackToken(
 	serializedRef []byte,
 	requestID string,
 ) (string, error) {
+	// TODO: replace this with selective CHASM consistency solution once available
+
+	ref := &persistencespb.ChasmComponentRef{}
+	if err := ref.Unmarshal(serializedRef); err != nil {
+		return "", fmt.Errorf("%w: %w", queueserrors.NewUnprocessableTaskError("failed to decode component ref for callback token"), err)
+	}
+
+	// Both VT becomes stale after workflow mutations between token minting and completion arrival.
+	ref.ExecutionVersionedTransition = nil
+	ref.ComponentInitialVersionedTransition = nil
+	stableRef, err := ref.Marshal()
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", queueserrors.NewUnprocessableTaskError("failed to encode component ref for callback token"), err)
+	}
+
 	token, err := h.callbackTokenGenerator.Tokenize(&tokenspb.NexusOperationCompletion{
-		ComponentRef: serializedRef,
+		ComponentRef: stableRef,
 		RequestId:    requestID,
 	})
 	if err != nil {
