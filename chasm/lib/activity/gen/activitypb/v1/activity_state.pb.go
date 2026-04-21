@@ -183,8 +183,8 @@ type ActivityState struct {
 	CancelState *ActivityCancelState `protobuf:"bytes,11,opt,name=cancel_state,json=cancelState,proto3" json:"cancel_state,omitempty"`
 	// Set if the activity was terminated
 	TerminateState *ActivityTerminateState `protobuf:"bytes,12,opt,name=terminate_state,json=terminateState,proto3" json:"terminate_state,omitempty"`
-	// Amount of time to wait before dispatching the activity task to the task queue for the first
-	// time. If the activity has a retry policy, retry attempts will not have start delay applied.
+	// Amount of time to wait before dispatching the activity task to the task queue for the first time. If the activity
+	// has a retry policy, retry attempts will not have start delay applied.
 	StartDelay    *durationpb.Duration `protobuf:"bytes,13,opt,name=start_delay,json=startDelay,proto3" json:"start_delay,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
