@@ -79,7 +79,7 @@ func ClientProvider(
 	testHooks testhooks.TestHooks,
 	metricsHandler metrics.Handler,
 ) Client {
-	highestRevSignaledToVersionWf := cache.New(dynamicconfig.VersionReactivationSignalCacheMaxSize.Get(dc)(), nil)
+	highestRevSignaledToVersionWf := cache.New(dynamicconfig.ReactivationSignalDedupCacheMaxSize.Get(dc)(), nil)
 	lc.Append(fx.Hook{
 		OnStop: func(context.Context) error {
 			highestRevSignaledToVersionWf.Stop()

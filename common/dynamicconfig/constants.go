@@ -2907,13 +2907,12 @@ instead of the previous HSM backed implementation.`,
 		`Maximum number of entries in the version membership cache.`,
 	)
 
-	VersionReactivationSignalCacheMaxSize = NewGlobalIntSetting(
-		"history.versionReactivationSignalCacheMaxSize",
+	ReactivationSignalDedupCacheMaxSize = NewGlobalIntSetting(
+		"worker.reactivationSignalDedupCacheMaxSize",
 		10000,
 		`Maximum number of entries in the per-pod reactivation-signal dedup cache on the
 		worker deployment client. Each entry tracks the highest revision signaled for one
-		target version workflow; LRU-evicted entries at worst cause a redundant RPC that
-		the receiver dedups via a deterministic UUID RequestId.`,
+		target version workflow.`,
 	)
 
 	EnableVersionReactivationSignals = NewGlobalBoolSetting(

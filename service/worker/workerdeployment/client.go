@@ -255,7 +255,7 @@ type ClientImpl struct {
 	// highestRevSignaledToVersionWf is a per-pod LRU that holds, for each target version
 	// workflow, the highest revision number this pod has successfully signaled for
 	// reactivation. A reactivation signal for the same or older revision is skipped.
-	// Size-bounded by VersionReactivationSignalCacheMaxSize; LRU eviction is pure memory
+	// Size-bounded by ReactivationSignalDedupCacheMaxSize; LRU eviction is pure memory
 	// hygiene, not part of the dedup contract. Cross-pod deduplication is handled
 	// separately by the deterministic UUID RequestId on each signal.
 	highestRevSignaledToVersionWf cache.Cache
@@ -2019,6 +2019,13 @@ func (d *ClientImpl) SignalVersionReactivation(
 		deploymentName: deploymentName,
 		buildID:        buildID,
 	}
+	metricsHandler := d.metricsHandler.WithTags(
+		metrics.CacheTypeTag(metrics.ReactivationSignalDedupCacheTypeTagValue),
+		metrics.OperationTag(metrics.ReactivationSignalDedupScope),
+		metrics.NamespaceIDTag(namespaceEntry.ID().String()),
+	)
+	metrics.CacheRequests.With(metricsHandler).Record(1)
+
 	if stored := d.highestRevSignaledToVersionWf.Get(key); stored != nil {
 		if storedRev, ok := stored.(int64); ok && revisionNumber <= storedRev {
 			// This pod has already signaled the target version workflow at this revision
@@ -2027,6 +2034,7 @@ func (d *ClientImpl) SignalVersionReactivation(
 			return nil
 		}
 	}
+	metrics.CacheMissCounter.With(metricsHandler).Record(1)
 
 	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
 
@@ -2039,7 +2047,7 @@ func (d *ClientImpl) SignalVersionReactivation(
 	// workflow (addressed by workflowID); different (deployment, build) pairs at the same
 	// revision don't collide because they're different workflows.
 	requestID := uuid.NewSHA1(
-		uuid.NameSpaceOID,
+		uuid.Nil,
 		[]byte("reactivation-signal:"+strconv.FormatInt(revisionNumber, 10)),
 	).String()
 

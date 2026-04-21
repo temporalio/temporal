@@ -47,6 +47,7 @@ const (
 	MutableStateCacheTypeTagValue                     = "mutablestate"
 	EventsCacheTypeTagValue                           = "events"
 	VersionMembershipCacheTypeTagValue                = "version_membership"
+	ReactivationSignalDedupCacheTypeTagValue          = "reactivation_signal_dedup"
 	RoutingInfoCacheTypeTagValue                      = "routing_info"
 	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
 
@@ -458,6 +459,9 @@ const (
 	VersionMembershipCacheGetScope = "VersionMembershipCacheGet"
 	// VersionMembershipCachePutScope is the scope used by version membership cache
 	VersionMembershipCachePutScope = "VersionMembershipCachePut"
+	// ReactivationSignalDedupScope is the scope used by the per-pod reactivation-signal
+	// dedup cache on the worker-deployment client.
+	ReactivationSignalDedupScope = "ReactivationSignalDedup"
 	// RoutingInfoCacheGetScope is the scope used by routing info cache
 	RoutingInfoCacheGetScope = "RoutingInfoCacheGet"
 	// RoutingInfoCachePutScope is the scope used by routing info cache

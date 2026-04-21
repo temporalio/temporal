@@ -408,19 +408,9 @@ func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploym
 	return false
 }
 
-// IsVersionActiveOrDraining reports whether the given version is in a status where a
-// reactivation signal would be wasteful or meaningless. This covers:
-//
-//   - CURRENT: the version is receiving new workflows.
-//   - RAMPING: the version is receiving a ramping share of new workflows.
-//   - DRAINING: the version is no longer receiving new workflows but still has in-flight
-//     ones; the reactivation signal handler in version_workflow.go only acts on
-//     DRAINED/INACTIVE, so a DRAINING signal would be a no-op.
-//
-// Returns false for DRAINED, INACTIVE, UNSPECIFIED, and when the version is not present
-// in the task queue's deployment data — in all of these cases the caller should send the
-// reactivation signal. The false-on-unknown default lets callers treat the returned bool
-// as a direct suppression directive without reasoning about tri-state status buckets.
+// IsVersionActiveOrDraining reports whether the version's status in the given deployment
+// data is CURRENT, RAMPING, or DRAINING. Returns false for DRAINED, INACTIVE, UNSPECIFIED,
+// and when the version is not present in the deployment data.
 //
 // The returned revisionNumber is the version's revision as tracked in the new deployment
 // data format (WorkerDeploymentVersionData.revision_number). It is 0 for the legacy
