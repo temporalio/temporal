@@ -375,6 +375,15 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 				pollerErrCh <- err
 				return
 			}
+			expectedLink := commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
+				Namespace:   s.Namespace().String(),
+				OperationId: "test-op",
+				RunId:       startResp.RunId,
+			})
+			startRequest := task.GetRequest().GetStartOperation()
+			require.Len(t, startRequest.GetLinks(), 1)
+			require.Equal(t, expectedLink.URL.String(), startRequest.GetLinks()[0].GetUrl())
+			require.Equal(t, expectedLink.Type, startRequest.GetLinks()[0].GetType())
 
 			_, err = s.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
 				Namespace: s.Namespace().String(),
@@ -1382,6 +1391,132 @@ func TestDeleteStandaloneNexusOperation(t *testing.T) {
 
 func TestStandaloneNexusOperationPoll(t *testing.T) {
 	t.Parallel()
+
+	t.Run("WaitStageStarted", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		taskQueue := testcore.RandomizedNexusEndpoint(t.Name())
+		endpointName := createNexusEndpointWithTaskQueue(s, taskQueue)
+		handlerLink := &commonpb.Link_WorkflowEvent{
+			Namespace:  s.Namespace().String(),
+			WorkflowId: "handler-workflow",
+			RunId:      "handler-run-id",
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   7,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		}
+
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		require.NoError(t, err)
+
+		ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+		defer cancel()
+
+		type pollResult struct {
+			resp *workflowservice.PollNexusOperationExecutionResponse
+			err  error
+		}
+		pollResultCh := make(chan pollResult, 1)
+		pollStartedCh := make(chan struct{}, 1)
+
+		go func() {
+			pollStartedCh <- struct{}{}
+			resp, err := s.FrontendClient().PollNexusOperationExecution(ctx, &workflowservice.PollNexusOperationExecutionRequest{
+				Namespace:   s.Namespace().String(),
+				OperationId: "test-op",
+				RunId:       startResp.RunId,
+				WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
+			})
+			pollResultCh <- pollResult{resp: resp, err: err}
+		}()
+
+		select {
+		case <-pollStartedCh:
+		case <-ctx.Done():
+			t.Fatal("PollNexusOperationExecution did not start before timeout")
+		}
+
+		// PollNexusOperationExecution should not resolve before the operation is started.
+		select {
+		case result := <-pollResultCh:
+			require.NoError(t, result.err)
+			t.Fatal("PollNexusOperationExecution returned before the operation started")
+		default:
+		}
+
+		task, err := s.FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			Identity:  "test-worker",
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
+		})
+		require.NoError(t, err)
+
+		expectedLink := commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		startRequest := task.GetRequest().GetStartOperation()
+		require.Len(t, startRequest.GetLinks(), 1)
+		require.Equal(t, expectedLink.URL.String(), startRequest.GetLinks()[0].GetUrl())
+		require.Equal(t, expectedLink.Type, startRequest.GetLinks()[0].GetType())
+
+		_, err = s.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			Identity:  "test-worker",
+			TaskToken: task.GetTaskToken(),
+			Response: &nexuspb.Response{
+				Variant: &nexuspb.Response_StartOperation{
+					StartOperation: &nexuspb.StartOperationResponse{
+						Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
+							AsyncSuccess: &nexuspb.StartOperationResponse_Async{
+								OperationToken: "test-operation-token",
+								Links: commonnexus.ConvertLinksToProto([]nexus.Link{
+									commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink),
+								}),
+							},
+						},
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		// Verify the poll result.
+		select {
+		case result := <-pollResultCh:
+			require.NoError(t, result.err)
+			protorequire.ProtoEqual(t, &workflowservice.PollNexusOperationExecutionResponse{
+				RunId:          startResp.RunId,
+				WaitStage:      enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
+				OperationToken: "test-operation-token",
+			}, result.resp)
+		case <-ctx.Done():
+			t.Fatal("PollNexusOperationExecution did not resolve before timeout")
+		}
+
+		descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		require.NoError(t, err)
+		protorequire.ProtoSliceEqual(t, []*commonpb.Link{
+			{
+				Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: handlerLink,
+				},
+			},
+		}, descResp.GetInfo().GetLinks())
+	})
 
 	t.Run("WaitStageClosed", func(t *testing.T) {
 		for _, tc := range []struct {

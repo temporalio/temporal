@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/softassert"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -235,6 +236,11 @@ func (o *Operation) loadStartArgs(
 		invocationData = InvocationData{
 			Input:  requestData.GetInput(),
 			Header: requestData.GetNexusHeader(),
+			NexusLinks: []nexus.Link{commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
+				Namespace:   ctx.NamespaceEntry().Name().String(),
+				OperationId: ctx.ExecutionKey().BusinessID,
+				RunId:       ctx.ExecutionKey().RunID,
+			})},
 		}
 	}
 
