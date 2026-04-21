@@ -50,7 +50,6 @@ const (
 	testLongVersionDrainageVisibilityGracePeriod = 10 * time.Second
 	testExtraLongVersionDrainageRefreshInterval  = 30 * time.Second
 	testVersionMembershipCacheTTL                = 5 * time.Second
-	testLongVersionReactivationCacheTTL          = 5 * time.Minute
 	testMaxVersionsInDeployment                  = 4
 )
 
@@ -89,9 +88,6 @@ func (s *DeploymentVersionSuite) SetupSuite() {
 		dynamicconfig.VersionDrainageStatusRefreshInterval.Key():       testVersionDrainageRefreshInterval,
 		dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Key(): testVersionDrainageVisibilityGracePeriod,
 		dynamicconfig.VersionMembershipCacheTTL.Key():                  testVersionMembershipCacheTTL,
-
-		// Large TTL for deduplication test. Must be set at suite level for cache initialization to work.
-		dynamicconfig.VersionReactivationSignalCacheTTL.Key(): testLongVersionReactivationCacheTTL,
 	}))
 }
 

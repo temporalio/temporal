@@ -41,8 +41,8 @@ func (noopVersionCache) Get(
 	_ enumspb.TaskQueueType,
 	_ string,
 	_ string,
-) (isMember bool, isDrainedOrInactive *bool, revisionNumber int64, ok bool) {
-	return false, nil, 0, false
+) (isMember bool, isVersionActiveOrDraining bool, revisionNumber int64, ok bool) {
+	return false, false, 0, false
 }
 
 func (noopVersionCache) Put(
@@ -52,15 +52,9 @@ func (noopVersionCache) Put(
 	_ string,
 	_ string,
 	_ bool,
-	_ *bool,
+	_ bool,
 	_ int64,
 ) {
-}
-
-type noopReactivationSignalCache struct{}
-
-func (noopReactivationSignalCache) ShouldSendSignal(_, _, _ string, _ int64) bool {
-	return false // Always return false to skip sending signals in tests
 }
 
 // noopReactivationSignaler is a no-op signaler function for tests
@@ -332,9 +326,8 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 		s.shardContext,
 		s.workflowConsistencyChecker,
 		s.mockMatchingClient,
-		noopVersionCache{},            // cache not meant to be used in this test
-		noopReactivationSignalCache{}, // cache not meant to be used in this test
-		noopReactivationSignaler,      // signaler not meant to be used in this test
+		noopVersionCache{},       // cache not meant to be used in this test
+		noopReactivationSignaler, // signaler not meant to be used in this test
 	)
 	s.NoError(err)
 	s.NotNil(resp)

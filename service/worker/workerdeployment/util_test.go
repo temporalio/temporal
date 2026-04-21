@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -73,9 +74,10 @@ func (d *deploymentWorkflowClientSuite) SetupTest() {
 		BuildId:    testBuildID,
 	}
 	d.deploymentClient = &ClientImpl{
-		logger:            log.NewNoopLogger(),
-		historyClient:     d.mockHistoryClient,
-		visibilityManager: d.VisibilityManager,
+		logger:                        log.NewNoopLogger(),
+		historyClient:                 d.mockHistoryClient,
+		visibilityManager:             d.VisibilityManager,
+		highestRevSignaledToVersionWf: cache.New(128, nil),
 	}
 
 }
@@ -407,9 +409,11 @@ func (d *deploymentWorkflowClientSuite) TestSignalVersionReactivation_RequestIdF
 			revisionNumber: 7,
 		},
 		{
+			// Distinct (deployment, build) from other cases so per-pod dedup in the client
+			// doesn't skip this call. Only the RequestId format is under test here.
 			name:           "zero revision (legacy format / never synced)",
-			deploymentName: "my-deployment",
-			buildID:        "build-42",
+			deploymentName: "legacy-deployment",
+			buildID:        "legacy-build",
 			revisionNumber: 0,
 		},
 		{
@@ -456,4 +460,76 @@ func (d *deploymentWorkflowClientSuite) TestSignalVersionReactivation_RequestIdF
 			}
 		})
 	}
+}
+
+// TestSignalVersionReactivation_DedupsByRevision verifies the per-pod dedup in
+// SignalVersionReactivation: once a revision (or higher) has been signaled for a given
+// version workflow, subsequent calls at the same-or-lower revision skip the RPC.
+func (d *deploymentWorkflowClientSuite) TestSignalVersionReactivation_DedupsByRevision() {
+	const (
+		dep   = "my-deployment"
+		build = "build-1"
+	)
+
+	// First call fires.
+	d.mockHistoryClient.EXPECT().
+		SignalWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&historyservice.SignalWorkflowExecutionResponse{}, nil).
+		Times(1)
+	d.NoError(d.deploymentClient.SignalVersionReactivation(context.Background(), d.ns, dep, build, 5))
+
+	// Same revision → skip (no mock call expected; gomock fails if called).
+	d.NoError(d.deploymentClient.SignalVersionReactivation(context.Background(), d.ns, dep, build, 5))
+
+	// Lower revision → skip.
+	d.NoError(d.deploymentClient.SignalVersionReactivation(context.Background(), d.ns, dep, build, 3))
+
+	// Higher revision → fires again.
+	d.mockHistoryClient.EXPECT().
+		SignalWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&historyservice.SignalWorkflowExecutionResponse{}, nil).
+		Times(1)
+	d.NoError(d.deploymentClient.SignalVersionReactivation(context.Background(), d.ns, dep, build, 7))
+
+	// Same-or-lower after the higher rev → still skipped.
+	d.NoError(d.deploymentClient.SignalVersionReactivation(context.Background(), d.ns, dep, build, 7))
+	d.NoError(d.deploymentClient.SignalVersionReactivation(context.Background(), d.ns, dep, build, 5))
+}
+
+// TestSignalVersionReactivation_DedupIsolatedPerVersion verifies the dedup key includes
+// (namespaceID, deploymentName, buildID) — different version workflows do not share state.
+func (d *deploymentWorkflowClientSuite) TestSignalVersionReactivation_DedupIsolatedPerVersion() {
+	d.mockHistoryClient.EXPECT().
+		SignalWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&historyservice.SignalWorkflowExecutionResponse{}, nil).
+		Times(3)
+
+	d.NoError(d.deploymentClient.SignalVersionReactivation(context.Background(), d.ns, "dep-a", "build-1", 5))
+	d.NoError(d.deploymentClient.SignalVersionReactivation(context.Background(), d.ns, "dep-b", "build-1", 5))
+	d.NoError(d.deploymentClient.SignalVersionReactivation(context.Background(), d.ns, "dep-a", "build-2", 5))
+}
+
+// TestSignalVersionReactivation_FailureAllowsRetry verifies that a failed signal does NOT
+// record the revision in the cache — a subsequent call for the same revision retries.
+func (d *deploymentWorkflowClientSuite) TestSignalVersionReactivation_FailureAllowsRetry() {
+	const (
+		dep   = "my-deployment"
+		build = "build-1"
+	)
+
+	// First attempt fails.
+	failErr := serviceerror.NewUnavailable("downstream unavailable")
+	d.mockHistoryClient.EXPECT().
+		SignalWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(nil, failErr).
+		Times(1)
+	err := d.deploymentClient.SignalVersionReactivation(context.Background(), d.ns, dep, build, 5)
+	d.Error(err)
+
+	// Retry at the same revision must hit the wire again (cache not recorded on failure).
+	d.mockHistoryClient.EXPECT().
+		SignalWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&historyservice.SignalWorkflowExecutionResponse{}, nil).
+		Times(1)
+	d.NoError(d.deploymentClient.SignalVersionReactivation(context.Background(), d.ns, dep, build, 5))
 }

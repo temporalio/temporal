@@ -28,7 +28,6 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
 	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
-	reactivationSignalCache worker_versioning.ReactivationSignalCache,
 	reactivationSignaler api.VersionReactivationSignalerFn,
 ) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
 	req := request.GetUpdateRequest()
@@ -40,7 +39,7 @@ func Invoke(
 
 	// Store versioning override to send reactivation signal after successful persistence
 	var versioningOverrideForReactivation *workflowpb.VersioningOverride
-	var isDrainedOrInactive *bool
+	var isVersionActiveOrDraining bool
 	var revisionNumber int64
 
 	err = api.GetAndUpdateWorkflowWithNew(
@@ -81,7 +80,7 @@ func Invoke(
 			}
 
 			// Validate versioning override, if any.
-			isDrainedOrInactive, revisionNumber, err = worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, requestedOptions.GetVersioningOverride(), matchingClient, versionCache, mutableState.GetExecutionInfo().GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, ns.ID().String())
+			isVersionActiveOrDraining, revisionNumber, err = worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, requestedOptions.GetVersioningOverride(), matchingClient, versionCache, mutableState.GetExecutionInfo().GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, ns.ID().String())
 			if err != nil {
 				return nil, err
 			}
@@ -120,7 +119,7 @@ func Invoke(
 
 	// Notify version workflow if we're pinning to a potentially drained version.
 	// This is done after successful persistence to avoid signaling if the update fails.
-	api.ReactivateVersionWorkflowIfPinned(ctx, ns, versioningOverrideForReactivation, reactivationSignalCache, reactivationSignaler, shardCtx.GetConfig().EnableVersionReactivationSignals(), isDrainedOrInactive, revisionNumber)
+	api.ReactivateVersionWorkflowIfPinned(ctx, ns, versioningOverrideForReactivation, reactivationSignaler, shardCtx.GetConfig().EnableVersionReactivationSignals(), isVersionActiveOrDraining, revisionNumber)
 
 	return ret, nil
 }

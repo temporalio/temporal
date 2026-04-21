@@ -3465,26 +3465,21 @@ func (e *matchingEngineImpl) CheckTaskQueueVersionMembership(
 	deploymentData := typedUserData.GetDeploymentData()
 	present := worker_versioning.HasDeploymentVersion(deploymentData, request.GetVersion())
 
-	// Check the version's status so callers can skip sending reactivation signals
-	// for versions that are not drained or inactive, avoiding unnecessary RPCs and
-	// workflow history events on the version workflow. The revision number flows
-	// back so history can compose a cluster-wide-deterministic RequestId on the
-	// reactivation signal for receiver-side dedup.
-	var reactivationEligibility *matchingservice.VersionReactivationEligibility
-	if isDrainedOrInactive, revisionNumber := worker_versioning.IsVersionDrainedOrInactive(
+	// Report whether the version is active-or-draining so callers can skip sending
+	// reactivation signals to versions that don't need one (CURRENT/RAMPING/DRAINING —
+	// see worker_versioning.IsVersionActiveOrDraining). The revision number flows back
+	// so history can compose a cluster-wide-deterministic RequestId on the reactivation
+	// signal for receiver-side dedup.
+	isVersionActiveOrDraining, revisionNumber := worker_versioning.IsVersionActiveOrDraining(
 		deploymentData,
 		request.GetVersion().GetDeploymentName(),
 		request.GetVersion().GetBuildId(),
-	); isDrainedOrInactive != nil {
-		reactivationEligibility = &matchingservice.VersionReactivationEligibility{
-			IsDrainedOrInactive: *isDrainedOrInactive,
-			RevisionNumber:      revisionNumber,
-		}
-	}
+	)
 
 	return &matchingservice.CheckTaskQueueVersionMembershipResponse{
-		IsMember:                present,
-		ReactivationEligibility: reactivationEligibility,
+		IsMember:                  present,
+		IsVersionActiveOrDraining: isVersionActiveOrDraining,
+		RevisionNumber:            revisionNumber,
 	}, nil
 }
 

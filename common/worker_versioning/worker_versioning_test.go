@@ -61,7 +61,7 @@ func (c *testVersionMembershipCache) Get(
 	taskQueueType enumspb.TaskQueueType,
 	deploymentName string,
 	buildID string,
-) (isMember bool, isDrainedOrInactive *bool, revisionNumber int64, ok bool) {
+) (isMember bool, isVersionActiveOrDraining bool, revisionNumber int64, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.getCalls++
@@ -72,7 +72,7 @@ func (c *testVersionMembershipCache) Get(
 		deploymentName: deploymentName,
 		buildID:        buildID,
 	}]
-	return v.isMember, v.isDrainedOrInactive, v.revisionNumber, ok
+	return v.isMember, v.isVersionActiveOrDraining, v.revisionNumber, ok
 }
 
 func (c *testVersionMembershipCache) Put(
@@ -82,7 +82,7 @@ func (c *testVersionMembershipCache) Put(
 	deploymentName string,
 	buildID string,
 	isMember bool,
-	isDrainedOrInactive *bool,
+	isVersionActiveOrDraining bool,
 	revisionNumber int64,
 ) {
 	c.mu.Lock()
@@ -94,38 +94,38 @@ func (c *testVersionMembershipCache) Put(
 		taskQueueType:  taskQueueType,
 		deploymentName: deploymentName,
 		buildID:        buildID,
-	}] = versionTaskQueueInfoCacheValue{isMember: isMember, isDrainedOrInactive: isDrainedOrInactive, revisionNumber: revisionNumber}
+	}] = versionTaskQueueInfoCacheValue{isMember: isMember, isVersionActiveOrDraining: isVersionActiveOrDraining, revisionNumber: revisionNumber}
 }
 
-func TestIsVersionDrainedOrInactive(t *testing.T) {
+func TestIsVersionActiveOrDraining(t *testing.T) {
 	tests := []struct {
 		name                   string
 		deployments            *persistencespb.DeploymentData
 		deploymentName         string
 		buildID                string
-		expected               *bool
+		expected               bool
 		expectedRevisionNumber int64
 	}{
 		{
-			name:                   "nil deployments returns nil",
+			name:                   "nil deployments returns false (not found → caller should send signal)",
 			deployments:            nil,
 			deploymentName:         "dep",
 			buildID:                "build",
-			expected:               nil,
+			expected:               false,
 			expectedRevisionNumber: 0,
 		},
 		{
-			name: "version not found returns nil",
+			name: "version not found returns false",
 			deployments: &persistencespb.DeploymentData{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{},
 			},
 			deploymentName:         "dep",
 			buildID:                "build",
-			expected:               nil,
+			expected:               false,
 			expectedRevisionNumber: 0,
 		},
 		{
-			name: "new format: DRAINED returns true with revision_number",
+			name: "new format: DRAINED returns false (caller should send signal) with revision_number",
 			deployments: &persistencespb.DeploymentData{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
 					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
@@ -135,11 +135,11 @@ func TestIsVersionDrainedOrInactive(t *testing.T) {
 			},
 			deploymentName:         "dep",
 			buildID:                "build",
-			expected:               boolPtr(true),
+			expected:               false,
 			expectedRevisionNumber: 42,
 		},
 		{
-			name: "new format: INACTIVE returns true with revision_number",
+			name: "new format: INACTIVE returns false with revision_number",
 			deployments: &persistencespb.DeploymentData{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
 					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
@@ -149,11 +149,11 @@ func TestIsVersionDrainedOrInactive(t *testing.T) {
 			},
 			deploymentName:         "dep",
 			buildID:                "build",
-			expected:               boolPtr(true),
+			expected:               false,
 			expectedRevisionNumber: 7,
 		},
 		{
-			name: "new format: CURRENT returns false with revision_number",
+			name: "new format: CURRENT returns true with revision_number",
 			deployments: &persistencespb.DeploymentData{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
 					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
@@ -163,11 +163,11 @@ func TestIsVersionDrainedOrInactive(t *testing.T) {
 			},
 			deploymentName:         "dep",
 			buildID:                "build",
-			expected:               boolPtr(false),
+			expected:               true,
 			expectedRevisionNumber: 3,
 		},
 		{
-			name: "new format: RAMPING returns false",
+			name: "new format: RAMPING returns true",
 			deployments: &persistencespb.DeploymentData{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
 					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
@@ -177,11 +177,25 @@ func TestIsVersionDrainedOrInactive(t *testing.T) {
 			},
 			deploymentName:         "dep",
 			buildID:                "build",
-			expected:               boolPtr(false),
+			expected:               true,
 			expectedRevisionNumber: 0,
 		},
 		{
-			name: "new format: deleted version returns nil",
+			name: "new format: DRAINING returns true",
+			deployments: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, RevisionNumber: 11},
+					}},
+				},
+			},
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               true,
+			expectedRevisionNumber: 11,
+		},
+		{
+			name: "new format: deleted version returns false (treated as not-found)",
 			deployments: &persistencespb.DeploymentData{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
 					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
@@ -191,11 +205,11 @@ func TestIsVersionDrainedOrInactive(t *testing.T) {
 			},
 			deploymentName:         "dep",
 			buildID:                "build",
-			expected:               nil,
+			expected:               false,
 			expectedRevisionNumber: 0,
 		},
 		{
-			name: "old format: DRAINED returns true with revision_number 0 (no field in old format)",
+			name: "old format: DRAINED returns false with revision_number 0 (no field in old format)",
 			deployments: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					{
@@ -206,11 +220,11 @@ func TestIsVersionDrainedOrInactive(t *testing.T) {
 			},
 			deploymentName:         "dep",
 			buildID:                "build",
-			expected:               boolPtr(true),
+			expected:               false,
 			expectedRevisionNumber: 0,
 		},
 		{
-			name: "old format: CURRENT returns false with revision_number 0",
+			name: "old format: CURRENT returns true with revision_number 0",
 			deployments: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					{
@@ -221,14 +235,14 @@ func TestIsVersionDrainedOrInactive(t *testing.T) {
 			},
 			deploymentName:         "dep",
 			buildID:                "build",
-			expected:               boolPtr(false),
+			expected:               true,
 			expectedRevisionNumber: 0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, revisionNumber := IsVersionDrainedOrInactive(tt.deployments, tt.deploymentName, tt.buildID)
+			result, revisionNumber := IsVersionActiveOrDraining(tt.deployments, tt.deploymentName, tt.buildID)
 			require.Equal(t, tt.expected, result)
 			require.Equal(t, tt.expectedRevisionNumber, revisionNumber)
 		})
@@ -976,10 +990,10 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 		taskQueueType               enumspb.TaskQueueType
 		setupCache                  func(c *testVersionMembershipCache)
 		setupMock                   func(m *matchingservicemock.MockMatchingServiceClient)
-		expectError                 bool
-		errorContains               string
-		expectedIsDrainedOrInactive *bool // nil means we expect nil returned
-		expectedRevisionNumber      int64
+		expectError                      bool
+		errorContains                    string
+		expectedIsVersionActiveOrDraining bool
+		expectedRevisionNumber           int64
 	}{
 		{
 			name:        "nil override returns nil",
@@ -1010,14 +1024,15 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 				},
 			},
 			setupCache: func(c *testVersionMembershipCache) {
-				drainedOrInactive := true
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true, &drainedOrInactive, 42)
+				// Cache says the version is drained/inactive (isVersionActiveOrDraining=false)
+				// with revision 42.
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true, false, 42)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
 			},
 			expectError:                 false,
-			expectedIsDrainedOrInactive: boolPtr(true),
+			expectedIsVersionActiveOrDraining: false,
 			expectedRevisionNumber:      42,
 		},
 		{
@@ -1031,14 +1046,14 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 				},
 			},
 			setupCache: func(c *testVersionMembershipCache) {
-				active := false
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true, &active, 0)
+				// Cache says the version is active (isVersionActiveOrDraining=true).
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true, true, 0)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
 			},
 			expectError:                 false,
-			expectedIsDrainedOrInactive: boolPtr(false),
+			expectedIsVersionActiveOrDraining: true,
 		},
 		{
 			name: "v0.32: Pinned override, with cache hit, returns error (since version is not present in the task queue)",
@@ -1051,7 +1066,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 				},
 			},
 			setupCache: func(c *testVersionMembershipCache) {
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, false, nil, 0)
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, false, false, 0)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
@@ -1071,7 +1086,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 				},
 			},
 			setupCache: func(c *testVersionMembershipCache) {
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true, nil, 0)
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true, false, 0)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(
@@ -1121,16 +1136,14 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{
-					IsMember: true,
-					ReactivationEligibility: &matchingservice.VersionReactivationEligibility{
-						IsDrainedOrInactive: true,
-						RevisionNumber:      7,
-					},
+					IsMember:                  true,
+					IsVersionActiveOrDraining: false, // drained/inactive on matching's side
+					RevisionNumber:            7,
 				}, nil)
 			},
-			expectError:                 false,
-			expectedIsDrainedOrInactive: boolPtr(true),
-			expectedRevisionNumber:      7,
+			expectError:                       false,
+			expectedIsVersionActiveOrDraining: false,
+			expectedRevisionNumber:            7,
 		},
 		{
 			name: "v0.32: Pinned override, with cache miss, RPC returns member and active",
@@ -1148,14 +1161,12 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{
-					IsMember: true,
-					ReactivationEligibility: &matchingservice.VersionReactivationEligibility{
-						IsDrainedOrInactive: false,
-					},
+					IsMember:                  true,
+					IsVersionActiveOrDraining: true, // active on matching's side
 				}, nil)
 			},
-			expectError:                 false,
-			expectedIsDrainedOrInactive: boolPtr(false),
+			expectError:                       false,
+			expectedIsVersionActiveOrDraining: true,
 		},
 		{
 			name: "v0.32: Pinned override, with cache miss, RPC returns member without eligibility (old matching)",
@@ -1177,7 +1188,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 				}, nil)
 			},
 			expectError:                 false,
-			expectedIsDrainedOrInactive: nil, // old matching server — nil preserved
+			expectedIsVersionActiveOrDraining: false, // old matching server — zero-value treated as "don't know, send signal"
 		},
 		{
 			name: "v0.32: Pinned override, without version, returns error",
@@ -1250,7 +1261,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 				PinnedVersion: "test-deployment.test-build-id",
 			},
 			setupCache: func(c *testVersionMembershipCache) {
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "test-deployment", "test-build-id", true, nil, 0)
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "test-deployment", "test-build-id", true, false, 0)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0)
@@ -1264,7 +1275,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 				PinnedVersion: "test-deployment.test-build-id",
 			},
 			setupCache: func(c *testVersionMembershipCache) {
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "test-deployment", "test-build-id", false, nil, 0)
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "test-deployment", "test-build-id", false, false, 0)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0)
@@ -1374,8 +1385,8 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 						},
 					}, nil)
 			},
-			expectError:                 false,
-			expectedIsDrainedOrInactive: boolPtr(false), // version data exists with UNSPECIFIED status → not drained/inactive
+			expectError:                       false,
+			expectedIsVersionActiveOrDraining: false, // version data exists with UNSPECIFIED status — not in {CURRENT, RAMPING, DRAINING}
 		},
 		{
 			name: "v0.32: Pinned override, Unimplemented fallback, version is not member",
@@ -1424,7 +1435,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 			if tqType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
 				tqType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
 			}
-			isDrainedOrInactive, revisionNumber, err := ValidateVersioningOverrideAndGetReactivationEligibility(
+			isVersionActiveOrDraining, revisionNumber, err := ValidateVersioningOverrideAndGetReactivationEligibility(
 				context.Background(),
 				tt.override,
 				mockMatchingClient,
@@ -1441,7 +1452,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 				}
 			} else {
 				require.NoError(t, err)
-				require.Equal(t, tt.expectedIsDrainedOrInactive, isDrainedOrInactive)
+				require.Equal(t, tt.expectedIsVersionActiveOrDraining, isVersionActiveOrDraining)
 				require.Equal(t, tt.expectedRevisionNumber, revisionNumber)
 			}
 		})

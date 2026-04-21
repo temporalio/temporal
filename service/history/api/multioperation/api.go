@@ -61,7 +61,6 @@ func Invoke(
 	tokenSerializer *tasktoken.Serializer,
 	matchingClient matchingservice.MatchingServiceClient,
 	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
-	reactivationSignalCache worker_versioning.ReactivationSignalCache,
 	reactivationSignaler api.VersionReactivationSignalerFn,
 	testHooks testhooks.TestHooks,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
@@ -103,7 +102,6 @@ func Invoke(
 			startReq,
 			matchingClient,
 			versionCache,
-			reactivationSignalCache,
 			reactivationSignaler,
 			uws.workflowLeaseCallback(ctx),
 		)

@@ -21,20 +21,20 @@ type VersionReactivationSignalerFn func(
 ) error
 
 // ReactivateVersionWorkflowIfPinned sends a reactivation signal to the version workflow
-// when workflows are pinned to a potentially DRAINED/INACTIVE version. It also deduplicates
-// signals within the cache TTL window.
+// when workflows are pinned to a potentially DRAINED/INACTIVE version.
 // This is a fire-and-forget operation - the signal is sent asynchronously and errors are
-// logged by the signaler implementation.
+// logged by the signaler implementation. The signaler itself is responsible for per-pod
+// dedup by revision number; cross-pod duplicates fold at the receiver via a deterministic
+// UUID RequestId.
 //
 //nolint:revive,errcheck
 func ReactivateVersionWorkflowIfPinned(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	override *workflowpb.VersioningOverride,
-	signalCache worker_versioning.ReactivationSignalCache,
 	signaler VersionReactivationSignalerFn,
 	enabled bool,
-	isDrainedOrInactive *bool,
+	isVersionActiveOrDraining bool,
 	revisionNumber int64,
 ) {
 	// Check if signals are enabled globally
@@ -42,9 +42,8 @@ func ReactivateVersionWorkflowIfPinned(
 		return
 	}
 
-	// Skip signal if matching confirmed the version is NOT drained/inactive.
-	// nil means unknown (old matching server) — send signal to preserve current behavior.
-	if isDrainedOrInactive != nil && !*isDrainedOrInactive {
+	// Skip signal if matching confirmed the version is active or still draining.
+	if isVersionActiveOrDraining {
 		return
 	}
 
@@ -55,18 +54,6 @@ func ReactivateVersionWorkflowIfPinned(
 
 	pinnedVersion := worker_versioning.GetOverridePinnedVersion(override)
 	if pinnedVersion == nil {
-		return
-	}
-
-	// Check cache - skip if signal was recently sent for this exact revision.
-	// The revision is part of the key so a rapid drain → reactivate → drain cycle within
-	// the TTL does not have its second signal suppressed by a stale entry from the first cycle.
-	if signalCache != nil && !signalCache.ShouldSendSignal(
-		namespaceEntry.ID().String(),
-		pinnedVersion.GetDeploymentName(),
-		pinnedVersion.GetBuildId(),
-		revisionNumber,
-	) {
 		return
 	}
 

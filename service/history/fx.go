@@ -89,7 +89,6 @@ var Module = fx.Options(
 	fx.Provide(NewService),
 	fx.Provide(ReplicationProgressCacheProvider),
 	fx.Provide(VersionMembershipCacheProvider),
-	fx.Provide(ReactivationSignalCacheProvider),
 	workerdeployment.ClientModule,
 	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
@@ -419,23 +418,6 @@ func VersionMembershipCacheProvider(
 		},
 	})
 	return worker_versioning.NewVersionMembershipAndReactivationStatusCache(c, metricsHandler)
-}
-
-func ReactivationSignalCacheProvider(
-	lc fx.Lifecycle,
-	serviceConfig *configs.Config,
-	metricsHandler metrics.Handler,
-) worker_versioning.ReactivationSignalCache {
-	c := commoncache.New(serviceConfig.VersionReactivationSignalCacheMaxSize(), &commoncache.Options{
-		TTL: max(1*time.Second, serviceConfig.VersionReactivationSignalCacheTTL()),
-	})
-	lc.Append(fx.Hook{
-		OnStop: func(context.Context) error {
-			c.Stop()
-			return nil
-		},
-	})
-	return worker_versioning.NewReactivationSignalCache(c, metricsHandler)
 }
 
 func RoutingInfoCacheProvider(

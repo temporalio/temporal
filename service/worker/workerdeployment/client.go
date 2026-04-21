@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -231,6 +232,13 @@ type ErrRegister struct{ error }
 var retryPolicy = backoff.NewExponentialRetryPolicy(100 * time.Millisecond).WithExpirationInterval(1 * time.Minute)
 
 // ClientImpl implements Client
+// reactivationVersionKey identifies one target version workflow for reactivation-signal dedup.
+type reactivationVersionKey struct {
+	namespaceID    string
+	deploymentName string
+	buildID        string
+}
+
 type ClientImpl struct {
 	logger                           log.Logger
 	historyClient                    historyservice.HistoryServiceClient
@@ -243,6 +251,14 @@ type ClientImpl struct {
 	maxDeployments                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	testHooks                        testhooks.TestHooks
 	metricsHandler                   metrics.Handler
+
+	// highestRevSignaledToVersionWf is a per-pod LRU that holds, for each target version
+	// workflow, the highest revision number this pod has successfully signaled for
+	// reactivation. A reactivation signal for the same or older revision is skipped.
+	// Size-bounded by VersionReactivationSignalCacheMaxSize; LRU eviction is pure memory
+	// hygiene, not part of the dedup contract. Cross-pod deduplication is handled
+	// separately by the deterministic UUID RequestId on each signal.
+	highestRevSignaledToVersionWf cache.Cache
 }
 
 func (d *ClientImpl) SetManager(
@@ -1998,6 +2014,20 @@ func (d *ClientImpl) SignalVersionReactivation(
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("SignalVersionReactivation", deploymentName, &retErr, buildID)()
 
+	key := reactivationVersionKey{
+		namespaceID:    namespaceEntry.ID().String(),
+		deploymentName: deploymentName,
+		buildID:        buildID,
+	}
+	if stored := d.highestRevSignaledToVersionWf.Get(key); stored != nil {
+		if revisionNumber <= stored.(int64) {
+			// This pod has already signaled the target version workflow at this revision
+			// or a newer one; skip to avoid a redundant RPC. Another pod may still send;
+			// the receiver dedups via the deterministic UUID RequestId.
+			return nil
+		}
+	}
+
 	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
 
 	// Deterministic UUID v5 RequestId derived from the revision number. Multiple history
@@ -2028,7 +2058,14 @@ func (d *ClientImpl) SignalVersionReactivation(
 	}
 
 	_, err := d.historyClient.SignalWorkflowExecution(ctx, signalRequest)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Record success so subsequent calls to the same version workflow for this or older
+	// revisions skip the RPC.
+	d.highestRevSignaledToVersionWf.Put(key, revisionNumber)
+	return nil
 }
 
 func (d *ClientImpl) getSyncBatchSize() int32 {
