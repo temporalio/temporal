@@ -19,10 +19,10 @@ type (
 		componentID uint32
 		fqn         string
 
-		ephemeral                  bool
-		singleCluster              bool
-		detached                   bool
-		skipPersistenceIfUnchanged bool
+		ephemeral              bool
+		singleCluster          bool
+		detached               bool
+		skipPersistenceIfClean bool
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 
@@ -75,13 +75,13 @@ func (rc *RegistrableComponent) IsDetached() bool {
 	return rc.detached
 }
 
-// WithSkipPersistenceIfUnchanged marks a component type so that CHASM skips
+// WithSkipPersistenceIfClean marks a component type so that CHASM skips
 // persistence calls when the serialized data is equal to what was
 // last loaded from storage. The LastUpdateVersionedTransition is also not bumped
 // for such nodes.
-func WithSkipPersistenceIfUnchanged() RegistrableComponentOption {
+func WithSkipPersistenceIfClean() RegistrableComponentOption {
 	return func(rc *RegistrableComponent) {
-		rc.skipPersistenceIfUnchanged = true
+		rc.skipPersistenceIfClean = true
 	}
 }
 

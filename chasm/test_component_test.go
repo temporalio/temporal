@@ -19,9 +19,9 @@ type (
 
 	protoMessageType = persistencespb.WorkflowExecutionState // Random proto message.
 
-	// TestSkipIfUnchangedComponent is a minimal component used to test the
-	// WithSkipPersistenceIfUnchanged registration option.
-	TestSkipIfUnchangedComponent struct {
+	// TestSkipIfCleanComponent is a minimal component used to test the
+	// WithSkipPersistenceIfClean registration option.
+	TestSkipIfCleanComponent struct {
 		UnimplementedComponent
 		Data *protoMessageType
 	}
@@ -168,18 +168,18 @@ func (tsc2 *TestSubComponent2) LifecycleState(_ Context) LifecycleState {
 	return LifecycleStateRunning
 }
 
-func (c *TestSkipIfUnchangedComponent) LifecycleState(_ Context) LifecycleState {
+func (c *TestSkipIfCleanComponent) LifecycleState(_ Context) LifecycleState {
 	return LifecycleStateRunning
 }
 
-func (c *TestSkipIfUnchangedComponent) Terminate(
+func (c *TestSkipIfCleanComponent) Terminate(
 	_ MutableContext,
 	_ TerminateComponentRequest,
 ) (TerminateComponentResponse, error) {
 	return TerminateComponentResponse{}, nil
 }
 
-func (c *TestSkipIfUnchangedComponent) ContextMetadata(_ Context) map[string]string {
+func (c *TestSkipIfCleanComponent) ContextMetadata(_ Context) map[string]string {
 	return nil
 }
 

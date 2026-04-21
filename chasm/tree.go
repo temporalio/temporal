@@ -760,11 +760,11 @@ func (n *Node) setSerializedNode(
 	return childNode.setSerializedNode(nodePath[1:], encodedPath, serializedNode)
 }
 
-// shouldSkipIfUnchanged returns true when this node's component type has opted in
-// to skip-if-unchanged behavior via WithSkipPersistenceIfUnchanged.
-func (n *Node) shouldSkipIfUnchanged() bool {
+// shouldSkipIfClean returns true when this node's component type has opted in
+// to skip-if-unchanged behavior via WithSkipPersistenceIfClean.
+func (n *Node) shouldSkipIfClean() bool {
 	rc, ok := n.registry.componentFor(n.value)
-	return ok && rc.skipPersistenceIfUnchanged
+	return ok && rc.skipPersistenceIfClean
 }
 
 // serialize sets or updates serializedValue field of the node n with serialized value.
@@ -1707,8 +1707,8 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			prevData                *commonpb.DataBlob
 			prevVersionedTransition *persistencespb.VersionedTransition
 		)
-		skipIfUnchanged := node.shouldSkipIfUnchanged() && node.initialStatePersisted
-		if skipIfUnchanged {
+		skipIfClean := node.shouldSkipIfClean() && node.initialStatePersisted && len(node.newTasks[node.value]) == 0
+		if skipIfClean {
 			prevData = node.serializedNode.Data
 			cloned, ok := proto.Clone(
 				node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
@@ -1724,7 +1724,7 @@ func (n *Node) closeTransactionSerializeNodes() error {
 
 		// If data bytes are identical to what was in storage, revert the metadata
 		// mutation and skip persistence for this node.
-		if skipIfUnchanged && bytes.Equal(prevData.GetData(), node.serializedNode.Data.GetData()) {
+		if skipIfClean && bytes.Equal(prevData.GetData(), node.serializedNode.Data.GetData()) {
 			node.serializedNode.GetMetadata().LastUpdateVersionedTransition = prevVersionedTransition
 			node.setValueState(valueStateSynced)
 			continue
