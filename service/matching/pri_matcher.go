@@ -655,6 +655,10 @@ func (tm *priTaskMatcher) poll(
 	return task, nil
 }
 
+func (tm *priTaskMatcher) HasWaitingPoller() bool {
+	return tm.data.HasWaitingPoller()
+}
+
 func (tm *priTaskMatcher) isForwardingAllowed() bool {
 	return tm.fwdr != nil
 }
