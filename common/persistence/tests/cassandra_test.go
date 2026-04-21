@@ -98,7 +98,7 @@ func (q failingQuery) Iter(context.Context) gocql.Iter {
 	return failingIter{}
 }
 
-func (q failingQuery) Scan(...any) error {
+func (q failingQuery) Scan(context.Context, ...any) error {
 	return assert.AnError
 }
 
@@ -688,7 +688,7 @@ func testCassandraQueueV2ErrInvalidQueueMessageEncodingType(t *testing.T, cluste
 	assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
 }
 
-func (q failingQuery) MapScanCAS(map[string]any) (bool, error) {
+func (q failingQuery) MapScanCAS(context.Context, map[string]any) (bool, error) {
 	return false, assert.AnError
 }
 
