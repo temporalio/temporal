@@ -47,7 +47,7 @@ type nexusCompletionHandler struct {
 	NamespaceRegistry                    namespace.Registry
 	Logger                               log.Logger
 	MetricsHandler                       metrics.Handler
-	ServiceConfig                        *Config
+	Config                               *Config
 	CallbackTokenGenerator               *commonnexus.CallbackTokenGenerator
 	HistoryClient                        resource.HistoryClient
 	TelemetryInterceptor                 *interceptor.TelemetryInterceptor
@@ -92,7 +92,7 @@ func newNexusCompletionHandler(
 		NamespaceRegistry:                    namespaceRegistry,
 		Logger:                               logger,
 		MetricsHandler:                       metricsHandler,
-		ServiceConfig:                        serviceConfig,
+		Config:                               serviceConfig,
 		CallbackTokenGenerator:               callbackTokenGenerator,
 		HistoryClient:                        historyClient,
 		TelemetryInterceptor:                 telemetryInterceptor,
@@ -211,7 +211,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		}
 		return err
 	}
-	tokenLimit := h.ServiceConfig.MaxNexusOperationTokenLength(ns.Name().String())
+	tokenLimit := h.Config.MaxNexusOperationTokenLength(ns.Name().String())
 	if len(r.OperationToken) > tokenLimit {
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation token length exceeds allowed limit (%d/%d)", len(r.OperationToken), tokenLimit)
 	}
@@ -251,7 +251,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 			logger.Error("cannot deserialize payload from completion result", tag.Error(err))
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid result content")
 		}
-		if result.Size() > h.ServiceConfig.BlobSizeLimitError(ns.Name().String()) {
+		if result.Size() > h.Config.BlobSizeLimitError(ns.Name().String()) {
 			logger.Error("payload size exceeds error limit for Nexus CompleteOperation request", tag.WorkflowNamespace(ns.Name().String()))
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "result exceeds size limit")
 		}
@@ -641,5 +641,5 @@ func (c *requestContext) shouldForwardRequest(ctx context.Context, header http.H
 	return redirectAllowed &&
 		c.RedirectionInterceptor.RedirectionAllowed(ctx) &&
 		c.namespace.IsGlobalNamespace() &&
-		c.ServiceConfig.EnableNamespaceNotActiveAutoForwarding(c.namespace.Name().String())
+		c.Config.EnableNamespaceNotActiveAutoForwarding(c.namespace.Name().String())
 }
