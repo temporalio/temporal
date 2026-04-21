@@ -269,7 +269,8 @@ message CancelOutstandingWorkerPollsPartitionRequest {
     // Tree fan-out parameters, set by root and passed down so each node can compute
     // its children without loading config.
     // Children of partition P are [P*degree+1, ..., P*degree+degree], capped at partition_count.
-    // Each node cancels locally, then sends RPCs to its direct children only.
+    // Each node cancels locally, then sends RPCs to its direct children and waits
+    // for all children to finish before returning.
     // Example with partition_count=7, degree=2:
     //         0
     //        / \
