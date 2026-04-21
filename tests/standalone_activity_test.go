@@ -4924,7 +4924,6 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 	t := s.T()
 
 	t.Run("Dispatch", func(t *testing.T) {
-		t.Parallel()
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
 
@@ -4961,14 +4960,13 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			"expected activity to remain in SCHEDULED state during start delay")
 
 		// Wait for the remaining delay, then poll — should get the task.
-		time.Sleep(safetyMargin)
+		time.Sleep(safetyMargin) //nolint:forbidigo
 		pollResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
 		require.NoError(t, err)
 		require.NotEmpty(t, pollResp.GetTaskToken(), "expected task after start delay")
 	})
 
 	t.Run("CompleteAfterDelay", func(t *testing.T) {
-		t.Parallel()
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
 
@@ -4991,7 +4989,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.NoError(t, err)
 
 		// Wait for delay, poll, and complete.
-		time.Sleep(startDelay)
+		time.Sleep(startDelay) //nolint:forbidigo
 		pollResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
 		require.NoError(t, err)
 		require.NotEmpty(t, pollResp.GetTaskToken())
@@ -5016,7 +5014,6 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 	})
 
 	t.Run("ScheduleToStartTimeoutExtended", func(t *testing.T) {
-		t.Parallel()
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
 
@@ -5065,7 +5062,6 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 	})
 
 	t.Run("ScheduleToCloseTimeoutExtended", func(t *testing.T) {
-		t.Parallel()
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
 
@@ -5113,7 +5109,6 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 	})
 
 	t.Run("CancelDuringDelay", func(t *testing.T) {
-		t.Parallel()
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
 
@@ -5158,7 +5153,6 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 	})
 
 	t.Run("TerminateDuringDelay", func(t *testing.T) {
-		t.Parallel()
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
 
@@ -5206,7 +5200,6 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 	// (fail at ~T+2s, retryInterval 1s, deadline without extension = T+3s). With the extension
 	// the deadline is T+5s, so the server allows the retry and we observe attempt 2.
 	t.Run("RetryWithStartDelay", func(t *testing.T) {
-		t.Parallel()
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
 
@@ -5231,7 +5224,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.NotEmpty(t, startResp.GetRunId())
 
 		// Wait for the start delay, then poll attempt 1.
-		time.Sleep(startDelay)
+		time.Sleep(startDelay) //nolint:forbidigo
 		pollResp1, err := s.pollActivityTaskQueue(ctx, taskQueue)
 		require.NoError(t, err)
 		require.NotEmpty(t, pollResp1.GetTaskToken())
