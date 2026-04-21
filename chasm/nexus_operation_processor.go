@@ -83,7 +83,7 @@ type RegisterableNexusOperationProcessor struct {
 
 func nexusOperationProcessorAdapter[I any](processor NexusOperationProcessor[I]) func(ctx NexusOperationProcessorContext, input *commonpb.Payload) (*NexusOperationProcessorResult, error) {
 	return func(ctx NexusOperationProcessorContext, input *commonpb.Payload) (*NexusOperationProcessorResult, error) {
-		fmt.Printf("TESTING: %v", input)
+		fmt.Printf("TESTING: nexusOperationProcessorAdapter input=%v\n", input)
 		var i I
 		decoded := false
 		// For json/plain payloads, proto.Message types use SDK shorthand encoding where
@@ -108,7 +108,7 @@ func nexusOperationProcessorAdapter[I any](processor NexusOperationProcessor[I])
 		}
 		if !decoded {
 			if err := payloads.Decode(&commonpb.Payloads{Payloads: []*commonpb.Payload{input}}, &i); err != nil {
-				fmt.Printf("TESTING: payload decoding failed %s", err.Error())
+				fmt.Printf("TESTING: payload decoding failed %s\n", err.Error())
 				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to decode input payload: %v", err)
 			}
 		}
