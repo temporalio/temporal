@@ -51,12 +51,20 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 
 func (l *Library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
-		chasm.NewRegistrableSideEffectTask("invocation", l.operationInvocationTaskHandler),
+		chasm.NewRegistrableSideEffectTask(
+			"invocation",
+			l.operationInvocationTaskHandler,
+			chasm.WithTaskGroup(TaskGroupName),
+		),
 		chasm.NewRegistrablePureTask("invocationBackoff", l.operationBackoffTaskHandler),
 		chasm.NewRegistrablePureTask("scheduleToStartTimeout", l.operationScheduleToStartTimeoutTaskHandler),
 		chasm.NewRegistrablePureTask("startToCloseTimeout", l.operationStartToCloseTimeoutTaskHandler),
 		chasm.NewRegistrablePureTask("scheduleToCloseTimeout", l.operationScheduleToCloseTimeoutTaskHandler),
-		chasm.NewRegistrableSideEffectTask("cancellation", l.cancellationInvocationTaskHandler),
+		chasm.NewRegistrableSideEffectTask(
+			"cancellation",
+			l.cancellationInvocationTaskHandler,
+			chasm.WithTaskGroup(TaskGroupName),
+		),
 		chasm.NewRegistrablePureTask("cancellationBackoff", l.cancellationBackoffTaskHandler),
 	}
 }
