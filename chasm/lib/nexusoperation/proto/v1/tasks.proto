@@ -4,11 +4,13 @@ package temporal.server.chasm.lib.nexusoperation.proto.v1;
 
 option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpb";
 
-message InvocationTask {
-  int32 attempt = 1;
-}
+message ScheduleToStartTimeoutTask {}
 
-message InvocationTimeoutTask {
+message StartToCloseTimeoutTask {}
+
+message ScheduleToCloseTimeoutTask {}
+
+message InvocationTask {
   int32 attempt = 1;
 }
 

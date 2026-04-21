@@ -8,16 +8,34 @@ import (
 type Library struct {
 	chasm.UnimplementedLibrary
 
-	OperationInvocationTaskHandler *OperationInvocationTaskHandler
-	OperationBackoffTaskHandler    *OperationBackoffTaskHandler
-	OperationTimeoutTaskHandler    *OperationTimeoutTaskHandler
+	operationBackoffTaskHandler                *operationBackoffTaskHandler
+	operationInvocationTaskHandler             *operationInvocationTaskHandler
+	operationScheduleToCloseTimeoutTaskHandler *operationScheduleToCloseTimeoutTaskHandler
+	operationScheduleToStartTimeoutTaskHandler *operationScheduleToStartTimeoutTaskHandler
+	operationStartToCloseTimeoutTaskHandler    *operationStartToCloseTimeoutTaskHandler
 
-	CancellationTaskHandler        *CancellationTaskHandler
-	CancellationBackoffTaskHandler *CancellationBackoffTaskHandler
+	cancellationInvocationTaskHandler *cancellationInvocationTaskHandler
+	cancellationBackoffTaskHandler    *cancellationBackoffTaskHandler
 }
 
-func newLibrary() *Library {
-	return &Library{}
+func newLibrary(
+	operationBackoffTaskHandler *operationBackoffTaskHandler,
+	operationInvocationTaskHandler *operationInvocationTaskHandler,
+	operationScheduleToCloseTimeoutTaskHandler *operationScheduleToCloseTimeoutTaskHandler,
+	operationScheduleToStartTimeoutTaskHandler *operationScheduleToStartTimeoutTaskHandler,
+	operationStartToCloseTimeoutTaskHandler *operationStartToCloseTimeoutTaskHandler,
+	cancellationInvocationTaskHandler *cancellationInvocationTaskHandler,
+	cancellationBackoffTaskHandler *cancellationBackoffTaskHandler,
+) *Library {
+	return &Library{
+		operationBackoffTaskHandler:                operationBackoffTaskHandler,
+		operationInvocationTaskHandler:             operationInvocationTaskHandler,
+		operationScheduleToCloseTimeoutTaskHandler: operationScheduleToCloseTimeoutTaskHandler,
+		operationScheduleToStartTimeoutTaskHandler: operationScheduleToStartTimeoutTaskHandler,
+		operationStartToCloseTimeoutTaskHandler:    operationStartToCloseTimeoutTaskHandler,
+		cancellationInvocationTaskHandler:          cancellationInvocationTaskHandler,
+		cancellationBackoffTaskHandler:             cancellationBackoffTaskHandler,
+	}
 }
 
 func (l *Library) Name() string {
@@ -27,17 +45,27 @@ func (l *Library) Name() string {
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*Operation]("operation"),
-		chasm.NewRegistrableComponent[*Operation]("cancellation"),
+		chasm.NewRegistrableComponent[*Cancellation]("cancellation"),
 	}
 }
 
 func (l *Library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
-		chasm.NewRegistrableSideEffectTask("invocation", l.OperationInvocationTaskHandler),
-		chasm.NewRegistrablePureTask("invocationBackoff", l.OperationBackoffTaskHandler),
-		chasm.NewRegistrablePureTask("scheduleToCloseTimeout", l.OperationTimeoutTaskHandler),
-		chasm.NewRegistrableSideEffectTask("cancellation", l.CancellationTaskHandler),
-		chasm.NewRegistrablePureTask("cancellationBackoff", l.CancellationBackoffTaskHandler),
+		chasm.NewRegistrableSideEffectTask(
+			"invocation",
+			l.operationInvocationTaskHandler,
+			chasm.WithTaskGroup(TaskGroupName),
+		),
+		chasm.NewRegistrablePureTask("invocationBackoff", l.operationBackoffTaskHandler),
+		chasm.NewRegistrablePureTask("scheduleToStartTimeout", l.operationScheduleToStartTimeoutTaskHandler),
+		chasm.NewRegistrablePureTask("startToCloseTimeout", l.operationStartToCloseTimeoutTaskHandler),
+		chasm.NewRegistrablePureTask("scheduleToCloseTimeout", l.operationScheduleToCloseTimeoutTaskHandler),
+		chasm.NewRegistrableSideEffectTask(
+			"cancellation",
+			l.cancellationInvocationTaskHandler,
+			chasm.WithTaskGroup(TaskGroupName),
+		),
+		chasm.NewRegistrablePureTask("cancellationBackoff", l.cancellationBackoffTaskHandler),
 	}
 }
 

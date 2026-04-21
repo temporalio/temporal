@@ -8,6 +8,8 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/callback"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -24,7 +26,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
-	"go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -40,7 +41,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
-	nexusfrontend "go.temporal.io/server/components/nexusoperations/frontend"
+	hsmcallbacks "go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
@@ -76,7 +77,7 @@ var Module = fx.Options(
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
 	fx.Provide(NamespaceHandoverInterceptorProvider),
-	fx.Provide(interceptor.NewBusinessIDExtractor),
+	fx.Provide(interceptor.NewRoutingKeyExtractor),
 	fx.Provide(BusinessIDInterceptorProvider),
 	fx.Provide(RedirectionInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
@@ -101,22 +102,25 @@ var Module = fx.Options(
 	fx.Provide(AuthorizationInterceptorProvider),
 	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
+	fx.Provide(callbackValidatorProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
 	fx.Provide(NamespaceDLQHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
 	fx.Provide(ServiceResolverProvider),
-	fx.Invoke(RegisterNexusHTTPHandler),
+	fx.Provide(newNexusCompletionHandler),
+	fx.Provide(NewNexusOperationHTTPHandler),
+	fx.Provide(newNexusCompletionHTTPHandler),
+	fx.Invoke(RegisterNexusOperationHTTPHandler),
+	fx.Invoke(RegisterNexusCompletionHTTPHandler),
 	fx.Invoke(RegisterOpenAPIHTTPHandler),
 	fx.Provide(HTTPAPIServerProvider),
 	fx.Provide(NewServiceProvider),
 	fx.Provide(NexusEndpointClientProvider),
-	fx.Provide(NexusEndpointRegistryProvider),
 	fx.Invoke(ServiceLifetimeHooks),
-	fx.Invoke(EndpointRegistryLifetimeHooks),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
-	nexusfrontend.Module,
+	chasmnexus.Module,
 	activity.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
@@ -184,6 +188,7 @@ func AuthorizationInterceptorProvider(
 		serviceConfig.ExposeAuthorizerErrors,
 		dynamicconfig.EnableCrossNamespaceCommands.Get(dc),
 		dynamicconfig.EnablePrincipalPropagation.Get(dc),
+		dynamicconfig.DisableStreamingAuthorizer.Get(dc),
 	)
 }
 
@@ -211,7 +216,7 @@ func GrpcServerOptionsProvider(
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceHandoverInterceptor *interceptor.NamespaceHandoverInterceptor,
-	businessIDInterceptor *interceptor.BusinessIDInterceptor,
+	businessIDInterceptor *interceptor.RoutingKeyInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
@@ -290,6 +295,7 @@ func GrpcServerOptionsProvider(
 	unaryInterceptors = append(unaryInterceptors, retryableInterceptor.Intercept)
 
 	streamInterceptor := []grpc.StreamServerInterceptor{
+		authInterceptor.InterceptStream,
 		telemetryInterceptor.StreamIntercept,
 	}
 	if len(customStreamInterceptors) > 0 {
@@ -371,11 +377,11 @@ func RedirectionInterceptorProvider(
 }
 
 func BusinessIDInterceptorProvider(
-	extractor interceptor.BusinessIDExtractor,
+	extractor interceptor.RoutingKeyExtractor,
 	logger log.Logger,
-) *interceptor.BusinessIDInterceptor {
-	return interceptor.NewBusinessIDInterceptor(
-		[]interceptor.BusinessIDExtractorFunc{
+) *interceptor.RoutingKeyInterceptor {
+	return interceptor.NewRoutingKeyInterceptor(
+		[]interceptor.RoutingKeyExtractorFunc{
 			interceptor.WorkflowServiceExtractor(extractor),
 		},
 		logger,
@@ -792,6 +798,26 @@ func OperatorHandlerProvider(
 	return NewOperatorHandlerImpl(args)
 }
 
+// callbackValidatorProvider creates a callback Validator using the production dynamic config keys
+// so that existing operator configurations (component.callbacks.allowedAddresses) are honored.
+// TODO: Once HSM callbacks (components/callbacks) are removed, move this provider into
+// chasm/lib/callback/fx.go and read directly from callback.AllowedAddresses.
+func callbackValidatorProvider(dc *dynamicconfig.Collection) *callback.Validator {
+	return callback.NewValidator(
+		callback.MaxPerExecution.Get(dc),
+		dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		func(ns string) callback.AddressMatchRules {
+			hsmRules := hsmcallbacks.AllowedAddresses.Get(dc)(ns)
+			chasmRules := make([]callback.AddressMatchRule, len(hsmRules.Rules))
+			for i, r := range hsmRules.Rules {
+				chasmRules[i] = callback.AddressMatchRule{Regexp: r.Regexp, AllowInsecure: r.AllowInsecure}
+			}
+			return callback.AddressMatchRules{Rules: chasmRules}
+		},
+	)
+}
+
 func HandlerProvider(
 	cfg *config.Config,
 	serviceName primitives.ServiceName,
@@ -825,6 +851,7 @@ func HandlerProvider(
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	activityHandler activity.FrontendHandler,
+	callbackValidator *callback.Validator,
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
 ) Handler {
@@ -835,6 +862,7 @@ func HandlerProvider(
 	)
 
 	wfHandler := NewWorkflowHandler(
+		callbackValidator,
 		serviceConfig,
 		namespaceReplicationQueue,
 		visibilityMgr,
@@ -867,46 +895,17 @@ func HandlerProvider(
 	return wfHandler
 }
 
-func RegisterNexusHTTPHandler(
-	serviceConfig *Config,
-	serviceName primitives.ServiceName,
-	matchingClient resource.MatchingClient,
-	metricsHandler metrics.Handler,
-	clusterMetadata cluster.Metadata,
-	clientCache *cluster.FrontendHTTPClientCache,
-	namespaceRegistry namespace.Registry,
-	endpointRegistry nexus.EndpointRegistry,
-	authInterceptor *authorization.Interceptor,
-	telemetryInterceptor *interceptor.TelemetryInterceptor,
-	requestErrorHandler *interceptor.RequestErrorHandler,
-	redirectionInterceptor *interceptor.Redirection,
-	namespaceRateLimiterInterceptor interceptor.NamespaceRateLimitInterceptor,
-	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
-	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
-	rateLimitInterceptor *interceptor.RateLimitInterceptor,
-	logger log.Logger,
+func RegisterNexusOperationHTTPHandler(
+	h *NexusOperationHTTPHandler,
 	router *mux.Router,
-	httpTraceProvider nexus.HTTPClientTraceProvider,
 ) {
-	h := NewNexusHTTPHandler(
-		serviceConfig,
-		matchingClient,
-		metricsHandler,
-		clusterMetadata,
-		clientCache,
-		namespaceRegistry,
-		endpointRegistry,
-		authInterceptor,
-		telemetryInterceptor,
-		requestErrorHandler,
-		redirectionInterceptor,
-		namespaceValidatorInterceptor,
-		namespaceRateLimiterInterceptor,
-		namespaceCountLimiterInterceptor,
-		rateLimitInterceptor,
-		logger,
-		httpTraceProvider,
-	)
+	h.RegisterRoutes(router)
+}
+
+func RegisterNexusCompletionHTTPHandler(
+	h *nexusCompletionHTTPHandler,
+	router *mux.Router,
+) {
 	h.RegisterRoutes(router)
 }
 
@@ -987,27 +986,6 @@ func NexusEndpointClientProvider(
 		nexusEndpointManager,
 		logger,
 	)
-}
-
-func NexusEndpointRegistryProvider(
-	matchingClient resource.MatchingClient,
-	nexusEndpointManager persistence.NexusEndpointManager,
-	dc *dynamicconfig.Collection,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-) nexus.EndpointRegistry {
-	registryConfig := nexus.NewEndpointRegistryConfig(dc)
-	return nexus.NewEndpointRegistry(
-		registryConfig,
-		matchingClient,
-		nexusEndpointManager,
-		logger,
-		metricsHandler,
-	)
-}
-
-func EndpointRegistryLifetimeHooks(lc fx.Lifecycle, registry nexus.EndpointRegistry) {
-	lc.Append(fx.StartStopHook(registry.StartLifecycle, registry.StopLifecycle))
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {

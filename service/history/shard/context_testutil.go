@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/future"
@@ -144,11 +145,15 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		shardInfo:          config.ShardInfo,
 		remoteClusterInfos: make(map[string]*remoteClusterInfo),
 
-		clusterMetadata:         clusterMetadata,
-		timeSource:              t.TimeSource,
-		namespaceRegistry:       registry,
-		stateMachineRegistry:    hsm.NewRegistry(),
-		chasmRegistry:           chasm.NewRegistry(t.GetLogger()),
+		clusterMetadata:      clusterMetadata,
+		timeSource:           t.TimeSource,
+		namespaceRegistry:    registry,
+		stateMachineRegistry: hsm.NewRegistry(),
+		chasmRegistry:        chasm.NewRegistry(t.GetLogger()),
+		businessIDRateLimiters: cache.New(
+			config.Config.BusinessIDReuseLimiterCacheSize(),
+			&cache.Options{TTL: config.Config.BusinessIDReuseLimiterCacheTTL()},
+		),
 		persistenceShardManager: t.GetShardManager(),
 		clientBean:              t.GetClientBean(),
 		saProvider:              t.GetSearchAttributesProvider(),

@@ -210,7 +210,7 @@ func (ni *NamespaceValidatorInterceptor) StateValidationIntercept(
 		return nil, err
 	}
 
-	if err := ni.ValidateState(namespaceEntry, info.FullMethod, GetBusinessIDFromContext(ctx)); err != nil {
+	if err := ni.ValidateState(namespaceEntry, info.FullMethod, GetRoutingKeyFromContext(ctx).ID); err != nil {
 		return nil, err
 	}
 
