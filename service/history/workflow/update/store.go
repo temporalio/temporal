@@ -58,6 +58,7 @@ type (
 			links []*commonpb.Link,
 			identity string,
 			priority *commonpb.Priority,
+			timeSkippingConfig *workflowpb.TimeSkippingConfig,
 			workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 		) (*historypb.HistoryEvent, error)
 

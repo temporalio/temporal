@@ -850,7 +850,6 @@ func nexusCompleteOperationFailure(
 		CloseTime: closeTime,
 		Links:     links,
 	}, nil
->>>>>>> c3db1d092 (Nexus Workflow Update code -- squashed)
 }
 
 // GetNexusCompletion converts a workflow completion event into a [nexus.OperationCompletion].
@@ -3316,7 +3315,7 @@ func (ms *MutableStateImpl) addUpdateCallbacks(
 		// Initialize chasm tree once for new workflows.
 		// Using context.Background() because this is done outside an actual request context and the
 		// chasmworkflow.NewWorkflow does not actually use it currently.
-		ms.ensureChasmWorkflowComponent(context.Background())
+		ms.EnsureChasmWorkflowComponent(context.Background())
 		return ms.addUpdateCallbacksChasm(event, updateID, requestID, updateCallbacks)
 	}
 
@@ -3335,7 +3334,7 @@ func (ms *MutableStateImpl) addUpdateCallbacksChasm(
 	}
 
 	nsName := ms.GetNamespaceEntry().Name().String()
-	maxCallbacksPerWorkflow := ms.config.MaxCHASMCallbacksPerWorkflow(nsName)
+	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(nsName)
 	maxCallbacksPerUpdateID := ms.config.MaxCallbacksPerUpdateID(nsName)
 	return wf.AddUpdateCompletionCallbacks(ctx, event.EventTime, updateID, requestID, updateCallbacks, maxCallbacksPerWorkflow, maxCallbacksPerUpdateID)
 }
@@ -5710,7 +5709,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 	return nil
 }
 
-func (ms *MutableStateImpl) RejectWorkflowExecutionUpdate(updateID string, failure *failurepb.Failure) error {
+func (ms *MutableStateImpl) RejectWorkflowExecutionUpdate(updateID string, wfFailure *failurepb.Failure) error {
 	if !ms.chasmCallbacksEnabled() {
 		return nil
 	}
@@ -5730,7 +5729,7 @@ func (ms *MutableStateImpl) RejectWorkflowExecutionUpdate(updateID string, failu
 	if err != nil {
 		return err
 	}
-	return wf.RejectUpdate(ctx, updateID, failure)
+	return wf.RejectUpdate(ctx, updateID, wfFailure)
 }
 
 // processUpdateCallbacks triggers "UpdateFinished" callbacks using the CHASM implementation.

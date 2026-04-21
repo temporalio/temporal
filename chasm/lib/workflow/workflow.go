@@ -178,7 +178,7 @@ func addCallbacksToMap(
 				},
 			}
 		default:
-			return target, fmt.Errorf("unsupported callback variant: %T", variant)
+			return target, serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", variant)
 		}
 
 		// requestID (unique per API call) + idx (position within the request) ensures unique, idempotent callback IDs.
