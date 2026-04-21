@@ -293,7 +293,7 @@ func Invoke(
 		wf, chasmCtx, err := mutableState.ChasmWorkflowComponentReadOnly(ctx)
 		if err != nil {
 			shard.GetLogger().Error(
-				"failed to get workflow component from CHASM tree",
+				"failed to load Nexus operation data while building describe response",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(executionInfo.WorkflowId),
 				tag.WorkflowRunID(executionState.RunId),
@@ -314,7 +314,7 @@ func Invoke(
 		chasmNexusOpInfos, err := wf.BuildPendingNexusOperationInfos(chasmCtx, outboundCB)
 		if err != nil {
 			shard.GetLogger().Error(
-				"failed to build Nexus operation info from CHASM tree",
+				"failed to build Nexus operation info while building describe response",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(executionInfo.WorkflowId),
 				tag.WorkflowRunID(executionState.RunId),

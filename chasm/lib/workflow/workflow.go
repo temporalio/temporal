@@ -433,10 +433,9 @@ func (w *Workflow) GetNexusCompletion(
 }
 
 // BuildPendingNexusOperationInfos reads nexus operations from the workflow and converts them to API format.
-// invocationCBOpen and cancellationCBOpen report whether the circuit breaker for the given endpoint is open.
 func (w *Workflow) BuildPendingNexusOperationInfos(
 	ctx chasm.Context,
-	invocationCBOpen func(endpoint string) bool,
+	circuitBreaker func(endpoint string) bool,
 ) ([]*workflowpb.PendingNexusOperationInfo, error) {
 	var result []*workflowpb.PendingNexusOperationInfo
 	for key, field := range w.Operations {
@@ -453,7 +452,7 @@ func (w *Workflow) BuildPendingNexusOperationInfos(
 		}
 
 		blockedReason := ""
-		if state == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED && invocationCBOpen(op.GetEndpoint()) {
+		if state == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED && circuitBreaker(op.GetEndpoint()) {
 			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
 			blockedReason = "The circuit breaker is open."
 		}
@@ -481,7 +480,7 @@ func (w *Workflow) BuildPendingNexusOperationInfos(
 			state := nexusoperation.CancellationAPIState(cancel.Status)
 			blockedReason := ""
 
-			if state == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED && invocationCBOpen(info.Endpoint) {
+			if state == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED && circuitBreaker(info.Endpoint) {
 				state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
 				blockedReason = "The circuit breaker is open."
 			}
