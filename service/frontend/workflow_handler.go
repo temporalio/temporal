@@ -3030,7 +3030,8 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPollsFrontendFanout(
 	if totalCancelled.Load() > 0 || failedPartitions.Load() > 0 {
 		wh.logger.Info("Cancelled outstanding polls for worker shutdown.",
 			tag.String("worker-instance-key", workerInstanceKey),
-			tag.NewInt32("cancelled-count", totalCancelled.Load()))
+			tag.NewInt32("cancelled-count", totalCancelled.Load()),
+			tag.NewInt32("failed-partitions", failedPartitions.Load()))
 	}
 }
 

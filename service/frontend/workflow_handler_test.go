@@ -3910,9 +3910,7 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithEagerPollCancellationFronte
 		WorkerInstanceKey: workerInstanceKey,
 		TaskQueue:         taskQueue,
 	})
-	if err != nil {
-		s.Fail("ShutdownWorker with frontend fan-out failed:", err)
-	}
+	s.NoError(err)
 }
 
 func (s *WorkflowHandlerSuite) TestShutdownWorkerWithCancellationError() {

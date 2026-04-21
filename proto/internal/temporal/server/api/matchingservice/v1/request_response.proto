@@ -278,7 +278,7 @@ message CancelOutstandingWorkerPollsPartitionRequest {
     //     3  4 5  6
     // Root sends RPCs to {1, 2}. Node 1 propagates to {3, 4}. Node 2 propagates to {5, 6}.
     int32 partition_count = 5;
-    // Maximum number of children per node in the partition tree (from ForwarderMaxChildrenPerNode config).
+    // Maximum number of children per node in the partition tree.
     int32 degree = 6;
 }
 

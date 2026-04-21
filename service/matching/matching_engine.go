@@ -1299,7 +1299,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPollsPartition(
 	numPartitions := int(request.GetPartitionCount())
 	degree := int(request.GetDegree())
 
-	e.logger.Info("Cancelling worker polls on partition",
+	e.logger.Debug("Cancelling worker polls on partition",
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.NewStringTag("worker-instance-key", request.GetWorkerInstanceKey()),
 		tag.NewInt32("partition-id", int32(partitionID)),
