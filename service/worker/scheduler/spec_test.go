@@ -514,7 +514,7 @@ func (s *specSuite) TestSpecMaxSpecYearBoundary() {
 			{Year: []*schedulepb.Range{{Start: 9999}}},
 		},
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	// Year 10000 (beyond maxSpecYear) should be rejected.
 	_, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
@@ -547,7 +547,7 @@ func (s *specSuite) TestSpecFullYearRange() {
 			{Year: []*schedulepb.Range{{Start: 2000, End: 9999}}},
 		},
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	s.checkSequenceFull(
 		"",
