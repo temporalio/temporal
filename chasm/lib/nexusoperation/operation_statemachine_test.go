@@ -11,7 +11,9 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -364,9 +366,26 @@ func TestTransitionSucceeded(t *testing.T) {
 			operation := newTestOperation()
 			operation.Status = nexusoperationpb.OPERATION_STATUS_STARTED
 
+			controller := gomock.NewController(t)
+			metricsHandler := metrics.NewMockHandler(controller)
+			outcomeTag := metrics.OutcomeTag("success")
+
+			counterSuccess := metrics.NewMockCounterIface(controller)
+			counterSuccess.EXPECT().Record(int64(1)).Times(1)
+			metricsHandler.EXPECT().Counter(NexusOperationSuccessCount.Name()).Return(counterSuccess)
+
+			timerS2C := metrics.NewMockTimerIface(controller)
+			timerS2C.EXPECT().Record(gomock.Any(), outcomeTag).Times(1)
+			metricsHandler.EXPECT().Timer(NexusOperationScheduleToCloseLatency.Name()).Return(timerS2C)
+
+			timerS2S := metrics.NewMockTimerIface(controller)
+			timerS2S.EXPECT().Record(gomock.Any(), outcomeTag).Times(1)
+			metricsHandler.EXPECT().Timer(NexusOperationScheduleToStartLatency.Name()).Return(timerS2S)
+
 			err := TransitionSucceeded.Apply(operation, ctx, EventSucceeded{
-				CompleteTime: tc.completeTime,
-				Result:       tc.result,
+				CompleteTime:   tc.completeTime,
+				Result:         tc.result,
+				metricsHandler: metricsHandler,
 			})
 			require.NoError(t, err)
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, operation.Status)
@@ -424,9 +443,26 @@ func TestTransitionFailed(t *testing.T) {
 			operation := newTestOperation()
 			operation.Status = tc.startStatus
 
+			controller := gomock.NewController(t)
+			metricsHandler := metrics.NewMockHandler(controller)
+			outcomeTag := metrics.OutcomeTag("failed")
+
+			counterFailed := metrics.NewMockCounterIface(controller)
+			counterFailed.EXPECT().Record(int64(1)).Times(1)
+			metricsHandler.EXPECT().Counter(NexusOperationFailedCount.Name()).Return(counterFailed)
+
+			timerS2C := metrics.NewMockTimerIface(controller)
+			timerS2C.EXPECT().Record(gomock.Any(), outcomeTag).Times(1)
+			metricsHandler.EXPECT().Timer(NexusOperationScheduleToCloseLatency.Name()).Return(timerS2C)
+
+			timerS2S := metrics.NewMockTimerIface(controller)
+			timerS2S.EXPECT().Record(gomock.Any(), outcomeTag).Times(1)
+			metricsHandler.EXPECT().Timer(NexusOperationScheduleToStartLatency.Name()).Return(timerS2S)
+
 			err := TransitionFailed.Apply(operation, ctx, EventFailed{
-				Failure:      failure,
-				CompleteTime: tc.completeTime,
+				Failure:        failure,
+				CompleteTime:   tc.completeTime,
+				metricsHandler: metricsHandler,
 			})
 			require.NoError(t, err)
 
@@ -486,9 +522,26 @@ func TestTransitionCanceled(t *testing.T) {
 			operation := newTestOperation()
 			operation.Status = tc.startStatus
 
+			controller := gomock.NewController(t)
+			metricsHandler := metrics.NewMockHandler(controller)
+			outcomeTag := metrics.OutcomeTag("canceled")
+
+			counterCanceled := metrics.NewMockCounterIface(controller)
+			counterCanceled.EXPECT().Record(int64(1)).Times(1)
+			metricsHandler.EXPECT().Counter(NexusOperationCancelCount.Name()).Return(counterCanceled)
+
+			timerS2C := metrics.NewMockTimerIface(controller)
+			timerS2C.EXPECT().Record(gomock.Any(), outcomeTag).Times(1)
+			metricsHandler.EXPECT().Timer(NexusOperationScheduleToCloseLatency.Name()).Return(timerS2C)
+
+			timerS2S := metrics.NewMockTimerIface(controller)
+			timerS2S.EXPECT().Record(gomock.Any(), outcomeTag).Times(1)
+			metricsHandler.EXPECT().Timer(NexusOperationScheduleToStartLatency.Name()).Return(timerS2S)
+
 			err := TransitionCanceled.Apply(operation, ctx, EventCanceled{
-				Failure:      failure,
-				CompleteTime: tc.completeTime,
+				Failure:        failure,
+				CompleteTime:   tc.completeTime,
+				metricsHandler: metricsHandler,
 			})
 			require.NoError(t, err)
 
@@ -506,27 +559,89 @@ func TestTransitionCanceled(t *testing.T) {
 }
 
 func TestTransitionTimedOut(t *testing.T) {
-	ctx := &chasm.MockMutableContext{
-		MockContext: chasm.MockContext{
-			HandleNow: func(chasm.Component) time.Time { return defaultTime },
+	testCases := []struct {
+		name        string
+		startStatus nexusoperationpb.OperationStatus
+		startedTime *timestamppb.Timestamp
+		timeoutType enumspb.TimeoutType
+	}{
+		{
+			name:        "schedule-to-close timeout",
+			startStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
+			timeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		},
+		{
+			name:        "schedule-to-close timeout with async operation",
+			startStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
+			startedTime: timestamppb.New(defaultTime),
+			timeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		},
+		{
+			name:        "schedule-to-start timeout",
+			startStatus: nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+			timeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		},
+		{
+			name:        "start-to-close timeout",
+			startStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
+			startedTime: timestamppb.New(defaultTime),
+			timeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		},
 	}
 
-	operation := newTestOperation()
-	operation.Status = nexusoperationpb.OPERATION_STATUS_STARTED
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{
+				MockContext: chasm.MockContext{
+					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+				},
+			}
 
-	err := TransitionTimedOut.Apply(operation, ctx, EventTimedOut{TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE})
-	require.NoError(t, err)
+			operation := newTestOperation()
+			operation.Status = tc.startStatus
+			operation.StartedTime = tc.startedTime
 
-	require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, operation.Status)
-	require.Equal(t, defaultTime, operation.ClosedTime.AsTime())
-	require.Empty(t, ctx.Tasks)
+			controller := gomock.NewController(t)
+			metricsHandler := metrics.NewMockHandler(controller)
+			outcomeTag := metrics.OutcomeTag("timeout")
+			timeoutTag := metrics.StringTag("timeout_type", tc.timeoutType.String())
+
+			counterTimeout := metrics.NewMockCounterIface(controller)
+			counterTimeout.EXPECT().Record(int64(1), timeoutTag).Times(1)
+			metricsHandler.EXPECT().Counter(NexusOperationTimeoutCount.Name()).Return(counterTimeout)
+
+			timerS2C := metrics.NewMockTimerIface(controller)
+			timerS2C.EXPECT().Record(gomock.Any(), outcomeTag).Times(1)
+			metricsHandler.EXPECT().Timer(NexusOperationScheduleToCloseLatency.Name()).Return(timerS2C)
+
+			timerS2S := metrics.NewMockTimerIface(controller)
+			timerS2S.EXPECT().Record(gomock.Any(), outcomeTag).Times(1)
+			metricsHandler.EXPECT().Timer(NexusOperationScheduleToStartLatency.Name()).Return(timerS2S)
+
+			if tc.startedTime != nil {
+				timerSt2C := metrics.NewMockTimerIface(controller)
+				timerSt2C.EXPECT().Record(gomock.Any(), outcomeTag).Times(1)
+				metricsHandler.EXPECT().Timer(NexusOperationStartToCloseLatency.Name()).Return(timerSt2C)
+			}
+
+			err := TransitionTimedOut.Apply(operation, ctx, EventTimedOut{
+				TimeoutType:    tc.timeoutType,
+				metricsHandler: metricsHandler,
+			})
+			require.NoError(t, err)
+
+			require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, operation.Status)
+			require.Equal(t, defaultTime, operation.ClosedTime.AsTime())
+			require.Empty(t, ctx.Tasks)
+		})
+	}
 }
 
 func TestTransitionTerminated(t *testing.T) {
 	testCases := []struct {
 		name        string
 		startStatus nexusoperationpb.OperationStatus
+		startedTime *timestamppb.Timestamp
 	}{
 		{
 			name:        "terminated from scheduled",
@@ -535,6 +650,7 @@ func TestTransitionTerminated(t *testing.T) {
 		{
 			name:        "terminated from started",
 			startStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
+			startedTime: timestamppb.New(defaultTime),
 		},
 		{
 			name:        "terminated from backing off",
@@ -555,12 +671,38 @@ func TestTransitionTerminated(t *testing.T) {
 			}
 			operation := newTestOperation()
 			operation.Status = tc.startStatus
+			operation.StartedTime = tc.startedTime
 
-			event := EventTerminated{TerminateComponentRequest: chasm.TerminateComponentRequest{
-				RequestID: "terminate-request-id",
-				Reason:    "test reason",
-				Identity:  "test-identity",
-			}}
+			controller := gomock.NewController(t)
+			metricsHandler := metrics.NewMockHandler(controller)
+			outcomeTag := metrics.OutcomeTag("terminated")
+
+			counterTerminate := metrics.NewMockCounterIface(controller)
+			counterTerminate.EXPECT().Record(int64(1)).Times(1)
+			metricsHandler.EXPECT().Counter(NexusOperationTerminateCount.Name()).Return(counterTerminate)
+
+			timerS2C := metrics.NewMockTimerIface(controller)
+			timerS2C.EXPECT().Record(gomock.Any(), outcomeTag).Times(1)
+			metricsHandler.EXPECT().Timer(NexusOperationScheduleToCloseLatency.Name()).Return(timerS2C)
+
+			timerS2S := metrics.NewMockTimerIface(controller)
+			timerS2S.EXPECT().Record(gomock.Any(), outcomeTag).Times(1)
+			metricsHandler.EXPECT().Timer(NexusOperationScheduleToStartLatency.Name()).Return(timerS2S)
+
+			if tc.startedTime != nil {
+				timerSt2C := metrics.NewMockTimerIface(controller)
+				timerSt2C.EXPECT().Record(gomock.Any(), outcomeTag).Times(1)
+				metricsHandler.EXPECT().Timer(NexusOperationStartToCloseLatency.Name()).Return(timerSt2C)
+			}
+
+			event := EventTerminated{
+				TerminateComponentRequest: chasm.TerminateComponentRequest{
+					RequestID: "terminate-request-id",
+					Reason:    "test reason",
+					Identity:  "test-identity",
+				},
+				metricsHandler: metricsHandler,
+			}
 
 			err := TransitionTerminated.Apply(operation, ctx, event)
 			require.NoError(t, err)
