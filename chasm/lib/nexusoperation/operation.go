@@ -16,6 +16,8 @@ import (
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/softassert"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
@@ -169,34 +171,51 @@ func (o *Operation) onCompleted(ctx chasm.MutableContext, result *commonpb.Paylo
 	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationCompleted(ctx, o, result, links)
 	}
+	metricsHandler, err := o.enrichMetricsHandler(ctx)
+	if err != nil {
+		return err
+	}
 	o.Links = append(o.Links, links...)
-	return TransitionSucceeded.Apply(o, ctx, EventSucceeded{Result: result})
+	return TransitionSucceeded.Apply(o, ctx, EventSucceeded{Result: result, metricsHandler: metricsHandler})
 }
 
 func (o *Operation) onFailed(ctx chasm.MutableContext, cause *failurepb.Failure) error {
 	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationFailed(ctx, o, cause)
 	}
-	return TransitionFailed.Apply(o, ctx, EventFailed{Failure: cause})
+	metricsHandler, err := o.enrichMetricsHandler(ctx)
+	if err != nil {
+		return err
+	}
+	return TransitionFailed.Apply(o, ctx, EventFailed{Failure: cause, metricsHandler: metricsHandler})
 }
 
 func (o *Operation) onCanceled(ctx chasm.MutableContext, cause *failurepb.Failure) error {
 	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationCanceled(ctx, o, cause)
 	}
-	return TransitionCanceled.Apply(o, ctx, EventCanceled{Failure: cause})
+	metricsHandler, err := o.enrichMetricsHandler(ctx)
+	if err != nil {
+		return err
+	}
+	return TransitionCanceled.Apply(o, ctx, EventCanceled{Failure: cause, metricsHandler: metricsHandler})
 }
 
 func (o *Operation) onTimedOut(ctx chasm.MutableContext, cause *failurepb.Failure) error {
 	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationTimedOut(ctx, o, cause)
 	}
+	metricsHandler, err := o.enrichMetricsHandler(ctx)
+	if err != nil {
+		return err
+	}
 	if cause != nil {
 		o.getOrCreateOutcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
 			Failed: &nexusoperationpb.OperationOutcome_Failed{Failure: cause},
 		}
 	}
-	return TransitionTimedOut.Apply(o, ctx, EventTimedOut{})
+	timeoutType := cause.GetTimeoutFailureInfo().GetTimeoutType()
+	return TransitionTimedOut.Apply(o, ctx, EventTimedOut{TimeoutType: timeoutType, metricsHandler: metricsHandler})
 }
 
 func (o *Operation) HandleNexusCompletion(
@@ -335,7 +354,12 @@ func (o *Operation) Terminate(
 		}
 		return chasm.TerminateComponentResponse{}, nil
 	}
-	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(o, ctx, EventTerminated{TerminateComponentRequest: req})
+
+	metricsHandler, err := o.enrichMetricsHandler(ctx)
+	if err != nil {
+		return chasm.TerminateComponentResponse{}, err
+	}
+	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(o, ctx, EventTerminated{TerminateComponentRequest: req, metricsHandler: metricsHandler})
 }
 
 func (o *Operation) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {
@@ -485,6 +509,78 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 	}
 
 	return info
+}
+
+// enrichMetricsHandler returns a metrics handler enriched with nexus operation tags.
+// Panics if the context value is missing, which indicates a library registration bug.
+func (o *Operation) enrichMetricsHandler(ctx chasm.Context) (metrics.Handler, error) {
+	// nolint:revive // unchecked-type-assertion: intentional panic on missing context value
+	opCtx := ctx.Value(ctxKeyOperationContext).(*operationContext)
+	namespaceName, err := opCtx.namespaceRegistry.GetNamespaceName(namespace.ID(ctx.ExecutionKey().NamespaceID))
+	if err != nil {
+		return nil, err
+	}
+	tags := []metrics.Tag{
+		metrics.NamespaceTag(namespaceName.String()),
+		metrics.NexusEndpointTag(o.GetEndpoint()),
+	}
+	if opCtx.metricTagConfig != nil {
+		conf := opCtx.metricTagConfig()
+		if conf.IncludeServiceTag {
+			tags = append(tags, metrics.NexusServiceTag(o.GetService()))
+		}
+		if conf.IncludeOperationTag {
+			tags = append(tags, metrics.NexusOperationTag(o.GetOperation()))
+		}
+	}
+	return ctx.MetricsHandler().WithTags(tags...), nil
+}
+
+func (o *Operation) emitOnSucceededMetrics(handler metrics.Handler, closeTime time.Time) {
+	outcomeTag := metrics.OutcomeTag("success")
+	NexusOperationSuccessCount.With(handler).Record(1)
+	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
+}
+
+func (o *Operation) emitOnFailedMetrics(handler metrics.Handler, closeTime time.Time) {
+	outcomeTag := metrics.OutcomeTag("failed")
+	NexusOperationFailedCount.With(handler).Record(1)
+	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
+}
+
+func (o *Operation) emitOnCanceledMetrics(handler metrics.Handler, closeTime time.Time) {
+	outcomeTag := metrics.OutcomeTag("canceled")
+	NexusOperationCancelCount.With(handler).Record(1)
+	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
+}
+
+func (o *Operation) emitOnTimedOutMetrics(handler metrics.Handler, closeTime time.Time, timeoutType string) {
+	outcomeTag := metrics.OutcomeTag("timeout")
+	NexusOperationTimeoutCount.With(handler).Record(1, metrics.StringTag("timeout_type", timeoutType))
+	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
+}
+
+func (o *Operation) emitOnTerminatedMetrics(handler metrics.Handler, closeTime time.Time) {
+	outcomeTag := metrics.OutcomeTag("terminated")
+	NexusOperationTerminateCount.With(handler).Record(1)
+	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
+}
+
+// emitLatencyMetrics emits schedule-to-close, schedule-to-start, and start-to-close latencies.
+func (o *Operation) emitLatencyMetrics(handler metrics.Handler, closeTime time.Time, outcomeTag metrics.Tag) {
+	scheduledTime := o.GetScheduledTime().AsTime()
+	NexusOperationScheduleToCloseLatency.With(handler).Record(closeTime.Sub(scheduledTime), outcomeTag)
+
+	startedTime := o.GetStartedTime()
+	if startedTime != nil {
+		// Async operation that was started.
+		NexusOperationScheduleToStartLatency.With(handler).Record(startedTime.AsTime().Sub(scheduledTime), outcomeTag)
+		NexusOperationStartToCloseLatency.With(handler).Record(closeTime.Sub(startedTime.AsTime()), outcomeTag)
+	} else {
+		// Sync operation or operation that never started.
+		// For sync ops, schedule-to-start equals schedule-to-close.
+		NexusOperationScheduleToStartLatency.With(handler).Record(closeTime.Sub(scheduledTime), outcomeTag)
+	}
 }
 
 func (o *Operation) closeTime(ctx chasm.Context) *timestamppb.Timestamp {

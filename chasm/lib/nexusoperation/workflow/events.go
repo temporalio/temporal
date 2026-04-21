@@ -317,7 +317,7 @@ func (d TimedOutEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkfl
 	}
 	op := field.Get(ctx)
 
-	if err := nexusoperation.TransitionTimedOut.Apply(op, ctx, nexusoperation.EventTimedOut{}); err != nil {
+	if err := nexusoperation.TransitionTimedOut.Apply(op, ctx, nexusoperation.EventTimedOut{TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE}); err != nil {
 		return err
 	}
 	wf.RemoveNexusOperation(attrs.GetScheduledEventId())

@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
@@ -514,7 +515,7 @@ func TestTransitionTimedOut(t *testing.T) {
 	operation := newTestOperation()
 	operation.Status = nexusoperationpb.OPERATION_STATUS_STARTED
 
-	err := TransitionTimedOut.Apply(operation, ctx, EventTimedOut{})
+	err := TransitionTimedOut.Apply(operation, ctx, EventTimedOut{TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE})
 	require.NoError(t, err)
 
 	require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, operation.Status)

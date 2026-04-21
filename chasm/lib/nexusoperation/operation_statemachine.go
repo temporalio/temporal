@@ -4,10 +4,12 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/metrics"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -160,8 +162,9 @@ var TransitionStarted = chasm.NewTransition(
 type EventSucceeded struct {
 	// If not nil, uses the provided time instead of the current component time.
 	// Used when a completion comes in before start is recorded (rare race).
-	CompleteTime *time.Time
-	Result       *commonpb.Payload
+	CompleteTime   *time.Time
+	Result         *commonpb.Payload
+	metricsHandler metrics.Handler
 }
 
 var TransitionSucceeded = chasm.NewTransition(
@@ -185,6 +188,7 @@ var TransitionSucceeded = chasm.NewTransition(
 			Successful: &nexusoperationpb.OperationOutcome_Successful{Result: event.Result},
 		}
 
+		o.emitOnSucceededMetrics(event.metricsHandler, closeTime)
 		// Terminal state - no tasks to emit.
 		return nil
 	},
@@ -194,8 +198,9 @@ var TransitionSucceeded = chasm.NewTransition(
 type EventFailed struct {
 	// If not nil, uses the provided time instead of the current component time.
 	// Used when a completion comes in before start is recorded (rare race).
-	CompleteTime *time.Time
-	Failure      *failurepb.Failure
+	CompleteTime   *time.Time
+	Failure        *failurepb.Failure
+	metricsHandler metrics.Handler
 }
 
 var TransitionFailed = chasm.NewTransition(
@@ -210,7 +215,12 @@ var TransitionFailed = chasm.NewTransition(
 		if event.CompleteTime != nil {
 			closeTime = *event.CompleteTime
 		}
-		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime)
+		if err := o.resolveUnsuccessfully(ctx, event.Failure, closeTime); err != nil {
+			return err
+		}
+
+		o.emitOnFailedMetrics(event.metricsHandler, closeTime)
+		return nil
 	},
 )
 
@@ -218,8 +228,9 @@ var TransitionFailed = chasm.NewTransition(
 type EventCanceled struct {
 	// If not nil, uses the provided time instead of the current component time.
 	// Used when a completion comes in before start is recorded (rare race).
-	CompleteTime *time.Time
-	Failure      *failurepb.Failure
+	CompleteTime   *time.Time
+	Failure        *failurepb.Failure
+	metricsHandler metrics.Handler
 }
 
 var TransitionCanceled = chasm.NewTransition(
@@ -234,6 +245,9 @@ var TransitionCanceled = chasm.NewTransition(
 		if event.CompleteTime != nil {
 			closeTime = *event.CompleteTime
 		}
+
+		o.emitOnCanceledMetrics(event.metricsHandler, closeTime)
+
 		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime)
 	},
 )
@@ -241,6 +255,7 @@ var TransitionCanceled = chasm.NewTransition(
 // EventTerminated is triggered when the operation is terminated by user request.
 type EventTerminated struct {
 	chasm.TerminateComponentRequest
+	metricsHandler metrics.Handler
 }
 
 var TransitionTerminated = chasm.NewTransition(
@@ -255,7 +270,8 @@ var TransitionTerminated = chasm.NewTransition(
 		o.TerminateState = &nexusoperationpb.NexusOperationTerminateState{
 			RequestId: event.RequestID,
 		}
-		o.ClosedTime = timestamppb.New(ctx.Now(o))
+		closedTime := ctx.Now(o)
+		o.ClosedTime = timestamppb.New(closedTime)
 		o.NextAttemptScheduleTime = nil
 		outcome := o.Outcome.Get(ctx)
 		outcome.Variant = &nexusoperationpb.OperationOutcome_Failed_{
@@ -270,12 +286,16 @@ var TransitionTerminated = chasm.NewTransition(
 				},
 			},
 		}
+
+		o.emitOnTerminatedMetrics(event.metricsHandler, closedTime)
 		return nil
 	},
 )
 
-// EventTimedOut is triggered when the schedule-to-close timeout is triggered for an operation.
+// EventTimedOut is triggered when a timeout is triggered for an operation.
 type EventTimedOut struct {
+	TimeoutType    enumspb.TimeoutType
+	metricsHandler metrics.Handler
 }
 
 var TransitionTimedOut = chasm.NewTransition(
@@ -289,7 +309,10 @@ var TransitionTimedOut = chasm.NewTransition(
 		// Clear the next attempt schedule time when leaving BACKING_OFF state. This field is only valid in
 		// BACKING_OFF state.
 		o.NextAttemptScheduleTime = nil
-		o.ClosedTime = timestamppb.New(ctx.Now(o))
+		closeTime := ctx.Now(o)
+		o.ClosedTime = timestamppb.New(closeTime)
+
+		o.emitOnTimedOutMetrics(event.metricsHandler, closeTime, event.TimeoutType.String())
 		// Terminal state - no tasks to emit.
 		return nil
 	},
