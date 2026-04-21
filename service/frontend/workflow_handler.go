@@ -2849,9 +2849,9 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 	if wh.config.EnableCancelWorkerPollsOnShutdown(request.GetNamespace()) {
 		waitGroup.Go(func() {
 			if wh.config.EnableMatchingFanOutForPollCancellation(request.GetNamespace()) {
-				wh.cancelOutstandingWorkerPollsMatchingFanOut(ctx, namespaceID.String(), request)
-			} else {
 				wh.cancelOutstandingWorkerPolls(ctx, namespaceID.String(), request)
+			} else {
+				wh.cancelOutstandingWorkerPollsFrontendFanout(ctx, namespaceID.String(), request)
 			}
 		})
 	}
@@ -2894,9 +2894,9 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 	return &workflowservice.ShutdownWorkerResponse{}, nil
 }
 
-// cancelOutstandingWorkerPollsMatchingFanOut sends root partition only; matching fans out to all partitions.
+// cancelOutstandingWorkerPolls sends root partition only; matching fans out to all partitions.
 // Best-effort: errors are logged but don't fail shutdown.
-func (wh *WorkflowHandler) cancelOutstandingWorkerPollsMatchingFanOut(
+func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 	ctx context.Context,
 	namespaceID string,
 	request *workflowservice.ShutdownWorkerRequest,
@@ -2957,9 +2957,10 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPollsMatchingFanOut(
 	}
 }
 
-// cancelOutstandingWorkerPolls fans out poll cancellation to all partitions of the task queue.
+// cancelOutstandingWorkerPollsFrontendFanout fans out poll cancellation to all partitions of the task queue.
+// TODO: Delete this code path after EnableMatchingFanOutForPollCancellation is rolled out.
 // This is a best-effort operation - errors are logged but don't fail the shutdown.
-func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
+func (wh *WorkflowHandler) cancelOutstandingWorkerPollsFrontendFanout(
 	ctx context.Context,
 	namespaceID string,
 	request *workflowservice.ShutdownWorkerRequest,
