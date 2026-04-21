@@ -347,9 +347,10 @@ func (h *handler) PauseActivityExecution(ctx context.Context, req *activitypb.Pa
 					WorkflowId: frontendReq.GetWorkflowId(),
 					RunId:      frontendReq.GetRunId(),
 				},
-				Activity: &workflowservice.PauseActivityRequest_Id{Id: frontendReq.GetActivityId()},
-				Reason:   frontendReq.GetReason(),
-				Identity: frontendReq.GetIdentity(),
+				Activity:  &workflowservice.PauseActivityRequest_Id{Id: frontendReq.GetActivityId()},
+				Reason:    frontendReq.GetReason(),
+				Identity:  frontendReq.GetIdentity(),
+				RequestId: frontendReq.GetRequestId(),
 			},
 		})
 		if err != nil {

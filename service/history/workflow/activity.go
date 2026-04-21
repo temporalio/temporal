@@ -267,6 +267,9 @@ func PauseActivity(
 	}
 
 	if ai.Paused {
+		if ai.GetPauseInfo().GetRequestId() == pauseInfo.GetRequestId() {
+			return nil
+		}
 		return serviceerror.NewFailedPrecondition("activity is already paused")
 	}
 
