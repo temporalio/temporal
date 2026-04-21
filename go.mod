@@ -18,6 +18,7 @@ require (
 	github.com/aws/smithy-go v1.24.2
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cactus/go-statsd-client/v5 v5.1.0
+	github.com/caio/go-tdigest/v5 v5.0.0
 	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da
 	github.com/emirpasic/gods v1.18.1
 	github.com/fatih/color v1.18.0
