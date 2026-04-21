@@ -348,10 +348,9 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 		expectedConfig *workflowpb.TimeSkippingConfig
 	}{
 		{
-			name: "update max_skipped_duration preserves enabled and disable_propagation",
+			name: "update max_skipped_duration preserves enabled",
 			initialConfig: &workflowpb.TimeSkippingConfig{
-				Enabled:            true,
-				DisablePropagation: true,
+				Enabled: true,
 				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
 					MaxSkippedDuration: oneHour,
 				},
@@ -365,8 +364,7 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 			},
 			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_skipped_duration"}},
 			expectedConfig: &workflowpb.TimeSkippingConfig{
-				Enabled:            true,
-				DisablePropagation: true,
+				Enabled: true,
 				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
 					MaxSkippedDuration: twoHours,
 				},

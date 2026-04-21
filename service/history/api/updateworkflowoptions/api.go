@@ -251,13 +251,6 @@ func mergeWorkflowExecutionOptions(
 		mergeInto.TimeSkippingConfig.Enabled = mergeFrom.GetTimeSkippingConfig().GetEnabled()
 	}
 
-	if _, ok := updateFields["timeSkippingConfig.disablePropagation"]; ok {
-		if mergeInto.TimeSkippingConfig == nil {
-			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
-		}
-		mergeInto.TimeSkippingConfig.DisablePropagation = mergeFrom.GetTimeSkippingConfig().GetDisablePropagation()
-	}
-
 	if _, ok := updateFields["timeSkippingConfig.maxSkippedDuration"]; ok {
 		if mergeInto.TimeSkippingConfig == nil {
 			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}

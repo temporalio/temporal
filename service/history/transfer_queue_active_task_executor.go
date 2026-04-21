@@ -1643,6 +1643,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		UserMetadata:             userMetadata,
 		VersioningOverride:       inheritedPinnedOverride,
 		Priority:                 priority,
+		TimeSkippingConfig:       attributes.GetTimeSkippingConfig(),
 	}
 
 	request := common.CreateHistoryStartWorkflowRequest(

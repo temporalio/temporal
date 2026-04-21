@@ -6034,10 +6034,27 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 		return nil, nil, err
 	}
 
+	// Snapshot parent's current time-skipping config and accumulated skipped duration
+	// into the initiated event so that the transfer task can use them to start the child wf.
+	var childTSConfig *workflowpb.TimeSkippingConfig
+	if ms.executionInfo != nil && ms.executionInfo.TimeSkippingInfo != nil {
+		parentTSInfo := ms.executionInfo.TimeSkippingInfo
+		if parentTSC := parentTSInfo.GetConfig(); parentTSC != nil {
+			childTSConfig = proto.Clone(parentTSC).(*workflowpb.TimeSkippingConfig)
+		}
+		if skipped := parentTSInfo.GetAccumulatedSkippedDuration(); skipped != nil {
+			if childTSConfig == nil {
+				childTSConfig = &workflowpb.TimeSkippingConfig{}
+			}
+			childTSConfig.PropagatedSkippedDuration = durationpb.New(skipped.AsDuration())
+		}
+	}
+
 	event := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		command,
 		targetNamespaceID,
+		childTSConfig,
 	)
 	ci, err := ms.ApplyStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event)
 	if err != nil {

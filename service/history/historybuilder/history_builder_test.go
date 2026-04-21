@@ -1363,6 +1363,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 		workflowTaskCompletionEventID,
 		attributes,
 		testNamespaceID,
+		nil,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -2566,6 +2567,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated_NilSearch
 		rand.Int63(),
 		command,
 		testNamespaceID,
+		nil,
 	)
 
 	// Verify that nil search attributes are filtered out
