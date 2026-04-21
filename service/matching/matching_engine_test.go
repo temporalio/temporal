@@ -5962,17 +5962,17 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.Equal(t, int32(3), resp.CancelledCount)
 	})
 
-	t.Run("tree fan-out: root + 2 levels (7 partitions, degree=2)", func(t *testing.T) {
+	t.Run("tree fan-out: root + 2 levels (6 partitions, degree=2)", func(t *testing.T) {
 		// Tree:       0
 		//            / \
 		//           1   2
-		//          / \ / \
-		//         3  4 5  6
+		//          / \   |
+		//         3  4   5
 		// Root sends RPCs to direct children {1, 2} only.
-		// Remote nodes 1 and 2 propagate to {3,4} and {5,6} respectively.
-		// The mock simulates the full subtree cancellation count in each child's response.
+		// Remote nodes 1 and 2 propagate to their children respectively.
+		// Mock returns different counts per child to verify correct aggregation.
 		t.Parallel()
-		engine, mockMatchingClient := setupFanOutTest(t, 7, 2)
+		engine, mockMatchingClient := setupFanOutTest(t, 6, 2)
 		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
 
 		var receivedPartitions []int32
@@ -5984,10 +5984,13 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 				mu.Lock()
 				receivedPartitions = append(receivedPartitions, partitionID)
 				mu.Unlock()
-				require.Equal(t, int32(7), req.GetPartitionCount())
+				require.Equal(t, int32(6), req.GetPartitionCount())
 				require.Equal(t, int32(2), req.GetDegree())
-				// Simulate: node 1 cancelled 3 (itself + children 3,4), node 2 cancelled 3 (itself + children 5,6)
-				return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: 3}, nil
+				// Node 1 cancelled 3 (itself + children 3,4), node 2 cancelled 2 (itself + child 5 only)
+				if partitionID == 1 {
+					return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: 3}, nil
+				}
+				return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: 2}, nil
 			}).
 			Times(2) // only direct children 1 and 2
 
@@ -6001,8 +6004,8 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			})
 
 		require.NoError(t, err)
-		// Root cancels 1 local + children return 3 + 3 = 7 total
-		require.Equal(t, int32(7), resp.CancelledCount)
+		// Root cancels 1 local + child 1 returns 3 + child 2 returns 2 = 6 total
+		require.Equal(t, int32(6), resp.CancelledCount)
 		slices.Sort(receivedPartitions)
 		require.Equal(t, []int32{1, 2}, receivedPartitions, "root should only send RPCs to direct children")
 	})
@@ -6036,5 +6039,61 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.NoError(t, err)
 		// Root cancels 1 local + child 1 fails (0) + child 2 returns 2 = 3 total
 		require.Equal(t, int32(3), resp.CancelledCount, "failed child should not block successful siblings")
+	})
+
+	t.Run("tree fan-out: intermediate node propagates to its children", func(t *testing.T) {
+		// Directly invoke CancelOutstandingWorkerPollsPartition on partition 1
+		// with partition_count=7, degree=2. Node 1's children are {3, 4}.
+		// Tree:       0
+		//            / \
+		//           1   2
+		//          / \ / \
+		//         3  4 5  6
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		t.Cleanup(ctrl.Finish)
+
+		mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+
+		var receivedPartitions []int32
+		var mu sync.Mutex
+		mockMatchingClient.EXPECT().
+			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+				partitionID := req.GetTaskQueuePartition().GetNormalPartitionId()
+				mu.Lock()
+				receivedPartitions = append(receivedPartitions, partitionID)
+				mu.Unlock()
+				require.Equal(t, int32(7), req.GetPartitionCount())
+				require.Equal(t, int32(2), req.GetDegree())
+				return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: 1}, nil
+			}).
+			Times(2) // children 3 and 4
+
+		engine := &matchingEngineImpl{
+			matchingRawClient:     mockMatchingClient,
+			logger:                log.NewNoopLogger(),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+		}
+		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
+
+		resp, err := engine.CancelOutstandingWorkerPollsPartition(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+				NamespaceId: "test-namespace-id",
+				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+					TaskQueue:     "test-queue",
+					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+					PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 1},
+				},
+				WorkerInstanceKey: "worker-key",
+				PartitionCount:    7,
+				Degree:            2,
+			})
+
+		require.NoError(t, err)
+		// Node 1 cancels 1 local + children 3 and 4 return 1 each = 3 total
+		require.Equal(t, int32(3), resp.CancelledCount)
+		slices.Sort(receivedPartitions)
+		require.Equal(t, []int32{3, 4}, receivedPartitions, "node 1 should propagate to children {3, 4}")
 	})
 }
