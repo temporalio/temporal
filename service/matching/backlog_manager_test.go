@@ -453,7 +453,7 @@ func (s *BacklogManagerTestSuite) TestSyncState_UnloadsOnOwnershipLoss() {
 
 	s.blm.Start()
 	defer s.blm.Stop()
-	s.NoError(s.blm.WaitUntilInitialized(context.Background()))
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
 
 	// physical queue should unload soon
 	var unloadCalled atomic.Bool
