@@ -214,6 +214,26 @@ func (s *MatcherDataSuite) TestMatchTaskImmediately() {
 	s.Equal(t, pres.task)
 }
 
+func (s *MatcherDataSuite) TestMatchTaskImmediatelyRateLimited() {
+	// Set rate limit to zero — blocks all matches.
+	s.md.rateLimitManager.SetEffectiveRPSAndSourceForTesting(0, enumspb.RATE_LIMIT_SOURCE_API)
+	s.md.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(0)
+
+	// Add a waiting poller.
+	go func() {
+		poller := &waitingPoller{startTime: s.now()}
+		s.md.EnqueuePollerAndWait(nil, poller)
+	}()
+	s.waitForPollers(1)
+
+	// Sync match should fail due to rate limiting, not lack of poller.
+	t := s.newSyncTask(nil)
+	imr := s.md.MatchTaskImmediately(t)
+	s.True(imr.canSyncMatch)
+	s.False(imr.gotSyncMatch)
+	s.True(imr.rateLimited)
+}
+
 func (s *MatcherDataSuite) TestMatchTaskImmediatelyDisabledBacklog() {
 	// register some backlog with old tasks
 	s.md.EnqueueTaskNoWait(s.newBacklogTask(123, 10*time.Minute, nil))
