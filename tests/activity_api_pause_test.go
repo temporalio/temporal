@@ -859,8 +859,8 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(c, err)
 					require.Len(c, desc.PendingActivities, 1)
-					assert.Equal(c, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, desc.PendingActivities[0].State)
-					assert.Greater(c, desc.PendingActivities[0].Attempt, int32(1))
+					require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, desc.PendingActivities[0].State)
+					require.Greater(c, desc.PendingActivities[0].Attempt, int32(1))
 				}, 5*time.Second, 200*time.Millisecond)
 
 				// step 1: pause
@@ -870,7 +870,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(c, err)
 					require.Len(c, desc.PendingActivities, 1)
-					assert.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, desc.PendingActivities[0].State)
+					require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, desc.PendingActivities[0].State)
 				}, 5*time.Second, 100*time.Millisecond)
 
 				// step 2: update-options (reduce schedule-to-close timeout while paused)
@@ -889,7 +889,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(c, err)
 					require.Len(c, desc.PendingActivities, 1)
-					assert.Equal(c, updatedScheduleToClose, desc.PendingActivities[0].ActivityOptions.GetScheduleToCloseTimeout().AsDuration())
+					require.Equal(c, updatedScheduleToClose, desc.PendingActivities[0].ActivityOptions.GetScheduleToCloseTimeout().AsDuration())
 				}, 5*time.Second, 100*time.Millisecond)
 
 				// step 3: reset while paused — stays PAUSED (keepPaused=true), attempt resets to 1
@@ -905,10 +905,10 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(c, err)
 					require.Len(c, desc.PendingActivities, 1)
-					assert.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, desc.PendingActivities[0].State)
-					assert.Equal(c, int32(1), desc.PendingActivities[0].Attempt)
+					require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, desc.PendingActivities[0].State)
+					require.Equal(c, int32(1), desc.PendingActivities[0].Attempt)
 					// updated options must survive the reset
-					assert.Equal(c, updatedScheduleToClose, desc.PendingActivities[0].ActivityOptions.GetScheduleToCloseTimeout().AsDuration())
+					require.Equal(c, updatedScheduleToClose, desc.PendingActivities[0].ActivityOptions.GetScheduleToCloseTimeout().AsDuration())
 				}, 5*time.Second, 100*time.Millisecond)
 
 				// step 4: unpause
@@ -919,8 +919,8 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 					require.NoError(c, err)
 					require.Len(c, desc.PendingActivities, 1)
-					assert.Equal(c, enumspb.PENDING_ACTIVITY_STATE_STARTED, desc.PendingActivities[0].State)
-					assert.Equal(c, int32(1), desc.PendingActivities[0].Attempt)
+					require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_STARTED, desc.PendingActivities[0].State)
+					require.Equal(c, int32(1), desc.PendingActivities[0].Attempt)
 				}, 5*time.Second, 100*time.Millisecond)
 
 				activityCompleteCh <- struct{}{}
