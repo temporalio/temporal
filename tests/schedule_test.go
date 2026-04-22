@@ -107,7 +107,7 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestUpdateIntervalTakesEffect", func(t *testing.T) { testUpdateIntervalTakesEffect(t, newContext) })
 	t.Run("TestListScheduleMatchingTimes", func(t *testing.T) { testListScheduleMatchingTimes(t, newContext) })
 	t.Run("TestListScheduleMatchingTimesWeeklyFarFuture", func(t *testing.T) { testListScheduleMatchingTimesWeeklyFarFuture(t, newContext) })
-	t.Run("TestDescribeScheduleFarFutureActionTimes", func(t *testing.T) { testDescribeScheduleFarFutureActionTimes(t, newContext) })
+	t.Run("TestDescribeScheduleFutureActionTimesAtBoundary", func(t *testing.T) { testDescribeScheduleFutureActionTimesAtBoundary(t, newContext) })
 	t.Run("TestDescribeScheduleBeyondMaxCalendarYear", func(t *testing.T) { testDescribeScheduleBeyondMaxCalendarYear(t, newContext) })
 	t.Run("TestUpdateScheduleFarFutureSpec", func(t *testing.T) { testUpdateScheduleFarFutureSpec(t, newContext) })
 	t.Run("TestLimitMemoSpecSize", func(t *testing.T) { testLimitMemoSpecSize(t, newContext) })
@@ -954,8 +954,8 @@ func testListScheduleMatchingTimes(t *testing.T, newContext contextFactory) {
 }
 
 // testListScheduleMatchingTimesWeeklyFarFuture tests a weekly schedule queried over
-// a far-future range (2026-01-01 to 2217-08-21). The spec validation accepts years
-// beyond 2100, but the result count is capped at MaxListMatchingTimesCount (1000).
+// a far-future range that extends beyond MaxCalendarYear. The spec validation accepts
+// years beyond MaxCalendarYear, but the result count is capped at MaxListMatchingTimesCount.
 func testListScheduleMatchingTimesWeeklyFarFuture(t *testing.T, newContext contextFactory) {
 	s := testcore.NewEnv(t, scheduleCommonOpts()...)
 
@@ -963,7 +963,6 @@ func testListScheduleMatchingTimesWeeklyFarFuture(t *testing.T, newContext conte
 
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
-			// Weekly: every Thursday at midnight UTC.
 			CronString: []string{"0 0 * * 4"},
 		},
 		Action: &schedulepb.ScheduleAction{
@@ -987,9 +986,8 @@ func testListScheduleMatchingTimesWeeklyFarFuture(t *testing.T, newContext conte
 	})
 	s.NoError(err)
 
-	// Query weekly action times from 2026-01-01 to 2217-08-21.
 	startTime := timestamppb.New(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
-	endTime := timestamppb.New(time.Date(2217, 8, 21, 0, 0, 0, 0, time.UTC))
+	endTime := timestamppb.New(time.Date(scheduler.MaxCalendarYear+50, 8, 21, 0, 0, 0, 0, time.UTC))
 
 	resp, err := s.FrontendClient().ListScheduleMatchingTimes(ctx, &workflowservice.ListScheduleMatchingTimesRequest{
 		Namespace:  s.Namespace().String(),
@@ -1014,23 +1012,34 @@ func testListScheduleMatchingTimesWeeklyFarFuture(t *testing.T, newContext conte
 	s.LessOrEqual(lastTime.Year(), scheduler.MaxCalendarYear)
 }
 
-// testDescribeScheduleFarFutureActionTimes verifies that DescribeSchedule returns
-// FutureActionTimes within the MaxCalendarYear bound for a schedule that has no
-// end date and will run indefinitely.
-func testDescribeScheduleFarFutureActionTimes(t *testing.T, newContext contextFactory) {
+// testDescribeScheduleFutureActionTimesAtBoundary verifies that DescribeSchedule
+// only returns FutureActionTimes at or before MaxCalendarYear, even when the spec
+// covers years beyond it.
+func testDescribeScheduleFutureActionTimesAtBoundary(t *testing.T, newContext contextFactory) {
 	s := testcore.NewEnv(t, scheduleCommonOpts()...)
 
-	sid := "sched-test-describe-far-future"
+	sid := "sched-test-describe-boundary"
 
+	// Yearly schedule: 5 actions before MaxCalendarYear and 5 after.
+	// Only the 5 before should be returned.
+	startYear := scheduler.MaxCalendarYear - 4
+	endYear := scheduler.MaxCalendarYear + 5
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
-			// Weekly: every Thursday at midnight UTC.
-			CronString: []string{"0 0 * * 4"},
+			Calendar: []*schedulepb.CalendarSpec{
+				{
+					Year:       fmt.Sprintf("%d-%d", startYear, endYear),
+					DayOfMonth: "1",
+					Month:      "1",
+					Hour:       "0",
+					Minute:     "0",
+				},
+			},
 		},
 		Action: &schedulepb.ScheduleAction{
 			Action: &schedulepb.ScheduleAction_StartWorkflow{
 				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
-					WorkflowId:   "wf-describe-far-future",
+					WorkflowId:   "wf-describe-boundary",
 					WorkflowType: &commonpb.WorkflowType{Name: "action"},
 					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				},
@@ -1055,12 +1064,10 @@ func testDescribeScheduleFarFutureActionTimes(t *testing.T, newContext contextFa
 	s.NoError(err)
 
 	futureTimes := descResp.GetInfo().GetFutureActionTimes()
-	s.Len(futureTimes, 10)
+	s.Len(futureTimes, 5)
 
 	for _, ts := range futureTimes {
-		t := ts.AsTime()
-		s.Equal(time.Thursday, t.Weekday(), "expected Thursday, got %s for %v", t.Weekday(), t)
-		s.LessOrEqual(t.Year(), scheduler.MaxCalendarYear)
+		s.LessOrEqual(ts.AsTime().Year(), scheduler.MaxCalendarYear)
 	}
 }
 
@@ -1076,7 +1083,7 @@ func testDescribeScheduleBeyondMaxCalendarYear(t *testing.T, newContext contextF
 		Spec: &schedulepb.ScheduleSpec{
 			Calendar: []*schedulepb.CalendarSpec{
 				{
-					Year:   "2150",
+					Year:   fmt.Sprintf("%d", scheduler.MaxCalendarYear+50),
 					Hour:   "12",
 					Minute: "0",
 				},
@@ -1109,8 +1116,6 @@ func testDescribeScheduleBeyondMaxCalendarYear(t *testing.T, newContext contextF
 	})
 	s.NoError(err)
 
-	// The spec is valid but all action times are beyond MaxCalendarYear,
-	// so the iterator cannot compute any future action times.
 	s.Empty(descResp.GetInfo().GetFutureActionTimes())
 }
 
@@ -1148,12 +1153,12 @@ func testUpdateScheduleFarFutureSpec(t *testing.T, newContext contextFactory) {
 	})
 	s.NoError(err)
 
-	// Update to a calendar spec that references a year beyond MaxCalendarYear.
-	// Use Calendar (string form) so defaults are auto-filled for unspecified fields.
+	startYear := scheduler.MaxCalendarYear - 10
+	endYear := scheduler.MaxCalendarYear + 50
 	schedule.Spec = &schedulepb.ScheduleSpec{
 		Calendar: []*schedulepb.CalendarSpec{
 			{
-				Year:       "2026-2217",
+				Year:       fmt.Sprintf("%d-%d", startYear, endYear),
 				DayOfMonth: "1",
 				Hour:       "0",
 				Minute:     "0",
@@ -1181,8 +1186,7 @@ func testUpdateScheduleFarFutureSpec(t *testing.T, newContext contextFactory) {
 		if len(cals) != 1 || len(cals[0].Year) == 0 {
 			return false
 		}
-		// Calendar "2026-2217" is parsed as Range{Start: 2026, End: 2217}.
-		if cals[0].Year[0].Start != int32(2026) || cals[0].Year[0].End != int32(2217) {
+		if cals[0].Year[0].Start != int32(startYear) || cals[0].Year[0].End != int32(endYear) {
 			return false
 		}
 		futureTimes := descResp.GetInfo().GetFutureActionTimes()
