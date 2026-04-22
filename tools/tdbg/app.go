@@ -115,7 +115,7 @@ func NewCliApp(opts ...Option) *cli.App {
 		case "never":
 			color.NoColor = true
 		default:
-			// fatih/color will inspect the enviroment and terminal and set a reasonable default.
+			// fatih/color will inspect the environment and terminal and set a reasonable default.
 		}
 		return nil
 	}
