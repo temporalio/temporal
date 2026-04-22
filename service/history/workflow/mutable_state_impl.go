@@ -1806,6 +1806,18 @@ func (ms *MutableStateImpl) Now() time.Time {
 	return ms.timeSource.Now()
 }
 
+// accumulatedSkippedDuration returns the workflow's accumulated time-skipping offset, or 0 if
+// time skipping is not configured. Timestamps in mutable state are stored in the virtual frame
+// (i.e. they may include skipped time); this offset is the amount to subtract to get real
+// wall-clock, used by AddTasks when persisting timer-category tasks.
+func (ms *MutableStateImpl) accumulatedSkippedDuration() time.Duration {
+	info := ms.executionInfo.GetTimeSkippingInfo()
+	if info == nil || info.AccumulatedSkippedDuration == nil {
+		return 0
+	}
+	return info.AccumulatedSkippedDuration.AsDuration()
+}
+
 // GetWorkflowCloseTime returns workflow closed time, returns a zero time for open workflow
 func (ms *MutableStateImpl) GetWorkflowCloseTime(ctx context.Context) (time.Time, error) {
 	if ms.executionState.GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && ms.executionInfo.CloseTime == nil {
@@ -2798,8 +2810,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	}
 
 	if tsc := startRequest.GetStartRequest().GetTimeSkippingConfig(); tsc != nil && tsc.GetEnabled() {
-		ms.initTimeSkippingInfoAndWrapTimeSource()
-		ms.executionInfo.TimeSkippingInfo.Config = tsc
+		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: tsc}
 	}
 
 	return event, nil
@@ -5658,7 +5669,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 	// Update time skipping config.
 	if tsc := attributes.GetTimeSkippingConfig(); tsc != nil {
 		if ms.executionInfo.TimeSkippingInfo == nil {
-			ms.initTimeSkippingInfoAndWrapTimeSource()
+			ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{}
 		}
 		ms.executionInfo.TimeSkippingInfo.Config = tsc
 	}
@@ -6899,6 +6910,7 @@ func (ms *MutableStateImpl) AddTasks(
 	newTasks ...tasks.Task,
 ) {
 	now := ms.timeSource.Now()
+	skip := ms.accumulatedSkippedDuration()
 	for _, task := range newTasks {
 		if chasmTask, ok := task.(*tasks.ChasmTask); ok &&
 			chasmTask.GetCategory() == tasks.CategoryVisibility &&
@@ -6911,6 +6923,15 @@ func (ms *MutableStateImpl) AddTasks(
 			task.GetVisibilityTime().Sub(now) > maxScheduledTaskDuration {
 			ms.logger.Info("Dropped long duration scheduled task.", tasks.Tags(task)...)
 			continue
+		}
+
+		// Timer tasks are produced with VisibilityTime in the workflow's virtual frame (i.e.
+		// possibly inflated by accumulated skipped duration). The timer queue dispatches against
+		// real wall-clock, so convert here — callers outside MutableState don't see the virtual
+		// vs. real distinction. The CategoryTypeScheduled drop-check above runs first so it
+		// compares virtual-vs-virtual (now is also virtual).
+		if skip > 0 && category == tasks.CategoryTimer {
+			task.SetVisibilityTime(task.GetVisibilityTime().Add(-skip))
 		}
 
 		if chasmPureTask, ok := task.(*tasks.ChasmTaskPure); ok {
@@ -8528,8 +8549,7 @@ func (ms *MutableStateImpl) closeTransactionRegenerateTimerTasksForTimeSkipping(
 		if !ms.IsWorkflowExecutionRunning() {
 			return nil
 		}
-		ms.taskGenerator.RegenerateTimerTasksForTimeSkipping()
-		return nil
+		return ms.taskGenerator.RegenerateTimerTasksForTimeSkipping()
 	case historyi.TransactionPolicyPassive:
 		return nil
 	default:
@@ -8674,7 +8694,7 @@ func (ms *MutableStateImpl) RefreshExpirationTimeoutTask(ctx context.Context) er
 	executionInfo := ms.GetExecutionInfo()
 	// Anchor expiration in the virtual frame so that toRealTime at the task
 	// generator boundary produces the correct wall-clock VisibilityTimestamp.
-	now := ms.timeSource.Now().UTC()
+	now := ms.timeSource.Now()
 	weTimeout := timestamp.DurationValue(executionInfo.WorkflowExecutionTimeout)
 	if weTimeout > 0 {
 		executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(now.Add(weTimeout))
@@ -9556,27 +9576,20 @@ func logError(
 	logger.Error(msg, tags...)
 }
 
-// initTimeSkippingInfoAndWrapTimeSource initializes the time-skipping info and wraps the time source.
-// Should always use this method to initialize the TimeSkippingInfo for the MutableStateImpl.
-func (ms *MutableStateImpl) initTimeSkippingInfoAndWrapTimeSource() {
-	if ms.executionInfo.TimeSkippingInfo == nil {
-		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{}
-	}
-	ms.wrapTimeSourceWithTimeSkipping()
-}
-
-// wrapTimeSourceWithTimeSkipping wraps the time source of mutableState and hBuilder with a time-skipping wrapper.
-// And this method will only wrap the time source if the time skipping info is set, and if the time source is not already wrapped.
+// wrapTimeSourceWithTimeSkipping wraps ms.timeSource (and the hBuilder's copy) with a time-skipping
+// wrapper. The closure captures ms so the offset tracks ms.executionInfo.TimeSkippingInfo as it
+// evolves — no need to re-wrap when TimeSkippingInfo is created or replaced. Called once per MS
+// lifetime from the constructors; the type-assertion guard makes any repeat call a no-op.
 func (ms *MutableStateImpl) wrapTimeSourceWithTimeSkipping() {
-	// no time skipping info, no need to wrap
-	if ms.executionInfo == nil || ms.executionInfo.TimeSkippingInfo == nil {
-		return
-	}
-	// idempotency check
 	if _, ok := ms.timeSource.(*clock.TimeSkippingTimeSourceWrapper); ok {
 		return
 	}
-	// taskGenerator and workflowTaskStateMachine read timeSource via ms directly and don't need updating.
-	ms.timeSource = clock.WrapTimeSourceWithTimeSkippingInfo(ms.timeSource, ms.executionInfo.TimeSkippingInfo)
+	ms.timeSource = clock.WrapTimeSourceWithTimeSkipping(ms.timeSource, func() time.Duration {
+		info := ms.executionInfo.GetTimeSkippingInfo()
+		if info == nil || info.AccumulatedSkippedDuration == nil {
+			return 0
+		}
+		return info.AccumulatedSkippedDuration.AsDuration()
+	})
 	ms.hBuilder.SetTimeSource(ms.timeSource)
 }

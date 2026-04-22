@@ -82,7 +82,7 @@ type (
 		GenerateUserTimerTasks() error
 
 		// time skipping tasks
-		RegenerateTimerTasksForTimeSkipping()
+		RegenerateTimerTasksForTimeSkipping() error
 
 		// replication tasks
 		GenerateHistoryReplicationTasks(
@@ -168,7 +168,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 			NamespaceID:         executionInfo.NamespaceId,
 			WorkflowID:          executionInfo.WorkflowId,
 			FirstRunID:          executionInfo.FirstExecutionRunId,
-			VisibilityTimestamp: r.toRealTime(workflowExecutionExpirationTime),
+			VisibilityTimestamp: workflowExecutionExpirationTime,
 		})
 		executionTimeoutTimerTaskStatus = TimerTaskStatusCreated
 	}
@@ -184,7 +184,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 		r.mutableState.AddTasks(&tasks.WorkflowRunTimeoutTask{
 			// TaskID is set by shard
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			VisibilityTimestamp: r.toRealTime(workflowRunExpirationTime),
+			VisibilityTimestamp: workflowRunExpirationTime,
 			Version:             startEvent.GetVersion(),
 		})
 	}
@@ -261,7 +261,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			task := &tasks.ArchiveExecutionTask{
 				// TaskID is set by the shard
 				WorkflowKey:         r.mutableState.GetWorkflowKey(),
-				VisibilityTimestamp: r.toRealTime(archiveTime),
+				VisibilityTimestamp: archiveTime,
 				Version:             closeVersion,
 			}
 			closeTasks = append(closeTasks, task)
@@ -273,13 +273,6 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	r.mutableState.AddTasks(closeTasks...)
 
 	return nil
-}
-
-// toRealTime tries to convert a timestampe of mutable state which is possibly virtual-framed
-// to real wall-clock by subtracting the workflow's accumulated skipped duration.
-// The returned time is guaranteed to be in real wall-clock, and should be used as the VisibilityTimestamp for tasks.
-func (r *TaskGeneratorImpl) toRealTime(msTimestamp time.Time) time.Time {
-	return virtualToRealTime(r.mutableState.GetExecutionInfo(), msTimestamp)
 }
 
 // getRetention returns the retention period for this task generator's workflow execution.
@@ -366,7 +359,7 @@ func (r *TaskGeneratorImpl) GenerateDeleteHistoryEventTask(closeTime time.Time) 
 	r.mutableState.AddTasks(&tasks.DeleteHistoryEventTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: r.toRealTime(deleteTime),
+		VisibilityTimestamp: deleteTime,
 		Version:             closeVersion,
 		BranchToken:         branchToken,
 		ArchetypeID:         r.mutableState.ChasmTree().ArchetypeID(),
@@ -407,7 +400,7 @@ func (r *TaskGeneratorImpl) GenerateDelayedWorkflowTasks(
 	r.mutableState.AddTasks(&tasks.WorkflowBackoffTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: r.toRealTime(executionTimestamp),
+		VisibilityTimestamp: executionTimestamp,
 		WorkflowBackoffType: workflowBackoffType,
 		Version:             startVersion,
 	})
@@ -445,7 +438,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		wttt := &tasks.WorkflowTaskTimeoutTask{
 			// TaskID is set by shard
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			VisibilityTimestamp: r.toRealTime(workflowTask.ScheduledTime.Add(scheduleToStartTimeout)),
+			VisibilityTimestamp: workflowTask.ScheduledTime.Add(scheduleToStartTimeout),
 			TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 			EventID:             workflowTask.ScheduledEventID,
 			ScheduleAttempt:     workflowTask.Attempt,
@@ -499,7 +492,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
 	wttt := &tasks.WorkflowTaskTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: r.toRealTime(workflowTask.ScheduledTime.Add(scheduleToStartTimeout)),
+		VisibilityTimestamp: workflowTask.ScheduledTime.Add(scheduleToStartTimeout),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventID:             workflowTask.ScheduledEventID,
 		ScheduleAttempt:     workflowTask.Attempt,
@@ -538,7 +531,7 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 	wttt := &tasks.WorkflowTaskTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: r.toRealTime(workflowTask.StartedTime.Add(workflowTask.WorkflowTaskTimeout)),
+		VisibilityTimestamp: workflowTask.StartedTime.Add(workflowTask.WorkflowTaskTimeout),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		EventID:             workflowTask.ScheduledEventID,
 		ScheduleAttempt:     workflowTask.Attempt,
@@ -582,7 +575,7 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistence
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		Version:             activityInfo.GetVersion(),
-		VisibilityTimestamp: r.toRealTime(activityInfo.GetScheduledTime().AsTime()),
+		VisibilityTimestamp: activityInfo.GetScheduledTime().AsTime(),
 		EventID:             activityInfo.GetScheduledEventId(),
 		Attempt:             activityInfo.GetAttempt(),
 		Stamp:               activityInfo.Stamp,
@@ -1043,14 +1036,14 @@ func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.St
 // This function is not idempotent, but when called twice, logically the timerTasks regenerated will have the same contents,
 // and the only difference is the TaskID.
 // TODO@time-skipping: currently not safe to call in replication context
-func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() {
+func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 
 	if r.mutableState.GetExecutionInfo().TimeSkippingInfo == nil {
-		return
+		return nil
 	}
 	accumulatedSkippedDuration := r.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration()
 	if accumulatedSkippedDuration == 0 {
-		return
+		return nil
 	}
 
 	// timertasks that are not stale should be regenerated when time skipping transition happens:
@@ -1066,7 +1059,7 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() {
 		r.mutableState.AddTasks(&tasks.UserTimerTask{
 			// TaskID is set by shard
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			VisibilityTimestamp: r.toRealTime(userTimerSequenceID.Timestamp),
+			VisibilityTimestamp: userTimerSequenceID.Timestamp,
 			EventID:             userTimerSequenceID.EventID,
 		})
 	}
@@ -1079,17 +1072,25 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() {
 			NamespaceID:         r.mutableState.GetExecutionInfo().NamespaceId,
 			WorkflowID:          r.mutableState.GetExecutionInfo().WorkflowId,
 			FirstRunID:          r.mutableState.GetExecutionInfo().FirstExecutionRunId,
-			VisibilityTimestamp: r.toRealTime(timestamp.TimeValue(executionTimeoutTimer)),
+			VisibilityTimestamp: timestamp.TimeValue(executionTimeoutTimer),
 		})
 	}
 	runTimeoutTimer := r.mutableState.GetExecutionInfo().WorkflowRunExpirationTime
 	if !timeNotSet(runTimeoutTimer) {
+		// Version must match the workflow's start version so the executor's
+		// CheckTaskVersion passes for global namespaces (see timer_queue_active_task_executor.go).
+		startVersion, err := r.mutableState.GetStartVersion()
+		if err != nil {
+			return err
+		}
 		r.mutableState.AddTasks(&tasks.WorkflowRunTimeoutTask{
 			// TaskID is set by shard
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			VisibilityTimestamp: r.toRealTime(timestamp.TimeValue(runTimeoutTimer)),
+			VisibilityTimestamp: timestamp.TimeValue(runTimeoutTimer),
+			Version:             startVersion,
 		})
 	}
+	return nil
 }
 
 func timeNotSet(ts *timestamppb.Timestamp) bool {

@@ -6652,18 +6652,19 @@ func (s *mutableStateSuite) TestWrapTimeSourceWithTimeSkipping() {
 		return ts
 	}
 
-	s.Run("NoOpWhenTimeSkippingInfoNil", func() {
+	s.Run("ZeroOffsetWhenTimeSkippingInfoNil", func() {
+		s.mutableState.timeSource = fixedTimeSource()
 		s.mutableState.executionInfo.TimeSkippingInfo = nil
-		original := s.mutableState.timeSource
 
 		s.mutableState.wrapTimeSourceWithTimeSkipping()
 
-		s.Equal(original, s.mutableState.timeSource)
 		_, isWrapper := s.mutableState.timeSource.(*clock.TimeSkippingTimeSourceWrapper)
-		s.False(isWrapper)
+		s.True(isWrapper)
+		// With nil TimeSkippingInfo the wrapper is present but applies a zero offset.
+		s.Equal(fixedBase, s.mutableState.timeSource.Now())
 	})
 
-	s.Run("WrapsTimeSourceWhenTimeSkippingInfoSet", func() {
+	s.Run("OffsetTracksAccumulatedDuration", func() {
 		s.mutableState.timeSource = fixedTimeSource()
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			AccumulatedSkippedDuration: durationpb.New(skipped),
@@ -6673,6 +6674,20 @@ func (s *mutableStateSuite) TestWrapTimeSourceWithTimeSkipping() {
 
 		_, isWrapper := s.mutableState.timeSource.(*clock.TimeSkippingTimeSourceWrapper)
 		s.True(isWrapper)
+		s.Equal(fixedBase.Add(skipped), s.mutableState.timeSource.Now())
+	})
+
+	s.Run("OffsetFollowsLateTimeSkippingInfoAssignment", func() {
+		// Wrap first with nil TimeSkippingInfo, then assign it — the closure must
+		// pick up the new accumulated duration without a re-wrap.
+		s.mutableState.timeSource = fixedTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		s.mutableState.wrapTimeSourceWithTimeSkipping()
+
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(skipped),
+		}
+
 		s.Equal(fixedBase.Add(skipped), s.mutableState.timeSource.Now())
 	})
 
@@ -6709,36 +6724,51 @@ func (s *mutableStateSuite) TestWrapTimeSourceWithTimeSkipping() {
 	})
 }
 
-func (s *mutableStateSuite) TestInitTimeSkippingInfoAndWrapTimeSource() {
-	const skipped = time.Hour
+func (s *mutableStateSuite) TestAddTasks_SubtractsSkipFromTimerTasks() {
+	skipped := 30 * time.Minute
+	virtualTime := s.mockShard.GetTimeSource().Now().Add(2 * time.Hour)
 
-	s.Run("InitializesNilTimeSkippingInfo", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = nil
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		AccumulatedSkippedDuration: durationpb.New(skipped),
+	}
 
-		s.mutableState.initTimeSkippingInfoAndWrapTimeSource()
+	timerTask := &tasks.UserTimerTask{
+		WorkflowKey:         s.mutableState.GetWorkflowKey(),
+		VisibilityTimestamp: virtualTime,
+		EventID:             42,
+	}
+	transferTask := &tasks.ActivityTask{
+		WorkflowKey:         s.mutableState.GetWorkflowKey(),
+		VisibilityTimestamp: virtualTime,
+		ScheduledEventID:    42,
+	}
 
-		s.NotNil(s.mutableState.executionInfo.TimeSkippingInfo)
-	})
+	s.mutableState.AddTasks(timerTask, transferTask)
 
-	s.Run("KeepsExistingTimeSkippingInfo", func() {
-		existing := &persistencespb.TimeSkippingInfo{
-			AccumulatedSkippedDuration: durationpb.New(skipped),
-		}
-		s.mutableState.executionInfo.TimeSkippingInfo = existing
+	// Timer-category VisibilityTimestamp is shifted back to real wall-clock; other
+	// categories are left alone because their timestamps are not virtual-framed.
+	s.Equal(virtualTime.Add(-skipped), timerTask.VisibilityTimestamp)
+	s.Equal(virtualTime, transferTask.VisibilityTimestamp)
 
-		s.mutableState.initTimeSkippingInfoAndWrapTimeSource()
+	inserted := s.mutableState.InsertTasks
+	s.Require().Len(inserted[tasks.CategoryTimer], 1)
+	s.Equal(virtualTime.Add(-skipped), inserted[tasks.CategoryTimer][0].GetVisibilityTime())
+	s.Require().Len(inserted[tasks.CategoryTransfer], 1)
+	s.Equal(virtualTime, inserted[tasks.CategoryTransfer][0].GetVisibilityTime())
+}
 
-		s.Equal(existing, s.mutableState.executionInfo.TimeSkippingInfo)
-	})
+func (s *mutableStateSuite) TestAddTasks_NoOpWithoutTimeSkipping() {
+	virtualTime := s.mockShard.GetTimeSource().Now().Add(2 * time.Hour)
+	s.mutableState.executionInfo.TimeSkippingInfo = nil
 
-	s.Run("WrapsTimeSourceAfterInit", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = nil
+	timerTask := &tasks.UserTimerTask{
+		WorkflowKey:         s.mutableState.GetWorkflowKey(),
+		VisibilityTimestamp: virtualTime,
+		EventID:             42,
+	}
+	s.mutableState.AddTasks(timerTask)
 
-		s.mutableState.initTimeSkippingInfoAndWrapTimeSource()
-
-		_, isWrapper := s.mutableState.timeSource.(*clock.TimeSkippingTimeSourceWrapper)
-		s.True(isWrapper)
-	})
+	s.Equal(virtualTime, timerTask.VisibilityTimestamp)
 }
 
 func (s *mutableStateSuite) TestAddWorkflowExecutionTimeSkippingTransitionedEvent() {

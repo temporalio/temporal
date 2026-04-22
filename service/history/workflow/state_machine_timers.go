@@ -34,7 +34,7 @@ func AddNextStateMachineTimerTask(ms historyi.MutableState) {
 	}
 	ms.AddTasks(&tasks.StateMachineTimerTask{
 		WorkflowKey:         ms.GetWorkflowKey(),
-		VisibilityTimestamp: virtualToRealTime(ms.GetExecutionInfo(), timerGroup.Deadline.AsTime()),
+		VisibilityTimestamp: timerGroup.Deadline.AsTime(),
 		Version:             ms.GetCurrentVersion(),
 	})
 	timerGroup.Scheduled = true

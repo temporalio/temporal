@@ -158,6 +158,7 @@ type (
 		GetChildExecutionInfo(int64) (*persistencespb.ChildExecutionInfo, bool)
 		GetChildExecutionInitiatedEvent(context.Context, int64) (*historypb.HistoryEvent, error)
 		GetCompletionEvent(context.Context) (*historypb.HistoryEvent, error)
+		// the time of a mutable state may be ahead of the wall-clock time because of time skipping
 		Now() time.Time
 		GetWorkflowCloseTime(ctx context.Context) (time.Time, error)
 		GetWorkflowExecutionDuration(ctx context.Context) (time.Duration, error)

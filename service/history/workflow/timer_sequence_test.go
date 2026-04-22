@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1595,100 +1594,4 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_FirstScheduledTime() 
 			Attempt:      activityInfo.Attempt,
 		},
 	}, timerSequenceIDs)
-}
-
-// TestCreateNextUserTimer_TimeSkipping_SubtractsAccumulatedSkip verifies that
-// when the workflow has accumulated skipped duration, the UserTimerTask's
-// VisibilityTimestamp is the virtual ExpiryTime minus the accumulated skip
-// (principle 2: timer queue dispatches on wall-clock).
-//
-// Scenario: virtual ExpiryTime = 17:00 (5 PM), accumulated skip = 1h.
-// Expected VisibilityTimestamp = 16:00 (4 PM).
-func (s *timerSequenceSuite) TestCreateNextUserTimer_TimeSkipping_SubtractsAccumulatedSkip() {
-	skipped := time.Hour
-	virtualExpiry := time.Date(2026, time.April, 20, 17, 0, 0, 0, time.UTC)
-	expectedVisibility := virtualExpiry.Add(-skipped) // 16:00
-
-	timerInfo := &persistencespb.TimerInfo{
-		Version:        123,
-		TimerId:        "user-timer-1",
-		StartedEventId: 456,
-		ExpiryTime:     timestamppb.New(virtualExpiry),
-		TaskStatus:     TimerTaskStatusNone,
-	}
-	timerInfos := map[string]*persistencespb.TimerInfo{timerInfo.TimerId: timerInfo}
-	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos)
-	s.mockMutableState.EXPECT().GetUserTimerInfoByEventID(timerInfo.StartedEventId).Return(timerInfo, true)
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		// no WorkflowRunExpirationTime so the expiry short-circuit doesn't trigger
-		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
-			AccumulatedSkippedDuration: durationpb.New(skipped),
-		},
-	})
-
-	timerInfoUpdated := common.CloneProto(timerInfo)
-	timerInfoUpdated.TaskStatus = TimerTaskStatusCreated
-	s.mockMutableState.EXPECT().UpdateUserTimerTaskStatus(timerInfoUpdated.TimerId, timerInfoUpdated.TaskStatus).Return(nil)
-	s.mockMutableState.EXPECT().AddTasks(&tasks.UserTimerTask{
-		WorkflowKey:         s.workflowKey,
-		VisibilityTimestamp: expectedVisibility,
-		EventID:             timerInfo.GetStartedEventId(),
-	})
-
-	modified, err := s.timerSequence.CreateNextUserTimer()
-	s.NoError(err)
-	s.True(modified)
-}
-
-// TestCreateNextActivityTimer_TimeSkipping_SubtractsAccumulatedSkip verifies
-// the same virtual→real conversion for ActivityTimeoutTask. The earliest
-// activity deadline here is ScheduleToStart = ScheduledTime + 10s.
-func (s *timerSequenceSuite) TestCreateNextActivityTimer_TimeSkipping_SubtractsAccumulatedSkip() {
-	skipped := time.Hour
-	scheduledTime := time.Date(2026, time.April, 20, 16, 59, 50, 0, time.UTC)
-	scheduleToStart := 10 * time.Second
-	virtualDeadline := scheduledTime.Add(scheduleToStart) // 17:00
-	expectedVisibility := virtualDeadline.Add(-skipped)   // 16:00
-
-	activityInfo := &persistencespb.ActivityInfo{
-		Version:                123,
-		ScheduledEventId:       234,
-		ScheduledTime:          timestamppb.New(scheduledTime),
-		FirstScheduledTime:     timestamppb.New(scheduledTime),
-		StartedEventId:         common.EmptyEventID,
-		ActivityId:             "some random activity ID",
-		ScheduleToStartTimeout: timestamp.DurationFromSeconds(10),
-		ScheduleToCloseTimeout: timestamp.DurationFromSeconds(1000),
-		StartToCloseTimeout:    timestamp.DurationFromSeconds(100),
-		HeartbeatTimeout:       timestamp.DurationFromSeconds(1),
-		TimerTaskStatus:        TimerTaskStatusNone,
-		Attempt:                12,
-	}
-	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduledEventId: activityInfo}
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
-	s.mockMutableState.EXPECT().GetActivityInfo(activityInfo.ScheduledEventId).Return(activityInfo, true)
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
-			AccumulatedSkippedDuration: durationpb.New(skipped),
-		},
-	})
-
-	activityInfoUpdated := common.CloneProto(activityInfo)
-	activityInfoUpdated.TimerTaskStatus = TimerTaskStatusCreatedScheduleToStart
-	s.mockMutableState.EXPECT().UpdateActivityTaskStatusWithTimerHeartbeat(
-		activityInfoUpdated.ScheduledEventId,
-		activityInfoUpdated.TimerTaskStatus,
-		nil,
-	).Return(nil)
-	s.mockMutableState.EXPECT().AddTasks(&tasks.ActivityTimeoutTask{
-		WorkflowKey:         s.workflowKey,
-		VisibilityTimestamp: expectedVisibility,
-		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		EventID:             activityInfo.ScheduledEventId,
-		Attempt:             activityInfo.Attempt,
-	})
-
-	modified, err := s.timerSequence.CreateNextActivityTimer()
-	s.NoError(err)
-	s.True(modified)
 }
