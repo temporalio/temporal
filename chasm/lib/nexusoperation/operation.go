@@ -443,14 +443,14 @@ func (o *Operation) describeOutcome(ctx chasm.Context) (*commonpb.Payload, *fail
 
 	switch {
 	case !hasOutcome:
-		return nil, nil
+		return nil, o.LastAttemptFailure
 	case outcome.GetSuccessful() != nil:
 		return outcome.GetSuccessful().GetResult(), nil
 	case outcome.GetFailed() != nil:
 		return nil, outcome.GetFailed().GetFailure()
 	default:
 		softassert.Fail(ctx.Logger(), "operation outcome has no variant set")
-		return nil, nil
+		return nil, o.LastAttemptFailure
 	}
 }
 
