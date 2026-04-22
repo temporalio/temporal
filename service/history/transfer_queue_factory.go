@@ -70,12 +70,10 @@ func NewTransferQueueFactory(
 				params.NamespaceRegistry,
 				params.ClusterMetadata.GetCurrentClusterName(),
 			),
-			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
-				NewHostRateLimiterRateFn(
-					params.Config.TransferProcessorMaxPollHostRPS,
-					params.Config.PersistenceMaxQPS,
-					transferQueuePersistenceMaxRPSRatio,
-				),
+			HostReaderRateLimiter: newHostReaderRateLimiter(
+				params.Config.TransferProcessorMaxPollHostRPS,
+				params.Config.PersistenceMaxQPS,
+				transferQueuePersistenceMaxRPSRatio,
 				int64(params.Config.TransferQueueMaxReaderCount()),
 			),
 			Tracer: params.TracerProvider.Tracer(telemetry.ComponentQueueTransfer),

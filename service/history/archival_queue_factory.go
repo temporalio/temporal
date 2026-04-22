@@ -96,12 +96,10 @@ func newQueueFactoryBase(params ArchivalQueueFactoryParams) QueueFactoryBase {
 			params.NamespaceRegistry,
 			params.ClusterMetadata.GetCurrentClusterName(),
 		),
-		HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
-			NewHostRateLimiterRateFn(
-				params.Config.ArchivalProcessorMaxPollHostRPS,
-				params.Config.PersistenceMaxQPS,
-				archivalQueuePersistenceMaxRPSRatio,
-			),
+		HostReaderRateLimiter: newHostReaderRateLimiter(
+			params.Config.ArchivalProcessorMaxPollHostRPS,
+			params.Config.PersistenceMaxQPS,
+			archivalQueuePersistenceMaxRPSRatio,
 			int64(params.Config.ArchivalQueueMaxReaderCount()),
 		),
 		Tracer: params.TracerProvider.Tracer(telemetry.ComponentQueueArchival),

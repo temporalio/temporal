@@ -1,13 +1,17 @@
 package history
 
 import (
+	"context"
+	"strconv"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -18,6 +22,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/telemetry"
@@ -160,4 +165,112 @@ type unusedDependencies struct {
 	chasm.Engine
 	ChasmRegistry *chasm.Registry
 	worker_versioning.VersionMembershipCache
+}
+
+func TestNewHostRateLimiterRateFn(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		hostRPS        int
+		persistenceRPS int
+		ratio          float64
+		expected       float64
+	}{
+		{
+			name:           "explicit host cap wins",
+			hostRPS:        50,
+			persistenceRPS: 9000,
+			ratio:          0.3,
+			expected:       50,
+		},
+		{
+			name:           "falls back to persistence-derived rate",
+			hostRPS:        0,
+			persistenceRPS: 9000,
+			ratio:          0.3,
+			expected:       2700,
+		},
+		{
+			name:           "non positive persistence leaves no fallback cap",
+			hostRPS:        0,
+			persistenceRPS: 0,
+			ratio:          0.3,
+			expected:       0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			hostRPS := tc.hostRPS
+			persistenceRPS := tc.persistenceRPS
+			rateFn := NewHostRateLimiterRateFn(
+				func() int { return hostRPS },
+				func() int { return persistenceRPS },
+				tc.ratio,
+			)
+
+			require.InDelta(t, tc.expected, rateFn(), 0.001)
+		})
+	}
+}
+
+func TestNewHostReaderRateLimiter_NoopsWhenNoHostFallbackCapExists(t *testing.T) {
+	t.Parallel()
+
+	limiter := newHostReaderRateLimiter(
+		func() int { return 0 },
+		func() int { return 0 },
+		0.3,
+		1,
+	)
+
+	request := quotas.NewRequest(
+		"",
+		1,
+		strconv.FormatInt(common.DefaultQueueReaderID, 10),
+		"",
+		0,
+		"",
+	)
+
+	require.True(t, limiter.Allow(time.Now(), request))
+	require.Equal(t, quotas.NoopReservation, limiter.Reserve(time.Now(), request))
+	require.NoError(t, limiter.Wait(context.Background(), request))
+}
+
+func TestNewHostReaderRateLimiter_TracksRuntimeTransitions(t *testing.T) {
+	t.Parallel()
+
+	persistenceRPS := 0
+	limiter := newHostReaderRateLimiter(
+		func() int { return 0 },
+		func() int { return persistenceRPS },
+		0.3,
+		1,
+	)
+
+	request := quotas.NewRequest(
+		"",
+		1,
+		strconv.FormatInt(common.DefaultQueueReaderID, 10),
+		"",
+		0,
+		"",
+	)
+
+	require.Equal(t, quotas.NoopReservation, limiter.Reserve(time.Now(), request))
+	require.NoError(t, limiter.Wait(context.Background(), request))
+
+	persistenceRPS = 10
+	reservation := limiter.Reserve(time.Now(), request)
+	require.NotEqual(t, quotas.NoopReservation, reservation)
+	require.True(t, reservation.OK())
+	require.NoError(t, limiter.Wait(context.Background(), request))
+
+	persistenceRPS = 0
+	require.Equal(t, quotas.NoopReservation, limiter.Reserve(time.Now(), request))
+	require.NoError(t, limiter.Wait(context.Background(), request))
 }

@@ -2,6 +2,8 @@ package history
 
 import (
 	"context"
+	"sync"
+	"time"
 
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/chasm"
@@ -71,6 +73,15 @@ type (
 
 		Lifecycle fx.Lifecycle
 		Factories []QueueFactory `group:"queueFactory"`
+	}
+
+	optionalRequestRateLimiter struct {
+		rateFn quotas.RateFn
+
+		newDelegate func() quotas.RequestRateLimiter
+
+		mu       sync.Mutex
+		delegate quotas.RequestRateLimiter
 	}
 )
 
@@ -214,6 +225,68 @@ func (f *QueueFactoryBase) Stop() {
 	}
 }
 
+func newOptionalRequestRateLimiter(
+	rateFn quotas.RateFn,
+	newDelegate func() quotas.RequestRateLimiter,
+) quotas.RequestRateLimiter {
+	return &optionalRequestRateLimiter{
+		rateFn:      rateFn,
+		newDelegate: newDelegate,
+	}
+}
+
+func (r *optionalRequestRateLimiter) Allow(
+	now time.Time,
+	request quotas.Request,
+) bool {
+	if r.rateFn() <= 0 {
+		return true
+	}
+	return r.getDelegate().Allow(now, request)
+}
+
+func (r *optionalRequestRateLimiter) Reserve(
+	now time.Time,
+	request quotas.Request,
+) quotas.Reservation {
+	if r.rateFn() <= 0 {
+		return quotas.NoopReservation
+	}
+	return r.getDelegate().Reserve(now, request)
+}
+
+func (r *optionalRequestRateLimiter) Wait(
+	ctx context.Context,
+	request quotas.Request,
+) error {
+	if r.rateFn() <= 0 {
+		return nil
+	}
+	return r.getDelegate().Wait(ctx, request)
+}
+
+func (r *optionalRequestRateLimiter) getDelegate() quotas.RequestRateLimiter {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.delegate == nil {
+		r.delegate = r.newDelegate()
+	}
+	return r.delegate
+}
+
+func newHostReaderRateLimiter(
+	hostRPS dynamicconfig.IntPropertyFn,
+	persistenceMaxRPS dynamicconfig.IntPropertyFn,
+	persistenceMaxRPSRatio float64,
+	maxReaders int64,
+) quotas.RequestRateLimiter {
+	rateFn := NewHostRateLimiterRateFn(hostRPS, persistenceMaxRPS, persistenceMaxRPSRatio)
+	return newOptionalRequestRateLimiter(rateFn, func() quotas.RequestRateLimiter {
+		return queues.NewReaderPriorityRateLimiter(rateFn, maxReaders)
+	})
+}
+
 func NewHostRateLimiterRateFn(
 	hostRPS dynamicconfig.IntPropertyFn,
 	persistenceMaxRPS dynamicconfig.IntPropertyFn,
@@ -229,6 +302,7 @@ func NewHostRateLimiterRateFn(
 		// ensure queue loading won't consume all persistence tokens
 		// especially upon host restart when we need to perform a load
 		// for all shards
+		// A non-positive result means there is no host-level fallback cap.
 		return float64(persistenceMaxRPS()) * persistenceMaxRPSRatio
 	}
 }

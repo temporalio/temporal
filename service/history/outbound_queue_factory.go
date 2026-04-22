@@ -108,12 +108,10 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 	grouper := queues.GrouperStateMachineNamespaceIDAndDestination{}
 	f := &outboundQueueFactory{
 		outboundQueueFactoryParams: params,
-		hostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
-			NewHostRateLimiterRateFn(
-				params.Config.OutboundProcessorMaxPollHostRPS,
-				params.Config.PersistenceMaxQPS,
-				outboundQueuePersistenceMaxRPSRatio,
-			),
+		hostReaderRateLimiter: newHostReaderRateLimiter(
+			params.Config.OutboundProcessorMaxPollHostRPS,
+			params.Config.PersistenceMaxQPS,
+			outboundQueuePersistenceMaxRPSRatio,
 			int64(params.Config.OutboundQueueMaxReaderCount()),
 		),
 		hostScheduler: &queues.CommonSchedulerWrapper{

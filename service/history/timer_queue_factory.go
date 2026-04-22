@@ -65,12 +65,10 @@ func NewTimerQueueFactory(
 				params.NamespaceRegistry,
 				params.ClusterMetadata.GetCurrentClusterName(),
 			),
-			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
-				NewHostRateLimiterRateFn(
-					params.Config.TimerProcessorMaxPollHostRPS,
-					params.Config.PersistenceMaxQPS,
-					timerQueuePersistenceMaxRPSRatio,
-				),
+			HostReaderRateLimiter: newHostReaderRateLimiter(
+				params.Config.TimerProcessorMaxPollHostRPS,
+				params.Config.PersistenceMaxQPS,
+				timerQueuePersistenceMaxRPSRatio,
 				int64(params.Config.TimerQueueMaxReaderCount()),
 			),
 			Tracer: params.TracerProvider.Tracer(telemetry.ComponentQueueTimer),

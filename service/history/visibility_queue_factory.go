@@ -61,12 +61,10 @@ func NewVisibilityQueueFactory(
 				params.NamespaceRegistry,
 				params.ClusterMetadata.GetCurrentClusterName(),
 			),
-			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
-				NewHostRateLimiterRateFn(
-					params.Config.VisibilityProcessorMaxPollHostRPS,
-					params.Config.PersistenceMaxQPS,
-					visibilityQueuePersistenceMaxRPSRatio,
-				),
+			HostReaderRateLimiter: newHostReaderRateLimiter(
+				params.Config.VisibilityProcessorMaxPollHostRPS,
+				params.Config.PersistenceMaxQPS,
+				visibilityQueuePersistenceMaxRPSRatio,
 				int64(params.Config.VisibilityQueueMaxReaderCount()),
 			),
 			Tracer: params.TracerProvider.Tracer(telemetry.ComponentQueueVisibility),

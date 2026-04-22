@@ -1552,7 +1552,8 @@ execution is deleted. When enabled, workflow deletions on the active cluster wil
 	HistoryPersistenceMaxQPS = NewGlobalIntSetting(
 		"history.persistenceMaxQPS",
 		9000,
-		`HistoryPersistenceMaxQPS is the max qps history host can query DB`,
+		`HistoryPersistenceMaxQPS is the max qps history host can query DB
+If value is less or equal to 0, persistence host rate limiting is disabled`,
 	)
 	HistoryPersistenceGlobalMaxQPS = NewGlobalIntSetting(
 		"history.persistenceGlobalMaxQPS",
@@ -1927,7 +1928,8 @@ Higher values allow limited parallelism per workflow. Values <= 0 are capped to 
 	TimerProcessorMaxPollHostRPS = NewGlobalIntSetting(
 		"history.timerProcessorMaxPollHostRPS",
 		0,
-		`TimerProcessorMaxPollHostRPS is max poll rate per second for all timer processor on a host`,
+		`TimerProcessorMaxPollHostRPS is max poll rate per second for all timer processor on a host
+If value is less or equal to 0, it falls back to a HistoryPersistenceMaxQPS-derived host poll rate when HistoryPersistenceMaxQPS is positive; otherwise no host poll rate limiter is applied`,
 	)
 	TimerProcessorMaxPollInterval = NewGlobalDurationSetting(
 		"history.timerProcessorMaxPollInterval",
@@ -1979,7 +1981,8 @@ Higher values allow limited parallelism per workflow. Values <= 0 are capped to 
 	TransferProcessorMaxPollHostRPS = NewGlobalIntSetting(
 		"history.transferProcessorMaxPollHostRPS",
 		0,
-		`TransferProcessorMaxPollHostRPS is max poll rate per second for all transferQueueProcessor on a host`,
+		`TransferProcessorMaxPollHostRPS is max poll rate per second for all transferQueueProcessor on a host
+If value is less or equal to 0, it falls back to a HistoryPersistenceMaxQPS-derived host poll rate when HistoryPersistenceMaxQPS is positive; otherwise no host poll rate limiter is applied`,
 	)
 	TransferProcessorSchedulerWorkerCount = NewGlobalIntSetting(
 		"history.transferProcessorSchedulerWorkerCount",
@@ -2069,7 +2072,8 @@ filtering logic.
 	OutboundProcessorMaxPollHostRPS = NewGlobalIntSetting(
 		"history.outboundProcessorMaxPollHostRPS",
 		0,
-		`OutboundProcessorMaxPollHostRPS is max poll rate per second for all outboundQueueFactory on a host`,
+		`OutboundProcessorMaxPollHostRPS is max poll rate per second for all outboundQueueFactory on a host
+If value is less or equal to 0, it falls back to a HistoryPersistenceMaxQPS-derived host poll rate when HistoryPersistenceMaxQPS is positive; otherwise no host poll rate limiter is applied`,
 	)
 	OutboundProcessorMaxPollInterval = NewGlobalDurationSetting(
 		"history.outboundProcessorMaxPollInterval",
@@ -2153,7 +2157,8 @@ the outbound standby task failed to be processed due to missing events.`,
 	VisibilityProcessorMaxPollHostRPS = NewGlobalIntSetting(
 		"history.visibilityProcessorMaxPollHostRPS",
 		0,
-		`VisibilityProcessorMaxPollHostRPS is max poll rate per second for all visibilityQueueProcessor on a host`,
+		`VisibilityProcessorMaxPollHostRPS is max poll rate per second for all visibilityQueueProcessor on a host
+If value is less or equal to 0, it falls back to a HistoryPersistenceMaxQPS-derived host poll rate when HistoryPersistenceMaxQPS is positive; otherwise no host poll rate limiter is applied`,
 	)
 	VisibilityProcessorSchedulerWorkerCount = NewGlobalIntSetting(
 		"history.visibilityProcessorSchedulerWorkerCount",
@@ -2239,7 +2244,8 @@ visibility if they were removed from the mutable state`,
 	ArchivalProcessorMaxPollHostRPS = NewGlobalIntSetting(
 		"history.archivalProcessorMaxPollHostRPS",
 		0,
-		`ArchivalProcessorMaxPollHostRPS is max poll rate per second for all archivalQueueProcessor on a host`,
+		`ArchivalProcessorMaxPollHostRPS is max poll rate per second for all archivalQueueProcessor on a host
+If value is less or equal to 0, it falls back to a HistoryPersistenceMaxQPS-derived host poll rate when HistoryPersistenceMaxQPS is positive; otherwise no host poll rate limiter is applied`,
 	)
 	ArchivalProcessorSchedulerWorkerCount = NewGlobalIntSetting(
 		"history.archivalProcessorSchedulerWorkerCount",
