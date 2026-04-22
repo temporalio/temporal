@@ -223,7 +223,6 @@ type invocationResult interface {
 
 type invocationResultOK struct {
 	response *nexusrpc.ClientStartOperationResponse[*commonpb.Payload]
-	links    []*commonpb.Link
 }
 
 func (invocationResultOK) mustImplementInvocationResult() {}

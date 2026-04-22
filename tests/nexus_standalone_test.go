@@ -380,9 +380,18 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 				RunId:       startResp.RunId,
 			})
 			startRequest := task.GetRequest().GetStartOperation()
-			require.Len(t, startRequest.GetLinks(), 1)
-			require.Equal(t, expectedLink.URL.String(), startRequest.GetLinks()[0].GetUrl())
-			require.Equal(t, expectedLink.Type, startRequest.GetLinks()[0].GetType())
+			if len(startRequest.GetLinks()) != 1 {
+				pollerErrCh <- fmt.Errorf("expected 1 link, got %d", len(startRequest.GetLinks()))
+				return
+			}
+			if startRequest.GetLinks()[0].GetUrl() != expectedLink.URL.String() {
+				pollerErrCh <- fmt.Errorf("unexpected link url: got %q want %q", startRequest.GetLinks()[0].GetUrl(), expectedLink.URL.String())
+				return
+			}
+			if startRequest.GetLinks()[0].GetType() != expectedLink.Type {
+				pollerErrCh <- fmt.Errorf("unexpected link type: got %q want %q", startRequest.GetLinks()[0].GetType(), expectedLink.Type)
+				return
+			}
 
 			_, err = s.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
 				Namespace: s.Namespace().String(),
