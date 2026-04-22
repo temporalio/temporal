@@ -1,14 +1,13 @@
 package matching
 
 import (
+	"cmp"
 	"context"
-	"fmt"
 	"math"
 	"slices"
 	"sync"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -23,8 +22,7 @@ import (
 )
 
 const (
-	initialRangeID     = 1 // Id of the first range of a new task queue
-	stickyTaskQueueTTL = 24 * time.Hour
+	initialRangeID = 1 // Id of the first range of a new task queue
 
 	// Subqueue zero corresponds to "the queue" before migrating metadata to subqueues.
 	// For backwards compatibility, some operations only apply to subqueue zero for now.
@@ -208,8 +206,8 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 
 		// If we are the draining one, then assume the other has tasks, so we can migrate
 		// backwards safely. Also assume other has tasks if the config allows for migration
-		// (and we're not sticky) since we may have just turned on fairness and need to migrate.
-		canMigrate := (db.config.NewMatcher || db.config.EnableFairness) && db.queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY
+		// (and the partition supports fairness) since we may have just turned on fairness and need to migrate.
+		canMigrate := (db.config.NewMatcher || db.config.EnableFairness) && db.queue.Partition().SupportsFairness()
 		db.otherHasTasks = canMigrate || db.isDraining
 
 		if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
@@ -295,10 +293,11 @@ func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	defer db.Unlock()
 	defer db.emitPhysicalBacklogGaugesLocked()
 
-	// We only need to write if something changed, or if we're past half of the sticky queue TTL.
-	// Note that we use the same threshold for non-sticky queues even though they don't have a
-	// persistence TTL, since the scavenger looks for metadata that hasn't been updated in 48 hours.
-	needWrite := db.lastChange.After(db.lastWrite) || time.Since(db.lastWrite) > stickyTaskQueueTTL/2
+	// We only need to write if something changed, or if we're past half of the persistence TTL.
+	// Cap at 24h so that the scavenger (which looks for metadata not updated in 48h) doesn't
+	// mistake the queue for idle, even if a future partition kind has a longer TTL.
+	ttl := min(24*time.Hour, cmp.Or(db.queue.Partition().PersistenceTTL(), 24*time.Hour))
+	needWrite := db.lastChange.After(db.lastWrite) || time.Since(db.lastWrite) > ttl/2
 	if !needWrite {
 		return nil
 	}
@@ -752,14 +751,10 @@ func (db *taskQueueDB) AllocateSubqueue(
 }
 
 func (db *taskQueueDB) expiryTime() *timestamppb.Timestamp {
-	switch db.queue.Partition().Kind() {
-	case enumspb.TASK_QUEUE_KIND_NORMAL:
-		return nil
-	case enumspb.TASK_QUEUE_KIND_STICKY:
-		return timestamppb.New(time.Now().Add(stickyTaskQueueTTL))
-	default:
-		panic(fmt.Sprintf("taskQueueDB encountered unknown task kind: %v", db.queue.Partition().Kind()))
+	if ttl := db.queue.Partition().PersistenceTTL(); ttl > 0 {
+		return timestamppb.New(time.Now().Add(ttl))
 	}
+	return nil
 }
 
 func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {

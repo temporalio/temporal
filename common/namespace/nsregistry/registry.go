@@ -888,5 +888,5 @@ func (r *registry) namespaceStateChanged(oldNS *namespace.Namespace, newNS *name
 		oldNS.Name() != newNS.Name() ||
 		oldNS.IsGlobalNamespace() != newNS.IsGlobalNamespace() ||
 		oldNS.ActiveInCluster(r.currentClusterName) != newNS.ActiveInCluster(r.currentClusterName) ||
-		oldNS.ReplicationState("") != newNS.ReplicationState("")
+		oldNS.ReplicationState(namespace.EmptyBusinessID) != newNS.ReplicationState(namespace.EmptyBusinessID)
 }

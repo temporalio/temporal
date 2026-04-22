@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -471,6 +472,7 @@ func (s *FunctionalTestBase) RegisterNamespace(
 ) (namespace.ID, error) {
 	currentClusterName := s.testCluster.testBase.ClusterMetadata.GetCurrentClusterName()
 	nsID := namespace.ID(uuid.NewString())
+	expectedSearchAttributes := searchattribute.TestSearchAttributesToRegister()
 	namespaceRequest := &persistence.CreateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
@@ -486,14 +488,6 @@ func (s *FunctionalTestBase) RegisterNamespace(
 				VisibilityArchivalState: archivalState,
 				VisibilityArchivalUri:   visibilityArchivalURI,
 				BadBinaries:             &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-				CustomSearchAttributeAliases: map[string]string{
-					"Bool01":     "CustomBoolField",
-					"Datetime01": "CustomDatetimeField",
-					"Double01":   "CustomDoubleField",
-					"Int01":      "CustomIntField",
-					"Keyword01":  "CustomKeywordField",
-					"Text01":     "CustomTextField",
-				},
 			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: currentClusterName,
@@ -510,6 +504,54 @@ func (s *FunctionalTestBase) RegisterNamespace(
 
 	if err != nil {
 		return namespace.EmptyID, err
+	}
+
+	namespaceCacheDeadline := time.Now().Add(5 * NamespaceCacheRefreshInterval)
+	ticker := time.NewTicker(NamespaceCacheRefreshInterval / 2)
+	defer ticker.Stop()
+	for {
+		_, describeErr := s.FrontendClient().DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
+			Namespace: nsName.String(),
+		})
+		if describeErr == nil {
+			break
+		}
+		if time.Now().After(namespaceCacheDeadline) {
+			return namespace.EmptyID, fmt.Errorf("namespace cache did not refresh for %q before deadline", nsName.String())
+		}
+		<-ticker.C
+	}
+
+	_, err = s.OperatorClient().AddSearchAttributes(NewContext(), &operatorservice.AddSearchAttributesRequest{
+		Namespace:        nsName.String(),
+		SearchAttributes: expectedSearchAttributes,
+	})
+	if err != nil {
+		return namespace.EmptyID, err
+	}
+
+	namespaceCacheDeadline = time.Now().Add(5 * NamespaceCacheRefreshInterval)
+	for {
+		listResp, listErr := s.OperatorClient().ListSearchAttributes(NewContext(), &operatorservice.ListSearchAttributesRequest{
+			Namespace: nsName.String(),
+		})
+		if listErr == nil {
+			customAttrs := listResp.GetCustomAttributes()
+			allFound := true
+			for saName := range expectedSearchAttributes {
+				if _, ok := customAttrs[saName]; !ok {
+					allFound = false
+					break
+				}
+			}
+			if allFound {
+				break
+			}
+		}
+		if time.Now().After(namespaceCacheDeadline) {
+			return namespace.EmptyID, fmt.Errorf("search attributes were not ready for %q before deadline", nsName.String())
+		}
+		<-ticker.C
 	}
 
 	s.Logger.Info("Register namespace succeeded",
@@ -591,7 +633,7 @@ func (s *FunctionalTestBase) DurationNear(value, target, tolerance time.Duration
 }
 
 func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
-	return s.testCluster.host.overrideDynamicConfig(s.T(), setting.Key(), value)
+	return s.testCluster.host.overrideDynamicConfigForTest(s.T(), setting.Key(), value)
 }
 
 // InjectHook sets a test hook inside the cluster.
@@ -637,6 +679,7 @@ func (s *FunctionalTestBase) GetNamespaceID(namespace string) string {
 func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 	for _, behavior := range AllMatchingBehaviors() {
 		s.Run(behavior.Name(), func() {
+			s.OverrideDynamicConfig(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 3)
 			if behavior.ForceTaskForward || behavior.ForcePollForward {
 				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
 				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
@@ -656,6 +699,15 @@ func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{
 	case <-ch:
 	case <-ctx.Done():
 		s.FailNow("context timeout while waiting for channel")
+	}
+}
+
+func (s *FunctionalTestBase) SendToChannel(ctx context.Context, ch chan struct{}) {
+	s.T().Helper()
+	select {
+	case ch <- struct{}{}:
+	case <-ctx.Done():
+		s.FailNow("context timeout while sending to channel")
 	}
 }
 

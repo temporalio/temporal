@@ -1012,6 +1012,61 @@ func (s *nodeSuite) TestApplyMutation() {
 	s.Len(root.taskValueCache, 1)
 }
 
+func (s *nodeSuite) TestApplyMutation_DeleteUpdateSamePath() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+					},
+				},
+			},
+		},
+		"SubComponent1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
+			},
+		},
+	}
+	root, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+
+	// First apply a mutation to delete "SubComponent1" node.
+	err = root.ApplyMutation(NodesMutation{
+		DeletedNodes: map[string]struct{}{
+			"SubComponent1": {},
+		},
+	})
+	s.NoError(err)
+	s.Empty(root.mutation.UpdatedNodes)
+	s.Len(root.mutation.DeletedNodes, 1)
+
+	// Then apply another mutation to update "SubComponent1" node.
+	// This simulates the applyMutation logic in mutable state where the logic
+	// first applies a deletion only mutation for recorded chasm node tombstones,
+	// and then applies an update only mutation for updated nodes.
+
+	mutation := NodesMutation{
+		UpdatedNodes: map[string]*persistencespb.ChasmNode{
+			"SubComponent1": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 20},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 20},
+				},
+			},
+		},
+	}
+	err = root.ApplyMutation(mutation)
+	s.NoError(err)
+	s.Len(root.mutation.UpdatedNodes, 1)
+	s.Empty(root.mutation.DeletedNodes, 1)
+
+}
+
 func (s *nodeSuite) TestApplySnapshot() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {

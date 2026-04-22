@@ -35,6 +35,12 @@ To pass in the required build tags, add them to the "Go tool arguments" field in
 
 ## Best Practices
 
+### Use `require` instead of `assert`
+
+Always use `require.X` (and `protorequire.X`) instead of `assert.X` (and `protoassert.X`).
+`assert` records a failure but lets the test continue, which often leads to confusing
+cascading errors.
+
 ### Parallelization
 
 All tests (and subtests!) should use `t.Parallel()` to be run concurrently;
@@ -78,7 +84,7 @@ func TestFoo(t *testing.T) {
 Later you can assert on the generated values. `testvars` guarantees to provide the same value every time you call the same method. 
 
 ```go
-assert.Equal(t, tv.WorkflowID(), startedWorkflow.WorkflowId)
+require.Equal(t, tv.WorkflowID(), startedWorkflow.WorkflowId)
 ```
 
 If you need more than one value for the same entity in one test, you can use `WithEntityNumber()` method to

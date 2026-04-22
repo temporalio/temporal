@@ -105,6 +105,7 @@ type (
 		OfferQuery(ctx context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error)
 		OfferNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error)
 		ReprocessAllTasks()
+		HasWaitingPoller() bool
 	}
 )
 
