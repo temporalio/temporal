@@ -215,12 +215,8 @@ var TransitionFailed = chasm.NewTransition(
 		if event.CompleteTime != nil {
 			closeTime = *event.CompleteTime
 		}
-		if err := o.resolveUnsuccessfully(ctx, event.Failure, closeTime); err != nil {
-			return err
-		}
-
 		o.emitOnFailedMetrics(event.MetricsHandler, closeTime)
-		return nil
+		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime)
 	},
 )
 
