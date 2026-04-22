@@ -2679,6 +2679,7 @@ func computeDeclinedTargetVersionUpgrade(info *persistencespb.WorkflowExecutionI
 	if lastNotified := info.GetLastNotifiedTargetVersion(); lastNotified != nil {
 		return &historypb.DeclinedTargetVersionUpgrade{
 			DeploymentVersion: lastNotified.GetDeploymentVersion(),
+			RevisionNumber:    lastNotified.GetRevisionNumber(),
 		}
 	}
 	return info.GetDeclinedTargetVersionUpgrade()
@@ -3300,12 +3301,13 @@ func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	updateReg update.Registry,
 	skipVersioningCheck bool,
 	targetDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
+	targetRevisionNumber int64,
 ) (*historypb.HistoryEvent, *historyi.WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck, updateReg, targetDeploymentVersion)
+	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck, updateReg, targetDeploymentVersion, targetRevisionNumber)
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(

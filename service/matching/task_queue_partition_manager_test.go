@@ -1565,11 +1565,9 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookSyncMatch() {
 		err  error
 	}
 	pollDone := make(chan pollResult, 1)
-	pollStarted := make(chan struct{})
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
-		close(pollStarted)
 		task, _, err := pm.PollTask(ctx, &pollMetadata{
 			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 				BuildId:       "",
@@ -1581,14 +1579,8 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookSyncMatch() {
 			close(task.responseC)
 		}
 	}()
-	s.Require().Eventually(func() bool {
-		select {
-		case <-pollStarted:
-			return true
-		default:
-			return false
-		}
-	}, 2*time.Second, 1*time.Millisecond)
+	pq := pm.defaultQueue().(*physicalTaskQueueManagerImpl)
+	s.Require().Eventually(pq.matcher.HasWaitingPoller, 2*time.Second, time.Millisecond)
 
 	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
 		taskInfo: &persistencespb.TaskInfo{
