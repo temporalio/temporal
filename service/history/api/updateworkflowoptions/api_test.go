@@ -41,7 +41,7 @@ func (noopVersionCache) Get(
 	_ enumspb.TaskQueueType,
 	_ string,
 	_ string,
-) (isMember bool, isVersionActiveOrDraining bool, revisionNumber int64, ok bool) {
+) (isMember bool, shouldSkipReactivation bool, revisionNumber int64, ok bool) {
 	return false, false, 0, false
 }
 

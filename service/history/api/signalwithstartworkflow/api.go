@@ -66,7 +66,7 @@ func Invoke(
 	}
 
 	// Validation for versioning override, if any.
-	isVersionActiveOrDraining, revisionNumber, err := worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, request.GetVersioningOverride(), matchingClient, versionCache, request.GetTaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID.String())
+	shouldSkipReactivation, revisionNumber, err := worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, request.GetVersioningOverride(), matchingClient, versionCache, request.GetTaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func Invoke(
 
 	// Notify version workflow if we're starting a new workflow pinned to a potentially drained version
 	if started {
-		api.ReactivateVersionWorkflowIfPinned(ctx, namespaceEntry, request.GetVersioningOverride(), reactivationSignaler, shard.GetConfig().EnableVersionReactivationSignals(), isVersionActiveOrDraining, revisionNumber)
+		api.ReactivateVersionWorkflowIfPinned(ctx, namespaceEntry, request.GetVersioningOverride(), reactivationSignaler, shard.GetConfig().EnableVersionReactivationSignals(), shouldSkipReactivation, revisionNumber)
 	}
 
 	return &historyservice.SignalWithStartWorkflowExecutionResponse{

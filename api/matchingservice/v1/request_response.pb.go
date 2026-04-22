@@ -5376,13 +5376,13 @@ func (x *CheckTaskQueueVersionMembershipRequest) GetVersion() *v110.WorkerDeploy
 type CheckTaskQueueVersionMembershipResponse struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	IsMember bool                   `protobuf:"varint,1,opt,name=is_member,json=isMember,proto3" json:"is_member,omitempty"`
-	// True when the version's status in matching's deployment data is CURRENT, RAMPING, or
-	// DRAINING. Callers use this to suppress redundant reactivation signals — a reactivation
-	// signal to an active-or-draining version is unnecessary. The zero value (false) is the
-	// safe default; it applies for DRAINED, INACTIVE, UNSPECIFIED, versions not present in
-	// matching's deployment data, and old matching servers that do not set this field — in
-	// all those cases the caller should send the signal.
-	IsVersionActiveOrDraining bool `protobuf:"varint,2,opt,name=is_version_active_or_draining,json=isVersionActiveOrDraining,proto3" json:"is_version_active_or_draining,omitempty"`
+	// True when a reactivation signal to this version would be redundant — i.e., matching
+	// determined the version is already in a state where it does not need to be reactivated
+	// (today: CURRENT, RAMPING, or DRAINING). History uses this to suppress such signals.
+	// The zero value (false) is the safe default; it applies when matching has no definitive
+	// answer (version not present in matching's deployment data, or old matching servers
+	// that do not set this field) and tells history to send the signal.
+	ShouldSkipReactivation bool `protobuf:"varint,2,opt,name=should_skip_reactivation,json=shouldSkipReactivation,proto3" json:"should_skip_reactivation,omitempty"`
 	// revision_number is the version's current revision as tracked in matching's per-TQ
 	// deployment data. It is returned so history can compose a stable, cluster-wide-deterministic
 	// RequestId on the reactivation signal. All history pods querying the same version at the
@@ -5432,9 +5432,9 @@ func (x *CheckTaskQueueVersionMembershipResponse) GetIsMember() bool {
 	return false
 }
 
-func (x *CheckTaskQueueVersionMembershipResponse) GetIsVersionActiveOrDraining() bool {
+func (x *CheckTaskQueueVersionMembershipResponse) GetShouldSkipReactivation() bool {
 	if x != nil {
-		return x.IsVersionActiveOrDraining
+		return x.ShouldSkipReactivation
 	}
 	return false
 }
@@ -6189,10 +6189,10 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\n" +
 	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12L\n" +
 	"\x0ftask_queue_type\x18\x03 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12T\n" +
-	"\aversion\x18\x04 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\"\xb1\x01\n" +
+	"\aversion\x18\x04 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\"\xa9\x01\n" +
 	"'CheckTaskQueueVersionMembershipResponse\x12\x1b\n" +
-	"\tis_member\x18\x01 \x01(\bR\bisMember\x12@\n" +
-	"\x1dis_version_active_or_draining\x18\x02 \x01(\bR\x19isVersionActiveOrDraining\x12'\n" +
+	"\tis_member\x18\x01 \x01(\bR\bisMember\x128\n" +
+	"\x18should_skip_reactivation\x18\x02 \x01(\bR\x16shouldSkipReactivation\x12'\n" +
 	"\x0frevision_number\x18\x03 \x01(\x03R\x0erevisionNumber\"L\n" +
 	"\x0ePollConditions\x12!\n" +
 	"\fmin_priority\x18\x01 \x01(\x05R\vminPriority\x12\x17\n" +

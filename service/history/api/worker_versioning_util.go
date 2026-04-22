@@ -34,7 +34,7 @@ func ReactivateVersionWorkflowIfPinned(
 	override *workflowpb.VersioningOverride,
 	signaler VersionReactivationSignalerFn,
 	enabled bool,
-	isVersionActiveOrDraining bool,
+	shouldSkipReactivation bool,
 	revisionNumber int64,
 ) {
 	// Check if signals are enabled globally
@@ -43,7 +43,7 @@ func ReactivateVersionWorkflowIfPinned(
 	}
 
 	// Skip signal if matching confirmed the version is active or still draining.
-	if isVersionActiveOrDraining {
+	if shouldSkipReactivation {
 		return
 	}
 

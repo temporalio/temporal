@@ -39,7 +39,7 @@ func Invoke(
 
 	// Store versioning override to send reactivation signal after successful persistence
 	var versioningOverrideForReactivation *workflowpb.VersioningOverride
-	var isVersionActiveOrDraining bool
+	var shouldSkipReactivation bool
 	var revisionNumber int64
 
 	err = api.GetAndUpdateWorkflowWithNew(
@@ -80,7 +80,7 @@ func Invoke(
 			}
 
 			// Validate versioning override, if any.
-			isVersionActiveOrDraining, revisionNumber, err = worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, requestedOptions.GetVersioningOverride(), matchingClient, versionCache, mutableState.GetExecutionInfo().GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, ns.ID().String())
+			shouldSkipReactivation, revisionNumber, err = worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, requestedOptions.GetVersioningOverride(), matchingClient, versionCache, mutableState.GetExecutionInfo().GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, ns.ID().String())
 			if err != nil {
 				return nil, err
 			}
@@ -119,7 +119,7 @@ func Invoke(
 
 	// Notify version workflow if we're pinning to a potentially drained version.
 	// This is done after successful persistence to avoid signaling if the update fails.
-	api.ReactivateVersionWorkflowIfPinned(ctx, ns, versioningOverrideForReactivation, reactivationSignaler, shardCtx.GetConfig().EnableVersionReactivationSignals(), isVersionActiveOrDraining, revisionNumber)
+	api.ReactivateVersionWorkflowIfPinned(ctx, ns, versioningOverrideForReactivation, reactivationSignaler, shardCtx.GetConfig().EnableVersionReactivationSignals(), shouldSkipReactivation, revisionNumber)
 
 	return ret, nil
 }

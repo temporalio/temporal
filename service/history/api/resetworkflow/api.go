@@ -76,7 +76,7 @@ func Invoke(
 	}
 
 	// Validate versioning override, if any.
-	isVersionActiveOrDrainingPerOp, revisionNumberPerOp, err := validatePostResetOperationInputs(ctx, request.GetPostResetOperations(), matchingClient, versionCache,
+	shouldSkipReactivationPerOp, revisionNumberPerOp, err := validatePostResetOperationInputs(ctx, request.GetPostResetOperations(), matchingClient, versionCache,
 		baseMutableState.GetExecutionInfo().GetTaskQueue(), namespaceID.String())
 	if err != nil {
 		return nil, err
@@ -195,7 +195,7 @@ func Invoke(
 	for i, operation := range request.GetPostResetOperations() {
 		if updateOpts, ok := operation.GetVariant().(*workflowpb.PostResetOperation_UpdateWorkflowOptions_); ok {
 			api.ReactivateVersionWorkflowIfPinned(ctx, namespaceEntry,
-				updateOpts.UpdateWorkflowOptions.GetWorkflowExecutionOptions().GetVersioningOverride(), reactivationSignaler, shardContext.GetConfig().EnableVersionReactivationSignals(), isVersionActiveOrDrainingPerOp[i], revisionNumberPerOp[i])
+				updateOpts.UpdateWorkflowOptions.GetWorkflowExecutionOptions().GetVersioningOverride(), reactivationSignaler, shardContext.GetConfig().EnableVersionReactivationSignals(), shouldSkipReactivationPerOp[i], revisionNumberPerOp[i])
 		}
 	}
 
@@ -235,7 +235,7 @@ func GetResetReapplyExcludeTypes(
 // validatePostResetOperationInputs validates the optional post reset operation inputs.
 // Returns parallel slices (one entry per operation) carrying the reactivation-signal inputs
 // derived from the operation's versioning override:
-//   - isVersionActiveOrDrainingPerOp: whether each operation's pinned version is active or
+//   - shouldSkipReactivationPerOp: whether each operation's pinned version is active or
 //     still draining per matching (true → no need to send a reactivation signal; false
 //     covers drained/inactive, unknown, not-found, and old-matching cases).
 //   - revisionNumberPerOp: the pinned version's revision number per matching's view, used to
@@ -249,21 +249,21 @@ func validatePostResetOperationInputs(ctx context.Context,
 	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	taskQueue string,
 	namespaceID string) ([]bool, []int64, error) {
-	isVersionActiveOrDrainingPerOp := make([]bool, len(postResetOperations))
+	shouldSkipReactivationPerOp := make([]bool, len(postResetOperations))
 	revisionNumberPerOp := make([]int64, len(postResetOperations))
 	for i, operation := range postResetOperations {
 		switch op := operation.GetVariant().(type) {
 		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
 			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
-			isVersionActiveOrDraining, revisionNumber, err := worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, opts.GetVersioningOverride(), matchingClient, versionCache, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID)
+			shouldSkipReactivation, revisionNumber, err := worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, opts.GetVersioningOverride(), matchingClient, versionCache, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID)
 			if err != nil {
 				return nil, nil, err
 			}
-			isVersionActiveOrDrainingPerOp[i] = isVersionActiveOrDraining
+			shouldSkipReactivationPerOp[i] = shouldSkipReactivation
 			revisionNumberPerOp[i] = revisionNumber
 		default:
 			return nil, nil, serviceerror.NewInvalidArgumentf("unsupported post reset operation: %T", op)
 		}
 	}
-	return isVersionActiveOrDrainingPerOp, revisionNumberPerOp, nil
+	return shouldSkipReactivationPerOp, revisionNumberPerOp, nil
 }

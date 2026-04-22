@@ -3467,10 +3467,10 @@ func (e *matchingEngineImpl) CheckTaskQueueVersionMembership(
 
 	// Report whether the version is active-or-draining so callers can skip sending
 	// reactivation signals to versions that don't need one (CURRENT/RAMPING/DRAINING —
-	// see worker_versioning.IsVersionActiveOrDraining). The revision number flows back
+	// see worker_versioning.ShouldSkipReactivation). The revision number flows back
 	// so history can compose a cluster-wide-deterministic RequestId on the reactivation
 	// signal for receiver-side dedup.
-	isVersionActiveOrDraining, revisionNumber := worker_versioning.IsVersionActiveOrDraining(
+	shouldSkipReactivation, revisionNumber := worker_versioning.ShouldSkipReactivation(
 		deploymentData,
 		request.GetVersion().GetDeploymentName(),
 		request.GetVersion().GetBuildId(),
@@ -3478,7 +3478,7 @@ func (e *matchingEngineImpl) CheckTaskQueueVersionMembership(
 
 	return &matchingservice.CheckTaskQueueVersionMembershipResponse{
 		IsMember:                  present,
-		IsVersionActiveOrDraining: isVersionActiveOrDraining,
+		ShouldSkipReactivation: shouldSkipReactivation,
 		RevisionNumber:            revisionNumber,
 	}, nil
 }
