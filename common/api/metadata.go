@@ -163,7 +163,6 @@ var (
 		"GetDeploymentReachability":                    {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone}, // [cleanup-wv-pre-release]
 		"GetCurrentDeployment":                         {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone}, // [cleanup-wv-pre-release]
 		"SetCurrentDeployment":                         {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},    // [cleanup-wv-pre-release]
-		"SetCurrentDeploymentVersion":                  {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},    // [cleanup-wv-pre-release]
 		"DescribeWorkerDeploymentVersion":              {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
 		"DescribeWorkerDeployment":                     {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
 		"SetWorkerDeploymentCurrentVersion":            {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
