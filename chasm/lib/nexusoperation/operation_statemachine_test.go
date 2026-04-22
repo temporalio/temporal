@@ -368,7 +368,7 @@ func TestTransitionSucceeded(t *testing.T) {
 
 			controller := gomock.NewController(t)
 			metricsHandler := metrics.NewMockHandler(controller)
-			outcomeTag := metrics.OutcomeTag("success")
+			outcomeTag := metrics.OutcomeTag(nexusoperationpb.OPERATION_STATUS_SUCCEEDED.String())
 
 			counterSuccess := metrics.NewMockCounterIface(controller)
 			counterSuccess.EXPECT().Record(int64(1)).Times(1)
@@ -445,7 +445,7 @@ func TestTransitionFailed(t *testing.T) {
 
 			controller := gomock.NewController(t)
 			metricsHandler := metrics.NewMockHandler(controller)
-			outcomeTag := metrics.OutcomeTag("failed")
+			outcomeTag := metrics.OutcomeTag(nexusoperationpb.OPERATION_STATUS_FAILED.String())
 
 			counterFailed := metrics.NewMockCounterIface(controller)
 			counterFailed.EXPECT().Record(int64(1)).Times(1)
@@ -524,7 +524,7 @@ func TestTransitionCanceled(t *testing.T) {
 
 			controller := gomock.NewController(t)
 			metricsHandler := metrics.NewMockHandler(controller)
-			outcomeTag := metrics.OutcomeTag("canceled")
+			outcomeTag := metrics.OutcomeTag(nexusoperationpb.OPERATION_STATUS_CANCELED.String())
 
 			counterCanceled := metrics.NewMockCounterIface(controller)
 			counterCanceled.EXPECT().Record(int64(1)).Times(1)
@@ -603,7 +603,7 @@ func TestTransitionTimedOut(t *testing.T) {
 
 			controller := gomock.NewController(t)
 			metricsHandler := metrics.NewMockHandler(controller)
-			outcomeTag := metrics.OutcomeTag("timeout")
+			outcomeTag := metrics.OutcomeTag(nexusoperationpb.OPERATION_STATUS_TIMED_OUT.String())
 			timeoutTag := metrics.StringTag("timeout_type", tc.timeoutType.String())
 
 			counterTimeout := metrics.NewMockCounterIface(controller)
@@ -675,7 +675,7 @@ func TestTransitionTerminated(t *testing.T) {
 
 			controller := gomock.NewController(t)
 			metricsHandler := metrics.NewMockHandler(controller)
-			outcomeTag := metrics.OutcomeTag("terminated")
+			outcomeTag := metrics.OutcomeTag(nexusoperationpb.OPERATION_STATUS_TERMINATED.String())
 
 			counterTerminate := metrics.NewMockCounterIface(controller)
 			counterTerminate.EXPECT().Record(int64(1)).Times(1)

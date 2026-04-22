@@ -41,6 +41,12 @@ var _ chasm.NexusCompletionHandler = (*Operation)(nil)
 var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancellation already requested")
 var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation already completed")
 
+const (
+	// WorkflowTypeTag is a required workflow tag for standalone operations to ensure consistent
+	// metric labeling between workflows and activities.
+	WorkflowTypeTag = "__temporal_standalone_nexus_operation__"
+)
+
 type InvocationData struct {
 	Input      *commonpb.Payload
 	Header     map[string]string
@@ -523,6 +529,7 @@ func (o *Operation) EnrichMetricsHandler(ctx chasm.Context) (metrics.Handler, er
 	tags := []metrics.Tag{
 		metrics.NamespaceTag(namespaceName.String()),
 		metrics.NexusEndpointTag(o.GetEndpoint()),
+		metrics.WorkflowTypeTag(WorkflowTypeTag),
 	}
 	if opCtx.MetricTagConfig != nil {
 		conf := opCtx.MetricTagConfig()
@@ -537,31 +544,31 @@ func (o *Operation) EnrichMetricsHandler(ctx chasm.Context) (metrics.Handler, er
 }
 
 func (o *Operation) emitOnSucceededMetrics(handler metrics.Handler, closeTime time.Time) {
-	outcomeTag := metrics.OutcomeTag("success")
+	outcomeTag := metrics.OutcomeTag(nexusoperationpb.OPERATION_STATUS_SUCCEEDED.String())
 	NexusOperationSuccessCount.With(handler).Record(1)
 	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
 }
 
 func (o *Operation) emitOnFailedMetrics(handler metrics.Handler, closeTime time.Time) {
-	outcomeTag := metrics.OutcomeTag("failed")
+	outcomeTag := metrics.OutcomeTag(nexusoperationpb.OPERATION_STATUS_FAILED.String())
 	NexusOperationFailedCount.With(handler).Record(1)
 	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
 }
 
 func (o *Operation) emitOnCanceledMetrics(handler metrics.Handler, closeTime time.Time) {
-	outcomeTag := metrics.OutcomeTag("canceled")
+	outcomeTag := metrics.OutcomeTag(nexusoperationpb.OPERATION_STATUS_CANCELED.String())
 	NexusOperationCancelCount.With(handler).Record(1)
 	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
 }
 
 func (o *Operation) emitOnTimedOutMetrics(handler metrics.Handler, closeTime time.Time, timeoutType string) {
-	outcomeTag := metrics.OutcomeTag("timeout")
+	outcomeTag := metrics.OutcomeTag(nexusoperationpb.OPERATION_STATUS_TIMED_OUT.String())
 	NexusOperationTimeoutCount.With(handler).Record(1, metrics.StringTag("timeout_type", timeoutType))
 	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
 }
 
 func (o *Operation) emitOnTerminatedMetrics(handler metrics.Handler, closeTime time.Time) {
-	outcomeTag := metrics.OutcomeTag("terminated")
+	outcomeTag := metrics.OutcomeTag(nexusoperationpb.OPERATION_STATUS_TERMINATED.String())
 	NexusOperationTerminateCount.With(handler).Record(1)
 	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
 }
