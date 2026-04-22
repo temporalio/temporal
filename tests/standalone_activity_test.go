@@ -1903,8 +1903,12 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 		require.Nil(t, info.GetLastFailure())
 
 		expectedFailure := &failurepb.Failure{
-			Message:     "Test Termination",
-			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
+			Message: "Test Termination",
+			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+				TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{
+					Identity: "terminator",
+				},
+			},
 		}
 		protorequire.ProtoEqual(t, expectedFailure, activityResp.GetOutcome().GetFailure())
 	})
@@ -2856,6 +2860,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 			protocmp.IgnoreFields(&activitypb.ActivityExecutionInfo{},
 				"execution_duration",
 				"schedule_time",
+				"state_size_bytes",
 				"state_transition_count",
 			),
 		)
@@ -2917,6 +2922,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 		protocmp.IgnoreFields(&activitypb.ActivityExecutionInfo{},
 			"execution_duration",
 			"schedule_time",
+			"state_size_bytes",
 			"state_transition_count",
 		),
 	)
@@ -2976,6 +2982,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 				"execution_duration",
 				"last_started_time",
 				"schedule_time",
+				"state_size_bytes",
 				"state_transition_count",
 			),
 		)

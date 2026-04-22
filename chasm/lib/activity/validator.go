@@ -58,10 +58,9 @@ func ValidateAndNormalizeEmbeddedActivity(
 	options *activitypb.ActivityOptions,
 	priority *commonpb.Priority,
 	runTimeout *durationpb.Duration,
+	workflowTaskQueueName string,
 ) error {
-	// We cannot use NormalizeAndValidateUserDefined for embedded activity task queue because embedded activities can
-	// use reserved task queues, which are not considered user defined.
-	if err := tqid.NormalizeAndValidate(options.TaskQueue, "", maxIDLengthLimit); err != nil {
+	if err := tqid.NormalizeAndValidateUserDefined(options.TaskQueue, "", workflowTaskQueueName, maxIDLengthLimit); err != nil {
 		return err
 	}
 
@@ -272,7 +271,7 @@ func validateAndNormalizeSearchAttributes(
 	return saValidator.ValidateSize(saToValidate, namespaceName)
 }
 
-func validateDescribeActivityExecutionRequest(
+func validateAndNormalizeDescribeActivityExecutionRequest(
 	req *workflowservice.DescribeActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
@@ -298,7 +297,7 @@ func validateDescribeActivityExecutionRequest(
 	return nil
 }
 
-func validatePollActivityExecutionRequest(
+func validateAndNormalizePollActivityExecutionRequest(
 	req *workflowservice.PollActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
@@ -318,13 +317,17 @@ func validatePollActivityExecutionRequest(
 	return nil
 }
 
-func validateRequestCancelActivityExecutionRequest(
+func validateAndNormalizeRequestCancelActivityExecutionRequest(
 	req *workflowservice.RequestCancelActivityExecutionRequest,
 	maxIDLengthLimit int,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 ) error {
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	}
+
 	if req.GetActivityId() == "" {
 		return serviceerror.NewInvalidArgument("activity ID is required")
 	}
@@ -367,7 +370,7 @@ func validateRequestCancelActivityExecutionRequest(
 }
 
 //nolint:revive // cyclomatic: per-field validation of a field-mask update requires explicit handling of each field
-func validateUpdateActivityExecutionOptionsRequest(
+func validateAndNormalizeUpdateActivityExecutionOptionsRequest(
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
 	maxIDLengthLimit int,
 ) error {
@@ -492,7 +495,7 @@ func validateUpdateActivityExecutionOptionsRequest(
 	return nil
 }
 
-func validateDeleteActivityExecutionRequest(
+func validateAndNormalizeDeleteActivityExecutionRequest(
 	req *workflowservice.DeleteActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
@@ -515,13 +518,17 @@ func validateDeleteActivityExecutionRequest(
 	return nil
 }
 
-func validateTerminateActivityExecutionRequest(
+func validateAndNormalizeTerminateActivityExecutionRequest(
 	req *workflowservice.TerminateActivityExecutionRequest,
 	maxIDLengthLimit int,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 ) error {
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	}
+
 	if req.GetActivityId() == "" {
 		return serviceerror.NewInvalidArgument("activity ID is required")
 	}
@@ -563,7 +570,7 @@ func validateTerminateActivityExecutionRequest(
 	return nil
 }
 
-func validatePauseActivityExecutionRequest(
+func validateAndNormalizePauseActivityExecutionRequest(
 	req *workflowservice.PauseActivityExecutionRequest,
 	maxIDLengthLimit int,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
@@ -600,7 +607,7 @@ func validatePauseActivityExecutionRequest(
 	return nil
 }
 
-func validateUnpauseActivityExecutionRequest(
+func validateAndNormalizeUnpauseActivityExecutionRequest(
 	req *workflowservice.UnpauseActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
