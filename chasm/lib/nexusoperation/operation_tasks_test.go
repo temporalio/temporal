@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"testing"
 	"text/template"
 	"time"
@@ -222,7 +223,13 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 				if len(options.Links) != 2 {
 					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "expected 2 links, got %d", len(options.Links))
 				}
-				link, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(options.Links[0])
+				workflowEventLinkIdx := slices.IndexFunc(options.Links, func(link nexus.Link) bool {
+					return link.Type == string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName())
+				})
+				if workflowEventLinkIdx == -1 {
+					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "missing workflow event link")
+				}
+				link, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(options.Links[workflowEventLinkIdx])
 				if err != nil {
 					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to convert link: %v", err)
 				}
