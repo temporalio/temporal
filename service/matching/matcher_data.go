@@ -571,6 +571,20 @@ func (d *matcherData) TimeSinceLastPoll() time.Duration {
 	return time.Since(d.lastPoller)
 }
 
+// HasWaitingPoller returns if there's a normal (non forwarder)
+// poller waiting for a task. This is intended mostly for use in
+// testing to ensure test setup.
+func (d *matcherData) HasWaitingPoller() bool {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	for _, p := range d.pollers.heap {
+		if p.taskForwarderType == notTaskForwarder {
+			return true
+		}
+	}
+	return false
+}
+
 // waitable match result:
 
 type waitableMatchResult struct {
