@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
@@ -71,7 +72,9 @@ func main() {
 	case strings.HasPrefix(branch, "release/") || strings.HasPrefix(branch, "cloud/"):
 		validateErr = validateReleaseBranch(modFile)
 	case branch == "main":
-		validateErr = validateMainBranch(context.Background(), modFile)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		validateErr = validateMainBranch(ctx, modFile)
 	default:
 		fmt.Printf("No dependency policy for base branch %q; skipping validation\n", branch)
 	}
@@ -113,8 +116,8 @@ func validateMainBranch(
 ) error {
 	var failures []string
 	for _, mod := range knownModules {
-		if failure := validateMainModule(ctx, modFile, mod); failure != "" {
-			failures = append(failures, failure)
+		if err := validateMainModule(ctx, modFile, mod); err != nil {
+			failures = append(failures, err.Error())
 		}
 	}
 
@@ -122,6 +125,7 @@ func validateMainBranch(
 		return fmt.Errorf("main branch dependency validation failed:\n  - %s", strings.Join(failures, "\n  - "))
 	}
 
+	fmt.Println("All required dependencies are valid for main branch")
 	return nil
 }
 
@@ -129,10 +133,10 @@ func validateMainModule(
 	ctx context.Context,
 	modFile *modfile.File,
 	mod moduleSpec,
-) string {
+) error {
 	modVersion, ok := findRequiredModuleVersion(modFile, mod.modulePath)
 	if !ok {
-		return fmt.Sprintf("%s: dependency not found in go.mod", mod.modulePath)
+		return fmt.Errorf("%s: dependency not found in go.mod", mod.modulePath)
 	}
 	version := modVersion.Version
 
@@ -140,29 +144,29 @@ func validateMainModule(
 
 	if !module.IsPseudoVersion(version) {
 		if !semver.IsValid(version) {
-			return fmt.Sprintf("%s@%s: not a valid semver tag", mod.modulePath, version)
+			return fmt.Errorf("%s@%s: not a valid semver tag", mod.modulePath, version)
 		}
 		fmt.Printf("  - %s@%s is a tagged release (ok)\n", mod.modulePath, version)
-		return ""
+		return nil
 	}
 
 	shortHash, err := module.PseudoVersionRev(version)
 	if err != nil {
-		return fmt.Sprintf("%s@%s: failed to parse pseudo-version revision: %v", mod.modulePath, version, err)
+		return fmt.Errorf("%s@%s: failed to parse pseudo-version revision: %v", mod.modulePath, version, err)
 	}
 
 	onDefault, err := resolveModuleOriginForSpec(ctx, mod, shortHash)
 	if err != nil {
-		return fmt.Sprintf("%s@%s: failed to resolve module origin: %v", mod.modulePath, version, err)
+		return fmt.Errorf("%s@%s: failed to resolve module origin: %v", mod.modulePath, version, err)
 	}
 
 	if !onDefault {
-		return fmt.Sprintf("%s@%s: commit %s is not on the default branch (%s) of %s",
+		return fmt.Errorf("%s@%s: commit %s is not on the default branch (%s) of %s",
 			mod.modulePath, version, shortHash, mod.defaultBranch, mod.repoURL)
 	}
 
 	fmt.Printf("  - %s@%s is on %s (ok)\n", mod.modulePath, version, mod.defaultBranch)
-	return ""
+	return nil
 }
 
 func findRequiredModuleVersion(modFile *modfile.File, modulePath string) (module.Version, bool) {
