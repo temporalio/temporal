@@ -83,7 +83,7 @@ func TestRequestIdStableAcrossRetries(t *testing.T) {
 			ActivityId: "test-activity",
 		}
 		validateTwice(t, req, func() error {
-			return validateTerminateActivityExecutionRequest(
+			return validateAndNormalizeTerminateActivityExecutionRequest(
 				req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
 		})
 	})
@@ -94,7 +94,7 @@ func TestRequestIdStableAcrossRetries(t *testing.T) {
 			ActivityId: "test-activity",
 		}
 		validateTwice(t, req, func() error {
-			return validateRequestCancelActivityExecutionRequest(
+			return validateAndNormalizeRequestCancelActivityExecutionRequest(
 				req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
 		})
 	})
