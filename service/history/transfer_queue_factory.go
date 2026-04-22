@@ -202,5 +202,6 @@ func (f *transferQueueFactory) CreateQueue(
 		logger,
 		metricsHandler,
 		factory,
+		nil, // taskPostProcessor
 	)
 }

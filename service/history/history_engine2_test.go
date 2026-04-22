@@ -20,6 +20,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -953,6 +954,75 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	s.Nil(err)
 	s.NotNil(response)
 	s.Equal(scheduledEvent, response.ScheduledEvent)
+	s.NotNil(response.Clock, "Clock must be set for shard staleness check")
+}
+
+func (s *engine2Suite) TestRecordActivityTaskStartedDuplicateRequest() {
+	namespaceID := tests.NamespaceID
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "wId",
+		RunId:      tests.RunID,
+	}
+
+	identity := "testIdentity"
+	tl := "testTaskQueue"
+
+	activityID := "activity1_id"
+	activityType := "activity_type1"
+	activityInput := payloads.EncodeString("input1")
+
+	ms := s.createExecutionStartedState(workflowExecution, tl, identity, true, true)
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, int64(2), int64(3), identity)
+	scheduledEvent, _ := addActivityTaskScheduledEvent(ms, workflowTaskCompletedEvent.EventId, activityID, activityType, tl, activityInput, 100*time.Second, 10*time.Second, 1*time.Second, 5*time.Second)
+
+	// Start the activity so it has StartedEventId set.
+	addActivityTaskStartedEvent(ms, scheduledEvent.GetEventId(), identity)
+
+	ms1 := workflow.TestCloneToProto(context.Background(), ms)
+
+	// Simulate what the API layer does on first start: store StartedClock in ActivityInfo.
+	// Set it on the proto directly (after cloning) to avoid dirtying mutable state,
+	// since the duplicate request path should not write back to persistence.
+	for _, ai := range ms1.ActivityInfos {
+		ai.StartedClock = &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 42}
+	}
+
+	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse1, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+
+	s.mockEventsCache.EXPECT().GetEvent(
+		gomock.Any(),
+		gomock.Any(),
+		events.EventKey{
+			NamespaceID: namespaceID,
+			WorkflowID:  workflowExecution.GetWorkflowId(),
+			RunID:       workflowExecution.GetRunId(),
+			EventID:     scheduledEvent.GetEventId(),
+			Version:     0,
+		},
+		workflowTaskCompletedEvent.GetEventId(),
+		gomock.Any(),
+	).Return(scheduledEvent, nil)
+
+	// Send the same RequestId that addActivityTaskStartedEvent used (tests.RunID).
+	response, err := s.historyEngine.RecordActivityTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordActivityTaskStartedRequest{
+		NamespaceId:       namespaceID.String(),
+		WorkflowExecution: workflowExecution,
+		ScheduledEventId:  5,
+		RequestId:         tests.RunID,
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: tl,
+			},
+			Identity: identity,
+		},
+	})
+	s.NoError(err)
+	s.NotNil(response)
+	s.NotNil(response.Clock, "Clock must be set for shard staleness check on duplicate request")
+	s.Equal(int64(42), response.Clock.Clock, "Should return the stored StartedClock")
 }
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecution_Running() {
@@ -1642,6 +1712,19 @@ func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Existing() {
 	s.NotEqual(s.tv.RunID(), resp.GetRunId())
 }
 
+func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Running() {
+	s.setupStartWorkflowExecutionForTerminate()
+
+	//nolint:staticcheck // SA1019: intentional coverage for deprecated policy migration
+	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING, enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED)
+
+	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+
+	s.NoError(err)
+	s.True(resp.Started)
+	s.NotEqual(s.tv.RunID(), resp.GetRunId())
+}
+
 func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 	namespaceID := tests.NamespaceID
 	workflowID := "workflowID"
@@ -1733,6 +1816,22 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 				resp, err := s.historyEngine.StartWorkflowExecution(
 					metrics.AddMetricsContext(context.Background()),
 					makeStartRequest(enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL))
+
+				s.NoError(err)
+				s.True(resp.Started)
+				s.NotEqual(prevRunID, resp.GetRunId())
+			})
+
+			s.Run("and id reuse policy is TERMINATE_IF_RUNNING", func() {
+				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).
+					Return(nil, makeCurrentWorkflowConditionFailedError(prevRequestID))
+				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), updateExecutionRequest).
+					Return(tests.CreateWorkflowExecutionResponse, nil)
+
+				resp, err := s.historyEngine.StartWorkflowExecution(
+					metrics.AddMetricsContext(context.Background()),
+					//nolint:staticcheck // SA1019: intentional coverage for deprecated policy migration
+					makeStartRequest(enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL))
 
 				s.NoError(err)
 				s.True(resp.Started)
