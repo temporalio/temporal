@@ -25,6 +25,10 @@ const (
 	MetadataKeyWorkflowType = "workflow-type"
 	// MetadataKeyWorkflowTaskQueue is the context metadata key for workflow task queue
 	MetadataKeyWorkflowTaskQueue = "workflow-task-queue"
+	// MetadataKeyStandaloneActivityType is the context metadata key for standalone activity type.
+	MetadataKeyStandaloneActivityType = "standalone-activity-type"
+	// MetadataKeyStandaloneActivityTaskQueue is the context metadata key for standalone activity task queue.
+	MetadataKeyStandaloneActivityTaskQueue = "standalone-activity-task-queue"
 
 	activityTypePrefix      = "activity-type-"
 	activityTaskQueuePrefix = "activity-task-queue-"
