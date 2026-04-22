@@ -63,7 +63,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.43.0
 	go.opentelemetry.io/otel/sdk/metric v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
-	go.temporal.io/api v1.62.10-0.20260420202918-975b82732988
+	go.temporal.io/api v1.62.10-0.20260421204157-0617d4e3bba2
 	go.temporal.io/auto-scaled-workers v0.0.0-20260407181057-edd947d743d2
 	go.temporal.io/sdk v1.41.1
 	go.uber.org/fx v1.24.0
@@ -71,6 +71,7 @@ require (
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.1
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f
+	golang.org/x/mod v0.35.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/text v0.36.0
@@ -230,5 +231,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
-
-replace go.temporal.io/api => github.com/davidporter-id-au/api-go v0.0.0-20260422011909-c01e522f0b3b
