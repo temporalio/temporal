@@ -26,6 +26,7 @@ type (
 	TaskAddHookDetails struct {
 		DeploymentVersion *deploymentpb.WorkerDeploymentVersion
 		IsSyncMatch       bool
+		RateLimited       bool
 	}
 
 	TaskHookFactory interface {

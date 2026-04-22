@@ -680,24 +680,33 @@ func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueue
 	return status
 }
 
-func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (bool, error) {
+// syncMatchResult contains the outcome of a TrySyncMatch attempt.
+type syncMatchResult struct {
+	matched     bool
+	rateLimited bool
+	err         error
+}
+
+func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) syncMatchResult {
 	if !task.isForwarded() {
 		// request sent by history service
 		c.liveness.markAlive()
 		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey())).inc(1)
 		if disable, _ := testhooks.Get(c.partitionMgr.engine.testHooks, testhooks.MatchingDisableSyncMatch, c.partitionMgr.ns.ID()); disable {
-			return false, nil
+			return syncMatchResult{}
 		}
 	}
 
 	if c.priMatcher != nil {
-		return c.priMatcher.Offer(ctx, task)
+		matched, rateLimited, err := c.priMatcher.Offer(ctx, task)
+		return syncMatchResult{matched: matched, rateLimited: rateLimited, err: err}
 	}
 
 	childCtx, cancel := contextutil.WithDeadlineBuffer(ctx, c.config.SyncMatchWaitDuration(), time.Second)
 	defer cancel()
 
-	return c.oldMatcher.Offer(childCtx, task)
+	matched, err := c.oldMatcher.Offer(childCtx, task)
+	return syncMatchResult{matched: matched, err: err}
 }
 
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(

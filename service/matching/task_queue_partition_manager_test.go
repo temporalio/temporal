@@ -1351,6 +1351,7 @@ type capturedTaskMatchDetails struct {
 	TaskQueueName     string
 	TaskQueueType     enumspb.TaskQueueType
 	IsSyncMatch       bool
+	RateLimited       bool
 	DeploymentVersion *deploymentpb.WorkerDeploymentVersion
 }
 
@@ -1373,6 +1374,7 @@ func (h *capturingTaskMatchHook) ProcessTaskAdd(ctx context.Context, event *hook
 		TaskQueueName: h.taskQueueName,
 		TaskQueueType: h.taskQueueType,
 		IsSyncMatch:   event.IsSyncMatch,
+		RateLimited:   event.RateLimited,
 	}
 	if event.DeploymentVersion != nil {
 		details.DeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
@@ -1712,6 +1714,75 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedNoSyncMatch_HooksN
 
 	// Hooks should NOT have been called on the parent partition.
 	s.Require().Empty(hook.getCalls())
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_RateLimited() {
+	if !s.newMatcher {
+		s.T().Skip("rate limiting signal from matcher is only available in new matcher")
+	}
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	// Set rate limit to zero RPS — this blocks all sync matches due to rate limiting.
+	pm.rateLimitManager.SetEffectiveRPSAndSourceForTesting(0, enumspb.RATE_LIMIT_SOURCE_API)
+	pm.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(0)
+
+	// Set up a waiting poller so sync match would succeed if not rate-limited.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		task, _, _ := pm.PollTask(ctx, &pollMetadata{
+			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:       "",
+				UseVersioning: false,
+			},
+		})
+		if task != nil && task.responseC != nil {
+			close(task.responseC)
+		}
+	}()
+	pq := pm.defaultQueue().(*physicalTaskQueueManagerImpl)
+	s.Require().Eventually(pq.matcher.HasWaitingPoller, 2*time.Second, time.Millisecond)
+
+	// AddTask should fall through to spool because rate limiting blocked sync match.
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().False(syncMatched)
+
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.False(calls[0].IsSyncMatch)
+	s.True(calls[0].RateLimited)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_NotRateLimited() {
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	// No rate limiting configured — task should spool normally without rate limit flag.
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId:      namespaceID,
+			RunId:            "run",
+			WorkflowId:       "wf",
+			VersionDirective: worker_versioning.MakeBuildIdDirective("buildXYZ"),
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().False(syncMatched)
+
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.False(calls[0].IsSyncMatch)
+	s.False(calls[0].RateLimited)
 }
 
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_MultipleHooksInvoked() {

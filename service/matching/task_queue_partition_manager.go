@@ -439,13 +439,15 @@ reredirectTask:
 		return "", false, err
 	}
 
+	var rateLimited bool
 	if isActive {
-		syncMatched, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
+		smr := syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
+		syncMatched, rateLimited, err = smr.matched, smr.rateLimited, smr.err
 		if syncMatched && !pm.shouldBacklogSyncMatchTaskOnError(err) {
 			// Only fire hooks for non-forwarded tasks. Forwarded tasks already had hooks fired
 			// on the child partition that originally received the task.
 			if params.forwardInfo == nil {
-				pm.processTaskAddHooks(ctx, targetVersion, syncMatched)
+				pm.processTaskAddHooks(ctx, targetVersion, syncMatched, false)
 			}
 
 			// Build ID is not returned for sync match. The returned build ID is used by History to update
@@ -474,17 +476,18 @@ reredirectTask:
 
 	err = spoolQueue.SpoolTask(params.taskInfo)
 	if err == nil {
-		pm.processTaskAddHooks(ctx, targetVersion, false)
+		pm.processTaskAddHooks(ctx, targetVersion, false, rateLimited)
 	}
 
 	return assignedBuildId, false, err
 }
 
-func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context, targetVersion *deploymentspb.WorkerDeploymentVersion, syncMatched bool) {
+func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context, targetVersion *deploymentspb.WorkerDeploymentVersion, syncMatched bool, rateLimited bool) {
 	for _, l := range pm.taskHooks {
 		l.ProcessTaskAdd(ctx, &hooks.TaskAddHookDetails{
 			DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(targetVersion),
 			IsSyncMatch:       syncMatched,
+			RateLimited:       rateLimited,
 		})
 	}
 }

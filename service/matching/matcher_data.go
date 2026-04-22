@@ -359,7 +359,13 @@ func (d *matcherData) EnqueuePollerAndWait(ctxs []context.Context, poller *waiti
 	return poller.waitForMatch()
 }
 
-func (d *matcherData) MatchTaskImmediately(task *internalTask) (canSyncMatch, gotSyncMatch bool) {
+type immediateMatchResult struct {
+	canSyncMatch bool
+	gotSyncMatch bool
+	rateLimited  bool
+}
+
+func (d *matcherData) MatchTaskImmediately(task *internalTask) immediateMatchResult {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -369,18 +375,18 @@ func (d *matcherData) MatchTaskImmediately(task *internalTask) (canSyncMatch, go
 		// poller to become available. In presence of a backlog the chance of a poller being available when sync match
 		// request comes is almost zero.
 		// This check is mostly effective for the sync match requests that come from child partitions for spooled tasks.
-		return false, false
+		return immediateMatchResult{}
 	}
 
 	task.initMatch(d)
 	d.tasks.Add(task)
-	d.findAndWakeMatches()
+	rateLimited := d.findAndWakeMatches()
 	// don't wait, check if match() picked this one already
 	if task.matchResult != nil {
-		return true, true
+		return immediateMatchResult{canSyncMatch: true, gotSyncMatch: true}
 	}
 	d.tasks.Remove(task)
-	return true, false
+	return immediateMatchResult{canSyncMatch: true, rateLimited: rateLimited}
 }
 
 func (d *matcherData) MatchPollerImmediately(poller *waitingPoller) *matchResult {
@@ -489,8 +495,8 @@ func (d *matcherData) allowForwarding() (allowForwarding bool) {
 	return delayToForwardingAllowed <= 0
 }
 
-// call with lock held
-func (d *matcherData) findAndWakeMatches() {
+// call with lock held. Returns true if a match was found but blocked by rate limiting.
+func (d *matcherData) findAndWakeMatches() (rateLimited bool) {
 	allowForwarding := d.canForward && d.allowForwarding()
 
 	now := d.timeSource.Now().UnixNano()
@@ -502,14 +508,14 @@ func (d *matcherData) findAndWakeMatches() {
 		if task == nil || poller == nil {
 			// no more current matches, stop rate limit timer if was running
 			d.rateLimitTimer.unset()
-			return
+			return false
 		}
 
 		// check ready time
 		delay := d.rateLimitManager.readyTimeForTask(task).delay(now)
 		d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, delay)
 		if delay > 0 {
-			return // not ready yet, timer will call match later
+			return true // not ready yet, timer will call match later
 		}
 
 		// ready to signal match
