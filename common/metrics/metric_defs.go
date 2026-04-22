@@ -21,6 +21,8 @@ const (
 	nexusEndpointTagName           = "nexus_endpoint"
 	nexusServiceTagName            = "nexus_service"
 	nexusOperationTagName          = "nexus_operation"
+	nexusCallerTagName             = "nexus_caller"
+	nexusCallerTypeTagName         = "nexus_caller_type"
 	outcomeTagName                 = "outcome"
 	versionedTagName               = "versioned"
 	resourceExhaustedTag           = "resource_exhausted_cause"
@@ -732,6 +734,10 @@ var (
 	NexusRequestPreProcessErrors = NewCounterDef(
 		"nexus_request_preprocess_errors",
 		WithDescription("The number of Nexus requests for which pre-processing failed."),
+	)
+	NexusRequestErrors = NewCounterDef(
+		"nexus_request_error_count",
+		WithDescription("The number of Nexus requests that resulted in errors."),
 	)
 	NexusLatency = NewTimerDef(
 		"nexus_latency",
