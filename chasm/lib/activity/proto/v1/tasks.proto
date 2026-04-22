@@ -5,29 +5,29 @@ package temporal.server.chasm.lib.activity.proto.v1;
 option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
 
 message ActivityDispatchTask {
-    // The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
-    int32 stamp = 1;
+  // The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
+  int32 stamp = 1;
 }
 
 message ScheduleToStartTimeoutTask {
-    // The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
-    int32 stamp = 1;
+  // The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
+  int32 stamp = 1;
 }
 
 message ScheduleToCloseTimeoutTask {
-    // The schedule-to-close stamp for this task. Used for task validation.
-    // See also [ActivityState.schedule_to_close_stamp].
-    // Tasks without a stamp (stamp=0) predate this field and are not validated by stamp.
-    int32 stamp = 1;
+  // The schedule-to-close stamp for this task. Used for task validation.
+  // See also [ActivityState.schedule_to_close_stamp].
+  // Tasks without a stamp (stamp=0) predate this field and are not validated by stamp.
+  int32 stamp = 1;
 }
 
 message StartToCloseTimeoutTask {
-    // The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
-    int32 stamp = 1;
+  // The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
+  int32 stamp = 1;
 }
 
 // HeartbeatTimeoutTask is a pure task that enforces heartbeat timeouts.
 message HeartbeatTimeoutTask {
-    // The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
-    int32 stamp = 1;
+  // The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
+  int32 stamp = 1;
 }
