@@ -158,6 +158,8 @@ message ActivityHeartbeatState {
   temporal.api.common.v1.Payloads details = 1;
   // Time the last heartbeat was recorded.
   google.protobuf.Timestamp recorded_time = 2;
+  // Total number of heartbeats recorded across all attempts of this activity, including retries.
+  int64 total_heartbeat_count = 3;
 }
 
 message ActivityRequestData {

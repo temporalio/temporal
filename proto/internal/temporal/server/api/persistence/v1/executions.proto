@@ -694,6 +694,9 @@ message ActivityInfo {
   // Replication: This field is part of ActivityInfo and is automatically replicated
   // via state-based replication. No special handling is needed.
   temporal.server.api.clock.v1.VectorClock started_clock = 52;
+
+  // Total number of heartbeats recorded across all attempts of this activity, including retries.
+  int64 total_heartbeat_count = 53;
 }
 
 // timer_map column

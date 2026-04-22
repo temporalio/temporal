@@ -230,3 +230,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+replace go.temporal.io/api => github.com/davidporter-id-au/api-go v0.0.0-20260422011909-c01e522f0b3b
