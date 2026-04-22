@@ -568,7 +568,6 @@ func TestTransitionTerminated(t *testing.T) {
 			require.Equal(t, defaultTime, operation.ClosedTime.AsTime())
 			protorequire.ProtoEqual(t, &nexusoperationpb.NexusOperationTerminateState{
 				RequestId: "terminate-request-id",
-				Identity:  "test-identity",
 			}, operation.TerminateState)
 
 			// Verify outcome failure is set with terminated info and reason as message.
@@ -578,7 +577,9 @@ func TestTransitionTerminated(t *testing.T) {
 						Failure: &failurepb.Failure{
 							Message: "test reason",
 							FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
-								TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
+								TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{
+									Identity: "test-identity",
+								},
 							},
 						},
 					},
