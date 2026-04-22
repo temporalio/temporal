@@ -440,7 +440,6 @@ func (x *OperationState) GetLinks() []*v11.Link {
 type NexusOperationTerminateState struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	Identity      string                 `protobuf:"bytes,2,opt,name=identity,proto3" json:"identity,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -478,13 +477,6 @@ func (*NexusOperationTerminateState) Descriptor() ([]byte, []int) {
 func (x *NexusOperationTerminateState) GetRequestId() string {
 	if x != nil {
 		return x.RequestId
-	}
-	return ""
-}
-
-func (x *NexusOperationTerminateState) GetIdentity() string {
-	if x != nil {
-		return x.Identity
 	}
 	return ""
 }
@@ -882,11 +874,10 @@ const file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_raw
 	"\x1anext_attempt_schedule_time\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\x17nextAttemptScheduleTime\x12'\n" +
 	"\x0foperation_token\x18\x12 \x01(\tR\x0eoperationToken\x12x\n" +
 	"\x0fterminate_state\x18\x13 \x01(\v2O.temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationTerminateStateR\x0eterminateState\x122\n" +
-	"\x05links\x18\x14 \x03(\v2\x1c.temporal.api.common.v1.LinkR\x05links\"Y\n" +
+	"\x05links\x18\x14 \x03(\v2\x1c.temporal.api.common.v1.LinkR\x05links\"=\n" +
 	"\x1cNexusOperationTerminateState\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1a\n" +
-	"\bidentity\x18\x02 \x01(\tR\bidentity\"\x82\x03\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\"\x82\x03\n" +
 	"\x10OperationOutcome\x12p\n" +
 	"\n" +
 	"successful\x18\x01 \x01(\v2N.temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.SuccessfulH\x00R\n" +

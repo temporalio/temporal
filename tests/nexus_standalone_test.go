@@ -689,6 +689,7 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 			RequestId:   "terminate-request-id",
+			Identity:    "test-identity",
 			Reason:      "test termination",
 		})
 		s.NoError(err)
@@ -750,6 +751,7 @@ func TestTerminateStandaloneNexusOperation(t *testing.T) {
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 			RequestId:   "terminate-request-id",
+			Identity:    "test-identity",
 			Reason:      "test termination",
 		})
 		s.NoError(err)
@@ -767,6 +769,7 @@ func TestTerminateStandaloneNexusOperation(t *testing.T) {
 		s.NotNil(failure)
 		s.Equal("test termination", failure.GetMessage())
 		s.NotNil(failure.GetTerminatedFailureInfo())
+		s.Equal("test-identity", failure.GetTerminatedFailureInfo().GetIdentity())
 	})
 
 	t.Run("AlreadyTerminated", func(t *testing.T) {
