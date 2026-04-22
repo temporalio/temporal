@@ -70,24 +70,6 @@ func (w *Workflow) Terminate(
 	return chasm.TerminateComponentResponse{}, serviceerror.NewInternal("workflow root Terminate should not be called")
 }
 
-// ProcessCloseCallbacks triggers "WorkflowClosed" callbacks using the CHASM implementation.
-// It iterates through all callbacks and schedules WorkflowClosed ones that are in STANDBY state.
-func (w *Workflow) ProcessCloseCallbacks(ctx chasm.MutableContext) error {
-	// Iterate through all callbacks and schedule WorkflowClosed ones
-	for _, field := range w.Callbacks {
-		cb := field.Get(ctx)
-		// Only process callbacks in STANDBY state (not already triggered)
-		if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
-			continue
-		}
-		// Trigger the callback by transitioning to SCHEDULED state
-		if err := callback.TransitionScheduled.Apply(cb, ctx, callback.EventScheduled{}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // AddCompletionCallbacks creates completion callbacks using the CHASM implementation.
 // maxCallbacksPerWorkflow is the configured maximum number of callbacks allowed per workflow.
 func (w *Workflow) AddCompletionCallbacks(
@@ -129,6 +111,9 @@ func (w *Workflow) AddCompletionCallbacks(
 			return serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", variant)
 		}
 
+		// requestID (unique per API call) + idx (position within the request) ensures unique, idempotent callback IDs.
+		// Unlike HSM callbacks, CHASM replicates entire trees rather than replaying events, so deterministic
+		// cross-cluster IDs based on event version are not needed.
 		id := fmt.Sprintf("%s-%d", requestID, idx)
 
 		// Create and add callback
@@ -307,6 +292,55 @@ func (w *Workflow) OnNexusOperationTimedOut(
 				Failure:          createNexusOperationFailure(op, scheduledEventID, cause),
 			},
 		}
+	})
+	return err
+}
+
+func (w *Workflow) OnNexusOperationCancellationCompleted(ctx chasm.MutableContext, op *nexusoperation.Operation) error {
+	parentData := &workflowpb.NexusOperationParentData{}
+	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
+		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
+	}
+
+	cancelParentData := &workflowpb.NexusCancellationParentData{}
+	if err := op.Cancellation.Get(ctx).GetParentData().UnmarshalTo(cancelParentData); err != nil {
+		return serviceerror.NewInternalf("failed to unmarshal nexus cancellation parent data: %v", err)
+	}
+
+	_, err := w.AddAndApplyHistoryEventByEventType(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED, func(e *historypb.HistoryEvent) {
+		e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestCompletedEventAttributes{
+			NexusOperationCancelRequestCompletedEventAttributes: &historypb.NexusOperationCancelRequestCompletedEventAttributes{
+				ScheduledEventId: parentData.GetScheduledEventId(),
+				RequestedEventId: cancelParentData.GetRequestedEventId(),
+			},
+		}
+		// nolint:revive // We must mutate here even if the linter doesn't like it.
+		e.WorkerMayIgnore = true // For compatibility with older SDKs.
+	})
+	return err
+}
+
+func (w *Workflow) OnNexusOperationCancellationFailed(ctx chasm.MutableContext, op *nexusoperation.Operation, failure *failurepb.Failure) error {
+	parentData := &workflowpb.NexusOperationParentData{}
+	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
+		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
+	}
+
+	cancelParentData := &workflowpb.NexusCancellationParentData{}
+	if err := op.Cancellation.Get(ctx).GetParentData().UnmarshalTo(cancelParentData); err != nil {
+		return serviceerror.NewInternalf("failed to unmarshal nexus cancellation parent data: %v", err)
+	}
+
+	_, err := w.AddAndApplyHistoryEventByEventType(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED, func(e *historypb.HistoryEvent) {
+		e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestFailedEventAttributes{
+			NexusOperationCancelRequestFailedEventAttributes: &historypb.NexusOperationCancelRequestFailedEventAttributes{
+				ScheduledEventId: parentData.GetScheduledEventId(),
+				RequestedEventId: cancelParentData.GetRequestedEventId(),
+				Failure:          failure,
+			},
+		}
+		// nolint:revive // We must mutate here even if the linter doesn't like it.
+		e.WorkerMayIgnore = true // For compatibility with older SDKs.
 	})
 	return err
 }

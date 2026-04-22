@@ -150,6 +150,7 @@ type unusedDependencies struct {
 	client.Bean
 	sdk.ClientFactory
 	resource.MatchingRawClient
+	resource.MatchingClient
 	resource.HistoryRawClient
 	manager.VisibilityManager
 	archival.Archiver

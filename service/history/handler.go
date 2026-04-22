@@ -459,10 +459,6 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	response.Clock, err = shardContext.NewVectorClock()
-	if err != nil {
-		return nil, h.convertError(err)
-	}
 	return response, nil
 }
 
@@ -2256,6 +2252,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 	completion := &persistencespb.ChasmNexusCompletion{
 		CloseTime: request.CloseTime,
 		RequestId: request.Completion.RequestId,
+		Links:     request.Links,
 	}
 	switch variant := request.Outcome.(type) {
 	case *historyservice.CompleteNexusOperationChasmRequest_Failure:
