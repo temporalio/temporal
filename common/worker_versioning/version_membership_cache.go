@@ -10,10 +10,9 @@ import (
 // VersionMembershipAndReactivationStatusCache caches results of Matching's
 // CheckTaskQueueVersionMembership calls. It stores three pieces of information per version:
 //   - isMember: whether the task queue exists in the version (used for pinned override validation).
-//   - shouldSkipReactivation: whether the version's status is CURRENT, RAMPING, or DRAINING
-//     (see ShouldSkipReactivation). Callers use this to suppress redundant reactivation
-//     signals; the zero value (false) is the safe default and covers unknown / not-found /
-//     old-matching cases.
+//   - shouldSkipReactivation: true when the version's current status is CURRENT, RAMPING,
+//     or DRAINING, in which case the caller skips the reactivation signal. The zero value
+//     (false) is the safe default and covers unknown / not-found / old-matching cases.
 //   - revisionNumber: the version's current revision per matching's view. Used as part of the
 //     reactivation signal's RequestId so that all history pods targeting the same version at
 //     the same revision compose the same dedup key. Zero means unknown (old matching server or

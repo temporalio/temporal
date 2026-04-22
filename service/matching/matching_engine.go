@@ -3477,9 +3477,9 @@ func (e *matchingEngineImpl) CheckTaskQueueVersionMembership(
 	)
 
 	return &matchingservice.CheckTaskQueueVersionMembershipResponse{
-		IsMember:                  present,
+		IsMember:               present,
 		ShouldSkipReactivation: shouldSkipReactivation,
-		RevisionNumber:            revisionNumber,
+		RevisionNumber:         revisionNumber,
 	}, nil
 }
 

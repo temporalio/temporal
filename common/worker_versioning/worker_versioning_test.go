@@ -983,15 +983,15 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                              string
-		override                          *workflowpb.VersioningOverride
-		taskQueueType                     enumspb.TaskQueueType
-		setupCache                        func(c *testVersionMembershipCache)
-		setupMock                         func(m *matchingservicemock.MockMatchingServiceClient)
-		expectError                       bool
-		errorContains                     string
+		name                           string
+		override                       *workflowpb.VersioningOverride
+		taskQueueType                  enumspb.TaskQueueType
+		setupCache                     func(c *testVersionMembershipCache)
+		setupMock                      func(m *matchingservicemock.MockMatchingServiceClient)
+		expectError                    bool
+		errorContains                  string
 		expectedShouldSkipReactivation bool
-		expectedRevisionNumber            int64
+		expectedRevisionNumber         int64
 	}{
 		{
 			name:        "nil override returns nil",
@@ -1029,9 +1029,9 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
 			},
-			expectError:                       false,
+			expectError:                    false,
 			expectedShouldSkipReactivation: false,
-			expectedRevisionNumber:            42,
+			expectedRevisionNumber:         42,
 		},
 		{
 			name: "v0.32: Pinned override, with cache hit (active), returns isDrainedOrInactive=false",
@@ -1050,7 +1050,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
 			},
-			expectError:                       false,
+			expectError:                    false,
 			expectedShouldSkipReactivation: true,
 		},
 		{
@@ -1134,14 +1134,14 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{
-					IsMember:                  true,
+					IsMember:               true,
 					ShouldSkipReactivation: false, // drained/inactive on matching's side
-					RevisionNumber:            7,
+					RevisionNumber:         7,
 				}, nil)
 			},
-			expectError:                       false,
+			expectError:                    false,
 			expectedShouldSkipReactivation: false,
-			expectedRevisionNumber:            7,
+			expectedRevisionNumber:         7,
 		},
 		{
 			name: "v0.32: Pinned override, with cache miss, RPC returns member and active",
@@ -1159,11 +1159,11 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{
-					IsMember:                  true,
+					IsMember:               true,
 					ShouldSkipReactivation: true, // active on matching's side
 				}, nil)
 			},
-			expectError:                       false,
+			expectError:                    false,
 			expectedShouldSkipReactivation: true,
 		},
 		{
@@ -1185,7 +1185,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 					IsMember: true,
 				}, nil)
 			},
-			expectError:                       false,
+			expectError:                    false,
 			expectedShouldSkipReactivation: false, // old matching server — zero-value treated as "don't know, send signal"
 		},
 		{
@@ -1383,7 +1383,7 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 						},
 					}, nil)
 			},
-			expectError:                       false,
+			expectError:                    false,
 			expectedShouldSkipReactivation: false, // version data exists with UNSPECIFIED status — not in {CURRENT, RAMPING, DRAINING}
 		},
 		{
