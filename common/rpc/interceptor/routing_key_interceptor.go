@@ -34,63 +34,38 @@ const (
 	PatternNone RoutingKeyPattern = iota
 	// PatternWorkflowID indicates extraction via GetWorkflowId() method
 	PatternWorkflowID
-	// PatternWorkflowExecution indicates extraction via GetWorkflowExecution().GetWorkflowId()
-	PatternWorkflowExecution
 	// PatternExecution indicates extraction via GetExecution().GetWorkflowId()
 	PatternExecution
 	// PatternTaskToken indicates extraction via deserializing GetTaskToken()
 	PatternTaskToken
 	// PatternMultiOperation indicates extraction from ExecuteMultiOperationRequest
 	PatternMultiOperation
-	// PatternTaskQueueName indicates extraction via GetTaskQueue() string method
-	PatternTaskQueueName
-	// PatternTaskQueueNameFromMessage indicates extraction via GetTaskQueue().GetName() (TaskQueue message)
-	PatternTaskQueueNameFromMessage
-	// PatternDeploymentName indicates extraction via GetDeploymentName() method
-	PatternDeploymentName
-	// PatternDeploymentVersion indicates extraction via GetDeploymentVersion().GetDeploymentName()
-	PatternDeploymentVersion
-	// PatternPollerGroupID indicates extraction via GetPollerGroupId() directly
-	PatternPollerGroupID
 	// PatternNamespace indicates extraction via GetNamespace() - used when we want to send all calls to a particular api and namespace to a single cell at a time.
 	PatternNamespace
-	// PatternUpdateRef indicates extraction via GetUpdateRef().GetWorkflowExecution().GetWorkflowId()
-	PatternUpdateRef
 )
 
-// methodToPattern maps API method names to their expected routing key extraction pattern.
-// Methods not in this map are treated as PatternNone (no routing key extraction needed).
+// methodToPattern maps API method names to their expected routing key
+// extraction pattern. Methods not in this map fall through to the generated
+// extractor in routing_key_extractor_gen.go; methods handled there do not
+// need an entry here.
+//
+// This map covers cases the codegen cannot express: task token deserialization,
+// ExecuteMultiOperation fan-out, namespace-level routing, and the legacy
+// GetWorkflowId() fallback for *ById methods whose callers have not yet
+// populated the resource_id proto field.
 var methodToPattern = map[string]RoutingKeyPattern{
-	// Pattern: GetWorkflowId() - direct WorkflowId field
-	"StartWorkflowExecution":           PatternWorkflowID,
-	"SignalWithStartWorkflowExecution": PatternWorkflowID,
-	"PauseWorkflowExecution":           PatternWorkflowID,
-	"UnpauseWorkflowExecution":         PatternWorkflowID,
+	// Pattern: GetWorkflowId() - legacy fallback for methods whose proto
+	// annotation uses {resource_id} but whose callers have not yet populated
+	// the ResourceID field.
 	"RecordActivityTaskHeartbeatById":  PatternWorkflowID,
 	"RespondActivityTaskCompletedById": PatternWorkflowID,
 	"RespondActivityTaskCanceledById":  PatternWorkflowID,
 	"RespondActivityTaskFailedById":    PatternWorkflowID,
 
-	// Pattern: GetWorkflowExecution().GetWorkflowId()
-	"DeleteWorkflowExecution":        PatternWorkflowExecution,
-	"RequestCancelWorkflowExecution": PatternWorkflowExecution,
-	"ResetWorkflowExecution":         PatternWorkflowExecution,
-	"SignalWorkflowExecution":        PatternWorkflowExecution,
-	"TerminateWorkflowExecution":     PatternWorkflowExecution,
-	"UpdateWorkflowExecution":        PatternWorkflowExecution,
-	"UpdateWorkflowExecutionOptions": PatternWorkflowExecution,
-
-	// Pattern: GetExecution().GetWorkflowId()
-	"DescribeWorkflowExecution":          PatternExecution,
-	"GetWorkflowExecutionHistory":        PatternExecution,
-	"GetWorkflowExecutionHistoryReverse": PatternExecution,
-	"QueryWorkflow":                      PatternExecution,
-	"ResetStickyTaskQueue":               PatternExecution,
-	"ResetActivity":                      PatternExecution,
-	"PauseActivity":                      PatternExecution,
-	"UnpauseActivity":                    PatternExecution,
-	"UpdateActivityOptions":              PatternExecution,
-	"TriggerWorkflowRule":                PatternExecution,
+	// Pattern: GetExecution().GetWorkflowId() - methods without a proto
+	// request_header annotation yet. Codegen does not emit these, so we rely
+	// on the pattern-based fallback.
+	"TriggerWorkflowRule": PatternExecution,
 
 	// Pattern: TaskToken deserialization
 	"RecordActivityTaskHeartbeat":  PatternTaskToken,
@@ -103,40 +78,12 @@ var methodToPattern = map[string]RoutingKeyPattern{
 	// Pattern: ExecuteMultiOperation special handling
 	"ExecuteMultiOperation": PatternMultiOperation,
 
-	// task queue name
-	"UpdateTaskQueueConfig": PatternTaskQueueName,
-
-	// task queue name (from TaskQueue message)
-	"ListTaskQueuePartitions": PatternTaskQueueNameFromMessage,
-
-	// deployment name
-	"DescribeWorkerDeployment":          PatternDeploymentName,
-	"DeleteWorkerDeployment":            PatternDeploymentName,
-	"SetWorkerDeploymentCurrentVersion": PatternDeploymentName,
-	"SetWorkerDeploymentManager":        PatternDeploymentName,
-	"SetWorkerDeploymentRampingVersion": PatternDeploymentName,
-
-	// deployment name (from WorkerDeploymentVersion message)
-	"DescribeWorkerDeploymentVersion":       PatternDeploymentVersion,
-	"DeleteWorkerDeploymentVersion":         PatternDeploymentVersion,
-	"UpdateWorkerDeploymentVersionMetadata": PatternDeploymentVersion,
-
 	// namespace (deterministic routing to a single cell for the namespace)
 	// TODO: Switch to worker_grouping_key when available for load balancing
 	"FetchWorkerConfig":     PatternNamespace,
 	"UpdateWorkerConfig":    PatternNamespace,
 	"DescribeWorker":        PatternNamespace,
 	"RecordWorkerHeartbeat": PatternNamespace,
-
-	// workflow ID (from UpdateRef)
-	"PollWorkflowExecutionUpdate": PatternUpdateRef,
-
-	"PollWorkflowTaskQueue":     PatternPollerGroupID,
-	"PollActivityTaskQueue":     PatternPollerGroupID,
-	"PollNexusTaskQueue":        PatternPollerGroupID,
-	"RespondQueryTaskCompleted": PatternPollerGroupID,
-	"RespondNexusTaskCompleted": PatternPollerGroupID,
-	"RespondNexusTaskFailed":    PatternPollerGroupID,
 }
 
 // NewRoutingKeyInterceptor creates a new RoutingKeyInterceptor with the given extractor functions.

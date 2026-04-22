@@ -359,8 +359,6 @@ func TestRoutingKeyInterceptor_AllMethods(t *testing.T) {
 		})
 	}
 
-	// Verify we tested all methods in methodToPattern
-	require.Len(t, testCases, len(methodToPattern), "test cases should cover all methods in methodToPattern")
 }
 
 func TestRoutingKeyInterceptor_SkipsNonWorkflowServiceAndUnmappedMethods(t *testing.T) {
@@ -648,38 +646,18 @@ func TestRoutingKeyInterceptor_FirstMatchingExtractorWins(t *testing.T) {
 	require.Equal(t, namespace.RoutingKey{ID: "first-wins"}, capturedRoutingKey)
 }
 
+// TestMethodToPatternMapping verifies the fallback map covers only cases the
+// codegen-driven extractor (routing_key_extractor_gen.go) cannot express:
+// task token deserialization, ExecuteMultiOperation, namespace-level routing,
+// and the legacy GetWorkflowId() fallback for *ById methods whose callers
+// have not yet populated the resource_id proto field.
 func TestMethodToPatternMapping(t *testing.T) {
 	expectedMappings := map[string]RoutingKeyPattern{
-		// PatternWorkflowID
-		"StartWorkflowExecution":           PatternWorkflowID,
-		"SignalWithStartWorkflowExecution": PatternWorkflowID,
-		"PauseWorkflowExecution":           PatternWorkflowID,
-		"UnpauseWorkflowExecution":         PatternWorkflowID,
+		// PatternWorkflowID — legacy fallback for *ById methods.
 		"RecordActivityTaskHeartbeatById":  PatternWorkflowID,
 		"RespondActivityTaskCompletedById": PatternWorkflowID,
 		"RespondActivityTaskCanceledById":  PatternWorkflowID,
 		"RespondActivityTaskFailedById":    PatternWorkflowID,
-
-		// PatternWorkflowExecution
-		"DeleteWorkflowExecution":        PatternWorkflowExecution,
-		"RequestCancelWorkflowExecution": PatternWorkflowExecution,
-		"ResetWorkflowExecution":         PatternWorkflowExecution,
-		"SignalWorkflowExecution":        PatternWorkflowExecution,
-		"TerminateWorkflowExecution":     PatternWorkflowExecution,
-		"UpdateWorkflowExecution":        PatternWorkflowExecution,
-		"UpdateWorkflowExecutionOptions": PatternWorkflowExecution,
-
-		// PatternExecution
-		"DescribeWorkflowExecution":          PatternExecution,
-		"GetWorkflowExecutionHistory":        PatternExecution,
-		"GetWorkflowExecutionHistoryReverse": PatternExecution,
-		"QueryWorkflow":                      PatternExecution,
-		"ResetStickyTaskQueue":               PatternExecution,
-		"ResetActivity":                      PatternExecution,
-		"PauseActivity":                      PatternExecution,
-		"UnpauseActivity":                    PatternExecution,
-		"UpdateActivityOptions":              PatternExecution,
-		"TriggerWorkflowRule":                PatternExecution,
 
 		// PatternTaskToken
 		"RecordActivityTaskHeartbeat":  PatternTaskToken,
@@ -692,39 +670,14 @@ func TestMethodToPatternMapping(t *testing.T) {
 		// PatternMultiOperation
 		"ExecuteMultiOperation": PatternMultiOperation,
 
-		// PatternTaskQueueName
-		"UpdateTaskQueueConfig": PatternTaskQueueName,
-
-		// PatternTaskQueueNameFromMessage
-		"ListTaskQueuePartitions": PatternTaskQueueNameFromMessage,
-
-		// PatternDeploymentName
-		"DescribeWorkerDeployment":          PatternDeploymentName,
-		"DeleteWorkerDeployment":            PatternDeploymentName,
-		"SetWorkerDeploymentCurrentVersion": PatternDeploymentName,
-		"SetWorkerDeploymentManager":        PatternDeploymentName,
-		"SetWorkerDeploymentRampingVersion": PatternDeploymentName,
-
-		// PatternDeploymentVersion
-		"DescribeWorkerDeploymentVersion":       PatternDeploymentVersion,
-		"DeleteWorkerDeploymentVersion":         PatternDeploymentVersion,
-		"UpdateWorkerDeploymentVersionMetadata": PatternDeploymentVersion,
+		// PatternExecution — proto-annotation gap; codegen does not emit.
+		"TriggerWorkflowRule": PatternExecution,
 
 		// PatternNamespace
 		"FetchWorkerConfig":     PatternNamespace,
 		"UpdateWorkerConfig":    PatternNamespace,
 		"DescribeWorker":        PatternNamespace,
 		"RecordWorkerHeartbeat": PatternNamespace,
-
-		"PollWorkflowExecutionUpdate": PatternUpdateRef,
-
-		// PatternPollerGroupID
-		"PollWorkflowTaskQueue":     PatternPollerGroupID,
-		"PollActivityTaskQueue":     PatternPollerGroupID,
-		"PollNexusTaskQueue":        PatternPollerGroupID,
-		"RespondQueryTaskCompleted": PatternPollerGroupID,
-		"RespondNexusTaskCompleted": PatternPollerGroupID,
-		"RespondNexusTaskFailed":    PatternPollerGroupID,
 	}
 
 	require.Equal(t, expectedMappings, methodToPattern)
