@@ -83,6 +83,8 @@ func newStandaloneOperation(
 		Service:                frontendReq.GetService(),
 		Operation:              frontendReq.GetOperation(),
 		ScheduleToCloseTimeout: frontendReq.GetScheduleToCloseTimeout(),
+		ScheduleToStartTimeout: frontendReq.GetScheduleToStartTimeout(),
+		StartToCloseTimeout:    frontendReq.GetStartToCloseTimeout(),
 		ScheduledTime:          timestamppb.New(ctx.Now(nil)),
 		RequestId:              uuid.NewString(),
 	})
