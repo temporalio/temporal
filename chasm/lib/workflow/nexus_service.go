@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -29,7 +28,6 @@ func (h *workflowServiceNexusHandler) signalWithStartWorkflowExecution(
 	req *workflowservice.SignalWithStartWorkflowExecutionRequest,
 	options nexus.StartOperationOptions,
 ) (*workflowservice.SignalWithStartWorkflowExecutionResponse, error) {
-	fmt.Printf("TESTING: signalWithStartWorkflowExecution\n")
 	nsID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgumentf("Invalid namespace %q: %v", req.GetNamespace(), err)
@@ -38,7 +36,6 @@ func (h *workflowServiceNexusHandler) signalWithStartWorkflowExecution(
 		NamespaceId:            nsID.String(),
 		SignalWithStartRequest: req,
 	})
-	fmt.Printf("TESTING: signalWithStartWorkflowExecution result res=%v err=%v conflictPolicy=%v\n", res, err, req.GetWorkflowIdConflictPolicy())
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +50,6 @@ func (h *workflowServiceNexusHandler) signalWithStartWorkflowExecution(
 		},
 	})
 	nexus.AddHandlerLinks(ctx, link)
-	fmt.Printf("TESTING: signal with start response: run_id=%s started=%v\n", res.GetRunId(), res.GetStarted())
 	return &workflowservice.SignalWithStartWorkflowExecutionResponse{
 		RunId:   res.GetRunId(),
 		Started: res.GetStarted(),
@@ -80,7 +76,6 @@ type SignalWithStartOperationProcessor struct {
 }
 
 func (o SignalWithStartOperationProcessor) ProcessInput(ctx chasm.NexusOperationProcessorContext, request *workflowservice.SignalWithStartWorkflowExecutionRequest) (*chasm.NexusOperationProcessorResult, error) {
-	fmt.Println("TESTING: ProcessInput")
 	if request == nil {
 		return nil, serviceerror.NewInvalidArgument("Request is empty")
 	}
@@ -129,7 +124,6 @@ func NewWorkflowServiceNexusServiceProcessor(
 	saValidator *searchattribute.Validator,
 ) *chasm.NexusServiceProcessor {
 	sp := chasm.NewNexusServiceProcessor(workflowservicenexus.WorkflowService.ServiceName)
-	fmt.Printf("TESTING: signal with start name: %s\n", workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name())
 	op := SignalWithStartOperationProcessor{validator: NewValidator(config, saMapperProvider, saValidator)}
 	sp.MustRegisterOperation(
 		workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name(),

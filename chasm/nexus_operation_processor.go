@@ -83,7 +83,6 @@ type RegisterableNexusOperationProcessor struct {
 
 func nexusOperationProcessorAdapter[I any](processor NexusOperationProcessor[I]) func(ctx NexusOperationProcessorContext, input *commonpb.Payload) (*NexusOperationProcessorResult, error) {
 	return func(ctx NexusOperationProcessorContext, input *commonpb.Payload) (*NexusOperationProcessorResult, error) {
-		fmt.Printf("TESTING: nexusOperationProcessorAdapter input=%v\n", input)
 		var i I
 		decoded := false
 		// For json/plain payloads, proto.Message types use SDK shorthand encoding where
@@ -100,7 +99,6 @@ func nexusOperationProcessorAdapter[I any](processor NexusOperationProcessor[I])
 				if err := (temporalproto.CustomJSONUnmarshalOptions{
 					Metadata: map[string]interface{}{commonpb.EnablePayloadShorthandMetadataKey: true},
 				}).Unmarshal(input.GetData(), msg); err != nil {
-					fmt.Printf("TESTING: payload decoding failed %s", err.Error())
 					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to decode input payload: %v", err)
 				}
 				decoded = true
@@ -108,7 +106,6 @@ func nexusOperationProcessorAdapter[I any](processor NexusOperationProcessor[I])
 		}
 		if !decoded {
 			if err := payloads.Decode(&commonpb.Payloads{Payloads: []*commonpb.Payload{input}}, &i); err != nil {
-				fmt.Printf("TESTING: payload decoding failed %s\n", err.Error())
 				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to decode input payload: %v", err)
 			}
 		}
@@ -177,13 +174,10 @@ func (p *NexusServiceProcessor) MustRegisterOperation(name string, op Registerab
 //
 // Returns a nexus.HandlerError if the operation is not found or if input processing fails.
 func (p *NexusServiceProcessor) ProcessInput(ctx NexusOperationProcessorContext, opName string, input *commonpb.Payload) (*NexusOperationProcessorResult, error) {
-	fmt.Printf("TESTING: NexusServiceProcessor.ProcessInput service=%q op=%q numOps=%d\n", p.name, opName, len(p.operations))
 	op, ok := p.operations[opName]
 	if !ok {
-		fmt.Printf("TESTING: NexusServiceProcessor.ProcessInput op=%q NOT FOUND in service=%q\n", opName, p.name)
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "operation %q not found", opName)
 	}
-	fmt.Printf("TESTING: NexusServiceProcessor.ProcessInput op=%q found, calling adapter\n", opName)
 	return op.processInput(ctx, input)
 }
 
@@ -223,12 +217,9 @@ func (p *NexusEndpointProcessor) MustRegisterServiceProcessor(processor *NexusSe
 //
 // Returns a nexus.HandlerError if the service is not found or if input processing fails.
 func (p *NexusEndpointProcessor) ProcessInput(ctx NexusOperationProcessorContext, service, operation string, input *commonpb.Payload) (*NexusOperationProcessorResult, error) {
-	fmt.Printf("TESTING: NexusEndpointProcessor.ProcessInput service=%q operation=%q numServices=%d\n", service, operation, len(p.serviceProcessors))
 	serviceProcessor, ok := p.serviceProcessors[service]
 	if !ok {
-		fmt.Printf("TESTING: NexusEndpointProcessor.ProcessInput service=%q NOT FOUND\n", service)
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "service %q not found", service)
 	}
-	fmt.Printf("TESTING: NexusEndpointProcessor.ProcessInput service=%q found, dispatching to service processor\n", service)
 	return serviceProcessor.ProcessInput(ctx, operation, input)
 }

@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -34,20 +33,10 @@ import (
 // target workflow. It is used by TestBothWorkflowsVisibleAfterSWSFromWorkflow to verify
 // end-to-end SDK serialization against the real server.
 func systemNexusSWSWorkflow(ctx workflow.Context, req *workflowservicev1.SignalWithStartWorkflowExecutionRequest) (string, error) {
-	fmt.Printf("TESTING: %+v\n", req)
 	nc := workflow.NewNexusClient(commonnexus.SystemEndpoint, workflowservicenexus.WorkflowService.ServiceName)
 	// fut := nc.ExecuteOperation(ctx, systemnexus.WorkflowService.SignalWithStartWorkflowExecution, req, workflow.NexusOperationOptions{})
 	fut := nc.ExecuteOperation(ctx, workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution,
 		req,
-		// workflowservicev1.SignalWithStartWorkflowExecutionRequest{
-		// 	WorkflowId:   req.WorkflowId,
-		// 	SignalName:   "test-signal",
-		// 	WorkflowType: &commonpb.WorkflowType{Name: "sysNexusSWSTargetWorkflow"},
-		// 	TaskQueue:    &taskqueuepb.TaskQueue{Name: req.TaskQueue.Name},
-		// 	Input:        &commonpb.Payloads{Payloads: []*commonpb.Payload{{Data: []byte("workflow-input")}}},
-		// 	SignalInput:  &commonpb.Payloads{Payloads: []*commonpb.Payload{{Data: []byte("signal-input")}}},
-		// 	Memo:         &commonpb.Memo{Fields: map[string]*commonpb.Payload{"memo-key": {Data: []byte("memo-value")}}},
-		// },
 		workflow.NexusOperationOptions{})
 	var result workflowservicev1.SignalWorkflowExecutionResponse
 	if err := fut.Get(ctx, &result); err != nil {
@@ -62,7 +51,6 @@ func systemNexusSWSWorkflow(ctx workflow.Context, req *workflowservicev1.SignalW
 // workflow (rather than leaving it running) ensures the Nexus SWS operation's async callback fires
 // so that fut.Get() in systemNexusSWSWorkflow can resolve.
 func sysNexusSWSTargetWorkflow(ctx workflow.Context) (string, error) {
-	fmt.Printf("TESTING: started target workflow\n")
 	var received string
 	workflow.GetSignalChannel(ctx, "test-signal").Receive(ctx, &received)
 	return received, nil

@@ -2533,7 +2533,6 @@ func (h *Handler) StartNexusOperation(
 	ctx context.Context,
 	req *historyservice.StartNexusOperationRequest,
 ) (*historyservice.StartNexusOperationResponse, error) {
-	fmt.Printf("TESTING: start operation request: %+v\n", req)
 	requestID := req.GetRequest().GetRequestId()
 	// Build nexus.StartOperationOptions from the request
 	options := nexus.StartOperationOptions{
@@ -2597,7 +2596,6 @@ func (h *Handler) StartNexusOperation(
 		if len(ps.GetPayloads()) == 1 {
 			payload = ps.GetPayloads()[0]
 		}
-		fmt.Printf("TESTING: StartOperation payload: %+v\n", payload)
 		response.Variant = &nexuspb.StartOperationResponse_SyncSuccess{
 			SyncSuccess: &nexuspb.StartOperationResponse_Sync{
 				Payload: payload,
@@ -2615,8 +2613,6 @@ func (h *Handler) StartNexusOperation(
 		h.logger.Error(fmt.Sprintf("invalid result type: %T", result), tag.RequestID(req.Request.RequestId))
 		return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")
 	}
-
-	fmt.Printf("TESTING: StartOperation response: %+v\n", response)
 
 	return &historyservice.StartNexusOperationResponse{
 		Response: response,
