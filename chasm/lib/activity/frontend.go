@@ -122,7 +122,7 @@ func (h *frontendHandler) DescribeActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	err := validateDescribeActivityExecutionRequest(
+	err := validateAndNormalizeDescribeActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 	)
@@ -151,7 +151,7 @@ func (h *frontendHandler) PollActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	err := validatePollActivityExecutionRequest(
+	err := validateAndNormalizePollActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 	)
@@ -266,7 +266,7 @@ func (h *frontendHandler) DeleteActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	if err := validateAndNormalizeDeleteRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+	if err := validateAndNormalizeDeleteActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 
@@ -301,7 +301,7 @@ func (h *frontendHandler) TerminateActivityExecution(
 		return nil, err
 	}
 
-	if err := validateAndNormalizeTerminateRequest(
+	if err := validateAndNormalizeTerminateActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 		h.config.BlobSizeLimitError,
@@ -334,7 +334,7 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 		return nil, err
 	}
 
-	if err := validateAndNormalizeCancelRequest(
+	if err := validateAndNormalizeRequestCancelActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 		h.config.BlobSizeLimitError,
@@ -395,16 +395,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 	applyActivityOptionsToStartRequest(opts, req)
 
-	err = validateAndNormalizeStartRequest(
-		req,
-		h.config.MaxIDLengthLimit(),
-		h.config.BlobSizeLimitError,
-		h.config.BlobSizeLimitWarn,
-		h.logger,
-		h.saMapperProvider,
-		h.saValidator,
-	)
-	if err != nil {
+	if err = h.validateAndNormalizeStartActivityExecutionRequest(req); err != nil {
 		return nil, err
 	}
 
@@ -415,6 +406,43 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 
 	return req, nil
+}
+
+func (h *frontendHandler) validateAndNormalizeStartActivityExecutionRequest(
+	req *workflowservice.StartActivityExecutionRequest,
+) error {
+	maxIDLengthLimit := h.config.MaxIDLengthLimit()
+
+	if len(req.GetRequestId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRequestId()), maxIDLengthLimit)
+	}
+	if len(req.GetIdentity()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
+	}
+	if err := normalizeAndValidateIDPolicy(req); err != nil {
+		return err
+	}
+	if err := validateBlobSize(
+		req.GetActivityId(),
+		"StartActivityExecution",
+		h.config.BlobSizeLimitError,
+		h.config.BlobSizeLimitWarn,
+		req.Input.Size(),
+		h.logger,
+		req.GetNamespace()); err != nil {
+		return serviceerror.NewInvalidArgument("input exceeds length limit")
+	}
+	if req.GetSearchAttributes() != nil {
+		if err := validateAndNormalizeSearchAttributes(
+			req,
+			h.saMapperProvider,
+			h.saValidator); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // activityOptionsFromStartRequest builds an ActivityOptions from the inlined fields
@@ -438,7 +466,7 @@ func (h *frontendHandler) PauseActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	if err := validatePauseActivityExecutionRequest(
+	if err := validateAndNormalizePauseActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 		h.config.BlobSizeLimitError,
@@ -470,7 +498,7 @@ func (h *frontendHandler) UnpauseActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	if err := validateUnpauseActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+	if err := validateAndNormalizeUnpauseActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 
@@ -523,7 +551,7 @@ func (h *frontendHandler) UpdateActivityExecutionOptions(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	if err := validateUpdateActivityExecutionOptionsRequest(
+	if err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 	); err != nil {
