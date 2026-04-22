@@ -6195,7 +6195,7 @@ func (s *mutableStateSuite) TestSetContextMetadata_ActivityResolution() {
 	di, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
 	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
-		di.ScheduledEventID, di.RequestID, di.TaskQueue, "identity", nil, nil, nil, false, nil,
+		di.ScheduledEventID, di.RequestID, di.TaskQueue, "identity", nil, nil, nil, false, nil, 0,
 	)
 	s.NoError(err)
 	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
