@@ -380,7 +380,7 @@ func TestContextMetadataMarkActivityID(t *testing.T) {
 		ctx := WithMetadataContext(context.Background())
 		require.True(t, ContextMetadataMarkActivityID(ctx, "act-1"))
 
-		ids := ContextMetadataGetActivityIDs(ctx)
+		ids := ContextMetadataGetMarkedActivityIDs(ctx)
 		require.Equal(t, []string{"act-1"}, ids)
 	})
 
@@ -394,27 +394,27 @@ func TestContextMetadataMarkActivityID(t *testing.T) {
 		require.True(t, ContextMetadataMarkActivityID(ctx, "act-1"))
 		require.True(t, ContextMetadataMarkActivityID(ctx, "act-2"))
 
-		ids := ContextMetadataGetActivityIDs(ctx)
+		ids := ContextMetadataGetMarkedActivityIDs(ctx)
 		require.ElementsMatch(t, []string{"act-1", "act-2"}, ids)
 	})
 }
 
-func TestContextMetadataGetActivityIDs(t *testing.T) {
+func TestContextMetadataGetMarkedActivityIDs(t *testing.T) {
 	t.Run("returns nil without metadata context", func(t *testing.T) {
 		ctx := context.Background()
-		require.Nil(t, ContextMetadataGetActivityIDs(ctx))
+		require.Nil(t, ContextMetadataGetMarkedActivityIDs(ctx))
 	})
 
 	t.Run("returns nil when no activities marked", func(t *testing.T) {
 		ctx := WithMetadataContext(context.Background())
-		require.Nil(t, ContextMetadataGetActivityIDs(ctx))
+		require.Nil(t, ContextMetadataGetMarkedActivityIDs(ctx))
 	})
 
 	t.Run("returns single marked activity ID", func(t *testing.T) {
 		ctx := WithMetadataContext(context.Background())
 		ContextMetadataMarkActivityID(ctx, "act-1")
 
-		ids := ContextMetadataGetActivityIDs(ctx)
+		ids := ContextMetadataGetMarkedActivityIDs(ctx)
 		require.Equal(t, []string{"act-1"}, ids)
 	})
 
@@ -423,7 +423,7 @@ func TestContextMetadataGetActivityIDs(t *testing.T) {
 		ContextMetadataMarkActivityID(ctx, "act-1")
 		ContextMetadataMarkActivityID(ctx, "act-2")
 
-		ids := ContextMetadataGetActivityIDs(ctx)
+		ids := ContextMetadataGetMarkedActivityIDs(ctx)
 		require.Len(t, ids, 2)
 		require.ElementsMatch(t, []string{"act-1", "act-2"}, ids)
 	})
@@ -434,7 +434,7 @@ func TestContextMetadataGetActivityIDs(t *testing.T) {
 		ContextMetadataSet(ctx, MetadataKeyWorkflowTaskQueue, "my-queue")
 		ContextMetadataMarkActivityID(ctx, "act-1")
 
-		ids := ContextMetadataGetActivityIDs(ctx)
+		ids := ContextMetadataGetMarkedActivityIDs(ctx)
 		require.Equal(t, []string{"act-1"}, ids)
 	})
 
@@ -443,7 +443,7 @@ func TestContextMetadataGetActivityIDs(t *testing.T) {
 		ContextMetadataMarkActivityID(ctx, "act-1")
 		ContextMetadataSet(ctx, ActivityTaskQueueKey(5), "my-queue")
 
-		ids := ContextMetadataGetActivityIDs(ctx)
+		ids := ContextMetadataGetMarkedActivityIDs(ctx)
 		require.Equal(t, []string{"act-1"}, ids)
 
 		val, ok := ContextMetadataGet(ctx, ActivityTaskQueueKey(5))

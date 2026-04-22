@@ -7240,7 +7240,7 @@ func (ms *MutableStateImpl) SetContextMetadata(
 			contextutil.ContextMetadataSet(ctx, contextutil.MetadataKeyWorkflowTaskQueue, ms.executionInfo.TaskQueue)
 		}
 
-		for _, activityID := range contextutil.ContextMetadataGetActivityIDs(ctx) {
+		for _, activityID := range contextutil.ContextMetadataGetMarkedActivityIDs(ctx) {
 			if ai, ok := ms.GetActivityByActivityID(activityID); ok {
 				contextutil.ContextMetadataSet(ctx, contextutil.ActivityTypeKey(ai.ScheduledEventId), ai.ActivityType.GetName())
 				contextutil.ContextMetadataSet(ctx, contextutil.ActivityTaskQueueKey(ai.ScheduledEventId), ai.TaskQueue)

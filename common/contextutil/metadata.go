@@ -61,8 +61,8 @@ func ContextMetadataMarkActivityID(ctx context.Context, activityID string) bool 
 	return true
 }
 
-// ContextMetadataGetActivityIDs returns the marked activity IDs from the context.
-func ContextMetadataGetActivityIDs(ctx context.Context) []string {
+// ContextMetadataGetMarkedActivityIDs returns the marked activity IDs from the context.
+func ContextMetadataGetMarkedActivityIDs(ctx context.Context) []string {
 	metadataCtx := getMetadataContext(ctx)
 	if metadataCtx == nil {
 		return nil
