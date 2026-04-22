@@ -390,9 +390,6 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	if err = h.validateAndNormalizeStartActivityExecutionRequest(req); err != nil {
 		return nil, err
 	}
-	if err != nil {
-		return nil, err
-	}
 
 	if cbs := req.GetCompletionCallbacks(); len(cbs) > 0 {
 		if err := h.callbackValidator.Validate(req.GetNamespace(), cbs); err != nil {
