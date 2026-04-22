@@ -3,6 +3,7 @@ package contextutil
 import (
 	"context"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -41,6 +42,36 @@ func ActivityTypeKey(scheduledEventID int64) string {
 // ActivityTaskQueueKey returns the metadata key for an activity's task queue, keyed by scheduled event ID.
 func ActivityTaskQueueKey(scheduledEventID int64) string {
 	return activityTaskQueuePrefix + strconv.FormatInt(scheduledEventID, 10)
+}
+
+// ContextMetadataGetActivityTypeAndTaskQueue scans the context metadata for a single
+// activity's type and task queue. Returns false if no activity metadata is found
+// or if multiple activities are present.
+func ContextMetadataGetActivityTypeAndTaskQueue(ctx context.Context) (activityType string, taskQueue string, ok bool) {
+	metadataCtx := getMetadataContext(ctx)
+	if metadataCtx == nil {
+		return "", "", false
+	}
+
+	metadataCtx.Lock()
+	defer metadataCtx.Unlock()
+
+	var foundType, foundTaskQueue bool
+	for key, value := range metadataCtx.Metadata {
+		if strings.HasPrefix(key, activityTypePrefix) {
+			if foundType {
+				return "", "", false
+			}
+			activityType, foundType = value.(string)
+		} else if strings.HasPrefix(key, activityTaskQueuePrefix) {
+			if foundTaskQueue {
+				return "", "", false
+			}
+			taskQueue, foundTaskQueue = value.(string)
+		}
+	}
+
+	return activityType, taskQueue, foundType && foundTaskQueue
 }
 
 // ContextMetadataMarkActivityID marks an activity ID on the context for metadata resolution.

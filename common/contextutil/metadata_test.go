@@ -361,6 +361,94 @@ func TestContextHasMetadata(t *testing.T) {
 	})
 }
 
+func TestContextMetadataGetActivityTypeAndTaskQueue(t *testing.T) {
+	t.Run("returns false without metadata context", func(t *testing.T) {
+		ctx := context.Background()
+		actType, taskQueue, ok := ContextMetadataGetActivityTypeAndTaskQueue(ctx)
+		require.False(t, ok)
+		require.Empty(t, actType)
+		require.Empty(t, taskQueue)
+	})
+
+	t.Run("returns false when no activity metadata", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		actType, taskQueue, ok := ContextMetadataGetActivityTypeAndTaskQueue(ctx)
+		require.False(t, ok)
+		require.Empty(t, actType)
+		require.Empty(t, taskQueue)
+	})
+
+	t.Run("returns single activity type and task queue", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		ContextMetadataSet(ctx, ActivityTypeKey(42), "my-activity")
+		ContextMetadataSet(ctx, ActivityTaskQueueKey(42), "my-queue")
+
+		actType, taskQueue, ok := ContextMetadataGetActivityTypeAndTaskQueue(ctx)
+		require.True(t, ok)
+		require.Equal(t, "my-activity", actType)
+		require.Equal(t, "my-queue", taskQueue)
+	})
+
+	t.Run("returns false when multiple activities present", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		ContextMetadataSet(ctx, ActivityTypeKey(1), "activity-a")
+		ContextMetadataSet(ctx, ActivityTaskQueueKey(1), "queue-a")
+		ContextMetadataSet(ctx, ActivityTypeKey(2), "activity-b")
+		ContextMetadataSet(ctx, ActivityTaskQueueKey(2), "queue-b")
+
+		actType, taskQueue, ok := ContextMetadataGetActivityTypeAndTaskQueue(ctx)
+		require.False(t, ok)
+		require.Empty(t, actType)
+		require.Empty(t, taskQueue)
+	})
+
+	t.Run("returns false when only activity type present", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		ContextMetadataSet(ctx, ActivityTypeKey(1), "my-activity")
+
+		actType, taskQueue, ok := ContextMetadataGetActivityTypeAndTaskQueue(ctx)
+		require.False(t, ok)
+		require.Empty(t, taskQueue)
+		_ = actType
+	})
+
+	t.Run("returns false when only task queue present", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		ContextMetadataSet(ctx, ActivityTaskQueueKey(1), "my-queue")
+
+		actType, taskQueue, ok := ContextMetadataGetActivityTypeAndTaskQueue(ctx)
+		require.False(t, ok)
+		require.Empty(t, actType)
+		_ = taskQueue
+	})
+
+	t.Run("ignores workflow metadata keys", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		ContextMetadataSet(ctx, MetadataKeyWorkflowType, "my-workflow")
+		ContextMetadataSet(ctx, MetadataKeyWorkflowTaskQueue, "workflow-queue")
+		ContextMetadataSet(ctx, ActivityTypeKey(7), "my-activity")
+		ContextMetadataSet(ctx, ActivityTaskQueueKey(7), "activity-queue")
+
+		actType, taskQueue, ok := ContextMetadataGetActivityTypeAndTaskQueue(ctx)
+		require.True(t, ok)
+		require.Equal(t, "my-activity", actType)
+		require.Equal(t, "activity-queue", taskQueue)
+	})
+
+	t.Run("ignores standalone activity metadata keys", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		ContextMetadataSet(ctx, MetadataKeyStandaloneActivityType, "standalone-act")
+		ContextMetadataSet(ctx, MetadataKeyStandaloneActivityTaskQueue, "standalone-queue")
+		ContextMetadataSet(ctx, ActivityTypeKey(3), "my-activity")
+		ContextMetadataSet(ctx, ActivityTaskQueueKey(3), "my-queue")
+
+		actType, taskQueue, ok := ContextMetadataGetActivityTypeAndTaskQueue(ctx)
+		require.True(t, ok)
+		require.Equal(t, "my-activity", actType)
+		require.Equal(t, "my-queue", taskQueue)
+	})
+}
+
 func TestActivityTypeKey(t *testing.T) {
 	key := ActivityTypeKey(1)
 	require.Equal(t, "activity-type-1", key)
