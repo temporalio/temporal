@@ -18,7 +18,7 @@ import (
 // This is typically done by server-side interceptors (e.g., ContextMetadataInterceptor).
 func TrailerToContextMetadataInterceptor(logger log.Logger) grpc.UnaryClientInterceptor {
 	throttledLogger := log.NewThrottledLogger(logger, func() float64 {
-		return 0.1 // 1 log per 10 seconds
+		return 1.0 / 30.0 // 1 log per 30 seconds
 	})
 	return func(
 		ctx context.Context,

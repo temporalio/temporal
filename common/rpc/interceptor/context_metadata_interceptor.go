@@ -29,7 +29,7 @@ func NewContextMetadataInterceptor(setTrailer bool, logger log.Logger) *ContextM
 	if setTrailer {
 		cmi.logger = logger
 		cmi.throttledLogger = log.NewThrottledLogger(logger, func() float64 {
-			return 0.1 // 1 log per 10 seconds
+			return 1.0 / 30.0 // 1 log per 30 seconds
 		})
 	}
 	return cmi
@@ -55,6 +55,14 @@ func (c *ContextMetadataInterceptor) Intercept(
 }
 
 func (c *ContextMetadataInterceptor) appendContextMetadataToTrailer(ctx context.Context, info *grpc.UnaryServerInfo) {
+	// If the context is done, the gRPC stream may already be in streamDone state,
+	// and SetTrailer would return ErrIllegalHeaderWrite ("SendHeader called multiple times").
+	select {
+	case <-ctx.Done():
+		return
+	default:
+	}
+
 	var trailerPairs []string
 
 	for key, value := range contextutil.ContextMetadataGetAll(ctx) {
