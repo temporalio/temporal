@@ -10,14 +10,16 @@ import (
 
 const TaskGroupName = "nexusoperation"
 
-type ctxKeyOperationContextType struct{}
+type operationContextKeyType struct{}
 
-var ctxKeyOperationContext = ctxKeyOperationContextType{}
+// OperationContextKey is the context key for OperationContext, registered as a CHASM component
+// context value. Exported for use in tests that need to set up MockContext.
+var OperationContextKey = operationContextKeyType{}
 
-// operationContext holds dependencies injected into the chasm.Context for use by Operation methods.
-type operationContext struct {
-	namespaceRegistry namespace.Registry
-	metricTagConfig   dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
+// OperationContext holds dependencies injected into the chasm.Context for use by Operation methods.
+type OperationContext struct {
+	NamespaceRegistry namespace.Registry
+	MetricTagConfig   dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
 }
 
 // componentOnlyLibrary registers just the components without task executors or gRPC handlers.
@@ -51,9 +53,9 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 			),
 			chasm.WithBusinessIDAlias("OperationId"),
 			chasm.WithContextValues(map[any]any{
-				ctxKeyOperationContext: &operationContext{
-					namespaceRegistry: l.namespaceRegistry,
-					metricTagConfig:   l.metricTagConfig,
+				OperationContextKey: &OperationContext{
+					NamespaceRegistry: l.namespaceRegistry,
+					MetricTagConfig:   l.metricTagConfig,
 				},
 			}),
 		),

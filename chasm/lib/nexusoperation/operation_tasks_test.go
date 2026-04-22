@@ -50,6 +50,7 @@ type invocationTaskTestEnv struct {
 	op         *Operation
 	mockEngine *chasm.MockEngine
 	timeSource *clock.EventTimeSource
+	nsRegistry *namespace.MockRegistry
 }
 
 func newInvocationTaskTestEnv(
@@ -70,6 +71,7 @@ func newInvocationTaskTestEnv(
 	nsRegistry := namespace.NewMockRegistry(ctrl)
 	nsRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
 		namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
+	nsRegistry.EXPECT().GetNamespaceName(namespace.ID("ns-id")).Return(namespace.Name("ns-name"), nil).AnyTimes()
 
 	callbackTmpl, err := template.New("callback").Parse("http://localhost/callback")
 	require.NoError(t, err)
@@ -131,6 +133,7 @@ func newInvocationTaskTestEnv(
 		op:         op,
 		mockEngine: mockEngine,
 		timeSource: timeSource,
+		nsRegistry: nsRegistry,
 	}
 }
 
@@ -174,6 +177,16 @@ func (e *invocationTaskTestEnv) setupUpdateComponent() {
 				HandleNow: func(_ chasm.Component) time.Time {
 					return e.timeSource.Now()
 				},
+				HandleExecutionKey: func() chasm.ExecutionKey {
+					return chasm.ExecutionKey{
+						NamespaceID: "ns-id",
+						BusinessID:  "wf-id",
+						RunID:       "run-id",
+					}
+				},
+				GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+					NamespaceRegistry: e.nsRegistry,
+				}),
 			},
 		}
 		err := updateFn(mockCtx, e.op)
@@ -746,9 +759,19 @@ func TestScheduleToStartTimeoutTaskHandler_Validate(t *testing.T) {
 }
 
 func TestScheduleToStartTimeoutTaskHandler_Execute(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	nsRegistry := namespace.NewMockRegistry(ctrl)
+	nsRegistry.EXPECT().GetNamespaceName(namespace.ID("ns-id")).Return(namespace.Name("ns-name"), nil)
+
 	ctx := &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
 			HandleNow: func(chasm.Component) time.Time { return defaultTime },
+			HandleExecutionKey: func() chasm.ExecutionKey {
+				return chasm.ExecutionKey{NamespaceID: "ns-id"}
+			},
+			GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+				NamespaceRegistry: nsRegistry,
+			}),
 		},
 	}
 
@@ -812,9 +835,19 @@ func TestStartToCloseTimeoutTaskHandler_Validate(t *testing.T) {
 }
 
 func TestStartToCloseTimeoutTaskHandler_Execute(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	nsRegistry := namespace.NewMockRegistry(ctrl)
+	nsRegistry.EXPECT().GetNamespaceName(namespace.ID("ns-id")).Return(namespace.Name("ns-name"), nil)
+
 	ctx := &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
 			HandleNow: func(chasm.Component) time.Time { return defaultTime },
+			HandleExecutionKey: func() chasm.ExecutionKey {
+				return chasm.ExecutionKey{NamespaceID: "ns-id"}
+			},
+			GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+				NamespaceRegistry: nsRegistry,
+			}),
 		},
 	}
 
@@ -873,9 +906,19 @@ func TestScheduleToCloseTimeoutTaskHandler_Validate(t *testing.T) {
 }
 
 func TestScheduleToCloseTimeoutTaskHandler_Execute(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	nsRegistry := namespace.NewMockRegistry(ctrl)
+	nsRegistry.EXPECT().GetNamespaceName(namespace.ID("ns-id")).Return(namespace.Name("ns-name"), nil)
+
 	ctx := &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
 			HandleNow: func(chasm.Component) time.Time { return defaultTime },
+			HandleExecutionKey: func() chasm.ExecutionKey {
+				return chasm.ExecutionKey{NamespaceID: "ns-id"}
+			},
+			GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+				NamespaceRegistry: nsRegistry,
+			}),
 		},
 	}
 

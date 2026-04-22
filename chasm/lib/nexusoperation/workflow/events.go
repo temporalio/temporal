@@ -213,8 +213,13 @@ func (d CompletedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkf
 	}
 	op := field.Get(ctx)
 
+	metricsHandler, err := op.EnrichMetricsHandler(ctx)
+	if err != nil {
+		return err
+	}
 	if err := nexusoperation.TransitionSucceeded.Apply(op, ctx, nexusoperation.EventSucceeded{
-		Result: attrs.GetResult(),
+		Result:         attrs.GetResult(),
+		MetricsHandler: metricsHandler,
 	}); err != nil {
 		return err
 	}
@@ -249,7 +254,13 @@ func (d FailedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow
 	}
 	op := field.Get(ctx)
 
-	if err := nexusoperation.TransitionFailed.Apply(op, ctx, nexusoperation.EventFailed{}); err != nil {
+	metricsHandler, err := op.EnrichMetricsHandler(ctx)
+	if err != nil {
+		return err
+	}
+	if err := nexusoperation.TransitionFailed.Apply(op, ctx, nexusoperation.EventFailed{
+		MetricsHandler: metricsHandler,
+	}); err != nil {
 		return err
 	}
 	wf.RemoveNexusOperation(attrs.GetScheduledEventId())
@@ -283,7 +294,13 @@ func (d CanceledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkfl
 	}
 	op := field.Get(ctx)
 
-	if err := nexusoperation.TransitionCanceled.Apply(op, ctx, nexusoperation.EventCanceled{}); err != nil {
+	metricsHandler, err := op.EnrichMetricsHandler(ctx)
+	if err != nil {
+		return err
+	}
+	if err := nexusoperation.TransitionCanceled.Apply(op, ctx, nexusoperation.EventCanceled{
+		MetricsHandler: metricsHandler,
+	}); err != nil {
 		return err
 	}
 	wf.RemoveNexusOperation(attrs.GetScheduledEventId())
@@ -317,7 +334,14 @@ func (d TimedOutEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkfl
 	}
 	op := field.Get(ctx)
 
-	if err := nexusoperation.TransitionTimedOut.Apply(op, ctx, nexusoperation.EventTimedOut{TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE}); err != nil {
+	metricsHandler, err := op.EnrichMetricsHandler(ctx)
+	if err != nil {
+		return err
+	}
+	if err := nexusoperation.TransitionTimedOut.Apply(op, ctx, nexusoperation.EventTimedOut{
+		TimeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		MetricsHandler: metricsHandler,
+	}); err != nil {
 		return err
 	}
 	wf.RemoveNexusOperation(attrs.GetScheduledEventId())

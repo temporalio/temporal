@@ -385,7 +385,7 @@ func TestTransitionSucceeded(t *testing.T) {
 			err := TransitionSucceeded.Apply(operation, ctx, EventSucceeded{
 				CompleteTime:   tc.completeTime,
 				Result:         tc.result,
-				metricsHandler: metricsHandler,
+				MetricsHandler: metricsHandler,
 			})
 			require.NoError(t, err)
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, operation.Status)
@@ -462,7 +462,7 @@ func TestTransitionFailed(t *testing.T) {
 			err := TransitionFailed.Apply(operation, ctx, EventFailed{
 				Failure:        failure,
 				CompleteTime:   tc.completeTime,
-				metricsHandler: metricsHandler,
+				MetricsHandler: metricsHandler,
 			})
 			require.NoError(t, err)
 
@@ -541,7 +541,7 @@ func TestTransitionCanceled(t *testing.T) {
 			err := TransitionCanceled.Apply(operation, ctx, EventCanceled{
 				Failure:        failure,
 				CompleteTime:   tc.completeTime,
-				metricsHandler: metricsHandler,
+				MetricsHandler: metricsHandler,
 			})
 			require.NoError(t, err)
 
@@ -626,7 +626,7 @@ func TestTransitionTimedOut(t *testing.T) {
 
 			err := TransitionTimedOut.Apply(operation, ctx, EventTimedOut{
 				TimeoutType:    tc.timeoutType,
-				metricsHandler: metricsHandler,
+				MetricsHandler: metricsHandler,
 			})
 			require.NoError(t, err)
 
@@ -701,7 +701,7 @@ func TestTransitionTerminated(t *testing.T) {
 					Reason:    "test reason",
 					Identity:  "test-identity",
 				},
-				metricsHandler: metricsHandler,
+				MetricsHandler: metricsHandler,
 			}
 
 			err := TransitionTerminated.Apply(operation, ctx, event)

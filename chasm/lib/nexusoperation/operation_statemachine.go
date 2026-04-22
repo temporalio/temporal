@@ -164,7 +164,7 @@ type EventSucceeded struct {
 	// Used when a completion comes in before start is recorded (rare race).
 	CompleteTime   *time.Time
 	Result         *commonpb.Payload
-	metricsHandler metrics.Handler
+	MetricsHandler metrics.Handler
 }
 
 var TransitionSucceeded = chasm.NewTransition(
@@ -188,7 +188,7 @@ var TransitionSucceeded = chasm.NewTransition(
 			Successful: &nexusoperationpb.OperationOutcome_Successful{Result: event.Result},
 		}
 
-		o.emitOnSucceededMetrics(event.metricsHandler, closeTime)
+		o.emitOnSucceededMetrics(event.MetricsHandler, closeTime)
 		// Terminal state - no tasks to emit.
 		return nil
 	},
@@ -200,7 +200,7 @@ type EventFailed struct {
 	// Used when a completion comes in before start is recorded (rare race).
 	CompleteTime   *time.Time
 	Failure        *failurepb.Failure
-	metricsHandler metrics.Handler
+	MetricsHandler metrics.Handler
 }
 
 var TransitionFailed = chasm.NewTransition(
@@ -219,7 +219,7 @@ var TransitionFailed = chasm.NewTransition(
 			return err
 		}
 
-		o.emitOnFailedMetrics(event.metricsHandler, closeTime)
+		o.emitOnFailedMetrics(event.MetricsHandler, closeTime)
 		return nil
 	},
 )
@@ -230,7 +230,7 @@ type EventCanceled struct {
 	// Used when a completion comes in before start is recorded (rare race).
 	CompleteTime   *time.Time
 	Failure        *failurepb.Failure
-	metricsHandler metrics.Handler
+	MetricsHandler metrics.Handler
 }
 
 var TransitionCanceled = chasm.NewTransition(
@@ -246,7 +246,7 @@ var TransitionCanceled = chasm.NewTransition(
 			closeTime = *event.CompleteTime
 		}
 
-		o.emitOnCanceledMetrics(event.metricsHandler, closeTime)
+		o.emitOnCanceledMetrics(event.MetricsHandler, closeTime)
 
 		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime)
 	},
@@ -255,7 +255,7 @@ var TransitionCanceled = chasm.NewTransition(
 // EventTerminated is triggered when the operation is terminated by user request.
 type EventTerminated struct {
 	chasm.TerminateComponentRequest
-	metricsHandler metrics.Handler
+	MetricsHandler metrics.Handler
 }
 
 var TransitionTerminated = chasm.NewTransition(
@@ -287,7 +287,7 @@ var TransitionTerminated = chasm.NewTransition(
 			},
 		}
 
-		o.emitOnTerminatedMetrics(event.metricsHandler, closedTime)
+		o.emitOnTerminatedMetrics(event.MetricsHandler, closedTime)
 		return nil
 	},
 )
@@ -295,7 +295,7 @@ var TransitionTerminated = chasm.NewTransition(
 // EventTimedOut is triggered when a timeout is triggered for an operation.
 type EventTimedOut struct {
 	TimeoutType    enumspb.TimeoutType
-	metricsHandler metrics.Handler
+	MetricsHandler metrics.Handler
 }
 
 var TransitionTimedOut = chasm.NewTransition(
@@ -312,7 +312,7 @@ var TransitionTimedOut = chasm.NewTransition(
 		closeTime := ctx.Now(o)
 		o.ClosedTime = timestamppb.New(closeTime)
 
-		o.emitOnTimedOutMetrics(event.metricsHandler, closeTime, event.TimeoutType.String())
+		o.emitOnTimedOutMetrics(event.MetricsHandler, closeTime, event.TimeoutType.String())
 		// Terminal state - no tasks to emit.
 		return nil
 	},

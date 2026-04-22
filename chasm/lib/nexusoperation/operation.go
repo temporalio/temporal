@@ -171,41 +171,41 @@ func (o *Operation) onCompleted(ctx chasm.MutableContext, result *commonpb.Paylo
 	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationCompleted(ctx, o, result, links)
 	}
-	metricsHandler, err := o.enrichMetricsHandler(ctx)
+	metricsHandler, err := o.EnrichMetricsHandler(ctx)
 	if err != nil {
 		return err
 	}
 	o.Links = append(o.Links, links...)
-	return TransitionSucceeded.Apply(o, ctx, EventSucceeded{Result: result, metricsHandler: metricsHandler})
+	return TransitionSucceeded.Apply(o, ctx, EventSucceeded{Result: result, MetricsHandler: metricsHandler})
 }
 
 func (o *Operation) onFailed(ctx chasm.MutableContext, cause *failurepb.Failure) error {
 	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationFailed(ctx, o, cause)
 	}
-	metricsHandler, err := o.enrichMetricsHandler(ctx)
+	metricsHandler, err := o.EnrichMetricsHandler(ctx)
 	if err != nil {
 		return err
 	}
-	return TransitionFailed.Apply(o, ctx, EventFailed{Failure: cause, metricsHandler: metricsHandler})
+	return TransitionFailed.Apply(o, ctx, EventFailed{Failure: cause, MetricsHandler: metricsHandler})
 }
 
 func (o *Operation) onCanceled(ctx chasm.MutableContext, cause *failurepb.Failure) error {
 	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationCanceled(ctx, o, cause)
 	}
-	metricsHandler, err := o.enrichMetricsHandler(ctx)
+	metricsHandler, err := o.EnrichMetricsHandler(ctx)
 	if err != nil {
 		return err
 	}
-	return TransitionCanceled.Apply(o, ctx, EventCanceled{Failure: cause, metricsHandler: metricsHandler})
+	return TransitionCanceled.Apply(o, ctx, EventCanceled{Failure: cause, MetricsHandler: metricsHandler})
 }
 
 func (o *Operation) onTimedOut(ctx chasm.MutableContext, cause *failurepb.Failure) error {
 	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationTimedOut(ctx, o, cause)
 	}
-	metricsHandler, err := o.enrichMetricsHandler(ctx)
+	metricsHandler, err := o.EnrichMetricsHandler(ctx)
 	if err != nil {
 		return err
 	}
@@ -215,7 +215,7 @@ func (o *Operation) onTimedOut(ctx chasm.MutableContext, cause *failurepb.Failur
 		}
 	}
 	timeoutType := cause.GetTimeoutFailureInfo().GetTimeoutType()
-	return TransitionTimedOut.Apply(o, ctx, EventTimedOut{TimeoutType: timeoutType, metricsHandler: metricsHandler})
+	return TransitionTimedOut.Apply(o, ctx, EventTimedOut{TimeoutType: timeoutType, MetricsHandler: metricsHandler})
 }
 
 func (o *Operation) HandleNexusCompletion(
@@ -355,11 +355,11 @@ func (o *Operation) Terminate(
 		return chasm.TerminateComponentResponse{}, nil
 	}
 
-	metricsHandler, err := o.enrichMetricsHandler(ctx)
+	metricsHandler, err := o.EnrichMetricsHandler(ctx)
 	if err != nil {
 		return chasm.TerminateComponentResponse{}, err
 	}
-	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(o, ctx, EventTerminated{TerminateComponentRequest: req, metricsHandler: metricsHandler})
+	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(o, ctx, EventTerminated{TerminateComponentRequest: req, MetricsHandler: metricsHandler})
 }
 
 func (o *Operation) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {
@@ -511,12 +511,12 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 	return info
 }
 
-// enrichMetricsHandler returns a metrics handler enriched with nexus operation tags.
+// EnrichMetricsHandler returns a metrics handler enriched with nexus operation tags.
 // Panics if the context value is missing, which indicates a library registration bug.
-func (o *Operation) enrichMetricsHandler(ctx chasm.Context) (metrics.Handler, error) {
+func (o *Operation) EnrichMetricsHandler(ctx chasm.Context) (metrics.Handler, error) {
 	// nolint:revive // unchecked-type-assertion: intentional panic on missing context value
-	opCtx := ctx.Value(ctxKeyOperationContext).(*operationContext)
-	namespaceName, err := opCtx.namespaceRegistry.GetNamespaceName(namespace.ID(ctx.ExecutionKey().NamespaceID))
+	opCtx := ctx.Value(OperationContextKey).(*OperationContext)
+	namespaceName, err := opCtx.NamespaceRegistry.GetNamespaceName(namespace.ID(ctx.ExecutionKey().NamespaceID))
 	if err != nil {
 		return nil, err
 	}
@@ -524,8 +524,8 @@ func (o *Operation) enrichMetricsHandler(ctx chasm.Context) (metrics.Handler, er
 		metrics.NamespaceTag(namespaceName.String()),
 		metrics.NexusEndpointTag(o.GetEndpoint()),
 	}
-	if opCtx.metricTagConfig != nil {
-		conf := opCtx.metricTagConfig()
+	if opCtx.MetricTagConfig != nil {
+		conf := opCtx.MetricTagConfig()
 		if conf.IncludeServiceTag {
 			tags = append(tags, metrics.NexusServiceTag(o.GetService()))
 		}

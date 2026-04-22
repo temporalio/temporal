@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -102,6 +103,11 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 		return e
 	}
 
+	ctrl := gomock.NewController(t)
+	nsRegistry := namespace.NewMockRegistry(ctrl)
+	nsRegistry.EXPECT().GetNamespaceName(tests.GlobalNamespaceEntry.ID()).Return(
+		tests.GlobalNamespaceEntry.Name(), nil).AnyTimes()
+
 	chasmCtx := chasmworkflow.SetEventRegistryOnContext(&chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
 			HandleNamespaceEntry: func() *namespace.Namespace {
@@ -110,6 +116,14 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 			HandleEndpointByName: func(name string) (*persistencespb.NexusEndpointEntry, error) {
 				return endpointReg.GetByName(context.Background(), tests.GlobalNamespaceEntry.ID(), name)
 			},
+			HandleExecutionKey: func() chasm.ExecutionKey {
+				return chasm.ExecutionKey{
+					NamespaceID: tests.GlobalNamespaceEntry.ID().String(),
+				}
+			},
+			GoCtx: context.WithValue(context.Background(), nexusoperation.OperationContextKey, &nexusoperation.OperationContext{
+				NamespaceRegistry: nsRegistry,
+			}),
 		},
 	}, chReg)
 

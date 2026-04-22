@@ -1,6 +1,7 @@
 package nexusoperation
 
 import (
+	"context"
 	"slices"
 	"testing"
 	"time"
@@ -12,9 +13,11 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/protoutils"
+	"go.uber.org/mock/gomock"
 )
 
 func TestIsWaitStageReached(t *testing.T) {
@@ -109,10 +112,20 @@ func TestHandleNexusCompletion(t *testing.T) {
 		require.NoError(t, TransitionStarted.Apply(op, ctx, EventStarted{OperationToken: "tok"}))
 		return op
 	}
+	ctrl := gomock.NewController(t)
+	nsRegistry := namespace.NewMockRegistry(ctrl)
+	nsRegistry.EXPECT().GetNamespaceName(namespace.ID("ns-id")).Return(namespace.Name("ns-name"), nil).AnyTimes()
+
 	newCtx := func() *chasm.MockMutableContext {
 		return &chasm.MockMutableContext{
 			MockContext: chasm.MockContext{
 				HandleNow: func(chasm.Component) time.Time { return defaultTime },
+				HandleExecutionKey: func() chasm.ExecutionKey {
+					return chasm.ExecutionKey{NamespaceID: "ns-id"}
+				},
+				GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+					NamespaceRegistry: nsRegistry,
+				}),
 			},
 		}
 	}

@@ -70,20 +70,36 @@ func (m *mockStoreComponent) OnNexusOperationStarted(ctx chasm.MutableContext, o
 }
 
 func (m *mockStoreComponent) OnNexusOperationCompleted(ctx chasm.MutableContext, op *Operation, result *commonpb.Payload, _ []*commonpb.Link) error {
-	return TransitionSucceeded.Apply(op, ctx, EventSucceeded{Result: result})
+	metricsHandler, err := op.EnrichMetricsHandler(ctx)
+	if err != nil {
+		return err
+	}
+	return TransitionSucceeded.Apply(op, ctx, EventSucceeded{Result: result, MetricsHandler: metricsHandler})
 }
 
 func (m *mockStoreComponent) OnNexusOperationFailed(ctx chasm.MutableContext, op *Operation, cause *failurepb.Failure) error {
-	return TransitionFailed.Apply(op, ctx, EventFailed{Failure: cause})
+	metricsHandler, err := op.EnrichMetricsHandler(ctx)
+	if err != nil {
+		return err
+	}
+	return TransitionFailed.Apply(op, ctx, EventFailed{Failure: cause, MetricsHandler: metricsHandler})
 }
 
 func (m *mockStoreComponent) OnNexusOperationCanceled(ctx chasm.MutableContext, op *Operation, cause *failurepb.Failure) error {
-	return TransitionCanceled.Apply(op, ctx, EventCanceled{Failure: cause})
+	metricsHandler, err := op.EnrichMetricsHandler(ctx)
+	if err != nil {
+		return err
+	}
+	return TransitionCanceled.Apply(op, ctx, EventCanceled{Failure: cause, MetricsHandler: metricsHandler})
 }
 
 func (m *mockStoreComponent) OnNexusOperationTimedOut(ctx chasm.MutableContext, op *Operation, cause *failurepb.Failure) error {
+	metricsHandler, err := op.EnrichMetricsHandler(ctx)
+	if err != nil {
+		return err
+	}
 	timeoutType := cause.GetTimeoutFailureInfo().GetTimeoutType()
-	return TransitionTimedOut.Apply(op, ctx, EventTimedOut{TimeoutType: timeoutType})
+	return TransitionTimedOut.Apply(op, ctx, EventTimedOut{TimeoutType: timeoutType, MetricsHandler: metricsHandler})
 }
 
 func (m *mockStoreComponent) OnNexusOperationCancellationCompleted(ctx chasm.MutableContext, op *Operation) error {
