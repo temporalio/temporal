@@ -7,6 +7,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
@@ -15,6 +16,7 @@ import (
 )
 
 var _ chasm.StateMachine[nexusoperationpb.OperationStatus] = (*Operation)(nil)
+var _ chasm.NexusCompletionHandler = (*Operation)(nil)
 
 // ErrCancellationAlreadyRequested is returned when a cancellation has already been requested for an operation.
 var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancellation already requested")
@@ -31,6 +33,9 @@ type InvocationData struct {
 	// NexusLink is the link to the caller that scheduled this operation.
 	NexusLink nexus.Link
 }
+
+// TaskGroupName groups invocation and cancellation together for the outbound queue
+const TaskGroupName = "nexus"
 
 // OperationStore defines the interface that must be implemented by any parent component that wants to manage Nexus operations.
 // It's the responsibility of the parrent component to apply the appropriate state transitions to the operation.
@@ -214,6 +219,7 @@ type saveInvocationResultInput struct {
 	retryPolicy backoff.RetryPolicy
 }
 
+// saveInvocationResult handles the outcome of the initial start call.
 func (o *Operation) saveInvocationResult(
 	ctx chasm.MutableContext,
 	input saveInvocationResultInput,
@@ -222,6 +228,8 @@ func (o *Operation) saveInvocationResult(
 	case startResultOK:
 		links := convertResponseLinks(r.response.Links, ctx.Logger())
 		if r.response.Pending != nil {
+			// An async operation transitions to STARTED here;
+			// HandleNexusCompletion will apply its outcome from the completion callback.
 			return nil, o.onStarted(ctx, r.response.Pending.Token, links)
 		}
 		return nil, o.onCompleted(ctx, r.response.Successful, links)
@@ -238,6 +246,31 @@ func (o *Operation) saveInvocationResult(
 		})
 	default:
 		return nil, serviceerror.NewInternalf("cannot save invocation result of type %T", r)
+	}
+}
+
+// HandleNexusCompletion handles the outcome of an asynchronous completion callback.
+func (o *Operation) HandleNexusCompletion(
+	ctx chasm.MutableContext,
+	completion *persistencespb.ChasmNexusCompletion,
+) error {
+	// TODO: support completion-before-start
+
+	// Request ID lets us reject a stale or misrouted completion.
+	if completion.GetRequestId() != "" && o.GetRequestId() != completion.GetRequestId() {
+		return serviceerror.NewNotFound("operation not found")
+	}
+
+	switch outcome := completion.Outcome.(type) {
+	case *persistencespb.ChasmNexusCompletion_Success:
+		return o.onCompleted(ctx, outcome.Success, completion.GetLinks())
+	case *persistencespb.ChasmNexusCompletion_Failure:
+		if outcome.Failure.GetCanceledFailureInfo() != nil {
+			return o.onCanceled(ctx, outcome.Failure)
+		}
+		return o.onFailed(ctx, outcome.Failure)
+	default:
+		return serviceerror.NewInvalidArgument("invalid completion outcome")
 	}
 }
 

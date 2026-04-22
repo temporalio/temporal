@@ -119,6 +119,10 @@ func NewStarter(
 func (s *Starter) prepare(ctx context.Context) error {
 	request := s.request.StartRequest
 
+	api.MigrateWorkflowIDReusePolicyForRunningWorkflow(
+		&request.WorkflowIdReusePolicy,
+		&request.WorkflowIdConflictPolicy)
+
 	api.OverrideStartWorkflowExecutionRequest(
 		request,
 		metrics.HistoryStartWorkflowExecutionScope,
@@ -691,6 +695,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 					links,
 					"",  // identity
 					nil, // priority
+					nil, // timeSkippingConfig
 				)
 				return api.UpdateWorkflowWithoutWorkflowTask, err
 			},

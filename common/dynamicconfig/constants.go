@@ -807,7 +807,12 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 	HistoryHostSelfErrorProportion = NewGlobalFloatSetting(
 		"frontend.historyHostSelfErrorProportion",
 		0.05,
-		`HistoryHostStartingProportion is the proportion of hosts that have marked themselves as not ready -- this could due to waiting to acquire all shards on startup, or an internal health check failure`,
+		`HistoryHostSelfErrorProportion is the proportion of hosts that have marked themselves as not ready -- this could be due to waiting to acquire all shards on startup, or an internal health check failure`,
+	)
+	HistoryHostFailureTimeThreshold = NewGlobalDurationSetting(
+		"frontend.historyHostFailureTimeThreshold",
+		10*time.Second,
+		`HistoryHostFailureTimeThreshold is the length of time a host must have failed before it is considered unhealthy`,
 	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
@@ -1009,13 +1014,6 @@ so forwarding by endpoint ID will not work out of the box.`,
 		"system.maxCallbacksPerWorkflow",
 		32,
 		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
-	)
-	// NOTE (seankane): MaxCHASMCallbacksPerWorkflow is temporary, this will be removed and replaced with MaxCallbacksPerWorkflow
-	// once CHASM is fully enabled
-	MaxCHASMCallbacksPerWorkflow = NewNamespaceIntSetting(
-		"system.maxCHASMCallbacksPerWorkflow",
-		2000,
-		`MaxCHASMCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow when using the CHASM implementation.`,
 	)
 	FrontendLinkMaxSize = NewNamespaceIntSetting(
 		"frontend.linkMaxSize",
@@ -2949,7 +2947,7 @@ instead of the previous HSM backed implementation.`,
 
 	ExternalPayloadsEnabled = NewNamespaceBoolSetting(
 		"history.externalPayloadsEnabled",
-		false,
+		true,
 		`ExternalPayloadsEnabled controls whether external payload features are enabled for a namespace.`,
 	)
 

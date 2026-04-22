@@ -5232,6 +5232,128 @@ func (*testTaskManager) CountTaskQueuesByBuildId(context.Context, *persistence.C
 	return 0, nil
 }
 
+// TestLoggerAndMetricsForPartition_BreakdownEnabled verifies the taskqueue and partition metric
+// tags for each task queue kind with the default BreakdownMetricsByTaskQueue=true.
+func TestLoggerAndMetricsForPartition_BreakdownEnabled(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	ns, mockNamespaceCache := createMockNamespaceCache(controller, matchingTestNamespace)
+	config := defaultTestConfig()
+	e := createTestMatchingEngine(log.NewTestLogger(), controller, config, nil, mockNamespaceCache)
+	captureHandler := metricstest.NewCaptureHandler()
+	e.metricsHandler = captureHandler
+
+	tests := []struct {
+		name               string
+		partition          tqid.Partition
+		expectTQValue      string
+		expectPartitionTag string
+	}{
+		{
+			name:               "normal",
+			partition:          newRootPartition(ns.ID().String(), "my-task-queue", enumspb.TASK_QUEUE_TYPE_NEXUS),
+			expectTQValue:      "my-task-queue",
+			expectPartitionTag: "0",
+		},
+		{
+			name:               "worker-commands",
+			partition:          newTestTaskQueue(ns.ID().String(), "/temporal-sys/worker-commands/ns/key", enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition(),
+			expectTQValue:      "/temporal-sys/worker-commands/ns/key",
+			expectPartitionTag: "__worker_commands__",
+		},
+		{
+			name:               "sticky",
+			partition:          newTestTaskQueue(ns.ID().String(), "my-task-queue", enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(uuid.NewString()),
+			expectTQValue:      "my-task-queue",
+			expectPartitionTag: "__sticky__",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			capture := captureHandler.StartCapture()
+			tqConfig := newTaskQueueConfig(tc.partition.TaskQueue(), config, matchingTestNamespace)
+			_, _, handler := e.loggerAndMetricsForPartition(ns, tc.partition, tqConfig)
+			metrics.PollSuccessPerTaskQueueCounter.With(handler).Record(1)
+			snap := capture.Snapshot()
+			captureHandler.StopCapture(capture)
+			recordings := snap["poll_success"]
+			require.NotEmpty(t, recordings, "expected poll_success metric to be recorded")
+			found := false
+			for _, rec := range recordings {
+				if rec.Tags["taskqueue"] == tc.expectTQValue && rec.Tags["partition"] == tc.expectPartitionTag {
+					found = true
+				}
+			}
+			require.True(t, found, "expected taskqueue=%q partition=%q, got: %v", tc.expectTQValue, tc.expectPartitionTag, recordings)
+		})
+	}
+}
+
+// TestLoggerAndMetricsForPartition_BreakdownDisabled verifies the taskqueue and partition metric
+// tags for each task queue kind with BreakdownMetricsByTaskQueue=false.
+func TestLoggerAndMetricsForPartition_BreakdownDisabled(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	ns, mockNamespaceCache := createMockNamespaceCache(controller, matchingTestNamespace)
+	dc := dynamicconfig.StaticClient{
+		dynamicconfig.MetricsBreakdownByTaskQueue.Key(): false,
+	}
+	config := NewConfig(dynamicconfig.NewCollection(dc, log.NewNoopLogger()))
+	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
+	e := createTestMatchingEngine(log.NewTestLogger(), controller, config, nil, mockNamespaceCache)
+	captureHandler := metricstest.NewCaptureHandler()
+	e.metricsHandler = captureHandler
+
+	tests := []struct {
+		name               string
+		partition          tqid.Partition
+		expectTQValue      string
+		expectPartitionTag string
+	}{
+		{
+			name:               "normal",
+			partition:          newRootPartition(ns.ID().String(), "my-task-queue", enumspb.TASK_QUEUE_TYPE_NEXUS),
+			expectTQValue:      "__omitted__",
+			expectPartitionTag: "0",
+		},
+		{
+			name:               "sticky",
+			partition:          newTestTaskQueue(ns.ID().String(), "my-task-queue", enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition(uuid.NewString()),
+			expectTQValue:      "__omitted__",
+			expectPartitionTag: "__sticky__",
+		},
+		{
+			name:               "worker-commands",
+			partition:          newTestTaskQueue(ns.ID().String(), "/temporal-sys/worker-commands/ns/key", enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition(),
+			expectTQValue:      "__omitted__",
+			expectPartitionTag: "__worker_commands__",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			capture := captureHandler.StartCapture()
+			tqConfig := newTaskQueueConfig(tc.partition.TaskQueue(), config, matchingTestNamespace)
+			_, _, handler := e.loggerAndMetricsForPartition(ns, tc.partition, tqConfig)
+			metrics.PollSuccessPerTaskQueueCounter.With(handler).Record(1)
+			snap := capture.Snapshot()
+			captureHandler.StopCapture(capture)
+			recordings := snap["poll_success"]
+			require.NotEmpty(t, recordings, "expected poll_success metric to be recorded")
+			found := false
+			for _, rec := range recordings {
+				if rec.Tags["taskqueue"] == tc.expectTQValue && rec.Tags["partition"] == tc.expectPartitionTag {
+					found = true
+				}
+			}
+			require.True(t, found, "expected taskqueue=%q partition=%q, got: %v", tc.expectTQValue, tc.expectPartitionTag, recordings)
+		})
+	}
+}
+
 func TestConvertPollWorkflowTaskQueueResponse(t *testing.T) {
 	t.Parallel()
 
