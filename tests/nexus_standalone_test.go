@@ -630,7 +630,6 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING, descResp.GetInfo().GetStatus())
 	})
 
-	// TODO: Enable once cancel is fully implemented.
 	t.Run("AlreadyCanceled", func(t *testing.T) {
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		endpointName := createNexusEndpoint(s)
@@ -670,7 +669,6 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 		s.Contains(err.Error(), "cancellation already requested")
 	})
 
-	// TODO: Enable once cancel/terminate interaction is fully implemented for standalone Nexus operations.
 	t.Run("AlreadyTerminated", func(t *testing.T) {
 		t.Skip("Cancel/terminate interaction not yet fully implemented for standalone Nexus operations")
 
@@ -704,7 +702,6 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 		s.Contains(err.Error(), "operation already completed")
 	})
 
-	// TODO: Enable once cancel is fully implemented for standalone Nexus operations.
 	t.Run("NotFound", func(t *testing.T) {
 		t.Skip("Cancel not yet fully implemented for standalone Nexus operations")
 
@@ -814,7 +811,6 @@ func TestTerminateStandaloneNexusOperation(t *testing.T) {
 		s.Contains(err.Error(), "already terminated")
 	})
 
-	// TODO: Enable once terminate is fully implemented for standalone Nexus operations.
 	t.Run("AlreadyCanceled", func(t *testing.T) {
 		t.Skip("Terminate not yet fully implemented for standalone Nexus operations")
 

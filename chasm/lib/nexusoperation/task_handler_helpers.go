@@ -396,17 +396,15 @@ func (h *operationInvocationTaskHandler) generateCallbackToken(serializedRef []b
 	if err := ref.Unmarshal(serializedRef); err != nil {
 		return "", fmt.Errorf("%w: %w", queueserrors.NewUnprocessableTaskError("failed to decode component ref for callback token"), err)
 	}
-	namespaceID := ref.NamespaceId
-
-	// Execution VT becomes stale after workflow mutations between token minting and completion arrival.
+	// Both VTs become stale after workflow mutations between token minting and completion arrival.
 	ref.ExecutionVersionedTransition = nil
+	ref.ComponentInitialVersionedTransition = nil
 	stableRef, err := ref.Marshal()
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", queueserrors.NewUnprocessableTaskError("failed to encode component ref for callback token"), err)
 	}
 
 	token, err := h.callbackTokenGenerator.Tokenize(&tokenspb.NexusOperationCompletion{
-		NamespaceId:  namespaceID,
 		ComponentRef: stableRef,
 		RequestId:    requestID,
 	})
