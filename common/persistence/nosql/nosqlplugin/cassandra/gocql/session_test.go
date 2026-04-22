@@ -6,7 +6,7 @@ import (
 	"time"
 
 	gocql "github.com/apache/cassandra-gocql-driver/v2"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -54,7 +54,7 @@ func TestInvalidHostGeneratesError(t *testing.T) {
 		return &gocql.ClusterConfig{Hosts: []string{"0.0.0.0"}}, nil
 	}, metrics.NoopMetricsHandler)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	// This used to panic, but now should simply return an error.
-	assert.Contains(t, err.Error(), "invalid host address")
+	require.Contains(t, err.Error(), "invalid host address")
 }
