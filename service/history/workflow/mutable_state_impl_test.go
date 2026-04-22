@@ -6204,7 +6204,7 @@ func (s *mutableStateSuite) TestSetContextMetadata_ActivityResolution() {
 	s.NoError(err)
 
 	workflowTaskCompletedEventID := int64(4)
-	_, _, err = s.mutableState.AddActivityTaskScheduledEvent(
+	scheduledEvent, _, err := s.mutableState.AddActivityTaskScheduledEvent(
 		workflowTaskCompletedEventID,
 		&commandpb.ScheduleActivityTaskCommandAttributes{
 			ActivityId:   "act-1",
@@ -6219,11 +6219,11 @@ func (s *mutableStateSuite) TestSetContextMetadata_ActivityResolution() {
 	contextutil.ContextMetadataMarkActivityID(ctx, "act-1")
 	s.mutableState.SetContextMetadata(ctx)
 
-	actType, ok := contextutil.ContextMetadataGet(ctx, contextutil.ActivityTypeKey("act-1"))
+	actType, ok := contextutil.ContextMetadataGet(ctx, contextutil.ActivityTypeKey(scheduledEvent.GetEventId()))
 	s.True(ok)
 	s.Equal("SendEmail", actType)
 
-	actQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.ActivityTaskQueueKey("act-1"))
+	actQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.ActivityTaskQueueKey(scheduledEvent.GetEventId()))
 	s.True(ok)
 	s.Equal("email-queue", actQueue)
 }
@@ -6252,9 +6252,9 @@ func (s *mutableStateSuite) TestSetContextMetadata_ActivityNotFound() {
 	s.mutableState.SetContextMetadata(ctx)
 
 	// Neither type nor task queue should be set for non-existent activity
-	_, ok := contextutil.ContextMetadataGet(ctx, contextutil.ActivityTypeKey("nonexistent"))
+	_, ok := contextutil.ContextMetadataGet(ctx, contextutil.ActivityTypeKey(999))
 	s.False(ok)
-	_, ok = contextutil.ContextMetadataGet(ctx, contextutil.ActivityTaskQueueKey("nonexistent"))
+	_, ok = contextutil.ContextMetadataGet(ctx, contextutil.ActivityTaskQueueKey(999))
 	s.False(ok)
 }
 

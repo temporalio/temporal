@@ -362,23 +362,17 @@ func TestContextHasMetadata(t *testing.T) {
 }
 
 func TestActivityTypeKey(t *testing.T) {
-	key := ActivityTypeKey("act-1")
-	require.Regexp(t, `^activity-type-[0-9a-f]{16}$`, key)
-	require.Equal(t, key, ActivityTypeKey("act-1"))
-	require.NotEqual(t, ActivityTypeKey("act-1"), ActivityTypeKey("act-2"))
-
-	unsafeKey := ActivityTypeKey("send email #1 (urgent)! / 订单-42 + foo 🚀")
-	require.Regexp(t, `^activity-type-[0-9a-f]{16}$`, unsafeKey)
+	key := ActivityTypeKey(1)
+	require.Equal(t, "activity-type-1", key)
+	require.Equal(t, key, ActivityTypeKey(1))
+	require.NotEqual(t, ActivityTypeKey(1), ActivityTypeKey(2))
 }
 
 func TestActivityTaskQueueKey(t *testing.T) {
-	key := ActivityTaskQueueKey("act-1")
-	require.Regexp(t, `^activity-task-queue-[0-9a-f]{16}$`, key)
-	require.Equal(t, key, ActivityTaskQueueKey("act-1"))
-	require.NotEqual(t, ActivityTaskQueueKey("act-1"), ActivityTaskQueueKey("act-2"))
-
-	unsafeKey := ActivityTaskQueueKey("send email #1 (urgent)! / 订单-42 + foo 🚀")
-	require.Regexp(t, `^activity-task-queue-[0-9a-f]{16}$`, unsafeKey)
+	key := ActivityTaskQueueKey(1)
+	require.Equal(t, "activity-task-queue-1", key)
+	require.Equal(t, key, ActivityTaskQueueKey(1))
+	require.NotEqual(t, ActivityTaskQueueKey(1), ActivityTaskQueueKey(2))
 }
 
 func TestContextMetadataMarkActivityID(t *testing.T) {
@@ -447,13 +441,12 @@ func TestContextMetadataGetActivityIDs(t *testing.T) {
 	t.Run("marked IDs are separate from resolved metadata", func(t *testing.T) {
 		ctx := WithMetadataContext(context.Background())
 		ContextMetadataMarkActivityID(ctx, "act-1")
-		ContextMetadataSet(ctx, ActivityTaskQueueKey("act-1"), "my-queue")
+		ContextMetadataSet(ctx, ActivityTaskQueueKey(5), "my-queue")
 
 		ids := ContextMetadataGetActivityIDs(ctx)
 		require.Equal(t, []string{"act-1"}, ids)
 
-		// Resolved metadata uses hashed keys, separate from marked IDs
-		val, ok := ContextMetadataGet(ctx, ActivityTaskQueueKey("act-1"))
+		val, ok := ContextMetadataGet(ctx, ActivityTaskQueueKey(5))
 		require.True(t, ok)
 		require.Equal(t, "my-queue", val)
 	})

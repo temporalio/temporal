@@ -2,8 +2,7 @@ package contextutil
 
 import (
 	"context"
-	"fmt"
-	"hash/fnv"
+	"strconv"
 	"sync"
 )
 
@@ -34,24 +33,14 @@ const (
 	activityTaskQueuePrefix = "activity-task-queue-"
 )
 
-// hashActivityID returns a gRPC-trailer-safe key suffix from an arbitrary activity ID.
-// FNV-64a: deterministic, 16 hex chars, ~0 collision risk at expected cardinality.
-func hashActivityID(activityID string) string {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(activityID))
-	return fmt.Sprintf("%016x", h.Sum64())
+// ActivityTypeKey returns the metadata key for an activity's type, keyed by scheduled event ID.
+func ActivityTypeKey(scheduledEventID int64) string {
+	return activityTypePrefix + strconv.FormatInt(scheduledEventID, 10)
 }
 
-// ActivityTypeKey returns the metadata key for the given activity ID's type.
-// The activity ID is hashed to produce a gRPC-trailer-safe key suffix.
-func ActivityTypeKey(activityID string) string {
-	return activityTypePrefix + hashActivityID(activityID)
-}
-
-// ActivityTaskQueueKey returns the metadata key for the given activity ID's task queue.
-// The activity ID is hashed to produce a gRPC-trailer-safe key suffix.
-func ActivityTaskQueueKey(activityID string) string {
-	return activityTaskQueuePrefix + hashActivityID(activityID)
+// ActivityTaskQueueKey returns the metadata key for an activity's task queue, keyed by scheduled event ID.
+func ActivityTaskQueueKey(scheduledEventID int64) string {
+	return activityTaskQueuePrefix + strconv.FormatInt(scheduledEventID, 10)
 }
 
 // ContextMetadataMarkActivityID marks an activity ID on the context for metadata resolution.

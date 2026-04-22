@@ -7242,8 +7242,8 @@ func (ms *MutableStateImpl) SetContextMetadata(
 
 		for _, activityID := range contextutil.ContextMetadataGetActivityIDs(ctx) {
 			if ai, ok := ms.GetActivityByActivityID(activityID); ok {
-				contextutil.ContextMetadataSet(ctx, contextutil.ActivityTypeKey(activityID), ai.ActivityType.GetName())
-				contextutil.ContextMetadataSet(ctx, contextutil.ActivityTaskQueueKey(activityID), ai.TaskQueue)
+				contextutil.ContextMetadataSet(ctx, contextutil.ActivityTypeKey(ai.ScheduledEventId), ai.ActivityType.GetName())
+				contextutil.ContextMetadataSet(ctx, contextutil.ActivityTaskQueueKey(ai.ScheduledEventId), ai.TaskQueue)
 			} else {
 				ms.logger.Warn("Activity ID marked for metadata but not found",
 					tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
