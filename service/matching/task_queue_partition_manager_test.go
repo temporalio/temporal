@@ -1637,7 +1637,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookNoSyncMatch() {
 	s.False(calls[0].IsSyncMatch)
 }
 
-func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedSyncMatch_NoHooks() {
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedSyncMatch_HooksNotInvoked() {
 	// When a task is forwarded from a child partition and sync-matched on the parent,
 	// hooks should not fire on the parent because the child already fired them.
 	hook := &capturingTaskMatchHook{}
@@ -1693,7 +1693,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedSyncMatch_NoHooks(
 	s.Require().Empty(hook.getCalls())
 }
 
-func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedNoSyncMatch_NoHooks() {
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedNoSyncMatch_HooksNotInvoked() {
 	// When a forwarded task fails to sync-match, hooks should not fire on the parent.
 	hook := &capturingTaskMatchHook{}
 	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
