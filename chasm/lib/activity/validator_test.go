@@ -429,7 +429,7 @@ func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
 	}
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+	err := h.validateAndNormalizeStartActivityExecutionRequest(req)
 	var invalidArgErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgErr)
 }
@@ -449,7 +449,7 @@ func TestValidateStandAloneInputTooLarge(t *testing.T) {
 	}
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+	err := h.validateAndNormalizeStartActivityExecutionRequest(req)
 	var invalidArgErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgErr)
 }
@@ -476,7 +476,7 @@ func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
 		func(ns string) int { return payloadSize },
 		defaultMaxIDLengthLimit,
 	)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+	err := h.validateAndNormalizeStartActivityExecutionRequest(req)
 	require.NoError(t, err)
 }
 
@@ -494,7 +494,7 @@ func TestValidateStandAlone_IDPolicyShouldDefault(t *testing.T) {
 	}
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+	err := h.validateAndNormalizeStartActivityExecutionRequest(req)
 
 	require.NoError(t, err)
 	require.Equal(t, enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE, req.IdReusePolicy)
@@ -646,7 +646,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 		req := &workflowservice.DeleteActivityExecutionRequest{
 			ActivityId: defaultActivityID,
 		}
-		err := validateAndNormalizeDeleteRequest(req, defaultMaxIDLengthLimit)
+		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		require.NoError(t, err)
 	})
 
@@ -655,7 +655,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 			ActivityId: defaultActivityID,
 			RunId:      "f47ac10b-58cc-4372-a567-0e02b2c3d479",
 		}
-		err := validateAndNormalizeDeleteRequest(req, defaultMaxIDLengthLimit)
+		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		require.NoError(t, err)
 	})
 
@@ -663,7 +663,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 		req := &workflowservice.DeleteActivityExecutionRequest{
 			ActivityId: "",
 		}
-		err := validateAndNormalizeDeleteRequest(req, defaultMaxIDLengthLimit)
+		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 	})
@@ -672,7 +672,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 		req := &workflowservice.DeleteActivityExecutionRequest{
 			ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)),
 		}
-		err := validateAndNormalizeDeleteRequest(req, defaultMaxIDLengthLimit)
+		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 	})
@@ -682,7 +682,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 			ActivityId: defaultActivityID,
 			RunId:      "not-a-valid-uuid",
 		}
-		err := validateAndNormalizeDeleteRequest(req, defaultMaxIDLengthLimit)
+		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 	})
