@@ -562,18 +562,13 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 				s.Equal(testClusterInfo.GetClusterId(), options.CallbackHeader.Get("source"))
 			}
 
-			s.Len(options.Links, 1)
-			var links []*commonpb.Link
-			for _, nexusLink := range options.Links {
-				link, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
-				s.NoError(err)
-				links = append(links, &commonpb.Link{
-					Variant: &commonpb.Link_WorkflowEvent_{
-						WorkflowEvent: link,
-					},
-				})
-			}
-			s.NotNil(links[0].GetWorkflowEvent())
+			s.Len(options.Links, 2)
+			workflowEventLinkIdx := slices.IndexFunc(options.Links, func(link nexus.Link) bool {
+				return link.Type == string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName())
+			})
+			s.NotEqual(-1, workflowEventLinkIdx)
+			workflowEventLink, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(options.Links[workflowEventLinkIdx])
+			s.NoError(err)
 			protorequire.ProtoEqual(s.T(), &commonpb.Link_WorkflowEvent{
 				Namespace:  env.Namespace().String(),
 				WorkflowId: run.GetID(),
@@ -590,7 +585,19 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 						EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
 					},
 				},
-			}, links[0].GetWorkflowEvent())
+			}, workflowEventLink)
+
+			nexusOperationLinkIdx := slices.IndexFunc(options.Links, func(link nexus.Link) bool {
+				return link.Type == string((&commonpb.Link_NexusOperation{}).ProtoReflect().Descriptor().FullName())
+			})
+			s.NotEqual(-1, nexusOperationLinkIdx)
+			expectedNexusOperationLink := commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
+				Namespace:   env.Namespace().String(),
+				OperationId: run.GetID(),
+				RunId:       run.GetRunID(),
+			})
+			s.Equal(expectedNexusOperationLink.URL.String(), options.Links[nexusOperationLinkIdx].URL.String())
+			s.Equal(expectedNexusOperationLink.Type, options.Links[nexusOperationLinkIdx].Type)
 
 			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
 			publicCallbackURL = options.CallbackURL
@@ -731,9 +738,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 
 		capture = env.StartNamespaceMetricCapture()
 		err = s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
-		completionRequests = capture.Metric("nexus_completion_requests")
 		s.ErrorAs(err, &handlerErr)
 		s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
+		completionRequests = capture.Metric("nexus_completion_requests")
 		s.Len(completionRequests, 1)
 		s.Subset(completionRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "error_not_found"})
 
@@ -746,9 +753,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 
 		capture = env.StartNamespaceMetricCapture()
 		err = s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
-		completionRequests = capture.Metric("nexus_completion_requests")
 		s.ErrorAs(err, &handlerErr)
 		s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
+		completionRequests = capture.Metric("nexus_completion_requests")
 		s.Len(completionRequests, 1)
 		s.Subset(completionRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "error_not_found"})
 	}
@@ -759,9 +766,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 
 	capture = env.StartNamespaceMetricCapture()
 	err = s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
+	s.NoError(err)
 	completionRequests = capture.Metric("nexus_completion_requests")
 	serviceRequests := capture.Metric("service_requests")
-	s.NoError(err)
 	s.Len(completionRequests, 1)
 	s.Subset(completionRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "success"})
 	// Ensure that CompleteOperation request is tracked as part of normal service telemetry metrics
@@ -774,9 +781,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	// Resend the request and verify we get a not found error since the operation has already completed.
 	capture = env.StartNamespaceMetricCapture()
 	err = s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
-	completionRequests = capture.Metric("nexus_completion_requests")
 	s.ErrorAs(err, &handlerErr)
 	s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
+	completionRequests = capture.Metric("nexus_completion_requests")
 	s.Len(completionRequests, 1)
 	s.Subset(completionRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "error_not_found"})
 
@@ -1285,7 +1292,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 	})
 
 	s.Run("NamespaceNotFoundNoIdentifier", func(s *NexusWorkflowTestSuite) {
-		env := s.newNexusWorkflowTestEnv(chasmEnabled)
+		env := s.newNexusWorkflowTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
 		// Generate a token with a non-existent namespace ID
 		tokenWithBadNamespace, err := s.generateValidCallbackToken("namespace-doesnt-exist-id", testcore.RandomizeStr("workflow"), uuid.NewString())
 		s.NoError(err)
@@ -1304,7 +1311,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 	})
 
 	s.Run("OperationTokenTooLong", func(s *NexusWorkflowTestSuite) {
-		env := s.newNexusWorkflowTestEnv(chasmEnabled)
+		env := s.newNexusWorkflowTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
 		publicCallbackURL := "http://" + env.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(env.Namespace().String())
 
 		// Generate a valid callback token to get past initial validation
@@ -1330,7 +1337,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 	})
 
 	s.Run("OperationTokenTooLongNoIdentifier", func(s *NexusWorkflowTestSuite) {
-		env := s.newNexusWorkflowTestEnv(chasmEnabled)
+		env := s.newNexusWorkflowTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
 		publicCallbackURL := "http://" + env.HttpAPIAddress() + commonnexus.PathCompletionCallbackNoIdentifier
 		// Generate a valid callback token to get past initial validation
 		namespaceID := env.NamespaceID().String()
@@ -1356,7 +1363,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 	})
 
 	s.Run("InvalidCallbackToken", func(s *NexusWorkflowTestSuite) {
-		env := s.newNexusWorkflowTestEnv(chasmEnabled)
+		env := s.newNexusWorkflowTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
 		completion := nexusrpc.CompleteOperationOptions{
 			Result: testcore.MustToPayload(s.T(), "result"),
 		}
@@ -1372,7 +1379,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 	})
 
 	s.Run("InvalidCallbackTokenNoIdentifier", func(s *NexusWorkflowTestSuite) {
-		env := s.newNexusWorkflowTestEnv(chasmEnabled)
+		env := s.newNexusWorkflowTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
 		completion := nexusrpc.CompleteOperationOptions{
 			Result: testcore.MustToPayload(s.T(), "result"),
 		}
@@ -1388,7 +1395,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 	})
 
 	s.Run("InvalidClientVersion", func(s *NexusWorkflowTestSuite) {
-		env := s.newNexusWorkflowTestEnv(chasmEnabled)
+		env := s.newNexusWorkflowTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
 		publicCallbackURL := "http://" + env.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(env.Namespace().String())
 		capture := env.StartNamespaceMetricCapture()
 
@@ -1417,7 +1424,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 	})
 
 	s.Run("InvalidClientVersionNoIdentifier", func(s *NexusWorkflowTestSuite) {
-		env := s.newNexusWorkflowTestEnv(chasmEnabled)
+		env := s.newNexusWorkflowTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
 		publicCallbackURL := "http://" + env.HttpAPIAddress() + commonnexus.PathCompletionCallbackNoIdentifier
 		capture := env.StartNamespaceMetricCapture()
 
