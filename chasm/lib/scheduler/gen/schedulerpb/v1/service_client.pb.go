@@ -39,7 +39,7 @@ func NewSchedulerServiceLayeredClient(
 	if err != nil {
 		return nil, err
 	}
-	connections := history.NewConnectionPool(resolver, rpcFactory, NewSchedulerServiceClient)
+	connections := history.NewConnectionPool(resolver, rpcFactory, NewSchedulerServiceClient, logger)
 	var redirector history.Redirector[SchedulerServiceClient]
 	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {
 		redirector = history.NewCachingRedirector(
