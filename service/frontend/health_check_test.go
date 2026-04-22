@@ -151,6 +151,15 @@ func (s *healthCheckerSuite) Test_Unhealthy_Host_Tracker() {
 	s.Require().Empty(otherUnhealthy, "Should be no other unhealthy hosts. Instead found: %+v", otherUnhealthy)
 }
 
+func (s *healthCheckerSuite) Test_Unhealthy_Host_Tracker_Ignore_Healthy() {
+	tracker := &unhealthyHostTracker{hosts: make(map[string]unhealthyHostRecord)}
+	tracker.updateUnhealthyHosts([]*healthspb.HostHealthDetail{
+		{Address: "A", State: enumsspb.HEALTH_STATE_SERVING},
+		{Address: "B", State: enumsspb.HEALTH_STATE_SERVING},
+	}, time.Unix(2, 0), 1*time.Second)
+	s.Require().Empty(tracker.hosts)
+}
+
 func (s *healthCheckerSuite) Test_Check_Serving() {
 	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{
 		membership.NewHostInfoFromAddress("servingA"),
@@ -422,45 +431,4 @@ func (s *healthCheckerSuite) Test_Check_HostChecks_Propagated() {
 	s.Equal(health.CheckTypeRPCLatency, host.Checks[0].CheckType)
 	s.InDelta(850.0, host.Checks[0].Value, 0.01)
 	s.InDelta(500.0, host.Checks[0].Threshold, 0.01)
-}
-
-func (s *healthCheckerSuite) Test_GetProportionOfNotReadyHosts() {
-	testCases := []struct {
-		name                             string
-		proportionOfDeclinedServingHosts float64
-		totalHosts                       int
-		expectedProportion               float64
-	}{
-		{
-			name:                             "zero proportion",
-			proportionOfDeclinedServingHosts: 0.0,
-			totalHosts:                       10,
-			expectedProportion:               0.2,
-		},
-		{
-			name:                             "small proportion with few hosts",
-			proportionOfDeclinedServingHosts: 0.1,
-			totalHosts:                       10,
-			expectedProportion:               0.2, // 2/10 = 0.2 since numHostsToFail < 2
-		},
-		{
-			name:                             "small proportion with many hosts",
-			proportionOfDeclinedServingHosts: 0.1,
-			totalHosts:                       100,
-			expectedProportion:               0.1, // 10 hosts > 2, so use original proportion
-		},
-		{
-			name:                             "large proportion",
-			proportionOfDeclinedServingHosts: 0.8,
-			totalHosts:                       10,
-			expectedProportion:               0.8, // 8 hosts > 2, so use original proportion
-		},
-	}
-
-	for _, tc := range testCases {
-		s.Run(tc.name, func() {
-			proportion := ensureMinimumProportionOfHosts(tc.proportionOfDeclinedServingHosts, tc.totalHosts)
-			s.Equal(tc.expectedProportion, proportion)
-		})
-	}
 }

@@ -3,7 +3,6 @@ package frontend
 import (
 	"context"
 	"fmt"
-	"math"
 	"slices"
 	"sync"
 	"time"
@@ -55,6 +54,7 @@ type (
 	}
 )
 
+// Compile-time assert: healthCheckerImpl implements HealthChecker
 var _ HealthChecker = (*healthCheckerImpl)(nil)
 
 // trackUnhealthyHost tracks the last time a host failed health check.
@@ -109,13 +109,16 @@ func (u *unhealthyHostTracker) unhealthyHosts(now time.Time, duration time.Durat
 	return
 }
 
-// filterUnhealthyHosts updates the local host health entries while holding mu, then returns the unhealthy hosts.
-func (u *unhealthyHostTracker) filterUnhealthyHosts(hostHealths []*healthspb.HostHealthDetail, now time.Time,
+// updateUnhealthyHosts updates the local host health entries while holding mu, then returns the unhealthy hosts.
+func (u *unhealthyHostTracker) updateUnhealthyHosts(hostHealths []*healthspb.HostHealthDetail, now time.Time,
 	threshold time.Duration) (declinedServing []unhealthyHostRecord, otherUnhealthy []unhealthyHostRecord) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	for _, result := range hostHealths {
-		u.trackUnhealthyHost(result.Address, now, result.State)
+		// Only track unhealthy hosts, healthy hosts will be cleaned up in clearStaleEntries
+		if result.GetState() != enumsspb.HEALTH_STATE_SERVING {
+			u.trackUnhealthyHost(result.Address, now, result.State)
+		}
 	}
 	u.clearStaleEntries(hostHealths)
 	return u.unhealthyHosts(now, threshold)
@@ -168,10 +171,7 @@ func (h *healthCheckerImpl) Check(ctx context.Context, now time.Time) (HealthChe
 	}
 
 	hostDetails := h.collectHostHealth(ctx, hosts)
-	declinedServing, otherUnhealthy := h.recentUnhealthyHosts.filterUnhealthyHosts(hostDetails, now, h.hostFailureTimeThreshold())
-
-	// Make sure that at lease 2 hosts must be not ready to trigger this check.
-	proportionOfDeclinedServiceHosts := ensureMinimumProportionOfHosts(h.hostDeclinedServingProportion(), len(hosts))
+	declinedServing, otherUnhealthy := h.recentUnhealthyHosts.updateUnhealthyHosts(hostDetails, now, h.hostFailureTimeThreshold())
 
 	overallState := enumsspb.HEALTH_STATE_SERVING
 	hostDeclinedServingProportion := float64(len(declinedServing)) / float64(len(hosts))
@@ -180,7 +180,7 @@ func (h *healthCheckerImpl) Check(ctx context.Context, now time.Time) (HealthChe
 	if failedHostCountProportion+hostDeclinedServingProportion > h.hostFailurePercentage() {
 		overallState = enumsspb.HEALTH_STATE_NOT_SERVING
 	}
-	if hostDeclinedServingProportion > proportionOfDeclinedServiceHosts {
+	if len(declinedServing) > 2 && hostDeclinedServingProportion > h.hostDeclinedServingProportion() {
 		overallState = enumsspb.HEALTH_STATE_DECLINED_SERVING
 	}
 	if overallState != enumsspb.HEALTH_STATE_SERVING {
@@ -197,7 +197,7 @@ func (h *healthCheckerImpl) Check(ctx context.Context, now time.Time) (HealthChe
 			tag.Float64("host failure percentage", failedHostCountProportion),
 			tag.Int("host declined serving count", len(declinedServing)),
 			tag.Float64("host declined serving percentage", hostDeclinedServingProportion),
-			tag.Float64("host declined serving percentage threshold", proportionOfDeclinedServiceHosts),
+			tag.Float64("host declined serving percentage threshold", h.hostDeclinedServingProportion()),
 			tag.NewStringTag("example_failed_host", failedHostSummary(exampleFailedHost)),
 		)
 	}
@@ -282,10 +282,4 @@ func failedHostSummary(host *healthspb.HostHealthDetail) string {
 		}
 	}
 	return fmt.Sprintf("%s: %s", host.GetAddress(), host.GetState().String())
-}
-
-func ensureMinimumProportionOfHosts(proportionOfDeclinedServingHosts float64, totalHosts int) float64 {
-	const minimumHostsFailed = 2.0 // We want to ensure that at least 2 fail before we notify the upstream.
-	minimumProportion := minimumHostsFailed / float64(totalHosts)
-	return math.Max(proportionOfDeclinedServingHosts, minimumProportion)
 }
