@@ -2925,6 +2925,15 @@ to the CHASM (V2) implementation on active scheduler workflows.`,
 instead of the previous HSM backed implementation.`,
 	)
 
+	EnableCHASMSignalBacklinks = NewNamespaceBoolSetting(
+		"history.enableCHASMSignalBacklinks",
+		false,
+		`Controls whether incoming signal request IDs are tracked in the CHASM IncomingSignals
+map to enable DescribeWorkflow to resolve RequestIDRef signal backlinks. Requires EnableChasm.
+Only enable once all servers in the fleet have been upgraded to a version that understands
+the IncomingSignals CHASM field.`,
+	)
+
 	VersionMembershipCacheTTL = NewGlobalDurationSetting(
 		"history.versionMembershipCacheTTL",
 		1*time.Second,

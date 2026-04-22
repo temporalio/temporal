@@ -37,8 +37,11 @@ func Invoke(
 			}
 
 			mutableState.DeleteSignalRequested(req.GetRequestId())
+			// This is a no-op if signals are stored in CHASM, since we'll ignore the deletion request,
+			// see DeleteSignalRequested implementation.
+			// TODO(long-nt-tran): Clean up code once ChasmSignalBacklinksEnabled is fully rolled out.
 			return &api.UpdateWorkflowAction{
-				Noop:               false,
+				Noop:               mutableState.ChasmSignalBacklinksEnabled(),
 				CreateWorkflowTask: false,
 			}, nil
 		},

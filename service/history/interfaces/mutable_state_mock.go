@@ -1722,6 +1722,20 @@ func (mr *MockMutableStateMockRecorder) ChasmEnabled() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmEnabled", reflect.TypeOf((*MockMutableState)(nil).ChasmEnabled))
 }
 
+// ChasmSignalBacklinksEnabled mocks base method.
+func (m *MockMutableState) ChasmSignalBacklinksEnabled() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ChasmSignalBacklinksEnabled")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// ChasmSignalBacklinksEnabled indicates an expected call of ChasmSignalBacklinksEnabled.
+func (mr *MockMutableStateMockRecorder) ChasmSignalBacklinksEnabled() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmSignalBacklinksEnabled", reflect.TypeOf((*MockMutableState)(nil).ChasmSignalBacklinksEnabled))
+}
+
 // ChasmTree mocks base method.
 func (m *MockMutableState) ChasmTree() ChasmTree {
 	m.ctrl.T.Helper()

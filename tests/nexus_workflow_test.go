@@ -2737,7 +2737,14 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers(chas
 					}
 				}
 				s.Equal(1, cntStarted)
-				s.Equal(1, cntSignaled)
+
+				// DescribeWorkflowExecution only incorporates signal events if CHASM is enabled since these signal requests
+				// are stored under the Workflow's CHASM component.
+				if chasmEnabled {
+					s.Equal(1, cntSignaled)
+				} else {
+					s.Equal(0, cntSignaled)
+				}
 			},
 		},
 		{
@@ -2772,7 +2779,14 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers(chas
 					}
 				}
 				s.Equal(1, cntStarted)
-				s.Equal(1, cntSignaled)
+
+				// DescribeWorkflowExecution only incorporates signal events if CHASM is enabled since these signal requests
+				// are stored under the Workflow's CHASM component.
+				if chasmEnabled {
+					s.Equal(1, cntSignaled)
+				} else {
+					s.Equal(0, cntSignaled)
+				}
 				s.Equal(numCalls-1, cntAttached)
 			},
 		},

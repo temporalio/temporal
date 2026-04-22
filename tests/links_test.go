@@ -11,6 +11,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
@@ -34,6 +35,13 @@ var links = []*commonpb.Link{
 			},
 		},
 	},
+}
+
+func enableSignalBacklinkOpts() []testcore.TestOption {
+	return []testcore.TestOption{
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSignalBacklinks, true),
+	}
 }
 
 func (s *LinksSuite) TestTerminateWorkflow_LinksAttachedToEvent() {
@@ -105,7 +113,7 @@ func (s *LinksSuite) TestRequestCancelWorkflow_LinksAttachedToEvent() {
 }
 
 func (s *LinksSuite) TestSignalWorkflowExecution_LinksAttachedToEvent() {
-	env := testcore.NewEnv(s.T())
+	env := testcore.NewEnv(s.T(), enableSignalBacklinkOpts()...)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	run, err := env.SdkClient().ExecuteWorkflow(
@@ -189,8 +197,121 @@ func (s *LinksSuite) TestSignalWorkflowExecution_LinksAttachedToEvent() {
 	s.Equal(signaledEventID, info.GetEventId(), "requestID map entry must point to the SIGNALED event in history")
 }
 
+// TestSignalWorkflowExecution_BacklinkSurvivesReset verifies that after a workflow is reset,
+// the new run's CHASM IncomingSignals map is rebuilt from history so that DescribeWorkflow
+// continues to return a valid requestID → event-ID backlink for signals that occurred before
+// the reset point.
+//
+// This exercises the rebuild/replay path through ApplyWorkflowExecutionSignaled, which uses
+// the event's real event ID (not common.BufferedEventID) when writing to the CHASM tree.
+func (s *LinksSuite) TestSignalWorkflowExecution_BacklinkSurvivesReset() {
+	env := testcore.NewEnv(s.T(), enableSignalBacklinkOpts()...)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	workflowID := testcore.RandomizeStr(s.T().Name())
+
+	// Start the workflow.
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: taskQueue,
+	}, "dont-care")
+	s.NoError(err)
+	runID := run.GetRunID()
+
+	signalRequestID := uuid.NewString()
+
+	// Signal the workflow. The signal will be included in the first WFT batch, so it will
+	// appear in history before the WFT completion event.
+	_, err = env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+		SignalName:        "dont-care",
+		Identity:          "test",
+		RequestId:         signalRequestID,
+		Links:             links,
+	})
+	s.NoError(err)
+
+	// Poll and complete the WFT so the signal is flushed to history with a real event ID.
+	s.Eventually(func() bool {
+		pollResp, pollErr := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  "test",
+		})
+		if pollErr != nil || pollResp.GetTaskToken() == nil {
+			return false
+		}
+		_, completeErr := env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			Identity:  "test",
+			TaskToken: pollResp.TaskToken,
+		})
+		return completeErr == nil
+	}, 20*time.Second, 200*time.Millisecond)
+
+	// Find the WFT completed event ID in the original run's history.
+	var wftCompletedEventID int64
+	history := env.SdkClient().GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	for history.HasNext() {
+		event, histErr := history.Next()
+		s.NoError(histErr)
+		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+			wftCompletedEventID = event.EventId
+			break
+		}
+	}
+	s.Positive(wftCompletedEventID, "WFT completed event not found in history")
+
+	// Reset the workflow to the first WFT completion. The signal event is before this point,
+	// so it will be included in the new run's replayed history.
+	resetResp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+		Reason:                    "testing-backlink-survival",
+		RequestId:                 uuid.NewString(),
+		WorkflowTaskFinishEventId: wftCompletedEventID,
+	})
+	s.NoError(err)
+	newRunID := resetResp.RunId
+	s.NotEmpty(newRunID)
+
+	// Wait for DescribeWorkflow on the new run to return the signal backlink.
+	// During reset, ApplyWorkflowExecutionSignaled rebuilds the CHASM IncomingSignals map
+	// from history, so the backlink should be present once the new run is created.
+	s.Eventually(func() bool {
+		descResp, descErr := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: newRunID},
+		})
+		if descErr != nil {
+			return false
+		}
+		_, ok := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()[signalRequestID]
+		return ok
+	}, 20*time.Second, 200*time.Millisecond)
+
+	// Verify the backlink on the new run points to a real (non-buffered) SIGNALED event.
+	descResp, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: newRunID},
+	})
+	s.NoError(err)
+	requestIDInfos := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()
+	s.Contains(requestIDInfos, signalRequestID)
+	info := requestIDInfos[signalRequestID]
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, info.GetEventType())
+	s.Positive(info.GetEventId(), "backlink event ID must be a real, non-buffered event ID in the new run's history")
+	s.False(info.GetBuffered())
+}
+
 func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToRelevantEvents() {
-	env := testcore.NewEnv(s.T())
+	env := testcore.NewEnv(s.T(), enableSignalBacklinkOpts()...)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 

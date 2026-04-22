@@ -348,6 +348,7 @@ type (
 		IsWorkflow() bool
 		ChasmTree() ChasmTree
 		ChasmEnabled() bool
+		ChasmSignalBacklinksEnabled() bool
 		ChasmWorkflowComponent(ctx context.Context) (*chasmworkflow.Workflow, chasm.MutableContext, error)
 		ChasmWorkflowComponentReadOnly(ctx context.Context) (*chasmworkflow.Workflow, chasm.Context, error)
 		// Ensures that the chasm workflow component is installed in the mutable state CHASM tree.
