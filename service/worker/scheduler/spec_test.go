@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -499,10 +500,10 @@ func (s *specSuite) TestSpecFarFutureYear() {
 		"",
 		&schedulepb.ScheduleSpec{
 			Calendar: []*schedulepb.CalendarSpec{
-				{Hour: "12", Minute: "0", DayOfMonth: "1", Month: "1", Year: "2150"},
+				{Hour: "12", Minute: "0", DayOfMonth: "1", Month: "1", Year: fmt.Sprintf("%d", MaxCalendarYear+50)},
 			},
 		},
-		time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(MaxCalendarYear-1, 1, 1, 0, 0, 0, 0, time.UTC),
 		time.Time{}, // beyond MaxCalendarYear
 	)
 }
@@ -540,8 +541,8 @@ func (s *specSuite) TestSpecFullYearRange() {
 				{Hour: "0", Minute: "0", DayOfMonth: "1", Month: "1", Year: "2000-9999"},
 			},
 		},
-		time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC),
-		time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(MaxCalendarYear-1, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(MaxCalendarYear, 1, 1, 0, 0, 0, 0, time.UTC),
 		time.Time{}, // stops at MaxCalendarYear
 	)
 }
