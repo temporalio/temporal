@@ -254,7 +254,6 @@ var TransitionTerminated = chasm.NewTransition(
 	func(o *Operation, ctx chasm.MutableContext, event EventTerminated) error {
 		o.TerminateState = &nexusoperationpb.NexusOperationTerminateState{
 			RequestId: event.RequestID,
-			Identity:  event.Identity,
 		}
 		o.ClosedTime = timestamppb.New(ctx.Now(o))
 		o.NextAttemptScheduleTime = nil
@@ -264,7 +263,9 @@ var TransitionTerminated = chasm.NewTransition(
 				Failure: &failurepb.Failure{
 					Message: event.Reason,
 					FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
-						TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
+						TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{
+							Identity: event.Identity,
+						},
 					},
 				},
 			},

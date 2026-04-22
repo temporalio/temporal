@@ -62,7 +62,6 @@ message OperationState {
 
 message NexusOperationTerminateState {
   string request_id = 1;
-  string identity = 2;
 }
 
 message OperationOutcome {
