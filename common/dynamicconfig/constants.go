@@ -807,12 +807,7 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 	HistoryHostSelfErrorProportion = NewGlobalFloatSetting(
 		"frontend.historyHostSelfErrorProportion",
 		0.05,
-		`HistoryHostSelfErrorProportion is the proportion of hosts that have marked themselves as not ready -- this could be due to waiting to acquire all shards on startup, or an internal health check failure`,
-	)
-	HistoryHostFailureTimeThreshold = NewGlobalDurationSetting(
-		"frontend.historyHostFailureTimeThreshold",
-		10*time.Second,
-		`HistoryHostFailureTimeThreshold is the length of time a host must have failed before it is considered unhealthy`,
+		`HistoryHostStartingProportion is the proportion of hosts that have marked themselves as not ready -- this could due to waiting to acquire all shards on startup, or an internal health check failure`,
 	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
