@@ -2249,6 +2249,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 	ctx context.Context,
 	request *historyservice.CompleteNexusOperationChasmRequest,
 ) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+	// TODO(stephan): This should be a CHASM transition option.
 	componentRef := request.GetCompletion().GetComponentRef()
 	if len(componentRef) > 0 {
 		// Ignore transition-history fields when applying completion,
