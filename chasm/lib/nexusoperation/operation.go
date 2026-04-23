@@ -299,13 +299,13 @@ func (o *Operation) saveInvocationResult(
 }
 
 // resolveUnsuccessfully finalizes the operation. When fromAttempt is true, the failure is recorded as
-// LastAttemptFailure. Otherwise the failure is recorded as the terminal Outcome. Nil failure leaves
-// Outcome untouched.
+// LastAttemptFailure. Otherwise the failure is recorded as the terminal Outcome.
 func (o *Operation) resolveUnsuccessfully(ctx chasm.MutableContext, failure *failurepb.Failure, closeTime time.Time, fromAttempt bool) error {
+	softassert.That(ctx.Logger(), failure != nil, "resolveUnsuccessfully called with nil failure")
 	if fromAttempt {
 		o.LastAttemptCompleteTime = timestamppb.New(ctx.Now(o))
 		o.LastAttemptFailure = failure
-	} else if failure != nil {
+	} else {
 		o.getOrCreateOutcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
 			Failed: &nexusoperationpb.OperationOutcome_Failed{Failure: failure},
 		}
