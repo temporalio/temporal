@@ -14,36 +14,36 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 )
 
-type BusinessIDExtractor struct {
+type RoutingKeyExtractor struct {
 	serializer tasktoken.Serializer
 }
 
-func NewBusinessIDExtractor() BusinessIDExtractor {
-	return BusinessIDExtractor{
+func NewRoutingKeyExtractor() RoutingKeyExtractor {
+	return RoutingKeyExtractor{
 		serializer: *tasktoken.NewSerializer(),
 	}
 }
 
-// WorkflowServiceExtractor returns a BusinessIDExtractorFunc that extracts business ID
-// from WorkflowService API requests using the provided BusinessIDExtractor.
-func WorkflowServiceExtractor(extractor BusinessIDExtractor) BusinessIDExtractorFunc {
-	return func(_ context.Context, req any, fullMethod string) string {
+// WorkflowServiceExtractor returns a RoutingKeyExtractorFunc that extracts business ID
+// from WorkflowService API requests using the provided RoutingKeyExtractor.
+func WorkflowServiceExtractor(extractor RoutingKeyExtractor) RoutingKeyExtractorFunc {
+	return func(_ context.Context, req any, fullMethod string) namespace.RoutingKey {
 		// Only process WorkflowService APIs
 		if !strings.HasPrefix(fullMethod, api.WorkflowServicePrefix) {
-			return ""
+			return namespace.RoutingKey{}
 		}
 
 		methodName := api.MethodName(fullMethod)
 		pattern, hasPattern := methodToPattern[methodName]
 		if !hasPattern {
-			return ""
+			return namespace.RoutingKey{}
 		}
 
 		return extractor.Extract(req, pattern)
 	}
 }
 
-// Interfaces for extracting business ID from different request types.
+// Interfaces for extracting routing key from different request types.
 type (
 	workflowIDGetter interface {
 		GetWorkflowId() string
@@ -90,31 +90,33 @@ type (
 	}
 )
 
-// Extract extracts business ID from the request using the specified pattern.
-// Returns the business ID or namespace.EmptyBusinessID if not found.
-func (e BusinessIDExtractor) Extract(req any, pattern BusinessIDPattern) string {
+// Extract extracts routing key from the request using the specified pattern.
+// Returns a zero-value namespace.RoutingKey if not found.
+//
+//nolint:revive // cognitive-complexity
+func (e RoutingKeyExtractor) Extract(req any, pattern RoutingKeyPattern) namespace.RoutingKey {
 	if req == nil {
-		return namespace.EmptyBusinessID
+		return namespace.RoutingKey{}
 	}
 
 	//nolint:revive // identical-switch-branches: PatternNone and default both fall through intentionally
 	switch pattern {
 	case PatternWorkflowID:
 		if getter, ok := req.(workflowIDGetter); ok {
-			return getter.GetWorkflowId()
+			return namespace.RoutingKey{ID: getter.GetWorkflowId()}
 		}
 
 	case PatternWorkflowExecution:
 		if getter, ok := req.(workflowExecutionGetter); ok {
 			if exec := getter.GetWorkflowExecution(); exec != nil {
-				return exec.GetWorkflowId()
+				return namespace.RoutingKey{ID: exec.GetWorkflowId()}
 			}
 		}
 
 	case PatternExecution:
 		if getter, ok := req.(executionGetter); ok {
 			if exec := getter.GetExecution(); exec != nil {
-				return exec.GetWorkflowId()
+				return namespace.RoutingKey{ID: exec.GetWorkflowId()}
 			}
 		}
 
@@ -122,7 +124,7 @@ func (e BusinessIDExtractor) Extract(req any, pattern BusinessIDPattern) string 
 		if getter, ok := req.(taskTokenGetter); ok {
 			if tokenBytes := getter.GetTaskToken(); len(tokenBytes) > 0 {
 				if taskToken, err := e.serializer.Deserialize(tokenBytes); err == nil {
-					return taskToken.GetWorkflowId()
+					return namespace.RoutingKey{ID: taskToken.GetWorkflowId()}
 				}
 			}
 		}
@@ -132,41 +134,41 @@ func (e BusinessIDExtractor) Extract(req any, pattern BusinessIDPattern) string 
 
 	case PatternTaskQueueName:
 		if getter, ok := req.(taskQueueNameGetter); ok {
-			return getter.GetTaskQueue()
+			return namespace.RoutingKey{ID: getter.GetTaskQueue()}
 		}
 
 	case PatternTaskQueueNameFromMessage:
 		if getter, ok := req.(taskQueueNameFromMessageGetter); ok {
 			if tq := getter.GetTaskQueue(); tq != nil {
-				return tq.GetName()
+				return namespace.RoutingKey{ID: tq.GetName()}
 			}
 		}
 
 	case PatternDeploymentName:
 		if getter, ok := req.(deploymentNameGetter); ok {
-			return getter.GetDeploymentName()
+			return namespace.RoutingKey{ID: getter.GetDeploymentName()}
 		}
 
 	case PatternDeploymentVersion:
 		if getter, ok := req.(deploymentVersionGetter); ok {
 			if dv := getter.GetDeploymentVersion(); dv != nil {
-				return dv.GetDeploymentName()
+				return namespace.RoutingKey{ID: dv.GetDeploymentName()}
 			}
 		}
 
 	case PatternPollerGroupID:
 		if getter, ok := req.(pollerGroupIDGetter); ok {
-			return getter.GetPollerGroupId()
+			return namespace.RoutingKey{ID: getter.GetPollerGroupId(), Strategy: namespace.RoutingStrategyPollerGroup}
 		}
 
 	case PatternNamespace:
 		if getter, ok := req.(namespaceGetter); ok {
-			return getter.GetNamespace()
+			return namespace.RoutingKey{ID: getter.GetNamespace()}
 		}
 
 	case PatternUpdateRef:
 		if getter, ok := req.(updateRefGetter); ok {
-			return getter.GetUpdateRef().GetWorkflowExecution().GetWorkflowId()
+			return namespace.RoutingKey{ID: getter.GetUpdateRef().GetWorkflowExecution().GetWorkflowId()}
 		}
 
 	case PatternNone:
@@ -176,25 +178,25 @@ func (e BusinessIDExtractor) Extract(req any, pattern BusinessIDPattern) string 
 		// Unknown pattern
 	}
 
-	return namespace.EmptyBusinessID
+	return namespace.RoutingKey{}
 }
 
-// extractMultiOperation extracts business ID from ExecuteMultiOperationRequest.
-// The business ID is extracted from the first operation's StartWorkflow request.
-func (e BusinessIDExtractor) extractMultiOperation(req any) string {
+// extractMultiOperation extracts routing key from ExecuteMultiOperationRequest.
+// The routing key is extracted from the first operation's StartWorkflow request.
+func (e RoutingKeyExtractor) extractMultiOperation(req any) namespace.RoutingKey {
 	multiOpReq, ok := req.(*workflowservice.ExecuteMultiOperationRequest)
 	if !ok {
-		return namespace.EmptyBusinessID
+		return namespace.RoutingKey{}
 	}
 
 	ops := multiOpReq.GetOperations()
 	if len(ops) == 0 {
-		return namespace.EmptyBusinessID
+		return namespace.RoutingKey{}
 	}
 
 	firstOp := ops[0]
 	if firstOp == nil {
-		return namespace.EmptyBusinessID
+		return namespace.RoutingKey{}
 	}
 
 	startWorkflow := firstOp.GetStartWorkflow()
@@ -202,10 +204,10 @@ func (e BusinessIDExtractor) extractMultiOperation(req any) string {
 		// First operation is not StartWorkflow - try to get from UpdateWorkflow
 		updateWorkflow := firstOp.GetUpdateWorkflow()
 		if updateWorkflow != nil && updateWorkflow.GetWorkflowExecution() != nil {
-			return updateWorkflow.GetWorkflowExecution().GetWorkflowId()
+			return namespace.RoutingKey{ID: updateWorkflow.GetWorkflowExecution().GetWorkflowId()}
 		}
-		return namespace.EmptyBusinessID
+		return namespace.RoutingKey{}
 	}
 
-	return startWorkflow.GetWorkflowId()
+	return namespace.RoutingKey{ID: startWorkflow.GetWorkflowId()}
 }

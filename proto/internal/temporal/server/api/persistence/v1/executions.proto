@@ -321,10 +321,11 @@ message WorkflowExecutionInfo {
 }
 
 message TimeSkippingInfo {
-  // The config for the time skipping for the workflow.
+  // Current time-skipping configuration for the workflow.
   temporal.api.workflow.v1.TimeSkippingConfig config = 1;
 
-// TODO: runtime details to be added later
+  // Runtime history of time skipping for the workflow.
+  google.protobuf.Duration accumulated_skipped_duration = 2;
 }
 
 // Internal wrapper message to distinguish "never notified" (nil wrapper) from
@@ -332,6 +333,10 @@ message TimeSkippingInfo {
 // Used only within server persistence; never flows to the public API.
 message LastNotifiedTargetVersion {
   temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 1;
+  // Revision number of the task queue routing config at the time the
+  // notification was sent. Carried forward to DeclinedTargetVersionUpgrade
+  // at continue-as-new time.
+  int64 revision_number = 2;
 }
 
 message ExecutionStats {

@@ -89,6 +89,11 @@ func New(
 	}
 }
 
+func (b *HistoryBuilder) SetTimeSource(timeSource clock.TimeSource) {
+	b.EventStore.timeSource = timeSource
+	b.EventFactory.timeSource = timeSource
+}
+
 func NewImmutable(histories ...[]*historypb.HistoryEvent) *HistoryBuilder {
 	lastHistory := histories[len(histories)-1]
 	lastEvent := lastHistory[len(lastHistory)-1]
@@ -322,6 +327,17 @@ func (b *HistoryBuilder) AddActivityTaskScheduledEvent(
 	return event
 }
 
+func (b *HistoryBuilder) AddWorkflowExecutionTimeSkippingTransitionedEvent(
+	targetTime time.Time,
+	triggeredDisable bool,
+) *historypb.HistoryEvent {
+	event := b.CreateWorkflowExecutionTimeSkippingTransitionedEvent(targetTime, triggeredDisable)
+	event.WorkerMayIgnore = true
+	event, _ = b.add(event)
+	b.metricsHandler.Counter(metrics.ExecutionTimeSkippingTransitionedCounter.Name()).Record(1)
+	return event
+}
+
 func (b *HistoryBuilder) AddActivityTaskStartedEvent(
 	scheduledEventID int64,
 	attempt int32,
@@ -458,6 +474,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 	links []*commonpb.Link,
 	identity string,
 	priority *commonpb.Priority,
+	timeSkippingConfig *workflowpb.TimeSkippingConfig,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowExecutionOptionsUpdatedEvent(
 		worker_versioning.ConvertOverrideToV32(versioningOverride),
@@ -467,6 +484,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 		links,
 		identity,
 		priority,
+		timeSkippingConfig,
 	)
 	event, _ = b.EventStore.add(event)
 	return event

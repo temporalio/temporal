@@ -807,7 +807,12 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 	HistoryHostSelfErrorProportion = NewGlobalFloatSetting(
 		"frontend.historyHostSelfErrorProportion",
 		0.05,
-		`HistoryHostStartingProportion is the proportion of hosts that have marked themselves as not ready -- this could due to waiting to acquire all shards on startup, or an internal health check failure`,
+		`HistoryHostSelfErrorProportion is the proportion of hosts that have marked themselves as not ready -- this could be due to waiting to acquire all shards on startup, or an internal health check failure`,
+	)
+	HistoryHostFailureTimeThreshold = NewGlobalDurationSetting(
+		"frontend.historyHostFailureTimeThreshold",
+		10*time.Second,
+		`HistoryHostFailureTimeThreshold is the length of time a host must have failed before it is considered unhealthy`,
 	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
@@ -1010,13 +1015,6 @@ so forwarding by endpoint ID will not work out of the box.`,
 		32,
 		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
 	)
-	// NOTE (seankane): MaxCHASMCallbacksPerWorkflow is temporary, this will be removed and replaced with MaxCallbacksPerWorkflow
-	// once CHASM is fully enabled
-	MaxCHASMCallbacksPerWorkflow = NewNamespaceIntSetting(
-		"system.maxCHASMCallbacksPerWorkflow",
-		2000,
-		`MaxCHASMCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow when using the CHASM implementation.`,
-	)
 	FrontendLinkMaxSize = NewNamespaceIntSetting(
 		"frontend.linkMaxSize",
 		4000, // Links may include a workflow ID and namespace name, both of which are limited to a length of 1000.
@@ -1197,6 +1195,15 @@ See DynamicRateLimitingParams comments for more details.`,
 			},
 		},
 		`MatchingUpdateAckInterval is the interval for update ack`,
+	)
+	MatchingMetadataUpdateOnAppendInterval = NewTaskQueueDurationSetting(
+		"matching.metadataUpdateOnAppendInterval",
+		5*time.Second,
+		`MatchingMetadataUpdateOnAppendInterval controls how often task queue metadata (e.g.
+approximate backlog count) is written along with task appends. When using Cassandra, task appends
+always require an LWT for the range ID check, but updating the full metadata on every append adds
+extra write cost. This setting limits metadata updates to at most once per interval, piggybacking
+on the append LWT. A value of 0 means always update metadata on every append (previous behavior).`,
 	)
 	MatchingMaxTaskQueueIdleTime = NewTaskQueueDurationSetting(
 		"matching.maxTaskQueueIdleTime",
@@ -2914,17 +2921,12 @@ instead of the previous HSM backed implementation.`,
 		`Maximum number of entries in the version membership cache.`,
 	)
 
-	VersionReactivationSignalCacheTTL = NewGlobalDurationSetting(
-		"history.versionReactivationSignalCacheTTL",
-		10*time.Second,
-		`TTL for caching drainage reactivation signals to version workflows. These signals are sent from the history service to update the version workflow's 
-		draining status to DRAINING from DRAINED/INACTIVE states.`,
-	)
-
-	VersionReactivationSignalCacheMaxSize = NewGlobalIntSetting(
-		"history.versionReactivationSignalCacheMaxSize",
+	ReactivationSignalDedupCacheMaxSize = NewGlobalIntSetting(
+		"worker.reactivationSignalDedupCacheMaxSize",
 		10000,
-		`Maximum number of entries in the version reactivation signal cache.`,
+		`Maximum number of entries in the per-pod reactivation-signal dedup cache on the
+		worker deployment client. Each entry tracks the highest revision signaled for one
+		target version workflow.`,
 	)
 
 	EnableVersionReactivationSignals = NewGlobalBoolSetting(

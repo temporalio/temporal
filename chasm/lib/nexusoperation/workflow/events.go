@@ -182,9 +182,12 @@ func (d StartedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflo
 
 	// TODO: Store event.Links on the Operation for standalone mode, where links won't be available via history.
 
-	return nexusoperation.TransitionStarted.Apply(op, ctx, nexusoperation.EventStarted{
+	startTime := event.GetEventTime().AsTime()
+	evt := nexusoperation.EventStarted{
 		OperationToken: attrs.GetOperationToken(),
-	})
+		StartTime:      &startTime,
+	}
+	return nexusoperation.TransitionStarted.Apply(op, ctx, evt)
 }
 
 func (d StartedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
@@ -214,7 +217,9 @@ func (d CompletedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkf
 	}
 	op := field.Get(ctx)
 
-	if err := nexusoperation.TransitionSucceeded.Apply(op, ctx, nexusoperation.EventSucceeded{}); err != nil {
+	completeTime := event.GetEventTime().AsTime()
+	evt := nexusoperation.EventSucceeded{CompleteTime: &completeTime}
+	if err := nexusoperation.TransitionSucceeded.Apply(op, ctx, evt); err != nil {
 		return err
 	}
 	wf.RemoveNexusOperation(attrs.GetScheduledEventId())
@@ -248,7 +253,9 @@ func (d FailedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow
 	}
 	op := field.Get(ctx)
 
-	if err := nexusoperation.TransitionFailed.Apply(op, ctx, nexusoperation.EventFailed{}); err != nil {
+	completeTime := event.GetEventTime().AsTime()
+	evt := nexusoperation.EventFailed{CompleteTime: &completeTime}
+	if err := nexusoperation.TransitionFailed.Apply(op, ctx, evt); err != nil {
 		return err
 	}
 	wf.RemoveNexusOperation(attrs.GetScheduledEventId())
@@ -282,7 +289,9 @@ func (d CanceledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkfl
 	}
 	op := field.Get(ctx)
 
-	if err := nexusoperation.TransitionCanceled.Apply(op, ctx, nexusoperation.EventCanceled{}); err != nil {
+	completeTime := event.GetEventTime().AsTime()
+	evt := nexusoperation.EventCanceled{CompleteTime: &completeTime}
+	if err := nexusoperation.TransitionCanceled.Apply(op, ctx, evt); err != nil {
 		return err
 	}
 	wf.RemoveNexusOperation(attrs.GetScheduledEventId())

@@ -1727,6 +1727,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 		&persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
 	).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
+	ms.EXPECT().Now().Return(s.mockShard.GetTimeSource().Now()).AnyTimes()
 
 	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
 	s.NoError(err)
@@ -1861,6 +1862,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Va
 		&persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
 	).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
+	ms.EXPECT().Now().Return(s.mockShard.GetTimeSource().Now()).AnyTimes()
 
 	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
 	s.NoError(err)
@@ -1970,6 +1972,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 		&persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
 	).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
+	ms.EXPECT().Now().Return(s.mockShard.GetTimeSource().Now()).AnyTimes()
 
 	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
 	s.NoError(err)
@@ -2172,6 +2175,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmPureTimerTask_Valid
 		&persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
 	).AnyTimes()
 	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
+	ms.EXPECT().Now().Return(s.mockShard.GetTimeSource().Now()).AnyTimes()
 
 	// Add a valid timer task.
 	timerTask := &tasks.ChasmTaskPure{
