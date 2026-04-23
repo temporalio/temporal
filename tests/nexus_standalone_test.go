@@ -916,36 +916,6 @@ func TestListStandaloneNexusOperation(t *testing.T) {
 		require.NotNil(t, op.GetScheduleTime())
 	})
 
-	t.Run("ListWithQueryFilter", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointA := createNexusEndpoint(s)
-		endpointB := createNexusEndpoint(s)
-
-		_, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
-			OperationId: "filter-op-1",
-			Endpoint:    endpointA,
-		})
-		s.NoError(err)
-
-		_, err = startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
-			OperationId: "filter-op-2",
-			Endpoint:    endpointB,
-		})
-		s.NoError(err)
-
-		var listResp *workflowservice.ListNexusOperationExecutionsResponse
-		s.EventuallyWithT(func(t *assert.CollectT) {
-			var err error
-			listResp, err = s.FrontendClient().ListNexusOperationExecutions(s.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("Endpoint = '%s'", endpointA),
-			})
-			require.NoError(t, err)
-			require.Len(t, listResp.GetOperations(), 1)
-		}, testcore.WaitForESToSettle, 100*time.Millisecond)
-		require.Equal(t, "filter-op-1", listResp.GetOperations()[0].GetOperationId())
-	})
-
 	t.Run("ListWithCustomSearchAttributes", func(t *testing.T) {
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		endpointName := createNexusEndpoint(s)
@@ -980,29 +950,6 @@ func TestListStandaloneNexusOperation(t *testing.T) {
 		require.Equal(t, "list-sa-value", returnedValue)
 	})
 
-	t.Run("QueryByExecutionStatus", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
-
-		_, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
-			OperationId: "status-op",
-			Endpoint:    endpointName,
-		})
-		s.NoError(err)
-
-		var listResp *workflowservice.ListNexusOperationExecutionsResponse
-		s.EventuallyWithT(func(t *assert.CollectT) {
-			var err error
-			listResp, err = s.FrontendClient().ListNexusOperationExecutions(s.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				Query:     "ExecutionStatus = 'Running' AND OperationId = 'status-op'",
-			})
-			require.NoError(t, err)
-			require.Len(t, listResp.GetOperations(), 1)
-		}, testcore.WaitForESToSettle, 100*time.Millisecond)
-		require.Equal(t, "status-op", listResp.GetOperations()[0].GetOperationId())
-	})
-
 	t.Run("QueryByMultipleFields", func(t *testing.T) {
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		endpointName := createNexusEndpoint(s)
@@ -1025,6 +972,147 @@ func TestListStandaloneNexusOperation(t *testing.T) {
 			require.Len(t, listResp.GetOperations(), 1)
 		}, testcore.WaitForESToSettle, 100*time.Millisecond)
 		require.Equal(t, "multi-op", listResp.GetOperations()[0].GetOperationId())
+	})
+
+	t.Run("QueryBySupportedSearchAttributes", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
+		testStartTime := time.Now().UTC().Format(time.RFC3339Nano)
+
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "supported-closed-op",
+			Endpoint:    endpointName,
+			Service:     "supported-closed-service",
+			Operation:   "supported-closed-operation",
+		})
+		s.NoError(err)
+
+		descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "supported-closed-op",
+			RunId:       startResp.RunId,
+		})
+		s.NoError(err)
+		requestID := descResp.GetInfo().GetRequestId()
+		s.NotEmpty(requestID)
+
+		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "supported-closed-op",
+			RunId:       startResp.RunId,
+			RequestId:   "supported-closed-op-terminate",
+			Identity:    "test-identity",
+			Reason:      "close for visibility query coverage",
+		})
+		s.NoError(err)
+
+		for _, tc := range []struct {
+			name   string
+			query  string
+			assert func(*testing.T, *nexuspb.NexusOperationExecutionListInfo)
+		}{
+			{
+				name:  "OperationId",
+				query: "OperationId = 'supported-closed-op'",
+				assert: func(t *testing.T, op *nexuspb.NexusOperationExecutionListInfo) {
+					require.Equal(t, "supported-closed-op", op.GetOperationId())
+				},
+			},
+			{
+				name:  "RunId",
+				query: fmt.Sprintf("RunId = '%s'", startResp.RunId),
+				assert: func(t *testing.T, op *nexuspb.NexusOperationExecutionListInfo) {
+					require.Equal(t, startResp.RunId, op.GetRunId())
+				},
+			},
+			{
+				name:  "RequestId",
+				query: fmt.Sprintf("RequestId = '%s' AND OperationId = 'supported-closed-op'", requestID),
+				assert: func(t *testing.T, op *nexuspb.NexusOperationExecutionListInfo) {
+					require.Equal(t, "supported-closed-op", op.GetOperationId())
+				},
+			},
+			{
+				name:  "Endpoint",
+				query: fmt.Sprintf("Endpoint = '%s' AND OperationId = 'supported-closed-op'", endpointName),
+				assert: func(t *testing.T, op *nexuspb.NexusOperationExecutionListInfo) {
+					require.Equal(t, endpointName, op.GetEndpoint())
+				},
+			},
+			{
+				name:  "Service",
+				query: "Service = 'supported-closed-service' AND OperationId = 'supported-closed-op'",
+				assert: func(t *testing.T, op *nexuspb.NexusOperationExecutionListInfo) {
+					require.Equal(t, "supported-closed-service", op.GetService())
+				},
+			},
+			{
+				name:  "Operation",
+				query: "Operation = 'supported-closed-operation' AND OperationId = 'supported-closed-op'",
+				assert: func(t *testing.T, op *nexuspb.NexusOperationExecutionListInfo) {
+					require.Equal(t, "supported-closed-operation", op.GetOperation())
+				},
+			},
+			{
+				name:  "StartTime",
+				query: fmt.Sprintf(`StartTime > "%s" AND OperationId = 'supported-closed-op'`, testStartTime),
+				assert: func(t *testing.T, op *nexuspb.NexusOperationExecutionListInfo) {
+					require.Equal(t, "supported-closed-op", op.GetOperationId())
+				},
+			},
+			{
+				name:  "ExecutionTime",
+				query: fmt.Sprintf(`ExecutionTime > "%s" AND OperationId = 'supported-closed-op'`, testStartTime),
+				assert: func(t *testing.T, op *nexuspb.NexusOperationExecutionListInfo) {
+					require.Equal(t, "supported-closed-op", op.GetOperationId())
+				},
+			},
+			{
+				name:  "CloseTime",
+				query: fmt.Sprintf(`CloseTime > "%s" AND OperationId = 'supported-closed-op'`, testStartTime),
+				assert: func(t *testing.T, op *nexuspb.NexusOperationExecutionListInfo) {
+					require.Equal(t, "supported-closed-op", op.GetOperationId())
+				},
+			},
+			{
+				name:  "ExecutionStatus",
+				query: "ExecutionStatus = 'Terminated' AND OperationId = 'supported-closed-op'",
+				assert: func(t *testing.T, op *nexuspb.NexusOperationExecutionListInfo) {
+					require.Equal(t, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TERMINATED, op.GetStatus())
+				},
+			},
+			{
+				name:  "ExecutionDuration",
+				query: "ExecutionDuration > '0s' AND OperationId = 'supported-closed-op'",
+				assert: func(t *testing.T, op *nexuspb.NexusOperationExecutionListInfo) {
+					require.Equal(t, "supported-closed-op", op.GetOperationId())
+					require.NotNil(t, op.GetExecutionDuration())
+				},
+			},
+			{
+				name:  "StateTransitionCount",
+				query: "StateTransitionCount > 0 AND OperationId = 'supported-closed-op'",
+				assert: func(t *testing.T, op *nexuspb.NexusOperationExecutionListInfo) {
+					require.Equal(t, "supported-closed-op", op.GetOperationId())
+					require.Positive(t, op.GetStateTransitionCount())
+				},
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				var resp *workflowservice.ListNexusOperationExecutionsResponse
+				s.EventuallyWithT(func(t *assert.CollectT) {
+					var err error
+					resp, err = s.FrontendClient().ListNexusOperationExecutions(s.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
+						Namespace: s.Namespace().String(),
+						PageSize:  10,
+						Query:     tc.query,
+					})
+					require.NoError(t, err, "case=%s query=%s", tc.name, tc.query)
+					require.Len(t, resp.GetOperations(), 1, "case=%s query=%s", tc.name, tc.query)
+				}, testcore.WaitForESToSettle, 100*time.Millisecond)
+				tc.assert(t, resp.GetOperations()[0])
+			})
+		}
 	})
 
 	t.Run("PageSizeCapping", func(t *testing.T) {
