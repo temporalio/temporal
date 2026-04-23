@@ -350,6 +350,8 @@ const (
 	ActivityPausedScope = "ActivityPaused"
 	// ActivityUnpausedScope tracks UnpauseActivityExecution API calls received by service
 	ActivityUnpausedScope = "ActivityUnpaused"
+	// ActivityResetScope tracks ResetActivityExecution API calls received by service
+	ActivityResetScope = "ActivityReset"
 	// HistoryGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
 	HistoryGetWorkflowExecutionHistoryScope = "GetWorkflowExecutionHistory"
 	// HistoryPollWorkflowExecutionHistoryScope is the metric scope for long poll case of frontend.GetWorkflowExecutionHistory
@@ -925,6 +927,7 @@ var (
 	ActivityTaskTimeout                              = NewCounterDef("activity_task_timeout", WithDescription("Number of activity task timeouts (including retries)."))
 	ActivityPause                                    = NewCounterDef("activity_pause", WithDescription("Number of activity pauses."))
 	ActivityUnpause                                  = NewCounterDef("activity_unpause", WithDescription("Number of activity unpauses."))
+	ActivityReset                                    = NewCounterDef("activity_reset", WithDescription("Number of activity resets."))
 	ActivityTimeout                                  = NewCounterDef("activity_timeout", WithDescription("Number of terminal activity timeouts."))
 	ActivityPayloadSize                              = NewCounterDef("activity_payload_size", WithDescription("Size of activity payloads in bytes."))
 	AckLevelUpdateCounter                            = NewCounterDef("ack_level_update")

@@ -456,8 +456,9 @@ var TransitionUnpaused = chasm.NewTransition(
 )
 
 type resetEvent struct {
-	scheduleTime    time.Time
-	resetHeartbeats bool
+	req          *workflowservice.ResetActivityExecutionRequest
+	scheduleTime time.Time
+	handler      metrics.Handler
 }
 
 // TransitionReset resets a SCHEDULED or PAUSED activity back to attempt 1. The stamp is bumped to
@@ -470,28 +471,7 @@ var TransitionReset = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, event resetEvent) error {
-		attempt := a.LastAttempt.Get(ctx)
-		attempt.Count = 1
-		attempt.Stamp++
-		attempt.CurrentRetryInterval = nil
-		if event.resetHeartbeats {
-			if hb, ok := a.LastHeartbeat.TryGet(ctx); ok {
-				hb.Details = nil
-				hb.RecordedTime = nil
-			}
-		}
-		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
-			ctx.AddTask(
-				a,
-				chasm.TaskAttributes{ScheduledTime: event.scheduleTime.Add(timeout)},
-				&activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()},
-			)
-		}
-		ctx.AddTask(
-			a,
-			chasm.TaskAttributes{ScheduledTime: event.scheduleTime},
-			&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()},
-		)
+		a.reset(ctx, event)
 		return nil
 	},
 )

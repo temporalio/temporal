@@ -7572,8 +7572,8 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.NoError(t, err)
 	})
 
-	t.Run("TerminalStateReturnsNotFound", func(t *testing.T) {
-		// Resetting a completed activity should return NotFound.
+	t.Run("TerminalStateReturnsFailedPrecondition", func(t *testing.T) {
+		// Resetting a completed activity should return FailedPrecondition.
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
@@ -7589,14 +7589,14 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Attempt to reset — should fail with NotFound
+		// Attempt to reset — should fail with FailedPrecondition since the activity is in a terminal state
 		_, err = s.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      startResp.GetRunId(),
 		})
-		require.Error(t, err)
-		require.Equal(t, codes.NotFound, serviceerror.ToStatus(err).Code())
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
 	})
 
 	t.Run("KeepPaused", func(t *testing.T) {
@@ -7697,6 +7697,91 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.EqualValues(t, 1, pollResp2.Attempt)
 
 		// Complete
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp2.TaskToken,
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("RestoreOriginalOptions", func(t *testing.T) {
+		// Start activity with specific options, update them, then reset with
+		// RestoreOriginalOptions=true and verify the original options come back
+		// along with the attempt count being reset to 1.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		originalMaxAttempts := int32(7)
+		retryPolicy := &commonpb.RetryPolicy{
+			InitialInterval:    durationpb.New(time.Second),
+			BackoffCoefficient: 1.0,
+			MaximumAttempts:    originalMaxAttempts,
+		}
+		startResp, pollResp1, taskQueue := startAndPollActivity(ctx, t, activityID, retryPolicy)
+
+		// Fail attempt 1 with a long backoff so the activity is SCHEDULED backing off.
+		failRetryable(ctx, t, pollResp1.TaskToken, 60*time.Second)
+
+		require.Eventually(t, func() bool {
+			desc, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.GetRunId(),
+			})
+			return err == nil && desc.GetInfo().GetRunState() == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
+		}, 5*time.Second, 100*time.Millisecond)
+
+		// Update MaximumAttempts to a different value.
+		updatedMaxAttempts := int32(100)
+		_, err := s.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       s.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.GetRunId(),
+			ActivityOptions: &activitypb.ActivityOptions{RetryPolicy: &commonpb.RetryPolicy{MaximumAttempts: updatedMaxAttempts}},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.maximum_attempts"}},
+		})
+		require.NoError(t, err)
+
+		desc, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, updatedMaxAttempts, desc.GetInfo().GetRetryPolicy().GetMaximumAttempts(), "update should be applied before reset")
+
+		// Reset with RestoreOriginalOptions=true — options should revert and attempt reset to 1.
+		_, err = s.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace:              s.Namespace().String(),
+			ActivityId:             activityID,
+			RunId:                  startResp.GetRunId(),
+			RestoreOriginalOptions: true,
+		})
+		require.NoError(t, err)
+
+		// Verify original options are reflected in describe after reset.
+		desc, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, desc.GetInfo().GetAttempt(), "attempt should be reset to 1")
+		require.Equal(t, originalMaxAttempts, desc.GetInfo().GetRetryPolicy().GetMaximumAttempts(), "original MaximumAttempts should be restored")
+
+		// Poll — should be attempt 1.
+		pollResp2, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp2.Attempt, "attempt should be reset to 1")
+
+		// Complete the activity.
 		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
 			Namespace: s.Namespace().String(),
 			TaskToken: pollResp2.TaskToken,
