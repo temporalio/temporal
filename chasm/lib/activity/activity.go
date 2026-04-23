@@ -24,6 +24,7 @@ import (
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -118,8 +119,17 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 }
 
 func (a *Activity) ContextMetadata(_ chasm.Context) map[string]string {
-	// TODO: Export standalone activity context metadata.
-	return nil
+	md := make(map[string]string, 2)
+	if actType := a.GetActivityType().GetName(); actType != "" {
+		md[contextutil.MetadataKeyStandaloneActivityType] = actType
+	}
+	if tq := a.GetTaskQueue().GetName(); tq != "" {
+		md[contextutil.MetadataKeyStandaloneActivityTaskQueue] = tq
+	}
+	if len(md) == 0 {
+		return nil
+	}
+	return md
 }
 
 // NewStandaloneActivity creates a new activity component and adds associated tasks to start execution.

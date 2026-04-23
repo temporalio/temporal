@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -81,7 +82,7 @@ type (
 		GenerateUserTimerTasks() error
 
 		// time skipping tasks
-		RegenerateTimerTasksForTimeSkipping()
+		RegenerateTimerTasksForTimeSkipping() error
 
 		// replication tasks
 		GenerateHistoryReplicationTasks(
@@ -1035,28 +1036,63 @@ func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.St
 // This function is not idempotent, but when called twice, logically the timerTasks regenerated will have the same contents,
 // and the only difference is the TaskID.
 // TODO@time-skipping: currently not safe to call in replication context
-func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() {
+func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 
 	if r.mutableState.GetExecutionInfo().TimeSkippingInfo == nil {
-		return
+		return nil
 	}
 	accumulatedSkippedDuration := r.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration()
 	if accumulatedSkippedDuration == 0 {
-		return
+		return nil
 	}
 
-	userTimerSequenceIDs := r.getTimerSequence().LoadAndSortUserTimers()
-	if len(userTimerSequenceIDs) == 0 {
-		// This method maybe called when there are no user timers to regenerate,
-		// time-skipping transition may happen without user timers
-		return
+	// timertasks that are not stale should be regenerated when time skipping transition happens:
+	// since time skipping transition only happens when there is no in-flight work,
+	// the only timers that are not stale can only be the following types:
+	// (1) next user timer
+	// (2) execution and run timeout timers
+
+	// (1) user timers — regenerate one task per pending user timer. User timers
+	// are only one of the task types that may need regeneration, so continue to
+	// the timeout timers below even when none are pending.
+	for _, userTimerSequenceID := range r.getTimerSequence().LoadAndSortUserTimers() {
+		r.mutableState.AddTasks(&tasks.UserTimerTask{
+			// TaskID is set by shard
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: userTimerSequenceID.Timestamp,
+			EventID:             userTimerSequenceID.EventID,
+		})
 	}
-	firstUserTimerSequenceID := userTimerSequenceIDs[0]
-	visibilityTimestamp := firstUserTimerSequenceID.Timestamp.Add(-accumulatedSkippedDuration)
-	r.mutableState.AddTasks(&tasks.UserTimerTask{
-		// TaskID is set by shard
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: visibilityTimestamp,
-		EventID:             firstUserTimerSequenceID.EventID,
-	})
+
+	// (2) execution and run timeout timers
+	executionTimeoutTimer := r.mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime
+	if !timeNotSet(executionTimeoutTimer) {
+		r.mutableState.AddTasks(&tasks.WorkflowExecutionTimeoutTask{
+			// TaskID is set by shard
+			NamespaceID:         r.mutableState.GetExecutionInfo().NamespaceId,
+			WorkflowID:          r.mutableState.GetExecutionInfo().WorkflowId,
+			FirstRunID:          r.mutableState.GetExecutionInfo().FirstExecutionRunId,
+			VisibilityTimestamp: timestamp.TimeValue(executionTimeoutTimer),
+		})
+	}
+	runTimeoutTimer := r.mutableState.GetExecutionInfo().WorkflowRunExpirationTime
+	if !timeNotSet(runTimeoutTimer) {
+		// Version must match the workflow's start version so the executor's
+		// CheckTaskVersion passes for global namespaces (see timer_queue_active_task_executor.go).
+		startVersion, err := r.mutableState.GetStartVersion()
+		if err != nil {
+			return err
+		}
+		r.mutableState.AddTasks(&tasks.WorkflowRunTimeoutTask{
+			// TaskID is set by shard
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: timestamp.TimeValue(runTimeoutTimer),
+			Version:             startVersion,
+		})
+	}
+	return nil
+}
+
+func timeNotSet(ts *timestamppb.Timestamp) bool {
+	return ts == nil || ts.AsTime().IsZero()
 }

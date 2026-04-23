@@ -1876,7 +1876,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 			// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
-			return dbq, dbq, userDataChanged, 0, targetDeploymentVersion, nil
+			return dbq, dbq, userDataChanged, targetDeploymentRevisionNumber, targetDeploymentVersion, nil
 		}
 
 		err = worker_versioning.ValidateDeployment(deployment)
@@ -1906,15 +1906,15 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		if !isIndependentPinnedActivity {
 			pinnedQueue, err := pm.getVersionedQueue(ctx, "", "", deployment, true)
 			if err != nil {
-				return nil, nil, nil, 0, nil, err // TODO (Shivam): Please add the comment in the proto to explain that pinned tasks and sticky tasks get 0 for the rev number.
+				return nil, nil, nil, 0, nil, err
 			}
 			if forwardInfo == nil {
 				// Task is not forwarded, so it can be spooled if sync match fails.
 				// Spool queue and sync match queue is the same for pinned workflows.
-				return pinnedQueue, pinnedQueue, userDataChanged, 0, targetDeploymentVersion, nil
+				return pinnedQueue, pinnedQueue, userDataChanged, targetDeploymentRevisionNumber, targetDeploymentVersion, nil
 			} else {
 				// Forwarded from child partition - only do sync match.
-				return nil, pinnedQueue, userDataChanged, 0, targetDeploymentVersion, nil
+				return nil, pinnedQueue, userDataChanged, targetDeploymentRevisionNumber, targetDeploymentVersion, nil
 			}
 		}
 	}

@@ -6367,6 +6367,150 @@ func (s *Versioning3Suite) TestRemoveOverride_ClearsDeclinedState() {
 		})
 }
 
+// TestStalePartition_RevisionSuppressesTrampolining verifies that when a stale
+// matching partition sends an outdated target version, the revision-based
+// comparison in case 4 suppresses the signal and prevents trampolining.
+//
+// Flow:
+// 1. Start pinned workflow on v1, set v1 as current
+// 2. Set v2 as current (revision increments)
+// 3. Set v3 as current (revision increments again)
+// 4. Trigger WFT → signal fires (target=v3 at high revision), CaN with decline
+// 5. Roll back task queue to v2 with revision 0 (simulating stale partition)
+// 6. Trigger WFT → assert targetDeploymentVersionChanged=false (revision 0 <= declined revision)
+// 7. Set v4 as current (fresh version with higher revision)
+// 8. Trigger WFT → assert targetDeploymentVersionChanged=true (new revision > declined revision)
+func (s *Versioning3Suite) TestStalePartition_RevisionSuppressesTrampolining() {
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+	tv3 := tv1.WithBuildIDNumber(3)
+
+	// Start async poller for v1 that handles first WFT and declares pinned behavior
+	wftCompleted := make(chan struct{})
+	s.pollWftAndHandle(tv1, false, wftCompleted,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tv1, false, vbPinned), nil
+		})
+
+	// Register v1 and set it as current
+	s.waitForDeploymentDataPropagation(tv1, versionStatusInactive, false, tqTypeWf)
+	s.setCurrentDeployment(tv1)
+
+	// Start workflow — first WFT handled by async poller (pinned on v1)
+	runID := s.startWorkflow(tv1, nil)
+	execution := tv1.WithRunID(runID).WorkflowExecution()
+	s.WaitForChannel(ctx, wftCompleted)
+	s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), nil, nil)
+
+	// Register v2, set v2 as current (revision increments)
+	s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "v2 poller registration")
+	s.setCurrentDeployment(tv2)
+
+	// Register v3, set v3 as current (revision increments again)
+	s.idlePollWorkflow(ctx, tv3, true, ver3MinPollTime, "v3 poller registration")
+	s.setCurrentDeployment(tv3)
+
+	// Trigger WFT — target should be v3 with a high revision
+	s.triggerNormalWFT(ctx, tv1, execution)
+
+	// Process: targetDeploymentVersionChanged=true → CaN without AU (decline v3)
+	s.pollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			var lastStarted *historypb.HistoryEvent
+			for _, event := range task.History.GetEvents() {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+					lastStarted = event
+				}
+			}
+			s.NotNil(lastStarted)
+			s.True(lastStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+				"expected true after v3 becomes current")
+
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+							ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+								WorkflowType: tv1.WorkflowType(),
+								TaskQueue:    tv1.TaskQueue(),
+								Input:        tv1.Any().Payloads(),
+							},
+						},
+					},
+				},
+				VersioningBehavior: vbPinned,
+				DeploymentOptions:  tv1.WorkerDeploymentOptions(true),
+			}, nil
+		})
+
+	// CaN run: first WFT — declined=v3 propagated from previous run
+	s.pollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.NotEqual(execution.RunId, task.WorkflowExecution.RunId,
+				"CaN should have created a new run")
+			execution = task.WorkflowExecution
+			return respondEmptyWft(tv1, false, vbPinned), nil
+		})
+
+	// Simulate stale partition: roll back task queue to v2 with revision 0
+	s.rollbackTaskQueueToVersion(tv2)
+
+	// Trigger WFT with stale data — target is now v2 at revision 0
+	s.triggerNormalWFT(ctx, tv1, execution)
+
+	// Assert: revision 0 <= declined revision → signal suppressed
+	s.pollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			var lastStarted *historypb.HistoryEvent
+			for _, event := range task.History.GetEvents() {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+					lastStarted = event
+				}
+			}
+			s.NotNil(lastStarted)
+			s.False(lastStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+				"stale partition (revision 0) should be suppressed by declined revision")
+			return respondEmptyWft(tv1, false, vbPinned), nil
+		})
+
+	// Set a new v4 as current — this produces a revision strictly higher than
+	// the declined revision, simulating an up-to-date partition with fresh data.
+	tv4 := tv1.WithBuildIDNumber(4)
+	s.idlePollWorkflow(ctx, tv4, true, ver3MinPollTime, "v4 poller registration")
+	s.setCurrentDeployment(tv4)
+	s.waitForDeploymentDataPropagation(tv4, versionStatusCurrent, false, tqTypeWf)
+
+	// Trigger WFT with fresh data — target is v4 at higher revision
+	s.triggerNormalWFT(ctx, tv1, execution)
+
+	// Assert: new revision > declined revision → signal fires
+	s.pollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			var lastStarted *historypb.HistoryEvent
+			for _, event := range task.History.GetEvents() {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+					lastStarted = event
+				}
+			}
+			s.NotNil(lastStarted)
+			s.True(lastStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+				"up-to-date partition with higher revision should fire signal")
+			return respondCompleteWorkflow(tv1, vbPinned), nil
+		})
+}
+
 // TestRetryOfDeclinedCaN_SignalsOnNewTarget verifies that when a CaN'd run
 // ,which declined to upgrade, fails and is retried by the server, the retry
 // run inherits NotificationSuppressedTargetVersion from the original CaN

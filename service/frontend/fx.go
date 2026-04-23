@@ -92,6 +92,7 @@ var Module = fx.Options(
 	fx.Provide(CallerInfoInterceptorProvider),
 	fx.Provide(SlowRequestLoggerInterceptorProvider),
 	fx.Provide(MaskInternalErrorDetailsInterceptorProvider),
+	fx.Provide(ContextMetadataInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
@@ -121,6 +122,7 @@ var Module = fx.Options(
 	fx.Invoke(ServiceLifetimeHooks),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	chasmnexus.Module,
+	fx.Provide(chasmnexus.NewFrontendHandler),
 	activity.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
@@ -228,6 +230,7 @@ func GrpcServerOptionsProvider(
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authInterceptor *authorization.Interceptor,
 	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
+	contextMetadataInterceptor *interceptor.ContextMetadataInterceptor,
 	slowRequestLoggerInterceptor *interceptor.SlowRequestLoggerInterceptor,
 	chasmRequestVisibilityInterceptor *chasm.ChasmVisibilityInterceptor,
 	customInterceptors []grpc.UnaryServerInterceptor,
@@ -259,7 +262,7 @@ func GrpcServerOptionsProvider(
 		logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
-		// Order or interceptors is important
+		// Order of interceptors is important
 		// Mask error interceptor should be the most outer interceptor since it handle the errors format
 		// Service Error Interceptor should be the next most outer interceptor on error handling
 		maskInternalErrorDetailsInterceptor.Intercept,
@@ -286,6 +289,7 @@ func GrpcServerOptionsProvider(
 		callerInfoInterceptor.Intercept,
 		slowRequestLoggerInterceptor.Intercept,
 		chasmRequestVisibilityInterceptor.Intercept,
+		contextMetadataInterceptor.Intercept,
 	}
 	if len(customInterceptors) > 0 {
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
@@ -474,6 +478,10 @@ func RateLimitInterceptorProvider(
 	)
 }
 
+func ContextMetadataInterceptorProvider(logger log.Logger) *interceptor.ContextMetadataInterceptor {
+	return interceptor.NewContextMetadataInterceptor(false, logger)
+}
+
 func MaskInternalErrorDetailsInterceptorProvider(
 	logger log.Logger,
 	serviceConfig *Config,
@@ -561,14 +569,21 @@ func NamespaceCountLimitInterceptorProvider(
 	)
 }
 
+type NamespaceValidatorInterceptorParams struct {
+	fx.In
+	ServiceConfig                          *Config
+	NamespaceRegistry                      namespace.Registry
+	AdditionalAllowedMethodsDuringHandover []string `group:"additionalAllowedMethodsDuringHandover"`
+}
+
 func NamespaceValidatorInterceptorProvider(
-	serviceConfig *Config,
-	namespaceRegistry namespace.Registry,
+	params NamespaceValidatorInterceptorParams,
 ) *interceptor.NamespaceValidatorInterceptor {
 	return interceptor.NewNamespaceValidatorInterceptor(
-		namespaceRegistry,
-		serviceConfig.EnableTokenNamespaceEnforcement,
-		serviceConfig.MaxIDLengthLimit,
+		params.NamespaceRegistry,
+		params.ServiceConfig.EnableTokenNamespaceEnforcement,
+		params.ServiceConfig.MaxIDLengthLimit,
+		params.AdditionalAllowedMethodsDuringHandover,
 	)
 }
 
@@ -844,6 +859,7 @@ func HandlerProvider(
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	activityHandler activity.FrontendHandler,
+	nexusOperationHandler chasmnexus.FrontendHandler,
 	callbackValidator *callback.Validator,
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
@@ -882,6 +898,7 @@ func HandlerProvider(
 		scheduleSpecBuilder,
 		httpEnabled(cfg, serviceName),
 		activityHandler,
+		nexusOperationHandler,
 		registry,
 		workerDeploymentReadRateLimiter,
 	)
