@@ -286,6 +286,7 @@ func (w *Workflow) OnNexusOperationTimedOut(
 	ctx chasm.MutableContext,
 	op *nexusoperation.Operation,
 	cause *failurepb.Failure,
+	_ bool,
 ) error {
 	parentData := &chasmworkflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {

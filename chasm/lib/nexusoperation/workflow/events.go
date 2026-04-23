@@ -182,14 +182,11 @@ func (d StartedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflo
 	}
 	op := field.Get(ctx)
 
-	// TODO: Store event.Links on the Operation for standalone mode, where links won't be available via history.
-
 	startTime := event.GetEventTime().AsTime()
-	evt := nexusoperation.EventStarted{
+	return nexusoperation.TransitionStarted.Apply(op, ctx, nexusoperation.EventStarted{
 		OperationToken: attrs.GetOperationToken(),
 		StartTime:      &startTime,
-	}
-	return nexusoperation.TransitionStarted.Apply(op, ctx, evt)
+	})
 }
 
 func (d StartedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
@@ -220,11 +217,10 @@ func (d CompletedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkf
 	op := field.Get(ctx)
 
 	completeTime := event.GetEventTime().AsTime()
-	evt := nexusoperation.EventSucceeded{
+	if err := nexusoperation.TransitionSucceeded.Apply(op, ctx, nexusoperation.EventSucceeded{
 		Result:       attrs.GetResult(),
 		CompleteTime: &completeTime,
-	}
-	if err := nexusoperation.TransitionSucceeded.Apply(op, ctx, evt); err != nil {
+	}); err != nil {
 		return err
 	}
 	wf.RemoveNexusOperation(attrs.GetScheduledEventId())
@@ -259,8 +255,10 @@ func (d FailedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow
 	op := field.Get(ctx)
 
 	completeTime := event.GetEventTime().AsTime()
-	evt := nexusoperation.EventFailed{CompleteTime: &completeTime}
-	if err := nexusoperation.TransitionFailed.Apply(op, ctx, evt); err != nil {
+	if err := nexusoperation.TransitionFailed.Apply(op, ctx, nexusoperation.EventFailed{
+		CompleteTime: &completeTime,
+		Failure:      attrs.GetFailure().GetCause(),
+	}); err != nil {
 		return err
 	}
 	wf.RemoveNexusOperation(attrs.GetScheduledEventId())
@@ -295,8 +293,10 @@ func (d CanceledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkfl
 	op := field.Get(ctx)
 
 	completeTime := event.GetEventTime().AsTime()
-	evt := nexusoperation.EventCanceled{CompleteTime: &completeTime}
-	if err := nexusoperation.TransitionCanceled.Apply(op, ctx, evt); err != nil {
+	if err := nexusoperation.TransitionCanceled.Apply(op, ctx, nexusoperation.EventCanceled{
+		CompleteTime: &completeTime,
+		Failure:      attrs.GetFailure().GetCause(),
+	}); err != nil {
 		return err
 	}
 	wf.RemoveNexusOperation(attrs.GetScheduledEventId())
@@ -330,7 +330,9 @@ func (d TimedOutEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkfl
 	}
 	op := field.Get(ctx)
 
-	if err := nexusoperation.TransitionTimedOut.Apply(op, ctx, nexusoperation.EventTimedOut{}); err != nil {
+	if err := nexusoperation.TransitionTimedOut.Apply(op, ctx, nexusoperation.EventTimedOut{
+		Failure: attrs.GetFailure().GetCause(),
+	}); err != nil {
 		return err
 	}
 	wf.RemoveNexusOperation(attrs.GetScheduledEventId())

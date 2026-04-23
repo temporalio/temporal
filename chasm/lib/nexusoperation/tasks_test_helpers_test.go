@@ -72,7 +72,10 @@ func (m *mockStoreComponent) NexusOperationInvocationData(_ chasm.Context, _ *Op
 func (m *mockStoreComponent) OnNexusOperationStarted(ctx chasm.MutableContext, op *Operation, operationToken string, startTime *time.Time, links []*commonpb.Link) error {
 	m.startTime = startTime
 	m.startLinks = links
-	return TransitionStarted.Apply(op, ctx, EventStarted{OperationToken: operationToken, StartTime: startTime})
+	return TransitionStarted.Apply(op, ctx, EventStarted{
+		OperationToken: operationToken,
+		StartTime:      startTime,
+	})
 }
 
 func (m *mockStoreComponent) OnNexusOperationCompleted(ctx chasm.MutableContext, op *Operation, result *commonpb.Payload, links []*commonpb.Link) error {
@@ -88,8 +91,11 @@ func (m *mockStoreComponent) OnNexusOperationCanceled(ctx chasm.MutableContext, 
 	return TransitionCanceled.Apply(op, ctx, EventCanceled{Failure: cause})
 }
 
-func (m *mockStoreComponent) OnNexusOperationTimedOut(ctx chasm.MutableContext, op *Operation, _ *failurepb.Failure) error {
-	return TransitionTimedOut.Apply(op, ctx, EventTimedOut{})
+func (m *mockStoreComponent) OnNexusOperationTimedOut(ctx chasm.MutableContext, op *Operation, cause *failurepb.Failure, fromAttempt bool) error {
+	return TransitionTimedOut.Apply(op, ctx, EventTimedOut{
+		Failure:     cause,
+		FromAttempt: fromAttempt,
+	})
 }
 
 func (m *mockStoreComponent) OnNexusOperationCancellationCompleted(ctx chasm.MutableContext, op *Operation) error {
