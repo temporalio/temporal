@@ -130,6 +130,7 @@ message ActivityPauseState {
   google.protobuf.Timestamp pause_time = 1;
   string identity = 2;
   string reason = 3;
+  string request_id = 4;
 }
 
 message ActivityAttemptState {

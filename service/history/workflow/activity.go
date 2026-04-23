@@ -267,8 +267,10 @@ func PauseActivity(
 	}
 
 	if ai.Paused {
-		// do nothing
-		return nil
+		if ai.GetPauseInfo().GetRequestId() == pauseInfo.GetRequestId() {
+			return nil
+		}
+		return serviceerror.NewFailedPrecondition("activity is already paused")
 	}
 
 	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {

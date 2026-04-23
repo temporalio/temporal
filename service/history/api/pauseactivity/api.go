@@ -59,6 +59,7 @@ func Invoke(
 						Reason:   frontendRequest.GetReason(),
 					},
 				},
+				RequestId: request.GetFrontendRequest().GetRequestId(),
 			}
 
 			for _, activityId := range activityIDs {
