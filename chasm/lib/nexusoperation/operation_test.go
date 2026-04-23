@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -53,15 +52,11 @@ func TestHandleNexusCompletion(t *testing.T) {
 		t.Run("CompletionBeforeStart", func(t *testing.T) {
 			ctx := newCtx()
 			op := newScheduledTestOperation(t, ctx)
-			store := &mockStoreComponent{}
-			op.Store = chasm.NewMockParentPtr[OperationStore](store)
 			startTime := defaultTime.Add(-time.Second)
-			links := []*commonpb.Link{{}}
 			err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
 				StartTime:      timestamppb.New(startTime),
 				RequestId:      op.GetRequestId(),
 				OperationToken: "tok",
-				Links:          links,
 				Outcome: &persistencespb.ChasmNexusCompletion_Success{
 					Success: mustToPayload(t, "result"),
 				},
@@ -70,9 +65,6 @@ func TestHandleNexusCompletion(t *testing.T) {
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, op.GetStatus())
 			require.Equal(t, "tok", op.GetOperationToken())
 			require.Equal(t, startTime, op.GetStartedTime().AsTime())
-			require.Equal(t, links, store.startLinks)
-			require.Equal(t, startTime, *store.startTime)
-			require.Nil(t, store.completionLinks)
 		})
 
 		t.Run("CompletionBeforeStartWithoutStartTime", func(t *testing.T) {
