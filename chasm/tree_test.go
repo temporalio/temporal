@@ -2323,6 +2323,206 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 	s.Empty(componentAttr.SideEffectTasks)
 }
 
+// TestCloseTransaction_PausedStateInvalidatesTasks verifies that all logical tasks are
+// invalidated when a component (or one of its non-detached ancestors) is paused, without
+// invoking the task-specific validator.
+func (s *nodeSuite) TestCloseTransaction_PausedStateInvalidatesTasks() {
+	payload := &commonpb.Payload{
+		Data: []byte("some-random-data"),
+	}
+	taskBlob, err := serialization.ProtoEncode(payload)
+	s.NoError(err)
+
+	makeTask := func(typeID uint32, offset int64) *persistencespb.ChasmComponentAttributes_Task {
+		return &persistencespb.ChasmComponentAttributes_Task{
+			TypeId:                    typeID,
+			VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+			VersionedTransitionOffset: offset,
+			Data:                      taskBlob,
+			PhysicalTaskStatus:        physicalTaskStatusCreated,
+		}
+	}
+
+	s.Run("paused component invalidates its own tasks without calling task validator", func() {
+		persistenceNodes := map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId:          testComponentTypeID,
+							SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{makeTask(testSideEffectTaskTypeID, 1)},
+							PureTasks:       []*persistencespb.ChasmComponentAttributes_Task{makeTask(testPureTaskTypeID, 2)},
+						},
+					},
+				},
+			},
+		}
+		root, err := s.newTestTree(persistenceNodes)
+		s.NoError(err)
+
+		nextTransitionCount := int64(2)
+		s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTransitionCount }
+
+		// Pause the root component.
+		mutableContext := NewMutableContext(context.Background(), root)
+		tc, err := root.Component(mutableContext, ComponentRef{})
+		s.NoError(err)
+		tc.(*TestComponent).Pause(mutableContext)
+
+		// Task-specific validators must NOT be called — paused state short-circuits them.
+		// (no EXPECT calls on mock handlers)
+
+		mutation, err := root.CloseTransaction()
+		s.NoError(err)
+
+		componentAttr := root.serializedNode.Metadata.GetComponentAttributes()
+		s.Empty(componentAttr.SideEffectTasks, "paused component should have no side-effect tasks")
+		s.Empty(componentAttr.PureTasks, "paused component should have no pure tasks")
+
+		// Node must be marked updated so the invalidation is persisted.
+		s.Len(mutation.UpdatedNodes, 1)
+	})
+
+	s.Run("paused parent invalidates non-detached sub-component tasks", func() {
+		persistenceNodes := map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testComponentTypeID,
+						},
+					},
+				},
+			},
+			"SubComponent1": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId:          testSubComponent1TypeID,
+							SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{makeTask(testSideEffectTaskTypeID, 1)},
+							PureTasks:       []*persistencespb.ChasmComponentAttributes_Task{makeTask(testPureTaskTypeID, 2)},
+						},
+					},
+				},
+			},
+		}
+		root, err := s.newTestTree(persistenceNodes)
+		s.NoError(err)
+
+		nextTransitionCount := int64(2)
+		s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTransitionCount }
+
+		// Pause the root — its non-detached sub-component's tasks should also be invalidated.
+		mutableContext := NewMutableContext(context.Background(), root)
+		tc, err := root.Component(mutableContext, ComponentRef{})
+		s.NoError(err)
+		tc.(*TestComponent).Pause(mutableContext)
+
+		mutation, err := root.CloseTransaction()
+		s.NoError(err)
+
+		subAttr := root.children["SubComponent1"].serializedNode.Metadata.GetComponentAttributes()
+		s.Empty(subAttr.SideEffectTasks, "non-detached sub-component tasks should be invalidated when parent is paused")
+		s.Empty(subAttr.PureTasks)
+		s.Len(mutation.UpdatedNodes, 2) // root (paused) + SubComponent1 (task cleanup)
+	})
+
+	s.Run("detached sub-component tasks are NOT invalidated by parent pause", func() {
+		persistenceNodes := map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testComponentTypeID,
+						},
+					},
+				},
+			},
+			"SubComponent1": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId:          testSubComponent1TypeID,
+							Detached:        true,
+							SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{makeTask(testSideEffectTaskTypeID, 1)},
+						},
+					},
+				},
+			},
+		}
+		root, err := s.newTestTree(persistenceNodes)
+		s.NoError(err)
+
+		nextTransitionCount := int64(2)
+		s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTransitionCount }
+
+		// Pause the root.
+		mutableContext := NewMutableContext(context.Background(), root)
+		tc, err := root.Component(mutableContext, ComponentRef{})
+		s.NoError(err)
+		tc.(*TestComponent).Pause(mutableContext)
+
+		// The detached sub-component's validator IS called (it decides independently).
+		s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+
+		mutation, err := root.CloseTransaction()
+		s.NoError(err)
+
+		subAttr := root.children["SubComponent1"].serializedNode.Metadata.GetComponentAttributes()
+		s.Len(subAttr.SideEffectTasks, 1, "detached sub-component tasks should survive parent pause")
+		_ = mutation
+	})
+
+	s.Run("write access accepted on paused component", func() {
+		// Requirement: for now accept chasm engine requests on paused component.
+		root, err := s.newTestTree(testComponentSerializedNodes())
+		s.NoError(err)
+
+		ctx := NewContext(
+			newContextWithOperationIntent(context.Background(), OperationIntentProgress),
+			root,
+		)
+
+		// Pause the root.
+		err = root.prepareComponentValue(ctx)
+		s.NoError(err)
+		root.value.(*TestComponent).Pause(NewMutableContext(context.Background(), root))
+
+		// validateAccess should still succeed — paused does NOT block writes.
+		subNode, ok := root.findNode([]string{"SubComponent1"})
+		s.True(ok)
+		err = subNode.validateAccess(ctx)
+		s.NoError(err, "write access to sub-component of paused parent should be accepted")
+	})
+}
+
+func (s *nodeSuite) TestCloseTransaction_LifecycleChange_PausedRootKeepsRunning() {
+	// When the root component is paused, the execution state should remain RUNNING
+	// because paused is an OPEN lifecycle state.
+	node := s.testComponentTree()
+
+	chasmCtx := NewMutableContext(context.Background(), node)
+	rootComp, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
+	s.NoError(err)
+	rootComp.(*TestComponent).Pause(chasmCtx)
+
+	_, err = node.CloseTransaction()
+	s.NoError(err)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, s.nodeBackend.LastUpdateWorkflowState())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, s.nodeBackend.LastUpdateWorkflowStatus())
+}
+
 func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {

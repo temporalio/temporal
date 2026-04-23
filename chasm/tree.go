@@ -1553,7 +1553,8 @@ func (n *Node) closeTransactionHandleRootLifecycleChange(
 	var newState enumsspb.WorkflowExecutionState
 	var newStatus enumspb.WorkflowExecutionStatus
 	switch lifecycleState {
-	case LifecycleStateRunning:
+	case LifecycleStateRunning, LifecycleStatePaused:
+		// Paused is an OPEN state; the execution remains RUNNING from the persistence perspective.
 		newState = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 		newStatus = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	case LifecycleStateCompleted:
@@ -1856,6 +1857,16 @@ func (n *Node) validateTask(
 		return false, err
 	}
 
+	// Paused components (and their non-detached sub-components) have all tasks invalidated.
+	// Component authors must re-emit tasks when transitioning back to running.
+	paused, err := n.isInPausedSubtree(validateContext)
+	if err != nil {
+		return false, err
+	}
+	if paused {
+		return false, nil
+	}
+
 	defer log.CapturePanic(n.logger, &retErr)
 
 	return registableTask.validateFn(
@@ -1865,6 +1876,60 @@ func (n *Node) validateTask(
 		taskInstance,
 		n.registry,
 	)
+}
+
+// isInPausedSubtree returns true if this component node or any non-detached ancestor
+// component is in the paused lifecycle state. Detached nodes do not inherit pause
+// from their ancestors, matching the access-rule boundary semantics.
+func (n *Node) isInPausedSubtree(ctx Context) (bool, error) {
+	if n.isDetached() {
+		// Detached nodes are isolated from ancestor pause state.
+		return false, nil
+	}
+
+	// Check non-detached ancestors first.
+	if n.parent != nil {
+		if paused, err := n.parent.isInPausedSubtreeHelper(ctx); err != nil || paused {
+			return paused, err
+		}
+	}
+
+	// Check this node itself.
+	if !n.isComponent() {
+		return false, nil
+	}
+	if err := n.prepareComponentValue(ctx); err != nil {
+		return false, err
+	}
+	comp, ok := n.value.(Component) //nolint:revive // unchecked-type-assertion
+	if !ok {
+		return false, nil
+	}
+	return comp.LifecycleState(ctx).IsPaused(), nil
+}
+
+// isInPausedSubtreeHelper is the recursive ancestor-traversal helper for isInPausedSubtree.
+// It checks whether this node (if a component) or any of its non-detached ancestors is paused,
+// stopping the traversal at detached-component boundaries.
+func (n *Node) isInPausedSubtreeHelper(ctx Context) (bool, error) {
+	// Traverse ancestors first, stopping at detached boundaries.
+	if !n.isDetached() && n.parent != nil {
+		if paused, err := n.parent.isInPausedSubtreeHelper(ctx); err != nil || paused {
+			return paused, err
+		}
+	}
+
+	if !n.isComponent() {
+		return false, nil
+	}
+	if err := n.prepareComponentValue(ctx); err != nil {
+		return false, err
+	}
+	comp, ok := n.value.(Component) //nolint:revive // unchecked-type-assertion
+	if !ok {
+		return false, nil
+	}
+	return comp.LifecycleState(ctx).IsPaused(), nil
 }
 
 func (n *Node) closeTransactionCleanupInvalidTasks(
