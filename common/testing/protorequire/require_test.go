@@ -28,10 +28,27 @@ func TestProtoEqualIgnoreFields(t *testing.T) {
 		TaskQueue: "queue-b",
 	}
 
-	// Should pass: both differing fields are ignored
-	protorequire.ProtoEqualIgnoreFields(t, a, b,
-		&workflowpb.WorkflowExecutionInfo{},
-		"status",
-		"task_queue",
-	)
+	t.Run("all differing fields ignored", func(t *testing.T) {
+		protorequire.ProtoEqual(t, a, b,
+			protorequire.IgnoreFields(
+				"status",
+				"task_queue",
+			),
+		)
+	})
+
+	t.Run("partial ignore still fails", func(t *testing.T) {
+		failTest := func(t *testing.T) {
+			protorequire.ProtoEqual(t, a, b,
+				protorequire.IgnoreFields(
+					"status",
+				),
+			)
+		}
+		if result := testing.RunTests(func(pat, str string) (bool, error) { return true, nil }, []testing.InternalTest{
+			{Name: "PartialIgnoreStillFails", F: failTest},
+		}); result {
+			t.Fatal("expected comparison to fail when not all differing fields are ignored")
+		}
+	})
 }

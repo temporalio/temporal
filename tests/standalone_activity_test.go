@@ -3035,12 +3035,13 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 		}
 
 		// Ignore non-deterministic fields. Validated separately.
-		protorequire.ProtoEqualIgnoreFields(t, expected, respInfo,
-			&activitypb.ActivityExecutionInfo{},
-			"execution_duration",
-			"schedule_time",
-			"state_size_bytes",
-			"state_transition_count",
+		protorequire.ProtoEqual(t, expected, respInfo,
+			protorequire.IgnoreFields(
+				"execution_duration",
+				"schedule_time",
+				"state_size_bytes",
+				"state_transition_count",
+			),
 		)
 		require.Equal(t, respInfo.GetExecutionDuration().AsDuration(), time.Duration(0)) // Never completed, so expect 0
 		require.Nil(t, describeResp.GetInfo().GetCloseTime())
@@ -3096,12 +3097,13 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 	}
 
 	// Ignore non-deterministic fields. Validated separately.
-	protorequire.ProtoEqualIgnoreFields(t, expected, firstDescribeResp.GetInfo(),
-		&activitypb.ActivityExecutionInfo{},
-		"execution_duration",
-		"schedule_time",
-		"state_size_bytes",
-		"state_transition_count",
+	protorequire.ProtoEqual(t, expected, firstDescribeResp.GetInfo(),
+		protorequire.IgnoreFields(
+			"execution_duration",
+			"schedule_time",
+			"state_size_bytes",
+			"state_transition_count",
+		),
 	)
 	require.Positive(t, firstDescribeResp.GetInfo().GetStateSizeBytes())
 
@@ -3154,13 +3156,14 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 		}
 
 		// Ignore non-deterministic fields. Validated separately.
-		protorequire.ProtoEqualIgnoreFields(t, expected, describeResp.GetInfo(),
-			&activitypb.ActivityExecutionInfo{},
-			"execution_duration",
-			"last_started_time",
-			"schedule_time",
-			"state_size_bytes",
-			"state_transition_count",
+		protorequire.ProtoEqual(t, expected, describeResp.GetInfo(),
+			protorequire.IgnoreFields(
+				"execution_duration",
+				"last_started_time",
+				"schedule_time",
+				"state_size_bytes",
+				"state_transition_count",
+			),
 		)
 		require.Positive(t, describeResp.GetInfo().GetStateSizeBytes())
 

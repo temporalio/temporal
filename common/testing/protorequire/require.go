@@ -15,6 +15,23 @@ type helper interface {
 	Helper()
 }
 
+// config holds settings populated by Option functions. Add new fields here for custom comparison behaviors beyond cmp
+// options.
+type config struct {
+	cmpOpts []cmp.Option
+}
+
+// Option configures how proto comparison behaves.
+type Option func(msg proto.Message, cfg *config)
+
+// IgnoreFields returns an Option that ignores the specified fields (by proto name) on the top-level message type
+// when comparing.
+func IgnoreFields(fields ...protoreflect.Name) Option {
+	return func(msg proto.Message, cfg *config) {
+		cfg.cmpOpts = append(cfg.cmpOpts, protocmp.IgnoreFields(msg, fields...))
+	}
+}
+
 type ProtoAssertions struct {
 	t require.TestingT
 }
@@ -23,22 +40,24 @@ func New(t require.TestingT) ProtoAssertions {
 	return ProtoAssertions{t}
 }
 
-func ProtoEqual(t require.TestingT, a proto.Message, b proto.Message) {
+// ProtoEqual compares two proto messages for equality using proto semantics. Options can be passed to customize
+// comparison behavior, e.g. protorequire.IgnoreFields to exclude specific fields.
+func ProtoEqual(t require.TestingT, a proto.Message, b proto.Message, opts ...Option) {
 	if th, ok := t.(helper); ok {
 		th.Helper()
 	}
-	if !protoassert.ProtoEqual(t, a, b) {
-		t.FailNow()
+	if len(opts) == 0 {
+		if !protoassert.ProtoEqual(t, a, b) {
+			t.FailNow()
+		}
+		return
 	}
-}
-
-// ProtoEqualIgnoreFields compares two proto messages for equality, ignoring the specified fields on the given message
-// type. Fields are specified by their proto name (snake_case).
-func ProtoEqualIgnoreFields(t require.TestingT, a proto.Message, b proto.Message, msgType proto.Message, fields ...protoreflect.Name) {
-	if th, ok := t.(helper); ok {
-		th.Helper()
+	cfg := &config{}
+	for _, opt := range opts {
+		opt(a, cfg)
 	}
-	if diff := cmp.Diff(a, b, protocmp.Transform(), protocmp.IgnoreFields(msgType, fields...)); diff != "" {
+	cmpOpts := append([]cmp.Option{protocmp.Transform()}, cfg.cmpOpts...)
+	if diff := cmp.Diff(a, b, cmpOpts...); diff != "" {
 		require.Fail(t, fmt.Sprintf("Proto mismatch (-want +got):\n%v", diff))
 	}
 }
@@ -65,13 +84,11 @@ func ProtoSliceEqual[T proto.Message](t require.TestingT, a []T, b []T) {
 	}
 }
 
-func (x ProtoAssertions) ProtoEqual(a proto.Message, b proto.Message) {
+func (x ProtoAssertions) ProtoEqual(a proto.Message, b proto.Message, opts ...Option) {
 	if th, ok := x.t.(helper); ok {
 		th.Helper()
 	}
-	if !protoassert.ProtoEqual(x.t, a, b) {
-		x.t.FailNow()
-	}
+	ProtoEqual(x.t, a, b, opts...)
 }
 
 func (x ProtoAssertions) NotProtoEqual(a proto.Message, b proto.Message) {
@@ -98,11 +115,4 @@ func (x ProtoAssertions) ProtoElementsMatch(a any, b any) bool {
 	}
 
 	return protoassert.ProtoElementsMatch(x.t, a, b)
-}
-
-func (x ProtoAssertions) ProtoEqualIgnoreFields(a proto.Message, b proto.Message, msgType proto.Message, fields ...protoreflect.Name) {
-	if th, ok := x.t.(helper); ok {
-		th.Helper()
-	}
-	ProtoEqualIgnoreFields(x.t, a, b, msgType, fields...)
 }
