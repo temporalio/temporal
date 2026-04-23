@@ -772,7 +772,9 @@ func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activityp
 		return nil, serviceerror.NewFailedPrecondition("cannot pause an activity with a pending cancellation")
 	}
 	if a.PauseState != nil {
-		if a.PauseState.GetRequestId() == req.GetFrontendRequest().GetRequestId() {
+		newReqID := req.GetFrontendRequest().GetRequestId()
+		existingReqID := a.PauseState.GetRequestId()
+		if newReqID != "" && existingReqID == newReqID {
 			return &activitypb.PauseActivityExecutionResponse{}, nil
 		}
 		return &activitypb.PauseActivityExecutionResponse{}, serviceerror.NewFailedPrecondition("activity is already paused")

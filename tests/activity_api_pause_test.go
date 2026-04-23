@@ -91,7 +91,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 			t.Parallel()
 
 			t.Run("TestActivityPauseApi_WhileRunning", func(t *testing.T) {
-				s := testcore.NewEnv(t, testcore.WithSdkWorker())
+				s := testcore.NewEnv(t)
 
 				initialRetryInterval := 1 * time.Second
 				scheduleToCloseTimeout := 30 * time.Minute
@@ -217,7 +217,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				 * 4. Validate activity failed
 				 * 5. Validate number of activity attempts increased
 				 */
-				s := testcore.NewEnv(t, testcore.WithSdkWorker())
+				s := testcore.NewEnv(t)
 
 				initialRetryInterval := 1 * time.Second
 				scheduleToCloseTimeout := 30 * time.Minute
@@ -336,7 +336,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				// In this case, pause happens when activity is in retry state.
 				// Make sure that activity is paused and then unpaused.
 				// Also check that activity will not be retried while unpaused.
-				s := testcore.NewEnv(t, testcore.WithSdkWorker())
+				s := testcore.NewEnv(t)
 
 				initialRetryInterval := 1 * time.Second
 				scheduleToCloseTimeout := 30 * time.Minute
@@ -432,7 +432,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				// In this case, pause can happen when activity is in retry state.
 				// Make sure that activity is paused and then unpaused.
 				// Also tests noWait flag.
-				s := testcore.NewEnv(t, testcore.WithSdkWorker())
+				s := testcore.NewEnv(t)
 
 				initialRetryInterval := 30 * time.Second
 				scheduleToCloseTimeout := 30 * time.Minute
@@ -510,7 +510,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 			t.Run("TestActivityPauseApi_WithReset", func(t *testing.T) {
 				// pause/unpause the activity with reset option and noWait flag
-				s := testcore.NewEnv(t, testcore.WithSdkWorker())
+				s := testcore.NewEnv(t)
 
 				initialRetryInterval := 1 * time.Second
 				scheduleToCloseTimeout := 30 * time.Minute
@@ -612,7 +612,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 			})
 
 			t.Run("TestActivityPauseApi_WhilePaused", func(t *testing.T) {
-				s := testcore.NewEnv(t, testcore.WithSdkWorker())
+				s := testcore.NewEnv(t)
 
 				initialRetryInterval := 1 * time.Second
 				scheduleToCloseTimeout := 30 * time.Minute
@@ -739,7 +739,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 			t.Run("TestActivityPauseApi_SameRequestID_IsIdempotent", func(t *testing.T) {
 				// Pausing an already-paused activity with the same request ID must succeed (no-op).
-				s := testcore.NewEnv(t, testcore.WithSdkWorker())
+				s := testcore.NewEnv(t)
 
 				scheduleToCloseTimeout := 30 * time.Minute
 				startToCloseTimeout := 15 * time.Minute
