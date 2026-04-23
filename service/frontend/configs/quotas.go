@@ -47,12 +47,14 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":               1,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution":     1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusOperationExecution": 1,
 
 		// Long-running if activity outcome is not already available
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution": 1,
 		// Long-running if certain request parameters are set
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory": 1,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution":   1,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeNexusOperationExecution": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory":     1,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution":       1,
 
 		// potentially long-running, depending on the operations
 		"/temporal.api.workflowservice.v1.WorkflowService/ExecuteMultiOperation": 1,
@@ -92,6 +94,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/CreateSchedule":                   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartBatchOperation":              1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartActivityExecution":           1,
+		"/temporal.api.workflowservice.v1.WorkflowService/StartNexusOperationExecution":     1,
 		DispatchNexusTaskByNamespaceAndTaskQueueAPIName:                                     1,
 		DispatchNexusTaskByEndpointAPIName:                                                  1,
 
@@ -141,6 +144,9 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelActivityExecution":             2,
 		"/temporal.api.workflowservice.v1.WorkflowService/TerminateActivityExecution":                 2,
 		"/temporal.api.workflowservice.v1.WorkflowService/DeleteActivityExecution":                    2,
+		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelNexusOperationExecution":       2,
+		"/temporal.api.workflowservice.v1.WorkflowService/TerminateNexusOperationExecution":           2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteNexusOperationExecution":              2,
 		"/temporal.api.workflowservice.v1.WorkflowService/PauseWorkflowExecution":                     2,
 		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseWorkflowExecution":                   2,
 
@@ -159,6 +165,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/GetCurrentDeployment":                         3, // [cleanup-wv-pre-release]
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeploymentVersion":              3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":                     3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeNexusOperationExecution":              3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ValidateWorkerDeploymentVersionComputeConfig": 3,
 
 		// P3: Progress APIs for reporting cancellations and failures.
@@ -171,6 +178,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskFailed":          3,
 
 		// P4: Poll APIs and other low priority APIs
+		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusOperationExecution":        4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution":              4, // TODO(saa-preview): should it be 4 or 3?
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":              4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":              4,
@@ -207,6 +215,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorker":                 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/CountActivityExecutions":        1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListActivityExecutions":         1,
+		"/temporal.api.workflowservice.v1.WorkflowService/CountNexusOperationExecutions":  1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListNexusOperationExecutions":   1,
 
 		// APIs that rely on visibility
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":         1,
