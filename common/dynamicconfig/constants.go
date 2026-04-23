@@ -2838,6 +2838,11 @@ Requires service restart to take effect.`,
 		500,
 		"History service health check on persistence average latency (millisecond) threshold",
 	)
+	HealthPersistenceP99LatencyFailure = NewGlobalFloatSetting(
+		"history.healthPersistenceP99LatencyFailure",
+		500,
+		"History service health check on persistence P99 latency (millisecond) threshold",
+	)
 	HealthPersistenceErrorRatio = NewGlobalFloatSetting(
 		"history.healthPersistenceErrorRatio",
 		0.90,
@@ -2847,6 +2852,11 @@ Requires service restart to take effect.`,
 		"history.healthRPCLatencyFailure",
 		500,
 		"History service health check on RPC average latency (millisecond) threshold",
+	)
+	HealthRPCP99LatencyFailure = NewGlobalFloatSetting(
+		"history.healthRPCP99LatencyFailure",
+		1000,
+		"History service health check on RPC P99 latency (millisecond) threshold",
 	)
 	HealthRPCErrorRatio = NewGlobalFloatSetting(
 		"history.healthRPCErrorRatio",

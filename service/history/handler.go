@@ -321,7 +321,48 @@ func (h *Handler) DeepHealthCheck(
 		Message:   persErrMsg,
 	})
 
+	// Check 6: Persistence P99 latency
+	persP99Latency := h.persistenceHealthSignal.P99Latency()
+	persP99Threshold := h.config.HealthPersistenceP99LatencyFailure()
+	persP99State := enumsspb.HEALTH_STATE_SERVING
+	persP99Msg := ""
+	if persP99Latency > persP99Threshold {
+		persP99State = enumsspb.HEALTH_STATE_NOT_SERVING
+		persP99Msg = fmt.Sprintf("Persistence P99 latency %.2fms exceeded %.2fms threshold", persP99Latency, persP99Threshold)
+		if overallState != enumsspb.HEALTH_STATE_DECLINED_SERVING {
+			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
+		}
+	}
+	checks = append(checks, &healthspb.HealthCheck{
+		CheckType: healthcheck.CheckTypePersistenceP99Latency,
+		State:     persP99State,
+		Value:     persP99Latency,
+		Threshold: persP99Threshold,
+		Message:   persP99Msg,
+	})
+
+	// Check 7: RPC P99 latency
+	rpcP99Latency := h.historyHealthSignal.P99Latency()
+	rpcP99Threshold := h.config.HealthRPCP99LatencyFailure()
+	rpcP99State := enumsspb.HEALTH_STATE_SERVING
+	rpcP99Msg := ""
+	if rpcP99Latency > rpcP99Threshold {
+		rpcP99State = enumsspb.HEALTH_STATE_NOT_SERVING
+		rpcP99Msg = fmt.Sprintf("RPC P99 latency %.2fms exceeded %.2fms threshold", rpcP99Latency, rpcP99Threshold)
+		if overallState != enumsspb.HEALTH_STATE_DECLINED_SERVING {
+			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
+		}
+	}
+	checks = append(checks, &healthspb.HealthCheck{
+		CheckType: healthcheck.CheckTypeRPCP99Latency,
+		State:     rpcP99State,
+		Value:     rpcP99Latency,
+		Threshold: rpcP99Threshold,
+		Message:   rpcP99Msg,
+	})
+
 	metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(overallState))
+	metrics.HistoryRPCP99LatencyGauge.With(h.metricsHandler).Record(rpcP99Latency)
 	return &historyservice.DeepHealthCheckResponse{
 		State:  overallState,
 		Checks: checks,

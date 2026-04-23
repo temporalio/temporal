@@ -403,9 +403,11 @@ type Config struct {
 	BusinessIDReuseLimiterCacheSize          dynamicconfig.IntPropertyFn
 	BusinessIDReuseLimiterCacheTTL           dynamicconfig.DurationPropertyFn
 
-	HealthPersistenceLatencyFailure dynamicconfig.FloatPropertyFn
-	HealthPersistenceErrorRatio     dynamicconfig.FloatPropertyFn
+	HealthPersistenceLatencyFailure    dynamicconfig.FloatPropertyFn
+	HealthPersistenceP99LatencyFailure dynamicconfig.FloatPropertyFn
+	HealthPersistenceErrorRatio        dynamicconfig.FloatPropertyFn
 	HealthRPCLatencyFailure         dynamicconfig.FloatPropertyFn
+	HealthRPCP99LatencyFailure      dynamicconfig.FloatPropertyFn
 	HealthRPCErrorRatio             dynamicconfig.FloatPropertyFn
 	BreakdownMetricsByTaskQueue     dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
@@ -785,9 +787,11 @@ func NewConfig(
 		BusinessIDReuseLimiterCacheSize:          dynamicconfig.BusinessIDReuseLimiterCacheSize.Get(dc),
 		BusinessIDReuseLimiterCacheTTL:           dynamicconfig.BusinessIDReuseLimiterCacheTTL.Get(dc),
 
-		HealthPersistenceLatencyFailure: dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
-		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
+		HealthPersistenceLatencyFailure:    dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
+		HealthPersistenceP99LatencyFailure: dynamicconfig.HealthPersistenceP99LatencyFailure.Get(dc),
+		HealthPersistenceErrorRatio:        dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
 		HealthRPCLatencyFailure:         dynamicconfig.HealthRPCLatencyFailure.Get(dc),
+		HealthRPCP99LatencyFailure:      dynamicconfig.HealthRPCP99LatencyFailure.Get(dc),
 		HealthRPCErrorRatio:             dynamicconfig.HealthRPCErrorRatio.Get(dc),
 
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),

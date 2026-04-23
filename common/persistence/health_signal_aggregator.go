@@ -19,6 +19,7 @@ type (
 	HealthSignalAggregator interface {
 		Record(callerSegment int32, latency time.Duration, err error)
 		AverageLatency() float64
+		P99Latency() float64
 		ErrorRatio() float64
 		Start()
 		Stop()
@@ -104,6 +105,13 @@ func (s *healthSignalAggregatorImpl) Record(callerSegment int32, latency time.Du
 
 func (s *healthSignalAggregatorImpl) AverageLatency() float64 {
 	return s.latencyAverage.Average()
+}
+
+func (s *healthSignalAggregatorImpl) P99Latency() float64 {
+	if impl, ok := s.latencyAverage.(*aggregate.MovingWindowAvgImpl); ok {
+		return impl.Percentile(0.99)
+	}
+	return 0
 }
 
 func (s *healthSignalAggregatorImpl) ErrorRatio() float64 {
