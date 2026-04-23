@@ -70,7 +70,7 @@ var Module = fx.Options(
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
 	fx.Provide(HealthCheckInterceptorProvider),
-	fx.Provide(MetadataContextInterceptorProvider),
+	fx.Provide(ContextMetadataInterceptorProvider),
 	fx.Provide(chasm.ChasmEngineInterceptorProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 	fx.Provide(HistoryAdditionalInterceptorsProvider),
@@ -248,18 +248,16 @@ func HealthCheckInterceptorProvider(
 	)
 }
 
-func MetadataContextInterceptorProvider() *interceptor.MetadataContextInterceptor {
-	return interceptor.NewMetadataContextInterceptor()
+func ContextMetadataInterceptorProvider(logger log.Logger) *interceptor.ContextMetadataInterceptor {
+	return interceptor.NewContextMetadataInterceptor(true, logger)
 }
 
 func HistoryAdditionalInterceptorsProvider(
 	healthCheckInterceptor *interceptor.HealthCheckInterceptor,
-	metadataContextInterceptor *interceptor.MetadataContextInterceptor,
 	chasmRequestEngineInterceptor *chasm.ChasmEngineInterceptor,
 	chasmRequestVisibilityInterceptor *chasm.ChasmVisibilityInterceptor,
 ) []grpc.UnaryServerInterceptor {
 	return []grpc.UnaryServerInterceptor{
-		metadataContextInterceptor.Intercept,
 		healthCheckInterceptor.UnaryIntercept,
 		chasmRequestEngineInterceptor.Intercept,
 		chasmRequestVisibilityInterceptor.Intercept,

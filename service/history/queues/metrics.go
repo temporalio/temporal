@@ -193,7 +193,7 @@ func GetOutboundTaskTypeTagValue(
 
 	switch task := task.(type) {
 	case *tasks.StateMachineOutboundTask:
-		return prefix + "." + task.StateMachineTaskType()
+		return prefix + "." + task.OutboundTaskGroup()
 	case *tasks.ChasmTask:
 		return prefix + "." + getCHASMTaskTypeTagValue(task, chasmRegistry)
 	case *tasks.WorkerCommandsTask:
