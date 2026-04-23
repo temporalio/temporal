@@ -20,9 +20,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
@@ -1855,6 +1858,103 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 		s.Error(err)
 		s.Contains(err.Error(), "operation_id is required")
 	})
+}
+
+func TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken(t *testing.T) {
+	t.Parallel()
+
+	s := testcore.NewEnv(t, nexusStandaloneOpts...)
+	endpointName := testcore.RandomizedNexusEndpoint(t.Name())
+
+	var callbackToken string
+	var callbackURL string
+	listenAddr := nexustest.AllocListenAddress()
+	nexustest.NewNexusServer(t, listenAddr, nexustest.Handler{
+		OnStartOperation: func(
+			ctx context.Context,
+			service string,
+			operation string,
+			input *nexus.LazyValue,
+			options nexus.StartOperationOptions,
+		) (nexus.HandlerStartOperationResult[any], error) {
+			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
+			callbackURL = options.CallbackURL
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-operation-token"}, nil
+		},
+	})
+
+	_, err := s.OperatorClient().CreateNexusEndpoint(s.Context(), &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_External_{
+					External: &nexuspb.EndpointTarget_External{
+						Url: "http://" + listenAddr,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		OperationId: "test-op",
+		Endpoint:    endpointName,
+	})
+	s.NoError(err)
+
+	ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+	defer cancel()
+	require.Eventually(t, func() bool {
+		return callbackToken != "" && callbackURL != ""
+	}, 10*time.Second, 100*time.Millisecond)
+
+	gen := &commonnexus.CallbackTokenGenerator{}
+	decodedToken, err := commonnexus.DecodeCallbackToken(callbackToken)
+	s.NoError(err)
+	completionToken, err := gen.DecodeCompletion(decodedToken)
+	s.NoError(err)
+
+	// Deliberately corrupt transition fields in the callback token. Completion should
+	// still succeed because the handler strips these fields before validation.
+	ref := &persistencespb.ChasmComponentRef{}
+	s.NoError(ref.Unmarshal(completionToken.GetComponentRef()))
+	s.NotNil(ref.ExecutionVersionedTransition)
+	s.NotNil(ref.ComponentInitialVersionedTransition)
+	ref.ExecutionVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: ref.ExecutionVersionedTransition.NamespaceFailoverVersion + 1000,
+		TransitionCount:          ref.ExecutionVersionedTransition.TransitionCount + 1000,
+	}
+	ref.ComponentInitialVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: ref.ComponentInitialVersionedTransition.NamespaceFailoverVersion + 1000,
+		TransitionCount:          ref.ComponentInitialVersionedTransition.TransitionCount + 1000,
+	}
+	completionToken.ComponentRef, err = ref.Marshal()
+	s.NoError(err)
+
+	callbackToken, err = gen.Tokenize(completionToken)
+	s.NoError(err)
+
+	c := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
+		Serializer: commonnexus.PayloadSerializer,
+	})
+	err = c.CompleteOperation(ctx, callbackURL, nexusrpc.CompleteOperationOptions{
+		Result: payload.EncodeString("result"),
+		Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
+	})
+	s.NoError(err)
+
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			OperationId:    "test-op",
+			RunId:          startResp.RunId,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+		protorequire.ProtoEqual(t, payload.EncodeString("result"), descResp.GetResult())
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func startNexusOperation(
