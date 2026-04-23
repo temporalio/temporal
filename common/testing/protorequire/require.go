@@ -46,12 +46,6 @@ func ProtoEqual(t require.TestingT, a proto.Message, b proto.Message, opts ...Op
 	if th, ok := t.(helper); ok {
 		th.Helper()
 	}
-	if len(opts) == 0 {
-		if !protoassert.ProtoEqual(t, a, b) {
-			t.FailNow()
-		}
-		return
-	}
 	cfg := &config{}
 	for _, opt := range opts {
 		opt(a, cfg)
