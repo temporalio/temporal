@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -399,6 +400,12 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 			},
 		)
 		return response, h.convertError(err)
+	}
+
+	if !contextutil.ContextMetadataMarkActivityID(ctx, taskToken.GetActivityId()) {
+		h.throttledLogger.Warn("Failed to mark activity ID in context metadata",
+			tag.WorkflowID(taskToken.GetWorkflowId()),
+			tag.ActivityID(taskToken.GetActivityId()))
 	}
 
 	// Handle worklow activity (mutable state backed implementation).
@@ -2250,9 +2257,11 @@ func (h *Handler) CompleteNexusOperationChasm(
 	request *historyservice.CompleteNexusOperationChasmRequest,
 ) (*historyservice.CompleteNexusOperationChasmResponse, error) {
 	completion := &persistencespb.ChasmNexusCompletion{
-		CloseTime: request.CloseTime,
-		RequestId: request.Completion.RequestId,
-		Links:     request.Links,
+		StartTime:      request.StartTime,
+		CloseTime:      request.CloseTime,
+		RequestId:      request.Completion.RequestId,
+		Links:          request.Links,
+		OperationToken: request.OperationToken,
 	}
 	switch variant := request.Outcome.(type) {
 	case *historyservice.CompleteNexusOperationChasmRequest_Failure:

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
@@ -144,5 +145,25 @@ func (c *Cancellation) saveResult(
 		})
 	default:
 		return nil, serviceerror.NewInternalf("cannot save cancellation result of type %T", r)
+	}
+}
+
+func CancellationAPIState(status nexusoperationpb.CancellationStatus) enumspb.NexusOperationCancellationState {
+	// TODO(samm): deduplicate against standalone nexus operations
+	switch status {
+	case nexusoperationpb.CANCELLATION_STATUS_SCHEDULED:
+		return enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED
+	case nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF:
+		return enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF
+	case nexusoperationpb.CANCELLATION_STATUS_SUCCEEDED:
+		return enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED
+	case nexusoperationpb.CANCELLATION_STATUS_FAILED:
+		return enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED
+	case nexusoperationpb.CANCELLATION_STATUS_TIMED_OUT:
+		return enumspb.NEXUS_OPERATION_CANCELLATION_STATE_TIMED_OUT
+	case nexusoperationpb.CANCELLATION_STATUS_BLOCKED:
+		return enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
+	default:
+		return enumspb.NEXUS_OPERATION_CANCELLATION_STATE_UNSPECIFIED
 	}
 }

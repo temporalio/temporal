@@ -70,7 +70,7 @@ var Module = fx.Options(
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
 	fx.Provide(HealthCheckInterceptorProvider),
-	fx.Provide(MetadataContextInterceptorProvider),
+	fx.Provide(ContextMetadataInterceptorProvider),
 	fx.Provide(chasm.ChasmEngineInterceptorProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 	fx.Provide(HistoryAdditionalInterceptorsProvider),
@@ -89,7 +89,6 @@ var Module = fx.Options(
 	fx.Provide(NewService),
 	fx.Provide(ReplicationProgressCacheProvider),
 	fx.Provide(VersionMembershipCacheProvider),
-	fx.Provide(ReactivationSignalCacheProvider),
 	workerdeployment.ClientModule,
 	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
@@ -248,18 +247,16 @@ func HealthCheckInterceptorProvider(
 	)
 }
 
-func MetadataContextInterceptorProvider() *interceptor.MetadataContextInterceptor {
-	return interceptor.NewMetadataContextInterceptor()
+func ContextMetadataInterceptorProvider(logger log.Logger) *interceptor.ContextMetadataInterceptor {
+	return interceptor.NewContextMetadataInterceptor(true, logger)
 }
 
 func HistoryAdditionalInterceptorsProvider(
 	healthCheckInterceptor *interceptor.HealthCheckInterceptor,
-	metadataContextInterceptor *interceptor.MetadataContextInterceptor,
 	chasmRequestEngineInterceptor *chasm.ChasmEngineInterceptor,
 	chasmRequestVisibilityInterceptor *chasm.ChasmVisibilityInterceptor,
 ) []grpc.UnaryServerInterceptor {
 	return []grpc.UnaryServerInterceptor{
-		metadataContextInterceptor.Intercept,
 		healthCheckInterceptor.UnaryIntercept,
 		chasmRequestEngineInterceptor.Intercept,
 		chasmRequestVisibilityInterceptor.Intercept,
@@ -408,7 +405,7 @@ func VersionMembershipCacheProvider(
 	lc fx.Lifecycle,
 	serviceConfig *configs.Config,
 	metricsHandler metrics.Handler,
-) worker_versioning.VersionMembershipCache {
+) worker_versioning.VersionMembershipAndReactivationStatusCache {
 	c := commoncache.New(serviceConfig.VersionMembershipCacheMaxSize(), &commoncache.Options{
 		TTL: max(1*time.Second, serviceConfig.VersionMembershipCacheTTL()),
 	})
@@ -418,24 +415,7 @@ func VersionMembershipCacheProvider(
 			return nil
 		},
 	})
-	return worker_versioning.NewVersionMembershipCache(c, metricsHandler)
-}
-
-func ReactivationSignalCacheProvider(
-	lc fx.Lifecycle,
-	serviceConfig *configs.Config,
-	metricsHandler metrics.Handler,
-) worker_versioning.ReactivationSignalCache {
-	c := commoncache.New(serviceConfig.VersionReactivationSignalCacheMaxSize(), &commoncache.Options{
-		TTL: max(1*time.Second, serviceConfig.VersionReactivationSignalCacheTTL()),
-	})
-	lc.Append(fx.Hook{
-		OnStop: func(context.Context) error {
-			c.Stop()
-			return nil
-		},
-	})
-	return worker_versioning.NewReactivationSignalCache(c, metricsHandler)
+	return worker_versioning.NewVersionMembershipAndReactivationStatusCache(c, metricsHandler)
 }
 
 func RoutingInfoCacheProvider(

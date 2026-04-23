@@ -5,12 +5,14 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -40,7 +42,7 @@ const TaskGroupName = "nexus"
 // OperationStore defines the interface that must be implemented by any parent component that wants to manage Nexus operations.
 // It's the responsibility of the parrent component to apply the appropriate state transitions to the operation.
 type OperationStore interface {
-	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation, operationToken string, links []*commonpb.Link) error
+	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation, operationToken string, startTime *time.Time, links []*commonpb.Link) error
 	OnNexusOperationCanceled(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
@@ -125,14 +127,15 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) erro
 }
 
 // onStarted applies the started transition or delegates to the store if one is present.
-func (o *Operation) onStarted(ctx chasm.MutableContext, operationToken string, links []*commonpb.Link) error {
+func (o *Operation) onStarted(ctx chasm.MutableContext, operationToken string, startTime *time.Time, links []*commonpb.Link) error {
 	store, ok := o.Store.TryGet(ctx)
 	if ok {
-		return store.OnNexusOperationStarted(ctx, o, operationToken, links)
+		return store.OnNexusOperationStarted(ctx, o, operationToken, startTime, links)
 	}
 	// TODO(stephan): for standalone, store links
 	return TransitionStarted.Apply(o, ctx, EventStarted{
 		OperationToken: operationToken,
+		StartTime:      startTime,
 	})
 }
 
@@ -230,7 +233,7 @@ func (o *Operation) saveInvocationResult(
 		if r.response.Pending != nil {
 			// An async operation transitions to STARTED here;
 			// HandleNexusCompletion will apply its outcome from the completion callback.
-			return nil, o.onStarted(ctx, r.response.Pending.Token, links)
+			return nil, o.onStarted(ctx, r.response.Pending.Token, nil, links)
 		}
 		return nil, o.onCompleted(ctx, r.response.Successful, links)
 	case startResultCancel:
@@ -254,16 +257,27 @@ func (o *Operation) HandleNexusCompletion(
 	ctx chasm.MutableContext,
 	completion *persistencespb.ChasmNexusCompletion,
 ) error {
-	// TODO: support completion-before-start
-
 	// Request ID lets us reject a stale or misrouted completion.
 	if completion.GetRequestId() != "" && o.GetRequestId() != completion.GetRequestId() {
 		return serviceerror.NewNotFound("operation not found")
 	}
 
+	links := completion.GetLinks()
+
+	// For completion-before-start, apply the started transition first.
+	if o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED {
+		startTime := timestamp.TimeValuePtr(completion.GetStartTime())
+		if err := o.onStarted(ctx, completion.GetOperationToken(), startTime, links); err != nil {
+			return err
+		}
+
+		// Links belong only to the synthetic started event.
+		links = nil
+	}
+
 	switch outcome := completion.Outcome.(type) {
 	case *persistencespb.ChasmNexusCompletion_Success:
-		return o.onCompleted(ctx, outcome.Success, completion.GetLinks())
+		return o.onCompleted(ctx, outcome.Success, links)
 	case *persistencespb.ChasmNexusCompletion_Failure:
 		if outcome.Failure.GetCanceledFailureInfo() != nil {
 			return o.onCanceled(ctx, outcome.Failure)
@@ -292,4 +306,20 @@ func (o *Operation) resolveUnsuccessfully(ctx chasm.MutableContext, failure *fai
 	o.NextAttemptScheduleTime = nil
 	// Terminal state - no tasks to emit.
 	return nil
+}
+
+// PendingOperationState maps a nexus operation status to the corresponding pending API state.
+// Returns PENDING_NEXUS_OPERATION_STATE_UNSPECIFIED for non-pending or unspecified statuses.
+func PendingOperationState(status nexusoperationpb.OperationStatus) enumspb.PendingNexusOperationState {
+	// TODO(samm): deduplicate against standalone nexus operations
+	switch status {
+	case nexusoperationpb.OPERATION_STATUS_SCHEDULED:
+		return enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED
+	case nexusoperationpb.OPERATION_STATUS_BACKING_OFF:
+		return enumspb.PENDING_NEXUS_OPERATION_STATE_BACKING_OFF
+	case nexusoperationpb.OPERATION_STATUS_STARTED:
+		return enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED
+	default:
+		return enumspb.PENDING_NEXUS_OPERATION_STATE_UNSPECIFIED
+	}
 }

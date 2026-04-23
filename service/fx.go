@@ -45,8 +45,9 @@ type (
 		RateLimitInterceptor         *interceptor.RateLimitInterceptor
 		TracingStatsHandler          telemetry.ServerStatsHandler
 		MetricsStatsHandler          metrics.ServerStatsHandler
-		AdditionalInterceptors       []grpc.UnaryServerInterceptor  `optional:"true"`
-		AdditionalStreamInterceptors []grpc.StreamServerInterceptor `optional:"true"`
+		ContextMetadataInterceptor   *interceptor.ContextMetadataInterceptor `optional:"true"`
+		AdditionalInterceptors       []grpc.UnaryServerInterceptor           `optional:"true"`
+		AdditionalStreamInterceptors []grpc.StreamServerInterceptor          `optional:"true"`
 	}
 )
 
@@ -163,8 +164,11 @@ func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInte
 
 	interceptors = append(interceptors, params.AdditionalInterceptors...)
 
-	return append(
-		interceptors,
-		params.RateLimitInterceptor.Intercept,
-		params.RetryableInterceptor.Intercept)
+	interceptors = append(interceptors, params.RateLimitInterceptor.Intercept)
+
+	if params.ContextMetadataInterceptor != nil {
+		interceptors = append(interceptors, params.ContextMetadataInterceptor.Intercept)
+	}
+
+	return append(interceptors, params.RetryableInterceptor.Intercept)
 }
