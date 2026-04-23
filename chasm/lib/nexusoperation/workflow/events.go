@@ -249,7 +249,9 @@ func (d FailedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow
 	}
 	op := field.Get(ctx)
 
-	if err := nexusoperation.TransitionFailed.Apply(op, ctx, nexusoperation.EventFailed{}); err != nil {
+	if err := nexusoperation.TransitionFailed.Apply(op, ctx, nexusoperation.EventFailed{
+		Failure: attrs.GetFailure().GetCause(), // must be provided to complete transition
+	}); err != nil {
 		return err
 	}
 	wf.RemoveNexusOperation(attrs.GetScheduledEventId())
@@ -283,7 +285,9 @@ func (d CanceledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkfl
 	}
 	op := field.Get(ctx)
 
-	if err := nexusoperation.TransitionCanceled.Apply(op, ctx, nexusoperation.EventCanceled{}); err != nil {
+	if err := nexusoperation.TransitionCanceled.Apply(op, ctx, nexusoperation.EventCanceled{
+		Failure: attrs.GetFailure().GetCause(), // must be provided to complete transition
+	}); err != nil {
 		return err
 	}
 	wf.RemoveNexusOperation(attrs.GetScheduledEventId())
@@ -317,7 +321,9 @@ func (d TimedOutEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkfl
 	}
 	op := field.Get(ctx)
 
-	if err := nexusoperation.TransitionTimedOut.Apply(op, ctx, nexusoperation.EventTimedOut{}); err != nil {
+	if err := nexusoperation.TransitionTimedOut.Apply(op, ctx, nexusoperation.EventTimedOut{
+		Failure: attrs.GetFailure().GetCause(), // must be provided to complete transition
+	}); err != nil {
 		return err
 	}
 	wf.RemoveNexusOperation(attrs.GetScheduledEventId())

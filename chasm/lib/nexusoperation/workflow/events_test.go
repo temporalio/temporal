@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
@@ -166,18 +167,30 @@ func TestTerminalStatesDeletion(t *testing.T) {
 				event.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
 					NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
 						ScheduledEventId: scheduledEventID,
+						Failure: &failurepb.Failure{
+							Message: "nexus operation failed",
+							Cause:   &failurepb.Failure{Message: "operation failed"},
+						},
 					},
 				}
 			case enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED:
 				event.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
 					NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
 						ScheduledEventId: scheduledEventID,
+						Failure: &failurepb.Failure{
+							Message: "nexus operation canceled",
+							Cause:   &failurepb.Failure{Message: "operation canceled"},
+						},
 					},
 				}
 			case enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT:
 				event.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
 					NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
 						ScheduledEventId: scheduledEventID,
+						Failure: &failurepb.Failure{
+							Message: "nexus operation timed out",
+							Cause:   &failurepb.Failure{Message: "operation timed out"},
+						},
 					},
 				}
 			default:

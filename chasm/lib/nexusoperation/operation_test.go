@@ -169,6 +169,7 @@ func TestDescribeOutcome(t *testing.T) {
 		name            string
 		status          nexusoperationpb.OperationStatus
 		outcome         *nexusoperationpb.OperationOutcome // nil means no outcome set
+		lastAttemptFail *failurepb.Failure
 		expectedResult  *commonpb.Payload
 		expectedFailure *failurepb.Failure
 	}{
@@ -195,16 +196,33 @@ func TestDescribeOutcome(t *testing.T) {
 			expectedFailure: &failurepb.Failure{Message: "outcome failure"},
 		},
 		{
-			name:   "NoOutcome_ReturnsNil",
-			status: nexusoperationpb.OPERATION_STATUS_STARTED,
-			// returns nil for both result and failure
+			name:            "NoOutcome_FallsBackToLastAttemptFailure",
+			status:          nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
+			lastAttemptFail: &failurepb.Failure{Message: "last attempt failure"},
+			expectedFailure: &failurepb.Failure{Message: "last attempt failure"},
+		},
+		{
+			name:   "Outcome_PreferredOverLastAttemptFailure",
+			status: nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
+			outcome: &nexusoperationpb.OperationOutcome{
+				Variant: &nexusoperationpb.OperationOutcome_Failed_{
+					Failed: &nexusoperationpb.OperationOutcome_Failed{
+						Failure: &failurepb.Failure{Message: "operation timed out"},
+					},
+				},
+			},
+			lastAttemptFail: &failurepb.Failure{Message: "last attempt failure"},
+			expectedFailure: &failurepb.Failure{Message: "operation timed out"},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := &chasm.MockMutableContext{}
-			op := NewOperation(&nexusoperationpb.OperationState{Status: tc.status})
+			op := NewOperation(&nexusoperationpb.OperationState{
+				Status:             tc.status,
+				LastAttemptFailure: tc.lastAttemptFail,
+			})
 			if tc.outcome != nil {
 				op.Outcome = chasm.NewDataField(ctx, tc.outcome)
 			}
