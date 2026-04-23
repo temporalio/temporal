@@ -212,9 +212,8 @@ type Config struct {
 	MaskInternalErrorDetails dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Health check
-	HistoryHostErrorPercentage      dynamicconfig.FloatPropertyFn
-	HistoryHostSelfErrorProportion  dynamicconfig.FloatPropertyFn
-	HistoryHostFailureTimeThreshold dynamicconfig.DurationPropertyFn
+	HistoryHostErrorPercentage     dynamicconfig.FloatPropertyFn
+	HistoryHostSelfErrorProportion dynamicconfig.FloatPropertyFn
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -387,7 +386,6 @@ func NewConfig(
 
 		HistoryHostErrorPercentage:        dynamicconfig.HistoryHostErrorPercentage.Get(dc),
 		HistoryHostSelfErrorProportion:    dynamicconfig.HistoryHostSelfErrorProportion.Get(dc),
-		HistoryHostFailureTimeThreshold:   dynamicconfig.HistoryHostFailureTimeThreshold.Get(dc),
 		LogAllReqErrors:                   dynamicconfig.LogAllReqErrors.Get(dc),
 		EnableEagerWorkflowStart:          dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 		WorkflowRulesAPIsEnabled:          dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),
