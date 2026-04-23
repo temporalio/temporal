@@ -2589,7 +2589,34 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		}
 	}
 
-	// TODO: add TimeSkippingConfig to StartWorkflowExecutionRequest
+	// Continue-as-new is a continuation of the same logical workflow, so the previous
+	// run's accumulated skipped duration flows directly into the new run's
+	// AccumulatedSkippedDuration — the virtual clock continues seamlessly across the
+	// boundary. This is seeded here, before AddWorkflowExecutionStartedEventWithOptions
+	// builds the new run's first event, so the event's timestamp already sits in the
+	// virtual frame.
+	var newRunTSConfig *workflowpb.TimeSkippingConfig
+	var inheritedAccumulated *durationpb.Duration
+	if prevTSInfo := previousExecutionInfo.GetTimeSkippingInfo(); prevTSInfo != nil {
+		if prevTSC := prevTSInfo.GetConfig(); prevTSC != nil {
+			newRunTSConfig = proto.Clone(prevTSC).(*workflowpb.TimeSkippingConfig)
+			// Across CaN the inherited skip is carried in AccumulatedSkippedDuration,
+			// not as Config.PropagatedSkippedDuration metadata.
+			newRunTSConfig.PropagatedSkippedDuration = nil
+		}
+		if skipped := prevTSInfo.GetAccumulatedSkippedDuration(); skipped != nil && skipped.AsDuration() > 0 {
+			inheritedAccumulated = durationpb.New(skipped.AsDuration())
+		}
+	}
+	if newRunTSConfig != nil || inheritedAccumulated != nil {
+		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     newRunTSConfig,
+			AccumulatedSkippedDuration: inheritedAccumulated,
+		}
+		ms.wrapTimeSourceWithTimeSkipping()
+		ms.timeSkippingInfoUpdated = true
+	}
+
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.NewString(),
 		Namespace:                ms.namespaceEntry.Name().String(),
@@ -2610,6 +2637,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		CompletionCallbacks:   completionCallbacks,
 		Links:                 links,
 		Priority:              previousExecutionInfo.Priority,
+		TimeSkippingConfig:    newRunTSConfig,
 	}
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
