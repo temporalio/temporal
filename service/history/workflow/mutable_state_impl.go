@@ -2596,7 +2596,9 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	var newRunTSConfig *workflowpb.TimeSkippingConfig
 	if prevTSInfo := previousExecutionInfo.GetTimeSkippingInfo(); prevTSInfo != nil {
 		if prevTSC := prevTSInfo.GetConfig(); prevTSC != nil {
-			newRunTSConfig = proto.Clone(prevTSC).(*workflowpb.TimeSkippingConfig)
+			if cloned, ok := proto.Clone(prevTSC).(*workflowpb.TimeSkippingConfig); ok {
+				newRunTSConfig = cloned
+			}
 		}
 		if skipped := prevTSInfo.GetAccumulatedSkippedDuration(); skipped != nil {
 			if newRunTSConfig == nil {
@@ -6057,7 +6059,9 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 	if ms.executionInfo != nil && ms.executionInfo.TimeSkippingInfo != nil {
 		parentTSInfo := ms.executionInfo.TimeSkippingInfo
 		if parentTSC := parentTSInfo.GetConfig(); parentTSC != nil {
-			childTSConfig = proto.Clone(parentTSC).(*workflowpb.TimeSkippingConfig)
+			if cloned, ok := proto.Clone(parentTSC).(*workflowpb.TimeSkippingConfig); ok {
+				childTSConfig = cloned
+			}
 		}
 		if skipped := parentTSInfo.GetAccumulatedSkippedDuration(); skipped != nil {
 			if childTSConfig == nil {
@@ -9644,8 +9648,10 @@ func (ms *MutableStateImpl) applyTimeSkippingConfig(config *workflowpb.TimeSkipp
 	var inheritedAccum *durationpb.Duration
 	if psd := config.GetPropagatedSkippedDuration(); psd != nil && psd.AsDuration() > 0 {
 		inheritedAccum = durationpb.New(psd.AsDuration())
-		config = proto.Clone(config).(*workflowpb.TimeSkippingConfig)
-		config.PropagatedSkippedDuration = nil
+		if cloned, ok := proto.Clone(config).(*workflowpb.TimeSkippingConfig); ok {
+			cloned.PropagatedSkippedDuration = nil
+			config = cloned
+		}
 	}
 	if ms.executionInfo.GetTimeSkippingInfo() == nil {
 		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{

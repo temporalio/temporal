@@ -10,6 +10,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -139,7 +140,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTimeSkippingPropagation_ParentTim
 		childWFType.Name:  childHandler,
 	})
 
-	s.drivePollsUntilClosed(env, ctx, tv, dispatch, parentWFID, parentRunID, 20)
+	s.drivePollsUntilClosed(ctx, env, tv, dispatch, parentWFID, parentRunID, 20)
 
 	elapsed := time.Since(startWall)
 	s.Less(elapsed, 2*time.Minute, "wall-clock elapsed (%s) should be far less than 5h of virtual time", elapsed)
@@ -153,7 +154,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTimeSkippingPropagation_ParentTim
 		"parent should accumulate 1h (t1) + 1h (t2 after child) = 2h")
 
 	// ---- Child ----
-	childMS := s.getMutableStateByID(env, ctx, childWFID)
+	childMS := s.getMutableStateByID(ctx, env, childWFID)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, childMS.State.ExecutionState.State)
 	childTSI := childMS.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(childTSI)
@@ -267,7 +268,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTimeSkippingPropagation_ParentWit
 		childWFType.Name:  childHandler,
 	})
 
-	s.drivePollsUntilClosed(env, ctx, tv, dispatch, parentWFID, parentRunID, 30)
+	s.drivePollsUntilClosed(ctx, env, tv, dispatch, parentWFID, parentRunID, 30)
 
 	elapsed := time.Since(startWall)
 	s.Less(elapsed, 2*time.Minute, "wall-clock elapsed (%s) should be far less than virtual time", elapsed)
@@ -280,7 +281,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTimeSkippingPropagation_ParentWit
 
 	// ---- Each child inherits identically ----
 	for _, id := range []string{child1WFID, child2WFID} {
-		childMS := s.getMutableStateByID(env, ctx, id)
+		childMS := s.getMutableStateByID(ctx, env, id)
 		s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, childMS.State.ExecutionState.State, "%s", id)
 		childTSI := childMS.State.ExecutionInfo.GetTimeSkippingInfo()
 		s.NotNil(childTSI, "%s TSI", id)
@@ -421,7 +422,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTimeSkippingPropagation_ThreeGene
 		cWFType.Name: cHandler,
 	})
 
-	s.drivePollsUntilClosed(env, ctx, tv, dispatch, gWFID, gRunID, 40)
+	s.drivePollsUntilClosed(ctx, env, tv, dispatch, gWFID, gRunID, 40)
 
 	elapsed := time.Since(startWall)
 	s.Less(elapsed, 3*time.Minute, "wall-clock elapsed (%s) should be far less than virtual time", elapsed)
@@ -433,7 +434,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTimeSkippingPropagation_ThreeGene
 		"G: 1h (gt1) + 1h (gt2 after P completes) = 2h")
 
 	// ---- Parent ----
-	pMS := s.getMutableStateByID(env, ctx, pWFID)
+	pMS := s.getMutableStateByID(ctx, env, pWFID)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, pMS.State.ExecutionState.State)
 	pTSI := pMS.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(pTSI)
@@ -444,7 +445,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTimeSkippingPropagation_ThreeGene
 		"P.accum == G's accumulated at P-start (1h) + P's own pt1 (2h) + P's own pt2 (1h) = 4h")
 
 	// ---- Child (accum inherited transitively through the ancestry) ----
-	cMS := s.getMutableStateByID(env, ctx, cWFID)
+	cMS := s.getMutableStateByID(ctx, env, cWFID)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, cMS.State.ExecutionState.State)
 	cTSI := cMS.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(cTSI)
@@ -507,8 +508,8 @@ func (s *TimeSkippingPropagationTestSuite) initiatedChildEvents(
 // named workflow reaches COMPLETED. Poll errors (typically long-poll timeouts) are
 // logged and ignored so transient emptiness doesn't fail the test.
 func (s *TimeSkippingPropagationTestSuite) drivePollsUntilClosed(
-	env *testcore.TestEnv,
 	ctx context.Context,
+	env *testcore.TestEnv,
 	tv *testvars.TestVars,
 	handler func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
 	workflowID, runID string,
@@ -551,7 +552,7 @@ func (s *TimeSkippingPropagationTestSuite) getMutableState(env *testcore.TestEnv
 
 // getMutableStateByID resolves the current run ID of a workflow via DescribeWorkflowExecution
 // and returns its persistence-layer mutable state.
-func (s *TimeSkippingPropagationTestSuite) getMutableStateByID(env *testcore.TestEnv, ctx context.Context, workflowID string) *persistence.GetWorkflowExecutionResponse {
+func (s *TimeSkippingPropagationTestSuite) getMutableStateByID(ctx context.Context, env *testcore.TestEnv, workflowID string) *persistence.GetWorkflowExecutionResponse {
 	desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
@@ -631,6 +632,20 @@ func completeCmd() *commandpb.Command {
 		CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
 			CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+		},
+	}
+}
+
+// failCmd builds a FailWorkflowExecution command with a bare Failure{Message: msg}.
+// Such a failure carries no specific FailureInfo, so retry.isRetryable treats it as
+// retryable — the server schedules a new run under RETRY initiator when RetryPolicy allows.
+func failCmd(msg string) *commandpb.Command {
+	return &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+		Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{
+			FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+				Failure: &failurepb.Failure{Message: msg},
+			},
 		},
 	}
 }
@@ -769,7 +784,7 @@ func (s *TimeSkippingPropagationTestSuite) TestPropagationInReset() {
 	s.NotEqual(originalRunID, resetRunID, "reset must produce a fresh run")
 
 	// Drive the reset run's fresh WFT to completion.
-	s.drivePollsUntilClosed(env, ctx, tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+	s.drivePollsUntilClosed(ctx, env, tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		return cmdsResponse(completeCmd()), nil
 	}, wfID, resetRunID, 10)
 
@@ -884,7 +899,7 @@ func (s *TimeSkippingPropagationTestSuite) TestPropagationInCaN() {
 	}
 
 	// Empty runID so describe follows the chain to the current run (run 2 after CaN).
-	s.drivePollsUntilClosed(env, ctx, tv, handler, wfID, "", 20)
+	s.drivePollsUntilClosed(ctx, env, tv, handler, wfID, "", 20)
 
 	elapsed := time.Since(startWall)
 	s.Less(elapsed, 2*time.Minute, "wall-clock elapsed (%s) should be far less than 3h of virtual time", elapsed)
@@ -898,7 +913,7 @@ func (s *TimeSkippingPropagationTestSuite) TestPropagationInCaN() {
 		"run 1 should have skipped 1h for t1 before continue-as-new")
 
 	// ---- Run 2: the CaN'd-into run, completed ----
-	run2MS := s.getMutableStateByID(env, ctx, wfID)
+	run2MS := s.getMutableStateByID(ctx, env, wfID)
 	run2ID := run2MS.State.ExecutionState.RunId
 	s.NotEqual(run1ID, run2ID, "run 2 should have a new run ID")
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, run2MS.State.ExecutionState.Status)
@@ -928,4 +943,136 @@ func (s *TimeSkippingPropagationTestSuite) TestPropagationInCaN() {
 	s.True(startedTSC.GetEnabled(), "started event TSC.Enabled mirrors run 1's config")
 	s.approxDuration(time.Hour, startedTSC.GetPropagatedSkippedDuration().AsDuration(),
 		"started event retains PSD=1h (run 1's accumulated at CaN time); applyTimeSkippingConfig converts it to AccumulatedSkippedDuration on the MS but the event snapshot is unchanged")
+}
+
+// TestPropagationInRetry verifies that TimeSkippingConfig is propagated from the
+// original run's WorkflowExecutionStarted event to a retried workflow run.
+//
+// Retry's createRequest.TimeSkippingConfig is a verbatim copy of startAttr.TimeSkippingConfig
+// (event #1 of the previous run). applyTimeSkippingConfig then produces the same MS state
+// the original run was booted with: Config.Enabled preserved; if the original event #1 had
+// a non-zero PSD snapshot (e.g., the original run was itself started as a child or via CaN),
+// that PSD is converted to AccumulatedSkippedDuration on the retry — otherwise the retry
+// starts with Accum=0.
+//
+// Key semantic: unlike continue-as-new, the previous attempt's *in-flight* accumulated
+// skip (skip that happened during the attempt) is NOT carried forward to the retry.
+// Each attempt gets a fresh virtual-time clock at whatever offset the original run was
+// booted with — the retry is semantically a re-attempt, not a continuation.
+//
+// Scenario:
+//   - Start a top-level workflow with TimeSkippingConfig{Enabled: true} and
+//     RetryPolicy{MaximumAttempts: 2}. Event #1's TSC has PSD=0 (no parent, no prior CaN).
+//   - Attempt 1 issues StartTimer(t1, 1h). Idle → server skips 1h → attempt1.Accum = 1h.
+//   - Attempt 1 issues FailWorkflowExecution with a bare (retryable) Failure.
+//   - Server schedules retry. Attempt 2 (retry run) starts.
+//     Its MS applies startAttr.TimeSkippingConfig: Config.Enabled=true, PSD=0 → Accum=0.
+//     Attempt 1's 1h in-flight skip is NOT carried forward.
+//   - Attempt 2 issues StartTimer(t2, 2h). Idle → server skips 2h → attempt2.Accum = 2h.
+//   - Attempt 2 completes.
+//
+// End-state assertions:
+//   - Attempt 1: status=FAILED, Config.Enabled=true, Accum=1h.
+//   - Attempt 2: status=COMPLETED, Config.Enabled=true, Config.PSD unset on the MS,
+//     Accum=2h (own skip only; 1h from attempt 1 is NOT inherited).
+//   - Attempt 2's WorkflowExecutionStarted carries the same TSC snapshot as attempt 1's
+//     event #1 (Enabled=true, PSD=0) and references attempt 1 as ContinuedExecutionRunId.
+func (s *TimeSkippingPropagationTestSuite) TestPropagationInRetry() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := testcore.NewContext()
+
+	wfType := tv.WorkflowType()
+	wfID := tv.WorkflowID()
+	tq := tv.TaskQueue()
+
+	startWall := time.Now()
+
+	start1, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          wfID,
+		WorkflowType:        wfType,
+		TaskQueue:           tq,
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true},
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval:    durationpb.New(time.Second),
+			BackoffCoefficient: 1.0,
+			MaximumAttempts:    2,
+		},
+	})
+	s.NoError(err)
+	attempt1ID := start1.RunId
+
+	state := 0
+	handler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		fired := firedTimers(task)
+		switch {
+		case state == 0:
+			state = 1
+			return cmdsResponse(timerCmd("t1", time.Hour)), nil
+		case state == 1 && fired["t1"]:
+			state = 2
+			return cmdsResponse(failCmd("retry me")), nil
+		case state == 2:
+			state = 3
+			return cmdsResponse(timerCmd("t2", 2*time.Hour)), nil
+		case state == 3 && fired["t2"]:
+			state = 4
+			return cmdsResponse(completeCmd()), nil
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+
+	// Empty runID so describe follows the chain to the current run (attempt 2 after retry).
+	s.drivePollsUntilClosed(ctx, env, tv, handler, wfID, "", 20)
+
+	elapsed := time.Since(startWall)
+	s.Less(elapsed, 2*time.Minute, "wall-clock elapsed (%s) should be far less than 3h of virtual time", elapsed)
+
+	// ---- Attempt 1: failed, retried ----
+	attempt1MS := s.getMutableState(env, wfID, attempt1ID)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, attempt1MS.State.ExecutionState.Status)
+	attempt1TSI := attempt1MS.State.ExecutionInfo.GetTimeSkippingInfo()
+	s.NotNil(attempt1TSI)
+	s.True(attempt1TSI.GetConfig().GetEnabled(), "attempt 1 has TSC enabled from the initial start request")
+	s.approxDuration(time.Hour, attempt1TSI.GetAccumulatedSkippedDuration().AsDuration(),
+		"attempt 1 skipped 1h for t1 before failing")
+
+	// ---- Attempt 2: retry run, completed ----
+	attempt2MS := s.getMutableStateByID(ctx, env, wfID)
+	attempt2ID := attempt2MS.State.ExecutionState.RunId
+	s.NotEqual(attempt1ID, attempt2ID, "attempt 2 has a new run ID")
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, attempt2MS.State.ExecutionState.Status)
+	attempt2TSI := attempt2MS.State.ExecutionInfo.GetTimeSkippingInfo()
+	s.NotNil(attempt2TSI, "attempt 2 should have TimeSkippingInfo from the propagated event #1 snapshot")
+	attempt2Cfg := attempt2TSI.GetConfig()
+	s.NotNil(attempt2Cfg)
+	s.True(attempt2Cfg.GetEnabled(), "attempt 2 TSC.Enabled propagated from attempt 1's event #1")
+	s.Zero(attempt2Cfg.GetPropagatedSkippedDuration().AsDuration(),
+		"attempt 2 Config.PSD unset — original event #1 had PSD=0 and applyTimeSkippingConfig strips PSD regardless")
+	s.approxDuration(2*time.Hour, attempt2TSI.GetAccumulatedSkippedDuration().AsDuration(),
+		"attempt 2 accumulated only its own 2h from t2; attempt 1's 1h in-flight skip is NOT carried forward on retry")
+
+	// Attempt 2's WorkflowExecutionStarted must carry the same TSC snapshot as attempt 1's event #1.
+	hist2, err := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: attempt2ID},
+	})
+	s.NoError(err)
+	s.NotEmpty(hist2.History.Events)
+	startedAttr := hist2.History.Events[0].GetWorkflowExecutionStartedEventAttributes()
+	s.NotNil(startedAttr)
+	s.Equal(attempt1ID, startedAttr.GetContinuedExecutionRunId(),
+		"attempt 2 references attempt 1 as its predecessor via ContinuedExecutionRunId")
+	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY, startedAttr.GetInitiator(),
+		"attempt 2 is initiated by retry")
+	startedTSC := startedAttr.GetTimeSkippingConfig()
+	s.NotNil(startedTSC, "attempt 2's WorkflowExecutionStarted must carry the TSC snapshot")
+	s.True(startedTSC.GetEnabled(), "started event TSC.Enabled mirrors attempt 1's event #1")
+	s.Zero(startedTSC.GetPropagatedSkippedDuration().AsDuration(),
+		"started event PSD matches attempt 1's event #1 (PSD=0 for a top-level workflow)")
 }
