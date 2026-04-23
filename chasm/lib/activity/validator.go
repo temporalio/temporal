@@ -367,6 +367,10 @@ func validateRequestCancelActivityExecutionRequest(
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 ) error {
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	}
+
 	if req.GetActivityId() == "" {
 		return serviceerror.NewInvalidArgument("activity ID is required")
 	}
@@ -564,6 +568,10 @@ func validateTerminateActivityExecutionRequest(
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 ) error {
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	}
+
 	if req.GetActivityId() == "" {
 		return serviceerror.NewInvalidArgument("activity ID is required")
 	}
