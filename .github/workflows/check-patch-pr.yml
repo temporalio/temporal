@@ -1,0 +1,56 @@
+name: Check Patch PR
+on:
+  pull_request:
+    branches:
+      - 'cloud/*'
+
+permissions:
+  contents: read
+
+jobs:
+  check-patch-pr:
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate GitHub token
+        id: generate-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+          owner: temporalio
+          permission-contents: read
+
+      - name: Fetch latest launchpad release
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          gh release download \
+            --repo temporalio/launchpad \
+            --pattern "launchpad_Linux_x86_64.tar.gz" \
+            --output - \
+          | tar -xz launchpad
+
+      - name: Run patch PR checks
+        env:
+          ORG: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          TEMPORAL_API_KEY: "${{ secrets.TEMPORAL_LAUNCHPAD_API_KEY }}"
+        run: |
+          output=$(./launchpad patch check-pr \
+            --org "$ORG" \
+            --repo "$REPO" \
+            --number "$NUMBER" \
+            --json)
+
+          if jq -e '.success' <<< "$output" > /dev/null; then
+            exit 0
+          fi
+
+          echo "Patch PR checks failed:"
+          jq -r '.messages[]' <<< "$output" | while IFS= read -r msg; do
+            echo "  - $msg"
+          done
+          exit 1
