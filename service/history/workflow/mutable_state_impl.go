@@ -426,7 +426,9 @@ func NewMutableState(
 		)
 	}
 
-	s.wrapTimeSourceWithTimeSkipping()
+	if s.executionInfo.GetTimeSkippingInfo() != nil {
+		s.wrapTimeSourceWithTimeSkipping()
+	}
 	return s
 }
 
@@ -577,7 +579,9 @@ func NewMutableStateFromDB(
 			return nil, err
 		}
 	}
-	mutableState.wrapTimeSourceWithTimeSkipping()
+	if mutableState.executionInfo.GetTimeSkippingInfo() != nil {
+		mutableState.wrapTimeSourceWithTimeSkipping()
+	}
 	return mutableState, nil
 }
 
@@ -1811,9 +1815,6 @@ func (ms *MutableStateImpl) Now() time.Time {
 // (i.e. they may include skipped time); this offset is the amount to subtract to get real
 // wall-clock, used by AddTasks when persisting timer-category tasks.
 func (ms *MutableStateImpl) accumulatedSkippedDuration() time.Duration {
-	if ms.executionInfo == nil {
-		return 0
-	}
 	info := ms.executionInfo.GetTimeSkippingInfo()
 	if info == nil || info.AccumulatedSkippedDuration == nil {
 		return 0
@@ -2812,10 +2813,9 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 		).Record(1)
 	}
 
-	if tsc := startRequest.GetStartRequest().GetTimeSkippingConfig(); tsc != nil && tsc.GetEnabled() {
-		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: tsc}
+	if tsc := startRequest.GetStartRequest().GetTimeSkippingConfig(); tsc != nil {
+		ms.applyTimeSkippingConfig(tsc)
 	}
-
 	return event, nil
 }
 
@@ -3048,10 +3048,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.Priority = event.Priority
 
 	if tsc := event.GetTimeSkippingConfig(); tsc != nil {
-		// todo@time-skipping: should use the wrapped method of initializing
-		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: tsc,
-		}
+		ms.applyTimeSkippingConfig(tsc)
 	}
 
 	ms.approximateSize += ms.executionInfo.Size()
@@ -5671,10 +5668,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 
 	// Update time skipping config.
 	if tsc := attributes.GetTimeSkippingConfig(); tsc != nil {
-		if ms.executionInfo.TimeSkippingInfo == nil {
-			ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{}
-		}
-		ms.executionInfo.TimeSkippingInfo.Config = tsc
+		ms.applyTimeSkippingConfig(tsc)
 	}
 
 	// Finally, reschedule the pending workflow task if so requested.
@@ -9590,4 +9584,15 @@ func (ms *MutableStateImpl) wrapTimeSourceWithTimeSkipping() {
 	ms.timeSource = clock.WrapTimeSourceWithTimeSkipping(
 		ms.timeSource, ms.accumulatedSkippedDuration)
 	ms.hBuilder.SetTimeSource(ms.timeSource)
+}
+
+// applyTimeSkippingConfig applies the time skipping config from the request or event to the mutable state.
+func (ms *MutableStateImpl) applyTimeSkippingConfig(config *workflowpb.TimeSkippingConfig) {
+	if ms.executionInfo.GetTimeSkippingInfo() == nil {
+		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: config}
+		ms.wrapTimeSourceWithTimeSkipping() // time source should be wrapped when time skipping info is initialized
+	} else {
+		ms.executionInfo.TimeSkippingInfo.Config = config
+	}
+	ms.timeSkippingInfoUpdated = true
 }
