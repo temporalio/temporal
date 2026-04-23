@@ -38,6 +38,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -208,7 +209,15 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		scheduler.NewSpecBuilder(),
 		true,
 		nil, // Not testing activity handler here
-		nil,
+		nexusoperation.NewFrontendHandler(
+			nil,
+			s.mockResource.GetLogger(),
+			s.mockResource.GetNamespaceRegistry(),
+			nil,
+			s.mockResource.GetSearchAttributesMapperProvider(),
+			nil,
+		),
+		nil, // Not testing CHASM registry here
 		quotas.NoopRequestRateLimiter,
 	)
 }
