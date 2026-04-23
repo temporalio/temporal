@@ -10,6 +10,18 @@ import (
 
 const myUUID = "deb7b204-b384-4fde-85c6-e5a56c42336a"
 
+type mockT struct {
+	failed bool
+}
+
+func (m *mockT) Errorf(string, ...any) {
+	m.failed = true
+}
+
+func (m *mockT) FailNow() {
+	m.failed = true
+}
+
 func TestProtoEqualIgnoreFields(t *testing.T) {
 	a := &workflowpb.WorkflowExecutionInfo{
 		Execution: &commonpb.WorkflowExecution{
@@ -38,16 +50,13 @@ func TestProtoEqualIgnoreFields(t *testing.T) {
 	})
 
 	t.Run("partial ignore still fails", func(t *testing.T) {
-		failTest := func(t *testing.T) {
-			protorequire.ProtoEqual(t, a, b,
-				protorequire.IgnoreFields(
-					"status",
-				),
-			)
-		}
-		if result := testing.RunTests(func(pat, str string) (bool, error) { return true, nil }, []testing.InternalTest{
-			{Name: "PartialIgnoreStillFails", F: failTest},
-		}); result {
+		mt := &mockT{}
+		protorequire.ProtoEqual(mt, a, b,
+			protorequire.IgnoreFields(
+				"status",
+			),
+		)
+		if !mt.failed {
 			t.Fatal("expected comparison to fail when not all differing fields are ignored")
 		}
 	})
