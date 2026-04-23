@@ -45,6 +45,7 @@ var Module = fx.Provide(
 		return m
 	},
 	nsreplication.NewNoopDataMerger,
+	nsreplication.NewDefaultAdmitter,
 	NewExecutionManagerDLQWriter,
 	ClientSchedulerRateLimiterProvider,
 	ServerSchedulerRateLimiterProvider,
@@ -81,6 +82,7 @@ func eagerNamespaceRefresherProvider(
 	clientBean client.Bean,
 	clusterMetadata cluster.Metadata,
 	dataMerger nsreplication.NamespaceDataMerger,
+	admitter nsreplication.NamespaceReplicationAdmitter,
 	metricsHandler metrics.Handler,
 ) EagerNamespaceRefresher {
 	return NewEagerNamespaceRefresher(
@@ -92,6 +94,7 @@ func eagerNamespaceRefresherProvider(
 			clusterMetadata.GetCurrentClusterName(),
 			metadataManager,
 			dataMerger,
+			admitter,
 			logger,
 		),
 		clusterMetadata.GetCurrentClusterName(),
