@@ -159,6 +159,9 @@ func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(
 	return nil
 }
 
+// isValidExpirationTime checks if the expiration time is expired.
+// The current time of the mutable state is used to check the expiration because
+// when time skipping happens, time related to a mutable state is virtual-framed.
 func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
 	mutableState historyi.MutableState,
 	task tasks.Task,
@@ -167,10 +170,8 @@ func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return false
 	}
-
-	now := t.Now()
 	taskShouldTriggerAt := expirationTime.AsTime()
-	expired := queues.IsTimeExpired(task, now, taskShouldTriggerAt)
+	expired := queues.IsTimeExpired(task, mutableState.Now(), taskShouldTriggerAt)
 	return expired
 }
 
@@ -276,6 +277,7 @@ func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
 	// truncated to a common (millisecond) precision later on.
 	//
 	// See also queues.IsTimeExpired.
+	// TODO@time-skipping: hasn's supported time skipping for CHASM system yet
 	referenceTime := util.MaxTime(t.Now(), task.GetKey().FireTime)
 
 	return tree.EachPureTask(referenceTime, callback)
@@ -304,7 +306,8 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 	// StateMachineTimers are sorted by Deadline, iterate through them as long as the deadline is expired.
 	for len(timers) > 0 {
 		group := timers[0]
-		if !queues.IsTimeExpired(task, t.Now(), group.Deadline.AsTime()) {
+		// TODO@time-skipping: review needed, used ms.Now() instead of t.Now() for consistency.
+		if !queues.IsTimeExpired(task, ms.Now(), group.Deadline.AsTime()) {
 			break
 		}
 

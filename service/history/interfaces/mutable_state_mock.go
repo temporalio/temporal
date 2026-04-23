@@ -3333,6 +3333,20 @@ func (mr *MockMutableStateMockRecorder) NextTransitionCount() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextTransitionCount", reflect.TypeOf((*MockMutableState)(nil).NextTransitionCount))
 }
 
+// Now mocks base method.
+func (m *MockMutableState) Now() time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Now")
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// Now indicates an expected call of Now.
+func (mr *MockMutableStateMockRecorder) Now() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Now", reflect.TypeOf((*MockMutableState)(nil).Now))
+}
+
 // PopTasks mocks base method.
 func (m *MockMutableState) PopTasks() map[tasks.Category][]tasks.Task {
 	m.ctrl.T.Helper()
