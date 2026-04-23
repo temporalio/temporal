@@ -2249,22 +2249,24 @@ func (h *Handler) CompleteNexusOperationChasm(
 	ctx context.Context,
 	request *historyservice.CompleteNexusOperationChasmRequest,
 ) (*historyservice.CompleteNexusOperationChasmResponse, error) {
-	// TODO(stephan): This should be a CHASM transition option.
 	componentRef := request.GetCompletion().GetComponentRef()
-	if len(componentRef) > 0 {
-		// Ignore transition-history fields when applying completion,
-		// use Request ID to accept or reject the completion instead.
-		ref := &persistencespb.ChasmComponentRef{}
-		if err := ref.Unmarshal(componentRef); err != nil {
-			return nil, serviceerror.NewInvalidArgument("invalid component ref")
-		}
-		ref.ExecutionVersionedTransition = nil
-		ref.ComponentInitialVersionedTransition = nil
-		var err error
-		componentRef, err = ref.Marshal()
-		if err != nil {
-			return nil, serviceerror.NewInvalidArgument("invalid component ref")
-		}
+	if len(componentRef) == 0 {
+		return nil, serviceerror.NewInvalidArgument("invalid component ref")
+	}
+
+	// Ignore transition-history fields when applying completion,
+	// use Request ID to accept or reject the completion instead.
+	// TODO(stephan): This should be a CHASM transition option.
+	ref := &persistencespb.ChasmComponentRef{}
+	if err := ref.Unmarshal(componentRef); err != nil {
+		return nil, serviceerror.NewInvalidArgument("invalid component ref")
+	}
+	ref.ExecutionVersionedTransition = nil
+	ref.ComponentInitialVersionedTransition = nil
+	var err error
+	componentRef, err = ref.Marshal()
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument("invalid component ref")
 	}
 
 	completion := &persistencespb.ChasmNexusCompletion{
@@ -2289,7 +2291,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 	// this similarly as we would a pure task (holding an exclusive lock), as the
 	// assumption is that the accessed component will be recording (or generating a
 	// task) based on this result.
-	_, _, err := chasm.UpdateComponent(
+	_, _, err = chasm.UpdateComponent(
 		ctx,
 		componentRef,
 		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
