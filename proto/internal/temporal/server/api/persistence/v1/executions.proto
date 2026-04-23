@@ -664,6 +664,8 @@ message ActivityInfo {
       // Id of the rule that paused the activity.
       string rule_id = 3;
     }
+
+    string request_id = 4;
   }
 
   PauseInfo pause_info = 46;
