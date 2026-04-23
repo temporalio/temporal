@@ -157,7 +157,7 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	}
 
 	timerSequence := t.getTimerSequence(mutableState)
-	referenceTime := t.Now()
+	referenceTime := mutableState.Now()
 	timerFired := false
 Loop:
 	for _, timerSequenceID := range timerSequence.LoadAndSortUserTimers() {
@@ -168,6 +168,8 @@ Loop:
 			return serviceerror.NewInternal(errString)
 		}
 
+		// when time-skipping happens, the task.FireTime is way before the timerSequenceID.Timestamp,
+		// but using the virtual time of ms as the reference time, this function will still return true.
 		if !queues.IsTimeExpired(task, referenceTime, timerSequenceID.Timestamp) {
 			// Timer sequence IDs are sorted; once we encounter a timer whose
 			// sequence ID has not expired, all subsequent timers will not have
@@ -221,7 +223,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	}
 
 	timerSequence := t.getTimerSequence(mutableState)
-	referenceTime := t.Now()
+	referenceTime := mutableState.Now()
 	updateMutableState := false
 	scheduleWorkflowTask := false
 
@@ -683,7 +685,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	initiator := enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED
 
 	wfExpTime := mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime
-	if wfExpTime == nil || wfExpTime.AsTime().IsZero() || wfExpTime.AsTime().After(t.Now()) {
+	if wfExpTime == nil || wfExpTime.AsTime().IsZero() || wfExpTime.AsTime().After(mutableState.Now()) {
 		backoffInterval, retryState = mutableState.GetRetryBackoffDuration(timeoutFailure)
 		if backoffInterval != backoff.NoBackoff {
 			// We have a retry policy and we should retry.
@@ -726,6 +728,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
+	// TODO@time-skipping: if time skipping happened, the virtual time is
+	// propagated to the new mutable state, need to check the bound works correctly in the retry.
 	newMutableState, err := workflow.NewMutableStateInChain(
 		t.shardContext,
 		t.shardContext.GetEventsCache(),
@@ -733,7 +737,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		mutableState.GetNamespaceEntry(),
 		mutableState.GetWorkflowKey().WorkflowID,
 		newRunID,
-		t.Now(),
+		mutableState.Now(),
 		mutableState,
 	)
 	if err != nil {
@@ -1024,6 +1028,7 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 	ctx context.Context,
 	task *tasks.ChasmTaskPure,
 ) error {
+	// TODO@time-skipping: if time skipping happened, check if virtual time is needed here.
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 

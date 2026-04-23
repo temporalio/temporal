@@ -1178,7 +1178,9 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping(t *testing.T) {
 	now := time.Now().UTC()
 	skippedDuration := time.Hour
 
-	// Two pending timers: expiry at now+1h and now+2h; only the earliest is regenerated.
+	// Two pending timers: expiry at now+1h and now+2h. Every pending user timer
+	// must be regenerated (not just the earliest), because the user may turn off time skipping after the first timer is started.
+	// And the second timer should still be fired in the correct time after time skipping is turned off.
 	timer1ExpiryTime := now.Add(1 * time.Hour)
 	timer2ExpiryTime := now.Add(2 * time.Hour)
 
@@ -1207,19 +1209,30 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping(t *testing.T) {
 	}).AnyTimes()
 
 	taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
-	taskGenerator.RegenerateTimerTasksForTimeSkipping()
+	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
 
-	// Only the earliest timer (timer1) must be regenerated.
-	require.Len(t, capturedTasks, 1)
+	// Both pending user timers must be regenerated.
+	require.Len(t, capturedTasks, 2)
 
-	t1, ok := capturedTasks[0].(*tasks.UserTimerTask)
-	require.True(t, ok, "expected *tasks.UserTimerTask, got %T", capturedTasks[0])
-	require.Equal(t, int64(1), t1.EventID)
-	// Timer 1: expiry now+1h, skipped 1h => visibility = now.
-	require.Equal(t, timer1ExpiryTime.Add(-skippedDuration), t1.VisibilityTimestamp)
-	require.Equal(t, tests.WorkflowKey, t1.WorkflowKey)
-	// TaskID must be zero: the generator leaves it unset; the shard assigns the real ID.
-	require.Equal(t, int64(0), t1.TaskID, "TaskID must be zero (set by shard, not the generator)")
+	// Index captured tasks by EventID — emission order follows the sorted
+	// sequence, but the assertions below don't need to depend on it.
+	byEventID := make(map[int64]*tasks.UserTimerTask, len(capturedTasks))
+	for _, task := range capturedTasks {
+		ut, ok := task.(*tasks.UserTimerTask)
+		require.True(t, ok, "expected *tasks.UserTimerTask, got %T", task)
+		require.Equal(t, tests.WorkflowKey, ut.WorkflowKey)
+		// TaskID must be zero: the generator leaves it unset; the shard assigns the real ID.
+		require.Equal(t, int64(0), ut.TaskID, "TaskID must be zero (set by shard, not the generator)")
+		byEventID[ut.EventID] = ut
+	}
+
+	// Task generator emits timer tasks with virtual-frame VisibilityTimestamp;
+	// the virtual-to-wallclock subtraction happens inside MutableState.AddTasks,
+	// which is a mock here and therefore records the pre-subtraction value.
+	require.Contains(t, byEventID, int64(1))
+	require.Equal(t, timer1ExpiryTime, byEventID[1].VisibilityTimestamp)
+	require.Contains(t, byEventID, int64(2))
+	require.Equal(t, timer2ExpiryTime, byEventID[2].VisibilityTimestamp)
 }
 
 func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_EdgeCases(t *testing.T) {
@@ -1269,65 +1282,125 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_EdgeCases(t *test
 			}
 
 			taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
-			taskGenerator.RegenerateTimerTasksForTimeSkipping()
+			require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
 		})
 	}
 }
 
-func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AccumulatedDurationNotStacked(t *testing.T) {
+// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_TimeoutTimers tests
+// execution and run timeout timers are regenerated when the workflow skips time.
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ExecutionTimers(t *testing.T) {
 	t.Parallel()
 
-	now := time.Now().UTC()
-	timer1ExpiryTime := now.Add(time.Hour)
-	timer2ExpiryTime := now.Add(2 * time.Hour)
-
-	pendingTimers := map[string]*persistencespb.TimerInfo{
-		"timer-1": {StartedEventId: 1, ExpiryTime: timestamppb.New(timer1ExpiryTime)},
-		"timer-2": {StartedEventId: 2, ExpiryTime: timestamppb.New(timer2ExpiryTime)},
-	}
-
-	ctrl := gomock.NewController(t)
-	mutableState := historyi.NewMockMutableState(ctrl)
-
-	// GetExecutionInfo is called twice per RegenerateTimerTasksForTimeSkipping invocation:
-	// once for the nil guard, once to read AccumulatedSkippedDuration.
-	execInfoWith10min := &persistencespb.WorkflowExecutionInfo{
-		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
-			AccumulatedSkippedDuration: durationpb.New(10 * time.Minute),
-		},
-	}
-	execInfoWith20min := &persistencespb.WorkflowExecutionInfo{
-		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
-			AccumulatedSkippedDuration: durationpb.New(20 * time.Minute),
-		},
-	}
-	gomock.InOrder(
-		mutableState.EXPECT().GetExecutionInfo().Return(execInfoWith10min).Times(2),
-		mutableState.EXPECT().GetExecutionInfo().Return(execInfoWith20min).Times(2),
+	const (
+		namespaceID     = "ns-id"
+		workflowID      = "wf-id"
+		firstRunID      = "first-run-id"
+		skippedDuration = time.Hour
+		startVersion    = int64(7)
 	)
-	mutableState.EXPECT().GetPendingTimerInfos().Return(pendingTimers).Times(2)
-	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	now := time.Now().UTC()
+	userTimerExpiry := now.Add(1 * time.Hour)
+	execExpiry := now.Add(24 * time.Hour)
+	runExpiry := now.Add(3 * time.Hour)
 
-	var allTasks []tasks.Task
-	mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
-		allTasks = append(allTasks, ts...)
-	}).AnyTimes()
+	for _, tc := range []struct {
+		name               string
+		execExpirationTime *timestamppb.Timestamp
+		runExpirationTime  *timestamppb.Timestamp
+		wantExecTimeout    bool
+		wantRunTimeout     bool
+	}{
+		{
+			name:               "both execution and run expirations set",
+			execExpirationTime: timestamppb.New(execExpiry),
+			runExpirationTime:  timestamppb.New(runExpiry),
+			wantExecTimeout:    true,
+			wantRunTimeout:     true,
+		},
+		{
+			name:               "only run expiration set",
+			execExpirationTime: nil,
+			runExpirationTime:  timestamppb.New(runExpiry),
+			wantExecTimeout:    false,
+			wantRunTimeout:     true,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
-	taskGenerator.RegenerateTimerTasksForTimeSkipping()
-	taskGenerator.RegenerateTimerTasksForTimeSkipping()
+			ctrl := gomock.NewController(t)
+			mutableState := historyi.NewMockMutableState(ctrl)
+			mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				NamespaceId:                     namespaceID,
+				WorkflowId:                      workflowID,
+				FirstExecutionRunId:             firstRunID,
+				WorkflowExecutionExpirationTime: tc.execExpirationTime,
+				WorkflowRunExpirationTime:       tc.runExpirationTime,
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					AccumulatedSkippedDuration: durationpb.New(skippedDuration),
+				},
+			}).AnyTimes()
+			mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{
+				"timer-1": {StartedEventId: 1, ExpiryTime: timestamppb.New(userTimerExpiry)},
+			}).AnyTimes()
+			mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+			// GetStartVersion is consulted when a WorkflowRunTimeoutTask is regenerated so the
+			// task can pass CheckTaskVersion in multi-cluster deployments.
+			if tc.wantRunTimeout {
+				mutableState.EXPECT().GetStartVersion().Return(int64(startVersion), nil)
+			}
 
-	// Only the earliest timer (timer1) × 2 calls = 2 tasks total.
-	require.Len(t, allTasks, 2)
+			var captured []tasks.Task
+			mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+				captured = append(captured, ts...)
+			}).AnyTimes()
 
-	call1Task := allTasks[0].(*tasks.UserTimerTask)
-	require.Equal(t, int64(1), call1Task.EventID)
-	// First call used 10 min: visibility = expiry - 10 min.
-	require.Equal(t, timer1ExpiryTime.Add(-10*time.Minute), call1Task.VisibilityTimestamp)
+			taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
+			require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
 
-	call2Task := allTasks[1].(*tasks.UserTimerTask)
-	require.Equal(t, int64(1), call2Task.EventID)
-	// Second call used 20 min: visibility = expiry - 20 min, NOT expiry - 30 min.
-	// Each call reads AccumulatedSkippedDuration independently; the durations are not stacked.
-	require.Equal(t, timer1ExpiryTime.Add(-20*time.Minute), call2Task.VisibilityTimestamp)
+			// Expected task count: always user timer, plus any timeout tasks whose expiration is set.
+			expectedCount := 1
+			if tc.wantExecTimeout {
+				expectedCount++
+			}
+			if tc.wantRunTimeout {
+				expectedCount++
+			}
+			require.Len(t, captured, expectedCount)
+
+			// User timer is always first (emission order in the implementation).
+			userTask, ok := captured[0].(*tasks.UserTimerTask)
+			require.True(t, ok, "first task should be *tasks.UserTimerTask, got %T", captured[0])
+			require.Equal(t, int64(1), userTask.EventID)
+			require.Equal(t, userTimerExpiry, userTask.VisibilityTimestamp)
+
+			// Walk remaining tasks and verify each expected timeout appears exactly once with correct fields.
+			var foundExec, foundRun bool
+			for _, task := range captured[1:] {
+				switch tt := task.(type) {
+				case *tasks.WorkflowExecutionTimeoutTask:
+					require.False(t, foundExec, "WorkflowExecutionTimeoutTask emitted more than once")
+					foundExec = true
+					require.Equal(t, namespaceID, tt.NamespaceID)
+					require.Equal(t, workflowID, tt.WorkflowID)
+					require.Equal(t, firstRunID, tt.FirstRunID)
+					require.Equal(t, execExpiry, tt.VisibilityTimestamp)
+					require.Equal(t, int64(0), tt.TaskID, "TaskID must be zero (set by shard)")
+				case *tasks.WorkflowRunTimeoutTask:
+					require.False(t, foundRun, "WorkflowRunTimeoutTask emitted more than once")
+					foundRun = true
+					require.Equal(t, tests.WorkflowKey, tt.WorkflowKey)
+					require.Equal(t, runExpiry, tt.VisibilityTimestamp)
+					require.Equal(t, int64(0), tt.TaskID, "TaskID must be zero (set by shard)")
+					require.Equal(t, int64(startVersion), tt.Version, "Version must match start version so CheckTaskVersion passes")
+				default:
+					t.Fatalf("unexpected task type %T", task)
+				}
+			}
+			require.Equal(t, tc.wantExecTimeout, foundExec)
+			require.Equal(t, tc.wantRunTimeout, foundRun)
+		})
+	}
 }

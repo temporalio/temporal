@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -54,6 +55,49 @@ func TestFromProtoPartition_Sticky(t *testing.T) {
 	_, err = PartitionFromProto(proto, nsid, taskType)
 	// sticky queue cannot have non-zero prtn
 	a.True(errors.Is(err, ErrNonZeroSticky))
+}
+
+func TestFromProtoPartition_WorkerCommands(t *testing.T) {
+	nsid := "my-namespace"
+	queueName := "/temporal-sys/worker-commands/ns/key"
+	taskType := enumspb.TASK_QUEUE_TYPE_NEXUS
+	kind := enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS
+	proto := &taskqueuepb.TaskQueue{
+		Name: queueName,
+		Kind: kind,
+	}
+
+	p, err := PartitionFromProto(proto, nsid, taskType)
+	require.NoError(t, err)
+	require.Equal(t, nsid, p.NamespaceId())
+	require.Equal(t, taskType, p.TaskType())
+	require.Equal(t, kind, p.Kind())
+	require.Equal(t, queueName, p.TaskQueue().Name())
+	require.Equal(t, queueName, p.RpcName())
+	require.False(t, p.IsRoot())
+	require.False(t, p.IsChild())
+	require.Equal(t, PartitionKey{nsid, queueName, 0, taskType}, p.Key())
+
+	// worker-commands cannot have non-zero partition
+	proto.Name = "/_sys/" + queueName + "/1"
+	_, err = PartitionFromProto(proto, nsid, taskType)
+	require.Error(t, err)
+
+	// worker-commands must have nexus task type
+	proto.Name = queueName
+	_, err = PartitionFromProto(proto, nsid, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	require.Error(t, err)
+}
+
+func TestWorkerCommandsPartitionProperties(t *testing.T) {
+	tq := UnsafeTaskQueueFamily("ns", "wc-queue").TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS)
+	p := tq.WorkerCommandsPartition()
+
+	require.Equal(t, 24*time.Hour, p.PersistenceTTL())
+	require.False(t, p.SupportsFairness())
+	require.False(t, p.SupportsVersioning())
+	require.False(t, p.SupportsPartitions())
+	require.Equal(t, "__worker_commands__", p.MetricTag(false))
 }
 
 func TestFromProtoPartition_Normal(t *testing.T) {
