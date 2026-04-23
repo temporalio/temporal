@@ -720,6 +720,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	completion := nexusrpc.CompleteOperationOptions{
 		Result: testcore.MustToPayload(s.T(), "result"),
 		Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
+		// Repeat the handler link on completion to verify callback links do not leak onto the completed event.
+		Links: []nexus.Link{handlerNexusLink},
 	}
 	err = s.sendNexusCompletionRequest(ctx, invalidCallbackURL, completion)
 	// Verify we get the correct error response
@@ -734,39 +736,97 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	completionToken, err := gen.DecodeCompletion(decodedToken)
 	s.NoError(err)
 
-	if !chasmEnabled {
-		// These token-mutation tests use HSM-specific fields (WorkflowId, Ref) that
-		// don't exist on CHASM callback tokens.
-
-		// Request fails if the workflow is not found.
-		workflowNotFoundToken := common.CloneProto(completionToken)
-		workflowNotFoundToken.WorkflowId = "not-found"
-		callbackToken, err = gen.Tokenize(workflowNotFoundToken)
-		s.NoError(err)
-		completion.Header = nexus.Header{commonnexus.CallbackTokenHeader: callbackToken}
-
+	assertInvalidCompletionTokenRejected := func(
+		caseName string,
+		mutate func(*tokenspb.NexusOperationCompletion) *tokenspb.NexusOperationCompletion,
+		expectedErrorType nexus.HandlerErrorType,
+	) {
+		s.T().Helper()
 		capture = env.StartNamespaceMetricCapture()
-		err = s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
-		s.ErrorAs(err, &handlerErr)
-		s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
-		completionRequests = capture.Metric("nexus_completion_requests")
-		s.Len(completionRequests, 1)
-		s.Subset(completionRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "error_not_found"})
 
-		// Request fails if the state machine reference is stale.
-		staleToken := common.CloneProto(completionToken)
-		staleToken.Ref.MachineInitialVersionedTransition.NamespaceFailoverVersion++
-		callbackToken, err = gen.Tokenize(staleToken)
-		s.NoError(err)
-		completion.Header = nexus.Header{commonnexus.CallbackTokenHeader: callbackToken}
+		mutatedCompletionToken := mutate(common.CloneProto(completionToken))
+		mutatedCallbackToken, err := gen.Tokenize(mutatedCompletionToken)
+		s.NoError(err, caseName)
+		completion.Header = nexus.Header{commonnexus.CallbackTokenHeader: mutatedCallbackToken}
 
-		capture = env.StartNamespaceMetricCapture()
 		err = s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
-		s.ErrorAs(err, &handlerErr)
-		s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
+		var handlerErr *nexus.HandlerError
+		s.ErrorAs(err, &handlerErr, caseName)
+		s.Equal(expectedErrorType, handlerErr.Type, caseName)
+
 		completionRequests = capture.Metric("nexus_completion_requests")
-		s.Len(completionRequests, 1)
-		s.Subset(completionRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "error_not_found"})
+		if expectedErrorType == nexus.HandlerErrorTypeNotFound {
+			s.Len(completionRequests, 1, caseName)
+			s.Subset(completionRequests[0].Tags, map[string]string{"outcome": "error_not_found"}, caseName)
+		} else {
+			s.Empty(completionRequests, caseName)
+		}
+	}
+
+	if chasmEnabled {
+		assertInvalidCompletionTokenRejected(
+			"missing execution",
+			func(token *tokenspb.NexusOperationCompletion) *tokenspb.NexusOperationCompletion {
+				s.mutateCompletionComponentRef(token, func(ref *persistencespb.ChasmComponentRef) {
+					ref.BusinessId = "not-found"
+				})
+				return token
+			},
+			nexus.HandlerErrorTypeNotFound,
+		)
+		assertInvalidCompletionTokenRejected(
+			"missing run",
+			func(token *tokenspb.NexusOperationCompletion) *tokenspb.NexusOperationCompletion {
+				s.mutateCompletionComponentRef(token, func(ref *persistencespb.ChasmComponentRef) {
+					ref.RunId = uuid.NewString()
+				})
+				return token
+			},
+			nexus.HandlerErrorTypeNotFound,
+		)
+		assertInvalidCompletionTokenRejected(
+			"wrong archetype",
+			func(token *tokenspb.NexusOperationCompletion) *tokenspb.NexusOperationCompletion {
+				s.mutateCompletionComponentRef(token, func(ref *persistencespb.ChasmComponentRef) {
+					ref.ArchetypeId = chasm.SchedulerArchetypeID
+				})
+				return token
+			},
+			nexus.HandlerErrorTypeNotFound,
+		)
+		assertInvalidCompletionTokenRejected(
+			"empty component ref",
+			func(token *tokenspb.NexusOperationCompletion) *tokenspb.NexusOperationCompletion {
+				token.ComponentRef = nil
+				return token
+			},
+			nexus.HandlerErrorTypeBadRequest,
+		)
+		assertInvalidCompletionTokenRejected(
+			"malformed component ref",
+			func(token *tokenspb.NexusOperationCompletion) *tokenspb.NexusOperationCompletion {
+				token.ComponentRef = []byte("not-a-proto")
+				return token
+			},
+			nexus.HandlerErrorTypeBadRequest,
+		)
+	} else {
+		assertInvalidCompletionTokenRejected(
+			"workflow not found",
+			func(token *tokenspb.NexusOperationCompletion) *tokenspb.NexusOperationCompletion {
+				token.WorkflowId = "not-found"
+				return token
+			},
+			nexus.HandlerErrorTypeNotFound,
+		)
+		assertInvalidCompletionTokenRejected(
+			"stale state machine ref",
+			func(token *tokenspb.NexusOperationCompletion) *tokenspb.NexusOperationCompletion {
+				token.Ref.MachineInitialVersionedTransition.NamespaceFailoverVersion++
+				return token
+			},
+			nexus.HandlerErrorTypeNotFound,
+		)
 	}
 
 	callbackToken, err = gen.Tokenize(completionToken)
@@ -806,10 +866,19 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 		Identity: "test",
 	})
 	s.NoError(err)
+	startedEventIdx = slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
+		return e.GetNexusOperationStartedEventAttributes() != nil
+	})
+	s.Positive(startedEventIdx)
+	s.Len(pollResp.History.Events[startedEventIdx].Links, 1)
+	l = pollResp.History.Events[startedEventIdx].Links[0].GetWorkflowEvent()
+	protorequire.ProtoEqual(s.T(), handlerLink, l)
+
 	completedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationCompletedEventAttributes() != nil
 	})
 	s.Positive(completedEventIdx)
+	s.Empty(pollResp.History.Events[completedEventIdx].Links)
 
 	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
@@ -3283,4 +3352,20 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint(chasmEnabled b
 	var response string
 	s.NoError(run.Get(ctx, &response))
 	s.Equal("Hello, Temporal", response)
+}
+
+func (s *NexusWorkflowTestSuite) mutateCompletionComponentRef(
+	token *tokenspb.NexusOperationCompletion,
+	mutate func(*persistencespb.ChasmComponentRef),
+) {
+	s.T().Helper()
+
+	ref := &persistencespb.ChasmComponentRef{}
+	s.NoError(ref.Unmarshal(token.GetComponentRef()))
+
+	mutate(ref)
+
+	var err error
+	token.ComponentRef, err = ref.Marshal()
+	s.NoError(err)
 }

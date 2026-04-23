@@ -178,6 +178,7 @@ func TestCompletedEventDefinitionApply(t *testing.T) {
 		field, ok := tcx.wf.Operations[key]
 		require.True(t, ok)
 		op := field.Get(tcx.chasmCtx)
+		// no start event
 		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, buildEvent(scheduledEvent.EventId))
 		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_SUCCEEDED)
 		require.Equal(t, eventTime, op.GetClosedTime().AsTime())
@@ -189,7 +190,7 @@ func TestCompletedEventDefinitionApply(t *testing.T) {
 		field, ok := tcx.wf.Operations[key]
 		require.True(t, ok)
 		op := field.Get(tcx.chasmCtx)
-		applyStartedEvent(t, tcx, scheduledEvent.EventId, eventTime)
+		applyStartedEvent(t, tcx, scheduledEvent.EventId, eventTime) // add start event firsts
 		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, buildEvent(scheduledEvent.EventId))
 		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_SUCCEEDED)
 		require.Equal(t, eventTime, op.GetClosedTime().AsTime())
@@ -219,6 +220,7 @@ func TestFailedEventDefinitionApply(t *testing.T) {
 		field, ok := tcx.wf.Operations[key]
 		require.True(t, ok)
 		op := field.Get(tcx.chasmCtx)
+		// no start event
 		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, buildEvent(scheduledEvent.EventId))
 		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_FAILED)
 		require.Equal(t, eventTime, op.GetClosedTime().AsTime())
@@ -230,7 +232,7 @@ func TestFailedEventDefinitionApply(t *testing.T) {
 		field, ok := tcx.wf.Operations[key]
 		require.True(t, ok)
 		op := field.Get(tcx.chasmCtx)
-		applyStartedEvent(t, tcx, scheduledEvent.EventId, eventTime)
+		applyStartedEvent(t, tcx, scheduledEvent.EventId, eventTime) // add start event first
 		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, buildEvent(scheduledEvent.EventId))
 		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_FAILED)
 		require.Equal(t, eventTime, op.GetClosedTime().AsTime())
@@ -260,6 +262,7 @@ func TestCanceledEventDefinitionApply(t *testing.T) {
 		field, ok := tcx.wf.Operations[key]
 		require.True(t, ok)
 		op := field.Get(tcx.chasmCtx)
+		// no start event
 		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, buildEvent(scheduledEvent.EventId))
 		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_CANCELED)
 		require.Equal(t, eventTime, op.GetClosedTime().AsTime())
@@ -271,7 +274,7 @@ func TestCanceledEventDefinitionApply(t *testing.T) {
 		field, ok := tcx.wf.Operations[key]
 		require.True(t, ok)
 		op := field.Get(tcx.chasmCtx)
-		applyStartedEvent(t, tcx, scheduledEvent.EventId, eventTime)
+		applyStartedEvent(t, tcx, scheduledEvent.EventId, eventTime) // add start event first
 		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, buildEvent(scheduledEvent.EventId))
 		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_CANCELED)
 		require.Equal(t, eventTime, op.GetClosedTime().AsTime())
@@ -301,6 +304,7 @@ func TestTimedOutEventDefinitionApply(t *testing.T) {
 		field, ok := tcx.wf.Operations[key]
 		require.True(t, ok)
 		op := field.Get(tcx.chasmCtx)
+		// no start event
 		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, buildEvent(scheduledEvent.EventId))
 		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_TIMED_OUT)
 	})
@@ -311,7 +315,7 @@ func TestTimedOutEventDefinitionApply(t *testing.T) {
 		field, ok := tcx.wf.Operations[key]
 		require.True(t, ok)
 		op := field.Get(tcx.chasmCtx)
-		applyStartedEvent(t, tcx, scheduledEvent.EventId, eventTime)
+		applyStartedEvent(t, tcx, scheduledEvent.EventId, eventTime) // add start event first
 		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, buildEvent(scheduledEvent.EventId))
 		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_TIMED_OUT)
 	})

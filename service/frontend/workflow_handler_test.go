@@ -211,6 +211,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		nil, // Not testing activity handler here
 		nexusoperation.NewFrontendHandler(
 			nil,
+			nil,
 			s.mockResource.GetLogger(),
 			s.mockResource.GetNamespaceRegistry(),
 			nil,

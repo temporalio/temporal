@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -54,20 +53,6 @@ func ValidateAndLowercaseNexusHeaders(headers map[string]string, disallowed []st
 	return lowered, nil
 }
 
-// ValidateAndCapScheduleToCloseTimeout validates and caps the schedule-to-close timeout.
-// It returns the (possibly capped) duration.
-func ValidateAndCapScheduleToCloseTimeout(timeout *durationpb.Duration, maxTimeout time.Duration) (*durationpb.Duration, error) {
-	if err := timestamp.ValidateAndCapProtoDuration(timeout); err != nil {
-		return timeout, fmt.Errorf("schedule_to_close_timeout is invalid: %v", err)
-	}
-	if maxTimeout > 0 {
-		if t := timeout.AsDuration(); t == 0 || t > maxTimeout {
-			timeout = durationpb.New(maxTimeout)
-		}
-	}
-	return timeout, nil
-}
-
 // ValidatePayloadSize checks that the payload does not exceed the size limit.
 func ValidatePayloadSize(input *commonpb.Payload, limit int) error {
 	if input.Size() > limit {
@@ -76,6 +61,7 @@ func ValidatePayloadSize(input *commonpb.Payload, limit int) error {
 	return nil
 }
 
+//revive:disable-next-line:cognitive-complexity,cyclomatic
 func validateAndNormalizeStartRequest(
 	req *workflowservice.StartNexusOperationExecutionRequest,
 	config *Config,
@@ -116,12 +102,34 @@ func validateAndNormalizeStartRequest(
 	if err := ValidateOperationName(req.GetOperation(), config.MaxOperationNameLength(ns)); err != nil {
 		return serviceerror.NewInvalidArgument(err.Error())
 	}
-	var err error
-	if req.ScheduleToCloseTimeout, err = ValidateAndCapScheduleToCloseTimeout(
-		req.GetScheduleToCloseTimeout(),
-		config.MaxOperationScheduleToCloseTimeout(ns),
-	); err != nil {
-		return serviceerror.NewInvalidArgument(err.Error())
+	if err := timestamp.ValidateAndCapProtoDuration(req.GetScheduleToCloseTimeout()); err != nil {
+		return serviceerror.NewInvalidArgumentf("schedule_to_close_timeout is invalid: %v", err)
+	}
+	if err := timestamp.ValidateAndCapProtoDuration(req.GetScheduleToStartTimeout()); err != nil {
+		return serviceerror.NewInvalidArgumentf("schedule_to_start_timeout is invalid: %v", err)
+	}
+	if err := timestamp.ValidateAndCapProtoDuration(req.GetStartToCloseTimeout()); err != nil {
+		return serviceerror.NewInvalidArgumentf("start_to_close_timeout is invalid: %v", err)
+	}
+
+	scheduleToCloseTimeout := req.GetScheduleToCloseTimeout().AsDuration()
+	maxTimeout := config.MaxOperationScheduleToCloseTimeout(ns)
+	if maxTimeout > 0 {
+		if scheduleToCloseTimeout == 0 || scheduleToCloseTimeout > maxTimeout {
+			// Apply the effective namespace limit to schedule_to_close_timeout before capping the other timeouts.
+			req.ScheduleToCloseTimeout = durationpb.New(maxTimeout)
+			scheduleToCloseTimeout = maxTimeout
+		}
+	}
+
+	// Bound schedule_to_start_timeout and start_to_close_timeout to schedule_to_close_timeout.
+	if scheduleToCloseTimeout > 0 {
+		if req.GetScheduleToStartTimeout().AsDuration() > scheduleToCloseTimeout {
+			req.ScheduleToStartTimeout = req.GetScheduleToCloseTimeout()
+		}
+		if req.GetStartToCloseTimeout().AsDuration() > scheduleToCloseTimeout {
+			req.StartToCloseTimeout = req.GetScheduleToCloseTimeout()
+		}
 	}
 
 	inputSize := req.GetInput().Size()

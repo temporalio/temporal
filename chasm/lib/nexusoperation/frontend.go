@@ -63,10 +63,6 @@ func NewFrontendHandler(
 	}
 }
 
-func (*frontendHandler) CountNexusOperationExecutions(context.Context, *workflowservice.CountNexusOperationExecutionsRequest) (*workflowservice.CountNexusOperationExecutionsResponse, error) {
-	return nil, ErrStandaloneNexusOperationDisabled
-}
-
 func (h *frontendHandler) StartNexusOperationExecution(
 	ctx context.Context,
 	req *workflowservice.StartNexusOperationExecutionRequest,
@@ -321,4 +317,9 @@ func (h *frontendHandler) DeleteNexusOperationExecution(
 	}
 
 	return &workflowservice.DeleteNexusOperationExecutionResponse{}, nil
+}
+
+// isStandaloneNexusOperationEnabled checks if standalone Nexus operations are enabled for the given namespace.
+func (h *frontendHandler) isStandaloneNexusOperationEnabled(namespaceName string) bool {
+	return h.config.EnableChasm(namespaceName) && h.config.Enabled(namespaceName)
 }
