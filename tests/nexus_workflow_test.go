@@ -562,7 +562,13 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 				s.Equal(testClusterInfo.GetClusterId(), options.CallbackHeader.Get("source"))
 			}
 
-			s.Len(options.Links, 2)
+			expectedLinkCount := 1
+			if chasmEnabled {
+				expectedLinkCount = 2
+			}
+			s.Len(options.Links, expectedLinkCount)
+
+			// Verify workflow event link is present
 			workflowEventLinkIdx := slices.IndexFunc(options.Links, func(link nexus.Link) bool {
 				return link.Type == string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName())
 			})
@@ -587,17 +593,20 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 				},
 			}, workflowEventLink)
 
-			nexusOperationLinkIdx := slices.IndexFunc(options.Links, func(link nexus.Link) bool {
-				return link.Type == string((&commonpb.Link_NexusOperation{}).ProtoReflect().Descriptor().FullName())
-			})
-			s.NotEqual(-1, nexusOperationLinkIdx)
-			expectedNexusOperationLink := commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
-				Namespace:   env.Namespace().String(),
-				OperationId: run.GetID(),
-				RunId:       run.GetRunID(),
-			})
-			s.Equal(expectedNexusOperationLink.URL.String(), options.Links[nexusOperationLinkIdx].URL.String())
-			s.Equal(expectedNexusOperationLink.Type, options.Links[nexusOperationLinkIdx].Type)
+			// Verify nexus operation link is present
+			if chasmEnabled {
+				nexusOperationLinkIdx := slices.IndexFunc(options.Links, func(link nexus.Link) bool {
+					return link.Type == string((&commonpb.Link_NexusOperation{}).ProtoReflect().Descriptor().FullName())
+				})
+				s.NotEqual(-1, nexusOperationLinkIdx)
+				expectedNexusOperationLink := commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
+					Namespace:   env.Namespace().String(),
+					OperationId: run.GetID(),
+					RunId:       run.GetRunID(),
+				})
+				s.Equal(expectedNexusOperationLink.URL.String(), options.Links[nexusOperationLinkIdx].URL.String())
+				s.Equal(expectedNexusOperationLink.Type, options.Links[nexusOperationLinkIdx].Type)
+			}
 
 			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
 			publicCallbackURL = options.CallbackURL
