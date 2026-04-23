@@ -487,7 +487,7 @@ func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context
 		l.ProcessTaskAdd(ctx, &hooks.TaskAddHookDetails{
 			DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(targetVersion),
 			IsSyncMatch:       syncMatched,
-			RateLimited:       rateLimited,
+			IsRateLimited:     rateLimited,
 		})
 	}
 }

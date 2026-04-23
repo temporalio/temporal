@@ -1351,7 +1351,7 @@ type capturedTaskMatchDetails struct {
 	TaskQueueName     string
 	TaskQueueType     enumspb.TaskQueueType
 	IsSyncMatch       bool
-	RateLimited       bool
+	IsRateLimited     bool
 	DeploymentVersion *deploymentpb.WorkerDeploymentVersion
 }
 
@@ -1374,7 +1374,7 @@ func (h *capturingTaskMatchHook) ProcessTaskAdd(ctx context.Context, event *hook
 		TaskQueueName: h.taskQueueName,
 		TaskQueueType: h.taskQueueType,
 		IsSyncMatch:   event.IsSyncMatch,
-		RateLimited:   event.RateLimited,
+		IsRateLimited: event.IsRateLimited,
 	}
 	if event.DeploymentVersion != nil {
 		details.DeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
@@ -1772,7 +1772,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_RateLimited() {
 	calls := hook.getCalls()
 	s.Require().Len(calls, 1)
 	s.False(calls[0].IsSyncMatch)
-	s.True(calls[0].RateLimited)
+	s.True(calls[0].IsRateLimited)
 }
 
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_NotRateLimited() {
@@ -1795,7 +1795,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_NotRateLimited() {
 	calls := hook.getCalls()
 	s.Require().Len(calls, 1)
 	s.False(calls[0].IsSyncMatch)
-	s.False(calls[0].RateLimited)
+	s.False(calls[0].IsRateLimited)
 }
 
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_MultipleHooksInvoked() {
