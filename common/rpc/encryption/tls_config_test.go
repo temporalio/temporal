@@ -288,10 +288,10 @@ func TestGetRemoteClusterClientConfig_ExactMatch(t *testing.T) {
 	require.Nil(t, tlsCfg)
 }
 
-func TestGetRemoteClusterClientConfig_DefaultFallback(t *testing.T) {
+func TestGetRemoteClusterClientConfig_StarFallback(t *testing.T) {
 	cfg := config.RootTLS{
 		RemoteClusters: map[string]config.GroupTLS{
-			defaultRemoteCluster: {Client: config.ClientTLS{ForceTLS: true}},
+			"*": {Client: config.ClientTLS{ForceTLS: true}},
 		},
 	}
 	provider := newTestTLSProvider(t, cfg)
@@ -301,23 +301,93 @@ func TestGetRemoteClusterClientConfig_DefaultFallback(t *testing.T) {
 	require.NotNil(t, tlsCfg)
 }
 
-func TestGetRemoteClusterClientConfig_ExactMatchTakesPriority(t *testing.T) {
+func TestGetRemoteClusterClientConfig_ExactOverStar(t *testing.T) {
 	cfg := config.RootTLS{
 		RemoteClusters: map[string]config.GroupTLS{
 			"cluster-a.example.com": {Client: config.ClientTLS{ForceTLS: false}},
-			// Default has ForceTLS: false so IsClientEnabled() returns false → nil config
-			defaultRemoteCluster: {Client: config.ClientTLS{ForceTLS: true}},
+			"*":                     {Client: config.ClientTLS{ForceTLS: true}},
 		},
 	}
 	provider := newTestTLSProvider(t, cfg)
 
-	// Exact match → nil (ForceTLS: false)
+	// Exact match → nil (ForceTLS: false, so IsClientEnabled() == false)
 	tlsCfg, err := provider.GetRemoteClusterClientConfig("cluster-a.example.com")
 	require.NoError(t, err)
 	require.Nil(t, tlsCfg)
 
-	// Unknown host falls back to default (ForceTLS: true) → non-nil
+	// Unknown host falls back to * (ForceTLS: true) → non-nil
 	tlsCfg, err = provider.GetRemoteClusterClientConfig("unknown-host")
 	require.NoError(t, err)
 	require.NotNil(t, tlsCfg)
+}
+
+func TestGetRemoteClusterClientConfig_WildcardSubdomainMatch(t *testing.T) {
+	cfg := config.RootTLS{
+		RemoteClusters: map[string]config.GroupTLS{
+			"*.temporal.cloud": {Client: config.ClientTLS{ForceTLS: true}},
+		},
+	}
+	provider := newTestTLSProvider(t, cfg)
+
+	tlsCfg, err := provider.GetRemoteClusterClientConfig("cluster-a.temporal.cloud")
+	require.NoError(t, err)
+	require.NotNil(t, tlsCfg)
+
+	tlsCfg, err = provider.GetRemoteClusterClientConfig("cluster-b.temporal.cloud")
+	require.NoError(t, err)
+	require.NotNil(t, tlsCfg)
+
+	// No match — different domain
+	tlsCfg, err = provider.GetRemoteClusterClientConfig("random.example.com")
+	require.NoError(t, err)
+	require.Nil(t, tlsCfg)
+}
+
+func TestGetRemoteClusterClientConfig_MoreSpecificWildcardWins(t *testing.T) {
+	cfg := config.RootTLS{
+		RemoteClusters: map[string]config.GroupTLS{
+			"*.temporal.cloud": {Client: config.ClientTLS{ForceTLS: false}},
+			"*":                {Client: config.ClientTLS{ForceTLS: true}},
+		},
+	}
+	provider := newTestTLSProvider(t, cfg)
+
+	// *.temporal.cloud is more specific, ForceTLS:false → nil
+	tlsCfg, err := provider.GetRemoteClusterClientConfig("cluster-a.temporal.cloud")
+	require.NoError(t, err)
+	require.Nil(t, tlsCfg)
+
+	// Falls through to * catch-all, ForceTLS:true → non-nil
+	tlsCfg, err = provider.GetRemoteClusterClientConfig("random.example.com")
+	require.NoError(t, err)
+	require.NotNil(t, tlsCfg)
+}
+
+func TestGetRemoteClusterClientConfig_ThreeTierPriority(t *testing.T) {
+	cfg := config.RootTLS{
+		RemoteClusters: map[string]config.GroupTLS{
+			"cluster-a.temporal.cloud": {Client: config.ClientTLS{ForceTLS: true, ServerName: "exact"}},
+			"*.temporal.cloud":         {Client: config.ClientTLS{ForceTLS: true, ServerName: "wildcard"}},
+			"*":                        {Client: config.ClientTLS{ForceTLS: true, ServerName: "star"}},
+		},
+	}
+	provider := newTestTLSProvider(t, cfg)
+
+	// Exact match
+	tlsCfg, err := provider.GetRemoteClusterClientConfig("cluster-a.temporal.cloud")
+	require.NoError(t, err)
+	require.NotNil(t, tlsCfg)
+	require.Equal(t, "exact", tlsCfg.ServerName)
+
+	// Wildcard subdomain match
+	tlsCfg, err = provider.GetRemoteClusterClientConfig("cluster-b.temporal.cloud")
+	require.NoError(t, err)
+	require.NotNil(t, tlsCfg)
+	require.Equal(t, "wildcard", tlsCfg.ServerName)
+
+	// Catch-all
+	tlsCfg, err = provider.GetRemoteClusterClientConfig("random.example.com")
+	require.NoError(t, err)
+	require.NotNil(t, tlsCfg)
+	require.Equal(t, "star", tlsCfg.ServerName)
 }
