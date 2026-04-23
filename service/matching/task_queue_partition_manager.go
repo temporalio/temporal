@@ -441,8 +441,8 @@ reredirectTask:
 
 	var rateLimited bool
 	if isActive {
-		smr := syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
-		syncMatched, rateLimited, err = smr.matched, smr.rateLimited, smr.err
+		syncResult := syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
+		syncMatched, rateLimited, err = syncResult.matched, syncResult.rateLimited, syncResult.err
 		if syncMatched && !pm.shouldBacklogSyncMatchTaskOnError(err) {
 			// Only fire hooks for non-forwarded tasks. Forwarded tasks already had hooks fired
 			// on the child partition that originally received the task.
