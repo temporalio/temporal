@@ -183,5 +183,4 @@ func TestHandleNexusCompletion(t *testing.T) {
 		require.ErrorAs(t, err, &notFound)
 		require.Equal(t, nexusoperationpb.OPERATION_STATUS_STARTED, op.GetStatus())
 	})
-
 }
