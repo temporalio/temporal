@@ -405,7 +405,7 @@ func (h *operationScheduleToStartTimeoutTaskHandler) Execute(
 				TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 			},
 		},
-	})
+	}, false)
 }
 
 type operationStartToCloseTimeoutTaskHandler struct {
@@ -446,7 +446,7 @@ func (h *operationStartToCloseTimeoutTaskHandler) Execute(
 				TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 			},
 		},
-	})
+	}, false)
 }
 
 type operationScheduleToCloseTimeoutTaskHandler struct {
@@ -487,5 +487,5 @@ func (h *operationScheduleToCloseTimeoutTaskHandler) Execute(
 				TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 			},
 		},
-	})
+	}, false)
 }

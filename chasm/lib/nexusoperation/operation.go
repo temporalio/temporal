@@ -54,7 +54,7 @@ type OperationStore interface {
 	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation, operationToken string, startTime *time.Time, links []*commonpb.Link) error
 	OnNexusOperationCanceled(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
-	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
+	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure, fromAttempt bool) error
 	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation, result *commonpb.Payload, links []*commonpb.Link) error
 	OnNexusOperationCancellationCompleted(ctx chasm.MutableContext, operation *Operation) error
 	OnNexusOperationCancellationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
@@ -162,10 +162,8 @@ func (o *Operation) RequestCancel(
 	return nil
 }
 
-// onStarted applies the started transition or delegates to the store if one is present.
 func (o *Operation) onStarted(ctx chasm.MutableContext, operationToken string, startTime *time.Time, links []*commonpb.Link) error {
-	store, ok := o.Store.TryGet(ctx)
-	if ok {
+	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationStarted(ctx, o, operationToken, startTime, links)
 	}
 	o.Links = append(o.Links, links...)
@@ -197,16 +195,45 @@ func (o *Operation) onCanceled(ctx chasm.MutableContext, cause *failurepb.Failur
 	return TransitionCanceled.Apply(o, ctx, EventCanceled{Failure: cause})
 }
 
-func (o *Operation) onTimedOut(ctx chasm.MutableContext, cause *failurepb.Failure) error {
+func (o *Operation) onTimedOut(ctx chasm.MutableContext, cause *failurepb.Failure, fromAttempt bool) error {
 	if store, ok := o.Store.TryGet(ctx); ok {
-		return store.OnNexusOperationTimedOut(ctx, o, cause)
+		return store.OnNexusOperationTimedOut(ctx, o, cause, fromAttempt)
 	}
-	if cause != nil {
-		o.getOrCreateOutcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
-			Failed: &nexusoperationpb.OperationOutcome_Failed{Failure: cause},
+	return TransitionTimedOut.Apply(o, ctx, EventTimedOut{
+		Failure:     cause,
+		FromAttempt: fromAttempt,
+	})
+}
+
+func (o *Operation) HandleNexusCompletion(
+	ctx chasm.MutableContext,
+	completion *persistencespb.ChasmNexusCompletion,
+) error {
+	if completion.GetRequestId() != "" && o.GetRequestId() != completion.GetRequestId() {
+		return serviceerror.NewNotFound("operation not found")
+	}
+
+	links := completion.GetLinks()
+
+	if o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED {
+		startTime := timestamp.TimeValuePtr(completion.GetStartTime())
+		if err := o.onStarted(ctx, completion.GetOperationToken(), startTime, links); err != nil {
+			return err
 		}
+		links = nil
 	}
-	return TransitionTimedOut.Apply(o, ctx, EventTimedOut{})
+
+	switch outcome := completion.Outcome.(type) {
+	case *persistencespb.ChasmNexusCompletion_Success:
+		return o.onCompleted(ctx, outcome.Success, links)
+	case *persistencespb.ChasmNexusCompletion_Failure:
+		if outcome.Failure.GetCanceledFailureInfo() != nil {
+			return o.onCanceled(ctx, outcome.Failure)
+		}
+		return o.onFailed(ctx, outcome.Failure)
+	default:
+		return serviceerror.NewInvalidArgument("invalid completion outcome")
+	}
 }
 
 func (o *Operation) loadStartArgs(
@@ -272,8 +299,6 @@ func (o *Operation) saveInvocationResult(
 	case invocationResultOK:
 		links := convertResponseLinks(r.response.Links, ctx.Logger())
 		if r.response.Pending != nil {
-			// An async operation transitions to STARTED here;
-			// HandleNexusCompletion will apply its outcome from the completion callback.
 			return nil, o.onStarted(ctx, r.response.Pending.Token, nil, links)
 		}
 		return nil, o.onCompleted(ctx, r.response.Successful, links)
@@ -282,7 +307,7 @@ func (o *Operation) saveInvocationResult(
 	case invocationResultFail:
 		return nil, o.onFailed(ctx, r.failure)
 	case invocationResultTimeout:
-		return nil, o.onTimedOut(ctx, r.failure)
+		return nil, o.onTimedOut(ctx, r.failure, true)
 	case invocationResultRetry:
 		return nil, transitionAttemptFailed.Apply(o, ctx, EventAttemptFailed{
 			Failure:     r.failure,
@@ -293,54 +318,22 @@ func (o *Operation) saveInvocationResult(
 	}
 }
 
-// HandleNexusCompletion handles the outcome of an asynchronous completion callback.
-func (o *Operation) HandleNexusCompletion(
-	ctx chasm.MutableContext,
-	completion *persistencespb.ChasmNexusCompletion,
-) error {
-	// Request ID lets us reject a stale or misrouted completion.
-	if completion.GetRequestId() != "" && o.GetRequestId() != completion.GetRequestId() {
-		return serviceerror.NewNotFound("operation not found")
-	}
-
-	links := completion.GetLinks()
-
-	// For completion-before-start, apply the started transition first.
-	if o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED {
-		startTime := timestamp.TimeValuePtr(completion.GetStartTime())
-		if err := o.onStarted(ctx, completion.GetOperationToken(), startTime, links); err != nil {
-			return err
-		}
-
-		// Links belong only to the synthetic started event.
-		links = nil
-	}
-
-	switch outcome := completion.Outcome.(type) {
-	case *persistencespb.ChasmNexusCompletion_Success:
-		return o.onCompleted(ctx, outcome.Success, links)
-	case *persistencespb.ChasmNexusCompletion_Failure:
-		if outcome.Failure.GetCanceledFailureInfo() != nil {
-			return o.onCanceled(ctx, outcome.Failure)
-		}
-		return o.onFailed(ctx, outcome.Failure)
-	default:
-		return serviceerror.NewInvalidArgument("invalid completion outcome")
-	}
-}
-
-func (o *Operation) resolveUnsuccessfully(ctx chasm.MutableContext, failure *failurepb.Failure, closeTime time.Time) error {
-	if o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED {
+// resolveUnsuccessfully finalizes the operation. When fromAttempt is true, the failure is recorded as
+// LastAttemptFailure. Otherwise the failure is recorded as the terminal Outcome.
+func (o *Operation) resolveUnsuccessfully(ctx chasm.MutableContext, failure *failurepb.Failure, closeTime time.Time, fromAttempt bool) error {
+	softassert.That(ctx.Logger(), failure != nil, "resolveUnsuccessfully called with nil failure")
+	if fromAttempt {
 		o.LastAttemptCompleteTime = timestamppb.New(ctx.Now(o))
 		o.LastAttemptFailure = failure
-	}
-	o.ClosedTime = timestamppb.New(closeTime)
-	o.NextAttemptScheduleTime = nil
-	if failure != nil {
+	} else {
 		o.getOrCreateOutcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
 			Failed: &nexusoperationpb.OperationOutcome_Failed{Failure: failure},
 		}
 	}
+	o.ClosedTime = timestamppb.New(closeTime)
+
+	// NextAttemptScheduleTime is only valid in BACKING_OFF; clear on close
+	o.NextAttemptScheduleTime = nil
 	return nil
 }
 
@@ -400,6 +393,12 @@ func (o *Operation) buildDescribeResponse(
 				Result: successful,
 			}
 		} else if failure != nil {
+			if failure.GetTimeoutFailureInfo() != nil {
+				failure = &failurepb.Failure{
+					Message: "nexus operation timed out",
+					Cause:   failure,
+				}
+			}
 			resp.Outcome = &workflowservice.DescribeNexusOperationExecutionResponse_Failure{
 				Failure: failure,
 			}
@@ -423,6 +422,12 @@ func (o *Operation) buildPollResponse(
 				Result: successful,
 			}
 		} else if failure != nil {
+			if failure.GetTimeoutFailureInfo() != nil {
+				failure = &failurepb.Failure{
+					Message: "nexus operation timed out",
+					Cause:   failure,
+				}
+			}
 			resp.Outcome = &workflowservice.PollNexusOperationExecutionResponse_Failure{
 				Failure: failure,
 			}
