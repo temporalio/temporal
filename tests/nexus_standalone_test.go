@@ -596,7 +596,7 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 			{
 				name: "TimeoutLastAttemptFailure",
 				setupReq: func(req *workflowservice.StartNexusOperationExecutionRequest) {
-					req.ScheduleToCloseTimeout = durationpb.New(2 * time.Second)
+					req.ScheduleToCloseTimeout = durationpb.New(4 * time.Second)
 				},
 				respond: func(ctx context.Context, s *testcore.TestEnv, task *workflowservice.PollNexusTaskQueueResponse) error {
 					_, err := s.FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
@@ -616,6 +616,8 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 					require.Equal(t, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
 					require.Equal(t, "nexus operation timed out", descResp.GetFailure().GetMessage())
 					require.Equal(t, "nexus operation timed out", pollResp.GetFailure().GetMessage())
+					require.Equal(t, "operation timed out", descResp.GetFailure().GetCause().GetMessage())
+					require.Equal(t, "operation timed out", pollResp.GetFailure().GetCause().GetMessage())
 				},
 			},
 			{

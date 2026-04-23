@@ -376,6 +376,12 @@ func (o *Operation) buildDescribeResponse(
 				Result: successful,
 			}
 		} else if failure != nil {
+			if failure.GetTimeoutFailureInfo() != nil {
+				failure = &failurepb.Failure{
+					Message: "nexus operation timed out",
+					Cause:   failure,
+				}
+			}
 			resp.Outcome = &workflowservice.DescribeNexusOperationExecutionResponse_Failure{
 				Failure: failure,
 			}
@@ -399,6 +405,12 @@ func (o *Operation) buildPollResponse(
 				Result: successful,
 			}
 		} else if failure != nil {
+			if failure.GetTimeoutFailureInfo() != nil {
+				failure = &failurepb.Failure{
+					Message: "nexus operation timed out",
+					Cause:   failure,
+				}
+			}
 			resp.Outcome = &workflowservice.PollNexusOperationExecutionResponse_Failure{
 				Failure: failure,
 			}
