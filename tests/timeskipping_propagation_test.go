@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 type TimeSkippingPropagationTestSuite struct {
@@ -622,4 +623,155 @@ func completeCmd() *commandpb.Command {
 // cmdsResponse wraps a list of commands in a RespondWorkflowTaskCompletedRequest.
 func cmdsResponse(cmds ...*commandpb.Command) *workflowservice.RespondWorkflowTaskCompletedRequest {
 	return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: cmds}
+}
+
+// firstWorkflowTaskCompletedEventID returns the event ID of the first
+// WorkflowTaskCompleted event in the given run's history. Used as the reset
+// point for tests that need to rewind to just past the first WFT.
+func (s *TimeSkippingPropagationTestSuite) firstWorkflowTaskCompletedEventID(
+	ctx context.Context,
+	env *testcore.TestEnv,
+	workflowID, runID string,
+) int64 {
+	hist, err := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+	})
+	s.NoError(err)
+	for _, e := range hist.History.Events {
+		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+			return e.GetEventId()
+		}
+	}
+	s.FailNow("no WorkflowTaskCompleted event found in history")
+	return 0
+}
+
+// TestReset_OptionsUpdateIsReapplied_TimeSkippingEnabled documents the
+// interaction between reset and WorkflowExecutionOptionsUpdated events.
+//
+// Scenario:
+//   - Start W with TimeSkippingConfig{Enabled: false}.
+//   - Drive WFT 1 with no commands → workflow idles after first WFTCompleted.
+//   - Call UpdateWorkflowExecutionOptions setting Enabled: true → emits
+//     OPTIONS_UPDATED event (does not schedule a WFT).
+//   - Terminate W so it closes cleanly before reset.
+//   - Reset to the first WFTCompleted event, with default reapply (no excludes).
+//   - Drive the reset run's fresh WFT to completion.
+//
+// Expected: the reset run has TimeSkippingConfig.Enabled == true even though
+// the reset point precedes the options update. This is because OPTIONS_UPDATED
+// is reapplied unconditionally at workflow_resetter.go — there is no
+// ResetReapplyExcludeType value that can suppress it. The test pins this
+// behavior so a future change would surface it.
+func (s *TimeSkippingPropagationTestSuite) TestPropagationInReset() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := testcore.NewContext()
+
+	wfID := tv.WorkflowID()
+
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          wfID,
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: false},
+	})
+	s.NoError(err)
+	originalRunID := startResp.RunId
+
+	// Drive WFT 1 with an empty command response so the workflow completes its
+	// first task and idles. This gives us a stable reset point before the
+	// options update.
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	})
+	s.NoError(err)
+
+	resetEventID := s.firstWorkflowTaskCompletedEventID(ctx, env, wfID, originalRunID)
+
+	// UpdateWorkflowExecutionOptions to enable time-skipping. This emits a
+	// WorkflowExecutionOptionsUpdated event. It does NOT schedule a new WFT,
+	// so we terminate the workflow below to close it before resetting.
+	_, err = env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: originalRunID},
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+			TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+	})
+	s.NoError(err)
+
+	// Terminate the original workflow so it's closed; the terminate event
+	// lands in history after the OPTIONS_UPDATED event. Terminate events are
+	// always excluded from reapply, so the reset scan will see OPTIONS_UPDATED
+	// as the only reapplyable post-reset event.
+	_, err = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: originalRunID},
+		Reason:            "test: close original before reset",
+	})
+	s.NoError(err)
+
+	// Sanity: original run ended with TSC enabled.
+	origMS := s.getMutableState(env, wfID, originalRunID)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, origMS.State.ExecutionState.State)
+	s.True(origMS.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled(),
+		"original run should have TSC enabled after UpdateWorkflowExecutionOptions")
+
+	// Reset to the first WFTCompleted event with default reapply.
+	resetResp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 env.Namespace().String(),
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: originalRunID},
+		Reason:                    "test: verify OPTIONS_UPDATED reapply preserves TimeSkippingConfig",
+		WorkflowTaskFinishEventId: resetEventID,
+		RequestId:                 uuid.NewString(),
+	})
+	s.NoError(err)
+	resetRunID := resetResp.RunId
+	s.NotEqual(originalRunID, resetRunID, "reset must produce a fresh run")
+
+	// Drive the reset run's fresh WFT to completion.
+	s.drivePollsUntilClosed(env, ctx, tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return cmdsResponse(completeCmd()), nil
+	}, wfID, resetRunID, 10)
+
+	// Key assertion: the reset run has TSC enabled because the post-reset
+	// OPTIONS_UPDATED event was reapplied onto the new run.
+	resetMS := s.getMutableState(env, wfID, resetRunID)
+	s.True(resetMS.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled(),
+		"reset run should have TSC enabled; OPTIONS_UPDATED event is reapplied from original run")
+
+	// Confirm the mechanism: the reset run's history contains exactly one
+	// reapplied OPTIONS_UPDATED event, and the WorkflowExecutionStarted event
+	// still reflects the original disabled config (i.e. replay restored the
+	// start-point state before reapply enabled it).
+	resetHist, err := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: resetRunID},
+	})
+	s.NoError(err)
+	var optionsUpdatedCount int
+	var startedEvent *historypb.HistoryEvent
+	for _, e := range resetHist.History.Events {
+		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+			optionsUpdatedCount++
+		}
+		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+			startedEvent = e
+		}
+	}
+	s.Equal(1, optionsUpdatedCount,
+		"reset run should contain exactly one reapplied OPTIONS_UPDATED event")
+	s.NotNil(startedEvent)
+	startedTSC := startedEvent.GetWorkflowExecutionStartedEventAttributes().GetTimeSkippingConfig()
+	s.NotNil(startedTSC, "WorkflowExecutionStarted should carry the original TimeSkippingConfig")
+	s.False(startedTSC.GetEnabled(),
+		"WorkflowExecutionStarted on reset run should carry the original disabled config; the later enable comes from reapply, not replay")
 }
