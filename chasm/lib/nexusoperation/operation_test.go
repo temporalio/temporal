@@ -10,6 +10,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func newScheduledTestOperation(t *testing.T, ctx *chasm.MockMutableContext) *Operation {
@@ -35,47 +36,129 @@ func TestHandleNexusCompletion(t *testing.T) {
 	}
 
 	t.Run("Success", func(t *testing.T) {
-		ctx := newCtx()
-		op := newStartedOp(t, ctx)
-		err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
-			RequestId: op.GetRequestId(),
-			Outcome: &persistencespb.ChasmNexusCompletion_Success{
-				Success: mustToPayload(t, "result"),
-			},
+		t.Run("AfterStarted", func(t *testing.T) {
+			ctx := newCtx()
+			op := newStartedOp(t, ctx)
+			err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				RequestId: op.GetRequestId(),
+				Outcome: &persistencespb.ChasmNexusCompletion_Success{
+					Success: mustToPayload(t, "result"),
+				},
+			})
+			require.NoError(t, err)
+			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, op.GetStatus())
 		})
-		require.NoError(t, err)
-		require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, op.GetStatus())
+
+		t.Run("CompletionBeforeStart", func(t *testing.T) {
+			ctx := newCtx()
+			op := newScheduledTestOperation(t, ctx)
+			startTime := defaultTime.Add(-time.Second)
+			err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				StartTime:      timestamppb.New(startTime),
+				RequestId:      op.GetRequestId(),
+				OperationToken: "tok",
+				Outcome: &persistencespb.ChasmNexusCompletion_Success{
+					Success: mustToPayload(t, "result"),
+				},
+			})
+			require.NoError(t, err)
+			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, op.GetStatus())
+			require.Equal(t, "tok", op.GetOperationToken())
+			require.Equal(t, startTime, op.GetStartedTime().AsTime())
+		})
+
+		t.Run("CompletionBeforeStartWithoutStartTime", func(t *testing.T) {
+			ctx := newCtx()
+			op := newScheduledTestOperation(t, ctx)
+			err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				// missing StartTime
+				RequestId:      op.GetRequestId(),
+				OperationToken: "tok",
+				Outcome: &persistencespb.ChasmNexusCompletion_Success{
+					Success: mustToPayload(t, "result"),
+				},
+			})
+			require.NoError(t, err)
+			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, op.GetStatus())
+			require.Equal(t, "tok", op.GetOperationToken())
+			require.Equal(t, defaultTime, op.GetStartedTime().AsTime())
+		})
 	})
 
 	t.Run("Failure", func(t *testing.T) {
-		ctx := newCtx()
-		op := newStartedOp(t, ctx)
-		err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
-			RequestId: op.GetRequestId(),
-			Outcome: &persistencespb.ChasmNexusCompletion_Failure{
-				Failure: &failurepb.Failure{Message: "oops"},
-			},
+		t.Run("AfterStarted", func(t *testing.T) {
+			ctx := newCtx()
+			op := newStartedOp(t, ctx)
+			err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				RequestId: op.GetRequestId(),
+				Outcome: &persistencespb.ChasmNexusCompletion_Failure{
+					Failure: &failurepb.Failure{Message: "oops"},
+				},
+			})
+			require.NoError(t, err)
+			require.Equal(t, nexusoperationpb.OPERATION_STATUS_FAILED, op.GetStatus())
 		})
-		require.NoError(t, err)
-		require.Equal(t, nexusoperationpb.OPERATION_STATUS_FAILED, op.GetStatus())
+
+		t.Run("CompletionBeforeStart", func(t *testing.T) {
+			ctx := newCtx()
+			op := newScheduledTestOperation(t, ctx)
+			startTime := defaultTime.Add(-time.Second)
+			err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				StartTime:      timestamppb.New(startTime),
+				RequestId:      op.GetRequestId(),
+				OperationToken: "tok",
+				Outcome: &persistencespb.ChasmNexusCompletion_Failure{
+					Failure: &failurepb.Failure{Message: "oops"},
+				},
+			})
+			require.NoError(t, err)
+			require.Equal(t, nexusoperationpb.OPERATION_STATUS_FAILED, op.GetStatus())
+			require.Equal(t, "tok", op.GetOperationToken())
+			require.Equal(t, startTime, op.GetStartedTime().AsTime())
+		})
 	})
 
 	t.Run("Canceled", func(t *testing.T) {
-		ctx := newCtx()
-		op := newStartedOp(t, ctx)
-		err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
-			RequestId: op.GetRequestId(),
-			Outcome: &persistencespb.ChasmNexusCompletion_Failure{
-				Failure: &failurepb.Failure{
-					Message: "canceled",
-					FailureInfo: &failurepb.Failure_CanceledFailureInfo{
-						CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+		t.Run("AfterStarted", func(t *testing.T) {
+			ctx := newCtx()
+			op := newStartedOp(t, ctx)
+			err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				RequestId: op.GetRequestId(),
+				Outcome: &persistencespb.ChasmNexusCompletion_Failure{
+					Failure: &failurepb.Failure{
+						Message: "canceled",
+						FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+							CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+						},
 					},
 				},
-			},
+			})
+			require.NoError(t, err)
+			require.Equal(t, nexusoperationpb.OPERATION_STATUS_CANCELED, op.GetStatus())
 		})
-		require.NoError(t, err)
-		require.Equal(t, nexusoperationpb.OPERATION_STATUS_CANCELED, op.GetStatus())
+
+		t.Run("CompletionBeforeStart", func(t *testing.T) {
+			ctx := newCtx()
+			op := newScheduledTestOperation(t, ctx)
+			startTime := defaultTime.Add(-time.Second)
+			err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				StartTime:      timestamppb.New(startTime),
+				RequestId:      op.GetRequestId(),
+				OperationToken: "tok",
+				Outcome: &persistencespb.ChasmNexusCompletion_Failure{
+					Failure: &failurepb.Failure{
+						Message: "canceled",
+						FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+							CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+						},
+					},
+				},
+			})
+			require.NoError(t, err)
+			require.Equal(t, nexusoperationpb.OPERATION_STATUS_CANCELED, op.GetStatus())
+			require.Equal(t, "tok", op.GetOperationToken())
+			require.Equal(t, startTime, op.GetStartedTime().AsTime())
+		})
 	})
 
 	t.Run("RequestIDMismatch", func(t *testing.T) {

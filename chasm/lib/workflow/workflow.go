@@ -2,18 +2,21 @@ package workflow
 
 import (
 	"fmt"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
-	workflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
+	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/service/history/historybuilder"
@@ -175,9 +178,10 @@ func (w *Workflow) OnNexusOperationStarted(
 	ctx chasm.MutableContext,
 	op *nexusoperation.Operation,
 	operationToken string,
+	startTime *time.Time,
 	links []*commonpb.Link,
 ) error {
-	parentData := &workflowpb.NexusOperationParentData{}
+	parentData := &chasmworkflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
 		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
 	}
@@ -191,6 +195,10 @@ func (w *Workflow) OnNexusOperationStarted(
 			},
 		}
 		e.Links = links
+		if startTime != nil {
+			// For completion-before-start, use the callback-provided start time for the synthetic started event.
+			e.EventTime = timestamppb.New(*startTime)
+		}
 	})
 	return err
 }
@@ -202,7 +210,7 @@ func (w *Workflow) OnNexusOperationCanceled(
 	op *nexusoperation.Operation,
 	cause *failurepb.Failure,
 ) error {
-	parentData := &workflowpb.NexusOperationParentData{}
+	parentData := &chasmworkflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
 		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
 	}
@@ -227,7 +235,7 @@ func (w *Workflow) OnNexusOperationFailed(
 	op *nexusoperation.Operation,
 	cause *failurepb.Failure,
 ) error {
-	parentData := &workflowpb.NexusOperationParentData{}
+	parentData := &chasmworkflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
 		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
 	}
@@ -253,7 +261,7 @@ func (w *Workflow) OnNexusOperationCompleted(
 	result *commonpb.Payload,
 	links []*commonpb.Link,
 ) error {
-	parentData := &workflowpb.NexusOperationParentData{}
+	parentData := &chasmworkflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
 		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
 	}
@@ -278,7 +286,7 @@ func (w *Workflow) OnNexusOperationTimedOut(
 	op *nexusoperation.Operation,
 	cause *failurepb.Failure,
 ) error {
-	parentData := &workflowpb.NexusOperationParentData{}
+	parentData := &chasmworkflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
 		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
 	}
@@ -297,12 +305,12 @@ func (w *Workflow) OnNexusOperationTimedOut(
 }
 
 func (w *Workflow) OnNexusOperationCancellationCompleted(ctx chasm.MutableContext, op *nexusoperation.Operation) error {
-	parentData := &workflowpb.NexusOperationParentData{}
+	parentData := &chasmworkflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
 		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
 	}
 
-	cancelParentData := &workflowpb.NexusCancellationParentData{}
+	cancelParentData := &chasmworkflowpb.NexusCancellationParentData{}
 	if err := op.Cancellation.Get(ctx).GetParentData().UnmarshalTo(cancelParentData); err != nil {
 		return serviceerror.NewInternalf("failed to unmarshal nexus cancellation parent data: %v", err)
 	}
@@ -321,12 +329,12 @@ func (w *Workflow) OnNexusOperationCancellationCompleted(ctx chasm.MutableContex
 }
 
 func (w *Workflow) OnNexusOperationCancellationFailed(ctx chasm.MutableContext, op *nexusoperation.Operation, failure *failurepb.Failure) error {
-	parentData := &workflowpb.NexusOperationParentData{}
+	parentData := &chasmworkflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
 		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
 	}
 
-	cancelParentData := &workflowpb.NexusCancellationParentData{}
+	cancelParentData := &chasmworkflowpb.NexusCancellationParentData{}
 	if err := op.Cancellation.Get(ctx).GetParentData().UnmarshalTo(cancelParentData); err != nil {
 		return serviceerror.NewInternalf("failed to unmarshal nexus cancellation parent data: %v", err)
 	}
@@ -377,7 +385,7 @@ func (w *Workflow) NexusOperationInvocationData(
 	ctx chasm.Context,
 	op *nexusoperation.Operation,
 ) (nexusoperation.InvocationData, error) {
-	parentData := &workflowpb.NexusOperationParentData{}
+	parentData := &chasmworkflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
 		return nexusoperation.InvocationData{}, serviceerror.NewInternalf(
 			"failed to unmarshal nexus operation parent data: %v", err,
@@ -428,4 +436,73 @@ func (w *Workflow) GetNexusCompletion(
 ) (nexusrpc.CompleteOperationOptions, error) {
 	// Retrieve the completion data from the underlying mutable state via MSPointer
 	return w.MSPointer.GetNexusCompletion(ctx, requestID)
+}
+
+// BuildPendingNexusOperationInfos reads nexus operations from the workflow and converts them to API format.
+func (w *Workflow) BuildPendingNexusOperationInfos(
+	ctx chasm.Context,
+	circuitBreaker func(endpoint string) bool,
+) ([]*workflowpb.PendingNexusOperationInfo, error) {
+	var result []*workflowpb.PendingNexusOperationInfo
+	for key, field := range w.Operations {
+		op := field.Get(ctx)
+
+		if op.GetStatus() == nexusoperationpb.OPERATION_STATUS_UNSPECIFIED {
+			return nil, serviceerror.NewInternal("Nexus operation with UNSPECIFIED state")
+		}
+
+		state := nexusoperation.PendingOperationState(op.GetStatus())
+		if state == enumspb.PENDING_NEXUS_OPERATION_STATE_UNSPECIFIED {
+			// Operation is not pending.
+			continue
+		}
+
+		blockedReason := ""
+		if state == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED && circuitBreaker(op.GetEndpoint()) {
+			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
+			blockedReason = "The circuit breaker is open."
+		}
+
+		info := &workflowpb.PendingNexusOperationInfo{
+			Endpoint:                op.GetEndpoint(),
+			Service:                 op.GetService(),
+			Operation:               op.GetOperation(),
+			OperationId:             op.GetOperationToken(),
+			OperationToken:          op.GetOperationToken(),
+			ScheduledEventId:        key,
+			ScheduleToCloseTimeout:  op.GetScheduleToCloseTimeout(),
+			ScheduleToStartTimeout:  op.GetScheduleToStartTimeout(),
+			StartToCloseTimeout:     op.GetStartToCloseTimeout(),
+			ScheduledTime:           op.GetScheduledTime(),
+			State:                   state,
+			Attempt:                 op.GetAttempt(),
+			LastAttemptCompleteTime: op.GetLastAttemptCompleteTime(),
+			LastAttemptFailure:      op.GetLastAttemptFailure(),
+			NextAttemptScheduleTime: op.GetNextAttemptScheduleTime(),
+			BlockedReason:           blockedReason,
+		}
+
+		if cancel, ok := op.Cancellation.TryGet(ctx); ok {
+			state := nexusoperation.CancellationAPIState(cancel.Status)
+			blockedReason := ""
+
+			if state == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED && circuitBreaker(info.Endpoint) {
+				state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
+				blockedReason = "The circuit breaker is open."
+			}
+
+			info.CancellationInfo = &workflowpb.NexusOperationCancellationInfo{
+				RequestedTime:           cancel.RequestedTime,
+				State:                   state,
+				Attempt:                 cancel.Attempt,
+				LastAttemptCompleteTime: cancel.LastAttemptCompleteTime,
+				LastAttemptFailure:      cancel.LastAttemptFailure,
+				NextAttemptScheduleTime: cancel.NextAttemptScheduleTime,
+				BlockedReason:           blockedReason,
+			}
+		}
+
+		result = append(result, info)
+	}
+	return result, nil
 }
