@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -480,7 +481,8 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 				})
 				require.NoError(t, err)
 				require.Equal(t, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
-				require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, descResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+				require.Equal(t, "nexus operation timed out", descResp.GetFailure().GetMessage())
+				require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, descResp.GetFailure().GetCause().GetTimeoutFailureInfo().GetTimeoutType())
 
 				pollResp, err := s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
 					Namespace:   s.Namespace().String(),
@@ -489,7 +491,8 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 					WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
 				})
 				require.NoError(t, err)
-				require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, pollResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+				require.Equal(t, "nexus operation timed out", pollResp.GetFailure().GetMessage())
+				require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, pollResp.GetFailure().GetCause().GetTimeoutFailureInfo().GetTimeoutType())
 			}, 10*time.Second, 100*time.Millisecond)
 		})
 
@@ -514,7 +517,8 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 				})
 				require.NoError(t, err)
 				require.Equal(t, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
-				require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, descResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+				require.Equal(t, "nexus operation timed out", descResp.GetFailure().GetMessage())
+				require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, descResp.GetFailure().GetCause().GetTimeoutFailureInfo().GetTimeoutType())
 
 				pollResp, err := s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
 					Namespace:   s.Namespace().String(),
@@ -523,7 +527,8 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 					WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
 				})
 				require.NoError(t, err)
-				require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, pollResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+				require.Equal(t, "nexus operation timed out", pollResp.GetFailure().GetMessage())
+				require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, pollResp.GetFailure().GetCause().GetTimeoutFailureInfo().GetTimeoutType())
 			}, 10*time.Second, 100*time.Millisecond)
 		})
 
@@ -559,8 +564,10 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 				},
 				assertOutcome: func(t *assert.CollectT, descResp *workflowservice.DescribeNexusOperationExecutionResponse, pollResp *workflowservice.PollNexusOperationExecutionResponse) {
 					require.Equal(t, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
-					require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, descResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
-					require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, pollResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+					require.Equal(t, "nexus operation timed out", descResp.GetFailure().GetMessage())
+					require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, descResp.GetFailure().GetCause().GetTimeoutFailureInfo().GetTimeoutType())
+					require.Equal(t, "nexus operation timed out", pollResp.GetFailure().GetMessage())
+					require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, pollResp.GetFailure().GetCause().GetTimeoutFailureInfo().GetTimeoutType())
 				},
 			},
 			{
@@ -589,8 +596,10 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 				},
 				assertOutcome: func(t *assert.CollectT, descResp *workflowservice.DescribeNexusOperationExecutionResponse, pollResp *workflowservice.PollNexusOperationExecutionResponse) {
 					require.Equal(t, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
-					require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, descResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
-					require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, pollResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+					require.Equal(t, "nexus operation timed out", descResp.GetFailure().GetMessage())
+					require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, descResp.GetFailure().GetCause().GetTimeoutFailureInfo().GetTimeoutType())
+					require.Equal(t, "nexus operation timed out", pollResp.GetFailure().GetMessage())
+					require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, pollResp.GetFailure().GetCause().GetTimeoutFailureInfo().GetTimeoutType())
 				},
 			},
 			// TODO
@@ -1996,8 +2005,11 @@ func TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken(t *testing.T) {
 	s := testcore.NewEnv(t, nexusStandaloneOpts...)
 	endpointName := testcore.RandomizedNexusEndpoint(t.Name())
 
-	var callbackToken string
-	var callbackURL string
+	var callbackData struct {
+		sync.RWMutex
+		token string
+		url   string
+	}
 	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(t, listenAddr, nexustest.Handler{
 		OnStartOperation: func(
@@ -2007,8 +2019,10 @@ func TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken(t *testing.T) {
 			input *nexus.LazyValue,
 			options nexus.StartOperationOptions,
 		) (nexus.HandlerStartOperationResult[any], error) {
-			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
-			callbackURL = options.CallbackURL
+			callbackData.Lock()
+			callbackData.token = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
+			callbackData.url = options.CallbackURL
+			callbackData.Unlock()
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-operation-token"}, nil
 		},
 	})
@@ -2035,7 +2049,12 @@ func TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
 	defer cancel()
+	var callbackToken, callbackURL string
 	require.Eventually(t, func() bool {
+		callbackData.RLock()
+		defer callbackData.RUnlock()
+		callbackToken = callbackData.token
+		callbackURL = callbackData.url
 		return callbackToken != "" && callbackURL != ""
 	}, 10*time.Second, 100*time.Millisecond)
 
