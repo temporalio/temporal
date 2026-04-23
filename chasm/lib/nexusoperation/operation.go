@@ -5,6 +5,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -305,4 +306,20 @@ func (o *Operation) resolveUnsuccessfully(ctx chasm.MutableContext, failure *fai
 	o.NextAttemptScheduleTime = nil
 	// Terminal state - no tasks to emit.
 	return nil
+}
+
+// PendingOperationState maps a nexus operation status to the corresponding pending API state.
+// Returns PENDING_NEXUS_OPERATION_STATE_UNSPECIFIED for non-pending or unspecified statuses.
+func PendingOperationState(status nexusoperationpb.OperationStatus) enumspb.PendingNexusOperationState {
+	// TODO(samm): deduplicate against standalone nexus operations
+	switch status {
+	case nexusoperationpb.OPERATION_STATUS_SCHEDULED:
+		return enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED
+	case nexusoperationpb.OPERATION_STATUS_BACKING_OFF:
+		return enumspb.PENDING_NEXUS_OPERATION_STATE_BACKING_OFF
+	case nexusoperationpb.OPERATION_STATUS_STARTED:
+		return enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED
+	default:
+		return enumspb.PENDING_NEXUS_OPERATION_STATE_UNSPECIFIED
+	}
 }

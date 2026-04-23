@@ -2321,19 +2321,13 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration(chasmEna
 			s.EventuallyWithT(func(t *assert.CollectT) {
 				desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 				require.NoError(t, err)
-				if !chasmEnabled {
-					// TODO: Assert pending Nexus operation rehydration for CHASM once DescribeWorkflowExecution.PendingNexusOperations is implemented there.
-					require.Len(t, desc.PendingNexusOperations, 1)
-					if len(desc.PendingNexusOperations) > 0 {
-						f = desc.PendingNexusOperations[0].LastAttemptFailure
-						require.NotNil(t, f)
-					}
+				require.Len(t, desc.PendingNexusOperations, 1)
+				if len(desc.PendingNexusOperations) > 0 {
+					f = desc.PendingNexusOperations[0].LastAttemptFailure
+					require.NotNil(t, f)
 				}
 			}, 10*time.Second, 100*time.Millisecond)
-			if !chasmEnabled {
-				// TODO: Assert pending Nexus operation rehydration for CHASM once DescribeWorkflowExecution.PendingNexusOperations is implemented there.
-				tc.checkPendingError(s, converter.FailureToError(f))
-			}
+			tc.checkPendingError(s, converter.FailureToError(f))
 			s.NoError(env.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test cleanup"))
 		} else {
 			wfErr := run.Get(ctx, nil)
@@ -2945,11 +2939,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationScheduleToCloseTimeout(chasmE
 
 	descResp, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 	s.NoError(err)
-	if !chasmEnabled {
-		// TODO: Assert this for CHASM once DescribeWorkflowExecution.PendingNexusOperations is implemented there.
-		s.Len(descResp.PendingNexusOperations, 1)
-		s.Equal(2*time.Second, descResp.PendingNexusOperations[0].ScheduleToCloseTimeout.AsDuration())
-	}
+	s.Len(descResp.PendingNexusOperations, 1)
+	s.Equal(2*time.Second, descResp.PendingNexusOperations[0].ScheduleToCloseTimeout.AsDuration())
 
 	// Now wait for the timeout event
 	pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -3046,11 +3037,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationScheduleToStartTimeout(chasmE
 
 	descResp, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 	s.NoError(err)
-	if !chasmEnabled {
-		// TODO: Assert this for CHASM once DescribeWorkflowExecution.PendingNexusOperations is implemented there.
-		s.Len(descResp.PendingNexusOperations, 1)
-		s.Equal(2*time.Second, descResp.PendingNexusOperations[0].ScheduleToStartTimeout.AsDuration())
-	}
+	s.Len(descResp.PendingNexusOperations, 1)
+	s.Equal(2*time.Second, descResp.PendingNexusOperations[0].ScheduleToStartTimeout.AsDuration())
 
 	// Now wait for the timeout event
 	pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -3156,11 +3144,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationStartToCloseTimeout(chasmEnab
 
 	descResp, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 	s.NoError(err)
-	if !chasmEnabled {
-		// TODO: Assert this for CHASM once DescribeWorkflowExecution.PendingNexusOperations is implemented there.
-		s.Len(descResp.PendingNexusOperations, 1)
-		s.Equal(2*time.Second, descResp.PendingNexusOperations[0].StartToCloseTimeout.AsDuration())
-	}
+	s.Len(descResp.PendingNexusOperations, 1)
+	s.Equal(2*time.Second, descResp.PendingNexusOperations[0].StartToCloseTimeout.AsDuration())
 
 	// Wait for the started event first
 	pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
