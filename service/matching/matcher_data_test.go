@@ -189,9 +189,9 @@ func (s *MatcherDataSuite) TestMatchTaskImmediately() {
 	t := s.newSyncTask(nil)
 
 	// no match yet
-	canSyncMatch, gotSyncMatch := s.md.MatchTaskImmediately(t)
-	s.True(canSyncMatch)
-	s.False(gotSyncMatch)
+	immediateResult := s.md.MatchTaskImmediately(t)
+	s.True(immediateResult.canSyncMatch)
+	s.False(immediateResult.gotSyncMatch)
 
 	// poll in a goroutine
 	ch := make(chan *matchResult, 1)
@@ -204,9 +204,9 @@ func (s *MatcherDataSuite) TestMatchTaskImmediately() {
 	s.waitForPollers(1)
 
 	// should match this time
-	canSyncMatch, gotSyncMatch = s.md.MatchTaskImmediately(t)
-	s.True(canSyncMatch)
-	s.True(gotSyncMatch)
+	immediateResult = s.md.MatchTaskImmediately(t)
+	s.True(immediateResult.canSyncMatch)
+	s.True(immediateResult.gotSyncMatch)
 
 	// check match
 	pres := <-ch
@@ -219,9 +219,9 @@ func (s *MatcherDataSuite) TestMatchTaskImmediatelyDisabledBacklog() {
 	s.md.EnqueueTaskNoWait(s.newBacklogTask(123, 10*time.Minute, nil))
 
 	t := s.newSyncTask(nil)
-	canSyncMatch, gotSyncMatch := s.md.MatchTaskImmediately(t)
-	s.False(canSyncMatch)
-	s.False(gotSyncMatch)
+	immediateResult := s.md.MatchTaskImmediately(t)
+	s.False(immediateResult.canSyncMatch)
+	s.False(immediateResult.gotSyncMatch)
 }
 
 func (s *MatcherDataSuite) TestQuery() {

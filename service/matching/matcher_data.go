@@ -359,7 +359,12 @@ func (d *matcherData) EnqueuePollerAndWait(ctxs []context.Context, poller *waiti
 	return poller.waitForMatch()
 }
 
-func (d *matcherData) MatchTaskImmediately(task *internalTask) (canSyncMatch, gotSyncMatch bool) {
+type immediateMatchResult struct {
+	canSyncMatch bool
+	gotSyncMatch bool
+}
+
+func (d *matcherData) MatchTaskImmediately(task *internalTask) immediateMatchResult {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -369,7 +374,7 @@ func (d *matcherData) MatchTaskImmediately(task *internalTask) (canSyncMatch, go
 		// poller to become available. In presence of a backlog the chance of a poller being available when sync match
 		// request comes is almost zero.
 		// This check is mostly effective for the sync match requests that come from child partitions for spooled tasks.
-		return false, false
+		return immediateMatchResult{}
 	}
 
 	task.initMatch(d)
@@ -377,10 +382,10 @@ func (d *matcherData) MatchTaskImmediately(task *internalTask) (canSyncMatch, go
 	d.findAndWakeMatches()
 	// don't wait, check if match() picked this one already
 	if task.matchResult != nil {
-		return true, true
+		return immediateMatchResult{canSyncMatch: true, gotSyncMatch: true}
 	}
 	d.tasks.Remove(task)
-	return true, false
+	return immediateMatchResult{canSyncMatch: true}
 }
 
 func (d *matcherData) MatchPollerImmediately(poller *waitingPoller) *matchResult {
