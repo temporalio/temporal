@@ -4426,6 +4426,7 @@ type ActivityInfo_PauseInfo struct {
 	//	*ActivityInfo_PauseInfo_Manual_
 	//	*ActivityInfo_PauseInfo_RuleId
 	PausedBy      isActivityInfo_PauseInfo_PausedBy `protobuf_oneof:"paused_by"`
+	RequestId     string                            `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4488,6 +4489,13 @@ func (x *ActivityInfo_PauseInfo) GetRuleId() string {
 		if x, ok := x.PausedBy.(*ActivityInfo_PauseInfo_RuleId); ok {
 			return x.RuleId
 		}
+	}
+	return ""
+}
+
+func (x *ActivityInfo_PauseInfo) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
 	}
 	return ""
 }
@@ -5101,7 +5109,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x17NexusInvocationTaskInfo\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\"4\n" +
 	"\x18NexusCancelationTaskInfo\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattempt\"\xa9\x1c\n" +
+	"\aattempt\x18\x01 \x01(\x05R\aattempt\"\xc8\x1c\n" +
 	"\fActivityInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x127\n" +
 	"\x18scheduled_event_batch_id\x18\x02 \x01(\x03R\x15scheduledEventBatchId\x12A\n" +
@@ -5159,12 +5167,14 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\rstarted_clock\x184 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\fstartedClock\x1ay\n" +
 	"\x16UseWorkflowBuildIdInfo\x12+\n" +
 	"\x12last_used_build_id\x18\x01 \x01(\tR\x0flastUsedBuildId\x122\n" +
-	"\x15last_redirect_counter\x18\x02 \x01(\x03R\x13lastRedirectCounter\x1a\x89\x02\n" +
+	"\x15last_redirect_counter\x18\x02 \x01(\x03R\x13lastRedirectCounter\x1a\xa8\x02\n" +
 	"\tPauseInfo\x129\n" +
 	"\n" +
 	"pause_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\tpauseTime\x12[\n" +
 	"\x06manual\x18\x02 \x01(\v2A.temporal.server.api.persistence.v1.ActivityInfo.PauseInfo.ManualH\x00R\x06manual\x12\x19\n" +
-	"\arule_id\x18\x03 \x01(\tH\x00R\x06ruleId\x1a<\n" +
+	"\arule_id\x18\x03 \x01(\tH\x00R\x06ruleId\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x04 \x01(\tR\trequestId\x1a<\n" +
 	"\x06Manual\x12\x1a\n" +
 	"\bidentity\x18\x01 \x01(\tR\bidentity\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reasonB\v\n" +

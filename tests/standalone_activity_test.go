@@ -6098,7 +6098,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		}
 	})
 
-	t.Run("PauseIdempotent", func(t *testing.T) {
+	t.Run("PauseWhilePaused", func(t *testing.T) {
 		ctx := testcore.NewContext()
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
@@ -6116,7 +6116,32 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		_, err := s.FrontendClient().PauseActivityExecution(ctx, pauseReq)
 		require.NoError(t, err)
 
-		// Second pause should succeed with no error (idempotent).
+		// Second pause should fail with FailedPrecondition (activity is already paused).
+		_, err = s.FrontendClient().PauseActivityExecution(ctx, pauseReq)
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
+	})
+
+	t.Run("PauseWhilePausedIdempotent", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		pauseReq := &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+			RequestId:  "some-request-id",
+		}
+		_, err := s.FrontendClient().PauseActivityExecution(ctx, pauseReq)
+		require.NoError(t, err)
+
+		// Second pause with the same request ID should succeed (idempotent no-op).
 		_, err = s.FrontendClient().PauseActivityExecution(ctx, pauseReq)
 		require.NoError(t, err)
 	})
