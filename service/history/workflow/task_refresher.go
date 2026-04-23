@@ -55,11 +55,9 @@ type (
 func NewTaskRefresher(
 	shard historyi.ShardContext,
 ) *TaskRefresherImpl {
-
 	return &TaskRefresherImpl{
-		shard: shard,
-
-		taskGeneratorProvider: taskGeneratorProvider,
+		shard:                 shard,
+		taskGeneratorProvider: GetTaskGeneratorProvider(),
 	}
 }
 
