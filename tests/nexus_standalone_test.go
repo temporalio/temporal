@@ -467,7 +467,6 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 			startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
 				OperationId:            "test-op",
 				Endpoint:               endpointName,
-				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 				ScheduleToStartTimeout: durationpb.New(2 * time.Second),
 			})
 			s.NoError(err)
@@ -504,7 +503,6 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 			{
 				name: "StartToCloseTimeout",
 				setupReq: func(req *workflowservice.StartNexusOperationExecutionRequest) {
-					req.ScheduleToCloseTimeout = durationpb.New(10 * time.Second)
 					req.StartToCloseTimeout = durationpb.New(2 * time.Second)
 				},
 				respond: func(ctx context.Context, s *testcore.TestEnv, task *workflowservice.PollNexusTaskQueueResponse) error {
