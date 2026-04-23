@@ -317,6 +317,8 @@ func (d TimedOutEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkfl
 	}
 	op := field.Get(ctx)
 
+	// TODO: persist whether the timeout happened while processing an attempt so replay can preserve
+	// attempt-derived LastAttemptFailure for workflow-backed Nexus operations.
 	if err := nexusoperation.TransitionTimedOut.Apply(op, ctx, nexusoperation.EventTimedOut{}); err != nil {
 		return err
 	}

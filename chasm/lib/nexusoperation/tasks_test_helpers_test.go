@@ -81,8 +81,11 @@ func (m *mockStoreComponent) OnNexusOperationCanceled(ctx chasm.MutableContext, 
 	return TransitionCanceled.Apply(op, ctx, EventCanceled{Failure: cause})
 }
 
-func (m *mockStoreComponent) OnNexusOperationTimedOut(ctx chasm.MutableContext, op *Operation, _ *failurepb.Failure) error {
-	return TransitionTimedOut.Apply(op, ctx, EventTimedOut{})
+func (m *mockStoreComponent) OnNexusOperationTimedOut(ctx chasm.MutableContext, op *Operation, cause *failurepb.Failure, fromAttempt bool) error {
+	return TransitionTimedOut.Apply(op, ctx, EventTimedOut{
+		Failure:     cause,
+		FromAttempt: fromAttempt,
+	})
 }
 
 func (m *mockStoreComponent) OnNexusOperationCancellationCompleted(ctx chasm.MutableContext, op *Operation) error {
