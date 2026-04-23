@@ -1811,6 +1811,9 @@ func (ms *MutableStateImpl) Now() time.Time {
 // (i.e. they may include skipped time); this offset is the amount to subtract to get real
 // wall-clock, used by AddTasks when persisting timer-category tasks.
 func (ms *MutableStateImpl) accumulatedSkippedDuration() time.Duration {
+	if ms.executionInfo == nil {
+		return 0
+	}
 	info := ms.executionInfo.GetTimeSkippingInfo()
 	if info == nil || info.AccumulatedSkippedDuration == nil {
 		return 0
@@ -9584,12 +9587,7 @@ func (ms *MutableStateImpl) wrapTimeSourceWithTimeSkipping() {
 	if _, ok := ms.timeSource.(*clock.TimeSkippingTimeSourceWrapper); ok {
 		return
 	}
-	ms.timeSource = clock.WrapTimeSourceWithTimeSkipping(ms.timeSource, func() time.Duration {
-		info := ms.executionInfo.GetTimeSkippingInfo()
-		if info == nil || info.AccumulatedSkippedDuration == nil {
-			return 0
-		}
-		return info.AccumulatedSkippedDuration.AsDuration()
-	})
+	ms.timeSource = clock.WrapTimeSourceWithTimeSkipping(
+		ms.timeSource, ms.accumulatedSkippedDuration)
 	ms.hBuilder.SetTimeSource(ms.timeSource)
 }
