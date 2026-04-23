@@ -7304,3 +7304,22 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSk
 		})
 	}
 }
+
+func (s *mutableStateSuite) TestUpdateActivityProgress_IncrementsHeartbeatCount() {
+	dbState := s.buildWorkflowMutableState()
+	scheduleEventID := int64(100)
+	dbState.ActivityInfos[scheduleEventID] = &persistencespb.ActivityInfo{
+		ScheduledEventId: scheduleEventID,
+	}
+	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	ai := ms.pendingActivityInfoIDs[scheduleEventID]
+	s.Equal(int64(0), ai.TotalHeartbeatCount)
+
+	ms.UpdateActivityProgress(ai, &workflowservice.RecordActivityTaskHeartbeatRequest{})
+	s.Equal(int64(1), ai.TotalHeartbeatCount)
+
+	ms.UpdateActivityProgress(ai, &workflowservice.RecordActivityTaskHeartbeatRequest{})
+	s.Equal(int64(2), ai.TotalHeartbeatCount)
+}
