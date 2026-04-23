@@ -28,6 +28,7 @@ var (
 	EndpointSearchAttribute  = chasm.NewSearchAttributeKeyword("Endpoint", chasm.SearchAttributeFieldKeyword01)
 	ServiceSearchAttribute   = chasm.NewSearchAttributeKeyword("Service", chasm.SearchAttributeFieldKeyword02)
 	OperationSearchAttribute = chasm.NewSearchAttributeKeyword("Operation", chasm.SearchAttributeFieldKeyword03)
+	RequestIDSearchAttribute = chasm.NewSearchAttributeKeyword("RequestId", chasm.SearchAttributeFieldKeyword04)
 	StatusSearchAttribute    = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
 )
 
@@ -371,6 +372,7 @@ func (o *Operation) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKey
 		EndpointSearchAttribute.Value(o.Endpoint),
 		ServiceSearchAttribute.Value(o.Service),
 		OperationSearchAttribute.Value(o.Operation),
+		RequestIDSearchAttribute.Value(o.RequestId),
 		StatusSearchAttribute.Value(operationExecutionStatus(o.Status).String()),
 	}
 }

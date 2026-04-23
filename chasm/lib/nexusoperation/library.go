@@ -30,6 +30,7 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 				EndpointSearchAttribute,
 				ServiceSearchAttribute,
 				OperationSearchAttribute,
+				RequestIDSearchAttribute,
 				StatusSearchAttribute,
 			),
 			chasm.WithBusinessIDAlias("OperationId"),
