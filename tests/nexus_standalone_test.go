@@ -47,6 +47,8 @@ func TestStartStandaloneNexusOperation(t *testing.T) {
 
 		testInput := payload.EncodeString("test-input")
 		testHeader := map[string]string{"test-key": "test-value"}
+		testScheduleToStartTimeout := 2 * time.Minute
+		testStartToCloseTimeout := 3 * time.Minute
 		testUserMetadata := &sdkpb.UserMetadata{
 			Summary: payload.EncodeString("test-summary"),
 			Details: payload.EncodeString("test-details"),
@@ -57,12 +59,14 @@ func TestStartStandaloneNexusOperation(t *testing.T) {
 			},
 		}
 		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
-			OperationId:      "test-op",
-			Endpoint:         endpointName,
-			Input:            testInput,
-			NexusHeader:      testHeader,
-			UserMetadata:     testUserMetadata,
-			SearchAttributes: testSearchAttributes,
+			OperationId:            "test-op",
+			Endpoint:               endpointName,
+			Input:                  testInput,
+			NexusHeader:            testHeader,
+			ScheduleToStartTimeout: durationpb.New(testScheduleToStartTimeout),
+			StartToCloseTimeout:    durationpb.New(testStartToCloseTimeout),
+			UserMetadata:           testUserMetadata,
+			SearchAttributes:       testSearchAttributes,
 		})
 		s.NoError(err)
 		s.True(startResp.GetStarted())
@@ -93,6 +97,8 @@ func TestStartStandaloneNexusOperation(t *testing.T) {
 					Status:                 enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING,
 					State:                  enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED,
 					ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
+					ScheduleToStartTimeout: durationpb.New(testScheduleToStartTimeout),
+					StartToCloseTimeout:    durationpb.New(testStartToCloseTimeout),
 					NexusHeader:            testHeader,
 					UserMetadata:           testUserMetadata,
 					SearchAttributes:       testSearchAttributes,
@@ -142,6 +148,7 @@ func TestStartStandaloneNexusOperation(t *testing.T) {
 		resp1, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
+			RequestId:   "first-request-id",
 		})
 		s.NoError(err)
 
@@ -152,14 +159,17 @@ func TestStartStandaloneNexusOperation(t *testing.T) {
 			RequestId:   "different-request-id",
 		})
 		s.Error(err)
-		var alreadyStartedErr *serviceerror.AlreadyExists
+		var alreadyStartedErr *serviceerror.NexusOperationExecutionAlreadyStarted
 		s.ErrorAs(err, &alreadyStartedErr)
 		s.ErrorContains(err, "nexus operation execution already started")
+		s.Equal(resp1.RunId, alreadyStartedErr.RunId)
+		s.Equal("first-request-id", alreadyStartedErr.StartRequestId)
 
 		// Second start with same request ID should return existing run.
 		resp2, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
+			RequestId:   "first-request-id",
 		})
 		s.NoError(err)
 		s.Equal(resp1.RunId, resp2.RunId)
@@ -453,17 +463,200 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 		// TODO: Add canceled last-attempt-failure coverage here once standalone cancellation tasks
 		// can be completed through the public Nexus task APIs.
 
+		t.Run("ScheduleToStartTimeout", func(t *testing.T) {
+			s := testcore.NewEnv(t, nexusStandaloneOpts...)
+			taskQueue := testcore.RandomizedNexusEndpoint(t.Name())
+			endpointName := createNexusEndpointWithTaskQueue(s, taskQueue)
+
+			startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+				OperationId:            "test-op",
+				Endpoint:               endpointName,
+				ScheduleToStartTimeout: durationpb.New(2 * time.Second),
+			})
+			s.NoError(err)
+
+			require.EventuallyWithT(t, func(t *assert.CollectT) {
+				descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+					Namespace:      s.Namespace().String(),
+					OperationId:    "test-op",
+					RunId:          startResp.RunId,
+					IncludeOutcome: true,
+				})
+				require.NoError(t, err)
+				require.Equal(t, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "operation timed out",
+					FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+						TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+							TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+						},
+					},
+				}, descResp.GetFailure())
+
+				pollResp, err := s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+					Namespace:   s.Namespace().String(),
+					OperationId: "test-op",
+					RunId:       startResp.RunId,
+					WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+				})
+				require.NoError(t, err)
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "operation timed out",
+					FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+						TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+							TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+						},
+					},
+				}, pollResp.GetFailure())
+			}, 10*time.Second, 100*time.Millisecond)
+		})
+
+		t.Run("ScheduleToCloseTimeout_BeforeStart", func(t *testing.T) {
+			s := testcore.NewEnv(t, nexusStandaloneOpts...)
+			taskQueue := testcore.RandomizedNexusEndpoint(t.Name())
+			endpointName := createNexusEndpointWithTaskQueue(s, taskQueue)
+
+			startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+				OperationId:            "test-op",
+				Endpoint:               endpointName,
+				ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
+			})
+			s.NoError(err)
+
+			require.EventuallyWithT(t, func(t *assert.CollectT) {
+				descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+					Namespace:      s.Namespace().String(),
+					OperationId:    "test-op",
+					RunId:          startResp.RunId,
+					IncludeOutcome: true,
+				})
+				require.NoError(t, err)
+				require.Equal(t, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "operation timed out",
+					FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+						TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+							TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+						},
+					},
+				}, descResp.GetFailure())
+
+				pollResp, err := s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+					Namespace:   s.Namespace().String(),
+					OperationId: "test-op",
+					RunId:       startResp.RunId,
+					WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+				})
+				require.NoError(t, err)
+				protorequire.ProtoEqual(t, &failurepb.Failure{
+					Message: "operation timed out",
+					FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+						TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+							TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+						},
+					},
+				}, pollResp.GetFailure())
+			}, 10*time.Second, 100*time.Millisecond)
+		})
+
 		testCases := []struct {
-			name                   string
-			setup                  func(*workflowservice.StartNexusOperationExecutionRequest)
-			respond                func(context.Context, *testcore.TestEnv, *workflowservice.PollNexusTaskQueueResponse) error
-			expectedStatus         enumspb.NexusOperationExecutionStatus
-			expectedFailureMessage string
+			name          string
+			setupReq      func(*workflowservice.StartNexusOperationExecutionRequest)
+			respond       func(context.Context, *testcore.TestEnv, *workflowservice.PollNexusTaskQueueResponse) error
+			assertOutcome func(*assert.CollectT, *workflowservice.DescribeNexusOperationExecutionResponse, *workflowservice.PollNexusOperationExecutionResponse)
 		}{
 			{
+				name: "StartToCloseTimeout",
+				setupReq: func(req *workflowservice.StartNexusOperationExecutionRequest) {
+					req.StartToCloseTimeout = durationpb.New(2 * time.Second)
+				},
+				respond: func(ctx context.Context, s *testcore.TestEnv, task *workflowservice.PollNexusTaskQueueResponse) error {
+					_, err := s.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+						Namespace: s.Namespace().String(),
+						Identity:  "test-worker",
+						TaskToken: task.GetTaskToken(),
+						Response: &nexuspb.Response{
+							Variant: &nexuspb.Response_StartOperation{
+								StartOperation: &nexuspb.StartOperationResponse{
+									Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
+										AsyncSuccess: &nexuspb.StartOperationResponse_Async{
+											OperationToken: "test-operation-token",
+										},
+									},
+								},
+							},
+						},
+					})
+					return err
+				},
+				assertOutcome: func(t *assert.CollectT, descResp *workflowservice.DescribeNexusOperationExecutionResponse, pollResp *workflowservice.PollNexusOperationExecutionResponse) {
+					require.Equal(t, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
+					protorequire.ProtoEqual(t, &failurepb.Failure{
+						Message: "operation timed out",
+						FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+							TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+								TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+							},
+						},
+					}, descResp.GetFailure())
+					protorequire.ProtoEqual(t, &failurepb.Failure{
+						Message: "operation timed out",
+						FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+							TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+								TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+							},
+						},
+					}, pollResp.GetFailure())
+				},
+			},
+			{
+				name: "ScheduleToCloseTimeout_AfterStart",
+				setupReq: func(req *workflowservice.StartNexusOperationExecutionRequest) {
+					req.ScheduleToCloseTimeout = durationpb.New(4 * time.Second)
+				},
+				respond: func(ctx context.Context, s *testcore.TestEnv, task *workflowservice.PollNexusTaskQueueResponse) error {
+					_, err := s.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+						Namespace: s.Namespace().String(),
+						Identity:  "test-worker",
+						TaskToken: task.GetTaskToken(),
+						Response: &nexuspb.Response{
+							Variant: &nexuspb.Response_StartOperation{
+								StartOperation: &nexuspb.StartOperationResponse{
+									Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
+										AsyncSuccess: &nexuspb.StartOperationResponse_Async{
+											OperationToken: "test-operation-token",
+										},
+									},
+								},
+							},
+						},
+					})
+					return err
+				},
+				assertOutcome: func(t *assert.CollectT, descResp *workflowservice.DescribeNexusOperationExecutionResponse, pollResp *workflowservice.PollNexusOperationExecutionResponse) {
+					require.Equal(t, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
+					protorequire.ProtoEqual(t, &failurepb.Failure{
+						Message: "operation timed out",
+						FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+							TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+								TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+							},
+						},
+					}, descResp.GetFailure())
+					protorequire.ProtoEqual(t, &failurepb.Failure{
+						Message: "operation timed out",
+						FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+							TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+								TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+							},
+						},
+					}, pollResp.GetFailure())
+				},
+			},
+			{
 				name: "TimeoutLastAttemptFailure",
-				setup: func(req *workflowservice.StartNexusOperationExecutionRequest) {
-					req.ScheduleToCloseTimeout = durationpb.New(2 * time.Second)
+				setupReq: func(req *workflowservice.StartNexusOperationExecutionRequest) {
+					req.ScheduleToCloseTimeout = durationpb.New(4 * time.Second)
 				},
 				respond: func(ctx context.Context, s *testcore.TestEnv, task *workflowservice.PollNexusTaskQueueResponse) error {
 					_, err := s.FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
@@ -479,8 +672,25 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 					})
 					return err
 				},
-				expectedStatus:         enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TIMED_OUT,
-				expectedFailureMessage: "last attempt failure",
+				assertOutcome: func(t *assert.CollectT, descResp *workflowservice.DescribeNexusOperationExecutionResponse, pollResp *workflowservice.PollNexusOperationExecutionResponse) {
+					require.Equal(t, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
+					protorequire.ProtoEqual(t, &failurepb.Failure{
+						Message: "operation timed out",
+						FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+							TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+								TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+							},
+						},
+					}, descResp.GetFailure())
+					protorequire.ProtoEqual(t, &failurepb.Failure{
+						Message: "operation timed out",
+						FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+							TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+								TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+							},
+						},
+					}, pollResp.GetFailure())
+				},
 			},
 			{
 				name: "TerminalFailure",
@@ -501,15 +711,17 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 					})
 					return err
 				},
-				expectedStatus:         enumspb.NEXUS_OPERATION_EXECUTION_STATUS_FAILED,
-				expectedFailureMessage: "final failure",
+				assertOutcome: func(t *assert.CollectT, descResp *workflowservice.DescribeNexusOperationExecutionResponse, pollResp *workflowservice.PollNexusOperationExecutionResponse) {
+					require.Equal(t, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_FAILED, descResp.GetInfo().GetStatus())
+					expected := &failurepb.Failure{Message: "final failure"}
+					protorequire.ProtoEqual(t, expected, descResp.GetFailure())
+					protorequire.ProtoEqual(t, expected, pollResp.GetFailure())
+				},
 			},
 		}
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				t.Skip("Enable once standalone Nexus task and cancellation executors are wired through public Nexus task APIs")
-
 				s := testcore.NewEnv(t, nexusStandaloneOpts...)
 				taskQueue := testcore.RandomizedNexusEndpoint(t.Name())
 				endpointName := createNexusEndpointWithTaskQueue(s, taskQueue)
@@ -517,8 +729,8 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 					OperationId: "test-op",
 					Endpoint:    endpointName,
 				}
-				if tc.setup != nil {
-					tc.setup(startReq)
+				if tc.setupReq != nil {
+					tc.setupReq(startReq)
 				}
 
 				startResp, err := startNexusOperation(s, startReq)
@@ -552,8 +764,6 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 						IncludeOutcome: true,
 					})
 					require.NoError(t, err)
-					require.Equal(t, tc.expectedStatus, descResp.GetInfo().GetStatus())
-					require.Equal(t, tc.expectedFailureMessage, descResp.GetFailure().GetMessage())
 
 					pollResp, err := s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
 						Namespace:   s.Namespace().String(),
@@ -562,7 +772,7 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 						WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
 					})
 					require.NoError(t, err)
-					require.Equal(t, tc.expectedFailureMessage, pollResp.GetFailure().GetMessage())
+					tc.assertOutcome(t, descResp, pollResp)
 				}, 10*time.Second, 100*time.Millisecond)
 
 				s.NoError(<-pollerErrCh)
@@ -672,9 +882,73 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 		s.Contains(err.Error(), "cancellation already requested")
 	})
 
-	t.Run("AlreadyTerminated", func(t *testing.T) {
-		t.Skip("Cancel/terminate interaction not yet fully implemented for standalone Nexus operations")
+	t.Run("RequestCancel_ForwardsOriginalNexusHeaders", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := testcore.RandomizedNexusEndpoint(t.Name())
+		taskHeaderCh := make(chan string, 1)
 
+		listenAddr := nexustest.AllocListenAddress()
+		nexustest.NewNexusServer(t, listenAddr, nexustest.Handler{
+			OnStartOperation: func(
+				ctx context.Context,
+				service string,
+				operation string,
+				input *nexus.LazyValue,
+				options nexus.StartOperationOptions,
+			) (nexus.HandlerStartOperationResult[any], error) {
+				return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-operation-token"}, nil
+			},
+			OnCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+				taskHeaderCh <- options.Header.Get("x-test-header")
+				return nil
+			},
+		})
+
+		_, err := s.OperatorClient().CreateNexusEndpoint(s.Context(), &operatorservice.CreateNexusEndpointRequest{
+			Spec: &nexuspb.EndpointSpec{
+				Name: endpointName,
+				Target: &nexuspb.EndpointTarget{
+					Variant: &nexuspb.EndpointTarget_External_{
+						External: &nexuspb.EndpointTarget_External{
+							Url: "http://" + listenAddr,
+						},
+					},
+				},
+			},
+		})
+		s.NoError(err)
+
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+			NexusHeader: map[string]string{"x-test-header": "expected-value"},
+		})
+		s.NoError(err)
+
+		_, err = s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
+		})
+		s.NoError(err)
+
+		_, err = s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		s.NoError(err)
+
+		select {
+		case headerValue := <-taskHeaderCh:
+			require.Equal(t, "expected-value", headerValue)
+		case <-time.After(10 * time.Second):
+			t.Fatal("CancelOperation was not invoked")
+		}
+	})
+
+	t.Run("AlreadyTerminated", func(t *testing.T) {
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		endpointName := createNexusEndpoint(s)
 
@@ -706,8 +980,6 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 	})
 
 	t.Run("NotFound", func(t *testing.T) {
-		t.Skip("Cancel not yet fully implemented for standalone Nexus operations")
-
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 
 		_, err := s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
@@ -815,8 +1087,6 @@ func TestTerminateStandaloneNexusOperation(t *testing.T) {
 	})
 
 	t.Run("AlreadyCanceled", func(t *testing.T) {
-		t.Skip("Terminate not yet fully implemented for standalone Nexus operations")
-
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		endpointName := createNexusEndpoint(s)
 
@@ -1744,8 +2014,6 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 	})
 
 	t.Run("ReturnsLastAttemptFailure", func(t *testing.T) {
-		t.Skip("Enable once standalone Nexus task and cancellation executors are wired through public Nexus task APIs")
-
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		taskQueue := testcore.RandomizedNexusEndpoint(t.Name())
 		endpointName := createNexusEndpointWithTaskQueue(s, taskQueue)
@@ -1753,7 +2021,7 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId:            "test-op",
 			Endpoint:               endpointName,
-			ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
+			ScheduleToCloseTimeout: durationpb.New(4 * time.Second),
 		})
 		s.NoError(err)
 
@@ -1797,7 +2065,14 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.Equal(t, enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED, pollResp.GetWaitStage())
-			require.Equal(t, "last attempt failure", pollResp.GetFailure().GetMessage())
+			protorequire.ProtoEqual(t, &failurepb.Failure{
+				Message: "operation timed out",
+				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+					TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+						TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+					},
+				},
+			}, pollResp.GetFailure())
 		}, 10*time.Second, 100*time.Millisecond)
 
 		s.NoError(<-pollerErrCh)
@@ -1865,6 +2140,18 @@ func TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken(t *testing.T) {
 
 	s := testcore.NewEnv(t, nexusStandaloneOpts...)
 	endpointName := testcore.RandomizedNexusEndpoint(t.Name())
+	handlerLink := &commonpb.Link_WorkflowEvent{
+		Namespace:  s.Namespace().String(),
+		WorkflowId: "handler-workflow",
+		RunId:      "handler-run-id",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventId:   7,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+		},
+	}
+	handlerNexusLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	var callbackToken string
 	var callbackURL string
@@ -1879,6 +2166,7 @@ func TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken(t *testing.T) {
 		) (nexus.HandlerStartOperationResult[any], error) {
 			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
 			callbackURL = options.CallbackURL
+			nexus.AddHandlerLinks(ctx, handlerNexusLink)
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-operation-token"}, nil
 		},
 	})
@@ -1954,6 +2242,13 @@ func TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
 		protorequire.ProtoEqual(t, payload.EncodeString("result"), descResp.GetResult())
+		protorequire.ProtoSliceEqual(t, []*commonpb.Link{
+			{
+				Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: handlerLink,
+				},
+			},
+		}, descResp.GetInfo().GetLinks())
 	}, 10*time.Second, 100*time.Millisecond)
 }
 

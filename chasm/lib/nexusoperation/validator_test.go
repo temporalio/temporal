@@ -155,6 +155,80 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			},
 		},
 		{
+			name: "schedule_to_start_timeout - invalid",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.ScheduleToStartTimeout = &durationpb.Duration{Seconds: -1}
+			},
+			errMsg: "schedule_to_start_timeout is invalid",
+		},
+		{
+			name: "schedule_to_start_timeout - caps to defaulted schedule_to_close_timeout",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.ScheduleToStartTimeout = durationpb.New(2 * time.Hour)
+			},
+			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+				require.Equal(t, time.Hour, r.ScheduleToCloseTimeout.AsDuration())
+				require.Equal(t, time.Hour, r.ScheduleToStartTimeout.AsDuration())
+			},
+		},
+		{
+			name: "schedule_to_start_timeout - caps to schedule_to_close_timeout",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.ScheduleToCloseTimeout = durationpb.New(30 * time.Minute)
+				r.ScheduleToStartTimeout = durationpb.New(time.Hour)
+			},
+			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+				require.Equal(t, 30*time.Minute, r.ScheduleToStartTimeout.AsDuration())
+			},
+		},
+		{
+			name: "schedule_to_start_timeout - preserves value within schedule_to_close_timeout",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.ScheduleToCloseTimeout = durationpb.New(30 * time.Minute)
+				r.ScheduleToStartTimeout = durationpb.New(20 * time.Minute)
+			},
+			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+				require.Equal(t, 20*time.Minute, r.ScheduleToStartTimeout.AsDuration())
+			},
+		},
+		{
+			name: "start_to_close_timeout - invalid",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.StartToCloseTimeout = &durationpb.Duration{Seconds: -1}
+			},
+			errMsg: "start_to_close_timeout is invalid",
+		},
+		{
+			name: "start_to_close_timeout - caps to defaulted schedule_to_close_timeout",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.StartToCloseTimeout = durationpb.New(2 * time.Hour)
+			},
+			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+				require.Equal(t, time.Hour, r.ScheduleToCloseTimeout.AsDuration())
+				require.Equal(t, time.Hour, r.StartToCloseTimeout.AsDuration())
+			},
+		},
+		{
+			name: "start_to_close_timeout - caps to schedule_to_close_timeout",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.ScheduleToCloseTimeout = durationpb.New(30 * time.Minute)
+				r.StartToCloseTimeout = durationpb.New(time.Hour)
+			},
+			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+				require.Equal(t, 30*time.Minute, r.StartToCloseTimeout.AsDuration())
+			},
+		},
+		{
+			name: "start_to_close_timeout - preserves value within schedule_to_close_timeout",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.ScheduleToCloseTimeout = durationpb.New(30 * time.Minute)
+				r.StartToCloseTimeout = durationpb.New(10 * time.Minute)
+			},
+			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+				require.Equal(t, 10*time.Minute, r.StartToCloseTimeout.AsDuration())
+			},
+		},
+		{
 			name: "input - exceeds warning limit but within hard limit",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.Input = &commonpb.Payload{Data: []byte("exceed-warn-limit")}

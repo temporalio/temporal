@@ -309,7 +309,7 @@ func TestDescribeOutcome(t *testing.T) {
 				op.Outcome = chasm.NewDataField(ctx, tc.outcome)
 			}
 
-			result, failure := op.describeOutcome(ctx)
+			result, failure := op.outcome(ctx)
 			protorequire.ProtoEqual(t, tc.expectedResult, result)
 			protorequire.ProtoEqual(t, tc.expectedFailure, failure)
 		})

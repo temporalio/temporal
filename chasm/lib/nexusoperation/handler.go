@@ -52,7 +52,9 @@ func (h *handler) StartNexusOperation(
 	)
 	if err != nil {
 		if alreadyStartedErr, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
-			return nil, serviceerror.NewAlreadyExistsf(
+			return nil, serviceerror.NewNexusOperationExecutionAlreadyStartedf(
+				alreadyStartedErr.CurrentRequestID,
+				alreadyStartedErr.CurrentRunID,
 				"nexus operation execution already started: request_id=%s, run_id=%s",
 				alreadyStartedErr.CurrentRequestID,
 				alreadyStartedErr.CurrentRunID,
