@@ -1704,10 +1704,9 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedSyncMatch_HooksNot
 }
 
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedNoSyncMatch_HooksNotInvoked() {
-	// When a forwarded task fails to sync-match, hooks should not fire on the parent.
-	// This documents the existing (already correct) behavior: forwarded tasks that fail
-	// to sync-match return errRemoteSyncMatchFailed, which exits AddTask before reaching
-	// the hook call site. We test it here for completeness alongside the sync-match case.
+	// When a forwarded task fails to sync-match (no poller available), hooks should
+	// not fire on the parent. The errRemoteSyncMatchFailed return path already skips
+	// hooks since it exits AddTask before reaching processTaskAddHooks.
 	hook := &capturingTaskMatchHook{}
 	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
 	defer cleanup()
