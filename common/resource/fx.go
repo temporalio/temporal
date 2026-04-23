@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
@@ -388,8 +389,15 @@ func DCRedirectionPolicyProvider(cfg *config.Config) config.DCRedirectionPolicy 
 	return cfg.DCRedirectionPolicy
 }
 
-func PerServiceDialOptionsProvider() map[primitives.ServiceName][]grpc.DialOption {
-	return map[primitives.ServiceName][]grpc.DialOption{}
+func PerServiceDialOptionsProvider(
+	logger log.SnTaggedLogger,
+) map[primitives.ServiceName][]grpc.DialOption {
+	trailerInterceptor := interceptor.TrailerToContextMetadataInterceptor(logger)
+	dialOpt := grpc.WithChainUnaryInterceptor(trailerInterceptor)
+	return map[primitives.ServiceName][]grpc.DialOption{
+		primitives.HistoryService:  {dialOpt},
+		primitives.MatchingService: {dialOpt},
+	}
 }
 
 func RPCFactoryProvider(

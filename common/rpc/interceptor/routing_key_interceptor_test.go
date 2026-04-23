@@ -307,6 +307,38 @@ func TestRoutingKeyInterceptor_AllMethods(t *testing.T) {
 			},
 			expectedRoutingKey: namespace.RoutingKey{ID: "test-workflow-id"},
 		},
+
+		// PatternPollerGroupID methods (GetPollerGroupId())
+		{
+			methodName:         "PollWorkflowTaskQueue",
+			request:            &workflowservice.PollWorkflowTaskQueueRequest{PollerGroupId: "test-poller-group-id"},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-poller-group-id", Strategy: namespace.RoutingStrategyPollerGroup},
+		},
+		{
+			methodName:         "PollActivityTaskQueue",
+			request:            &workflowservice.PollActivityTaskQueueRequest{PollerGroupId: "test-poller-group-id"},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-poller-group-id", Strategy: namespace.RoutingStrategyPollerGroup},
+		},
+		{
+			methodName:         "PollNexusTaskQueue",
+			request:            &workflowservice.PollNexusTaskQueueRequest{PollerGroupId: "test-poller-group-id"},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-poller-group-id", Strategy: namespace.RoutingStrategyPollerGroup},
+		},
+		{
+			methodName:         "RespondQueryTaskCompleted",
+			request:            &workflowservice.RespondQueryTaskCompletedRequest{PollerGroupId: "test-poller-group-id"},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-poller-group-id", Strategy: namespace.RoutingStrategyPollerGroup},
+		},
+		{
+			methodName:         "RespondNexusTaskCompleted",
+			request:            &workflowservice.RespondNexusTaskCompletedRequest{PollerGroupId: "test-poller-group-id"},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-poller-group-id", Strategy: namespace.RoutingStrategyPollerGroup},
+		},
+		{
+			methodName:         "RespondNexusTaskFailed",
+			request:            &workflowservice.RespondNexusTaskFailedRequest{PollerGroupId: "test-poller-group-id"},
+			expectedRoutingKey: namespace.RoutingKey{ID: "test-poller-group-id", Strategy: namespace.RoutingStrategyPollerGroup},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -685,6 +717,14 @@ func TestMethodToPatternMapping(t *testing.T) {
 		"RecordWorkerHeartbeat": PatternNamespace,
 
 		"PollWorkflowExecutionUpdate": PatternUpdateRef,
+
+		// PatternPollerGroupID
+		"PollWorkflowTaskQueue":     PatternPollerGroupID,
+		"PollActivityTaskQueue":     PatternPollerGroupID,
+		"PollNexusTaskQueue":        PatternPollerGroupID,
+		"RespondQueryTaskCompleted": PatternPollerGroupID,
+		"RespondNexusTaskCompleted": PatternPollerGroupID,
+		"RespondNexusTaskFailed":    PatternPollerGroupID,
 	}
 
 	require.Equal(t, expectedMappings, methodToPattern)

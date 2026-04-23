@@ -131,11 +131,12 @@ var methodToPattern = map[string]RoutingKeyPattern{
 	// workflow ID (from UpdateRef)
 	"PollWorkflowExecutionUpdate": PatternUpdateRef,
 
-	// TODO: Uncomment when poller_group_id field is added to requests
-	// "PollWorkflowTaskQueue": PatternPollerGroupID,
-	// "PollActivityTaskQueue": PatternPollerGroupID,
-	// "PollNexusTaskQueue":    PatternPollerGroupID,
-
+	"PollWorkflowTaskQueue":     PatternPollerGroupID,
+	"PollActivityTaskQueue":     PatternPollerGroupID,
+	"PollNexusTaskQueue":        PatternPollerGroupID,
+	"RespondQueryTaskCompleted": PatternPollerGroupID,
+	"RespondNexusTaskCompleted": PatternPollerGroupID,
+	"RespondNexusTaskFailed":    PatternPollerGroupID,
 }
 
 // NewRoutingKeyInterceptor creates a new RoutingKeyInterceptor with the given extractor functions.
