@@ -951,6 +951,11 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 		if frontendReq.GetResetHeartbeat() {
 			a.ResetHeartbeats = true
 		}
+		if !keepPaused {
+			// Clear PauseState now so TransitionRescheduled can dispatch without being
+			// blocked by the validator (which drops dispatch tasks when PauseState != nil).
+			a.PauseState = nil
+		}
 		return &activitypb.ResetActivityExecutionResponse{}, nil
 
 	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
