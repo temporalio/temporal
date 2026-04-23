@@ -201,6 +201,19 @@ func TestDescribeOutcome(t *testing.T) {
 			lastAttemptFail: &failurepb.Failure{Message: "last attempt failure"},
 			expectedFailure: &failurepb.Failure{Message: "last attempt failure"},
 		},
+		{
+			name:   "Outcome_PreferredOverLastAttemptFailure",
+			status: nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
+			outcome: &nexusoperationpb.OperationOutcome{
+				Variant: &nexusoperationpb.OperationOutcome_Failed_{
+					Failed: &nexusoperationpb.OperationOutcome_Failed{
+						Failure: &failurepb.Failure{Message: "operation timed out"},
+					},
+				},
+			},
+			lastAttemptFail: &failurepb.Failure{Message: "last attempt failure"},
+			expectedFailure: &failurepb.Failure{Message: "operation timed out"},
+		},
 	}
 
 	for _, tc := range tests {

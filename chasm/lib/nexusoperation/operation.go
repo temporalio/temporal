@@ -50,7 +50,7 @@ type OperationStore interface {
 	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation, operationToken string, links []*commonpb.Link) error
 	OnNexusOperationCanceled(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
-	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
+	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure, fromAttempt bool) error
 	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation, result *commonpb.Payload, links []*commonpb.Link) error
 	OnNexusOperationCancellationCompleted(ctx chasm.MutableContext, operation *Operation) error
 	OnNexusOperationCancellationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
@@ -188,16 +188,14 @@ func (o *Operation) onCanceled(ctx chasm.MutableContext, cause *failurepb.Failur
 	return TransitionCanceled.Apply(o, ctx, EventCanceled{Failure: cause})
 }
 
-func (o *Operation) onTimedOut(ctx chasm.MutableContext, cause *failurepb.Failure) error {
+func (o *Operation) onTimedOut(ctx chasm.MutableContext, cause *failurepb.Failure, fromAttempt bool) error {
 	if store, ok := o.Store.TryGet(ctx); ok {
-		return store.OnNexusOperationTimedOut(ctx, o, cause)
+		return store.OnNexusOperationTimedOut(ctx, o, cause, fromAttempt)
 	}
-	if cause != nil {
-		o.getOrCreateOutcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
-			Failed: &nexusoperationpb.OperationOutcome_Failed{Failure: cause},
-		}
-	}
-	return TransitionTimedOut.Apply(o, ctx, EventTimedOut{})
+	return TransitionTimedOut.Apply(o, ctx, EventTimedOut{
+		Failure:     cause,
+		FromAttempt: fromAttempt,
+	})
 }
 
 func (o *Operation) HandleNexusCompletion(
@@ -290,7 +288,7 @@ func (o *Operation) saveInvocationResult(
 	case invocationResultFail:
 		return nil, o.onFailed(ctx, r.failure)
 	case invocationResultTimeout:
-		return nil, o.onTimedOut(ctx, r.failure)
+		return nil, o.onTimedOut(ctx, r.failure, true)
 	case invocationResultRetry:
 		return nil, transitionAttemptFailed.Apply(o, ctx, EventAttemptFailed{
 			Failure:     r.failure,
@@ -301,18 +299,22 @@ func (o *Operation) saveInvocationResult(
 	}
 }
 
-func (o *Operation) resolveUnsuccessfully(ctx chasm.MutableContext, failure *failurepb.Failure, closeTime time.Time) error {
-	if o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED {
+// resolveUnsuccessfully finalizes the operation. When fromAttempt is true, the failure is recorded as
+// LastAttemptFailure. Otherwise the failure is recorded as the terminal Outcome.
+func (o *Operation) resolveUnsuccessfully(ctx chasm.MutableContext, failure *failurepb.Failure, closeTime time.Time, fromAttempt bool) error {
+	softassert.That(ctx.Logger(), failure != nil, "resolveUnsuccessfully called with nil failure")
+	if fromAttempt {
 		o.LastAttemptCompleteTime = timestamppb.New(ctx.Now(o))
 		o.LastAttemptFailure = failure
-	}
-	o.ClosedTime = timestamppb.New(closeTime)
-	o.NextAttemptScheduleTime = nil
-	if failure != nil {
+	} else {
 		o.getOrCreateOutcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Failed_{
 			Failed: &nexusoperationpb.OperationOutcome_Failed{Failure: failure},
 		}
 	}
+	o.ClosedTime = timestamppb.New(closeTime)
+
+	// NextAttemptScheduleTime is only valid in BACKING_OFF; clear on close
+	o.NextAttemptScheduleTime = nil
 	return nil
 }
 
