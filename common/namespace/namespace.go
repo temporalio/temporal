@@ -179,6 +179,10 @@ func (ns *Namespace) State() enumspb.NamespaceState {
 	return ns.info.State
 }
 
+func (ns *Namespace) ReplicationResolver() ReplicationResolver {
+	return ns.replicationResolver
+}
+
 func (ns *Namespace) ReplicationState(businessID string) enumspb.ReplicationState {
 	return ns.replicationResolver.ReplicationState(businessID)
 }
