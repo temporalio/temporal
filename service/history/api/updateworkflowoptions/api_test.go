@@ -33,36 +33,32 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type noopVersionMembershipCache struct{}
+type noopVersionCache struct{}
 
-func (noopVersionMembershipCache) Get(
+func (noopVersionCache) Get(
 	_ string,
 	_ string,
 	_ enumspb.TaskQueueType,
 	_ string,
 	_ string,
-) (isMember bool, ok bool) {
-	return false, false
+) (isMember bool, shouldSkipReactivation bool, revisionNumber int64, ok bool) {
+	return false, false, 0, false
 }
 
-func (noopVersionMembershipCache) Put(
+func (noopVersionCache) Put(
 	_ string,
 	_ string,
 	_ enumspb.TaskQueueType,
 	_ string,
 	_ string,
 	_ bool,
+	_ bool,
+	_ int64,
 ) {
 }
 
-type noopReactivationSignalCache struct{}
-
-func (noopReactivationSignalCache) ShouldSendSignal(_, _, _ string) bool {
-	return false // Always return false to skip sending signals in tests
-}
-
 // noopReactivationSignaler is a no-op signaler function for tests
-func noopReactivationSignaler(_ context.Context, _ *namespace.Namespace, _, _ string) error {
+func noopReactivationSignaler(_ context.Context, _ *namespace.Namespace, _, _ string, _ int64) error {
 	return nil
 }
 
@@ -330,9 +326,8 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 		s.shardContext,
 		s.workflowConsistencyChecker,
 		s.mockMatchingClient,
-		noopVersionMembershipCache{},  // cache not meant to be used in this test
-		noopReactivationSignalCache{}, // cache not meant to be used in this test
-		noopReactivationSignaler,      // signaler not meant to be used in this test
+		noopVersionCache{},       // cache not meant to be used in this test
+		noopReactivationSignaler, // signaler not meant to be used in this test
 	)
 	s.NoError(err)
 	s.NotNil(resp)

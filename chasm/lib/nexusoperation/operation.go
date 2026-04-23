@@ -17,6 +17,7 @@ import (
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/softassert"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -47,7 +48,7 @@ type InvocationData struct {
 }
 
 type OperationStore interface {
-	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation, operationToken string, links []*commonpb.Link) error
+	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation, operationToken string, startTime *time.Time, links []*commonpb.Link) error
 	OnNexusOperationCanceled(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure, fromAttempt bool) error
@@ -84,8 +85,6 @@ func newStandaloneOperation(
 		Service:                frontendReq.GetService(),
 		Operation:              frontendReq.GetOperation(),
 		ScheduleToCloseTimeout: frontendReq.GetScheduleToCloseTimeout(),
-		ScheduleToStartTimeout: frontendReq.GetScheduleToStartTimeout(),
-		StartToCloseTimeout:    frontendReq.GetStartToCloseTimeout(),
 		ScheduledTime:          timestamppb.New(ctx.Now(nil)),
 		RequestId:              uuid.NewString(),
 	})
@@ -160,12 +159,15 @@ func (o *Operation) RequestCancel(
 	return nil
 }
 
-func (o *Operation) onStarted(ctx chasm.MutableContext, operationToken string, links []*commonpb.Link) error {
+func (o *Operation) onStarted(ctx chasm.MutableContext, operationToken string, startTime *time.Time, links []*commonpb.Link) error {
 	if store, ok := o.Store.TryGet(ctx); ok {
-		return store.OnNexusOperationStarted(ctx, o, operationToken, links)
+		return store.OnNexusOperationStarted(ctx, o, operationToken, startTime, links)
 	}
 	o.Links = append(o.Links, links...)
-	return TransitionStarted.Apply(o, ctx, EventStarted{OperationToken: operationToken})
+	return TransitionStarted.Apply(o, ctx, EventStarted{
+		OperationToken: operationToken,
+		StartTime:      startTime,
+	})
 }
 
 func (o *Operation) onCompleted(ctx chasm.MutableContext, result *commonpb.Payload, links []*commonpb.Link) error {
@@ -204,11 +206,23 @@ func (o *Operation) HandleNexusCompletion(
 	ctx chasm.MutableContext,
 	completion *persistencespb.ChasmNexusCompletion,
 ) error {
-	// TODO: support completion-before-start
+	if completion.GetRequestId() != "" && o.GetRequestId() != completion.GetRequestId() {
+		return serviceerror.NewNotFound("operation not found")
+	}
+
+	links := completion.GetLinks()
+
+	if o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED {
+		startTime := timestamp.TimeValuePtr(completion.GetStartTime())
+		if err := o.onStarted(ctx, completion.GetOperationToken(), startTime, links); err != nil {
+			return err
+		}
+		links = nil
+	}
 
 	switch outcome := completion.Outcome.(type) {
 	case *persistencespb.ChasmNexusCompletion_Success:
-		return o.onCompleted(ctx, outcome.Success, completion.GetLinks())
+		return o.onCompleted(ctx, outcome.Success, links)
 	case *persistencespb.ChasmNexusCompletion_Failure:
 		if outcome.Failure.GetCanceledFailureInfo() != nil {
 			return o.onCanceled(ctx, outcome.Failure)
@@ -282,7 +296,7 @@ func (o *Operation) saveInvocationResult(
 	case invocationResultOK:
 		links := convertResponseLinks(r.response.Links, ctx.Logger())
 		if r.response.Pending != nil {
-			return nil, o.onStarted(ctx, r.response.Pending.Token, links)
+			return nil, o.onStarted(ctx, r.response.Pending.Token, nil, links)
 		}
 		return nil, o.onCompleted(ctx, r.response.Successful, links)
 	case invocationResultCancel:

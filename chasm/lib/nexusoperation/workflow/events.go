@@ -181,8 +181,11 @@ func (d StartedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflo
 		return serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId())
 	}
 	op := field.Get(ctx)
+
+	startTime := event.GetEventTime().AsTime()
 	return nexusoperation.TransitionStarted.Apply(op, ctx, nexusoperation.EventStarted{
 		OperationToken: attrs.GetOperationToken(),
+		StartTime:      &startTime,
 	})
 }
 
@@ -213,8 +216,10 @@ func (d CompletedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkf
 	}
 	op := field.Get(ctx)
 
+	completeTime := event.GetEventTime().AsTime()
 	if err := nexusoperation.TransitionSucceeded.Apply(op, ctx, nexusoperation.EventSucceeded{
-		Result: attrs.GetResult(),
+		Result:       attrs.GetResult(),
+		CompleteTime: &completeTime,
 	}); err != nil {
 		return err
 	}
@@ -249,8 +254,10 @@ func (d FailedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow
 	}
 	op := field.Get(ctx)
 
+	completeTime := event.GetEventTime().AsTime()
 	if err := nexusoperation.TransitionFailed.Apply(op, ctx, nexusoperation.EventFailed{
-		Failure: attrs.GetFailure().GetCause(), // must be provided to complete transition
+		CompleteTime: &completeTime,
+		Failure:      attrs.GetFailure().GetCause(),
 	}); err != nil {
 		return err
 	}
@@ -285,8 +292,10 @@ func (d CanceledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkfl
 	}
 	op := field.Get(ctx)
 
+	completeTime := event.GetEventTime().AsTime()
 	if err := nexusoperation.TransitionCanceled.Apply(op, ctx, nexusoperation.EventCanceled{
-		Failure: attrs.GetFailure().GetCause(), // must be provided to complete transition
+		CompleteTime: &completeTime,
+		Failure:      attrs.GetFailure().GetCause(),
 	}); err != nil {
 		return err
 	}
@@ -322,7 +331,7 @@ func (d TimedOutEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkfl
 	op := field.Get(ctx)
 
 	if err := nexusoperation.TransitionTimedOut.Apply(op, ctx, nexusoperation.EventTimedOut{
-		Failure: attrs.GetFailure().GetCause(), // must be provided to complete transition
+		Failure: attrs.GetFailure().GetCause(),
 	}); err != nil {
 		return err
 	}

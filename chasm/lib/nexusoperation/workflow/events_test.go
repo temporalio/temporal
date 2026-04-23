@@ -36,6 +36,47 @@ func scheduleOperation(t *testing.T, tcx testContext) (*historypb.HistoryEvent, 
 	return event, event.EventId
 }
 
+func applyStartedEvent(t *testing.T, tcx testContext, scheduledEventID int64, eventTime time.Time) {
+	t.Helper()
+	applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, &historypb.HistoryEvent{
+		EventTime: timestamppb.New(eventTime),
+		Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
+			NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
+				ScheduledEventId: scheduledEventID,
+				OperationToken:   "token",
+			},
+		},
+	})
+}
+
+func applyEventDefinition(
+	t *testing.T,
+	tcx testContext,
+	eventType enumspb.EventType,
+	event *historypb.HistoryEvent,
+) {
+	t.Helper()
+	chReg := chasmworkflow.NewRegistry()
+	require.NoError(t, chReg.Register(newLibrary(defaultConfig, chasm.NewNexusEndpointProcessor())))
+	def, ok := chReg.EventDefinitionByEventType(eventType)
+	require.True(t, ok)
+	err := def.Apply(tcx.chasmCtx, tcx.wf, event)
+	require.NoError(t, err)
+}
+
+func assertTerminalEventApplied(
+	t *testing.T,
+	tcx testContext,
+	key int64,
+	op *nexusoperationpb.OperationState,
+	expectedStatus nexusoperationpb.OperationStatus,
+) {
+	t.Helper()
+	require.Equal(t, expectedStatus, op.GetStatus())
+	_, ok := tcx.wf.Operations[key]
+	require.False(t, ok, "operation should be removed after terminal event")
+}
+
 func TestCherryPick(t *testing.T) {
 	t.Run("should exclude nexus events", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
@@ -118,105 +159,167 @@ func TestCherryPick(t *testing.T) {
 	})
 }
 
-func TestTerminalStatesDeletion(t *testing.T) {
-	testCases := []struct {
-		name      string
-		eventType enumspb.EventType
-		event     *historypb.HistoryEvent
-	}{
-		{
-			name:      "CompletedDeletesOperation",
-			eventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED,
-		},
-		{
-			name:      "FailedDeletesOperation",
-			eventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED,
-		},
-		{
-			name:      "CanceledDeletesOperation",
-			eventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED,
-		},
-		{
-			name:      "TimedOutDeletesOperation",
-			eventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT,
-		},
+func TestCompletedEventDefinitionApply(t *testing.T) {
+	eventTime := time.Now().UTC()
+	buildEvent := func(scheduledEventID int64) *historypb.HistoryEvent {
+		return &historypb.HistoryEvent{
+			EventTime: timestamppb.New(eventTime),
+			Attributes: &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
+				NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{
+					ScheduledEventId: scheduledEventID,
+				},
+			},
+		}
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			tcx := newTestContext(t, defaultConfig)
-			scheduledEvent, key := scheduleOperation(t, tcx)
-			scheduledEventID := scheduledEvent.EventId
+	t.Run("without started event", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		scheduledEvent, key := scheduleOperation(t, tcx)
+		field, ok := tcx.wf.Operations[key]
+		require.True(t, ok)
+		op := field.Get(tcx.chasmCtx)
+		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, buildEvent(scheduledEvent.EventId))
+		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_SUCCEEDED)
+		require.Equal(t, eventTime, op.GetClosedTime().AsTime())
+	})
 
-			// Verify operation exists.
-			_, ok := tcx.wf.Operations[key]
-			require.True(t, ok)
+	t.Run("with started event", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		scheduledEvent, key := scheduleOperation(t, tcx)
+		field, ok := tcx.wf.Operations[key]
+		require.True(t, ok)
+		op := field.Get(tcx.chasmCtx)
+		applyStartedEvent(t, tcx, scheduledEvent.EventId, eventTime)
+		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, buildEvent(scheduledEvent.EventId))
+		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_SUCCEEDED)
+		require.Equal(t, eventTime, op.GetClosedTime().AsTime())
+	})
+}
 
-			// Build the terminal event.
-			event := &historypb.HistoryEvent{
-				EventTime: timestamppb.Now(),
-			}
-			switch tc.eventType {
-			case enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED:
-				event.Attributes = &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
-					NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{
-						ScheduledEventId: scheduledEventID,
+func TestFailedEventDefinitionApply(t *testing.T) {
+	eventTime := time.Now().UTC()
+	buildEvent := func(scheduledEventID int64) *historypb.HistoryEvent {
+		return &historypb.HistoryEvent{
+			EventTime: timestamppb.New(eventTime),
+			Attributes: &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
+				NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
+					ScheduledEventId: scheduledEventID,
+					Failure: &failurepb.Failure{
+						Message: "nexus operation failed",
+						Cause:   &failurepb.Failure{Message: "operation failed"},
 					},
-				}
-			case enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED:
-				event.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
-					NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
-						ScheduledEventId: scheduledEventID,
-						Failure: &failurepb.Failure{
-							Message: "nexus operation failed",
-							Cause:   &failurepb.Failure{Message: "operation failed"},
-						},
-					},
-				}
-			case enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED:
-				event.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
-					NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
-						ScheduledEventId: scheduledEventID,
-						Failure: &failurepb.Failure{
-							Message: "nexus operation canceled",
-							Cause:   &failurepb.Failure{Message: "operation canceled"},
-						},
-					},
-				}
-			case enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT:
-				event.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
-					NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
-						ScheduledEventId: scheduledEventID,
-						Failure: &failurepb.Failure{
-							Message: "nexus operation timed out",
-							Cause:   &failurepb.Failure{Message: "operation timed out"},
-						},
-					},
-				}
-			default:
-				t.Fatalf("unexpected event type: %v", tc.eventType)
-			}
-
-			// Look up the event definition from the registry.
-			chReg := chasmworkflow.NewRegistry()
-			require.NoError(t, chReg.Register(newLibrary(defaultConfig, chasm.NewNexusEndpointProcessor())))
-			def, ok := chReg.EventDefinitionByEventType(tc.eventType)
-			require.True(t, ok)
-
-			err := def.Apply(tcx.chasmCtx, tcx.wf, event)
-			require.NoError(t, err)
-
-			// Verify operation was removed.
-			_, ok = tcx.wf.Operations[key]
-			require.False(t, ok, "operation should be removed after terminal event")
-		})
+				},
+			},
+		}
 	}
+
+	t.Run("without started event", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		scheduledEvent, key := scheduleOperation(t, tcx)
+		field, ok := tcx.wf.Operations[key]
+		require.True(t, ok)
+		op := field.Get(tcx.chasmCtx)
+		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, buildEvent(scheduledEvent.EventId))
+		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_FAILED)
+		require.Equal(t, eventTime, op.GetClosedTime().AsTime())
+	})
+
+	t.Run("with started event", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		scheduledEvent, key := scheduleOperation(t, tcx)
+		field, ok := tcx.wf.Operations[key]
+		require.True(t, ok)
+		op := field.Get(tcx.chasmCtx)
+		applyStartedEvent(t, tcx, scheduledEvent.EventId, eventTime)
+		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, buildEvent(scheduledEvent.EventId))
+		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_FAILED)
+		require.Equal(t, eventTime, op.GetClosedTime().AsTime())
+	})
+}
+
+func TestCanceledEventDefinitionApply(t *testing.T) {
+	eventTime := time.Now().UTC()
+	buildEvent := func(scheduledEventID int64) *historypb.HistoryEvent {
+		return &historypb.HistoryEvent{
+			EventTime: timestamppb.New(eventTime),
+			Attributes: &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
+				NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
+					ScheduledEventId: scheduledEventID,
+					Failure: &failurepb.Failure{
+						Message: "nexus operation canceled",
+						Cause:   &failurepb.Failure{Message: "operation canceled"},
+					},
+				},
+			},
+		}
+	}
+
+	t.Run("without started event", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		scheduledEvent, key := scheduleOperation(t, tcx)
+		field, ok := tcx.wf.Operations[key]
+		require.True(t, ok)
+		op := field.Get(tcx.chasmCtx)
+		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, buildEvent(scheduledEvent.EventId))
+		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_CANCELED)
+		require.Equal(t, eventTime, op.GetClosedTime().AsTime())
+	})
+
+	t.Run("with started event", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		scheduledEvent, key := scheduleOperation(t, tcx)
+		field, ok := tcx.wf.Operations[key]
+		require.True(t, ok)
+		op := field.Get(tcx.chasmCtx)
+		applyStartedEvent(t, tcx, scheduledEvent.EventId, eventTime)
+		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, buildEvent(scheduledEvent.EventId))
+		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_CANCELED)
+		require.Equal(t, eventTime, op.GetClosedTime().AsTime())
+	})
+}
+
+func TestTimedOutEventDefinitionApply(t *testing.T) {
+	eventTime := time.Now().UTC()
+	buildEvent := func(scheduledEventID int64) *historypb.HistoryEvent {
+		return &historypb.HistoryEvent{
+			EventTime: timestamppb.New(eventTime),
+			Attributes: &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
+				NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
+					ScheduledEventId: scheduledEventID,
+					Failure: &failurepb.Failure{
+						Message: "nexus operation timed out",
+						Cause:   &failurepb.Failure{Message: "operation timed out"},
+					},
+				},
+			},
+		}
+	}
+
+	t.Run("without started event", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		scheduledEvent, key := scheduleOperation(t, tcx)
+		field, ok := tcx.wf.Operations[key]
+		require.True(t, ok)
+		op := field.Get(tcx.chasmCtx)
+		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, buildEvent(scheduledEvent.EventId))
+		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_TIMED_OUT)
+	})
+
+	t.Run("with started event", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		scheduledEvent, key := scheduleOperation(t, tcx)
+		field, ok := tcx.wf.Operations[key]
+		require.True(t, ok)
+		op := field.Get(tcx.chasmCtx)
+		applyStartedEvent(t, tcx, scheduledEvent.EventId, eventTime)
+		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, buildEvent(scheduledEvent.EventId))
+		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_TIMED_OUT)
+	})
 }
 
 func TestScheduledEventDefinitionApply(t *testing.T) {
 	tcx := newTestContext(t, defaultConfig)
 
-	def := ScheduledEventDefinition{}
 	event := &historypb.HistoryEvent{
 		EventId:   int64(10),
 		EventTime: timestamppb.Now(),
@@ -233,8 +336,7 @@ func TestScheduledEventDefinitionApply(t *testing.T) {
 		},
 	}
 
-	err := def.Apply(tcx.chasmCtx, tcx.wf, event)
-	require.NoError(t, err)
+	applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, event)
 
 	field, ok := tcx.wf.Operations[event.EventId]
 	require.True(t, ok)
@@ -250,10 +352,10 @@ func TestScheduledEventDefinitionApply(t *testing.T) {
 func TestStartedEventDefinitionApply(t *testing.T) {
 	tcx := newTestContext(t, defaultConfig)
 	event, key := scheduleOperation(t, tcx)
+	startTime := time.Now().UTC()
 
-	def := StartedEventDefinition{}
-	err := def.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
-		EventTime: timestamppb.Now(),
+	applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, &historypb.HistoryEvent{
+		EventTime: timestamppb.New(startTime),
 		Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
 			NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
 				ScheduledEventId: event.EventId,
@@ -261,13 +363,13 @@ func TestStartedEventDefinitionApply(t *testing.T) {
 			},
 		},
 	})
-	require.NoError(t, err)
 
 	field, ok := tcx.wf.Operations[key]
 	require.True(t, ok)
 	op := field.Get(tcx.chasmCtx)
 	require.Equal(t, nexusoperationpb.OPERATION_STATUS_STARTED, op.Status)
 	require.Equal(t, "test-token", op.GetOperationToken())
+	require.Equal(t, startTime, op.GetStartedTime().AsTime())
 }
 
 func TestCancelRequestedEventDefinitionApply(t *testing.T) {

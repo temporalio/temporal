@@ -2,6 +2,7 @@ package nexusoperation
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -45,8 +46,11 @@ type mockStoreComponent struct {
 	// Data is required by CHASM for serialization - every component needs a proto.Message field.
 	Data *nexusoperationpb.OperationState
 
-	invocationData InvocationData
-	Op             chasm.Field[*Operation]
+	invocationData  InvocationData
+	Op              chasm.Field[*Operation]
+	startLinks      []*commonpb.Link
+	completionLinks []*commonpb.Link
+	startTime       *time.Time
 }
 
 func (m *mockStoreComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
@@ -65,11 +69,17 @@ func (m *mockStoreComponent) NexusOperationInvocationData(_ chasm.Context, _ *Op
 	return m.invocationData, nil
 }
 
-func (m *mockStoreComponent) OnNexusOperationStarted(ctx chasm.MutableContext, op *Operation, operationToken string, _ []*commonpb.Link) error {
-	return TransitionStarted.Apply(op, ctx, EventStarted{OperationToken: operationToken})
+func (m *mockStoreComponent) OnNexusOperationStarted(ctx chasm.MutableContext, op *Operation, operationToken string, startTime *time.Time, links []*commonpb.Link) error {
+	m.startTime = startTime
+	m.startLinks = links
+	return TransitionStarted.Apply(op, ctx, EventStarted{
+		OperationToken: operationToken,
+		StartTime:      startTime,
+	})
 }
 
-func (m *mockStoreComponent) OnNexusOperationCompleted(ctx chasm.MutableContext, op *Operation, result *commonpb.Payload, _ []*commonpb.Link) error {
+func (m *mockStoreComponent) OnNexusOperationCompleted(ctx chasm.MutableContext, op *Operation, result *commonpb.Payload, links []*commonpb.Link) error {
+	m.completionLinks = links
 	return TransitionSucceeded.Apply(op, ctx, EventSucceeded{Result: result})
 }
 

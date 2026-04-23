@@ -884,10 +884,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart(chasmEnabled bool) {
-	if chasmEnabled {
-		// TODO: Implement completion-before-start in stephanos/nexus-chasm-async-compl-2.
-		s.T().Skip("Blocked on CHASM Nexus completion-before-start support")
-	}
 	env := s.newNexusWorkflowTestEnv(chasmEnabled)
 	ctx := testcore.NewContext()
 	taskQueues := []string{testcore.RandomizeStr(s.T().Name()), testcore.RandomizeStr(s.T().Name())}
@@ -1023,6 +1019,15 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart(ch
 		Identity: "test",
 	})
 	s.NoError(err)
+	completionWorkflowHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: completionWFID,
+		RunId:      completionWfRunIDs[0],
+	})
+	completionWorkflowStartedEventIdx := slices.IndexFunc(completionWorkflowHistory, func(e *historypb.HistoryEvent) bool {
+		return e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED
+	})
+	s.NotEqual(-1, completionWorkflowStartedEventIdx)
+	completionWorkflowStartTime := completionWorkflowHistory[completionWorkflowStartedEventIdx].GetEventTime().AsTime()
 	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
 		TaskToken: pollResp.TaskToken,
@@ -1079,18 +1084,26 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart(ch
 			Identity: "test",
 		})
 		s.NoError(err)
+
 		startedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 			return e.GetNexusOperationStartedEventAttributes() != nil
 		})
 		s.NotEqual(-1, startedEventIdx)
 		nexusOpStartedEvent := pollResp.History.Events[startedEventIdx]
 		s.Equal(completionWFID, nexusOpStartedEvent.GetNexusOperationStartedEventAttributes().OperationToken)
+		s.Equal(
+			completionWorkflowStartTime.Truncate(time.Second),
+			nexusOpStartedEvent.GetEventTime().AsTime().Truncate(time.Second),
+		)
 		s.Len(nexusOpStartedEvent.Links, 1)
 		s.ProtoEqual(expectedLinks[i], nexusOpStartedEvent.Links[0].GetWorkflowEvent())
+
 		completedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 			return e.GetNexusOperationCompletedEventAttributes() != nil
 		})
 		s.Positive(completedEventIdx)
+		s.Less(startedEventIdx, completedEventIdx)
+		s.Empty(pollResp.History.Events[completedEventIdx].Links)
 
 		// Complete start request to verify response is ignored.
 		_, err = env.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
@@ -1122,7 +1135,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart(ch
 						CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 							Result: &commonpb.Payloads{
 								Payloads: []*commonpb.Payload{
-									pollResp.History.Events[completedEventIdx].GetNexusOperationCompletedEventAttributes().Result,
+									testcore.MustToPayload(s.T(), "result"),
 								},
 							},
 						},

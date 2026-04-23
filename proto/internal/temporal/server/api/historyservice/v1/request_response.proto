@@ -1207,6 +1207,11 @@ message CompleteNexusOperationChasmRequest {
   google.protobuf.Timestamp close_time = 4;
   // Links from the Nexus completion callback (e.g. references to the handler workflow).
   repeated temporal.api.common.v1.Link links = 5;
+  // Async operation token from the callback request, used to synthesize a started event when
+  // completion arrives before the worker's start response.
+  string operation_token = 6;
+  // Time when the operation was started. Used when completion is received before the started response.
+  google.protobuf.Timestamp start_time = 7;
 }
 
 message CompleteNexusOperationChasmResponse {}

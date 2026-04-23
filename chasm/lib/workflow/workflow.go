@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -176,6 +177,7 @@ func (w *Workflow) OnNexusOperationStarted(
 	ctx chasm.MutableContext,
 	op *nexusoperation.Operation,
 	operationToken string,
+	startTime *time.Time,
 	links []*commonpb.Link,
 ) error {
 	parentData := &workflowpb.NexusOperationParentData{}
@@ -192,6 +194,10 @@ func (w *Workflow) OnNexusOperationStarted(
 			},
 		}
 		e.Links = links
+		if startTime != nil {
+			// For completion-before-start, use the callback-provided start time for the synthetic started event.
+			e.EventTime = timestamppb.New(*startTime)
+		}
 	})
 	return err
 }
