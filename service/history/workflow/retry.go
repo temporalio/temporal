@@ -303,12 +303,9 @@ func SetupNewWorkflowForRetryOrCron(
 		VersioningOverride:       pinnedOverride,
 	}
 
-	// Retry inherits the TimeSkippingConfig snapshot from the previous run's
-	// WorkflowExecutionStarted event verbatim. Cron does not inherit TSC — new
-	// cron runs start fresh, consistent with the cron-never-inherits convention.
-	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
-		createRequest.TimeSkippingConfig = startAttr.GetTimeSkippingConfig()
-	}
+	// Retry and Cron inherit the TimeSkippingConfig snapshot from the previous
+	// run's WorkflowExecutionStarted event verbatim.
+	createRequest.TimeSkippingConfig = startAttr.GetTimeSkippingConfig()
 
 	attempt := int32(1)
 	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
