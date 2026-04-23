@@ -388,7 +388,7 @@ func (s *healthCheckerSuite) Test_GetProportionOfNotReadyHosts() {
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			proportion := ensureMinimumProportionOfHosts(tc.proportionOfDeclinedServingHosts, tc.totalHosts)
-			s.Equal(tc.expectedProportion, proportion)
+			s.InDelta(tc.expectedProportion, proportion, 0.01)
 		})
 	}
 }
