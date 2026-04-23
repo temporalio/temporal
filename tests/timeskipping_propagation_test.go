@@ -35,8 +35,14 @@ func TestTimeSkippingPropagationTestSuite(t *testing.T) {
 }
 
 // TestTimeSkippingPropagation_ParentTimerChildTimerParentTimer exercises end-to-end
-// propagation of TimeSkippingConfig + PropagatedSkippedDuration from parent to child,
+// propagation of TimeSkippingConfig + AccumulatedSkippedDuration from parent to child,
 // together with the idle-only skipping invariant on the parent.
+//
+// The parent's StartChildWorkflowExecutionInitiated event carries a PSD snapshot of
+// the parent's accumulated skip at child-start time. applyTimeSkippingConfig on the
+// child's MS converts that PSD into AccumulatedSkippedDuration and strips PSD from
+// the stored Config, so the child's virtual clock continues from where the parent
+// left off.
 //
 // Scenario:
 //   - Parent starts with TimeSkippingConfig{Enabled: true}.
@@ -44,11 +50,11 @@ func TestTimeSkippingPropagationTestSuite(t *testing.T) {
 //     After skip: parent.AccumulatedSkippedDuration = 1h.
 //   - t1 fires. Parent issues StartChildWorkflow(child) and StartTimer(t2, 1h).
 //     Parent now has a pending child → NOT idle → parent does NOT skip.
-//   - Child is started. Its mutable state receives TimeSkippingConfig propagated
-//     from the parent, plus PropagatedSkippedDuration = 1h (parent's accumulated
-//     skip at the moment the child started).
+//   - Child is started. Its MS is seeded with AccumulatedSkippedDuration = 1h
+//     (converted from the PSD=1h on the initiated event) and Config.Enabled = true
+//     (Config.PSD stripped by applyTimeSkippingConfig).
 //   - Child issues StartTimer(tc, 3h). Child is idle → server skips 3h.
-//     After skip: child.AccumulatedSkippedDuration = 3h.
+//     After skip: child.AccumulatedSkippedDuration = 1h + 3h = 4h.
 //   - tc fires. Child completes.
 //   - Parent receives ChildWorkflowExecutionCompleted. Parent is now only waiting
 //     on t2 → idle → server skips 1h to fire t2.
@@ -58,9 +64,11 @@ func TestTimeSkippingPropagationTestSuite(t *testing.T) {
 // End-state assertions:
 //   - parent.AccumulatedSkippedDuration == 2h.
 //   - child.TimeSkippingInfo.Config.Enabled == true (propagated).
-//   - child.TimeSkippingInfo.Config.PropagatedSkippedDuration == 1h.
-//   - child.AccumulatedSkippedDuration == 3h.
-//   - child's total virtual advance (propagated + accumulated) == 4h.
+//   - child.TimeSkippingInfo.Config.PropagatedSkippedDuration is unset on the MS —
+//     applyTimeSkippingConfig stripped it after converting to AccumulatedSkippedDuration.
+//   - child.AccumulatedSkippedDuration == 4h (1h inherited + 3h own from tc).
+//   - The parent's StartChildWorkflowExecutionInitiated event retains PSD=1h (the
+//     pre-apply snapshot; it is the wire form the transfer task consumes).
 //   - Wall-clock elapsed is nowhere near 5h of virtual time.
 func (s *TimeSkippingPropagationTestSuite) TestTimeSkippingPropagation_ParentTimerChildTimerParentTimer() {
 	env := testcore.NewEnv(s.T())
@@ -152,13 +160,10 @@ func (s *TimeSkippingPropagationTestSuite) TestTimeSkippingPropagation_ParentTim
 	childCfg := childTSI.GetConfig()
 	s.NotNil(childCfg)
 	s.True(childCfg.GetEnabled(), "child TSC.Enabled propagated from parent")
-	s.approxDuration(time.Hour, childCfg.GetPropagatedSkippedDuration().AsDuration(),
-		"child PropagatedSkippedDuration == parent's AccumulatedSkippedDuration at child-start (1h)")
-	s.approxDuration(3*time.Hour, childTSI.GetAccumulatedSkippedDuration().AsDuration(),
-		"child accumulated 3h from tc")
-	s.approxDuration(4*time.Hour,
-		childCfg.GetPropagatedSkippedDuration().AsDuration()+childTSI.GetAccumulatedSkippedDuration().AsDuration(),
-		"child virtual ends 4h ahead (1h propagated + 3h accumulated)")
+	s.Zero(childCfg.GetPropagatedSkippedDuration().AsDuration(),
+		"child Config.PSD is stripped on apply; the inherited skip lives in AccumulatedSkippedDuration")
+	s.approxDuration(4*time.Hour, childTSI.GetAccumulatedSkippedDuration().AsDuration(),
+		"child AccumulatedSkippedDuration == parent's accumulated at child-start (1h) + child's own skip for tc (3h) = 4h")
 
 	// The parent's StartChildWorkflowExecutionInitiated event must carry the propagated
 	// TimeSkippingConfig — this is what the transfer task consumes when it starts the child.
@@ -172,15 +177,18 @@ func (s *TimeSkippingPropagationTestSuite) TestTimeSkippingPropagation_ParentTim
 }
 
 // TestTimeSkippingPropagation_ParentWithTwoChildren verifies that:
-//   - All children started in the same WFT inherit the parent's TimeSkippingConfig and
-//     the parent's AccumulatedSkippedDuration at the moment they start.
+//   - All children started in the same WFT inherit the parent's TimeSkippingConfig
+//     and have their AccumulatedSkippedDuration seeded to the parent's accumulated
+//     skip at child-start time (via the PSD snapshot on the initiated event, which
+//     applyTimeSkippingConfig converts into AccumulatedSkippedDuration).
 //   - The parent is blocked from skipping while ANY child is pending, and resumes
 //     skipping only after all children complete (idle-only invariant).
 //
 // Scenario:
 //   - Parent TSC enabled. Parent issues StartTimer(t1, 1h) → skips 1h.
 //   - Parent issues [StartChild(c1), StartChild(c2), StartTimer(t2, 1h)].
-//     Each child inherits TSC and receives PropagatedSkippedDuration = 1h.
+//     Each child's MS is seeded with AccumulatedSkippedDuration = 1h
+//     (inherited from the parent's accumulated at command time).
 //   - c1 issues StartTimer(tc1, 2h) → idle → skips 2h → completes.
 //   - c2 issues StartTimer(tc2, 2h) → idle → skips 2h → completes.
 //   - Only after BOTH c1 and c2 complete does parent become idle on t2 → skips 1h → t2 fires.
@@ -277,10 +285,10 @@ func (s *TimeSkippingPropagationTestSuite) TestTimeSkippingPropagation_ParentWit
 		childTSI := childMS.State.ExecutionInfo.GetTimeSkippingInfo()
 		s.NotNil(childTSI, "%s TSI", id)
 		s.True(childTSI.GetConfig().GetEnabled(), "%s inherited Enabled", id)
-		s.approxDuration(time.Hour, childTSI.GetConfig().GetPropagatedSkippedDuration().AsDuration(),
-			"%s PropagatedSkippedDuration == parent's accumulated at child-start (1h)", id)
-		s.approxDuration(2*time.Hour, childTSI.GetAccumulatedSkippedDuration().AsDuration(),
-			"%s accumulated 2h from its own timer", id)
+		s.Zero(childTSI.GetConfig().GetPropagatedSkippedDuration().AsDuration(),
+			"%s Config.PSD is stripped on apply; the inherited skip lives in AccumulatedSkippedDuration", id)
+		s.approxDuration(3*time.Hour, childTSI.GetAccumulatedSkippedDuration().AsDuration(),
+			"%s AccumulatedSkippedDuration == parent's accumulated at child-start (1h) + own skip for tc (2h) = 3h", id)
 	}
 
 	// Both children are initiated in the same WFT — the parent's history must carry two
@@ -296,22 +304,28 @@ func (s *TimeSkippingPropagationTestSuite) TestTimeSkippingPropagation_ParentWit
 	}
 }
 
-// TestTimeSkippingPropagation_ThreeGenerations verifies that propagation only carries
-// the *direct* parent's accumulated skip — grandparent contributions are NOT re-added
-// transitively (they are already folded into the direct parent's accumulated skip before
-// the direct parent started its own child).
+// TestTimeSkippingPropagation_ThreeGenerations verifies that AccumulatedSkippedDuration
+// flows transitively through the ancestry: each generation's MS starts with its direct
+// parent's accumulated skip (which already includes all ancestors' contributions) seeded
+// into AccumulatedSkippedDuration, then adds its own skipping on top.
+//
+// The initiated-event PSD snapshot on any parent reflects that parent's full accumulated
+// skip at command time — which includes the parent's own inherited portion. There is no
+// "direct-parent-only" carve-out; the ancestry's virtual clock is continuous.
 //
 // Scenario:
 //   - Grandparent (G) TSC enabled. G: StartTimer(gt1, 1h) → skips 1h → G.accum = 1h.
-//   - G: StartChild(P) + StartTimer(gt2, 1h). P inherits PropagatedSkippedDuration = 1h.
-//   - P: StartTimer(pt1, 2h) → skips 2h → P.accum = 2h.
-//   - P: StartChild(C) + StartTimer(pt2, 1h). C inherits PropagatedSkippedDuration = 2h
-//     (= P's accumulated at time of C start, NOT 1h + 2h = 3h).
-//   - C: StartTimer(ct, 1h) → skips 1h → C.accum = 1h → completes.
-//   - P: idle on pt2 → skips 1h → P.accum = 3h. pt2 fires. P completes.
-//   - G: idle on gt2 → skips 1h → G.accum = 2h. gt2 fires. G completes.
+//   - G: StartChild(P) + StartTimer(gt2, 1h). P's initiated event snapshots PSD=1h.
+//     P's MS: AccumulatedSkippedDuration seeded to 1h, Config.PSD stripped.
+//   - P: StartTimer(pt1, 2h) → skips 2h → P.accum = 1h + 2h = 3h.
+//   - P: StartChild(C) + StartTimer(pt2, 1h). C's initiated event snapshots PSD=3h
+//     (P's full accumulated at command time, which already includes G's 1h).
+//     C's MS: AccumulatedSkippedDuration seeded to 3h, Config.PSD stripped.
+//   - C: StartTimer(ct, 1h) → skips 1h → C.accum = 3h + 1h = 4h → completes.
+//   - P: idle on pt2 → skips 1h → P.accum = 3h + 1h = 4h. pt2 fires. P completes.
+//   - G: idle on gt2 → skips 1h → G.accum = 1h + 1h = 2h. gt2 fires. G completes.
 //
-// Final state: C.config.Propagated == 2h (direct parent only); C.accum == 1h.
+// Final state: C.accum == 4h (3h inherited + 1h own); P.accum == 4h; G.accum == 2h.
 func (s *TimeSkippingPropagationTestSuite) TestTimeSkippingPropagation_ThreeGenerations() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
@@ -424,25 +438,25 @@ func (s *TimeSkippingPropagationTestSuite) TestTimeSkippingPropagation_ThreeGene
 	pTSI := pMS.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(pTSI)
 	s.True(pTSI.GetConfig().GetEnabled())
-	s.approxDuration(time.Hour, pTSI.GetConfig().GetPropagatedSkippedDuration().AsDuration(),
-		"P.PropagatedSkippedDuration == G's accumulated at P-start (1h)")
-	s.approxDuration(3*time.Hour, pTSI.GetAccumulatedSkippedDuration().AsDuration(),
-		"P: 2h (pt1) + 1h (pt2 after C completes) = 3h")
+	s.Zero(pTSI.GetConfig().GetPropagatedSkippedDuration().AsDuration(),
+		"P.Config.PSD is stripped on apply; the inherited skip lives in AccumulatedSkippedDuration")
+	s.approxDuration(4*time.Hour, pTSI.GetAccumulatedSkippedDuration().AsDuration(),
+		"P.accum == G's accumulated at P-start (1h) + P's own pt1 (2h) + P's own pt2 (1h) = 4h")
 
-	// ---- Child (direct-parent-only propagation) ----
+	// ---- Child (accum inherited transitively through the ancestry) ----
 	cMS := s.getMutableStateByID(env, ctx, cWFID)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, cMS.State.ExecutionState.State)
 	cTSI := cMS.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(cTSI)
 	s.True(cTSI.GetConfig().GetEnabled())
-	s.approxDuration(2*time.Hour, cTSI.GetConfig().GetPropagatedSkippedDuration().AsDuration(),
-		"C.PropagatedSkippedDuration == P's accumulated at C-start (2h); grandparent skip is NOT re-added")
-	s.approxDuration(time.Hour, cTSI.GetAccumulatedSkippedDuration().AsDuration(),
-		"C accumulated 1h from ct")
+	s.Zero(cTSI.GetConfig().GetPropagatedSkippedDuration().AsDuration(),
+		"C.Config.PSD is stripped on apply")
+	s.approxDuration(4*time.Hour, cTSI.GetAccumulatedSkippedDuration().AsDuration(),
+		"C.accum == P's accumulated at C-start (3h, which already includes G's 1h) + C's own ct (1h) = 4h")
 
-	// History-side check: G's initiated event for P snapshots PSD=1h (G's accumulated at
-	// command time); P's initiated event for C snapshots PSD=2h (P's accumulated at its
-	// own command time — grandparent contribution is NOT carried transitively).
+	// History-side check: G's initiated event for P snapshots PSD=1h (G's accumulated
+	// at command time); P's initiated event for C snapshots PSD=3h (P's full accumulated
+	// at command time — includes G's 1h contribution, which propagates transitively).
 	gInit := s.initiatedChildEvents(ctx, env, gWFID, gRunID)
 	s.Len(gInit, 1)
 	gInitTSC := gInit[0].GetStartChildWorkflowExecutionInitiatedEventAttributes().GetTimeSkippingConfig()
@@ -454,7 +468,8 @@ func (s *TimeSkippingPropagationTestSuite) TestTimeSkippingPropagation_ThreeGene
 	s.Len(pInit, 1)
 	pInitTSC := pInit[0].GetStartChildWorkflowExecutionInitiatedEventAttributes().GetTimeSkippingConfig()
 	s.NotNil(pInitTSC)
-	s.approxDuration(2*time.Hour, pInitTSC.GetPropagatedSkippedDuration().AsDuration())
+	s.approxDuration(3*time.Hour, pInitTSC.GetPropagatedSkippedDuration().AsDuration(),
+		"P's initiated event for C carries P's full accumulated at command time (3h = G's 1h + P's pt1 2h)")
 }
 
 // approxDuration asserts actual is within 5s of expected. Each skip loses
@@ -795,17 +810,20 @@ func (s *TimeSkippingPropagationTestSuite) TestPropagationInReset() {
 // TestPropagationInCaN verifies that TimeSkippingConfig and the previous run's
 // AccumulatedSkippedDuration are propagated to the new run on continue-as-new.
 //
-// Continue-as-new is a continuation of the same logical workflow, so the previous
-// run's accumulated skip flows directly into the new run's AccumulatedSkippedDuration
-// (not stored as Config.PropagatedSkippedDuration metadata like the child-workflow case).
+// CaN uses the same propagation mechanism as child workflows: the previous run's
+// AccumulatedSkippedDuration is snapshotted as PropagatedSkippedDuration on the new
+// run's WorkflowExecutionStarted event. applyTimeSkippingConfig then converts that
+// PSD into AccumulatedSkippedDuration on the new MS (stripping PSD from the stored
+// Config) so the virtual clock continues seamlessly.
 //
 // Scenario:
 //   - Run 1 starts with TimeSkippingConfig{Enabled: true}.
 //   - Run 1 issues StartTimer(t1, 1h). Idle → server skips 1h.
 //     After skip: run1.AccumulatedSkippedDuration = 1h.
 //   - t1 fires. Run 1 issues ContinueAsNew (same type, same task queue).
-//   - Run 2 starts with its AccumulatedSkippedDuration seeded to 1h (inherited
-//     from run 1) and Config.Enabled = true.
+//   - Run 2 starts. Its WorkflowExecutionStarted event carries TSC with Enabled=true
+//     and PropagatedSkippedDuration=1h. The applied MS has Config.Enabled=true,
+//     Config.PSD unset, AccumulatedSkippedDuration=1h.
 //   - Run 2 issues StartTimer(t2, 2h). Idle → skips 2h.
 //     After skip: run2.AccumulatedSkippedDuration = 1h + 2h = 3h.
 //   - t2 fires. Run 2 completes.
@@ -814,11 +832,11 @@ func (s *TimeSkippingPropagationTestSuite) TestPropagationInReset() {
 //   - run1.status == CONTINUED_AS_NEW, run1.AccumulatedSkippedDuration == 1h.
 //   - run2.status == COMPLETED.
 //   - run2.TimeSkippingInfo.Config.Enabled == true (propagated).
-//   - run2.TimeSkippingInfo.Config.PropagatedSkippedDuration is unset — CaN carries
-//     the inherited skip in AccumulatedSkippedDuration, not as PSD metadata.
+//   - run2.TimeSkippingInfo.Config.PropagatedSkippedDuration is unset on the MS —
+//     applyTimeSkippingConfig stripped it after converting to AccumulatedSkippedDuration.
 //   - run2.AccumulatedSkippedDuration == 3h.
-//   - run2 WorkflowExecutionStarted event carries a TSC snapshot with Enabled=true
-//     and no PSD.
+//   - run2 WorkflowExecutionStarted event retains the PSD=1h snapshot (history
+//     observability — the event is created before applyTimeSkippingConfig runs).
 //   - Wall-clock elapsed is nowhere near 3h of virtual time.
 func (s *TimeSkippingPropagationTestSuite) TestPropagationInCaN() {
 	env := testcore.NewEnv(s.T())
@@ -908,6 +926,6 @@ func (s *TimeSkippingPropagationTestSuite) TestPropagationInCaN() {
 	startedTSC := startedAttr.GetTimeSkippingConfig()
 	s.NotNil(startedTSC, "run 2's WorkflowExecutionStarted must carry the TSC snapshot")
 	s.True(startedTSC.GetEnabled(), "started event TSC.Enabled mirrors run 1's config")
-	s.Zero(startedTSC.GetPropagatedSkippedDuration().AsDuration(),
-		"started event must not carry PropagatedSkippedDuration; the inherited skip is on run 2's AccumulatedSkippedDuration")
+	s.approxDuration(time.Hour, startedTSC.GetPropagatedSkippedDuration().AsDuration(),
+		"started event retains PSD=1h (run 1's accumulated at CaN time); applyTimeSkippingConfig converts it to AccumulatedSkippedDuration on the MS but the event snapshot is unchanged")
 }

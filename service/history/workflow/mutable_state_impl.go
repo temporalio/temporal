@@ -2589,32 +2589,21 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		}
 	}
 
-	// Continue-as-new is a continuation of the same logical workflow, so the previous
-	// run's accumulated skipped duration flows directly into the new run's
-	// AccumulatedSkippedDuration — the virtual clock continues seamlessly across the
-	// boundary. This is seeded here, before AddWorkflowExecutionStartedEventWithOptions
-	// builds the new run's first event, so the event's timestamp already sits in the
-	// virtual frame.
+	// Snapshot previous run's time-skipping config and accumulated skipped duration
+	// so the new run inherits skipping behavior across the continue-as-new boundary.
+	// PropagatedSkippedDuration carries the old run's accumulated skip; applyTimeSkippingConfig
+	// converts it into the new MS's AccumulatedSkippedDuration on first TSI init.
 	var newRunTSConfig *workflowpb.TimeSkippingConfig
-	var inheritedAccumulated *durationpb.Duration
 	if prevTSInfo := previousExecutionInfo.GetTimeSkippingInfo(); prevTSInfo != nil {
 		if prevTSC := prevTSInfo.GetConfig(); prevTSC != nil {
 			newRunTSConfig = proto.Clone(prevTSC).(*workflowpb.TimeSkippingConfig)
-			// Across CaN the inherited skip is carried in AccumulatedSkippedDuration,
-			// not as Config.PropagatedSkippedDuration metadata.
-			newRunTSConfig.PropagatedSkippedDuration = nil
 		}
-		if skipped := prevTSInfo.GetAccumulatedSkippedDuration(); skipped != nil && skipped.AsDuration() > 0 {
-			inheritedAccumulated = durationpb.New(skipped.AsDuration())
+		if skipped := prevTSInfo.GetAccumulatedSkippedDuration(); skipped != nil {
+			if newRunTSConfig == nil {
+				newRunTSConfig = &workflowpb.TimeSkippingConfig{}
+			}
+			newRunTSConfig.PropagatedSkippedDuration = durationpb.New(skipped.AsDuration())
 		}
-	}
-	if newRunTSConfig != nil || inheritedAccumulated != nil {
-		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config:                     newRunTSConfig,
-			AccumulatedSkippedDuration: inheritedAccumulated,
-		}
-		ms.wrapTimeSourceWithTimeSkipping()
-		ms.timeSkippingInfoUpdated = true
 	}
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
@@ -9641,12 +9630,34 @@ func (ms *MutableStateImpl) wrapTimeSourceWithTimeSkipping() {
 }
 
 // applyTimeSkippingConfig applies the time skipping config from the request or event to the mutable state.
+// If the incoming config carries a PropagatedSkippedDuration (from a parent workflow on child start,
+// or the previous run on continue-as-new), seed the new MS's AccumulatedSkippedDuration with it so
+// the virtual clock continues from where the originator left off. The stored Config has PSD stripped
+// because the inherited skip is represented by AccumulatedSkippedDuration, not metadata — the
+// incoming event/request still retains the PSD snapshot for history observability.
+//
+// Stripping happens on both the first-init and the re-init branch so the function is idempotent:
+// during workflow start, applyTimeSkippingConfig is called twice (once via event replay in
+// ApplyWorkflowExecutionStartedEvent, once directly from the request), and the second call must
+// not re-poison the stored Config with PSD.
 func (ms *MutableStateImpl) applyTimeSkippingConfig(config *workflowpb.TimeSkippingConfig) {
+	var inheritedAccum *durationpb.Duration
+	if psd := config.GetPropagatedSkippedDuration(); psd != nil && psd.AsDuration() > 0 {
+		inheritedAccum = durationpb.New(psd.AsDuration())
+		config = proto.Clone(config).(*workflowpb.TimeSkippingConfig)
+		config.PropagatedSkippedDuration = nil
+	}
 	if ms.executionInfo.GetTimeSkippingInfo() == nil {
-		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: config}
+		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     config,
+			AccumulatedSkippedDuration: inheritedAccum,
+		}
 		ms.wrapTimeSourceWithTimeSkipping() // time source should be wrapped when time skipping info is initialized
 	} else {
 		ms.executionInfo.TimeSkippingInfo.Config = config
+		// AccumulatedSkippedDuration is not overwritten here — PSD propagation only
+		// applies on first TSI init; subsequent applies (e.g., UpdateWorkflowExecutionOptions)
+		// carry a user-provided Config without PSD.
 	}
 	ms.timeSkippingInfoUpdated = true
 }
