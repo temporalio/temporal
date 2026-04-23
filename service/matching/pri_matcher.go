@@ -406,14 +406,14 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (matche
 	// Fast path if we have a waiting poller (or forwarder).
 	// Forwarding happens here if we match with the task forwarding poller.
 	task.forwardCtx = ctx
-	imr := tm.data.MatchTaskImmediately(task)
-	if imr.gotSyncMatch {
+	immediateResult := tm.data.MatchTaskImmediately(task)
+	if immediateResult.gotSyncMatch {
 		return finish()
-	} else if !imr.canSyncMatch {
+	} else if !immediateResult.canSyncMatch {
 		return false, false, nil
 	}
 
-	if imr.rateLimited {
+	if immediateResult.rateLimited {
 		return false, true, nil
 	}
 

@@ -189,9 +189,9 @@ func (s *MatcherDataSuite) TestMatchTaskImmediately() {
 	t := s.newSyncTask(nil)
 
 	// no match yet
-	imr := s.md.MatchTaskImmediately(t)
-	s.True(imr.canSyncMatch)
-	s.False(imr.gotSyncMatch)
+	immediateResult := s.md.MatchTaskImmediately(t)
+	s.True(immediateResult.canSyncMatch)
+	s.False(immediateResult.gotSyncMatch)
 
 	// poll in a goroutine
 	ch := make(chan *matchResult, 1)
@@ -204,9 +204,9 @@ func (s *MatcherDataSuite) TestMatchTaskImmediately() {
 	s.waitForPollers(1)
 
 	// should match this time
-	imr = s.md.MatchTaskImmediately(t)
-	s.True(imr.canSyncMatch)
-	s.True(imr.gotSyncMatch)
+	immediateResult = s.md.MatchTaskImmediately(t)
+	s.True(immediateResult.canSyncMatch)
+	s.True(immediateResult.gotSyncMatch)
 
 	// check match
 	pres := <-ch
@@ -228,10 +228,10 @@ func (s *MatcherDataSuite) TestMatchTaskImmediatelyRateLimited() {
 
 	// Sync match should fail due to rate limiting, not lack of poller.
 	t := s.newSyncTask(nil)
-	imr := s.md.MatchTaskImmediately(t)
-	s.True(imr.canSyncMatch)
-	s.False(imr.gotSyncMatch)
-	s.True(imr.rateLimited)
+	immediateResult := s.md.MatchTaskImmediately(t)
+	s.True(immediateResult.canSyncMatch)
+	s.False(immediateResult.gotSyncMatch)
+	s.True(immediateResult.rateLimited)
 }
 
 func (s *MatcherDataSuite) TestMatchTaskImmediatelyDisabledBacklog() {
@@ -239,9 +239,9 @@ func (s *MatcherDataSuite) TestMatchTaskImmediatelyDisabledBacklog() {
 	s.md.EnqueueTaskNoWait(s.newBacklogTask(123, 10*time.Minute, nil))
 
 	t := s.newSyncTask(nil)
-	imr := s.md.MatchTaskImmediately(t)
-	s.False(imr.canSyncMatch)
-	s.False(imr.gotSyncMatch)
+	immediateResult := s.md.MatchTaskImmediately(t)
+	s.False(immediateResult.canSyncMatch)
+	s.False(immediateResult.gotSyncMatch)
 }
 
 func (s *MatcherDataSuite) TestQuery() {
