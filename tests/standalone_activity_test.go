@@ -4652,14 +4652,20 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		// Verify: heartbeat details from first attempt are available
 		protorequire.ProtoEqual(t, heartbeatDetails, pollResp2.HeartbeatDetails)
 
-		// Second attempt: worker accepts retry task
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp2.TaskToken,
+			Details:   heartbeatDetails,
+		})
+		require.NoError(t, err)
+
 		desc, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:      s.Namespace().String(),
 			ActivityId:     activityID,
 			IncludeOutcome: true,
 		})
 
-		require.Equal(t, desc.Info.GetTotalHeartbeatCount(), 2)
+		require.Equal(t, int64(2), desc.Info.GetTotalHeartbeatCount(), "total heartbeat count")
 	})
 
 	t.Run("ActivityTimesOutWithoutHeartbeat", func(t *testing.T) {
