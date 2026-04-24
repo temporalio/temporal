@@ -4966,6 +4966,11 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		pollResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
 		require.NoError(t, err)
 		require.NotEmpty(t, pollResp.GetTaskToken(), "expected task after start delay")
+
+		// CurrentAttemptScheduledTime should be exactly ScheduledTime + StartDelay.
+		// Both values are computed server-side from the same fields, so no tolerance needed.
+		expectedDispatchTime := pollResp.GetScheduledTime().AsTime().Add(startDelay)
+		require.Equal(t, expectedDispatchTime, pollResp.GetCurrentAttemptScheduledTime().AsTime())
 	})
 
 	t.Run("CompleteAfterDelay", func(t *testing.T) {
@@ -5083,6 +5088,16 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			RequestId:              requestID,
 		})
 		require.NoError(t, err)
+
+		// ExpirationTime should account for start delay: ScheduleTime + StartDelay + ScheduleToCloseTimeout.
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		expectedExpiration := descResp.GetInfo().GetScheduleTime().AsTime().Add(startDelay).Add(scheduleToCloseTimeout)
+		require.Equal(t, expectedExpiration, descResp.GetInfo().GetExpirationTime().AsTime())
 
 		// Activity should stay running (not timed out) throughout startDelay + most of scheduleToCloseTimeout.
 		// The timeout should only fire after startDelay + scheduleToCloseTimeout.
@@ -5242,12 +5257,16 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			},
 		})
 		require.NoError(t, err)
+		failTime := time.Now()
 
 		// Attempt 2 should be scheduled (start delay extended the ScheduleToClose deadline).
+		// It should arrive within the retry backoff interval, NOT re-applying the start delay.
 		pollResp2, err := s.pollActivityTaskQueue(ctx, taskQueue)
 		require.NoError(t, err)
 		require.NotEmpty(t, pollResp2.GetTaskToken(), "expected retry attempt 2 to be dispatched")
 		require.EqualValues(t, 2, pollResp2.GetAttempt())
+		require.Less(t, time.Since(failTime), startDelay,
+			"retry was dispatched after startDelay, suggesting start delay was re-applied")
 
 		// Complete attempt 2.
 		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
