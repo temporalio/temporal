@@ -58,10 +58,10 @@ var PersistenceLazyLoadedServiceResolverModule = fx.Options(
 			Value: &atomic.Value{},
 		}
 	}),
-	fx.Invoke(initLazyLoadedServiceResolver),
+	fx.Invoke(initPersistenceLazyLoadedServiceResolver),
 )
 
-func initLazyLoadedServiceResolver(
+func initPersistenceLazyLoadedServiceResolver(
 	serviceName primitives.ServiceName,
 	logger log.SnTaggedLogger,
 	serviceResolver membership.ServiceResolver,
