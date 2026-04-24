@@ -745,12 +745,9 @@ func (ms *MutableStateImpl) GetNexusUpdateCompletion(
 	updateID string,
 	requestID string,
 ) (_ nexusrpc.CompleteOperationOptions, err error) {
-	if ms.executionInfo.UpdateInfos == nil {
-		return nexusrpc.CompleteOperationOptions{}, serviceerror.NewNotFound("update not found")
-	}
-
 	var closeTime time.Time
-	outcome, err := ms.GetUpdateOutcome(ctx, updateID)
+	cevent, err := ms.getUpdateOutcomeEvent(ctx, updateID)
+	var outcome *updatepb.Outcome
 	if err != nil {
 		// If the workflow is complete but the update outcome is missing we need to respond to all callbacks
 		ce, errCE := ms.GetCompletionEvent(ctx)
@@ -761,15 +758,12 @@ func (ms *MutableStateImpl) GetNexusUpdateCompletion(
 		}
 		outcome = &updatepb.Outcome{
 			Value: &updatepb.Outcome_Failure{
-				Failure: update.AcceptedUpdateCompletedWorkflowFailure,
+				Failure: common.CloneProto(update.AcceptedUpdateCompletedWorkflowFailure),
 			},
 		}
 		closeTime = ce.GetEventTime().AsTime()
 	} else {
-		cevent, err := ms.GetUpdateOutcomeEvent(ctx, updateID)
-		if err != nil {
-			return nexusrpc.CompleteOperationOptions{}, err
-		}
+		outcome = cevent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome()
 		closeTime = cevent.GetEventTime().AsTime()
 	}
 
@@ -783,8 +777,8 @@ func (ms *MutableStateImpl) GetNexusUpdateCompletion(
 		WorkflowId: ms.executionInfo.WorkflowId,
 		RunId:      ms.executionState.RunId,
 	}
-	requestIDInfo := ms.executionState.RequestIds[requestID]
-	if requestIDInfo != nil {
+	requestIDInfo, exists := ms.executionState.RequestIds[requestID]
+	if exists {
 		link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
 			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
 				RequestId: requestID,
@@ -1518,18 +1512,14 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 	ctx context.Context,
 	updateID string,
 ) (*updatepb.Outcome, error) {
-	event, err := ms.GetUpdateOutcomeEvent(ctx, updateID)
+	event, err := ms.getUpdateOutcomeEvent(ctx, updateID)
 	if err != nil {
 		return nil, err
 	}
-	attrs := event.GetWorkflowExecutionUpdateCompletedEventAttributes()
-	if attrs == nil {
-		return nil, serviceerror.NewInternal("event pointer does not reference an update completed event")
-	}
-	return attrs.GetOutcome(), nil
+	return event.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), nil
 }
 
-func (ms *MutableStateImpl) GetUpdateOutcomeEvent(
+func (ms *MutableStateImpl) getUpdateOutcomeEvent(
 	ctx context.Context,
 	updateID string,
 ) (*historypb.HistoryEvent, error) {

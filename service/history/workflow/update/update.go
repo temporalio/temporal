@@ -384,36 +384,46 @@ func (u *Update) Admit(
 func (u *Update) AttachCallbacks(
 	req *updatepb.Request,
 	eventStore EventStore,
-) (bool, error) {
+) (isCallbackAttached bool, err error) {
 	// Only attach callbacks if the request actually has something to attach.
 	// This preserves existing behavior for callers that don't set callbacks.
-	if len(req.GetCompletionCallbacks()) == 0 && req.GetRequestId() == "" {
+	if len(req.GetCompletionCallbacks()) == 0 {
 		return false, nil
 	}
-
-	// Provisional states are transient — they exist only between an event write
-	// and its OnAfterCommit callback within a single workflow task completion
-	// transaction. In practice, AttachCallbacks should never see these states because
-	// a new UpdateWorkflowExecution API call must acquire the workflow lock,
-	// which means the previous transaction has already committed and provisional
-	// states have resolved. This guard is kept defensively in case future code
-	// paths call AttachCallbacks within the same transaction.
-	if u.state == stateProvisionallyAccepted || u.state == stateProvisionallyCompleted || u.state == stateProvisionallyCompletedAfterAccepted || u.state == stateProvisionallyAborted {
-		return false, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "workflow update is not yet accepted, please retry")
+	if req.GetRequestId() == "" {
+		return false, serviceerror.NewInvalidArgumentf("invalid %T: request_id is required when completion_callbacks are set", req)
 	}
 
-	// stateSent: the update has been sent to the worker but not yet accepted.
-	// Buffer the callbacks in memory; they will be flushed to the event store
-	// when the update is accepted in onAcceptanceMsg.
-	// Returning (true, nil) is safe because:
-	// - The caller already holds the workflow lock
-	// - A workflow task already exists (the update was sent via one)
-	// - No new workflow task is needed — just buffer until acceptance
-	// - The event will be written atomically with acceptance
-	// If the Update struct is lost (registry cleared), the abort mechanism fires
-	// registryClearedErr on the caller's future, prompting an immediate retry.
-	if u.state == stateSent {
-		// Deduplicate by requestID against existing buffer entries.
+	switch u.state {
+	case stateProvisionallyAccepted,
+		stateProvisionallyCompleted,
+		stateProvisionallyCompletedAfterAccepted,
+		stateProvisionallyAborted:
+		// Provisional states are transient — they exist only between an event write
+		// and its OnAfterCommit callback within a single workflow task completion
+		// transaction. In practice, AttachCallbacks should never see these states because
+		// a new UpdateWorkflowExecution API call must acquire the workflow lock,
+		// which means the previous transaction has already committed and provisional
+		// states have resolved. This guard is kept defensively in case future code
+		// paths call AttachCallbacks within the same transaction.
+		return false, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "workflow update is not yet accepted, please retry")
+
+	case stateAdmitted:
+		// The update is now admitted by the server but not yet set to the worker.
+		// Return false since at this stage, it's too early to have callbacks attached.
+		return false, nil
+
+	case stateSent:
+		// stateSent: the update has been sent to the worker but not yet accepted.
+		// Buffer the callbacks in memory; they will be flushed to the event store
+		// when the update is accepted in onAcceptanceMsg.
+		// Returning (true, nil) is safe because:
+		// - The caller already holds the workflow lock
+		// - A workflow task already exists (the update was sent via one)
+		// - No new workflow task is needed — just buffer until acceptance
+		// - The event will be written atomically with acceptance
+		// If the Update struct is lost (registry cleared), the abort mechanism fires
+		// registryClearedErr on the caller's future, prompting an immediate retry.
 		if req.GetRequestId() != "" {
 			for _, pc := range u.pendingCallbacks {
 				if pc.requestID == req.GetRequestId() {
@@ -426,48 +436,23 @@ func (u *Update) AttachCallbacks(
 			completionCallbacks: req.GetCompletionCallbacks(),
 		})
 		return true, nil
-	}
 
-	// If the update is already completed, the result is returned synchronously
-	// in the UpdateWorkflowExecution response — no callback needed.
-	if u.state == stateCompleted {
-		return true, nil
-	}
+	case stateAccepted:
+		// Persist immediately as its own event, u.persistCallback(...) will dedup against requestIDs
+		// that are already recorded on the workflow.
+		return u.persistCallback(eventStore, req.GetRequestId(), req.GetCompletionCallbacks())
 
-	if u.state == stateAccepted {
-		// Deduplicate by requestID: if this request has already been recorded
-		// (e.g. a retry), skip writing another event but still return success
-		// so the caller can wait on the existing update.
-		if req.GetRequestId() != "" && eventStore.HasRequestID(req.GetRequestId()) {
-			return true, nil
-		}
-		um := []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate{
-			{
-				UpdateId:                    u.id,
-				AttachedRequestId:           req.GetRequestId(),
-				AttachedCompletionCallbacks: req.GetCompletionCallbacks(),
-			},
-		}
-		_, err := eventStore.AddWorkflowExecutionOptionsUpdatedEvent(
-			nil,
-			false,
-			"",
-			nil,
-			nil,
-			"",  // identity
-			nil, // priority
-			nil, // timeSkippingConfig
-			um,
-		)
-		if err != nil {
-			return false, err
-		}
+	case stateCompleted:
+		// If the update is already completed, the result is returned synchronously
+		// in the UpdateWorkflowExecution response — no callback needed.
 		return true, nil
+
+	default:
+		return false, nil
 	}
-	return false, nil
 }
 
-// flushPendingCallbacks writes one WorkflowExecutionOptionsUpdatedEvent per
+// persistPendingCallbacks writes one WorkflowExecutionOptionsUpdatedEvent per
 // buffered AttachCallbacks callback, skipping any whose requestID is already persisted.
 // Called from onAcceptanceMsg after the acceptance event has been written.
 //
@@ -482,39 +467,39 @@ func (u *Update) AttachCallbacks(
 // multiple concurrent callers to call AttachCallbacks while the update is in
 // stateSent. The per-update callback limit (MaxCallbacksPerUpdateID) bounds the
 // worst case.
-func (u *Update) flushPendingCallbacks(eventStore EventStore) error {
-	if len(u.pendingCallbacks) == 0 {
-		return nil
-	}
+func (u *Update) persistPendingCallbacks(eventStore EventStore) error {
 	for _, pc := range u.pendingCallbacks {
-		// Skip if this requestID was already persisted (e.g., from a previous
-		// acceptance attempt that committed before rollback).
-		if pc.requestID != "" && eventStore.HasRequestID(pc.requestID) {
-			continue
-		}
-		um := []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate{
-			{
-				UpdateId:                    u.id,
-				AttachedRequestId:           pc.requestID,
-				AttachedCompletionCallbacks: pc.completionCallbacks,
-			},
-		}
-		if _, err := eventStore.AddWorkflowExecutionOptionsUpdatedEvent(
-			nil,
-			false,
-			"",
-			nil,
-			nil,
-			"",  // identity
-			nil, // priority
-			nil, // timeSkippingConfig
-			um,
-		); err != nil {
+		if _, err := u.persistCallback(eventStore, pc.requestID, pc.completionCallbacks); err != nil {
 			return err
 		}
 	}
 	u.pendingCallbacks = nil
 	return nil
+}
+
+// persistCallback writes a single WorkflowExecutionOptionsUpdatedEvent to attach the
+// given requestID and completion callbacks, and deduplicate on requestID if already attached.
+func (u *Update) persistCallback(
+	eventStore EventStore,
+	requestID string,
+	completionCallbacks []*commonpb.Callback,
+) (isCallbackAttached bool, err error) {
+	// Callback is already attached, no need to update.
+	if requestID != "" && eventStore.HasRequestID(requestID) {
+		return true, nil
+	}
+	_, err = eventStore.AddWorkflowExecutionOptionsUpdatedEvent(
+		nil, false, "", nil, nil, "", nil, nil,
+		[]*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate{{
+			UpdateId:                    u.id,
+			AttachedRequestId:           requestID,
+			AttachedCompletionCallbacks: completionCallbacks,
+		}},
+	)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // OnProtocolMessage delivers a message to the Update state machine. The Body field of
@@ -669,9 +654,9 @@ func (u *Update) onAcceptanceMsg(
 	}
 	u.acceptedEventID = event.EventId
 
-	// Flush any callbacks that were buffered by AttachCallbacks while in stateSent.
-	// See flushPendingCallbacks for why this writes one event per pending entry.
-	if err := u.flushPendingCallbacks(eventStore); err != nil {
+	// Persist any callbacks that were buffered by AttachCallbacks while in stateSent or stateAdmitted.
+	// See persistPendingCallbacks for why this writes one event per pending entry.
+	if err := u.persistPendingCallbacks(eventStore); err != nil {
 		return err
 	}
 
