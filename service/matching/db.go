@@ -290,10 +290,31 @@ func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	// persistence TTL, since the scavenger looks for metadata that hasn't been updated in 48 hours.
 	needWrite := db.lastChange.After(db.lastWrite) || time.Since(db.lastWrite) > stickyTaskQueueTTL/2
 	if !needWrite {
-		return nil
+		// If we don't write, though, we wouldn't know if someone else has stolen ownership
+		// momentarily (this could happen due to eventual consistency of membership updates).
+		// So instead, do a (cheaper) read to just check the range id.
+		return db.verifyOwnershipLocked(ctx)
 	}
 
 	return db.updateTaskQueueLocked(ctx, false)
+}
+
+func (db *taskQueueDB) verifyOwnershipLocked(ctx context.Context) error {
+	response, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
+		NamespaceID: db.queue.NamespaceId(),
+		TaskQueue:   db.queue.PersistenceName(),
+		TaskType:    db.queue.TaskType(),
+	})
+	if err != nil {
+		return err
+	}
+	if response.RangeID != db.rangeID {
+		return &persistence.ConditionFailedError{
+			Msg: fmt.Sprintf("task queue ownership lost: stored rangeID %d, in-memory rangeID %d",
+				response.RangeID, db.rangeID),
+		}
+	}
+	return nil
 }
 
 func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue subqueueIndex, newAckLevel int64, countDelta int64, oldestTime time.Time) {
