@@ -37,15 +37,25 @@ type defaultJWTClaimMapper struct {
 }
 
 func NewDefaultJWTClaimMapper(provider TokenKeyProvider, cfg *config.Authorization, logger log.Logger) ClaimMapper {
-	claimName := cfg.PermissionsClaimName
-	if claimName == "" {
-		claimName = defaultPermissionsClaimName
-	}
+	permissionsClaimName := cfg.PermissionsClaimName
 	var permissionsClaimQuery *jmespath.JMESPath
-	query, err := jmespath.Compile(claimName)
-	if err == nil {
-		permissionsClaimQuery = query
+	if cfg.PermissionsClaimQuery != "" {
+		var err error
+		permissionsClaimQuery, err = jmespath.Compile(cfg.PermissionsClaimQuery)
+		if err != nil {
+			logger.Warn(fmt.Sprintf("failed to compile permissions claim query '%s': %v", cfg.PermissionsClaimQuery, err))
+		}
 	}
+
+	if permissionsClaimName != "" && permissionsClaimQuery != nil {
+		logger.Warn("both permissionsClaimName and permissionsClaimQuery are set; permissionsClaimName takes precedence")
+	}
+
+	if permissionsClaimName == "" && permissionsClaimQuery == nil {
+		logger.Info(fmt.Sprintf("using default permissions claim name: %s", defaultPermissionsClaimName))
+		permissionsClaimName = defaultPermissionsClaimName
+	}
+
 	var permissionsRegex *regexp.Regexp
 	var namespaceIndex, roleIndex int
 	if cfg.PermissionsRegex != "" {
@@ -71,7 +81,7 @@ func NewDefaultJWTClaimMapper(provider TokenKeyProvider, cfg *config.Authorizati
 	return &defaultJWTClaimMapper{
 		keyProvider:           provider,
 		logger:                logger,
-		permissionsClaimName:  claimName,
+		permissionsClaimName:  permissionsClaimName,
 		permissionsClaimQuery: permissionsClaimQuery,
 		permissionsRegex:      permissionsRegex,
 		matchNamespaceIndex:   namespaceIndex,
@@ -121,8 +131,14 @@ func (a *defaultJWTClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 }
 
 func (a *defaultJWTClaimMapper) extractPermissionsClaim(jwtClaims jwt.MapClaims) ([]any, bool, error) {
-	if permissions, ok := jwtClaims[a.permissionsClaimName].([]any); ok {
-		return permissions, true, nil
+	if a.permissionsClaimName == "" && a.permissionsClaimQuery == nil {
+		return nil, false, fmt.Errorf("neither permissionsClaimName nor permissionsClaimQuery is configured")
+	}
+
+	if a.permissionsClaimName != "" {
+		if permissions, ok := jwtClaims[a.permissionsClaimName].([]any); ok {
+			return permissions, true, nil
+		}
 	}
 
 	if a.permissionsClaimQuery == nil {
@@ -131,13 +147,13 @@ func (a *defaultJWTClaimMapper) extractPermissionsClaim(jwtClaims jwt.MapClaims)
 
 	value, err := a.permissionsClaimQuery.Search(map[string]any(jwtClaims))
 	if err != nil {
-		return nil, false, serviceerror.NewPermissionDenied(
-			fmt.Sprintf("invalid permissions claim query: %s", a.permissionsClaimName), "")
+		a.logger.Warn(fmt.Sprintf("permissions claim query failed: %v", err))
+		return nil, false, serviceerror.NewPermissionDenied("invalid permissions claim query", "")
 	}
 
 	permissions, ok := value.([]any)
 	if !ok {
-		a.logger.Warn(fmt.Sprintf("permissions claim query did not return an array: %s", a.permissionsClaimName))
+		a.logger.Warn("permissions claim query did not return an array")
 		return nil, false, nil
 	}
 	return permissions, true, nil

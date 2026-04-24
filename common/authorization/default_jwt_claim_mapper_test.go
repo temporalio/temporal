@@ -224,17 +224,13 @@ func (s *defaultClaimMapperSuite) TestGetClaimMapperWithPermissionsRegexInvalidR
 
 func (s *defaultClaimMapperSuite) TestGetClaimMapperWithPermissionsRegexMissingNamespaceGroup() {
 	pattern := `(?P<role>\w+):(\w+)`
-	mapper := NewDefaultJWTClaimMapper(
-		nil, &config.Authorization{PermissionsRegex: pattern}, log.NewNoopLogger(),
-	).(*defaultJWTClaimMapper)
+	mapper := NewDefaultJWTClaimMapper(nil, &config.Authorization{PermissionsRegex: pattern}, log.NewNoopLogger()).(*defaultJWTClaimMapper)
 	s.Nil(mapper.permissionsRegex)
 }
 
 func (s *defaultClaimMapperSuite) TestGetClaimMapperWithPermissionsRegexMissingRoleGroup() {
 	pattern := `(?P<namespace>\w+):(\w+)`
-	mapper := NewDefaultJWTClaimMapper(
-		nil, &config.Authorization{PermissionsRegex: pattern}, log.NewNoopLogger(),
-	).(*defaultJWTClaimMapper)
+	mapper := NewDefaultJWTClaimMapper(nil, &config.Authorization{PermissionsRegex: pattern}, log.NewNoopLogger()).(*defaultJWTClaimMapper)
 	s.Nil(mapper.permissionsRegex)
 }
 
@@ -284,14 +280,75 @@ func (s *defaultClaimMapperSuite) TestTokenWithNestedPermissionsBadClaims() {
 	}
 	claimMapper := NewDefaultJWTClaimMapper(
 		s.tokenGenerator,
-		&config.Authorization{PermissionsClaimName: "traits.temporal"},
+		&config.Authorization{PermissionsClaimQuery: "traits.temporal"},
 		s.logger,
 	)
 	claims, err := claimMapper.GetClaims(authInfo)
+	s.NoError(err)
 	s.Equal(testSubject, claims.Subject)
 	s.Equal(RoleUndefined, claims.System)
 	s.Equal(0, len(claims.Namespaces))
 	s.Equal(RoleUndefined, claims.Namespaces[defaultNamespace])
+}
+
+func (s *defaultClaimMapperSuite) TestTokenWithPermissionsClaimsBadQuery() {
+	tokenString, err := s.tokenGenerator.generateTokenWithClaims(RSA, jwt.MapClaims{
+		headerSubject: testSubject,
+		"traits": map[string]any{
+			"temporal": []string{"default:read", "default:write", "default:worker"},
+		},
+		"exp": time.Now().Add(time.Hour).Unix(),
+		"iss": "test",
+		"aud": []string{"test-audience"},
+	}, errorTestOptionNoError)
+	s.NoError(err)
+
+	authInfo := &AuthInfo{
+		AddBearer(tokenString),
+		nil,
+		nil,
+		"",
+		"test-audience",
+	}
+	claimMapper := NewDefaultJWTClaimMapper(
+		s.tokenGenerator,
+		&config.Authorization{PermissionsClaimQuery: "length(traits.temporal)"},
+		s.logger,
+	)
+	claims, err := claimMapper.GetClaims(authInfo)
+	s.NoError(err)
+	s.Equal(testSubject, claims.Subject)
+	s.Equal(RoleUndefined, claims.System)
+	s.Equal(0, len(claims.Namespaces))
+	s.Equal(RoleUndefined, claims.Namespaces[defaultNamespace])
+}
+
+func (s *defaultClaimMapperSuite) TestTokenWithRuntimeErrorInvalidPermissionsClaimQuery() {
+	tokenString, err := s.tokenGenerator.generateTokenWithClaims(RSA, jwt.MapClaims{
+		headerSubject: testSubject,
+		"traits": map[string]any{
+			"temporal": []string{"default:read", "default:write", "default:worker"},
+		},
+		"exp": time.Now().Add(time.Hour).Unix(),
+		"iss": "test",
+		"aud": []string{"test-audience"},
+	}, errorTestOptionNoError)
+	s.NoError(err)
+
+	authInfo := &AuthInfo{
+		AddBearer(tokenString),
+		nil,
+		nil,
+		"",
+		"test-audience",
+	}
+	claimMapper := NewDefaultJWTClaimMapper(
+		s.tokenGenerator,
+		&config.Authorization{PermissionsClaimQuery: "len(traits.temporal)"},
+		s.logger,
+	)
+	_, err = claimMapper.GetClaims(authInfo)
+	s.Error(err)
 }
 
 func (s *defaultClaimMapperSuite) TestTokenWithNestedPermissionsClaim() {
@@ -315,7 +372,7 @@ func (s *defaultClaimMapperSuite) TestTokenWithNestedPermissionsClaim() {
 	}
 	claimMapper := NewDefaultJWTClaimMapper(
 		s.tokenGenerator,
-		&config.Authorization{PermissionsClaimName: "traits.temporal"},
+		&config.Authorization{PermissionsClaimQuery: "traits.temporal"},
 		s.logger,
 	)
 	claims, err := claimMapper.GetClaims(authInfo)
@@ -355,6 +412,28 @@ func (s *defaultClaimMapperSuite) TestTokenWithLiteralDottedPermissionsClaimName
 	s.Equal(RoleUndefined, claims.System)
 	s.Equal(1, len(claims.Namespaces))
 	s.Equal(RoleReader, claims.Namespaces[defaultNamespace])
+}
+
+func (s *defaultClaimMapperSuite) TestTokenWithInvalidPermissionsClaimQuery() {
+	// "error[" is an invalid JMESPath expression that fails at compile time; the mapper
+	// should log a warning and fall back to returning no permissions.
+	claimMapper := NewDefaultJWTClaimMapper(
+		s.tokenGenerator,
+		&config.Authorization{PermissionsClaimQuery: "error["},
+		s.logger,
+	)
+	tokenString, err := s.tokenGenerator.generateTokenWithClaims(RSA, jwt.MapClaims{
+		headerSubject: testSubject,
+		"exp":         time.Now().Add(time.Hour).Unix(),
+		"iss":         "test",
+	}, errorTestOptionNoError)
+	s.NoError(err)
+	authInfo := &AuthInfo{AuthToken: AddBearer(tokenString)}
+	claims, err := claimMapper.GetClaims(authInfo)
+	s.NoError(err)
+	s.Equal(testSubject, claims.Subject)
+	s.Equal(RoleUndefined, claims.System)
+	s.Equal(0, len(claims.Namespaces))
 }
 
 func (s *defaultClaimMapperSuite) TestWrongAudience() {
