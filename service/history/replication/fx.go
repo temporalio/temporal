@@ -306,7 +306,9 @@ func sequentialTaskQueueFactoryProvider(
 		if !ok {
 			return NewSequentialTaskQueueWithID(item)
 		}
-		return NewSequentialTaskQueueWithID(workflowKey.NamespaceID + "_" + workflowKey.WorkflowID)
+		return NewSequentialTaskQueueWithID(
+			definition.NewWorkflowKey(workflowKey.NamespaceID, workflowKey.WorkflowID, ""),
+		)
 	}
 }
 
