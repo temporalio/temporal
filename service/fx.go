@@ -38,15 +38,17 @@ type (
 	GrpcServerOptionsParams struct {
 		fx.In
 
-		Logger                       log.Logger
-		RPCFactory                   common.RPCFactory
-		RetryableInterceptor         *interceptor.RetryableInterceptor
-		TelemetryInterceptor         *interceptor.TelemetryInterceptor
-		RateLimitInterceptor         *interceptor.RateLimitInterceptor
-		TracingStatsHandler          telemetry.ServerStatsHandler
-		MetricsStatsHandler          metrics.ServerStatsHandler
-		AdditionalInterceptors       []grpc.UnaryServerInterceptor  `optional:"true"`
-		AdditionalStreamInterceptors []grpc.StreamServerInterceptor `optional:"true"`
+		Logger                        log.Logger
+		RPCFactory                    common.RPCFactory
+		RetryableInterceptor          *interceptor.RetryableInterceptor
+		TelemetryInterceptor          *interceptor.TelemetryInterceptor
+		NamespaceRateLimitInterceptor interceptor.NamespaceRateLimitInterceptor `optional:"true"`
+		RateLimitInterceptor          *interceptor.RateLimitInterceptor
+		TracingStatsHandler           telemetry.ServerStatsHandler
+		MetricsStatsHandler           metrics.ServerStatsHandler
+		ContextMetadataInterceptor    *interceptor.ContextMetadataInterceptor `optional:"true"`
+		AdditionalInterceptors        []grpc.UnaryServerInterceptor           `optional:"true"`
+		AdditionalStreamInterceptors  []grpc.StreamServerInterceptor          `optional:"true"`
 	}
 )
 
@@ -163,8 +165,15 @@ func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInte
 
 	interceptors = append(interceptors, params.AdditionalInterceptors...)
 
-	return append(
-		interceptors,
-		params.RateLimitInterceptor.Intercept,
-		params.RetryableInterceptor.Intercept)
+	if params.NamespaceRateLimitInterceptor != nil {
+		interceptors = append(interceptors, params.NamespaceRateLimitInterceptor.Intercept)
+	}
+
+	interceptors = append(interceptors, params.RateLimitInterceptor.Intercept)
+
+	if params.ContextMetadataInterceptor != nil {
+		interceptors = append(interceptors, params.ContextMetadataInterceptor.Intercept)
+	}
+
+	return append(interceptors, params.RetryableInterceptor.Intercept)
 }

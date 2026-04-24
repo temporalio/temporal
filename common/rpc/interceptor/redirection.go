@@ -151,6 +151,15 @@ var (
 		"RequestCancelActivityExecution": func() any { return &workflowservice.RequestCancelActivityExecutionResponse{} },
 		"TerminateActivityExecution":     func() any { return &workflowservice.TerminateActivityExecutionResponse{} },
 		"DeleteActivityExecution":        func() any { return &workflowservice.DeleteActivityExecutionResponse{} },
+
+		"CountNexusOperationExecutions":        func() any { return &workflowservice.CountNexusOperationExecutionsResponse{} },
+		"DeleteNexusOperationExecution":        func() any { return &workflowservice.DeleteNexusOperationExecutionResponse{} },
+		"DescribeNexusOperationExecution":      func() any { return &workflowservice.DescribeNexusOperationExecutionResponse{} },
+		"ListNexusOperationExecutions":         func() any { return &workflowservice.ListNexusOperationExecutionsResponse{} },
+		"PollNexusOperationExecution":          func() any { return &workflowservice.PollNexusOperationExecutionResponse{} },
+		"RequestCancelNexusOperationExecution": func() any { return &workflowservice.RequestCancelNexusOperationExecutionResponse{} },
+		"StartNexusOperationExecution":         func() any { return &workflowservice.StartNexusOperationExecutionResponse{} },
+		"TerminateNexusOperationExecution":     func() any { return &workflowservice.TerminateNexusOperationExecutionResponse{} },
 	}
 )
 

@@ -58,6 +58,7 @@ var (
 		"ChasmPure":                          32,
 		"Chasm":                              33,
 		"ReplicationDeleteExecution":         34,
+		"WorkerCommands":                     35,
 	}
 )
 

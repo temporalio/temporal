@@ -170,6 +170,7 @@ func Invoke(
 				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
 				req.TargetDeploymentVersion,
+				req.TaskDispatchRevisionNumber,
 			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history

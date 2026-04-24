@@ -27,8 +27,7 @@ func Invoke(
 	shardCtx historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
-	reactivationSignalCache worker_versioning.ReactivationSignalCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	reactivationSignaler api.VersionReactivationSignalerFn,
 ) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
 	req := request.GetUpdateRequest()
@@ -40,6 +39,8 @@ func Invoke(
 
 	// Store versioning override to send reactivation signal after successful persistence
 	var versioningOverrideForReactivation *workflowpb.VersioningOverride
+	var shouldSkipReactivation bool
+	var revisionNumber int64
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -79,7 +80,7 @@ func Invoke(
 			}
 
 			// Validate versioning override, if any.
-			err = worker_versioning.ValidateVersioningOverride(ctx, requestedOptions.GetVersioningOverride(), matchingClient, versionMembershipCache, mutableState.GetExecutionInfo().GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, ns.ID().String())
+			shouldSkipReactivation, revisionNumber, err = worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, requestedOptions.GetVersioningOverride(), matchingClient, versionCache, mutableState.GetExecutionInfo().GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, ns.ID().String())
 			if err != nil {
 				return nil, err
 			}
@@ -118,7 +119,7 @@ func Invoke(
 
 	// Notify version workflow if we're pinning to a potentially drained version.
 	// This is done after successful persistence to avoid signaling if the update fails.
-	api.ReactivateVersionWorkflowIfPinned(ctx, ns, versioningOverrideForReactivation, reactivationSignalCache, reactivationSignaler, shardCtx.GetConfig().EnableVersionReactivationSignals())
+	api.ReactivateVersionWorkflowIfPinned(ctx, ns, versioningOverrideForReactivation, reactivationSignaler, shardCtx.GetConfig().EnableVersionReactivationSignals(), shouldSkipReactivation, revisionNumber)
 
 	return ret, nil
 }
@@ -151,7 +152,7 @@ func MergeAndApply(
 	if mergedOpts.GetVersioningOverride() == nil {
 		unsetOverride = true
 	}
-	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority())
+	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority(), mergedOpts.GetTimeSkippingConfig())
 	if err != nil {
 		return nil, hasChanges, err
 	}
@@ -170,6 +171,11 @@ func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowEx
 	if priority := ms.GetExecutionInfo().GetPriority(); priority != nil {
 		if cloned, ok := proto.Clone(priority).(*commonpb.Priority); ok {
 			opts.Priority = cloned
+		}
+	}
+	if tsInfo := ms.GetExecutionInfo().GetTimeSkippingInfo(); tsInfo != nil {
+		if cloned, ok := proto.Clone(tsInfo.GetConfig()).(*workflowpb.TimeSkippingConfig); ok {
+			opts.TimeSkippingConfig = cloned
 		}
 	}
 	return opts
@@ -228,6 +234,55 @@ func mergeWorkflowExecutionOptions(
 			mergeInto.Priority = &commonpb.Priority{}
 		}
 		mergeInto.Priority.FairnessWeight = mergeFrom.Priority.GetFairnessWeight()
+	}
+
+	// ==== Time Skipping Config
+	// nil means "no change" — only update if the caller provided an explicit value.
+	if _, ok := updateFields["timeSkippingConfig"]; ok {
+		if mergeFrom.GetTimeSkippingConfig() != nil {
+			mergeInto.TimeSkippingConfig = mergeFrom.GetTimeSkippingConfig()
+		}
+	}
+
+	if _, ok := updateFields["timeSkippingConfig.enabled"]; ok {
+		if mergeInto.TimeSkippingConfig == nil {
+			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
+		}
+		mergeInto.TimeSkippingConfig.Enabled = mergeFrom.GetTimeSkippingConfig().GetEnabled()
+	}
+
+	if _, ok := updateFields["timeSkippingConfig.disablePropagation"]; ok {
+		if mergeInto.TimeSkippingConfig == nil {
+			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
+		}
+		mergeInto.TimeSkippingConfig.DisablePropagation = mergeFrom.GetTimeSkippingConfig().GetDisablePropagation()
+	}
+
+	if _, ok := updateFields["timeSkippingConfig.maxSkippedDuration"]; ok {
+		if mergeInto.TimeSkippingConfig == nil {
+			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
+		}
+		mergeInto.TimeSkippingConfig.Bound = &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
+			MaxSkippedDuration: mergeFrom.GetTimeSkippingConfig().GetMaxSkippedDuration(),
+		}
+	}
+
+	if _, ok := updateFields["timeSkippingConfig.maxElapsedDuration"]; ok {
+		if mergeInto.TimeSkippingConfig == nil {
+			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
+		}
+		mergeInto.TimeSkippingConfig.Bound = &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
+			MaxElapsedDuration: mergeFrom.GetTimeSkippingConfig().GetMaxElapsedDuration(),
+		}
+	}
+
+	if _, ok := updateFields["timeSkippingConfig.maxTargetTime"]; ok {
+		if mergeInto.TimeSkippingConfig == nil {
+			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
+		}
+		mergeInto.TimeSkippingConfig.Bound = &workflowpb.TimeSkippingConfig_MaxTargetTime{
+			MaxTargetTime: mergeFrom.GetTimeSkippingConfig().GetMaxTargetTime(),
+		}
 	}
 
 	return mergeInto, nil

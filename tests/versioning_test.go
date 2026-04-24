@@ -63,7 +63,6 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
 		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():     true,
-		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key():        partitionTreeDegree,
 		dynamicconfig.TaskQueuesPerBuildIdLimit.Key():                  3,
 		dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Key():  true,
 
@@ -466,42 +465,6 @@ func (s *VersioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
 	s.ErrorAs(err, &failedPreconditionError)
 	s.Equal("Exceeded max task queues allowed to be mapped to a single build ID: 3", failedPreconditionError.Message)
 }
-
-// func (s *VersioningIntegSuite) testWithMatchingBehavior(subtest func()) {
-//	for _, forceForward := range []bool{false, true} {
-//		for _, forceAsync := range []bool{false, true} {
-//			name := "NoForward"
-//			if forceForward {
-//				// force two levels of forwarding
-//				name = "ForceForward"
-//			}
-//			if forceAsync {
-//				name += "ForceAsync"
-//			} else {
-//				name += "AllowSync"
-//			}
-//
-//			s.Run(name, func() {
-//				if forceForward {
-//					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
-//					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
-//					s.OverrideDynamicConfig(dynamicconfig.TestMatchingLBForceReadPartition, 5)
-//					s.OverrideDynamicConfig(dynamicconfig.TestMatchingLBForceWritePartition, 11)
-//				} else {
-//					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-//					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-//				}
-//				if forceAsync {
-//					s.OverrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, true)
-//				} else {
-//					s.OverrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, false)
-//				}
-//
-//				subtest()
-//			})
-//		}
-//	}
-// }
 
 func (s *VersioningIntegSuite) TestDispatchNewWorkflowOld() {
 	s.RunTestWithMatchingBehavior(func() { s.dispatchNewWorkflow(false) })

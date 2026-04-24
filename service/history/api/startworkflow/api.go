@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -59,9 +58,10 @@ type Starter struct {
 	request                    *historyservice.StartWorkflowExecutionRequest
 	namespace                  *namespace.Namespace
 	createOrUpdateLeaseFn      api.CreateOrUpdateLeaseFunc
-	versionMembershipCache     worker_versioning.VersionMembershipCache
-	reactivationSignalCache    worker_versioning.ReactivationSignalCache
+	versionCache               worker_versioning.VersionMembershipAndReactivationStatusCache
 	reactivationSignaler       api.VersionReactivationSignalerFn
+	shouldSkipReactivation     bool
+	revisionNumber             int64
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -90,8 +90,7 @@ func NewStarter(
 	tokenSerializer *tasktoken.Serializer,
 	request *historyservice.StartWorkflowExecutionRequest,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
-	reactivationSignalCache worker_versioning.ReactivationSignalCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	reactivationSignaler api.VersionReactivationSignalerFn,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
 ) (*Starter, error) {
@@ -110,8 +109,7 @@ func NewStarter(
 		request:                    request,
 		namespace:                  namespaceEntry,
 		createOrUpdateLeaseFn:      createLeaseFn,
-		versionMembershipCache:     versionMembershipCache,
-		reactivationSignalCache:    reactivationSignalCache,
+		versionCache:               versionCache,
 		reactivationSignaler:       reactivationSignaler,
 	}, nil
 }
@@ -120,12 +118,7 @@ func NewStarter(
 func (s *Starter) prepare(ctx context.Context) error {
 	request := s.request.StartRequest
 
-	// TODO: remove this call in 1.25
-	enums.SetDefaultWorkflowIdConflictPolicy(
-		&request.WorkflowIdConflictPolicy,
-		enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
-
-	api.MigrateWorkflowIdReusePolicyForRunningWorkflow(
+	api.MigrateWorkflowIDReusePolicyForRunningWorkflow(
 		&request.WorkflowIdReusePolicy,
 		&request.WorkflowIdConflictPolicy)
 
@@ -142,7 +135,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 	}
 
 	// Validation for versioning override, if any.
-	err = worker_versioning.ValidateVersioningOverride(ctx, request.GetVersioningOverride(), s.matchingClient, s.versionMembershipCache, request.GetTaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, s.namespace.ID().String())
+	s.shouldSkipReactivation, s.revisionNumber, err = worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, request.GetVersioningOverride(), s.matchingClient, s.versionCache, request.GetTaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, s.namespace.ID().String())
 	if err != nil {
 		return err
 	}
@@ -219,7 +212,7 @@ func (s *Starter) Invoke(
 				// Notify version workflow if we are starting a workflow execution on a potentially drained version.
 				// Only signal when a new workflow was actually created (StartNew), not for deduped retries
 				// (StartDeduped) or reused existing workflows (StartReused) where the pinned override is not applied.
-				api.ReactivateVersionWorkflowIfPinned(ctx, s.namespace, s.request.StartRequest.GetVersioningOverride(), s.reactivationSignalCache, s.reactivationSignaler, s.shardContext.GetConfig().EnableVersionReactivationSignals())
+				api.ReactivateVersionWorkflowIfPinned(ctx, s.namespace, s.request.StartRequest.GetVersioningOverride(), s.reactivationSignaler, s.shardContext.GetConfig().EnableVersionReactivationSignals(), s.shouldSkipReactivation, s.revisionNumber)
 			}
 			return resp, outcome, conflictErr
 		}
@@ -227,7 +220,7 @@ func (s *Starter) Invoke(
 	}
 
 	// Notify version workflow if we're pinning to a potentially drained version
-	api.ReactivateVersionWorkflowIfPinned(ctx, s.namespace, s.request.StartRequest.GetVersioningOverride(), s.reactivationSignalCache, s.reactivationSignaler, s.shardContext.GetConfig().EnableVersionReactivationSignals())
+	api.ReactivateVersionWorkflowIfPinned(ctx, s.namespace, s.request.StartRequest.GetVersioningOverride(), s.reactivationSignaler, s.shardContext.GetConfig().EnableVersionReactivationSignals(), s.shouldSkipReactivation, s.revisionNumber)
 
 	resp, err = s.generateResponse(
 		creationParams.runID,
@@ -319,6 +312,7 @@ func (s *Starter) createBrandNew(ctx context.Context, creationParams *creationPa
 		creationParams.workflowLease.GetMutableState(),
 		creationParams.workflowSnapshot,
 		creationParams.workflowEventBatches,
+		historyi.TransactionPolicyActive,
 	)
 }
 
@@ -394,6 +388,7 @@ func (s *Starter) createAsCurrent(
 		creationParams.workflowLease.GetMutableState(),
 		creationParams.workflowSnapshot,
 		creationParams.workflowEventBatches,
+		historyi.TransactionPolicyActive,
 	)
 }
 
@@ -699,6 +694,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 					links,
 					"",  // identity
 					nil, // priority
+					nil, // timeSkippingConfig
 				)
 				return api.UpdateWorkflowWithoutWorkflowTask, err
 			},
