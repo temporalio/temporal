@@ -84,7 +84,7 @@ type (
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
 		chasmWorkflowRegistry  *chasmworkflow.Registry
 		matchingClient         matchingservice.MatchingServiceClient
-		versionMembershipCache worker_versioning.VersionMembershipCache
+		versionCache           worker_versioning.VersionMembershipAndReactivationStatusCache
 	}
 
 	workflowTaskFailedCause struct {
@@ -126,7 +126,7 @@ func newWorkflowTaskCompletedHandler(
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	chasmWorkflowRegistry *chasmworkflow.Registry,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 ) *workflowTaskCompletedHandler {
 	return &workflowTaskCompletedHandler{
 		identity:                identity,
@@ -161,7 +161,7 @@ func newWorkflowTaskCompletedHandler(
 		commandHandlerRegistry: commandHandlerRegistry,
 		chasmWorkflowRegistry:  chasmWorkflowRegistry,
 		matchingClient:         matchingClient,
-		versionMembershipCache: versionMembershipCache,
+		versionCache:           versionCache,
 	}
 }
 
@@ -682,7 +682,6 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 	if ai != nil {
 		// If ai is nil, the activity has already been canceled/completed/timedout. The cancel request
 		// will be recorded in the history, but no further action will be taken.
-
 		if ai.StartedEventId == common.EmptyEventID {
 			// We haven't started the activity yet, we can cancel the activity right away and
 			// schedule a workflow task to ensure the workflow makes progress.
@@ -697,37 +696,48 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 				return nil, err
 			}
 			handler.activityNotStartedCancelled = true
-		} else if ai.StartedEventId != common.EmptyEventID && ai.WorkerControlTaskQueue != "" {
-			// Activity has started and worker supports Nexus control tasks - collect for batched dispatch.
-			taskToken, err := handler.tokenSerializer.Serialize(tasktoken.NewActivityTaskToken(
-				handler.mutableState.GetNamespaceEntry().ID().String(),
-				handler.mutableState.GetWorkflowKey().WorkflowID,
-				handler.mutableState.GetWorkflowKey().RunID,
-				ai.ScheduledEventId,
-				ai.ActivityId,
-				ai.ActivityType.GetName(),
-				ai.Attempt,
-				nil, // Clock not needed for cancel
-				ai.Version,
-				ai.StartVersion,
-				nil,
-			))
-			if err != nil {
-				return nil, err
-			}
-			if handler.pendingWorkerCommandsByControlQueue == nil {
-				handler.pendingWorkerCommandsByControlQueue = make(map[string][]*workerpb.WorkerCommand)
-			}
-			handler.pendingWorkerCommandsByControlQueue[ai.WorkerControlTaskQueue] = append(
-				handler.pendingWorkerCommandsByControlQueue[ai.WorkerControlTaskQueue],
-				&workerpb.WorkerCommand{
-					Type: &workerpb.WorkerCommand_CancelActivity{
-						CancelActivity: &workerpb.CancelActivityCommand{
-							TaskToken: taskToken,
+		} else if ai.WorkerControlTaskQueue != "" {
+			if ai.StartedClock == nil {
+				// StartedClock may be nil for activities started before this feature was deployed.
+				// Skip cancel command; the activity will time out normally.
+				handler.logger.Info("Skipping worker cancel command: activity missing StartedClock (pre-deploy)",
+					tag.WorkflowNamespaceID(handler.mutableState.GetWorkflowKey().NamespaceID),
+					tag.WorkflowID(handler.mutableState.GetWorkflowKey().WorkflowID),
+					tag.WorkflowRunID(handler.mutableState.GetWorkflowKey().RunID),
+					tag.WorkflowScheduledEventID(ai.ScheduledEventId),
+				)
+			} else {
+				// Activity has started and worker supports Nexus control tasks - collect for batched dispatch.
+				taskToken, err := handler.tokenSerializer.Serialize(tasktoken.NewActivityTaskToken(
+					handler.mutableState.GetNamespaceEntry().ID().String(),
+					handler.mutableState.GetWorkflowKey().WorkflowID,
+					handler.mutableState.GetWorkflowKey().RunID,
+					ai.ScheduledEventId,
+					ai.ActivityId,
+					ai.ActivityType.GetName(),
+					ai.Attempt,
+					ai.StartedClock,
+					ai.Version,
+					ai.StartVersion,
+					nil,
+				))
+				if err != nil {
+					return nil, err
+				}
+				if handler.pendingWorkerCommandsByControlQueue == nil {
+					handler.pendingWorkerCommandsByControlQueue = make(map[string][]*workerpb.WorkerCommand)
+				}
+				handler.pendingWorkerCommandsByControlQueue[ai.WorkerControlTaskQueue] = append(
+					handler.pendingWorkerCommandsByControlQueue[ai.WorkerControlTaskQueue],
+					&workerpb.WorkerCommand{
+						Type: &workerpb.WorkerCommand_CancelActivity{
+							CancelActivity: &workerpb.CancelActivityCommand{
+								TaskToken: taskToken,
+							},
 						},
 					},
-				},
-			)
+				)
+			}
 		}
 	}
 	return actCancelReqEvent, nil
@@ -1112,7 +1122,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 		handler.workflowTaskCompletedID,
 		parentNamespace,
 		attr,
-		worker_versioning.GetIsWFTaskQueueInVersionDetector(handler.matchingClient, handler.versionMembershipCache),
+		worker_versioning.GetIsWFTaskQueueInVersionDetector(handler.matchingClient, handler.versionCache),
 	)
 	if err != nil {
 		return nil, err

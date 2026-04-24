@@ -130,6 +130,7 @@ func (s *registryWatchSuite) newRegistryWithResolverFactory(
 		s.captureHandler,
 		s.logger,
 		resolverFactory,
+		nsregistry.DefaultNamespaceStateChanged,
 	)
 }
 
@@ -252,7 +253,7 @@ func (s *registryWatchSuite) TestWatchEvents() {
 	ns, err := s.registry.GetNamespace("initial-namespace")
 	s.NoError(err)
 	s.Equal(ns1ID, ns.ID())
-	s.Equal(cluster.TestCurrentClusterName, ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestCurrentClusterName, ns.ActiveClusterName(namespace.RoutingKey{}))
 
 	events := tracker.getEvents()
 	s.Len(events, 1)
@@ -294,17 +295,17 @@ func (s *registryWatchSuite) TestWatchEvents() {
 	ns, err = s.registry.GetNamespace("initial-namespace")
 	s.NoError(err)
 	s.Equal(ns1ID, ns.ID())
-	s.Equal(cluster.TestAlternativeClusterName, ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestAlternativeClusterName, ns.ActiveClusterName(namespace.RoutingKey{}))
 
 	ns, err = s.registry.GetNamespaceByID(ns1ID)
 	s.NoError(err)
-	s.Equal(cluster.TestAlternativeClusterName, ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestAlternativeClusterName, ns.ActiveClusterName(namespace.RoutingKey{}))
 
 	events = tracker.getEvents()
 	s.Len(events, 3)
 	s.Equal("initial-namespace", events[2].ns.Name().String())
 	s.Equal(int64(3), events[2].ns.NotificationVersion())
-	s.Equal(cluster.TestAlternativeClusterName, events[2].ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestAlternativeClusterName, events[2].ns.ActiveClusterName(namespace.RoutingKey{}))
 	s.False(events[2].deleted)
 	s.InEpsilon(float64(2), s.capture.Snapshot()[metrics.TotalNamespaces.Name()][2].Value, 0.01) // update doesn't change count
 
@@ -363,7 +364,7 @@ func (s *registryWatchSuite) TestWatchStaleUpdateIgnored() {
 
 	ns, err := s.registry.GetNamespace("test-namespace")
 	s.NoError(err)
-	s.Equal(cluster.TestCurrentClusterName, ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestCurrentClusterName, ns.ActiveClusterName(namespace.RoutingKey{}))
 
 	// Send valid update (NotificationVersion 3), changing cluster to trigger callback
 	validRecord := s.newGlobalNamespaceResponse(nsID, "test-namespace", cluster.TestAlternativeClusterName, 3)
@@ -375,7 +376,7 @@ func (s *registryWatchSuite) TestWatchStaleUpdateIgnored() {
 
 	ns, err = s.registry.GetNamespace("test-namespace")
 	s.NoError(err)
-	s.Equal(cluster.TestAlternativeClusterName, ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestAlternativeClusterName, ns.ActiveClusterName(namespace.RoutingKey{}))
 
 	// Send stale update (NotificationVersion 1 < current version 3)
 	// Uses different retention as a marker to verify it wasn't applied
@@ -709,12 +710,12 @@ func (s *registryWatchSuite) TestWatchUpdateWithoutStateChange() {
 
 	// First event: initial namespace with original cluster
 	s.Equal(nsID, events[0].ns.ID())
-	s.Equal(cluster.TestCurrentClusterName, events[0].ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestCurrentClusterName, events[0].ns.ActiveClusterName(namespace.RoutingKey{}))
 	s.False(events[0].deleted)
 
 	// Second event: state change with new cluster (the retention-only update was skipped)
 	s.Equal(nsID, events[1].ns.ID())
-	s.Equal(cluster.TestAlternativeClusterName, events[1].ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestAlternativeClusterName, events[1].ns.ActiveClusterName(namespace.RoutingKey{}))
 	s.False(events[1].deleted)
 }
 
@@ -1132,7 +1133,7 @@ func (s *registryWatchSuite) TestWatchCreateForExistingNamespace() {
 	ns, err := s.registry.GetNamespace("test-namespace")
 	s.NoError(err)
 	s.Equal(int64(2), ns.NotificationVersion())
-	s.Equal(cluster.TestAlternativeClusterName, ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestAlternativeClusterName, ns.ActiveClusterName(namespace.RoutingKey{}))
 
 	s.Equal(int32(2), tracker.getCount())
 
@@ -1141,11 +1142,11 @@ func (s *registryWatchSuite) TestWatchCreateForExistingNamespace() {
 	s.Len(events, 2)
 	// Initial refresh
 	s.Equal(nsID, events[0].ns.ID())
-	s.Equal(cluster.TestCurrentClusterName, events[0].ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestCurrentClusterName, events[0].ns.ActiveClusterName(namespace.RoutingKey{}))
 	s.False(events[0].deleted)
 	// Create event (acts as update)
 	s.Equal(nsID, events[1].ns.ID())
-	s.Equal(cluster.TestAlternativeClusterName, events[1].ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestAlternativeClusterName, events[1].ns.ActiveClusterName(namespace.RoutingKey{}))
 	s.False(events[1].deleted)
 }
 

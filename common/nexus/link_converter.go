@@ -39,11 +39,12 @@ import (
 )
 
 const (
-	urlSchemeTemporalKey = "temporal"
-	urlPathNamespaceKey  = "namespace"
-	urlPathWorkflowIDKey = "workflowID"
-	urlPathRunIDKey      = "runID"
-	urlPathTemplate      = "/namespaces/%s/workflows/%s/%s/history"
+	urlSchemeTemporalKey          = "temporal"
+	urlPathNamespaceKey           = "namespace"
+	urlPathWorkflowIDKey          = "workflowID"
+	urlPathRunIDKey               = "runID"
+	urlPathWorkflowEventTemplate  = "/namespaces/%s/workflows/%s/%s/history"
+	urlPathNexusOperationTemplate = "/namespaces/%s/nexus-operations/%s"
 
 	linkWorkflowEventReferenceTypeKey = "referenceType"
 	linkEventIDKey                    = "eventID"
@@ -65,15 +66,37 @@ var (
 	requestIDReferenceType = string((&commonpb.Link_WorkflowEvent_RequestIdReference{}).ProtoReflect().Descriptor().Name())
 )
 
+// ConvertLinkNexusOperationToNexusLink converts a Link_NexusOperation type to Nexus Link.
+func ConvertLinkNexusOperationToNexusLink(no *commonpb.Link_NexusOperation) nexus.Link {
+	query := url.Values{}
+	query.Set(urlPathRunIDKey, no.GetRunId())
+
+	u := &url.URL{
+		Scheme: urlSchemeTemporalKey,
+		Path:   fmt.Sprintf(urlPathNexusOperationTemplate, no.GetNamespace(), no.GetOperationId()),
+		RawPath: fmt.Sprintf(
+			urlPathNexusOperationTemplate,
+			url.PathEscape(no.GetNamespace()),
+			url.PathEscape(no.GetOperationId()),
+		),
+		RawQuery: query.Encode(),
+	}
+
+	return nexus.Link{
+		URL:  u,
+		Type: string(no.ProtoReflect().Descriptor().FullName()),
+	}
+}
+
 // ConvertLinkWorkflowEventToNexusLink converts a Link_WorkflowEvent type to Nexus Link.
 //
 // NOTE: Experimental
 func ConvertLinkWorkflowEventToNexusLink(we *commonpb.Link_WorkflowEvent) nexus.Link {
 	u := &url.URL{
 		Scheme: urlSchemeTemporalKey,
-		Path:   fmt.Sprintf(urlPathTemplate, we.GetNamespace(), we.GetWorkflowId(), we.GetRunId()),
+		Path:   fmt.Sprintf(urlPathWorkflowEventTemplate, we.GetNamespace(), we.GetWorkflowId(), we.GetRunId()),
 		RawPath: fmt.Sprintf(
-			urlPathTemplate,
+			urlPathWorkflowEventTemplate,
 			url.PathEscape(we.GetNamespace()),
 			url.PathEscape(we.GetWorkflowId()),
 			url.PathEscape(we.GetRunId()),

@@ -128,4 +128,10 @@ message ChasmNexusCompletion {
   // Request ID embedded in the NexusOperationScheduledEvent.
   // Allows completing a started operation after a workflow has been reset.
   string request_id = 4;
+  // Links from the Nexus completion callback (e.g. references to the handler workflow).
+  repeated temporal.api.common.v1.Link links = 5;
+  // Async operation token from the callback request, used for completion-before-start.
+  string operation_token = 6;
+  // Start time from the callback request, used for completion-before-start.
+  google.protobuf.Timestamp start_time = 7;
 }

@@ -2137,6 +2137,15 @@ func (n *Node) resolveDeferredPointers() error {
 				switch value := internal.value().(type) {
 				case Component:
 					resolvedPath, err = n.componentNodePath(value)
+					if err == nil {
+						targetNode := n.valueToNode[value]
+						if !targetNode.isAncestorOf(node) {
+							err = fmt.Errorf(
+								"pointer target is not an ancestor of component at path %v",
+								node.path(),
+							)
+						}
+					}
 				case proto.Message:
 					resolvedPath, err = n.dataNodePath(value)
 				default:
@@ -2535,6 +2544,19 @@ func (n *Node) findNode(
 		return nil, false
 	}
 	return childNode.findNode(path[1:])
+}
+
+// isAncestorOf returns true if n is a proper ancestor of descendant.
+// It walks from descendant up through parent links to check if n is encountered.
+func (n *Node) isAncestorOf(descendant *Node) bool {
+	current := descendant.parent
+	for current != nil {
+		if current == n {
+			return true
+		}
+		current = current.parent
+	}
+	return false
 }
 
 func (n *Node) delete(isSystemDelete bool) error {
