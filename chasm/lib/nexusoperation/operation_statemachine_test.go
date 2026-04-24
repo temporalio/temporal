@@ -1,15 +1,19 @@
 package nexusoperation
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -295,6 +299,14 @@ func TestTransitionStarted(t *testing.T) {
 			ctx := &chasm.MockMutableContext{
 				MockContext: chasm.MockContext{
 					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+					HandleNamespaceEntry: func() *namespace.Namespace {
+						return namespace.NewNamespaceForTest(
+							&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0,
+						)
+					},
+					GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+						MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
+					}),
 				},
 			}
 
@@ -357,6 +369,14 @@ func TestTransitionSucceeded(t *testing.T) {
 			ctx := &chasm.MockMutableContext{
 				MockContext: chasm.MockContext{
 					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+					HandleNamespaceEntry: func() *namespace.Namespace {
+						return namespace.NewNamespaceForTest(
+							&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0,
+						)
+					},
+					GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+						MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
+					}),
 				},
 			}
 
@@ -430,6 +450,14 @@ func TestTransitionFailed(t *testing.T) {
 			ctx := &chasm.MockMutableContext{
 				MockContext: chasm.MockContext{
 					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+					HandleNamespaceEntry: func() *namespace.Namespace {
+						return namespace.NewNamespaceForTest(
+							&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0,
+						)
+					},
+					GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+						MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
+					}),
 				},
 			}
 
@@ -500,6 +528,14 @@ func TestTransitionCanceled(t *testing.T) {
 			ctx := &chasm.MockMutableContext{
 				MockContext: chasm.MockContext{
 					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+					HandleNamespaceEntry: func() *namespace.Namespace {
+						return namespace.NewNamespaceForTest(
+							&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0,
+						)
+					},
+					GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+						MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
+					}),
 				},
 			}
 
@@ -563,6 +599,14 @@ func TestTransitionTimedOut(t *testing.T) {
 			ctx := &chasm.MockMutableContext{
 				MockContext: chasm.MockContext{
 					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+					HandleNamespaceEntry: func() *namespace.Namespace {
+						return namespace.NewNamespaceForTest(
+							&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0,
+						)
+					},
+					GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+						MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
+					}),
 				},
 			}
 
@@ -625,6 +669,14 @@ func TestTransitionTerminated(t *testing.T) {
 			ctx := &chasm.MockMutableContext{
 				MockContext: chasm.MockContext{
 					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+					HandleNamespaceEntry: func() *namespace.Namespace {
+						return namespace.NewNamespaceForTest(
+							&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0,
+						)
+					},
+					GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+						MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
+					}),
 				},
 			}
 			operation := newTestOperation()

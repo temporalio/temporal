@@ -4,6 +4,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
@@ -135,6 +136,13 @@ var TransitionStarted = chasm.NewTransition(
 		// Store the operation token for async completion.
 		o.OperationToken = event.OperationToken
 
+		// Emit schedule-to-start latency on the transition to started.
+		metricsHandler, err := o.enrichMetricsHandler(ctx)
+		if err != nil {
+			return err
+		}
+		NexusOperationScheduleToStartLatency.With(metricsHandler).Record(startTime.Sub(o.GetScheduledTime().AsTime()))
+
 		// Emit a start-to-close timeout task if configured.
 		if o.StartToCloseTimeout != nil && o.StartToCloseTimeout.AsDuration() != 0 {
 			deadline := startTime.Add(o.StartToCloseTimeout.AsDuration())
@@ -185,6 +193,11 @@ var TransitionSucceeded = chasm.NewTransition(
 			Successful: &nexusoperationpb.OperationOutcome_Successful{Result: event.Result},
 		}
 
+		metricsHandler, err := o.enrichMetricsHandler(ctx)
+		if err != nil {
+			return err
+		}
+		o.emitOnSucceededMetrics(metricsHandler, closeTime)
 		// Terminal state - no tasks to emit.
 		return nil
 	},
@@ -210,8 +223,13 @@ var TransitionFailed = chasm.NewTransition(
 		if event.CompleteTime != nil {
 			closeTime = *event.CompleteTime
 		}
+		metricsHandler, err := o.enrichMetricsHandler(ctx)
+		if err != nil {
+			return err
+		}
 		// Attempts only execute in SCHEDULED, so that status identifies attempt-originated failures.
 		fromAttempt := o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED
+		o.emitOnFailedMetrics(metricsHandler, closeTime)
 		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime, fromAttempt)
 	},
 )
@@ -236,7 +254,12 @@ var TransitionCanceled = chasm.NewTransition(
 		if event.CompleteTime != nil {
 			closeTime = *event.CompleteTime
 		}
+		metricsHandler, err := o.enrichMetricsHandler(ctx)
+		if err != nil {
+			return err
+		}
 		// Attempts only execute in SCHEDULED, so that status identifies attempt-originated cancels.
+		o.emitOnCanceledMetrics(metricsHandler, closeTime)
 		fromAttempt := o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED
 		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime, fromAttempt)
 	},
@@ -268,15 +291,21 @@ var TransitionTerminated = chasm.NewTransition(
 				},
 			},
 		}
+		metricsHandler, err := o.enrichMetricsHandler(ctx)
+		if err != nil {
+			return err
+		}
+		o.emitOnTerminatedMetrics(metricsHandler, closeTime)
 		return o.resolveUnsuccessfully(ctx, failure, closeTime, false)
 	},
 )
 
-// EventTimedOut is triggered when the schedule-to-close timeout is triggered for an operation.
+// EventTimedOut is triggered when a timeout is triggered for an operation.
 type EventTimedOut struct {
 	Failure *failurepb.Failure
 	// FromAttempt is true when the failure came from an invocation attempt.
 	FromAttempt bool
+	TimeoutType enumspb.TimeoutType
 }
 
 var TransitionTimedOut = chasm.NewTransition(
@@ -287,6 +316,12 @@ var TransitionTimedOut = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
 	func(o *Operation, ctx chasm.MutableContext, event EventTimedOut) error {
-		return o.resolveUnsuccessfully(ctx, event.Failure, ctx.Now(o), event.FromAttempt)
+		closeTime := ctx.Now(o)
+		metricsHandler, err := o.enrichMetricsHandler(ctx)
+		if err != nil {
+			return err
+		}
+		o.emitOnTimedOutMetrics(metricsHandler, closeTime, event.TimeoutType.String())
+		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime, event.FromAttempt)
 	},
 )
