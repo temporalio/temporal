@@ -4927,6 +4927,44 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		require.Equal(t, int64(1), pollResp.GetInfo().GetTotalHeartbeatCount(), "total heartbeat count")
 		protorequire.ProtoEqual(t, defaultResult, pollResp.GetOutcome().GetResult())
 	})
+
+	t.Run("HeartbeatCountIncrementsPerHeartbeat", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+		})
+		require.NoError(t, err)
+
+		pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+
+		const numHeartbeats = 5
+		for i := range numHeartbeats {
+			_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+				Namespace: s.Namespace().String(),
+				TaskToken: pollTaskResp.TaskToken,
+				Details:   heartbeatDetails,
+			})
+			require.NoError(t, err)
+
+			descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.RunId,
+			})
+			require.NoError(t, err)
+			require.Equal(t, int64(i+1), descResp.GetInfo().GetTotalHeartbeatCount(), "total heartbeat count after heartbeat %d", i+1)
+		}
+	})
 }
 
 func (s *standaloneActivityTestSuite) TestStartDelay() {
