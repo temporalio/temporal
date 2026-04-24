@@ -1116,6 +1116,12 @@ Default is 0, means, namespace will be deleted immediately.`,
 		1200,
 		`MatchingRPS is request rate per second for each matching host`,
 	)
+	MatchingNamespaceRPS = NewNamespaceIntSetting(
+		"matching.namespaceRPS",
+		0,
+		`MatchingNamespaceRPS is namespace rate limit per second for each matching host. 
+If value less or equal to 0, will fall back to MatchingRPS`,
+	)
 	MatchingPersistenceMaxQPS = NewGlobalIntSetting(
 		"matching.persistenceMaxQPS",
 		3000,
