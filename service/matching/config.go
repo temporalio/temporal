@@ -28,6 +28,7 @@ type (
 		RPS                                  dynamicconfig.IntPropertyFn
 		NamespaceRPS                         dynamicconfig.IntPropertyFnWithNamespaceFilter
 		OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
+		PollWaitForNamespaceRateLimitToken   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		AlignMembershipChange                dynamicconfig.DurationPropertyFn
 		ShutdownDrainDuration                dynamicconfig.DurationPropertyFn
 		HistoryMaxPageSize                   dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -277,6 +278,7 @@ func NewConfig(
 		RPS:                                      dynamicconfig.MatchingRPS.Get(dc),
 		NamespaceRPS:                             dynamicconfig.MatchingNamespaceRPS.Get(dc),
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
+		PollWaitForNamespaceRateLimitToken:       dynamicconfig.PollWaitForNamespaceRateLimitToken.Get(dc),
 		RangeSize:                                100000,
 		NewMatcherSub:                            dynamicconfig.MatchingUseNewMatcher.Subscribe(dc),
 		EnableFairnessSub:                        dynamicconfig.MatchingEnableFairness.Subscribe(dc),

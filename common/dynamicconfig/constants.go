@@ -321,6 +321,16 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 Setting this to 0 prevents the search attribute from being set when a problem is detected, and unset when the problem is resolved.`,
 	)
 
+	PollWaitForNamespaceRateLimitToken = NewNamespaceBoolSetting(
+		"system.pollWaitForNamespaceRateLimitToken",
+		false,
+		`PollWaitForNamespaceRateLimitToken controls whether poll requests wait for
+a namespace RPS rate limit token to become available instead of immediately rejecting
+with ResourceExhausted. When enabled, poll requests block until a token is available
+or the request context deadline is reached. The concurrent request rate limiter fires
+before this limiter and will still reject requests that exceed the concurrent limit.`,
+	)
+
 	// keys for size limit
 
 	BlobSizeLimitError = NewNamespaceIntSetting(
@@ -697,15 +707,6 @@ exceeded, not when it is only reached.`,
 instances in the cluster, for a given namespace, per-API method. If this is set to 0 (the default), then it is
 ignored. The name 'frontend.globalNamespaceCount' is kept for consistency with the per-instance limit name,
 'frontend.namespaceCount'.`,
-	)
-	FrontendPollWaitForNamespaceRateLimitToken = NewNamespaceBoolSetting(
-		"frontend.pollWaitForNamespaceRateLimitToken",
-		false,
-		`FrontendPollWaitForNamespaceRateLimitToken controls whether poll requests wait for
-a namespace RPS rate limit token to become available instead of immediately rejecting
-with ResourceExhausted. When enabled, poll requests block until a token is available
-or the request context deadline is reached. The concurrent request rate limiter fires
-before this limiter and will still reject requests that exceed the concurrent limit.`,
 	)
 	FrontendMaxNamespaceVisibilityRPSPerInstance = NewNamespaceIntSetting(
 		"frontend.namespaceRPS.visibility",

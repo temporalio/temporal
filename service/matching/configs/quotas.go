@@ -51,6 +51,12 @@ var (
 	}
 
 	APIPrioritiesOrdered = []int{0, 1, 2}
+
+	PollTaskAPISet = map[string]struct{}{
+		"/temporal.server.api.matchingservice.v1.MatchingService/PollActivityTaskQueue": {},
+		"/temporal.server.api.matchingservice.v1.MatchingService/PollWorkflowTaskQueue": {},
+		"/temporal.server.api.matchingservice.v1.MatchingService/PollNexusTaskQueue":    {},
+	}
 )
 
 func NewPriorityRateLimiter(
