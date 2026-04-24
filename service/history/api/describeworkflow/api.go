@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/components/callbacks"
@@ -298,6 +299,11 @@ func Invoke(
 					info.EventId = incomingSignalData.EventId
 				}
 				result.WorkflowExtendedInfo.RequestIdInfos[requestID] = info
+			}
+			if n := int64(len(wf.IncomingSignals)); n > 0 {
+				metrics.DescribeWorkflowSignalBacklinksCount.With(
+					shard.GetMetricsHandler().WithTags(metrics.NamespaceTag(namespaceName)),
+				).Record(n)
 			}
 		}
 	}

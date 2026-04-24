@@ -5916,9 +5916,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionSignaled(
 		// Persist the signal requestID to the current eventID.
 		// - For buffered events (normal processing path), event.GetEventId() returns the common.BufferedEventID and will be resolved later.
 		// - For already-persisted events (rebuild/replay path), event.GetEventId() returns the real history event ID.
+		nsTag := metrics.NamespaceTag(ms.GetNamespaceEntry().Name().String())
 		if err := wf.AddIncomingSignalEvent(chasmCtx, requestID, event.GetEventId()); err != nil {
 			return err
 		}
+		metrics.ChasmIncomingSignalWritten.With(ms.metricsHandler.WithTags(nsTag)).Record(1)
 	}
 	return nil
 }
