@@ -2,9 +2,11 @@ package tests
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,9 +19,11 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
@@ -33,19 +37,70 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+const (
+	// Custom scheme for testing custom archiver implementation
+	customArchiverScheme = "customtest"
+)
+
 type (
 	ArchivalSuite struct {
 		testcore.FunctionalTestBase
 
 		archivalNamespace   namespace.Name
 		archivalNamespaceID namespace.ID
+
+		// Namespace for testing custom archiver
+		customArchiverNamespace   namespace.Name
+		customArchiverNamespaceID namespace.ID
+
+		// Counters to verify custom archivers are being called
+		customHistoryArchiveCalled    atomic.Int32
+		customVisibilityArchiveCalled atomic.Int32
 	}
 
 	archivalWorkflowInfo struct {
 		execution   *commonpb.WorkflowExecution
 		branchToken []byte
 	}
+
+	// customHistoryArchiver wraps a built-in history archiver and tracks Archive calls
+	customHistoryArchiver struct {
+		counter *atomic.Int32
+	}
+
+	// customVisibilityArchiver wraps a built-in visibility archiver and tracks Archive calls
+	customVisibilityArchiver struct {
+		counter *atomic.Int32
+	}
 )
+
+// customHistoryArchiver method implementations
+func (c *customHistoryArchiver) Archive(ctx context.Context, uri archiver.URI, request *archiver.ArchiveHistoryRequest, opts ...archiver.ArchiveOption) error {
+	c.counter.Add(1)
+	return nil
+}
+
+func (c *customHistoryArchiver) Get(ctx context.Context, uri archiver.URI, request *archiver.GetHistoryRequest) (*archiver.GetHistoryResponse, error) {
+	return nil, nil
+}
+
+func (c *customHistoryArchiver) ValidateURI(uri archiver.URI) error {
+	return nil
+}
+
+// customVisibilityArchiver method implementations
+func (c *customVisibilityArchiver) Archive(ctx context.Context, uri archiver.URI, request *archiverspb.VisibilityRecord, opts ...archiver.ArchiveOption) error {
+	c.counter.Add(1)
+	return nil
+}
+
+func (c *customVisibilityArchiver) Query(ctx context.Context, uri archiver.URI, request *archiver.QueryVisibilityRequest, saTypeMap searchattribute.NameTypeMap) (*archiver.QueryVisibilityResponse, error) {
+	return nil, nil
+}
+
+func (c *customVisibilityArchiver) ValidateURI(uri archiver.URI) error {
+	return nil
+}
 
 func TestArchivalSuite(t *testing.T) {
 	t.Parallel() // This suite can work in parallel as long as it is the only one that use testcore.WithArchivalEnabled() option.
@@ -57,12 +112,44 @@ func (s *ArchivalSuite) SetupSuite() {
 		dynamicconfig.ArchivalProcessorArchiveDelay.Key(): time.Duration(0),
 	}
 
+	// Create custom history archiver factory for custom scheme
+	customHistoryArchiverFactory := provider.CustomHistoryArchiverFactoryFunc(
+		func(params provider.NewCustomHistoryArchiverParams) (archiver.HistoryArchiver, error) {
+			// Only handle custom scheme, return ErrUnknownScheme for others (including filestore)
+			if params.Scheme != customArchiverScheme {
+				return nil, provider.ErrUnknownScheme
+			}
+			// Return a wrapper that delegates to filestore but tracks Archive calls
+			return &customHistoryArchiver{
+				counter: &s.customHistoryArchiveCalled,
+			}, nil
+		},
+	)
+
+	// Create custom visibility archiver factory for custom scheme
+	customVisibilityArchiverFactory := provider.CustomVisibilityArchiverFactoryFunc(
+		func(params provider.NewCustomVisibilityArchiverParams) (archiver.VisibilityArchiver, error) {
+			// Only handle custom scheme, return ErrUnknownScheme for others (including filestore)
+			if params.Scheme != customArchiverScheme {
+				return nil, provider.ErrUnknownScheme
+			}
+			// Return a wrapper that delegates to filestore but tracks Archive calls
+			return &customVisibilityArchiver{
+				counter: &s.customVisibilityArchiveCalled,
+			}, nil
+		},
+	)
+
 	s.FunctionalTestBase.SetupSuiteWithCluster(
 		testcore.WithDynamicConfigOverrides(dynamicConfigOverrides),
 		testcore.WithArchivalEnabled(),
+		testcore.WithCustomHistoryArchiverFactory(customHistoryArchiverFactory),
+		testcore.WithCustomVisibilityArchiverFactory(customVisibilityArchiverFactory),
 	)
 
 	var err error
+
+	// Register namespace using built-in filestore archiver
 	s.archivalNamespace = namespace.Name(testcore.RandomizeStr("archival-enabled-namespace"))
 	s.archivalNamespaceID, err = s.RegisterNamespace(
 		s.archivalNamespace,
@@ -72,10 +159,24 @@ func (s *ArchivalSuite) SetupSuite() {
 		s.GetTestCluster().ArchiverBase().VisibilityURI(),
 	)
 	s.Require().NoError(err)
+
+	// Register namespace using custom archiver with custom scheme
+	s.customArchiverNamespace = namespace.Name(testcore.RandomizeStr("custom-archiver-namespace"))
+	customHistoryURI := customArchiverScheme + "://custom-history-archiver"
+	customVisibilityURI := customArchiverScheme + "://custom-visibility-archiver"
+	s.customArchiverNamespaceID, err = s.RegisterNamespace(
+		s.customArchiverNamespace,
+		0, // Archive right away.
+		enumspb.ARCHIVAL_STATE_ENABLED,
+		customHistoryURI,
+		customVisibilityURI,
+	)
+	s.Require().NoError(err)
 }
 
 func (s *ArchivalSuite) TearDownSuite() {
 	s.Require().NoError(s.MarkNamespaceAsDeleted(s.archivalNamespace))
+	s.Require().NoError(s.MarkNamespaceAsDeleted(s.customArchiverNamespace))
 	s.FunctionalTestBase.TearDownCluster()
 }
 
@@ -173,6 +274,33 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 			execution.ExecutionDuration.AsDuration(),
 		)
 	}
+}
+
+func (s *ArchivalSuite) TestCustomArchiver() {
+	s.True(s.GetTestCluster().ArchiverBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
+
+	workflowID := "custom-history-archiver-workflow-id"
+	workflowType := "custom-history-archiver-type"
+	taskQueue := "custom-history-archiver-task-queue"
+	numActivities := 1
+	numRuns := 1
+
+	// Reset counter before test
+	s.customHistoryArchiveCalled.Store(0)
+	s.customVisibilityArchiveCalled.Store(0)
+
+	// Use custom archiver namespace to trigger custom archiver
+	s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.customArchiverNamespace, numActivities, numRuns)
+
+	// Verify custom archiver's Archive method was called at least once
+	s.Eventually(func() bool {
+		called := s.customHistoryArchiveCalled.Load()
+		return called > 0
+	}, 10*time.Second, 500*time.Millisecond, "Custom history archiver Archive method should have been called")
+	s.Eventually(func() bool {
+		called := s.customVisibilityArchiveCalled.Load()
+		return called > 0
+	}, 10*time.Second, 500*time.Millisecond, "Custom visibility archiver Archive method should have been called")
 }
 
 // workflowIsArchived asserts that both the workflow history and workflow visibility are archived.
@@ -322,7 +450,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
@@ -383,8 +511,8 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
-	for run := 0; run < numRuns; run++ {
-		for i := 0; i < numActivities; i++ {
+	for range numRuns {
+		for i := range numActivities {
 			_, err := poller.PollAndProcessWorkflowTask()
 			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 			s.NoError(err)

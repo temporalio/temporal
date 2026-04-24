@@ -6,6 +6,7 @@ import (
 
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -106,6 +107,8 @@ var DisallowedOperationHeaders = dynamicconfig.NewGlobalTypedSettingWithConverte
 		headers.CallerNameHeaderName,
 		headers.CallerTypeHeaderName,
 		headers.CallOriginHeaderName,
+		headers.PrincipalTypeHeaderName,
+		headers.PrincipalNameHeaderName,
 	},
 	`Case insensitive list of disallowed header keys for Nexus Operations.
 ScheduleNexusOperation commands with a "nexus_header" field that contains any of these disallowed keys will be
@@ -161,7 +164,7 @@ NexusOperationCancelRequestFailed events. Default true.`,
 )
 
 type Config struct {
-	Enabled                             dynamicconfig.BoolPropertyFn
+	NumHistoryShards                    int32
 	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MinRequestTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentOperations             dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -179,9 +182,8 @@ type Config struct {
 	RetryPolicy                         func() backoff.RetryPolicy
 }
 
-func ConfigProvider(dc *dynamicconfig.Collection) *Config {
+func ConfigProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Config {
 	return &Config{
-		Enabled:                             dynamicconfig.EnableNexus.Get(dc),
 		RequestTimeout:                      RequestTimeout.Get(dc),
 		MinRequestTimeout:                   MinRequestTimeout.Get(dc),
 		MaxConcurrentOperations:             MaxConcurrentOperations.Get(dc),
@@ -205,5 +207,6 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 				backoff.NoInterval,
 			)
 		},
+		NumHistoryShards: cfg.NumHistoryShards,
 	}
 }

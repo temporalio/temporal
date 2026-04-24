@@ -14,8 +14,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// LegacyToSchedulerMigrationState converts legacy (workflow-backed) scheduler state to a
-// SchedulerMigrationState proto. This is the primary V1-to-V2 migration function.
+// LegacyToCreateFromMigrationStateRequest converts legacy (workflow-backed) scheduler
+// state to a CreateFromMigrationStateRequest proto. This is the primary V1-to-V2
+// migration function.
 //
 // The migrationTime parameter is used for initializing timestamps that don't have a
 // direct mapping from V1 state (e.g., StartTime for running workflows).
@@ -34,14 +35,14 @@ import (
 //
 // Note: In V2, RunningWorkflows and RecentActions are computed on-demand from
 // BufferedStarts by the Invoker, rather than being stored separately in ScheduleInfo.
-func LegacyToSchedulerMigrationState(
+func LegacyToCreateFromMigrationStateRequest(
 	schedule *schedulepb.Schedule,
 	info *schedulepb.ScheduleInfo,
 	state *schedulespb.InternalState,
-	searchAttributes map[string]*commonpb.Payload,
-	memo map[string]*commonpb.Payload,
+	searchAttributes *commonpb.SearchAttributes,
+	memo *commonpb.Memo,
 	migrationTime time.Time,
-) *schedulerpb.SchedulerMigrationState {
+) *schedulerpb.CreateFromMigrationStateRequest {
 	// V2 computes RunningWorkflows/RecentActions on-demand from BufferedStarts
 	infoClone := common.CloneProto(info)
 	infoClone.RunningWorkflows = nil
@@ -80,6 +81,7 @@ func LegacyToSchedulerMigrationState(
 
 	recentActionsBufferedStarts := convertRecentActionsToBufferedStarts(
 		info.RecentActions,
+		info.RunningWorkflows,
 		state.NamespaceId,
 		state.ScheduleId,
 		state.ConflictToken,
@@ -97,18 +99,24 @@ func LegacyToSchedulerMigrationState(
 	backfillers := convertBackfillsLegacyToCHASM(state.OngoingBackfills)
 	lastCompletion := convertLastCompletionLegacyToCHASM(state.LastCompletionResult, state.ContinuedFailure)
 
-	return &schedulerpb.SchedulerMigrationState{
-		SchedulerState:       schedulerState,
-		GeneratorState:       generatorState,
-		InvokerState:         invokerState,
-		Backfillers:          backfillers,
-		LastCompletionResult: lastCompletion,
-		SearchAttributes:     searchAttributes,
-		Memo:                 memo,
+	return &schedulerpb.CreateFromMigrationStateRequest{
+		NamespaceId: state.NamespaceId,
+		State: &schedulerpb.SchedulerMigrationState{
+			SchedulerState:       schedulerState,
+			GeneratorState:       generatorState,
+			InvokerState:         invokerState,
+			Backfillers:          backfillers,
+			LastCompletionResult: lastCompletion,
+			SearchAttributes:     searchAttributes.GetIndexedFields(),
+			Memo:                 memo.GetFields(),
+		},
 	}
 }
 
-func CHASMToSchedulerMigrationState(
+// CHASMToLegacyStartScheduleArgs converts CHASM scheduler state to V1 StartScheduleArgs.
+// This is the primary V2-to-V1 migration function. The migrationTime parameter is used
+// to initialize missing timestamps.
+func CHASMToLegacyStartScheduleArgs(
 	scheduler *schedulerpb.SchedulerState,
 	generator *schedulerpb.GeneratorState,
 	invoker *schedulerpb.InvokerState,
@@ -116,29 +124,9 @@ func CHASMToSchedulerMigrationState(
 	lastCompletionResult *schedulerpb.LastCompletionResult,
 	searchAttributes map[string]*commonpb.Payload,
 	memo map[string]*commonpb.Payload,
-) *schedulerpb.SchedulerMigrationState {
-	return &schedulerpb.SchedulerMigrationState{
-		SchedulerState:       common.CloneProto(scheduler),
-		GeneratorState:       common.CloneProto(generator),
-		InvokerState:         common.CloneProto(invoker),
-		Backfillers:          common.CloneProtoMap(backfillers),
-		LastCompletionResult: common.CloneProto(lastCompletionResult),
-		SearchAttributes:     searchAttributes,
-		Memo:                 memo,
-	}
-}
-
-// SchedulerMigrationStateToLegacyStartScheduleArgs converts migration state to V1 StartScheduleArgs.. The migrationTime parameter is used to initialize
-// missing timestamps.
-func SchedulerMigrationStateToLegacyStartScheduleArgs(
-	migrationState *schedulerpb.SchedulerMigrationState,
 	migrationTime time.Time,
 ) *schedulespb.StartScheduleArgs {
-	if migrationState == nil {
-		migrationState = &schedulerpb.SchedulerMigrationState{}
-	}
-
-	schedulerState := common.CloneProto(migrationState.GetSchedulerState())
+	schedulerState := common.CloneProto(scheduler)
 	if schedulerState == nil {
 		schedulerState = &schedulerpb.SchedulerState{}
 	}
@@ -154,23 +142,23 @@ func SchedulerMigrationStateToLegacyStartScheduleArgs(
 	}
 
 	var invokerBuffered []*schedulespb.BufferedStart
-	if migrationState.GetInvokerState() != nil {
-		invokerBuffered = migrationState.GetInvokerState().GetBufferedStarts()
+	if invoker != nil {
+		invokerBuffered = invoker.GetBufferedStarts()
 	}
 	bufferedStarts, running, recent := splitBufferedStartsForLegacy(invokerBuffered)
-	ongoingBackfills, triggerStarts := convertBackfillersCHASMToLegacy(migrationState.GetBackfillers(), migrationTime)
+	ongoingBackfills, triggerStarts := convertBackfillersCHASMToLegacy(backfillers, migrationTime)
 	bufferedStarts = append(bufferedStarts, triggerStarts...)
 
 	var generatorLastProcessed *timestamppb.Timestamp
-	if migrationState.GetGeneratorState() != nil {
-		generatorLastProcessed = migrationState.GetGeneratorState().GetLastProcessedTime()
+	if generator != nil {
+		generatorLastProcessed = generator.GetLastProcessedTime()
 	}
 	lastProcessedTime := common.CloneProto(generatorLastProcessed)
 	if lastProcessedTime == nil {
 		lastProcessedTime = timestamppb.New(migrationTime)
 	}
 
-	resultPayloads, continuedFailure := convertLastCompletionCHASMToLegacy(migrationState.GetLastCompletionResult())
+	resultPayloads, continuedFailure := convertLastCompletionCHASMToLegacy(lastCompletionResult)
 
 	info.RunningWorkflows = running
 	info.RecentActions = recent
@@ -261,16 +249,22 @@ func convertRunningWorkflowsToBufferedStarts(
 			RunId:       wf.RunId,
 			// RequestId will be used with AttachRequestID to register Nexus
 			// callbacks for tracking workflow completion after migration.
+			// Include the RunId in the tag to ensure each running workflow
+			// gets a unique RequestId (important for ALLOW_ALL overlap
+			// policy where multiple workflows may be running concurrently).
 			RequestId: schedulescommon.GenerateRequestID(
 				namespaceID,
 				scheduleID,
 				conflictToken,
-				"migrated-running",
+				"migrated-running-"+wf.RunId,
 				migrationTime,
 				migrationTime,
 			),
 			Attempt:   1,
 			Completed: nil,
+			// Migrated running workflows must have a Nexus callback attached once the
+			// migrated schedule target has been created.
+			HasCallback: false,
 		}
 	}
 
@@ -280,8 +274,15 @@ func convertRunningWorkflowsToBufferedStarts(
 // convertRecentActionsToBufferedStarts converts V1's RecentActions list to V2's
 // BufferedStarts format. In V2, completed actions are represented as BufferedStarts with
 // RunId, StartTime, and Completed fields all populated.
+//
+// runningWorkflows is the set of currently running workflow executions (from
+// info.RunningWorkflows). These are excluded because they are already converted
+// separately by convertRunningWorkflowsToBufferedStarts. In V1, recordAction
+// adds the same workflow to both RecentActions and RunningWorkflows, so without
+// this filter the same execution would appear twice in the CHASM BufferedStarts.
 func convertRecentActionsToBufferedStarts(
 	recentActions []*schedulepb.ScheduleActionResult,
+	runningWorkflows []*commonpb.WorkflowExecution,
 	namespaceID, scheduleID string,
 	conflictToken int64,
 	migrationTime time.Time,
@@ -290,9 +291,22 @@ func convertRecentActionsToBufferedStarts(
 		return nil
 	}
 
+	// Build a set of running workflow run IDs to exclude from recent actions,
+	// since those are already converted by convertRunningWorkflowsToBufferedStarts.
+	runningRunIDs := make(map[string]struct{}, len(runningWorkflows))
+	for _, wf := range runningWorkflows {
+		runningRunIDs[wf.GetRunId()] = struct{}{}
+	}
+
 	bufferedStarts := make([]*schedulespb.BufferedStart, 0, len(recentActions))
 	for _, action := range recentActions {
 		if action.StartWorkflowResult == nil {
+			continue
+		}
+
+		// Skip actions for workflows that are still running — those are handled
+		// by convertRunningWorkflowsToBufferedStarts.
+		if _, ok := runningRunIDs[action.StartWorkflowResult.GetRunId()]; ok {
 			continue
 		}
 

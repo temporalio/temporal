@@ -3,10 +3,12 @@ package chasm
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"regexp"
 	"strings"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/server/common/log"
 	"google.golang.org/grpc"
 )
@@ -24,26 +26,43 @@ type (
 		rcByFqn    map[string]*RegistrableComponent       // fully qualified type name -> component
 		rcByID     map[uint32]*RegistrableComponent       // component type ID -> component
 		rcByGoType map[reflect.Type]*RegistrableComponent // component go type -> component
+		// rcContextValues is aggregated context values from all components,
+		// used for easy lookup when Context.Value(key) is called.
+		// Registration process will check for key conflicts and return error if same key is registered by multiple components.
+		rcContextValues map[any]valueWithFqn
 
 		// rt stands for RegistrableTask.
 		rtByFqn    map[string]*RegistrableTask       // fully qualified type name -> task
 		rtByID     map[uint32]*RegistrableTask       // task type ID -> task
 		rtByGoType map[reflect.Type]*RegistrableTask // task go type -> task
 
+		nexusServices          map[string]*nexus.Service // service name -> nexus service
+		NexusEndpointProcessor *NexusEndpointProcessor
+
 		logger log.Logger
 	}
 )
 
+// valueWithFqn is a wrapper struct that associates a value with
+// the fully qualified name (FQN) of the component that registered it.
+type valueWithFqn struct {
+	v   any
+	fqn string
+}
+
 func NewRegistry(logger log.Logger) *Registry {
 	return &Registry{
-		libraries:  make(map[string]Library),
-		rcByFqn:    make(map[string]*RegistrableComponent),
-		rcByID:     make(map[uint32]*RegistrableComponent),
-		rcByGoType: make(map[reflect.Type]*RegistrableComponent),
-		rtByFqn:    make(map[string]*RegistrableTask),
-		rtByID:     make(map[uint32]*RegistrableTask),
-		rtByGoType: make(map[reflect.Type]*RegistrableTask),
-		logger:     logger,
+		libraries:              make(map[string]Library),
+		rcByFqn:                make(map[string]*RegistrableComponent),
+		rcByID:                 make(map[uint32]*RegistrableComponent),
+		rcByGoType:             make(map[reflect.Type]*RegistrableComponent),
+		rtByFqn:                make(map[string]*RegistrableTask),
+		rtByID:                 make(map[uint32]*RegistrableTask),
+		rtByGoType:             make(map[reflect.Type]*RegistrableTask),
+		rcContextValues:        make(map[any]valueWithFqn),
+		nexusServices:          make(map[string]*nexus.Service),
+		NexusEndpointProcessor: NewNexusEndpointProcessor(),
+		logger:                 logger,
 	}
 }
 
@@ -66,6 +85,19 @@ func (r *Registry) Register(lib Library) error {
 			return err
 		}
 	}
+
+	for _, svc := range lib.NexusServices() {
+		if err := r.registerNexusService(svc); err != nil {
+			return err
+		}
+	}
+
+	for _, svc := range lib.NexusServiceProcessors() {
+		if err := r.NexusEndpointProcessor.RegisterServiceProcessor(svc); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -224,6 +256,16 @@ func (r *Registry) registerComponent(
 		return fmt.Errorf("component ID %d collision between %s and %s", id, fqn, existingComponent.fqType())
 	}
 
+	for key, value := range rc.contextValues {
+		if existingValue, ok := r.rcContextValues[key]; ok {
+			return fmt.Errorf("context value key %v registered by component %s conflicts with component %s", key, fqn, existingValue.fqn)
+		}
+		r.rcContextValues[key] = valueWithFqn{
+			v:   value,
+			fqn: fqn,
+		}
+	}
+
 	// rc.goType implements Component interface; therefore, it must be a struct.
 	// This check to protect against the interface itself being registered.
 	if !(rc.goType.Kind() == reflect.Struct ||
@@ -321,4 +363,27 @@ func (r *Registry) warnUnmanagedFields(fqn string, rc *RegistrableComponent) {
 			fqn,
 			strings.Join(unmanagedFields, "\n\t")))
 	}
+}
+
+func (r *Registry) registerNexusService(svc *nexus.Service) error {
+	if _, ok := r.nexusServices[svc.Name]; ok {
+		return fmt.Errorf("nexus service %s is already registered", svc.Name)
+	}
+	r.nexusServices[svc.Name] = svc
+	return nil
+}
+
+// NexusServices returns all registered Nexus services.
+func (r *Registry) NexusServices() map[string]*nexus.Service {
+	// Return a copy to prevent external modification
+	services := make(map[string]*nexus.Service, len(r.nexusServices))
+	maps.Copy(services, r.nexusServices)
+	return services
+}
+
+func (r *Registry) componentContextValue(key any) any {
+	if v, ok := r.rcContextValues[key]; ok {
+		return v.v
+	}
+	return nil
 }

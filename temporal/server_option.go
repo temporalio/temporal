@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -70,7 +71,7 @@ func WithStaticHosts(hostsByService map[primitives.ServiceName]static.Hosts) Ser
 }
 
 // InterruptOn interrupts server on the signal from server. If channel is nil Start() will block forever.
-func InterruptOn(interruptCh <-chan interface{}) ServerOption {
+func InterruptOn(interruptCh <-chan any) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.startupSynchronizationMode.blockingStart = true
 		s.startupSynchronizationMode.interruptCh = interruptCh
@@ -151,6 +152,22 @@ func WithCustomDataStoreFactory(customFactory persistenceclient.AbstractDataStor
 func WithCustomVisibilityStoreFactory(customFactory visibility.VisibilityStoreFactory) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.customVisibilityStoreFactory = customFactory
+	})
+}
+
+// WithCustomHistoryArchiverFactory sets a custom history archiver factory.
+// NOTE: this option is experimental and may be changed in future release.
+func WithCustomHistoryArchiverFactory(factory provider.CustomHistoryArchiverFactory) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.customHistoryArchiverFactory = factory
+	})
+}
+
+// WithCustomVisibilityArchiverFactory sets a custom visibility archiver factory.
+// NOTE: this option is experimental and may be changed in future release.
+func WithCustomVisibilityArchiverFactory(factory provider.CustomVisibilityArchiverFactory) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.customVisibilityArchiverFactory = factory
 	})
 }
 

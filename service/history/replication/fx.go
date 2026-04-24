@@ -44,6 +44,8 @@ var Module = fx.Provide(
 	func(m persistence.ExecutionManager) ExecutionManager {
 		return m
 	},
+	nsreplication.NewNoopDataMerger,
+	nsreplication.NewDefaultAdmitter,
 	NewExecutionManagerDLQWriter,
 	ClientSchedulerRateLimiterProvider,
 	ServerSchedulerRateLimiterProvider,
@@ -79,6 +81,8 @@ func eagerNamespaceRefresherProvider(
 	logger log.Logger,
 	clientBean client.Bean,
 	clusterMetadata cluster.Metadata,
+	dataMerger nsreplication.NamespaceDataMerger,
+	admitter nsreplication.NamespaceReplicationAdmitter,
 	metricsHandler metrics.Handler,
 ) EagerNamespaceRefresher {
 	return NewEagerNamespaceRefresher(
@@ -89,6 +93,8 @@ func eagerNamespaceRefresherProvider(
 		nsreplication.NewTaskExecutor(
 			clusterMetadata.GetCurrentClusterName(),
 			metadataManager,
+			dataMerger,
+			admitter,
 			logger,
 		),
 		clusterMetadata.GetCurrentClusterName(),
@@ -183,7 +189,7 @@ func replicationStreamLowPrioritySchedulerProvider(
 		}
 		return NewSequentialTaskQueueWithID(workflowKey.NamespaceID + "_" + workflowKey.WorkflowID)
 	}
-	taskQueueHashFunc := func(item interface{}) uint32 {
+	taskQueueHashFunc := func(item any) uint32 {
 		workflowKey, ok := item.(definition.WorkflowKey)
 		if !ok {
 			return 0

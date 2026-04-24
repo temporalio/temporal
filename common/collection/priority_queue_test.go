@@ -94,11 +94,11 @@ func (s *PriorityQueueSuite) TestInsertAndPop() {
 }
 
 func (s *PriorityQueueSuite) TestRandomNumber() {
-	for round := 0; round < 1000; round++ {
+	for range 1000 {
 
 		expected := []int{}
 		result := []int{}
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			num := rand.Int()
 			s.pq.Add(&testPriorityQueueItem{num})
 			expected = append(expected, num)

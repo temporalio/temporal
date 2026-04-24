@@ -30,18 +30,6 @@ type (
 		HandoverTimeoutSeconds int
 	}
 
-	replicationStatus struct {
-		MaxReplicationTaskIds map[int32]int64 // max replication task id for each shard.
-	}
-
-	waitReplicationRequest struct {
-		ShardCount          int32
-		RemoteCluster       string          // remote cluster name
-		WaitForTaskIds      map[int32]int64 // remote acked replication task needs to pass this id
-		AllowedLagging      time.Duration   // allowed remote acked lagging duration
-		AllowedLaggingTasks int64           // allowed remote acked task lagging
-	}
-
 	updateStateRequest struct {
 		Namespace string // move this namespace into Handover state
 		NewState  enumspb.ReplicationState
@@ -87,16 +75,16 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 	ctx = workflow.WithActivityOptions(ctx, ao)
 
 	// ** Step 1: Get Cluster Metadata **
-	var metadataResp metadataResponse
-	metadataRequest := metadataRequest{Namespace: params.Namespace}
+	var metadataResp MetadataResponse
+	MetadataRequest := MetadataRequest{Namespace: params.Namespace}
 	var a *activities
-	err := workflow.ExecuteActivity(ctx, a.GetMetadata, metadataRequest).Get(ctx, &metadataResp)
+	err := workflow.ExecuteActivity(ctx, a.GetMetadata, MetadataRequest).Get(ctx, &metadataResp)
 	if err != nil {
 		return err
 	}
 
 	// ** Step 2: Get current replication status **
-	var repStatus replicationStatus
+	var repStatus ReplicationStatus
 	err = workflow.ExecuteActivity(ctx, a.GetMaxReplicationTaskIDs).Get(ctx, &repStatus)
 	if err != nil {
 		return err
@@ -109,7 +97,7 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 		RetryPolicy:         retryPolicy,
 	}
 	ctx2 := workflow.WithActivityOptions(ctx, ao2)
-	waitRequest := waitReplicationRequest{
+	waitRequest := WaitReplicationRequest{
 		ShardCount:          metadataResp.ShardCount,
 		RemoteCluster:       params.RemoteCluster,
 		AllowedLagging:      time.Duration(params.AllowedLaggingSeconds) * time.Second,

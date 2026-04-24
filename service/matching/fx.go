@@ -35,6 +35,7 @@ var Module = fx.Options(
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ThrottledLoggerRpsFnProvider),
+	fx.Provide(ContextMetadataInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
@@ -189,6 +190,10 @@ func VisibilityManagerProvider(
 	)
 }
 
+func ContextMetadataInterceptorProvider(logger log.Logger) *interceptor.ContextMetadataInterceptor {
+	return interceptor.NewContextMetadataInterceptor(true, logger)
+}
+
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
 }
@@ -199,12 +204,17 @@ func WorkersRegistryProvider(
 	serviceConfig *Config,
 ) workers.Registry {
 	return workers.NewRegistry(lc, workers.RegistryParams{
-		NumBuckets:          serviceConfig.WorkerRegistryNumBuckets,
-		TTL:                 serviceConfig.WorkerRegistryEntryTTL,
-		MinEvictAge:         serviceConfig.WorkerRegistryMinEvictAge,
-		MaxItems:            serviceConfig.WorkerRegistryMaxEntries,
-		EvictionInterval:    serviceConfig.WorkerRegistryEvictionInterval,
-		MetricsHandler:      metricsHandler,
-		EnablePluginMetrics: serviceConfig.EnableWorkerPluginMetrics,
+		NumBuckets:       serviceConfig.WorkerRegistryNumBuckets,
+		TTL:              serviceConfig.WorkerRegistryEntryTTL,
+		MinEvictAge:      serviceConfig.WorkerRegistryMinEvictAge,
+		MaxItems:         serviceConfig.WorkerRegistryMaxEntries,
+		EvictionInterval: serviceConfig.WorkerRegistryEvictionInterval,
+		MetricsHandler:   metricsHandler,
+		MetricsConfig: workers.WorkerMetricsConfig{
+			EnablePluginMetrics:            serviceConfig.EnableWorkerPluginMetrics,
+			EnablePollerAutoscalingMetrics: serviceConfig.EnablePollerAutoscalingMetrics,
+			BreakdownMetricsByTaskQueue:    serviceConfig.BreakdownMetricsByTaskQueue,
+			ExternalPayloadsEnabled:        serviceConfig.ExternalPayloadsEnabled,
+		},
 	})
 }

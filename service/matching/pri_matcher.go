@@ -332,6 +332,9 @@ func (tm *priTaskMatcher) forwardPolls(
 		_ = stop()
 		if err == nil {
 			tm.data.FinishMatchAfterPollForward(poller, task)
+			if ft == priorityBacklogPollForwarder {
+				metrics.PriorityBacklogForwardedPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			}
 		} else if ft == priorityBacklogPollForwarder && errors.Is(err, errNoTasks) {
 			// There are no tasks of the priority we're looking for on the target. This goroutine
 			// will probably get canceled as soon as ephemeral data updates. In the meantime, wait.
@@ -506,6 +509,9 @@ func (tm *priTaskMatcher) AddTask(task *internalTask) error {
 }
 
 func (tm *priTaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
+	if tm.config.EmitTaskDispatchLatencyAtPoll() {
+		return // metric will be emitted at poll response
+	}
 	if task.event.Data.CreateTime == nil {
 		return // should not happen but for safety
 	}
@@ -647,6 +653,10 @@ func (tm *priTaskMatcher) poll(
 	}
 
 	return task, nil
+}
+
+func (tm *priTaskMatcher) HasWaitingPoller() bool {
+	return tm.data.HasWaitingPoller()
 }
 
 func (tm *priTaskMatcher) isForwardingAllowed() bool {

@@ -175,14 +175,14 @@ func (h *HistoryStore) ReadHistoryBranch(
 	}
 
 	nodes := make([]p.InternalHistoryNode, 0, request.PageSize)
-	message := make(map[string]interface{})
+	message := make(map[string]any)
 	for iter.MapScan(message) {
 		nodes = append(nodes, convertHistoryNode(message))
-		message = make(map[string]interface{})
+		message = make(map[string]any)
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailablef("ReadHistoryBranch. Close operation failed. Error: %v", err)
+		return nil, gocql.ConvertError("ReadHistoryBranch", err)
 	}
 
 	return &p.InternalReadHistoryBranchResponse{
@@ -334,7 +334,7 @@ func (h *HistoryStore) GetAllHistoryTreeBranches(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailablef("GetAllHistoryTreeBranches. Close operation failed. Error: %v", err)
+		return nil, gocql.ConvertError("GetAllHistoryTreeBranches", err)
 	}
 
 	response := &p.InternalGetAllHistoryTreeBranchesResponse{
@@ -401,7 +401,7 @@ func (h *HistoryStore) GetHistoryBranchUtil() p.HistoryBranchUtil {
 }
 
 func convertHistoryNode(
-	message map[string]interface{},
+	message map[string]any,
 ) p.InternalHistoryNode {
 	nodeID := message["node_id"].(int64)
 	prevTxnID := message["prev_txn_id"].(int64)

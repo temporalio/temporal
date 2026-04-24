@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/resource"
@@ -57,8 +58,10 @@ type (
 		TaskCategoryRegistry        tasks.TaskCategoryRegistry
 		EventsCache                 events.Cache
 
-		StateMachineRegistry *hsm.Registry
-		ChasmRegistry        *chasm.Registry
+		StateMachineRegistry   *hsm.Registry
+		ChasmRegistry          *chasm.Registry
+		EndpointRegistry       commonnexus.EndpointRegistry
+		HandoverTrackerFactory HandoverTrackerFactory
 	}
 
 	contextFactoryImpl struct {
@@ -101,6 +104,8 @@ func (c *contextFactoryImpl) CreateContext(
 		c.EventsCache,
 		c.StateMachineRegistry,
 		c.ChasmRegistry,
+		c.EndpointRegistry,
+		c.HandoverTrackerFactory,
 	)
 	if err != nil {
 		return nil, err

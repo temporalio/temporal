@@ -6,7 +6,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
@@ -94,7 +93,7 @@ func (q *QueueStore) tryEnqueue(
 	blob *commonpb.DataBlob,
 ) (int64, error) {
 	query := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, blob.Data, blob.EncodingType.String()).WithContext(ctx)
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		return persistence.EmptyQueueMessageID, gocql.ConvertError("tryEnqueue", err)
@@ -113,7 +112,7 @@ func (q *QueueStore) getLastMessageID(
 ) (int64, error) {
 
 	query := q.session.Query(templateGetLastMessageIDQuery, queueType).WithContext(ctx)
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 	err := query.MapScan(result)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
@@ -139,15 +138,15 @@ func (q *QueueStore) ReadMessages(
 	iter := query.Iter()
 
 	var result []*persistence.QueueMessage
-	message := make(map[string]interface{})
+	message := make(map[string]any)
 	for iter.MapScan(message) {
 		queueMessage := convertQueueMessage(message)
 		result = append(result, queueMessage)
-		message = make(map[string]interface{})
+		message = make(map[string]any)
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailablef("ReadMessages operation failed. Error: %v", err)
+		return nil, gocql.ConvertError("ReadMessages", err)
 	}
 
 	return result, nil
@@ -170,11 +169,11 @@ func (q *QueueStore) ReadMessagesFromDLQ(
 	iter := query.PageSize(pageSize).PageState(pageToken).Iter()
 
 	var result []*persistence.QueueMessage
-	message := make(map[string]interface{})
+	message := make(map[string]any)
 	for iter.MapScan(message) {
 		queueMessage := convertQueueMessage(message)
 		result = append(result, queueMessage)
-		message = make(map[string]interface{})
+		message = make(map[string]any)
 	}
 
 	var nextPageToken []byte
@@ -182,7 +181,7 @@ func (q *QueueStore) ReadMessagesFromDLQ(
 		nextPageToken = iter.PageState()
 	}
 	if err := iter.Close(); err != nil {
-		return nil, nil, serviceerror.NewUnavailablef("ReadMessagesFromDLQ operation failed. Error: %v", err)
+		return nil, nil, gocql.ConvertError("ReadMessagesFromDLQ", err)
 	}
 
 	return result, nextPageToken, nil
@@ -195,7 +194,7 @@ func (q *QueueStore) DeleteMessagesBefore(
 
 	query := q.session.Query(templateDeleteMessagesBeforeQuery, q.queueType, messageID).WithContext(ctx)
 	if err := query.Exec(); err != nil {
-		return serviceerror.NewUnavailablef("DeleteMessagesBefore operation failed. Error %v", err)
+		return gocql.ConvertError("DeleteMessagesBefore", err)
 	}
 	return nil
 }
@@ -208,7 +207,7 @@ func (q *QueueStore) DeleteMessageFromDLQ(
 	// Use negative queue type as the dlq type
 	query := q.session.Query(templateDeleteMessageQuery, q.getDLQTypeFromQueueType(), messageID).WithContext(ctx)
 	if err := query.Exec(); err != nil {
-		return serviceerror.NewUnavailablef("DeleteMessageFromDLQ operation failed. Error %v", err)
+		return gocql.ConvertError("DeleteMessageFromDLQ", err)
 	}
 
 	return nil
@@ -223,7 +222,7 @@ func (q *QueueStore) RangeDeleteMessagesFromDLQ(
 	// Use negative queue type as the dlq type
 	query := q.session.Query(templateDeleteMessagesQuery, q.getDLQTypeFromQueueType(), firstMessageID, lastMessageID).WithContext(ctx)
 	if err := query.Exec(); err != nil {
-		return serviceerror.NewUnavailablef("RangeDeleteMessagesFromDLQ operation failed. Error %v", err)
+		return gocql.ConvertError("RangeDeleteMessagesFromDLQ", err)
 	}
 
 	return nil
@@ -282,7 +281,7 @@ func (q *QueueStore) insertInitialQueueMetadataRecord(
 		blob.EncodingType.String(),
 		version,
 	).WithContext(ctx)
-	_, err := query.MapScanCAS(make(map[string]interface{}))
+	_, err := query.MapScanCAS(make(map[string]any))
 	if err != nil {
 		return fmt.Errorf("failed to insert initial queue metadata record: %v, Type: %v", err, queueType)
 	}
@@ -296,7 +295,7 @@ func (q *QueueStore) getQueueMetadata(
 ) (*persistence.InternalQueueMetadata, error) {
 
 	query := q.session.Query(templateGetQueueMetadataQuery, queueType).WithContext(ctx)
-	message := make(map[string]interface{})
+	message := make(map[string]any)
 	err := query.MapScan(message)
 	if err != nil {
 		return nil, err
@@ -325,7 +324,7 @@ func (q *QueueStore) updateAckLevel(
 		queueType,
 		metadata.Version, // condition update
 	).WithContext(ctx)
-	applied, err := query.MapScanCAS(make(map[string]interface{}))
+	applied, err := query.MapScanCAS(make(map[string]any))
 	if err != nil {
 		return gocql.ConvertError("updateAckLevel", err)
 	}
@@ -369,7 +368,7 @@ func (q *QueueStore) initializeDLQMetadata(
 }
 
 func convertQueueMessage(
-	message map[string]interface{},
+	message map[string]any,
 ) *persistence.QueueMessage {
 
 	id := message["message_id"].(int64)
@@ -386,7 +385,7 @@ func convertQueueMessage(
 }
 
 func convertQueueMetadata(
-	message map[string]interface{},
+	message map[string]any,
 	serializer serialization.Serializer,
 ) (*persistence.InternalQueueMetadata, error) {
 

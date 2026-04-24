@@ -2,51 +2,135 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.nexusoperation.proto.v1;
 
+import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "temporal/api/failure/v1/message.proto";
+
 option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpb";
 
 message OperationState {
+  // Current status of the operation.
   OperationStatus status = 1;
+
+  // Endpoint ID - used internally to avoid failing requests when endpoint is renamed.
+  string endpoint_id = 2;
+
+  // Endpoint name - resolved from the endpoint registry for this workflow's namespace.
+  string endpoint = 3;
+
+  // Service name.
+  string service = 4;
+
+  // Operation name.
+  string operation = 5;
+
+  // The time when the operation was scheduled.
+  google.protobuf.Timestamp scheduled_time = 6;
+
+  // The time when the operation was started. Only set for asynchronous operations after a successful StartOperation
+  // call. Taken from the component time or the time reported in an async completion request, whichever happens first.
+  google.protobuf.Timestamp started_time = 7;
+
+  // The time when the operation reached a terminal state. Taken from the component time or the time reported in an
+  // async completion request, whichever happens first.
+  google.protobuf.Timestamp closed_time = 8;
+
+  // Schedule-to-start timeout for this operation.
+  google.protobuf.Duration schedule_to_start_timeout = 9;
+
+  // Start-to-close timeout for this operation.
+  google.protobuf.Duration start_to_close_timeout = 10;
+
+  // Schedule-to-close timeout for this operation.
+  google.protobuf.Duration schedule_to_close_timeout = 11;
+
+  // Unique request ID allocated for all retry attempts of the StartOperation request.
+  string request_id = 12;
+
+  // Opaque data injected by the parent (e.g. workflow) for its own bookkeeping.
+  // The operation component itself does not interpret this field.
+  google.protobuf.Any parent_data = 13;
+
+  // The number of attempts made to deliver the start operation request.
+  // This number is approximate, it is incremented when a task is added to the history queue.
+  // In practice, there could be more attempts if a task is executed but fails to commit, or less attempts if a task was
+  // never executed.
+  int32 attempt = 14;
+
+  // The time when the last attempt completed.
+  google.protobuf.Timestamp last_attempt_complete_time = 15;
+
+  // The last attempt's failure, if any.
+  temporal.api.failure.v1.Failure last_attempt_failure = 16;
+
+  // The time when the next attempt is scheduled (only set when in BACKING_OFF state).
+  google.protobuf.Timestamp next_attempt_schedule_time = 17;
+
+  // Operation token - only set for asynchronous operations after a successful StartOperation call.
+  string operation_token = 18;
 }
 
 enum OperationStatus {
   // Default value, unspecified status.
-    OPERATION_STATUS_UNSPECIFIED = 0;
+  OPERATION_STATUS_UNSPECIFIED = 0;
   // Operation is in the queue waiting to be executed or is currently executing.
-    OPERATION_STATUS_SCHEDULED = 1;
+  OPERATION_STATUS_SCHEDULED = 1;
   // Operation has failed with a retryable error and is backing off before the next attempt.
-    OPERATION_STATUS_BACKING_OFF = 2;
+  OPERATION_STATUS_BACKING_OFF = 2;
   // Operation was started and will complete asynchronously.
-    OPERATION_STATUS_STARTED = 3;
+  OPERATION_STATUS_STARTED = 3;
   // Operation succeeded.
   // This may happen either as a response to a start request or as reported via callback.
-    OPERATION_STATUS_SUCCEEDED = 4;
+  OPERATION_STATUS_SUCCEEDED = 4;
   // Operation failed either when a start request encounters a non-retryable error or as reported via callback.
-    OPERATION_STATUS_FAILED = 5;
+  OPERATION_STATUS_FAILED = 5;
   // Operation completed as canceled (may have not ever been delivered).
   // This may happen either as a response to a start request or as reported via callback.
-    OPERATION_STATUS_CANCELED = 6;
+  OPERATION_STATUS_CANCELED = 6;
   // Operation timed out - exceeded the user supplied schedule-to-close timeout.
   // Any attempts to complete the operation in this status will be ignored.
-    OPERATION_STATUS_TIMED_OUT = 7;
+  OPERATION_STATUS_TIMED_OUT = 7;
 }
 
 message CancellationState {
+  // Current status of the cancellation request.
   CancellationStatus status = 1;
+
+  // The time when cancellation was requested.
+  google.protobuf.Timestamp requested_time = 2;
+
+  // The number of attempts made to deliver the cancel operation request.
+  // This number represents a minimum bound since the attempt is incremented after the request completes.
+  int32 attempt = 3;
+
+  // The time when the last attempt completed.
+  google.protobuf.Timestamp last_attempt_complete_time = 4;
+
+  // The last attempt's failure, if any.
+  temporal.api.failure.v1.Failure last_attempt_failure = 5;
+
+  // The time when the next attempt is scheduled (only set when in BACKING_OFF state).
+  google.protobuf.Timestamp next_attempt_schedule_time = 6;
+
+  // Opaque data injected by the parent (e.g. workflow) for its own bookkeeping.
+  // The cancellation component itself does not interpret this field.
+  google.protobuf.Any parent_data = 7;
 }
 
 enum CancellationStatus {
   // Default value, unspecified status.
-    CANCELLATION_STATUS_UNSPECIFIED = 0;
+  CANCELLATION_STATUS_UNSPECIFIED = 0;
   // Cancellation request is in the queue waiting to be executed or is currently executing.
-    CANCELLATION_STATUS_SCHEDULED = 1;
+  CANCELLATION_STATUS_SCHEDULED = 1;
   // Cancellation request has failed with a retryable error and is backing off before the next attempt.
-    CANCELLATION_STATUS_BACKING_OFF = 2;
+  CANCELLATION_STATUS_BACKING_OFF = 2;
   // Cancellation request succeeded.
-    CANCELLATION_STATUS_SUCCEEDED = 3;
+  CANCELLATION_STATUS_SUCCEEDED = 3;
   // Cancellation request failed with a non-retryable error.
-    CANCELLATION_STATUS_FAILED = 4;
+  CANCELLATION_STATUS_FAILED = 4;
   // The associated operation timed out - exceeded the user supplied schedule-to-close timeout.
-    CANCELLATION_STATUS_TIMED_OUT = 5;
+  CANCELLATION_STATUS_TIMED_OUT = 5;
   // Cancellation request is blocked (eg: by circuit breaker).
-    CANCELLATION_STATUS_BLOCKED = 6;
+  CANCELLATION_STATUS_BLOCKED = 6;
 }

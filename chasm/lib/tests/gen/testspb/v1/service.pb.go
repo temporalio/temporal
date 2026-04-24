@@ -10,6 +10,7 @@ import (
 	reflect "reflect"
 	unsafe "unsafe"
 
+	_ "go.temporal.io/server/api/common/v1"
 	_ "go.temporal.io/server/api/routing/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -26,9 +27,9 @@ var File_temporal_server_chasm_lib_tests_proto_v1_service_proto protoreflect.Fil
 
 const file_temporal_server_chasm_lib_tests_proto_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"6temporal/server/chasm/lib/tests/proto/v1/service.proto\x12(temporal.server.chasm.lib.tests.proto.v1\x1a?temporal/server/chasm/lib/tests/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto2\x8c\x01\n" +
-	"\vTestService\x12}\n" +
-	"\x04Test\x125.temporal.server.chasm.lib.tests.proto.v1.TestRequest\x1a6.temporal.server.chasm.lib.tests.proto.v1.TestResponse\"\x06\x92\xc4\x03\x02\b\x01B;Z9go.temporal.io/server/chasm/lib/tests/gen/testspb;testspbb\x06proto3"
+	"6temporal/server/chasm/lib/tests/proto/v1/service.proto\x12(temporal.server.chasm.lib.tests.proto.v1\x1a?temporal/server/chasm/lib/tests/proto/v1/request_response.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto2\x93\x01\n" +
+	"\vTestService\x12\x83\x01\n" +
+	"\x04Test\x125.temporal.server.chasm.lib.tests.proto.v1.TestRequest\x1a6.temporal.server.chasm.lib.tests.proto.v1.TestResponse\"\f\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x02\b\x01B;Z9go.temporal.io/server/chasm/lib/tests/gen/testspb;testspbb\x06proto3"
 
 var file_temporal_server_chasm_lib_tests_proto_v1_service_proto_goTypes = []any{
 	(*TestRequest)(nil),  // 0: temporal.server.chasm.lib.tests.proto.v1.TestRequest

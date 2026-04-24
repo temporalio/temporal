@@ -37,8 +37,6 @@ system.enableDeploymentVersions:
   - value: true
 frontend.workerVersioningRuleAPIs:
   - value: true
-system.enableNexus:
-  - value: true
 component.nexusoperations.callback.endpoint.template:
   - value: http://localhost:7243/namespaces/{{.NamespaceName}}/nexus/callback
 component.callbacks.allowedAddresses:

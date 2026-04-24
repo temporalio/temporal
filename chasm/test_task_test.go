@@ -8,6 +8,8 @@ import (
 type (
 	TestSideEffectTask = commonpb.Payload
 
+	TestDiscardableSideEffectTask struct{}
+
 	TestOutboundSideEffectTask struct{}
 
 	TestPureTask struct {

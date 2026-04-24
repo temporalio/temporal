@@ -10,6 +10,7 @@ import (
 	reflect "reflect"
 	unsafe "unsafe"
 
+	_ "go.temporal.io/server/api/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -25,48 +26,48 @@ var File_temporal_server_api_matchingservice_v1_service_proto protoreflect.FileD
 
 const file_temporal_server_api_matchingservice_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"4temporal/server/api/matchingservice/v1/service.proto\x12&temporal.server.api.matchingservice.v1\x1a=temporal/server/api/matchingservice/v1/request_response.proto2\xb36\n" +
-	"\x0fMatchingService\x12\xa6\x01\n" +
-	"\x15PollWorkflowTaskQueue\x12D.temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest\x1aE.temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse\"\x00\x12\xa6\x01\n" +
-	"\x15PollActivityTaskQueue\x12D.temporal.server.api.matchingservice.v1.PollActivityTaskQueueRequest\x1aE.temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse\"\x00\x12\x94\x01\n" +
-	"\x0fAddWorkflowTask\x12>.temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest\x1a?.temporal.server.api.matchingservice.v1.AddWorkflowTaskResponse\"\x00\x12\x94\x01\n" +
-	"\x0fAddActivityTask\x12>.temporal.server.api.matchingservice.v1.AddActivityTaskRequest\x1a?.temporal.server.api.matchingservice.v1.AddActivityTaskResponse\"\x00\x12\x8e\x01\n" +
-	"\rQueryWorkflow\x12<.temporal.server.api.matchingservice.v1.QueryWorkflowRequest\x1a=.temporal.server.api.matchingservice.v1.QueryWorkflowResponse\"\x00\x12\xb2\x01\n" +
-	"\x19RespondQueryTaskCompleted\x12H.temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedRequest\x1aI.temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedResponse\"\x00\x12\x9a\x01\n" +
-	"\x11DispatchNexusTask\x12@.temporal.server.api.matchingservice.v1.DispatchNexusTaskRequest\x1aA.temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse\"\x00\x12\x9d\x01\n" +
-	"\x12PollNexusTaskQueue\x12A.temporal.server.api.matchingservice.v1.PollNexusTaskQueueRequest\x1aB.temporal.server.api.matchingservice.v1.PollNexusTaskQueueResponse\"\x00\x12\xb2\x01\n" +
-	"\x19RespondNexusTaskCompleted\x12H.temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedRequest\x1aI.temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedResponse\"\x00\x12\xa9\x01\n" +
-	"\x16RespondNexusTaskFailed\x12E.temporal.server.api.matchingservice.v1.RespondNexusTaskFailedRequest\x1aF.temporal.server.api.matchingservice.v1.RespondNexusTaskFailedResponse\"\x00\x12\xa6\x01\n" +
-	"\x15CancelOutstandingPoll\x12D.temporal.server.api.matchingservice.v1.CancelOutstandingPollRequest\x1aE.temporal.server.api.matchingservice.v1.CancelOutstandingPollResponse\"\x00\x12\xbb\x01\n" +
-	"\x1cCancelOutstandingWorkerPolls\x12K.temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsRequest\x1aL.temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsResponse\"\x00\x12\x9a\x01\n" +
-	"\x11DescribeTaskQueue\x12@.temporal.server.api.matchingservice.v1.DescribeTaskQueueRequest\x1aA.temporal.server.api.matchingservice.v1.DescribeTaskQueueResponse\"\x00\x12\xb5\x01\n" +
-	"\x1aDescribeTaskQueuePartition\x12I.temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionRequest\x1aJ.temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse\"\x00\x12\xb8\x01\n" +
-	"\x1bDescribeVersionedTaskQueues\x12J.temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest\x1aK.temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse\"\x00\x12\xac\x01\n" +
-	"\x17ListTaskQueuePartitions\x12F.temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsRequest\x1aG.temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse\"\x00\x12\xc7\x01\n" +
-	" UpdateWorkerBuildIdCompatibility\x12O.temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest\x1aP.temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityResponse\"\x00\x12\xbe\x01\n" +
-	"\x1dGetWorkerBuildIdCompatibility\x12L.temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityRequest\x1aM.temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityResponse\"\x00\x12\xa3\x01\n" +
-	"\x14GetTaskQueueUserData\x12C.temporal.server.api.matchingservice.v1.GetTaskQueueUserDataRequest\x1aD.temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse\"\x00\x12\xb8\x01\n" +
-	"\x1bUpdateWorkerVersioningRules\x12J.temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesRequest\x1aK.temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesResponse\"\x00\x12\xaf\x01\n" +
-	"\x18GetWorkerVersioningRules\x12G.temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesRequest\x1aH.temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesResponse\"\x00\x12\xa9\x01\n" +
-	"\x16SyncDeploymentUserData\x12E.temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest\x1aF.temporal.server.api.matchingservice.v1.SyncDeploymentUserDataResponse\"\x00\x12\xd9\x01\n" +
-	"&ApplyTaskQueueUserDataReplicationEvent\x12U.temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventRequest\x1aV.temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventResponse\"\x00\x12\xb5\x01\n" +
-	"\x1aGetBuildIdTaskQueueMapping\x12I.temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingRequest\x1aJ.temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingResponse\"\x00\x12\xb8\x01\n" +
-	"\x1bForceLoadTaskQueuePartition\x12J.temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionRequest\x1aK.temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionResponse\"\x00\x12\xa3\x01\n" +
-	"\x14ForceUnloadTaskQueue\x12C.temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueRequest\x1aD.temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueResponse\"\x00\x12\xbe\x01\n" +
-	"\x1dForceUnloadTaskQueuePartition\x12L.temporal.server.api.matchingservice.v1.ForceUnloadTaskQueuePartitionRequest\x1aM.temporal.server.api.matchingservice.v1.ForceUnloadTaskQueuePartitionResponse\"\x00\x12\xac\x01\n" +
-	"\x17UpdateTaskQueueUserData\x12F.temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataRequest\x1aG.temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataResponse\"\x00\x12\xb5\x01\n" +
-	"\x1aReplicateTaskQueueUserData\x12I.temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataRequest\x1aJ.temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataResponse\"\x00\x12\xca\x01\n" +
-	"!CheckTaskQueueUserDataPropagation\x12P.temporal.server.api.matchingservice.v1.CheckTaskQueueUserDataPropagationRequest\x1aQ.temporal.server.api.matchingservice.v1.CheckTaskQueueUserDataPropagationResponse\"\x00\x12\xa0\x01\n" +
-	"\x13CreateNexusEndpoint\x12B.temporal.server.api.matchingservice.v1.CreateNexusEndpointRequest\x1aC.temporal.server.api.matchingservice.v1.CreateNexusEndpointResponse\"\x00\x12\xa0\x01\n" +
-	"\x13UpdateNexusEndpoint\x12B.temporal.server.api.matchingservice.v1.UpdateNexusEndpointRequest\x1aC.temporal.server.api.matchingservice.v1.UpdateNexusEndpointResponse\"\x00\x12\xa0\x01\n" +
-	"\x13DeleteNexusEndpoint\x12B.temporal.server.api.matchingservice.v1.DeleteNexusEndpointRequest\x1aC.temporal.server.api.matchingservice.v1.DeleteNexusEndpointResponse\"\x00\x12\x9d\x01\n" +
-	"\x12ListNexusEndpoints\x12A.temporal.server.api.matchingservice.v1.ListNexusEndpointsRequest\x1aB.temporal.server.api.matchingservice.v1.ListNexusEndpointsResponse\"\x00\x12\xa6\x01\n" +
-	"\x15RecordWorkerHeartbeat\x12D.temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatRequest\x1aE.temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatResponse\"\x00\x12\x88\x01\n" +
-	"\vListWorkers\x12:.temporal.server.api.matchingservice.v1.ListWorkersRequest\x1a;.temporal.server.api.matchingservice.v1.ListWorkersResponse\"\x00\x12\xa6\x01\n" +
-	"\x15UpdateTaskQueueConfig\x12D.temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigRequest\x1aE.temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigResponse\"\x00\x12\x91\x01\n" +
-	"\x0eDescribeWorker\x12=.temporal.server.api.matchingservice.v1.DescribeWorkerRequest\x1a>.temporal.server.api.matchingservice.v1.DescribeWorkerResponse\"\x00\x12\xa0\x01\n" +
-	"\x13UpdateFairnessState\x12B.temporal.server.api.matchingservice.v1.UpdateFairnessStateRequest\x1aC.temporal.server.api.matchingservice.v1.UpdateFairnessStateResponse\"\x00\x12\xc4\x01\n" +
-	"\x1fCheckTaskQueueVersionMembership\x12N.temporal.server.api.matchingservice.v1.CheckTaskQueueVersionMembershipRequest\x1aO.temporal.server.api.matchingservice.v1.CheckTaskQueueVersionMembershipResponse\"\x00B>Z<go.temporal.io/server/api/matchingservice/v1;matchingserviceb\x06proto3"
+	"4temporal/server/api/matchingservice/v1/service.proto\x12&temporal.server.api.matchingservice.v1\x1a0temporal/server/api/common/v1/api_category.proto\x1a=temporal/server/api/matchingservice/v1/request_response.proto2\xa38\n" +
+	"\x0fMatchingService\x12\xac\x01\n" +
+	"\x15PollWorkflowTaskQueue\x12D.temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest\x1aE.temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse\"\x06\x8a\xb5\x18\x02\b\x02\x12\xac\x01\n" +
+	"\x15PollActivityTaskQueue\x12D.temporal.server.api.matchingservice.v1.PollActivityTaskQueueRequest\x1aE.temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse\"\x06\x8a\xb5\x18\x02\b\x02\x12\x9a\x01\n" +
+	"\x0fAddWorkflowTask\x12>.temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest\x1a?.temporal.server.api.matchingservice.v1.AddWorkflowTaskResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\x9a\x01\n" +
+	"\x0fAddActivityTask\x12>.temporal.server.api.matchingservice.v1.AddActivityTaskRequest\x1a?.temporal.server.api.matchingservice.v1.AddActivityTaskResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\x94\x01\n" +
+	"\rQueryWorkflow\x12<.temporal.server.api.matchingservice.v1.QueryWorkflowRequest\x1a=.temporal.server.api.matchingservice.v1.QueryWorkflowResponse\"\x06\x8a\xb5\x18\x02\b\x02\x12\xb8\x01\n" +
+	"\x19RespondQueryTaskCompleted\x12H.temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedRequest\x1aI.temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xa0\x01\n" +
+	"\x11DispatchNexusTask\x12@.temporal.server.api.matchingservice.v1.DispatchNexusTaskRequest\x1aA.temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xa3\x01\n" +
+	"\x12PollNexusTaskQueue\x12A.temporal.server.api.matchingservice.v1.PollNexusTaskQueueRequest\x1aB.temporal.server.api.matchingservice.v1.PollNexusTaskQueueResponse\"\x06\x8a\xb5\x18\x02\b\x02\x12\xb8\x01\n" +
+	"\x19RespondNexusTaskCompleted\x12H.temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedRequest\x1aI.temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xaf\x01\n" +
+	"\x16RespondNexusTaskFailed\x12E.temporal.server.api.matchingservice.v1.RespondNexusTaskFailedRequest\x1aF.temporal.server.api.matchingservice.v1.RespondNexusTaskFailedResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xac\x01\n" +
+	"\x15CancelOutstandingPoll\x12D.temporal.server.api.matchingservice.v1.CancelOutstandingPollRequest\x1aE.temporal.server.api.matchingservice.v1.CancelOutstandingPollResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xc1\x01\n" +
+	"\x1cCancelOutstandingWorkerPolls\x12K.temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsRequest\x1aL.temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xa0\x01\n" +
+	"\x11DescribeTaskQueue\x12@.temporal.server.api.matchingservice.v1.DescribeTaskQueueRequest\x1aA.temporal.server.api.matchingservice.v1.DescribeTaskQueueResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xbb\x01\n" +
+	"\x1aDescribeTaskQueuePartition\x12I.temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionRequest\x1aJ.temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xbe\x01\n" +
+	"\x1bDescribeVersionedTaskQueues\x12J.temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest\x1aK.temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xb2\x01\n" +
+	"\x17ListTaskQueuePartitions\x12F.temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsRequest\x1aG.temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xcd\x01\n" +
+	" UpdateWorkerBuildIdCompatibility\x12O.temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest\x1aP.temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xc4\x01\n" +
+	"\x1dGetWorkerBuildIdCompatibility\x12L.temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityRequest\x1aM.temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xa9\x01\n" +
+	"\x14GetTaskQueueUserData\x12C.temporal.server.api.matchingservice.v1.GetTaskQueueUserDataRequest\x1aD.temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xbe\x01\n" +
+	"\x1bUpdateWorkerVersioningRules\x12J.temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesRequest\x1aK.temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xb5\x01\n" +
+	"\x18GetWorkerVersioningRules\x12G.temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesRequest\x1aH.temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xaf\x01\n" +
+	"\x16SyncDeploymentUserData\x12E.temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest\x1aF.temporal.server.api.matchingservice.v1.SyncDeploymentUserDataResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xdf\x01\n" +
+	"&ApplyTaskQueueUserDataReplicationEvent\x12U.temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventRequest\x1aV.temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xbb\x01\n" +
+	"\x1aGetBuildIdTaskQueueMapping\x12I.temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingRequest\x1aJ.temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xbe\x01\n" +
+	"\x1bForceLoadTaskQueuePartition\x12J.temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionRequest\x1aK.temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xa9\x01\n" +
+	"\x14ForceUnloadTaskQueue\x12C.temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueRequest\x1aD.temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xc4\x01\n" +
+	"\x1dForceUnloadTaskQueuePartition\x12L.temporal.server.api.matchingservice.v1.ForceUnloadTaskQueuePartitionRequest\x1aM.temporal.server.api.matchingservice.v1.ForceUnloadTaskQueuePartitionResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xb2\x01\n" +
+	"\x17UpdateTaskQueueUserData\x12F.temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataRequest\x1aG.temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xbb\x01\n" +
+	"\x1aReplicateTaskQueueUserData\x12I.temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataRequest\x1aJ.temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xd0\x01\n" +
+	"!CheckTaskQueueUserDataPropagation\x12P.temporal.server.api.matchingservice.v1.CheckTaskQueueUserDataPropagationRequest\x1aQ.temporal.server.api.matchingservice.v1.CheckTaskQueueUserDataPropagationResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xa6\x01\n" +
+	"\x13CreateNexusEndpoint\x12B.temporal.server.api.matchingservice.v1.CreateNexusEndpointRequest\x1aC.temporal.server.api.matchingservice.v1.CreateNexusEndpointResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xa6\x01\n" +
+	"\x13UpdateNexusEndpoint\x12B.temporal.server.api.matchingservice.v1.UpdateNexusEndpointRequest\x1aC.temporal.server.api.matchingservice.v1.UpdateNexusEndpointResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xa6\x01\n" +
+	"\x13DeleteNexusEndpoint\x12B.temporal.server.api.matchingservice.v1.DeleteNexusEndpointRequest\x1aC.temporal.server.api.matchingservice.v1.DeleteNexusEndpointResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xa3\x01\n" +
+	"\x12ListNexusEndpoints\x12A.temporal.server.api.matchingservice.v1.ListNexusEndpointsRequest\x1aB.temporal.server.api.matchingservice.v1.ListNexusEndpointsResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xac\x01\n" +
+	"\x15RecordWorkerHeartbeat\x12D.temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatRequest\x1aE.temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\x8e\x01\n" +
+	"\vListWorkers\x12:.temporal.server.api.matchingservice.v1.ListWorkersRequest\x1a;.temporal.server.api.matchingservice.v1.ListWorkersResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xac\x01\n" +
+	"\x15UpdateTaskQueueConfig\x12D.temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigRequest\x1aE.temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\x97\x01\n" +
+	"\x0eDescribeWorker\x12=.temporal.server.api.matchingservice.v1.DescribeWorkerRequest\x1a>.temporal.server.api.matchingservice.v1.DescribeWorkerResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xa6\x01\n" +
+	"\x13UpdateFairnessState\x12B.temporal.server.api.matchingservice.v1.UpdateFairnessStateRequest\x1aC.temporal.server.api.matchingservice.v1.UpdateFairnessStateResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xca\x01\n" +
+	"\x1fCheckTaskQueueVersionMembership\x12N.temporal.server.api.matchingservice.v1.CheckTaskQueueVersionMembershipRequest\x1aO.temporal.server.api.matchingservice.v1.CheckTaskQueueVersionMembershipResponse\"\x06\x8a\xb5\x18\x02\b\x01B>Z<go.temporal.io/server/api/matchingservice/v1;matchingserviceb\x06proto3"
 
 var file_temporal_server_api_matchingservice_v1_service_proto_goTypes = []any{
 	(*PollWorkflowTaskQueueRequest)(nil),                   // 0: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest

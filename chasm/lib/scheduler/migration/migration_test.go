@@ -34,7 +34,7 @@ func newTestSchedule() *schedulepb.Schedule {
 	}
 }
 
-func TestLegacyToSchedulerMigrationState(t *testing.T) {
+func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 	now := time.Now().UTC()
 	state := &schedulespb.InternalState{
 		Namespace:         "test-ns",
@@ -75,11 +75,15 @@ func TestLegacyToSchedulerMigrationState(t *testing.T) {
 			},
 		},
 	}
-	searchAttrs := map[string]*commonpb.Payload{"Attr": {Data: []byte("value")}}
-	memo := map[string]*commonpb.Payload{"Memo": {Data: []byte("memo")}}
+	searchAttrs := &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{"Attr": {Data: []byte("value")}}}
+	memo := &commonpb.Memo{Fields: map[string]*commonpb.Payload{"Memo": {Data: []byte("memo")}}}
 
-	migrationState := LegacyToSchedulerMigrationState(newTestSchedule(), info, state, searchAttrs, memo, now)
+	req := LegacyToCreateFromMigrationStateRequest(newTestSchedule(), info, state, searchAttrs, memo, now)
 
+	require.NotNil(t, req)
+	require.Equal(t, "test-ns-id", req.NamespaceId)
+
+	migrationState := req.State
 	// Scheduler state
 	require.NotNil(t, migrationState)
 	require.NotNil(t, migrationState.SchedulerState)
@@ -109,6 +113,7 @@ func TestLegacyToSchedulerMigrationState(t *testing.T) {
 			running++
 			require.Equal(t, "wf-1", start.WorkflowId)
 			require.Equal(t, "run-1", start.RunId)
+			require.False(t, start.HasCallback)
 		case start.Completed != nil:
 			completed++
 			require.Equal(t, "wf-2", start.WorkflowId)
@@ -136,8 +141,8 @@ func TestLegacyToSchedulerMigrationState(t *testing.T) {
 	require.Equal(t, "last failure", migrationState.LastCompletionResult.Failure.Message)
 
 	// Search attributes and memo
-	require.Equal(t, searchAttrs, migrationState.SearchAttributes)
-	require.Equal(t, memo, migrationState.Memo)
+	require.Equal(t, searchAttrs.GetIndexedFields(), migrationState.SearchAttributes)
+	require.Equal(t, memo.GetFields(), migrationState.Memo)
 }
 
 func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
@@ -207,15 +212,7 @@ func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
 		Failure: &failurepb.Failure{Message: "last failure"},
 	}
 
-	migrationState := &schedulerpb.SchedulerMigrationState{
-		SchedulerState:       scheduler,
-		GeneratorState:       generator,
-		InvokerState:         invoker,
-		Backfillers:          backfillers,
-		LastCompletionResult: lastCompletion,
-	}
-
-	args := SchedulerMigrationStateToLegacyStartScheduleArgs(migrationState, now)
+	args := CHASMToLegacyStartScheduleArgs(scheduler, generator, invoker, backfillers, lastCompletion, nil, nil, now)
 
 	require.Equal(t, "ns-id", args.State.NamespaceId)
 	require.Equal(t, "sched-id", args.State.ScheduleId)
@@ -242,4 +239,98 @@ func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
 		}
 	}
 	require.True(t, triggerFound)
+}
+
+func TestLegacyToCreateFromMigrationStateRequest_DeduplicatesRunningWorkflows(t *testing.T) {
+	// V1's recordAction puts the same workflow in both RecentActions (with
+	// RUNNING status) and RunningWorkflows. The migration should not create
+	// duplicate BufferedStarts for the same execution.
+	now := time.Now().UTC()
+	state := &schedulespb.InternalState{
+		Namespace:     "test-ns",
+		NamespaceId:   "test-ns-id",
+		ScheduleId:    "test-sched-id",
+		ConflictToken: 1,
+	}
+	info := &schedulepb.ScheduleInfo{
+		RunningWorkflows: []*commonpb.WorkflowExecution{
+			{WorkflowId: "wf-1", RunId: "run-1"},
+		},
+		RecentActions: []*schedulepb.ScheduleActionResult{
+			{
+				// Completed action - should be kept.
+				ScheduleTime:        timestamppb.New(now.Add(-2 * time.Hour)),
+				ActualTime:          timestamppb.New(now.Add(-2 * time.Hour)),
+				StartWorkflowResult: &commonpb.WorkflowExecution{WorkflowId: "wf-old", RunId: "run-old"},
+				StartWorkflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				// Same workflow as RunningWorkflows - should be deduplicated.
+				ScheduleTime:        timestamppb.New(now.Add(-time.Hour)),
+				ActualTime:          timestamppb.New(now.Add(-time.Hour)),
+				StartWorkflowResult: &commonpb.WorkflowExecution{WorkflowId: "wf-1", RunId: "run-1"},
+				StartWorkflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			},
+		},
+	}
+
+	req := LegacyToCreateFromMigrationStateRequest(newTestSchedule(), info, state, nil, nil, now)
+
+	// Should have 2 BufferedStarts: 1 running (from RunningWorkflows) + 1 completed (from RecentActions).
+	// The running entry in RecentActions should be excluded since it duplicates RunningWorkflows.
+	require.Len(t, req.State.InvokerState.BufferedStarts, 2)
+
+	var running, completed int
+	for _, start := range req.State.InvokerState.BufferedStarts {
+		switch {
+		case start.RunId != "" && start.Completed == nil:
+			running++
+			require.Equal(t, "wf-1", start.WorkflowId)
+			require.Equal(t, "run-1", start.RunId)
+		case start.Completed != nil:
+			completed++
+			require.Equal(t, "wf-old", start.WorkflowId)
+			require.Equal(t, "run-old", start.RunId)
+		default:
+			t.Fatalf("unexpected buffered start state: RunId=%q, Completed=%v", start.RunId, start.Completed)
+		}
+	}
+	require.Equal(t, 1, running, "expected exactly 1 running workflow (not duplicated)")
+	require.Equal(t, 1, completed, "expected 1 completed workflow from recent actions")
+
+	// Verify the round-trip: converting back to legacy should also have no
+	// duplicate RunIds in RecentActions.
+	_, _, recentActions := splitBufferedStartsForLegacy(req.State.InvokerState.BufferedStarts)
+	seen := make(map[string]bool)
+	for _, action := range recentActions {
+		runID := action.GetStartWorkflowResult().GetRunId()
+		require.False(t, seen[runID], "duplicate RunId %q in round-tripped RecentActions", runID)
+		seen[runID] = true
+	}
+}
+
+func TestConvertRunningWorkflowsToBufferedStarts_UniqueRequestIDs(t *testing.T) {
+	// With ALLOW_ALL overlap policy, multiple workflows can be running
+	// concurrently. Each must get a unique RequestId so that
+	// recordCompletedAction matches the correct BufferedStart.
+	now := time.Now().UTC()
+	running := []*commonpb.WorkflowExecution{
+		{WorkflowId: "wf-1", RunId: "run-aaa"},
+		{WorkflowId: "wf-2", RunId: "run-bbb"},
+		{WorkflowId: "wf-3", RunId: "run-ccc"},
+	}
+
+	starts := convertRunningWorkflowsToBufferedStarts(
+		running, "ns-id", "sched-id", 1, now,
+	)
+	require.Len(t, starts, 3)
+
+	requestIDs := make(map[string]string) // requestId -> runId
+	for _, start := range starts {
+		if prev, ok := requestIDs[start.RequestId]; ok {
+			t.Fatalf("duplicate RequestId %q: used by both RunId %q and %q",
+				start.RequestId, prev, start.RunId)
+		}
+		requestIDs[start.RequestId] = start.RunId
+	}
 }

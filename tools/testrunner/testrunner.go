@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -22,8 +23,14 @@ const (
 	maxAttemptsFlag       = "--max-attempts="
 	coverProfileFlag      = "-coverprofile="
 	junitReportFlag       = "--junitfile="
+	junitGlobFlag         = "--junit-glob="
 	crashReportNameFlag   = "--crashreportname="
 	gotestsumPathFlag     = "--gotestsum-path="
+
+	// goTestTimeoutFlag is the go test flag whose value is also used as the
+	// testrunner's total-run deadline (so results are flushed before an external
+	// kill such as a GitHub Actions timeout).
+	goTestTimeoutFlagEq = "-timeout="
 
 	// fullRerunThreshold is the number of test failures above which we do a full
 	// rerun instead of retrying only the failed tests.
@@ -33,6 +40,7 @@ const (
 const (
 	testCommand        = "test"
 	crashReportCommand = "report-crash"
+	summaryCommand     = "print-summary"
 )
 
 type attempt struct {
@@ -69,7 +77,9 @@ type runner struct {
 	attempts         []*attempt
 	maxAttempts      int
 	crashName        string
+	junitGlob        string
 	alerts           []alert
+	totalTimeout     time.Duration // derived from the -timeout go test flag
 }
 
 func newRunner() *runner {
@@ -81,6 +91,17 @@ func newRunner() *runner {
 
 // nolint:revive,cognitive-complexity
 func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, error) {
+	// Pre-pass: read the go test -timeout value and use it as the testrunner's
+	// total deadline so results are flushed before an external kill (e.g. GitHub
+	// Actions timeout). The flag is NOT consumed — it still passes through to gotestsum.
+	for _, arg := range args {
+		if strings.HasPrefix(arg, goTestTimeoutFlagEq) {
+			if d, err := time.ParseDuration(strings.TrimPrefix(arg, goTestTimeoutFlagEq)); err == nil {
+				r.totalTimeout = d
+			}
+		}
+	}
+
 	var sanitizedArgs []string
 	for _, arg := range args {
 		if strings.HasPrefix(arg, maxAttemptsFlag) {
@@ -111,6 +132,10 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 			continue // this is a `testrunner` only arg and not passed through
 		}
 
+		if strings.HasPrefix(arg, junitGlobFlag) {
+			r.junitGlob = strings.Split(arg, "=")[1]
+			continue
+		}
 		if strings.HasPrefix(arg, coverProfileFlag) {
 			r.coverProfilePath = strings.Split(arg, "=")[1]
 		} else if strings.HasPrefix(arg, junitReportFlag) {
@@ -119,10 +144,6 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 		}
 
 		sanitizedArgs = append(sanitizedArgs, arg)
-	}
-
-	if r.junitOutputPath == "" {
-		return nil, fmt.Errorf("missing required argument %q", junitReportFlag)
 	}
 
 	switch command {
@@ -137,8 +158,15 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 			return nil, fmt.Errorf("missing required argument %q", gotestsumPathFlag)
 		}
 	case crashReportCommand:
+		if r.junitOutputPath == "" {
+			return nil, fmt.Errorf("missing required argument %q", junitReportFlag)
+		}
 		if r.crashName == "" {
 			return nil, fmt.Errorf("missing required argument %q", crashReportNameFlag)
+		}
+	case summaryCommand:
+		if r.junitGlob == "" {
+			return nil, fmt.Errorf("missing required argument %q", junitGlobFlag)
 		}
 	default:
 		return nil, fmt.Errorf("unknown command %q", command)
@@ -189,11 +217,21 @@ func Main() {
 		log.Fatalf("failed to parse command line options: %v", err)
 	}
 
+	if r.totalTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, r.totalTimeout)
+		defer cancel()
+	}
+
 	switch command {
 	case testCommand:
 		r.runTests(ctx, args)
 	case crashReportCommand:
 		r.reportCrash()
+	case summaryCommand:
+		if err := r.printSummary(); err != nil {
+			log.Fatal(err)
+		}
 	default:
 		log.Fatalf("unknown command %q", command)
 	}
@@ -201,10 +239,63 @@ func Main() {
 
 // nolint:revive,deep-exit
 func (r *runner) reportCrash() {
-	jr := generateStatic([]string{r.crashName}, "crash", "Crash")
+	jr := generateReport([]string{r.crashName}, "crash", failureTypeCrash)
 	jr.path = r.junitOutputPath
 	if err := jr.write(); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func (r *runner) printSummary() error {
+	paths, err := filepath.Glob(r.junitGlob)
+	if err != nil {
+		return fmt.Errorf("failed to expand junit glob %q: %w", r.junitGlob, err)
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	slices.Sort(paths)
+
+	reports := make([]*junitReport, 0, len(paths))
+	for _, path := range paths {
+		report := &junitReport{path: path}
+		if err := report.read(); err != nil {
+			return fmt.Errorf("failed to read junit report %q: %w", path, err)
+		}
+		reports = append(reports, report)
+	}
+
+	content := newSummaryFromReports(reports).String()
+	if content == "" {
+		return nil
+	}
+	if _, err := os.Stdout.WriteString(content); err != nil {
+		return fmt.Errorf("failed to write summary to stdout: %w", err)
+	}
+	return nil
+}
+
+// writeCurrentReport writes the merged report from all completed attempts to the
+// final output path. It is called after each attempt so that partial results
+// survive if the process is killed externally between attempts.
+// Reporting errors (e.g. unexpected missing reruns) are intentionally ignored
+// here; they are only checked for the final write at the end of runTests.
+func (r *runner) writeCurrentReport() {
+	reports := r.allReports()
+	if len(reports) == 0 {
+		return
+	}
+	merged, err := mergeReports(reports)
+	if err != nil {
+		log.Printf("warning: failed to merge reports for intermediate write: %v", err)
+		return
+	}
+	if len(r.alerts) > 0 {
+		merged.appendAlertsSuite(r.alerts)
+	}
+	merged.path = r.junitOutputPath
+	if err := merged.write(); err != nil {
+		log.Printf("warning: failed to write intermediate report: %v", err)
 	}
 }
 
@@ -217,6 +308,27 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		stdout, err := currentAttempt.run(ctx, args)
 		// Extract prominent alerts from this attempt's output.
 		r.alerts = append(r.alerts, parseAlerts(stdout)...)
+
+		// Check whether our total timeout fired (context deadline exceeded).
+		// This happens when the go test binary hangs and never produces its own
+		// "test timed out" panic. We collect whatever results are available from
+		// completed attempts and from the partially-executed current attempt, then
+		// flush the XML before the external kill arrives.
+		if ctx.Err() != nil {
+			log.Printf("total timeout reached, collecting partial results from %d completed attempt(s)", a-1)
+			// Try to read whatever gotestsum managed to write before it was killed.
+			if readErr := currentAttempt.junitReport.read(); readErr != nil {
+				// gotestsum didn't finish writing a JUnit XML. Fall back to parsing
+				// stdout for any "--- FAIL:" lines that completed before the kill.
+				if failedTests := parseFailedTestsFromOutput(stdout); len(failedTests) > 0 {
+					currentAttempt.junitReport = generateReport(failedTests, "total timeout", failureTypeTimeout)
+				}
+				// If no failed tests are found either, the current attempt's report
+				// remains empty and mergeReports will include only prior attempts.
+			}
+			break
+		}
+
 		if err != nil && !errors.As(err, &currentAttempt.exitErr) {
 			log.Fatalf("test run failed with an unexpected error: %v", err)
 		}
@@ -225,7 +337,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		if len(timedoutTests) > 0 {
 			// Run timed out and was aborted.
 			// Update JUnit XML output for timed out tests since none will have been generated.
-			currentAttempt.junitReport = generateStatic(timedoutTests, "timed out", "Timeout")
+			currentAttempt.junitReport = generateReport(timedoutTests, "timed out", failureTypeTimeout)
 			log.Print(stacktrace)
 
 			// Don't retry.
@@ -236,6 +348,11 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		if err = currentAttempt.junitReport.read(); err != nil {
 			log.Fatal(err)
 		}
+
+		// Write intermediate results so they survive if we are killed externally
+		// between attempts (e.g. a GitHub Actions job timeout fires after this
+		// attempt but before the next one completes).
+		r.writeCurrentReport()
 
 		// If the run completely successfull, no need to retry.
 		if currentAttempt.exitErr == nil {
@@ -282,7 +399,11 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 	if err = mergedReport.write(); err != nil {
 		log.Fatal(err)
 	}
-	if len(mergedReport.reportingErrs) > 0 {
+
+	// Skip the strict rerun-coverage check when the total timeout fired: the
+	// in-progress attempt was killed before it could execute all expected tests.
+
+	if len(mergedReport.reportingErrs) > 0 && ctx.Err() == nil {
 		log.Fatal(mergedReport.reportingErrs)
 	}
 

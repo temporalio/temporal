@@ -120,7 +120,7 @@ func (s *Scavenger) Run(ctx context.Context) (ScavengerHeartbeatDetails, error) 
 	reqCh := make(chan taskDetail, pageSize)
 
 	go s.loadTasks(ctx, reqCh)
-	for i := 0; i < numWorker; i++ {
+	for range numWorker {
 		s.WaitGroup.Add(1)
 		go s.taskWorker(ctx, reqCh)
 	}

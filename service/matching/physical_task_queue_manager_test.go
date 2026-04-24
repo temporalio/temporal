@@ -87,10 +87,9 @@ func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	engine.partitions[prtn.Key()] = prtnMgr
 
 	if s.fairness {
-		prtnMgr.config.NewMatcher = true
 		prtnMgr.config.EnableFairness = true
-	} else if s.newMatcher {
-		prtnMgr.config.NewMatcher = true
+	} else if !s.newMatcher {
+		prtnMgr.config.NewMatcher = false
 	}
 
 	s.tqMgr, err = newPhysicalTaskQueueManager(prtnMgr, s.physicalTaskQueueKey)
@@ -153,8 +152,8 @@ func makePollMetadata(rps float64) *pollMetadata {
 
 // runOneShotPoller spawns a goroutine to call tqMgr.PollTask on the provided tqMgr.
 // The second return value is a channel of either error or *internalTask.
-func runOneShotPoller(ctx context.Context, tqm physicalTaskQueueManager) (*goro.Handle, chan interface{}) {
-	out := make(chan interface{}, 1)
+func runOneShotPoller(ctx context.Context, tqm physicalTaskQueueManager) (*goro.Handle, chan any) {
+	out := make(chan any, 1)
 	handle := goro.NewHandle(ctx).Go(func(ctx context.Context) error {
 		task, err := tqm.PollTask(ctx, makePollMetadata(rpsInf))
 		if task == nil {
@@ -175,6 +174,15 @@ func defaultTqId() *PhysicalTaskQueueKey {
 	return newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
 }
 
+// getTaskManager returns the underlying testTaskManager (which is accessed differently
+// depending on mode)
+func (s *PhysicalTaskQueueManagerTestSuite) getTaskManager() *testTaskManager {
+	if s.fairness {
+		return s.tqMgr.partitionMgr.engine.fairTaskManager.(*testTaskManager)
+	}
+	return s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager)
+}
+
 // TODO(pri): old matcher cleanup
 func (s *PhysicalTaskQueueManagerTestSuite) TestReaderBacklogAge() {
 	if s.newMatcher {
@@ -192,21 +200,21 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestReaderBacklogAge() {
 	go blm.taskReader.dispatchBufferedTasks()
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.InDelta(s.T(), time.Minute, blm.taskReader.getBacklogHeadAge(), float64(time.Second))
+		assert.InDelta(collect, time.Minute, blm.taskReader.getBacklogHeadAge(), float64(time.Second))
 	}, time.Second, 10*time.Millisecond)
 
 	_, err := blm.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	s.NoError(err)
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.InDelta(s.T(), 10*time.Second, blm.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
+		assert.InDelta(collect, 10*time.Second, blm.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
 	}, time.Second, 10*time.Millisecond)
 
 	_, err = blm.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	s.NoError(err)
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.Equalf(s.T(), time.Duration(0), blm.taskReader.getBacklogHeadAge(), "backlog age being reset because of no tasks in the buffer")
+		assert.Equalf(collect, time.Duration(0), blm.taskReader.getBacklogHeadAge(), "backlog age being reset because of no tasks in the buffer")
 	}, time.Second, 10*time.Millisecond)
 }
 
@@ -240,7 +248,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 
 	startTaskID := int64(1)
 	taskCount := int64(3)
-	for i := int64(0); i < taskCount; i++ {
+	for i := range taskCount {
 		blm.taskAckManager.addTask(startTaskID + i)
 	}
 
@@ -266,7 +274,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 	// Add a poller and complete all tasks
 	pollerIdent := pollerIdentity("test-poll")
 	s.tqMgr.pollerHistory.updatePollerInfo(pollerIdent, &pollMetadata{})
-	for i := int64(0); i < taskCount; i++ {
+	for i := range taskCount {
 		_, numAcked := blm.taskAckManager.completeTask(startTaskID + i)
 		blm.db.updateBacklogStats(-numAcked, time.Time{})
 	}
@@ -353,15 +361,12 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher")
-	}
-
 	s.config.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Second)
+	s.config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	s.tqMgr.Start()
 	defer s.tqMgr.Stop(unloadCauseShuttingDown)
 
-	tm, _ := s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager)
+	tm := s.getTaskManager()
 	s.EventuallyWithT(func(collect *assert.CollectT) {
 		// will unload due to idleness
 		require.Equal(collect, 1, tm.getUpdateCount(s.physicalTaskQueueKey))
@@ -371,17 +376,13 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload()
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnershipLost() {
 	// TODO: use mocks instead of testTaskManager so we can do synchronization better instead of sleeps
 	s.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
+	s.config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	s.tqMgr.Start()
 
 	// wait for goroutines to start and to acquire rangeid lock
 	time.Sleep(10 * time.Millisecond) // nolint:forbidigo
 
-	var tm *testTaskManager
-	if s.fairness {
-		tm = s.tqMgr.partitionMgr.engine.fairTaskManager.(*testTaskManager) // nolint:revive
-	} else {
-		tm = s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager) // nolint:revive
-	}
+	tm := s.getTaskManager()
 	s.Equal(0, tm.getUpdateCount(s.physicalTaskQueueKey))
 
 	// simulate stolen lock

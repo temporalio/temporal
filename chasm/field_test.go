@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -29,6 +30,7 @@ type fieldSuite struct {
 	timeSource      *clock.EventTimeSource
 	nodePathEncoder NodePathEncoder
 	logger          log.Logger
+	metricsHandler  metrics.Handler
 }
 
 func TestFieldSuite(t *testing.T) {
@@ -41,6 +43,7 @@ func (s *fieldSuite) SetupTest() {
 	s.nodeBackend = &MockNodeBackend{}
 
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+	s.metricsHandler = metrics.NoopMetricsHandler
 	s.registry = NewRegistry(s.logger)
 	err := s.registry.Register(newTestLibrary(s.controller))
 	s.NoError(err)
@@ -145,6 +148,7 @@ func (s *fieldSuite) newTestTree(
 			s.nodeBackend,
 			s.nodePathEncoder,
 			s.logger,
+			s.metricsHandler,
 		), nil
 	}
 	return NewTreeFromDB(
@@ -154,6 +158,7 @@ func (s *fieldSuite) newTestTree(
 		s.nodeBackend,
 		s.nodePathEncoder,
 		s.logger,
+		s.metricsHandler,
 	)
 }
 
@@ -165,8 +170,11 @@ func (s *fieldSuite) setupComponentWithTree(rootComponent *TestComponent) (*Node
 		s.nodeBackend,
 		s.nodePathEncoder,
 		s.logger,
+		s.metricsHandler,
 	)
-	rootNode.SetRootComponent(rootComponent)
+	if err := rootNode.SetRootComponent(rootComponent); err != nil {
+		return nil, nil, err
+	}
 
 	return rootNode, NewMutableContext(context.Background(), rootNode), nil
 }
@@ -181,13 +189,6 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 		HandleNextTransitionCount: func() int64 { return 1 },
 		HandleGetCurrentVersion:   func() int64 { return 1 },
 		HandleGetWorkflowKey:      func() definition.WorkflowKey { return workflowKey },
-	}
-
-	// Create component structure that will simulate StartExecution scenario.
-	sc2 := &TestSubComponent2{
-		SubComponent2Data: &protoMessageType{
-			CreateRequestId: "sub-component2-data",
-		},
 	}
 
 	sc1 := &TestSubComponent1{
@@ -206,46 +207,34 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
 	s.NoError(err)
 
-	// Create deferred pointers.
-	sc1.SubComponent2Pointer = ComponentPointerTo(ctx, sc2)
-	rootComponent.SubComponent2 = NewComponentField(nil, sc2)
+	// Get components from tree to mark nodes as needing sync.
+	rootComponentInterface, err := rootNode.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	rootComponent = rootComponentInterface.(*TestComponent)
+	sc1 = rootComponent.SubComponent1.Get(ctx)
 
-	data := &protoMessageType{CreateRequestId: "sub-data-1"}
-	sc1.DataPointer = DataPointerTo(ctx, data)
-	rootComponent.SubData1 = NewDataField(ctx, data)
+	// sc1 (child) points to rootComponent (parent) via component pointer.
+	sc1.RootPointer = ComponentPointerTo(ctx, rootComponent)
 
-	// Verify it's a deferred pointer storing the component directly.
-	s.Equal(fieldTypeDeferredPointer, sc1.SubComponent2Pointer.Internal.fieldType())
-	s.Equal(fieldTypeDeferredPointer, sc1.DataPointer.Internal.fieldType())
-	s.Equal(sc2, sc1.SubComponent2Pointer.Internal.v)
-	s.Equal(data, sc1.DataPointer.Internal.v)
+	// Verify deferred state.
+	s.Equal(fieldTypeDeferredPointer, sc1.RootPointer.Internal.fieldType())
+	s.Equal(rootComponent, sc1.RootPointer.Internal.v)
 
 	// CloseTransaction should resolve the deferred pointer.
 	mutations, err := rootNode.CloseTransaction()
 	s.NoError(err)
 	s.NotEmpty(mutations.UpdatedNodes)
 
-	// Verify the pointers were resolved to a regular pointer with path.
-	s.Equal(fieldTypePointer, sc1.SubComponent2Pointer.Internal.fieldType())
-	s.Equal(fieldTypePointer, sc1.DataPointer.Internal.fieldType())
+	// Verify the pointer was resolved to a regular pointer with path.
+	s.Equal(fieldTypePointer, sc1.RootPointer.Internal.fieldType())
 
-	cResolvedPath, ok := sc1.SubComponent2Pointer.Internal.v.([]string)
+	cResolvedPath, ok := sc1.RootPointer.Internal.v.([]string)
 	s.True(ok)
-	s.Equal([]string{"SubComponent2"}, cResolvedPath)
-	dResolvedPath, ok := sc1.DataPointer.Internal.v.([]string)
-	s.True(ok)
-	s.Equal([]string{"SubData1"}, dResolvedPath)
+	s.Equal([]string{}, cResolvedPath)
 
-	// Verify we can dereference the pointers.
-	resolvedComponent := sc1.SubComponent2Pointer.Get(ctx)
-	s.Equal(sc2, resolvedComponent)
-
-	// TODO - this doesn't resolve, but I've manually verified the tree structure looks correct
-	// TODO
-	// TODO
-	// resolvedData, err := sc1.DataPointer.Get(ctx)
-	// s.NoError(err)
-	// s.Equal(sc2.SubComponent2Data, resolvedData)
+	// Verify we can dereference the component pointer.
+	resolvedComponent := sc1.RootPointer.Get(ctx)
+	s.Equal(rootComponent, resolvedComponent)
 }
 
 func (s *fieldSuite) TestMixedPointerScenario() {
@@ -260,13 +249,13 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 		HandleGetWorkflowKey:      func() definition.WorkflowKey { return workflowKey },
 	}
 
-	existingComponent := &TestSubComponent11{
-		SubComponent11Data: &protoMessageType{CreateRequestId: "existing-component"},
+	sc11 := &TestSubComponent11{
+		SubComponent11Data: &protoMessageType{CreateRequestId: "sub-component11-data"},
 	}
 
 	sc1 := &TestSubComponent1{
 		SubComponent1Data: &protoMessageType{CreateRequestId: "sub-component1-data"},
-		SubComponent11:    NewComponentField(nil, existingComponent),
+		SubComponent11:    NewComponentField(nil, sc11),
 	}
 
 	rootComponent := &TestComponent{
@@ -277,48 +266,46 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
 	s.NoError(err)
 
-	rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, existingComponent)
+	// Get components from tree to mark nodes as needing sync.
+	rootComponentInterface, err := rootNode.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	rootComponent = rootComponentInterface.(*TestComponent)
+	sc1 = rootComponent.SubComponent1.Get(ctx)
+	sc11 = sc1.SubComponent11.Get(ctx)
 
-	// Close the transaction to resolve SubComponent11Pointer's field to existingComponent.
+	// Transaction 1: sc11 points to root (grandparent).
+	sc11.GrandparentPointer = ComponentPointerTo(ctx, rootComponent)
+
 	_, err = rootNode.CloseTransaction()
 	s.NoError(err)
-	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
+	s.Equal(fieldTypePointer, sc11.GrandparentPointer.Internal.fieldType())
 
-	// For a new transaction, get the components from the tree again,
-	// otherwise those nodes will not be marked as dirty.
-
+	// Transaction 2: sc1 points to root (parent).
 	ctx2 := NewMutableContext(context.Background(), rootNode)
-	rootComponentInterface, err := rootNode.Component(ctx2, ComponentRef{})
+	rootComponentInterface, err = rootNode.Component(ctx2, ComponentRef{})
 	s.NoError(err)
 
 	rootComponent = rootComponentInterface.(*TestComponent)
 	sc1 = rootComponent.SubComponent1.Get(ctx2)
+	sc11 = sc1.SubComponent11.Get(ctx2)
 
-	// Now, add a new component and deferred pointer for it.
-	newComponent := &TestSubComponent2{
-		SubComponent2Data: &protoMessageType{CreateRequestId: "new-component"},
-	}
+	sc1.RootPointer = ComponentPointerTo(ctx2, rootComponent)
 
-	sc1.SubComponent2Pointer = ComponentPointerTo(ctx2, newComponent)
-
-	// Now add the component to the tree so it can be resolved during CloseTransaction.
-	rootComponent.SubComponent2 = NewComponentField(ctx, newComponent)
-
-	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
-	s.Equal(fieldTypeDeferredPointer, sc1.SubComponent2Pointer.Internal.fieldType())
+	s.Equal(fieldTypePointer, sc11.GrandparentPointer.Internal.fieldType())
+	s.Equal(fieldTypeDeferredPointer, sc1.RootPointer.Internal.fieldType())
 
 	_, err = rootNode.CloseTransaction()
 	s.NoError(err)
 
 	// Ensure both pointers have been resolved.
-	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
-	s.Equal(fieldTypePointer, sc1.SubComponent2Pointer.Internal.fieldType())
+	s.Equal(fieldTypePointer, sc11.GrandparentPointer.Internal.fieldType())
+	s.Equal(fieldTypePointer, sc1.RootPointer.Internal.fieldType())
 
-	resolved1 := rootComponent.SubComponent11Pointer.Get(ctx2)
-	s.Equal(existingComponent, resolved1)
+	resolved1 := sc11.GrandparentPointer.Get(ctx2)
+	s.Equal(rootComponent, resolved1)
 
-	resolved2 := sc1.SubComponent2Pointer.Get(ctx2)
-	s.Equal(newComponent, resolved2)
+	resolved2 := sc1.RootPointer.Get(ctx2)
+	s.Equal(rootComponent, resolved2)
 }
 
 func (s *fieldSuite) TestUnresolvableDeferredPointerError() {
@@ -351,10 +338,101 @@ func (s *fieldSuite) TestUnresolvableDeferredPointerError() {
 	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
 	s.NoError(err)
 
+	// Get component from tree to mark node as needing sync.
+	rootComponentInterface, err := rootNode.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	rootComponent = rootComponentInterface.(*TestComponent)
+
 	rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, orphanComponent)
 	s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
 
 	_, err = rootNode.CloseTransaction()
 	s.Error(err)
 	s.Contains(err.Error(), "failed to resolve deferred pointer during transaction close")
+}
+
+func (s *fieldSuite) TestNonAncestorComponentPointerRejected() {
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
+	s.nodeBackend = &MockNodeBackend{
+		HandleNextTransitionCount: func() int64 { return 1 },
+		HandleGetCurrentVersion:   func() int64 { return 1 },
+		HandleGetWorkflowKey:      func() definition.WorkflowKey { return workflowKey },
+	}
+
+	s.logger.(*testlogger.TestLogger).
+		Expect(testlogger.Error, "failed to resolve deferred pointer during transaction close")
+
+	sc11 := &TestSubComponent11{
+		SubComponent11Data: &protoMessageType{CreateRequestId: "sub-component11-data"},
+	}
+
+	sc1 := &TestSubComponent1{
+		SubComponent1Data: &protoMessageType{CreateRequestId: "sub-component1-data"},
+		SubComponent11:    NewComponentField(nil, sc11),
+	}
+
+	rootComponent := &TestComponent{
+		ComponentData: &protoMessageType{CreateRequestId: "component-data"},
+		SubComponent1: NewComponentField(nil, sc1),
+	}
+
+	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
+	s.NoError(err)
+
+	rootComponentInterface, err := rootNode.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	rootComponent = rootComponentInterface.(*TestComponent)
+	sc1 = rootComponent.SubComponent1.Get(ctx)
+	sc11 = sc1.SubComponent11.Get(ctx)
+
+	// Root pointing to descendant sc11 should be rejected.
+	rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, sc11)
+
+	_, err = rootNode.CloseTransaction()
+	s.Error(err)
+	s.Contains(err.Error(), "is not an ancestor of component")
+}
+
+func (s *fieldSuite) TestChildComponentPointerRejected() {
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
+	s.nodeBackend = &MockNodeBackend{
+		HandleNextTransitionCount: func() int64 { return 1 },
+		HandleGetCurrentVersion:   func() int64 { return 1 },
+		HandleGetWorkflowKey:      func() definition.WorkflowKey { return workflowKey },
+	}
+
+	s.logger.(*testlogger.TestLogger).
+		Expect(testlogger.Error, "failed to resolve deferred pointer during transaction close")
+
+	sc1 := &TestSubComponent1{
+		SubComponent1Data: &protoMessageType{CreateRequestId: "sub-component1-data"},
+	}
+
+	rootComponent := &TestComponent{
+		ComponentData: &protoMessageType{CreateRequestId: "component-data"},
+		SubComponent1: NewComponentField(nil, sc1),
+	}
+
+	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
+	s.NoError(err)
+
+	rootComponentInterface, err := rootNode.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	rootComponent = rootComponentInterface.(*TestComponent)
+	sc1 = rootComponent.SubComponent1.Get(ctx)
+
+	// Root pointing to child sc1 via interface pointer should be rejected.
+	rootComponent.SubComponentInterfacePointer = ComponentPointerTo[Component](ctx, sc1)
+
+	_, err = rootNode.CloseTransaction()
+	s.Error(err)
+	s.Contains(err.Error(), "is not an ancestor of component")
 }

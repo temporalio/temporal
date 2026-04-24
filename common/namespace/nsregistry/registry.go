@@ -106,10 +106,12 @@ type (
 		refresher               *goro.Handle
 		persistence             Persistence
 		globalNamespacesEnabled bool
+		currentClusterName      string
 		clock                   Clock
 		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		refreshInterval         dynamicconfig.DurationPropertyFn
+		namespaceStateChangedFn namespace.NamespaceStateChangedFn
 
 		// nsMapsLock protects nameToID, idToNamespace, and stateChangedDuringReadthrough
 		nsMapsLock    sync.RWMutex
@@ -150,15 +152,18 @@ var _ namespace.Registry = (*registry)(nil)
 func NewRegistry(
 	aPersistence Persistence,
 	enableGlobalNamespaces bool,
+	currentClusterName string,
 	refreshInterval dynamicconfig.DurationPropertyFn,
 	forceSearchAttributesCacheRefreshOnRead dynamicconfig.BoolPropertyFn,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	replicationResolverFactory namespace.ReplicationResolverFactory,
+	namespaceStateChangedFn namespace.NamespaceStateChangedFn,
 ) *registry {
-	reg := &registry{
+	return &registry{
 		persistence:              aPersistence,
 		globalNamespacesEnabled:  enableGlobalNamespaces,
+		currentClusterName:       currentClusterName,
 		clock:                    clock.NewRealTimeSource(),
 		metricsHandler:           metricsHandler.WithTags(metrics.OperationTag(metrics.NamespaceCacheScope)),
 		logger:                   logger,
@@ -169,8 +174,19 @@ func NewRegistry(
 
 		forceSearchAttributesCacheRefreshOnRead: forceSearchAttributesCacheRefreshOnRead,
 		replicationResolverFactory:              replicationResolverFactory,
+		namespaceStateChangedFn:                 namespaceStateChangedFn,
 	}
-	return reg
+}
+
+// DefaultNamespaceStateChanged is the default implementation that checks whether a namespace
+// state change is significant enough to trigger callbacks.
+func DefaultNamespaceStateChanged(currentClusterName string, oldNS *namespace.Namespace, newNS *namespace.Namespace) bool {
+	return oldNS == nil ||
+		oldNS.State() != newNS.State() ||
+		oldNS.Name() != newNS.Name() ||
+		oldNS.IsGlobalNamespace() != newNS.IsGlobalNamespace() ||
+		oldNS.ActiveInCluster(currentClusterName) != newNS.ActiveInCluster(currentClusterName) ||
+		oldNS.ReplicationState("") != newNS.ReplicationState("")
 }
 
 // GetRegistrySize observes the size of the by-name and by-ID maps.
@@ -601,17 +617,20 @@ func (r *registry) refreshNamespaces(ctx context.Context) (err error) {
 		}
 		newNameToID[aNamespace.Name()] = aNamespace.ID()
 
-		if namespaceStateChanged(oldNS, aNamespace) {
+		if r.namespaceStateChanged(oldNS, aNamespace) {
 			stateChanged = append(stateChanged, aNamespace)
 		}
 	}
 
 	r.nsMapsLock.Lock()
+	totalNamespaceCount := len(newIDToNamespace) // record metric value within lock boundary
 	r.idToNamespace = newIDToNamespace
 	r.nameToID = newNameToID
 	stateChanged = append(stateChanged, r.stateChangedDuringReadthrough...)
 	r.stateChangedDuringReadthrough = nil
 	r.nsMapsLock.Unlock()
+
+	metrics.TotalNamespaces.With(r.metricsHandler).Record(float64(totalNamespaceCount))
 
 	r.stateChangeCallbacks.Range(
 		func(_, value any) bool {
@@ -657,6 +676,9 @@ func (r *registry) processWatchEvent(event *persistence.NamespaceWatchEvent) err
 	default:
 		r.logger.Warn("Unknown namespace watch event type", tag.Int("eventType", int(event.Type)))
 	}
+
+	idCount, _ := r.GetRegistrySize()
+	metrics.TotalNamespaces.With(r.metricsHandler).Record(float64(idCount))
 
 	if executeCallbacks {
 		isDelete := event.Type == persistence.NamespaceWatchEventTypeDelete
@@ -812,7 +834,7 @@ func (r *registry) updateSingleNamespace(ns *namespace.Namespace, updatedViaWatc
 	}
 	r.nameToID[ns.Name()] = ns.ID()
 
-	changed := namespaceStateChanged(oldNS, ns)
+	changed := r.namespaceStateChanged(oldNS, ns)
 	if changed && !updatedViaWatch {
 		r.stateChangedDuringReadthrough = append(r.stateChangedDuringReadthrough, ns)
 	}
@@ -870,15 +892,6 @@ func (r *registry) getNamespacePersistence(request *persistence.GetNamespaceRequ
 	)
 }
 
-// this test should include anything that might affect whether a namespace is active on
-// this cluster.
-// returns true if the state was changed or false if not
-func namespaceStateChanged(old *namespace.Namespace, new *namespace.Namespace) bool {
-	return old == nil ||
-		old.State() != new.State() ||
-		old.Name() != new.Name() ||
-		old.IsGlobalNamespace() != new.IsGlobalNamespace() ||
-		// TODO: Refactor to use ns.ActiveInCluster() api
-		old.ActiveClusterName(namespace.EmptyBusinessID) != new.ActiveClusterName(namespace.EmptyBusinessID) ||
-		old.ReplicationState() != new.ReplicationState()
+func (r *registry) namespaceStateChanged(oldNS *namespace.Namespace, newNS *namespace.Namespace) bool {
+	return r.namespaceStateChangedFn(r.currentClusterName, oldNS, newNS)
 }

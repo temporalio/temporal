@@ -73,7 +73,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 	history0 := &historypb.History{Events: []*historypb.HistoryEvent{event0, event0}}
 
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 
 		go func() {
 			startWG.Wait()

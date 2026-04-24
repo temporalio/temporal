@@ -3,7 +3,6 @@ package tests
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -54,7 +53,7 @@ func (s *UpdateWorkflowSdkSuite) TestTerminateWorkflowAfterUpdateAdmitted() {
 	run := s.startWorkflow(ctx, tv, workflowFn)
 	s.updateWorkflowWaitAdmitted(ctx, tv, "update-arg")
 
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	s.NoError(s.SdkClient().TerminateWorkflow(ctx, tv.WorkflowID(), run.GetRunID(), "reason"))
 
@@ -90,7 +89,7 @@ func (s *UpdateWorkflowSdkSuite) TestTimeoutWorkflowAfterUpdateAccepted() {
 		return unreachableErr
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	wfRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:                       tv.WorkflowID(),
@@ -154,7 +153,7 @@ func (s *UpdateWorkflowSdkSuite) TestTerminateWorkflowAfterUpdateAccepted() {
 		return unreachableErr
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 	wfRun := s.startWorkflow(ctx, tv, workflowFn)
 
 	// Wait for the first WFT to complete.
@@ -235,9 +234,9 @@ func (s *UpdateWorkflowSdkSuite) TestContinueAsNewAfterUpdateAdmitted() {
 		return workflow.NewContinueAsNewError(ctx, workflowFn2)
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn1)
-	s.Worker().RegisterWorkflow(workflowFn2)
-	s.Worker().RegisterActivity(sendUpdateActivityFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn1)
+	s.SdkWorker().RegisterWorkflow(workflowFn2)
+	s.SdkWorker().RegisterActivity(sendUpdateActivityFn)
 
 	var firstRun sdkclient.WorkflowRun
 	firstRun = s.startWorkflow(rootCtx, tv, workflowFn1)
@@ -323,7 +322,7 @@ func (s *UpdateWorkflowSdkSuite) TestTimeoutWithRetryAfterUpdateAdmitted() {
 	s.ErrorAs(err, &canErr)
 
 	// "start" worker for workflowFn.
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	var secondRunID string
 	s.Eventually(func() bool {
@@ -377,7 +376,7 @@ func (s *UpdateWorkflowSdkSuite) updateWorkflowWaitAdmitted(ctx context.Context,
 		var notFoundErr *serviceerror.NotFound
 		s.ErrorAs(err, &notFoundErr) // poll beat send in race
 		return false
-	}, 5*time.Second, 100*time.Millisecond, fmt.Sprintf("update %s did not reach Admitted stage", tv.UpdateID()))
+	}, 5*time.Second, 100*time.Millisecond, "update %s did not reach Admitted stage", tv.UpdateID())
 }
 
 func (s *UpdateWorkflowSdkSuite) updateWorkflowWaitAccepted(ctx context.Context, tv *testvars.TestVars, arg string) (sdkclient.WorkflowUpdateHandle, error) {
@@ -386,7 +385,7 @@ func (s *UpdateWorkflowSdkSuite) updateWorkflowWaitAccepted(ctx context.Context,
 		WorkflowID:   tv.WorkflowID(),
 		RunID:        tv.RunID(),
 		UpdateName:   tv.HandlerName(),
-		Args:         []interface{}{arg},
+		Args:         []any{arg},
 		WaitForStage: sdkclient.WorkflowUpdateStageAccepted,
 	})
 }

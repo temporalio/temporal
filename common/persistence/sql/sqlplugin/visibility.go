@@ -25,7 +25,7 @@ var (
 type (
 	// VisibilitySearchAttributes represents the search attributes json
 	// in executions_visibility table
-	VisibilitySearchAttributes map[string]interface{}
+	VisibilitySearchAttributes map[string]any
 
 	// VisibilityRow represents a row in executions_visibility table
 	VisibilityRow struct {
@@ -69,7 +69,7 @@ type (
 		PageSize         *int
 
 		Query     string
-		QueryArgs []interface{}
+		QueryArgs []any
 		GroupBy   []string
 	}
 
@@ -115,7 +115,7 @@ var _ driver.Valuer = (*VisibilitySearchAttributes)(nil)
 
 var DbFields = getDbFields()
 
-func (vsa *VisibilitySearchAttributes) Scan(src interface{}) error {
+func (vsa *VisibilitySearchAttributes) Scan(src any) error {
 	if src == nil {
 		return nil
 	}
@@ -240,7 +240,7 @@ func GenerateSelectQuery(
 	convertToDbDateTime func(time.Time) time.Time,
 ) error {
 	whereClauses := make([]string, 0, 10)
-	queryArgs := make([]interface{}, 0, 10)
+	queryArgs := make([]any, 0, 10)
 
 	whereClauses = append(
 		whereClauses,

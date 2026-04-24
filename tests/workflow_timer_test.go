@@ -6,27 +6,28 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type WorkflowTimerTestSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*WorkflowTimerTestSuite]
 }
 
 func TestWorkflowTimerTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(WorkflowTimerTestSuite))
+	parallelsuite.Run(t, &WorkflowTimerTestSuite{})
 }
 
 func (s *WorkflowTimerTestSuite) TestCancelTimer() {
+	env := testcore.NewEnv(s.T())
+
 	id := "functional-cancel-timer-test"
 	wt := "functional-cancel-timer-test-type"
 	tl := "functional-cancel-timer-test-taskqueue"
@@ -34,7 +35,7 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -44,7 +45,7 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer() {
 		Identity:            identity,
 	}
 
-	creatResp, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	creatResp, err0 := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
 	s.NoError(err0)
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
@@ -68,7 +69,7 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer() {
 			}}, nil
 		}
 
-		historyEvents := s.GetHistory(s.Namespace().String(), workflowExecution)
+		historyEvents := env.GetHistory(env.Namespace().String(), workflowExecution)
 		for _, event := range historyEvents {
 			switch event.GetEventType() { // nolint:exhaustive
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
@@ -100,35 +101,35 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer() {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
 	// schedule the timer
 	_, err := poller.PollAndProcessWorkflowTask()
-	s.Logger.Info("PollAndProcessWorkflowTask: completed")
+	env.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.SendSignal(s.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 
 	// receive the signal & cancel the timer
 	_, err = poller.PollAndProcessWorkflowTask()
-	s.Logger.Info("PollAndProcessWorkflowTask: completed")
+	env.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.SendSignal(s.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 	// complete the workflow
 	_, err = poller.PollAndProcessWorkflowTask()
-	s.Logger.Info("PollAndProcessWorkflowTask: completed")
+	env.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	historyEvents := s.GetHistory(s.Namespace().String(), workflowExecution)
+	historyEvents := env.GetHistory(env.Namespace().String(), workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -149,6 +150,8 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer() {
 }
 
 func (s *WorkflowTimerTestSuite) TestCancelTimer_CancelFiredAndBuffered() {
+	env := testcore.NewEnv(s.T())
+
 	id := "functional-cancel-timer-fired-and-buffered-test"
 	wt := "functional-cancel-timer-fired-and-buffered-test-type"
 	tl := "functional-cancel-timer-fired-and-buffered-test-taskqueue"
@@ -156,7 +159,7 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer_CancelFiredAndBuffered() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -166,7 +169,7 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer_CancelFiredAndBuffered() {
 		Identity:            identity,
 	}
 
-	creatResp, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	creatResp, err0 := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
 	s.NoError(err0)
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
@@ -190,7 +193,7 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer_CancelFiredAndBuffered() {
 			}}, nil
 		}
 
-		historyEvents := s.GetHistory(s.Namespace().String(), workflowExecution)
+		historyEvents := env.GetHistory(env.Namespace().String(), workflowExecution)
 		for _, event := range historyEvents {
 			switch event.GetEventType() { // nolint:exhaustive
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
@@ -223,35 +226,35 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
 	// schedule the timer
 	_, err := poller.PollAndProcessWorkflowTask()
-	s.Logger.Info("PollAndProcessWorkflowTask: completed")
+	env.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.SendSignal(s.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 
 	// receive the signal & cancel the timer
 	_, err = poller.PollAndProcessWorkflowTask()
-	s.Logger.Info("PollAndProcessWorkflowTask: completed")
+	env.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.SendSignal(s.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 	// complete the workflow
 	_, err = poller.PollAndProcessWorkflowTask()
-	s.Logger.Info("PollAndProcessWorkflowTask: completed")
+	env.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	historyEvents := s.GetHistory(s.Namespace().String(), workflowExecution)
+	historyEvents := env.GetHistory(env.Namespace().String(), workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled

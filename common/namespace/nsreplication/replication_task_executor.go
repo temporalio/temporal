@@ -50,6 +50,8 @@ type (
 	taskExecutorImpl struct {
 		currentCluster  string
 		metadataManager persistence.MetadataManager
+		dataMerger      NamespaceDataMerger
+		admitter        NamespaceReplicationAdmitter
 		logger          log.Logger
 	}
 )
@@ -58,12 +60,16 @@ type (
 func NewTaskExecutor(
 	currentCluster string,
 	metadataManagerV2 persistence.MetadataManager,
+	dataMerger NamespaceDataMerger,
+	admitter NamespaceReplicationAdmitter,
 	logger log.Logger,
 ) TaskExecutor {
 
 	return &taskExecutorImpl{
 		currentCluster:  currentCluster,
 		metadataManager: metadataManagerV2,
+		dataMerger:      dataMerger,
+		admitter:        admitter,
 		logger:          logger,
 	}
 }
@@ -90,15 +96,6 @@ func (h *taskExecutorImpl) Execute(
 	}
 }
 
-func checkClusterIncludedInReplicationConfig(clusterName string, repCfg []*replicationpb.ClusterReplicationConfig) bool {
-	for _, cluster := range repCfg {
-		if clusterName == cluster.ClusterName {
-			return true
-		}
-	}
-	return false
-}
-
 func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) (bool, error) {
 	resp, err := h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
 		Name: task.Info.GetName(),
@@ -116,7 +113,7 @@ func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicat
 
 		return true, nil
 	case *serviceerror.NamespaceNotFound:
-		return checkClusterIncludedInReplicationConfig(h.currentCluster, task.ReplicationConfig.Clusters), nil
+		return h.admitter.Admit(ctx, h.currentCluster, task), nil
 	default:
 		// return the original err
 		return false, err
@@ -155,6 +152,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
 				Clusters:          ConvertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters),
+				State:             task.ReplicationConfig.GetState(),
 				FailoverHistory:   ConvertFailoverHistoryToPersistenceProto(task.GetFailoverHistory()),
 			},
 			ConfigVersion:   task.GetConfigVersion(),
@@ -266,15 +264,26 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 		IsGlobalNamespace:   resp.IsGlobalNamespace,
 	}
 
+	mergedData, dataMerged := h.dataMerger.MergeData(resp.Namespace.Info.Data, task.Info.Data)
+	if dataMerged {
+		recordUpdated = true
+		request.Namespace.Info.Data = mergedData
+	}
+
 	if resp.Namespace.ConfigVersion < task.GetConfigVersion() {
 		recordUpdated = true
+		// Use merged data if available, otherwise use task data
+		data := task.Info.Data
+		if dataMerged {
+			data = mergedData
+		}
 		request.Namespace.Info = &persistencespb.NamespaceInfo{
 			Id:          task.GetId(),
 			Name:        task.Info.GetName(),
 			State:       task.Info.GetState(),
 			Description: task.Info.GetDescription(),
 			Owner:       task.Info.GetOwnerEmail(),
-			Data:        task.Info.Data,
+			Data:        data,
 		}
 		request.Namespace.Config = &persistencespb.NamespaceConfig{
 			Retention:                    task.Config.GetWorkflowExecutionRetentionTtl(),

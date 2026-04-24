@@ -57,6 +57,6 @@ type (
 		Query       elastic.Query
 		PageSize    int
 		Sorter      []elastic.Sorter
-		SearchAfter []interface{}
+		SearchAfter []any
 	}
 )

@@ -24,6 +24,8 @@ type (
 		detached      bool
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
+
+		contextValues map[any]any
 	}
 
 	RegistrableComponentOption func(*RegistrableComponent)
@@ -150,6 +152,29 @@ func WithSearchAttributes(
 			rc.searchAttributesMapper.aliasToField[alias] = field
 			rc.searchAttributesMapper.fieldToAlias[field] = alias
 			rc.searchAttributesMapper.saTypeMap[field] = valueType
+		}
+	}
+}
+
+// WithContextValues allows specifying key-value pairs that will be available in the Context
+// via the Value() method whenever the chasm framework starts, updates, reads, polls, executes or
+// validates tasks on a component.
+//
+// This is useful for propagating values needed for those processing logic but are not avaiable via the
+// component's struct definition, such as configurations.
+//
+// Keys need to be globally unique across components. Conflicting keys across will cause component registration to fail.
+//
+// Manually added key-value pairs via ContextWithValue() will take precedence over registered context values.
+func WithContextValues(
+	keyVals map[any]any,
+) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		if rc.contextValues == nil {
+			rc.contextValues = make(map[any]any, len(keyVals))
+		}
+		for k, v := range keyVals {
+			rc.contextValues[k] = v
 		}
 	}
 }
