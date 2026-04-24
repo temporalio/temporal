@@ -2792,6 +2792,8 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 		return nil, err
 	}
 
+	metrics.VisibilityListWorkflowsQueryLength.With(wh.metricsScope(ctx)).Record(int64(len(request.GetQuery())))
+
 	req := &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   namespaceID,
 		Namespace:     namespaceName,
