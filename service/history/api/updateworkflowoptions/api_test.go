@@ -30,7 +30,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type noopVersionCache struct{}
@@ -338,7 +337,6 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 	oneHour := durationpb.New(time.Hour)
 	twoHours := durationpb.New(2 * time.Hour)
 	thirtyMin := durationpb.New(30 * time.Minute)
-	targetTime := timestamppb.New(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 
 	testCases := []struct {
 		name           string
@@ -348,10 +346,9 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 		expectedConfig *workflowpb.TimeSkippingConfig
 	}{
 		{
-			name: "update max_skipped_duration preserves enabled and disable_propagation",
+			name: "update max_skipped_duration preserves enabled",
 			initialConfig: &workflowpb.TimeSkippingConfig{
-				Enabled:            true,
-				DisablePropagation: true,
+				Enabled: true,
 				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
 					MaxSkippedDuration: oneHour,
 				},
@@ -365,8 +362,7 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 			},
 			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_skipped_duration"}},
 			expectedConfig: &workflowpb.TimeSkippingConfig{
-				Enabled:            true,
-				DisablePropagation: true,
+				Enabled: true,
 				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
 					MaxSkippedDuration: twoHours,
 				},
@@ -412,29 +408,6 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 			},
 			updateMask:     &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.enabled"}},
 			expectedConfig: &workflowpb.TimeSkippingConfig{Enabled: false},
-		},
-		{
-			name: "change bound type to max_target_time preserves enabled",
-			initialConfig: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-					MaxSkippedDuration: oneHour,
-				},
-			},
-			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
-					Bound: &workflowpb.TimeSkippingConfig_MaxTargetTime{
-						MaxTargetTime: targetTime,
-					},
-				},
-			},
-			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_target_time"}},
-			expectedConfig: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound: &workflowpb.TimeSkippingConfig_MaxTargetTime{
-					MaxTargetTime: targetTime,
-				},
-			},
 		},
 	}
 
