@@ -566,6 +566,13 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.ValidateWorkerDeploymentVersionComputeConfigResponse:
 		return nil
+	case *workflowservice.WaitExternalWorkflowRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowId()),
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.WaitExternalWorkflowResponse:
+		return nil
 	default:
 		return nil
 	}

@@ -126,6 +126,56 @@ func (w *Workflow) AddCompletionCallbacks(
 	return nil
 }
 
+// RemoveCompletionCallbacks removes completion callbacks using the CHASM implementation.
+// maxCallbacksPerWorkflow is the configured maximum number of callbacks allowed per workflow.
+func (w *Workflow) RemoveCompletionCallbacks(
+	ctx chasm.MutableContext,
+	eventTime *timestamppb.Timestamp,
+	requestID string,
+	completionCallbacks []*commonpb.Callback,
+	maxCallbacksPerWorkflow int,
+) error {
+	// Check CHASM max callbacks limit
+	currentCallbackCount := len(w.Callbacks)
+	if len(completionCallbacks)+currentCallbackCount > maxCallbacksPerWorkflow {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
+			maxCallbacksPerWorkflow,
+			currentCallbackCount,
+		)
+	}
+
+	// Initialize map if needed
+	if w.Callbacks == nil {
+		w.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
+	}
+
+	// Add each callback
+	for idx, cb := range completionCallbacks {
+		chasmCB := &callbackspb.Callback{
+			Links: cb.GetLinks(),
+		}
+		switch variant := cb.Variant.(type) {
+		case *commonpb.Callback_Nexus_:
+			chasmCB.Variant = &callbackspb.Callback_Nexus_{
+				Nexus: &callbackspb.Callback_Nexus{
+					Url:    variant.Nexus.GetUrl(),
+					Header: variant.Nexus.GetHeader(),
+				},
+			}
+		default:
+			return fmt.Errorf("unsupported callback variant: %T", variant)
+		}
+
+		id := fmt.Sprintf("%s-%d", requestID, idx)
+
+		// Create and add callback
+		callbackObj := callback.NewCallback(requestID, eventTime, &callbackspb.CallbackState{}, chasmCB)
+		w.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
+	}
+	return nil
+}
+
 func (w *Workflow) GetNexusCompletion(
 	ctx chasm.Context,
 	requestID string,

@@ -91,8 +91,6 @@ github.com/benbjohnson/clock v1.3.5 h1:VvXlSJBzZpA/zum6Sj74hxwYI2DIxRWuNIoXAzHZz
 github.com/benbjohnson/clock v1.3.5/go.mod h1:J11/hYXuz8f4ySSvYwY0FKfm+ezbsZBKZxNJlLklBHA=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
-github.com/bergundy/nexus-proto-annotations v0.1.0 h1:A4dwYmbD/a9fx267DgtJq8j5Tcuw49Z7JfZcGKFeSdQ=
-github.com/bergundy/nexus-proto-annotations v0.1.0/go.mod h1:fw4ftU2X2TA6g3vO6pblwotc9OYJhNQJEPyatps6DdA=
 github.com/bitly/go-hostpool v0.0.0-20171023180738-a3a6125de932 h1:mXoPYz/Ul5HYEDvkta6I8/rnYM5gSdSV2tJ6XbZuEtY=
 github.com/bitly/go-hostpool v0.0.0-20171023180738-a3a6125de932/go.mod h1:NOuUCSz6Q9T7+igc/hlvDOUdtWKryOrtFyIVABv/p7k=
 github.com/blang/semver/v4 v4.0.0 h1:1PFHFE6yCCTv8C1TeyNNarDzntLi7wMI5i/pzqYIsAM=
@@ -444,8 +442,8 @@ go.opentelemetry.io/otel/trace v1.40.0 h1:WA4etStDttCSYuhwvEa8OP8I5EWu24lkOzp+ZY
 go.opentelemetry.io/otel/trace v1.40.0/go.mod h1:zeAhriXecNGP/s2SEG3+Y8X9ujcJOTqQ5RgdEJcawiA=
 go.opentelemetry.io/proto/otlp v1.7.1 h1:gTOMpGDb0WTBOP8JaO72iL3auEZhVmAQg4ipjOVAtj4=
 go.opentelemetry.io/proto/otlp v1.7.1/go.mod h1:b2rVh6rfI/s2pHWNlB7ILJcRALpcNDzKhACevjI+ZnE=
-go.temporal.io/api v1.62.8-0.20260406214859-f85b47677ba3 h1:dvPBzIaeSsJJtUulVcx6G2Ltjlsx+budQd88/QUIL5s=
-go.temporal.io/api v1.62.8-0.20260406214859-f85b47677ba3/go.mod h1:+cZCPtiYpwJy3N1uOThV8lEg8S+zr0DpFuCZeyt8A9k=
+go.temporal.io/api v1.62.8-0.20260409191452-9babec2b2609 h1:E+yhh9U/asLVpi+xf+VhYQG86bk26M+NsbJYP8dElGo=
+go.temporal.io/api v1.62.8-0.20260409191452-9babec2b2609/go.mod h1:+cZCPtiYpwJy3N1uOThV8lEg8S+zr0DpFuCZeyt8A9k=
 go.temporal.io/auto-scaled-workers v0.0.0-20260401235702-f2721a623799 h1:M+eqXvIdNCCf5wIX2no7lLuCjdhmqoIKlcPUZIo9aPg=
 go.temporal.io/auto-scaled-workers v0.0.0-20260401235702-f2721a623799/go.mod h1:gni0wHhtx7BbY/Hr41ea0JENWQAlWqQbxXqXQ7p2ONo=
 go.temporal.io/sdk v1.41.1 h1:yOpvsHyDD1lNuwlGBv/SUodCPhjv9nDeC9lLHW/fJUA=

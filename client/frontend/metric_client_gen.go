@@ -1534,3 +1534,17 @@ func (c *metricClient) ValidateWorkerDeploymentVersionComputeConfig(
 
 	return c.client.ValidateWorkerDeploymentVersionComputeConfig(ctx, request, opts...)
 }
+
+func (c *metricClient) WaitExternalWorkflow(
+	ctx context.Context,
+	request *workflowservice.WaitExternalWorkflowRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.WaitExternalWorkflowResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientWaitExternalWorkflow")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.WaitExternalWorkflow(ctx, request, opts...)
+}

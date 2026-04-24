@@ -639,6 +639,20 @@ func (c *metricClient) RefreshWorkflowTasks(
 	return c.client.RefreshWorkflowTasks(ctx, request, opts...)
 }
 
+func (c *metricClient) RegisterWorkflowCallback(
+	ctx context.Context,
+	request *historyservice.RegisterWorkflowCallbackRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.RegisterWorkflowCallbackResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientRegisterWorkflowCallback")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.RegisterWorkflowCallback(ctx, request, opts...)
+}
+
 func (c *metricClient) RemoveSignalMutableState(
 	ctx context.Context,
 	request *historyservice.RemoveSignalMutableStateRequest,

@@ -1403,3 +1403,26 @@ message CancelNexusOperationRequest {
 message CancelNexusOperationResponse {
   temporal.api.nexus.v1.CancelOperationResponse response = 1;
 }
+
+message RegisterWorkflowCallbackRequest {
+  option (routing).workflow_id = "workflow_id";
+
+  string namespace_id = 1;
+  string workflow_id = 2;
+  string run_id = 3;
+  string request_id = 4;
+  temporal.api.common.v1.Callback callback = 5;
+}
+
+message RegisterWorkflowCallbackResponse {
+}
+
+message RemoveWorkflowCallbackRequest {
+  string namespace_id = 1;
+  string workflow_id = 2;
+  string run_id = 3;
+  string request_id = 4;
+}
+
+message RemoveWorkflowCallbackResponse {
+}

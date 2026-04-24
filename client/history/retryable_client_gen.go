@@ -701,6 +701,21 @@ func (c *retryableClient) RefreshWorkflowTasks(
 	return resp, err
 }
 
+func (c *retryableClient) RegisterWorkflowCallback(
+	ctx context.Context,
+	request *historyservice.RegisterWorkflowCallbackRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.RegisterWorkflowCallbackResponse, error) {
+	var resp *historyservice.RegisterWorkflowCallbackResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.RegisterWorkflowCallback(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) RemoveSignalMutableState(
 	ctx context.Context,
 	request *historyservice.RemoveSignalMutableStateRequest,

@@ -59,6 +59,8 @@ import (
 	"go.temporal.io/server/service/history/api/recordchildworkflowcompleted"
 	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
 	"go.temporal.io/server/service/history/api/refreshworkflow"
+	"go.temporal.io/server/service/history/api/registercallback"
+	"go.temporal.io/server/service/history/api/removecallback"
 	"go.temporal.io/server/service/history/api/removesignalmutablestate"
 	replicationapi "go.temporal.io/server/service/history/api/replication"
 	"go.temporal.io/server/service/history/api/replicationadmin"
@@ -1137,4 +1139,18 @@ func (e *historyEngineImpl) UnpauseWorkflowExecution(
 	req *historyservice.UnpauseWorkflowExecutionRequest,
 ) (resp *historyservice.UnpauseWorkflowExecutionResponse, retError error) {
 	return unpauseworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) RegisterWorkflowCallback(
+	ctx context.Context,
+	req *historyservice.RegisterWorkflowCallbackRequest,
+) (resp *historyservice.RegisterWorkflowCallbackResponse, retError error) {
+	return registercallback.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) RemoveWorkflowCallback(
+	ctx context.Context,
+	req *historyservice.RemoveWorkflowCallbackRequest,
+) (resp *historyservice.RemoveWorkflowCallbackResponse, retError error) {
+	return removecallback.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
 }

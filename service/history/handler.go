@@ -2652,6 +2652,48 @@ func (h *Handler) CancelNexusOperation(
 	}, nil
 }
 
+func (h *Handler) RegisterExecutionCallback(
+	ctx context.Context,
+	req *historyservice.RegisterWorkflowCallbackRequest,
+) (*historyservice.RegisterWorkflowCallbackResponse, error) {
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowID := req.GetWorkflowId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return engine.RegisterWorkflowCallback(ctx, req)
+}
+
+func (h *Handler) RemoveExecutionCallback(
+	ctx context.Context,
+	req *historyservice.RemoveWorkflowCallbackRequest,
+) (*historyservice.RemoveWorkflowCallbackResponse, error) {
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowID := req.GetWorkflowId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return engine.RemoveWorkflowCallback(ctx, req)
+}
+
 func createLazyValueFromPayload(payload *commonpb.Payload) *nexus.LazyValue {
 	// Create a serializer that wraps the payload.
 	// When Deserialize is called, it will directly unmarshal the payload.

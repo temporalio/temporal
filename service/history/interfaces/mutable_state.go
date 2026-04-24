@@ -390,5 +390,7 @@ type (
 
 		HasRequestID(requestID string) bool
 		SetSuccessorRunID(runID string)
+
+		DeleteCompletionCallback(requestID string) error
 	}
 )

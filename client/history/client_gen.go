@@ -857,6 +857,26 @@ func (c *clientImpl) RefreshWorkflowTasks(
 	return response, nil
 }
 
+func (c *clientImpl) RegisterWorkflowCallback(
+	ctx context.Context,
+	request *historyservice.RegisterWorkflowCallbackRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.RegisterWorkflowCallbackResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowId())
+	var response *historyservice.RegisterWorkflowCallbackResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.RegisterWorkflowCallback(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) RemoveSignalMutableState(
 	ctx context.Context,
 	request *historyservice.RemoveSignalMutableStateRequest,

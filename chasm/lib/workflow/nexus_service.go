@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -10,14 +12,28 @@ import (
 	"go.temporal.io/api/workflowservice/v1/workflowservicenexus"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/workflow"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/consts"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type workflowServiceNexusHandler struct {
-	namespaceRegistry namespace.Registry
-	historyHandler    historyservice.HistoryServiceServer
+	namespaceRegistry       namespace.Registry
+	historyHandler          historyservice.HistoryServiceServer
+	maxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
+}
+
+func (w *workflowServiceNexusHandler) getTerminalState(
+	ctx context.Context,
+	nsID string,
+	req *workflowservice.WaitExternalWorkflowRequest,
+) (*workflowservice.WaitExternalWorkflowResult, error) {
+	// Implementation for fetching terminal state
+	return nil, nil
 }
 
 // SignalWithStartWorkflowExecution implements the SignalWithStartWorkflowExecution Nexus operation.
@@ -27,6 +43,7 @@ func (h *workflowServiceNexusHandler) SignalWithStartWorkflowExecution(name stri
 		if err != nil {
 			return nil, serviceerror.NewInvalidArgumentf("Invalid namespace %q: %v", req.GetNamespace(), err)
 		}
+
 		res, err := h.historyHandler.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
 			NamespaceId:            nsID.String(),
 			SignalWithStartRequest: req,
@@ -53,11 +70,95 @@ func (h *workflowServiceNexusHandler) SignalWithStartWorkflowExecution(name stri
 	})
 }
 
+type WaitForExternalWorkflowOperationProcessor struct{}
+
+func (o WaitForExternalWorkflowOperationProcessor) ProcessInput(
+	ctx chasm.NexusOperationProcessorContext,
+	request *workflowservice.WaitExternalWorkflowRequest,
+) (
+	*chasm.NexusOperationProcessorResult,
+	error,
+) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+type waitForExternalWorkflowOperation struct {
+	nexus.UnimplementedOperation[
+		workflowservice.WaitExternalWorkflowRequest,
+		workflowservice.WaitExternalWorkflowResult,
+	]
+	h *workflowServiceNexusHandler
+}
+
+func (o *waitForExternalWorkflowOperation) Name() string {
+	return workflowservicenexus.WorkflowService.WaitExternalWorkflow.Name()
+}
+func (o *waitForExternalWorkflowOperation) Start(
+	ctx context.Context,
+	req *workflowservice.WaitExternalWorkflowRequest,
+	opts nexus.StartOperationOptions,
+) (nexus.HandlerStartOperationResult[*workflowservice.WaitExternalWorkflowResult], error) {
+	nsID, err := o.h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("invalid namespace %q: %v", req.GetNamespace(), err)
+	}
+
+	workflowBRef := chasm.NewComponentRef[*chasmworkflow.Workflow](chasm.ExecutionKey{
+		NamespaceID: nsID.String(),
+		BusinessID:  req.GetWorkflowId(),
+		RunID:       req.GetRunId(),
+	})
+
+	_, _, err = chasm.UpdateComponent(ctx, workflowBRef,
+		func(w *chasmworkflow.Workflow, mutableCtx chasm.MutableContext, _ any) (any, error) {
+			if w.LifecycleState(mutableCtx) != chasm.LifecycleStateRunning {
+				return nil, consts.ErrWorkflowCompleted
+			}
+			return nil, w.AddCompletionCallbacks(
+				mutableCtx,
+				timestamppb.Now(),
+				req.GetRequestId(),
+				[]*commonpb.Callback{{Variant: &commonpb.Callback_Nexus_{
+					Nexus: &commonpb.Callback_Nexus{Url: opts.CallbackURL},
+				}}},
+				o.h.maxCallbacksPerWorkflow(req.GetNamespace()),
+			)
+		}, nil,
+	)
+	if err != nil {
+		if errors.Is(err, consts.ErrWorkflowCompleted) {
+			result, err := o.h.getTerminalState(ctx, nsID.String(), req)
+			if err != nil {
+				return nil, err
+			}
+			return &nexus.HandlerStartOperationResultSync[*workflowservice.WaitExternalWorkflowResult]{
+				Value: result,
+			}, nil
+		}
+		return nil, err
+	}
+
+	return &nexus.HandlerStartOperationResultAsync{
+		OperationToken: req.GetWorkflowId() + ":" + req.GetRunId() + ":" + req.GetRequestId(),
+	}, nil
+}
+
+func (o *waitForExternalWorkflowOperation) Cancel(
+	ctx context.Context,
+	token string,
+	opts nexus.CancelOperationOptions,
+) error {
+	return nil
+}
+
 func mustNewWorkflowServiceNexusHandler(
 	handler *workflowServiceNexusHandler,
 ) *nexus.Service {
 	svc := nexus.NewService(workflowservicenexus.WorkflowService.ServiceName)
-	svc.MustRegister(handler.SignalWithStartWorkflowExecution(workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name()))
+	svc.MustRegister(
+		handler.SignalWithStartWorkflowExecution(workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name()),
+		&waitForExternalWorkflowOperation{h: handler},
+	)
 	return svc
 }
 
@@ -118,8 +219,18 @@ func NewWorkflowServiceNexusServiceProcessor(
 	saValidator *searchattribute.Validator,
 ) *chasm.NexusServiceProcessor {
 	sp := chasm.NewNexusServiceProcessor(workflowservicenexus.WorkflowService.ServiceName)
-	sp.MustRegisterOperation(workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name(), chasm.NewRegisterableNexusOperationProcessor(SignalWithStartOperationProcessor{
-		validator: NewValidator(config, saMapperProvider, saValidator),
-	}))
+	sp.MustRegisterOperation(
+		workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution.Name(),
+		chasm.NewRegisterableNexusOperationProcessor(SignalWithStartOperationProcessor{
+			validator: NewValidator(config, saMapperProvider, saValidator),
+		},
+		),
+	)
+	sp.MustRegisterOperation(
+		workflowservicenexus.WorkflowService.WaitExternalWorkflow.Name(),
+		chasm.NewRegisterableNexusOperationProcessor(
+			WaitForExternalWorkflowOperationProcessor{},
+		),
+	)
 	return sp
 }

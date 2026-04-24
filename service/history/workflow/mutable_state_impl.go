@@ -3199,6 +3199,77 @@ func (ms *MutableStateImpl) addCompletionCallbacksChasm(
 	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks, maxCallbacksPerWorkflow)
 }
 
+func (ms *MutableStateImpl) DeleteCompletionCallback(requestID string) error {
+	if ms.chasmCallbacksEnabled() {
+		// Initialize chasm tree once for new workflows.
+		// Using context.Background() because this is done outside an actual request context and the
+		// chasmworkflow.NewWorkflow does not actually use it currently.
+		ms.ensureChasmWorkflowComponent(context.Background())
+		return ms.removeCompletionCallbacksChasm(requestID)
+	}
+
+	return ms.removeCompletionCallbacksHsm(requestID)
+}
+
+// addCompletionCallbacksHsm creates completion callbacks using the HSM implementation.
+func (ms *MutableStateImpl) removeCompletionCallbacksHsm(
+	requestID string,
+) error {
+	coll := callbacks.MachineCollection(ms.HSM())
+	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
+	if len(completionCallbacks)+coll.Size() > maxCallbacksPerWorkflow {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
+			maxCallbacksPerWorkflow,
+			coll.Size(),
+		)
+	}
+	for idx, cb := range completionCallbacks {
+		persistenceCB := &persistencespb.Callback{
+			Links: cb.GetLinks(),
+		}
+		switch variant := cb.Variant.(type) {
+		case *commonpb.Callback_Nexus_:
+			persistenceCB.Variant = &persistencespb.Callback_Nexus_{
+				Nexus: &persistencespb.Callback_Nexus{
+					Url:    variant.Nexus.GetUrl(),
+					Header: variant.Nexus.GetHeader(),
+				},
+			}
+		default:
+			return serviceerror.NewInvalidArgumentf("unknown callback variant: %T", cb.Variant)
+		}
+		machine := callbacks.NewCallback(requestID, event.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
+		id := ""
+		// This is for backwards compatibility: callbacks were initially only attached when the workflow
+		// execution started, but now they can be attached while the workflow is running.
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+			// Use the start event version and ID as part of the callback ID to ensure that callbacks have unique
+			// IDs that are deterministically created across clusters.
+			id = fmt.Sprintf("%d-%d-%d", event.GetVersion(), event.GetEventId(), idx)
+		} else {
+			id = fmt.Sprintf("cb-%s-%d", requestID, idx)
+		}
+		if _, err := coll.Add(id, machine); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// addCompletionCallbacksChasm creates completion callbacks using the CHASM implementation.
+func (ms *MutableStateImpl) removeCompletionCallbacksChasm(
+	requestID string,
+) error {
+	wf, ctx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return err
+	}
+
+	maxCallbacksPerWorkflow := ms.config.MaxCHASMCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
+	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks, maxCallbacksPerWorkflow)
+}
+
 // AddFirstWorkflowTaskScheduled adds the first workflow task scheduled event unless it should be delayed as indicated
 // by the startEvent's FirstWorkflowTaskBackoff.
 // Returns the workflow task's scheduled event ID if a task was scheduled, 0 otherwise.

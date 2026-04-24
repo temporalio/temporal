@@ -514,4 +514,9 @@ service HistoryService {
   rpc CancelNexusOperation(CancelNexusOperationRequest) returns (CancelNexusOperationResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
+
+  // RegisterWorkflowCallback registers a callback to be invoked when a workflow execution reaches a terminal state.
+  rpc RegisterWorkflowCallback(RegisterWorkflowCallbackRequest) returns (RegisterWorkflowCallbackResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 }

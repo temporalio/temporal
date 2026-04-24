@@ -46,7 +46,8 @@ func findProtoImports() []string {
 					i := match[1]
 					if strings.HasPrefix(i, "temporal/api/") ||
 						strings.HasPrefix(i, "google/") ||
-						strings.HasPrefix(i, "nexus/") {
+						strings.HasPrefix(i, "nexus/") ||
+						strings.HasPrefix(i, "nexusannotations/") {
 						importMap[i] = struct{}{}
 					}
 				}
@@ -93,8 +94,8 @@ func genFileList(protoImports []string) {
 			}
 			goImportsMap[goImport] = base
 			protoToPackage[i] = base
-		} else if strings.HasPrefix(i, "nexus/") {
-			goImport := filepath.Dir(strings.Replace(i, "nexus/", "github.com/bergundy/nexus-proto-annotations/go/nexus/", 1))
+		} else if strings.HasPrefix(i, "nexusannotations/") {
+			goImport := filepath.Dir(strings.Replace(i, "nexusannotations/", "github.com/nexus-rpc/nexus-proto-annotations/go/nexusannotations/", 1))
 			importName := "nexusannotations"
 			goImportsMap[goImport] = importName
 			protoToPackage[i] = importName
@@ -157,7 +158,7 @@ func checkImports(files map[string]protoreflect.FileDescriptor) {
 		num := imports.Len()
 		for i := range num {
 			imp := imports.Get(i).Path()
-			if strings.HasPrefix(imp, "temporal/api/") || strings.HasPrefix(imp, "google/") || strings.HasPrefix(imp, "nexus/") {
+			if strings.HasPrefix(imp, "temporal/api/") || strings.HasPrefix(imp, "google/") || strings.HasPrefix(imp, "nexus/") || strings.HasPrefix(imp, "nexusannotations/") {
 				if _, ok := files[imp]; !ok {
 					missing[imp] = struct{}{}
 				}

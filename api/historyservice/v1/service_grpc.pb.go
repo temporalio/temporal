@@ -96,6 +96,7 @@ const (
 	HistoryService_UnpauseWorkflowExecution_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/UnpauseWorkflowExecution"
 	HistoryService_StartNexusOperation_FullMethodName                    = "/temporal.server.api.historyservice.v1.HistoryService/StartNexusOperation"
 	HistoryService_CancelNexusOperation_FullMethodName                   = "/temporal.server.api.historyservice.v1.HistoryService/CancelNexusOperation"
+	HistoryService_RegisterWorkflowCallback_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/RegisterWorkflowCallback"
 )
 
 // HistoryServiceClient is the client API for HistoryService service.
@@ -387,6 +388,8 @@ type HistoryServiceClient interface {
 	StartNexusOperation(ctx context.Context, in *StartNexusOperationRequest, opts ...grpc.CallOption) (*StartNexusOperationResponse, error)
 	// CancelNexusOperation cancels a Nexus operation on the __temporal_system endpoint.
 	CancelNexusOperation(ctx context.Context, in *CancelNexusOperationRequest, opts ...grpc.CallOption) (*CancelNexusOperationResponse, error)
+	// RegisterWorkflowCallback registers a callback to be invoked when a workflow execution reaches a terminal state.
+	RegisterWorkflowCallback(ctx context.Context, in *RegisterWorkflowCallbackRequest, opts ...grpc.CallOption) (*RegisterWorkflowCallbackResponse, error)
 }
 
 type historyServiceClient struct {
@@ -1103,6 +1106,15 @@ func (c *historyServiceClient) CancelNexusOperation(ctx context.Context, in *Can
 	return out, nil
 }
 
+func (c *historyServiceClient) RegisterWorkflowCallback(ctx context.Context, in *RegisterWorkflowCallbackRequest, opts ...grpc.CallOption) (*RegisterWorkflowCallbackResponse, error) {
+	out := new(RegisterWorkflowCallbackResponse)
+	err := c.cc.Invoke(ctx, HistoryService_RegisterWorkflowCallback_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HistoryServiceServer is the server API for HistoryService service.
 // All implementations must embed UnimplementedHistoryServiceServer
 // for forward compatibility
@@ -1392,6 +1404,8 @@ type HistoryServiceServer interface {
 	StartNexusOperation(context.Context, *StartNexusOperationRequest) (*StartNexusOperationResponse, error)
 	// CancelNexusOperation cancels a Nexus operation on the __temporal_system endpoint.
 	CancelNexusOperation(context.Context, *CancelNexusOperationRequest) (*CancelNexusOperationResponse, error)
+	// RegisterWorkflowCallback registers a callback to be invoked when a workflow execution reaches a terminal state.
+	RegisterWorkflowCallback(context.Context, *RegisterWorkflowCallbackRequest) (*RegisterWorkflowCallbackResponse, error)
 	mustEmbedUnimplementedHistoryServiceServer()
 }
 
@@ -1626,6 +1640,9 @@ func (UnimplementedHistoryServiceServer) StartNexusOperation(context.Context, *S
 }
 func (UnimplementedHistoryServiceServer) CancelNexusOperation(context.Context, *CancelNexusOperationRequest) (*CancelNexusOperationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CancelNexusOperation not implemented")
+}
+func (UnimplementedHistoryServiceServer) RegisterWorkflowCallback(context.Context, *RegisterWorkflowCallbackRequest) (*RegisterWorkflowCallbackResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegisterWorkflowCallback not implemented")
 }
 func (UnimplementedHistoryServiceServer) mustEmbedUnimplementedHistoryServiceServer() {}
 
@@ -3016,6 +3033,24 @@ func _HistoryService_CancelNexusOperation_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_RegisterWorkflowCallback_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterWorkflowCallbackRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).RegisterWorkflowCallback(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_RegisterWorkflowCallback_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).RegisterWorkflowCallback(ctx, req.(*RegisterWorkflowCallbackRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HistoryService_ServiceDesc is the grpc.ServiceDesc for HistoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -3322,6 +3357,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelNexusOperation",
 			Handler:    _HistoryService_CancelNexusOperation_Handler,
+		},
+		{
+			MethodName: "RegisterWorkflowCallback",
+			Handler:    _HistoryService_RegisterWorkflowCallback_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -963,6 +963,26 @@ func (mr *MockHistoryServiceClientMockRecorder) RefreshWorkflowTasks(ctx, in any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshWorkflowTasks", reflect.TypeOf((*MockHistoryServiceClient)(nil).RefreshWorkflowTasks), varargs...)
 }
 
+// RegisterWorkflowCallback mocks base method.
+func (m *MockHistoryServiceClient) RegisterWorkflowCallback(ctx context.Context, in *historyservice.RegisterWorkflowCallbackRequest, opts ...grpc.CallOption) (*historyservice.RegisterWorkflowCallbackResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RegisterWorkflowCallback", varargs...)
+	ret0, _ := ret[0].(*historyservice.RegisterWorkflowCallbackResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RegisterWorkflowCallback indicates an expected call of RegisterWorkflowCallback.
+func (mr *MockHistoryServiceClientMockRecorder) RegisterWorkflowCallback(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterWorkflowCallback", reflect.TypeOf((*MockHistoryServiceClient)(nil).RegisterWorkflowCallback), varargs...)
+}
+
 // RemoveSignalMutableState mocks base method.
 func (m *MockHistoryServiceClient) RemoveSignalMutableState(ctx context.Context, in *historyservice.RemoveSignalMutableStateRequest, opts ...grpc.CallOption) (*historyservice.RemoveSignalMutableStateResponse, error) {
 	m.ctrl.T.Helper()
@@ -2413,6 +2433,21 @@ func (m *MockHistoryServiceServer) RefreshWorkflowTasks(arg0 context.Context, ar
 func (mr *MockHistoryServiceServerMockRecorder) RefreshWorkflowTasks(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshWorkflowTasks", reflect.TypeOf((*MockHistoryServiceServer)(nil).RefreshWorkflowTasks), arg0, arg1)
+}
+
+// RegisterWorkflowCallback mocks base method.
+func (m *MockHistoryServiceServer) RegisterWorkflowCallback(arg0 context.Context, arg1 *historyservice.RegisterWorkflowCallbackRequest) (*historyservice.RegisterWorkflowCallbackResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegisterWorkflowCallback", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.RegisterWorkflowCallbackResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RegisterWorkflowCallback indicates an expected call of RegisterWorkflowCallback.
+func (mr *MockHistoryServiceServerMockRecorder) RegisterWorkflowCallback(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterWorkflowCallback", reflect.TypeOf((*MockHistoryServiceServer)(nil).RegisterWorkflowCallback), arg0, arg1)
 }
 
 // RemoveSignalMutableState mocks base method.

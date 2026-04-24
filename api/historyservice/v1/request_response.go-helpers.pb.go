@@ -5924,3 +5924,151 @@ func (this *CancelNexusOperationResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type RegisterWorkflowCallbackRequest to the protobuf v3 wire format
+func (val *RegisterWorkflowCallbackRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RegisterWorkflowCallbackRequest from the protobuf v3 wire format
+func (val *RegisterWorkflowCallbackRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RegisterWorkflowCallbackRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RegisterWorkflowCallbackRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RegisterWorkflowCallbackRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RegisterWorkflowCallbackRequest
+	switch t := that.(type) {
+	case *RegisterWorkflowCallbackRequest:
+		that1 = t
+	case RegisterWorkflowCallbackRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type RegisterWorkflowCallbackResponse to the protobuf v3 wire format
+func (val *RegisterWorkflowCallbackResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RegisterWorkflowCallbackResponse from the protobuf v3 wire format
+func (val *RegisterWorkflowCallbackResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RegisterWorkflowCallbackResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RegisterWorkflowCallbackResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RegisterWorkflowCallbackResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RegisterWorkflowCallbackResponse
+	switch t := that.(type) {
+	case *RegisterWorkflowCallbackResponse:
+		that1 = t
+	case RegisterWorkflowCallbackResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type RemoveWorkflowCallbackRequest to the protobuf v3 wire format
+func (val *RemoveWorkflowCallbackRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RemoveWorkflowCallbackRequest from the protobuf v3 wire format
+func (val *RemoveWorkflowCallbackRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RemoveWorkflowCallbackRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RemoveWorkflowCallbackRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RemoveWorkflowCallbackRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RemoveWorkflowCallbackRequest
+	switch t := that.(type) {
+	case *RemoveWorkflowCallbackRequest:
+		that1 = t
+	case RemoveWorkflowCallbackRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type RemoveWorkflowCallbackResponse to the protobuf v3 wire format
+func (val *RemoveWorkflowCallbackResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RemoveWorkflowCallbackResponse from the protobuf v3 wire format
+func (val *RemoveWorkflowCallbackResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RemoveWorkflowCallbackResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RemoveWorkflowCallbackResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RemoveWorkflowCallbackResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RemoveWorkflowCallbackResponse
+	switch t := that.(type) {
+	case *RemoveWorkflowCallbackResponse:
+		that1 = t
+	case RemoveWorkflowCallbackResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
