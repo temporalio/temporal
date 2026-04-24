@@ -32,6 +32,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
+	chasmcallback "go.temporal.io/server/chasm/lib/callback"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -7615,4 +7617,171 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSk
 			}
 		})
 	}
+}
+
+// TestApplyWorkflowExecutionUpdateEvents_CallbacksNotDuplicated verifies that
+// calling addUpdateCallbacks at both admission and acceptance time does not
+// duplicate CHASM callback components for the update.
+func (s *mutableStateSuite) TestApplyWorkflowExecutionUpdateEvents_CallbacksNotDuplicated() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	// Enable all CHASM update-callback feature flags.
+	s.mockConfig.EnableChasm = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.mockConfig.EnableCHASMCallbacks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.mockConfig.EnableWorkflowUpdateCallbacks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+
+	// Register minimal CHASM libraries (components only; task handlers not needed for this test).
+	chasmReg := s.mockShard.ChasmRegistry()
+	s.Require().NoError(chasmReg.Register(&chasmcallback.Library{}))
+	s.Require().NoError(chasmReg.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
+
+	// Recreate mutable state now that CHASM is enabled.
+	s.mutableState = NewMutableState(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
+
+	updateID := uuid.NewString()
+	requestID := uuid.NewString()
+	eventTime := timestamppb.New(time.Now())
+	cbs := []*commonpb.Callback{
+		{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://example.com/callback"}}},
+	}
+
+	// Step 1: apply UpdateAdmitted, which registers callbacks at admission time.
+	admittedEvent := &historypb.HistoryEvent{
+		EventId:   1,
+		EventTime: eventTime,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{
+			WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
+				Request: &updatepb.Request{
+					Meta:                &updatepb.Meta{UpdateId: updateID},
+					Input:               &updatepb.Input{Name: "update"},
+					RequestId:           requestID,
+					CompletionCallbacks: cbs,
+				},
+			},
+		},
+	}
+	s.NoError(s.mutableState.ApplyWorkflowExecutionUpdateAdmittedEvent(admittedEvent, 1))
+
+	// Capture the callback pointer registered at admission time.
+	wf, chasmCtx, err := s.mutableState.ChasmWorkflowComponent(context.Background())
+	s.Require().NoError(err)
+	updField, ok := wf.Updates[updateID]
+	s.Require().True(ok, "update must be present after admission")
+	cbKey := requestID + "-0"
+	cbBefore := updField.Get(chasmCtx).Callbacks[cbKey].Get(chasmCtx)
+
+	// Step 2: apply UpdateAccepted with AcceptedRequest present.
+	// This triggers a second call to addUpdateCallbacks with the same requestID and callbacks.
+	acceptedEvent := &historypb.HistoryEvent{
+		EventId:   2,
+		EventTime: eventTime,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{
+			WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
+				ProtocolInstanceId:               updateID,
+				AcceptedRequestMessageId:         "msg-id",
+				AcceptedRequestSequencingEventId: 1,
+				AcceptedRequest: &updatepb.Request{
+					Meta:                &updatepb.Meta{UpdateId: updateID},
+					Input:               &updatepb.Input{Name: "update"},
+					RequestId:           requestID,
+					CompletionCallbacks: cbs,
+				},
+			},
+		},
+	}
+	s.NoError(s.mutableState.ApplyWorkflowExecutionUpdateAcceptedEvent(acceptedEvent))
+
+	// The original callback object registered at admission must not be replaced.
+	wf, chasmCtx, err = s.mutableState.ChasmWorkflowComponent(context.Background())
+	s.Require().NoError(err)
+	updField, ok = wf.Updates[updateID]
+	s.Require().True(ok, "update must be present after acceptance")
+	cbAfter := updField.Get(chasmCtx).Callbacks[cbKey].Get(chasmCtx)
+	s.Same(cbBefore, cbAfter, "acceptance must not overwrite callback registered at admission")
+}
+
+// TestApplyWorkflowExecutionUpdateAccepted_NilCallbacksMap verifies that
+// AddUpdateCompletionCallbacks does not panic when the WorkflowUpdate already
+// exists in CHASM but its Callbacks map is nil (e.g. after deserialization of
+// an update that was created without callbacks).
+func (s *mutableStateSuite) TestApplyWorkflowExecutionUpdateAccepted_NilCallbacksMap() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	s.mockConfig.EnableChasm = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.mockConfig.EnableCHASMCallbacks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.mockConfig.EnableWorkflowUpdateCallbacks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+
+	chasmReg := s.mockShard.ChasmRegistry()
+	s.Require().NoError(chasmReg.Register(&chasmcallback.Library{}))
+	s.Require().NoError(chasmReg.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
+
+	s.mutableState = NewMutableState(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
+
+	updateID := uuid.NewString()
+	requestID := uuid.NewString()
+	eventTime := timestamppb.New(time.Now())
+	cbs := []*commonpb.Callback{
+		{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://example.com/callback"}}},
+	}
+
+	// Apply UpdateAdmitted WITHOUT callbacks so that the CHASM WorkflowUpdate is never
+	// created via addUpdateCallbacks (the function returns early for an empty slice).
+	// This leaves w.Updates empty; we then insert a WorkflowUpdate with nil Callbacks
+	// directly to simulate a CHASM node loaded from persistence without callbacks.
+	admittedEvent := &historypb.HistoryEvent{
+		EventId:   1,
+		EventTime: eventTime,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{
+			WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
+				Request: &updatepb.Request{
+					Meta:  &updatepb.Meta{UpdateId: updateID},
+					Input: &updatepb.Input{Name: "update"},
+					// No CompletionCallbacks — addUpdateCallbacks returns early, CHASM entry not created.
+				},
+			},
+		},
+	}
+	s.NoError(s.mutableState.ApplyWorkflowExecutionUpdateAdmittedEvent(admittedEvent, 1))
+
+	// Directly insert a WorkflowUpdate with nil Callbacks into the CHASM tree.
+	wf, chasmCtx, err := s.mutableState.ChasmWorkflowComponent(context.Background())
+	s.Require().NoError(err)
+	_, exists := wf.Updates[updateID]
+	s.Require().False(exists, "sanity: no CHASM update yet")
+	if wf.Updates == nil {
+		wf.Updates = make(chasm.Map[string, *chasmworkflow.WorkflowUpdate], 1)
+	}
+	updObj := chasmworkflow.NewWorkflowUpdate(chasmCtx, updateID, wf.MSPointer)
+	// Leave updObj.Callbacks nil to simulate deserialization without callbacks.
+	wf.Updates[updateID] = chasm.NewComponentField(chasmCtx, updObj)
+
+	// Now apply UpdateAccepted with callbacks. The WorkflowUpdate exists in CHASM with
+	// a nil Callback map, we should create the map here.
+	acceptedEvent := &historypb.HistoryEvent{
+		EventId:   2,
+		EventTime: eventTime,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{
+			WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
+				ProtocolInstanceId:               updateID,
+				AcceptedRequestMessageId:         "msg-id",
+				AcceptedRequestSequencingEventId: 1,
+				AcceptedRequest: &updatepb.Request{
+					Meta:                &updatepb.Meta{UpdateId: updateID},
+					Input:               &updatepb.Input{Name: "update"},
+					RequestId:           requestID,
+					CompletionCallbacks: cbs,
+				},
+			},
+		},
+	}
+	s.NoError(s.mutableState.ApplyWorkflowExecutionUpdateAcceptedEvent(acceptedEvent))
+
+	wf, chasmCtx, err = s.mutableState.ChasmWorkflowComponent(context.Background())
+	s.Require().NoError(err)
+	upd := wf.Updates[updateID].Get(chasmCtx)
+	s.Len(upd.Callbacks, 1, "callback must be registered without panic")
 }

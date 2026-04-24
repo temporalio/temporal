@@ -177,6 +177,10 @@ func addCallbacksToMap(
 		// Unlike HSM callbacks, CHASM replicates entire trees rather than replaying events, so deterministic
 		// cross-cluster IDs based on event version are not needed.
 		id := fmt.Sprintf("%s-%d", requestID, idx)
+		if _, exists := target[id]; exists {
+			// Already registered, skip to avoid overwriting.
+			continue
+		}
 		callbackObj := callback.NewCallback(requestID, eventTime, &callbackspb.CallbackState{}, chasmCB)
 		target[id] = chasm.NewComponentField(ctx, callbackObj)
 	}
@@ -231,6 +235,9 @@ func (w *Workflow) AddUpdateCompletionCallbacks(
 	}
 
 	update := w.Updates[updateID].Get(ctx)
+	if update.Callbacks == nil {
+		update.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
+	}
 
 	currentCallbackCount := len(update.Callbacks)
 	if len(completionCallbacks)+currentCallbackCount > maxCallbacksPerUpdateID {

@@ -2,6 +2,7 @@ package update_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -1290,15 +1291,91 @@ func TestAttachCallbacks(t *testing.T) {
 		require.False(t, *eventCreated)
 	})
 
-	t.Run("on stateAdmitted returns false without creating event", func(t *testing.T) {
+	t.Run("on stateAdmitted returns false without creating event at attachment time", func(t *testing.T) {
 		effects := &effect.Buffer{}
 		store, eventCreated := trackingStore(effects)
 		upd := update.NewAdmitted(tv.UpdateID(), nil)
 
 		fired, err := upd.AttachCallbacks(testRequest, store)
 		require.NoError(t, err)
+		require.False(t, fired, "stateAdmitted should return false so caller creates a speculative task")
+		require.False(t, *eventCreated, "no event written at attachment time, callbacks are buffered")
+	})
+
+	t.Run("on stateAdmitted buffers callbacks and flushes on acceptance", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store, optionsEventCount := countingOptionsStore(effects)
+		upd := update.New(tv.UpdateID())
+		mustAdmit(t, store, upd)
+		effects.Apply(context.Background())
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
 		require.False(t, fired)
-		require.False(t, *eventCreated)
+		require.Equal(t, 0, *optionsEventCount, "no event at attachment time")
+
+		require.NoError(t, accept(t, store, upd))
+		effects.Apply(context.Background())
+
+		require.Equal(t, 1, *optionsEventCount, "buffered callback flushed as options event on acceptance")
+	})
+
+	t.Run("on stateAdmitted dedup by requestID buffers only once", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store, optionsEventCount := countingOptionsStore(effects)
+		upd := update.New(tv.UpdateID())
+		mustAdmit(t, store, upd)
+		effects.Apply(context.Background())
+
+		fired1, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.False(t, fired1)
+		fired2, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.True(t, fired2, "dedup: callback already buffered, no new WFT needed")
+
+		require.NoError(t, accept(t, store, upd))
+		effects.Apply(context.Background())
+
+		require.Equal(t, 1, *optionsEventCount, "duplicate requestID deduped — only one event written")
+	})
+
+	t.Run("on stateAdmitted rejection flushes buffered callbacks", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store, optionsEventCount := countingOptionsStore(effects)
+		upd := update.New(tv.UpdateID())
+		mustAdmit(t, store, upd)
+		effects.Apply(context.Background())
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.False(t, fired)
+
+		require.NoError(t, reject(t, store, upd))
+		effects.Apply(context.Background())
+
+		require.Equal(t, 1, *optionsEventCount, "buffered callback flushed before rejection so CHASM can fire it")
+	})
+
+	t.Run("on stateAdmitted abort clears buffer without flushing", func(t *testing.T) {
+		// Known limitation: abort() has no EventStore so cannot write history events.
+		// Callbacks buffered in stateAdmitted are dropped on abort. The caller's
+		// outcome future is set with the abort failure, so the long-poll returns an
+		// error and the caller can retry.
+		effects := &effect.Buffer{}
+		store, optionsEventCount := countingOptionsStore(effects)
+		upd := update.New(tv.UpdateID())
+		mustAdmit(t, store, upd)
+		effects.Apply(context.Background())
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.False(t, fired)
+
+		upd.Abort(update.AbortReasonWorkflowCompleted, effects)
+		effects.Apply(context.Background())
+
+		require.Equal(t, 0, *optionsEventCount, "abort cannot flush — callbacks dropped (known limitation)")
 	})
 
 	t.Run("on stateSent buffers callbacks and returns true", func(t *testing.T) {
@@ -1440,7 +1517,7 @@ func TestAttachCallbacks(t *testing.T) {
 		require.ErrorAs(t, err, &resourceExhaustedErr)
 	})
 
-	t.Run("on stateSent rejection clears buffer", func(t *testing.T) {
+	t.Run("on stateSent rejection flushes buffered callbacks before rejecting", func(t *testing.T) {
 		effects := &effect.Buffer{}
 		store, optionsEventCount := countingOptionsStore(effects)
 		upd := update.New(tv.UpdateID())
@@ -1456,7 +1533,44 @@ func TestAttachCallbacks(t *testing.T) {
 		require.NoError(t, err)
 		effects.Apply(context.Background())
 
-		require.Equal(t, 0, *optionsEventCount, "rejected update should not flush buffered callbacks")
+		require.Equal(t, 1, *optionsEventCount, "buffered callbacks flushed as options event before rejection so CHASM can fire them")
+	})
+
+	t.Run("on stateSent rejection with closed workflow skips flush and succeeds", func(t *testing.T) {
+		effects := &effect.Buffer{}
+
+		// Mock event store that emulates a closed workflow (CanAddEventFunc always returns false) to test that we will skip
+		// flushing callbacks on rejection.
+		optionsEventWritten := false
+		store := mockEventStore{
+			Controller:      effects,
+			CanAddEventFunc: func() bool { return false },
+			AddWorkflowExecutionOptionsUpdatedEventFunc: func(
+				_ *workflowpb.VersioningOverride, _ bool, _ string, _ []*commonpb.Callback, _ []*commonpb.Link, _ string, _ *commonpb.Priority,
+				_ *workflowpb.TimeSkippingConfig, _ []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
+			) (*historypb.HistoryEvent, error) {
+				optionsEventWritten = true
+				return nil, errors.New("ErrWorkflowFinished")
+			},
+		}
+		upd := update.New(tv.UpdateID())
+		mustAdmit(t, mockEventStore{Controller: effects}, upd)
+		effects.Apply(context.Background())
+		_ = send(t, upd, skipAlreadySent)
+
+		fired, err := upd.AttachCallbacks(testRequest, mockEventStore{Controller: effects})
+		require.NoError(t, err)
+		require.True(t, fired)
+
+		err = reject(t, store, upd)
+		require.NoError(t, err, "rejection must succeed even when CanAddEvent is false")
+		require.False(t, optionsEventWritten, "must not attempt to write options event when workflow is closed")
+		effects.Apply(context.Background())
+
+		status, err := upd.WaitLifecycleStage(immediateCtx, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, immediateTimeout)
+		require.NoError(t, err)
+		require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+		require.NotNil(t, status.Outcome.GetFailure(), "update should be completed with rejection failure")
 	})
 
 	t.Run("buffered callbacks lost when Update struct is recreated", func(t *testing.T) {

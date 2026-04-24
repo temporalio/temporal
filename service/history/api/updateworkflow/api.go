@@ -279,8 +279,11 @@ func (u *Updater) OnSuccess(
 	// COMPLETED with a failure outcome and no acceptance), use a Workflow link since rejected
 	// updates don't write any event to history.
 	requestID := u.req.GetRequest().GetRequest().GetRequestId()
-	if status.Outcome.GetFailure() != nil && status.Stage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
-		// Rejected update: no event in history, link to the workflow itself.
+	isRejection := status.Outcome.GetFailure() != nil &&
+		status.Stage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED &&
+		u.upd.AcceptedEventID() == common.EmptyEventID
+	if isRejection {
+		// Rejected update: never accepted, so no event in history — link to the workflow itself.
 		resp.Response.Link = &commonpb.Link{
 			Variant: &commonpb.Link_Workflow_{
 				Workflow: &commonpb.Link_Workflow{

@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -9,8 +10,10 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
@@ -142,6 +145,156 @@ func (s *LinksSuite) TestSignalWorkflowExecution_LinksAttachedToEvent() {
 		protorequire.ProtoSliceEqual(s.T(), links, event.Links)
 	}
 	s.True(foundEvent)
+}
+
+// TestUpdateWorkflowExecution_AcceptedUpdate_BacklinkInResponse verifies that
+// the UpdateWorkflowExecution response contains a WorkflowEvent backlink pointing
+// to the accepted event via RequestIdReference.
+func (s *LinksSuite) TestUpdateWorkflowExecution_AcceptedUpdate_BacklinkInResponse() {
+	env := testcore.NewEnv(s.T())
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// Workflow that has an empty update handler and blocks on a completion signal.
+	workflowFn := func(ctx workflow.Context) error {
+		if err := workflow.SetUpdateHandler(ctx, "update", func(ctx workflow.Context) error {
+			return nil
+		}); err != nil {
+			return err
+		}
+		signalCh := workflow.GetSignalChannel(ctx, "stop")
+		signalCh.Receive(ctx, nil)
+		return nil
+	}
+	env.SdkWorker().RegisterWorkflow(workflowFn)
+
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: env.WorkerTaskQueue(),
+	}, workflowFn)
+	s.NoError(err)
+
+	requestID := uuid.NewString()
+	resp, err := env.FrontendClient().UpdateWorkflowExecution(ctx, &workflowservice.UpdateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
+		WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
+		Request: &updatepb.Request{
+			Meta:      &updatepb.Meta{UpdateId: uuid.NewString()},
+			Input:     &updatepb.Input{Name: "update"},
+			RequestId: requestID,
+		},
+	})
+	s.NoError(err)
+
+	we := resp.GetLink().GetWorkflowEvent()
+	s.NotNil(we)
+	s.Equal(run.GetID(), we.GetWorkflowId())
+	ref := we.GetRequestIdRef()
+	s.NotNil(ref)
+	s.Equal(requestID, ref.GetRequestId())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, ref.GetEventType())
+}
+
+// TestUpdateWorkflowExecution_RejectedUpdate_BacklinkInResponse verifies that
+// the UpdateWorkflowExecution response contains a Workflow backlink (not a
+// WorkflowEvent link) when the update is rejected by the validator, since
+// rejections don't write a history event.
+func (s *LinksSuite) TestUpdateWorkflowExecution_RejectedUpdate_BacklinkInResponse() {
+	env := testcore.NewEnv(s.T())
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// Workflow with an update handler that rejects every request to test rejection path.
+	workflowFn := func(ctx workflow.Context) error {
+		if err := workflow.SetUpdateHandlerWithOptions(ctx, "update",
+			func(ctx workflow.Context) error { return nil },
+			workflow.UpdateHandlerOptions{
+				Validator: func(ctx workflow.Context) error {
+					return errors.New("rejected by test")
+				},
+			},
+		); err != nil {
+			return err
+		}
+		signalCh := workflow.GetSignalChannel(ctx, "stop")
+		signalCh.Receive(ctx, nil)
+		return nil
+	}
+	env.SdkWorker().RegisterWorkflow(workflowFn)
+
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: env.WorkerTaskQueue(),
+	}, workflowFn)
+	s.NoError(err)
+
+	resp, err := env.FrontendClient().UpdateWorkflowExecution(ctx, &workflowservice.UpdateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
+		WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
+		Request: &updatepb.Request{
+			Meta:  &updatepb.Meta{UpdateId: uuid.NewString()},
+			Input: &updatepb.Input{Name: "update"},
+		},
+	})
+	s.NoError(err)
+	s.NotNil(resp.GetOutcome().GetFailure(), "expected rejection failure in outcome")
+
+	wf := resp.GetLink().GetWorkflow()
+	s.Equal(run.GetID(), wf.GetWorkflowId())
+	s.Equal("Update rejected", wf.GetReason())
+}
+
+// TestUpdateWorkflowExecution_AcceptedThenFailedUpdate_BacklinkInResponse verifies that
+// an update which is accepted by the validator but whose handler returns a failure still
+// receives a WorkflowEvent backlink (not a Workflow backlink). Accepted-then-failed updates
+// write an UpdateAccepted event and must not be misclassified as rejections.
+func (s *LinksSuite) TestUpdateWorkflowExecution_AcceptedThenFailedUpdate_BacklinkInResponse() {
+	env := testcore.NewEnv(s.T())
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// Workflow with an update handler that accepts (no validator rejection) but returns a failure.
+	workflowFn := func(ctx workflow.Context) error {
+		if err := workflow.SetUpdateHandler(ctx, "update",
+			func(ctx workflow.Context) error {
+				return errors.New("handler failure")
+			},
+		); err != nil {
+			return err
+		}
+		signalCh := workflow.GetSignalChannel(ctx, "stop")
+		signalCh.Receive(ctx, nil)
+		return nil
+	}
+	env.SdkWorker().RegisterWorkflow(workflowFn)
+
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: env.WorkerTaskQueue(),
+	}, workflowFn)
+	s.NoError(err)
+
+	requestID := uuid.NewString()
+	resp, err := env.FrontendClient().UpdateWorkflowExecution(ctx, &workflowservice.UpdateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
+		WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
+		Request: &updatepb.Request{
+			Meta:      &updatepb.Meta{UpdateId: uuid.NewString()},
+			Input:     &updatepb.Input{Name: "update"},
+			RequestId: requestID,
+		},
+	})
+	s.NoError(err)
+	s.NotNil(resp.GetOutcome().GetFailure(), "expected handler failure in outcome")
+
+	// Must be a WorkflowEvent link (not a Workflow link), because the update was accepted.
+	we := resp.GetLink().GetWorkflowEvent()
+	s.NotNil(we, "accepted-then-failed update must produce a WorkflowEvent backlink, not a Workflow backlink")
+	s.Equal(run.GetID(), we.GetWorkflowId())
+	ref := we.GetRequestIdRef()
+	s.NotNil(ref)
+	s.Equal(requestID, ref.GetRequestId())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, ref.GetEventType())
 }
 
 func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToRelevantEvents() {

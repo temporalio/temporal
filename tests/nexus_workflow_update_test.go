@@ -668,6 +668,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackAfterResetRejec
 	var shouldReject atomic.Bool
 
 	// Single workflow function used for both runs.
+	resetError := errors.New("update rejected after reset")
 	targetWF := func(ctx workflow.Context, input string) (string, error) {
 		err := workflow.SetUpdateHandlerWithOptions(ctx, "update",
 			func(ctx workflow.Context, input string) (string, error) {
@@ -678,7 +679,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackAfterResetRejec
 			workflow.UpdateHandlerOptions{
 				Validator: func(ctx workflow.Context, input string) error {
 					if shouldReject.Load() {
-						return errors.New("update rejected after reset")
+						return resetError
 					}
 					return nil
 				},
@@ -780,6 +781,9 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackAfterResetRejec
 	s.ErrorAs(err, &wee)
 	var noe *temporal.NexusOperationError
 	s.ErrorAs(wee, &noe)
+	var appErr *temporal.ApplicationError
+	s.ErrorAs(noe, &appErr)
+	s.Equal(appErr.Message(), resetError.Error())
 
 	// Clean up: stop the new run of the target workflow.
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, cfg.childWfID, resetResp.RunId, "stop", nil))
@@ -1048,19 +1052,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnWorkflowTermi
 	targetTaskQueue := testcore.RandomizeStr("target-" + s.T().Name())
 
 	// Target workflow: update handler blocks on a signal so it stays in-flight.
-	targetWF := func(ctx workflow.Context, input string) (string, error) {
-		if err := workflow.SetUpdateHandler(ctx, "update", func(ctx workflow.Context, input string) (string, error) {
-			signalCh := workflow.GetSignalChannel(ctx, "complete-update")
-			signalCh.Receive(ctx, nil)
-			return "updated: " + input, nil
-		}); err != nil {
-			return "", err
-		}
-		signalCh := workflow.GetSignalChannel(ctx, "stop")
-		signalCh.Receive(ctx, nil)
-		return "done: " + input, nil
-	}
-
+	targetWF := newUpdateChildWorkflow(true)
 	targetWorker := worker.New(env.SdkClient(), targetTaskQueue, worker.Options{})
 	targetWorker.RegisterWorkflow(targetWF)
 	s.NoError(targetWorker.Start())
@@ -1443,4 +1435,167 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateRequestIDInAcceptedEven
 
 	// Clean up.
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "stop", nil))
+}
+
+// TestWorkflowUpdateCallbackOnWorkflowCompletion verifies that when a workflow completes
+// normally while an accepted update with completion callbacks is still in-flight (handler
+// blocking), processCloseCallbacksChasm fires the update-level callbacks.
+func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnWorkflowCompletion() {
+	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
+	ctx := testcore.NewContext()
+	cfg := newUpdateNexusTestConfig(s.T())
+	cfg.updateID = "wf-completion-update-id"
+
+	h := makeUpdateWithCallbackHandler(env, s.T(), cfg, nil)
+	env.setupExternalNexusEndpoint(ctx, s.T(), cfg.endpointName, h)
+
+	targetTaskQueue := testcore.RandomizeStr("target-" + s.T().Name())
+
+	// Target workflow: update handler blocks on signal.
+	targetWF := newUpdateChildWorkflow(true)
+
+	targetWorker := worker.New(env.SdkClient(), targetTaskQueue, worker.Options{})
+	targetWorker.RegisterWorkflow(targetWF)
+	s.NoError(targetWorker.Start())
+	s.T().Cleanup(targetWorker.Stop)
+
+	_, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        cfg.childWfID,
+		TaskQueue: targetTaskQueue,
+	}, targetWF, "initial input")
+	s.NoError(err)
+
+	callerWF := func(ctx workflow.Context) (string, error) {
+		nexusClient := workflow.NewNexusClient(cfg.endpointName, "test")
+		fut := nexusClient.ExecuteOperation(ctx, "operation", cfg.childWfID, workflow.NexusOperationOptions{})
+		var result string
+		err := fut.Get(ctx, &result)
+		return result, err
+	}
+
+	callerWorker := worker.New(env.SdkClient(), cfg.taskQueue, worker.Options{})
+	callerWorker.RegisterWorkflow(callerWF)
+	s.NoError(callerWorker.Start())
+	s.T().Cleanup(callerWorker.Stop)
+
+	callerRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue:                cfg.taskQueue,
+		WorkflowExecutionTimeout: 30 * time.Second,
+	}, callerWF)
+	s.NoError(err)
+
+	// Wait for the update to be accepted.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		hist := env.SdkClient().GetWorkflowHistory(ctx, cfg.childWfID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		for hist.HasNext() {
+			event, err := hist.Next()
+			require.NoError(t, err)
+			if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED {
+				return
+			}
+		}
+		require.Fail(t, "update not yet accepted")
+	}, 10*time.Second, 500*time.Millisecond)
+
+	// Complete the workflow via the "stop" signal while the update is still in-flight,
+	// blocked on "complete-update" signal.
+	// Expect that update-level callbacks should be fired.
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, cfg.childWfID, "", "stop", nil))
+
+	// Callback fires → nexus operation fails (accepted update, workflow completed) →
+	// caller workflow fails with NexusOperationError.
+	var result string
+	err = callerRun.Get(ctx, &result)
+	s.Error(err, "expected caller to fail because the workflow completed with an in-flight update")
+
+	// Verify that the error is due to the workflow completing while the update is in-flight.
+	var wee *temporal.WorkflowExecutionError
+	s.ErrorAs(err, &wee)
+	var noe *temporal.NexusOperationError
+	s.ErrorAs(err, &noe)
+}
+
+// TestWorkflowUpdateCallbackOnWorkflowCancellation verifies that when a workflow is
+// cancelled while an accepted update with completion callbacks is in-flight, the update
+// callbacks are fired via ProcessCloseCallbacks.
+func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnWorkflowCancellation() {
+	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
+	ctx := testcore.NewContext()
+	cfg := newUpdateNexusTestConfig(s.T())
+	cfg.updateID = "wf-cancel-update-id"
+
+	h := makeUpdateWithCallbackHandler(env, s.T(), cfg, nil)
+	env.setupExternalNexusEndpoint(ctx, s.T(), cfg.endpointName, h)
+
+	targetTaskQueue := testcore.RandomizeStr("target-" + s.T().Name())
+
+	// Target workflow: update handler blocks; the workflow handles cancellation gracefully.
+	targetWF := func(ctx workflow.Context, input string) (string, error) {
+		if err := workflow.SetUpdateHandler(ctx, "update", func(ctx workflow.Context, input string) (string, error) {
+			signalCh := workflow.GetSignalChannel(ctx, "complete-update")
+			signalCh.Receive(ctx, nil)
+			return "updated: " + input, nil
+		}); err != nil {
+			return "", err
+		}
+		// Sleep for a long time so workflow doesn't finish before cancellation is received.
+		_ = workflow.Sleep(ctx, 24*time.Hour)
+		return "done", ctx.Err()
+	}
+
+	targetWorker := worker.New(env.SdkClient(), targetTaskQueue, worker.Options{})
+	targetWorker.RegisterWorkflow(targetWF)
+	s.NoError(targetWorker.Start())
+	s.T().Cleanup(targetWorker.Stop)
+
+	targetRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        cfg.childWfID,
+		TaskQueue: targetTaskQueue,
+	}, targetWF, "initial input")
+	s.NoError(err)
+
+	callerWF := func(ctx workflow.Context) (string, error) {
+		nexusClient := workflow.NewNexusClient(cfg.endpointName, "test")
+		fut := nexusClient.ExecuteOperation(ctx, "operation", cfg.childWfID, workflow.NexusOperationOptions{})
+		var result string
+		err := fut.Get(ctx, &result)
+		return result, err
+	}
+
+	callerWorker := worker.New(env.SdkClient(), cfg.taskQueue, worker.Options{})
+	callerWorker.RegisterWorkflow(callerWF)
+	s.NoError(callerWorker.Start())
+	s.T().Cleanup(callerWorker.Stop)
+
+	callerRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue:                cfg.taskQueue,
+		WorkflowExecutionTimeout: 30 * time.Second,
+	}, callerWF)
+	s.NoError(err)
+
+	// Wait for the update to be accepted.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		hist := env.SdkClient().GetWorkflowHistory(ctx, cfg.childWfID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		for hist.HasNext() {
+			event, err := hist.Next()
+			require.NoError(t, err)
+			if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED {
+				return
+			}
+		}
+		require.Fail(t, "update not yet accepted")
+	}, 10*time.Second, 500*time.Millisecond)
+
+	// Cancel the workflow — processCloseCallbacksChasm should fire the update callbacks.
+	s.NoError(env.SdkClient().CancelWorkflow(ctx, cfg.childWfID, targetRun.GetRunID()))
+
+	// Callback fires → nexus operation fails → caller workflow fails.
+	var result string
+	err = callerRun.Get(ctx, &result)
+	s.Error(err, "expected caller to fail because the target workflow was cancelled")
+
+	var wee *temporal.WorkflowExecutionError
+	s.ErrorAs(err, &wee)
+	var noe *temporal.NexusOperationError
+	s.ErrorAs(wee, &noe)
 }

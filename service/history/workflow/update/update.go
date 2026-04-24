@@ -21,8 +21,8 @@ import (
 )
 
 // pendingCallback holds a AttachCallbacks request that arrived while the Update
-// was in stateSent. These are flushed to the event store on acceptance
-// in onAcceptanceMsg. In-memory only; lost on registry clear/lock release.
+// was in stateAdmitted or stateSent. These are flushed to the event store on
+// acceptance in onAcceptanceMsg. In-memory only; lost on registry clear/lock release.
 type pendingCallback struct {
 	requestID           string
 	completionCallbacks []*commonpb.Callback
@@ -53,8 +53,9 @@ type (
 		instrumentation *instrumentation
 		admittedTime    time.Time
 		// pendingCallbacks buffers AttachCallbacks requests that arrive while
-		// the Update is in stateSent. Flushed to the event store in onAcceptanceMsg.
-		// Cleared on rejection, abort, or rollback. In-memory only; lost on lock release.
+		// the Update is in stateAdmitted or stateSent. Flushed to the event store
+		// in onAcceptanceMsg. Cleared on rejection, abort, or rollback. In-memory
+		// only; lost on lock release.
 		pendingCallbacks []pendingCallback
 
 		// These fields might be accessed while not holding the workflow lock.
@@ -370,13 +371,13 @@ func (u *Update) Admit(
 	return nil
 }
 
-// AttachCallbacks attaches completion callbacks from a second caller to an update
-// that has already progressed past admission. If the update is accepted, it writes
-// a WorkflowExecutionOptionsUpdatedEvent with the caller's callbacks and request ID.
-// If the update is in stateSent (sent to worker, not yet accepted), callbacks are
-// buffered in memory and flushed when the update is accepted. If the update is
-// already completed, returns true without attaching callbacks since the caller
-// receives the result synchronously.
+// AttachCallbacks attaches completion callbacks to an update. Behavior depends on state:
+//   - stateAdmitted: callbacks are buffered in memory; returns (false, nil) so the
+//     caller proceeds to create a speculative workflow task.
+//   - stateSent: callbacks are buffered in memory; returns (true, nil) since a workflow
+//     task already exists. Both admitted and sent buffers are flushed in onAcceptanceMsg.
+//   - stateAccepted: writes a WorkflowExecutionOptionsUpdatedEvent immediately.
+//   - stateCompleted: returns (true, nil) — result is available synchronously.
 //
 // Returns (true, nil) if the caller should proceed (callbacks attached or update already completed),
 // (false, nil) if the update is in an early state where attachment does not apply,
@@ -402,17 +403,22 @@ func (u *Update) AttachCallbacks(
 		return false, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "workflow update is not yet accepted, please retry")
 	}
 
+	// stateAdmitted: the update has been admitted but not yet dispatched to a worker.
 	// stateSent: the update has been sent to the worker but not yet accepted.
 	// Buffer the callbacks in memory; they will be flushed to the event store
 	// when the update is accepted in onAcceptanceMsg.
-	// Returning (true, nil) is safe because:
+	//
+	// For stateAdmitted, returning (false, nil) allows the caller to create
+	// a speculative WFT.
+	//
+	// For stateSent, returning (true, nil) is safe because:
 	// - The caller already holds the workflow lock
 	// - A workflow task already exists (the update was sent via one)
 	// - No new workflow task is needed — just buffer until acceptance
 	// - The event will be written atomically with acceptance
 	// If the Update struct is lost (registry cleared), the abort mechanism fires
 	// registryClearedErr on the caller's future, prompting an immediate retry.
-	if u.state == stateSent {
+	if u.state == stateAdmitted || u.state == stateSent {
 		// Deduplicate by requestID against existing buffer entries.
 		if req.GetRequestId() != "" {
 			for _, pc := range u.pendingCallbacks {
@@ -425,7 +431,9 @@ func (u *Update) AttachCallbacks(
 			requestID:           req.GetRequestId(),
 			completionCallbacks: req.GetCompletionCallbacks(),
 		})
-		return true, nil
+
+		isCallbackAttached := u.state == stateSent
+		return isCallbackAttached, nil
 	}
 
 	// If the update is already completed, the result is returned synchronously
@@ -739,14 +747,29 @@ func (u *Update) onRejectionMsg(
 		return err
 	}
 	u.instrumentation.countRejectionMsg()
+	// Flush any callbacks buffered during stateAdmitted or stateSent into CHASM
+	// before calling RejectWorkflowExecutionUpdate. RejectWorkflowExecutionUpdate
+	// fires CHASM callbacks with the rejection failure, so the flush must happen
+	// first to ensure those buffered callbacks are registered before being fired.
+	//
+	// If the workflow is closed (CanAddEvent is false), writing history events is
+	// impossible. Clear the buffer without flushing so the rejection can still
+	// complete the update state machine. The API caller is notified of the
+	// rejection via WaitLifecycleStage regardless; only async CHASM callbacks
+	// are dropped, which is acceptable when the host workflow is already gone.
+	if eventStore.CanAddEvent() {
+		if err := u.flushPendingCallbacks(eventStore); err != nil {
+			return err
+		}
+	} else {
+		u.pendingCallbacks = nil
+	}
 	// Notify the event store so it can fire any completion callbacks that were
-	// registered at admission time (e.g., after reset/reapply) and clean up
-	// the update's mutable-state entry.
+	// registered (including those just flushed above) and clean up the update's
+	// MutableState entry.
 	if err := eventStore.RejectWorkflowExecutionUpdate(u.id, rej.Failure); err != nil {
 		return err
 	}
-	// Clear any buffered AttachCallbacks callbacks — they cannot be delivered for a rejected update.
-	u.pendingCallbacks = nil
 	return u.reject(rej.Failure, eventStore)
 }
 

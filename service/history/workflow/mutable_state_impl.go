@@ -35,7 +35,6 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/callback"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -7158,7 +7157,7 @@ func (ms *MutableStateImpl) processCloseCallbacksChasm() error {
 		return err
 	}
 
-	return callback.ScheduleStandbyCallbacks(ctx, wf.Callbacks)
+	return wf.ProcessCloseCallbacks(ctx)
 }
 
 func (ms *MutableStateImpl) AddTasks(
