@@ -107,6 +107,10 @@ func (s *standaloneActivityTestSuite) SetupSuite() {
 		activity.Enabled,
 		true,
 	)
+	s.OverrideDynamicConfig(
+		activity.StartDelayEnabled,
+		true,
+	)
 }
 
 func (s *standaloneActivityTestSuite) SetupTest() {
