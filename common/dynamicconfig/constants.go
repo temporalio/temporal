@@ -1450,6 +1450,11 @@ second per poller by one physical queue manager`,
 		60*time.Second,
 		`Timeout for forwarded backlog task (requires new matcher)`,
 	)
+	MatchingForwardPollRetryMaxInterval = NewTaskQueueDurationSetting(
+		"matching.forwardPollRetryMaxInterval",
+		10*time.Second,
+		`Max backoff interval when retrying a rate-limited ForwardPoll from a child partition`,
+	)
 	MatchingFairnessCounter = NewTaskQueueTypedSetting(
 		"matching.fairnessCounter",
 		counter.DefaultCounterParams,
