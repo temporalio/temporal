@@ -380,6 +380,7 @@ func (tm *priTaskMatcher) forwardPolls(
 //   - ratelimit is exceeded (does not apply to query task)
 //   - context deadline is exceeded
 //   - task is matched and consumer returns error in response channel
+
 // offerResult contains the outcome of an Offer attempt.
 type offerResult struct {
 	matched bool
