@@ -696,8 +696,7 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	}
 
 	if c.priMatcher != nil {
-		offered := c.priMatcher.Offer(ctx, task)
-		return syncMatchResult{matched: offered.matched, err: offered.err}
+		return syncMatchResult(c.priMatcher.Offer(ctx, task))
 	}
 
 	childCtx, cancel := contextutil.WithDeadlineBuffer(ctx, c.config.SyncMatchWaitDuration(), time.Second)
