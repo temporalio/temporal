@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.nexusoperation.proto.v1;
+
+import "temporal/api/workflowservice/v1/request_response.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpb";
+
+message StartNexusOperationRequest {
+  string namespace_id = 1;
+  string endpoint_id = 2;
+
+  temporal.api.workflowservice.v1.StartNexusOperationExecutionRequest frontend_request = 3;
+}
+
+message StartNexusOperationResponse {
+  temporal.api.workflowservice.v1.StartNexusOperationExecutionResponse frontend_response = 1;
+}
+
+message DescribeNexusOperationRequest {
+  string namespace_id = 1;
+
+  temporal.api.workflowservice.v1.DescribeNexusOperationExecutionRequest frontend_request = 2;
+}
+
+message DescribeNexusOperationResponse {
+  temporal.api.workflowservice.v1.DescribeNexusOperationExecutionResponse frontend_response = 1;
+}
+
+message RequestCancelNexusOperationRequest {
+  string namespace_id = 1;
+
+  temporal.api.workflowservice.v1.RequestCancelNexusOperationExecutionRequest frontend_request = 2;
+}
+
+message RequestCancelNexusOperationResponse {}
+
+message TerminateNexusOperationRequest {
+  string namespace_id = 1;
+
+  temporal.api.workflowservice.v1.TerminateNexusOperationExecutionRequest frontend_request = 2;
+}
+
+message TerminateNexusOperationResponse {}
+
+message DeleteNexusOperationRequest {
+  string namespace_id = 1;
+
+  temporal.api.workflowservice.v1.DeleteNexusOperationExecutionRequest frontend_request = 2;
+}
+
+message DeleteNexusOperationResponse {}
+
+message PollNexusOperationRequest {
+  string namespace_id = 1;
+
+  temporal.api.workflowservice.v1.PollNexusOperationExecutionRequest frontend_request = 2;
+}
+
+message PollNexusOperationResponse {
+  temporal.api.workflowservice.v1.PollNexusOperationExecutionResponse frontend_response = 1;
+}
