@@ -7519,4 +7519,3 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSk
 		})
 	}
 }
-
