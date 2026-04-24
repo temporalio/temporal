@@ -294,7 +294,7 @@ func (tm *priTaskMatcher) forwardPolls(
 	target *tqid.NormalPartition,
 ) {
 	policy := backoff.NewExponentialRetryPolicy(time.Second).
-		WithMaximumInterval(tm.config.BacklogTaskForwardTimeout()).
+		WithMaximumInterval(tm.config.ForwardPollRetryMaxInterval()).
 		WithExpirationInterval(backoff.NoInterval)
 	retrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
 	forwarderTask := newPollForwarderTask(effectivePriority, ft)
