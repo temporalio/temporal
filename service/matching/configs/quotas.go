@@ -16,7 +16,7 @@ var (
 		"/temporal.server.api.matchingservice.v1.MatchingService/AddActivityTask":                        1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/AddWorkflowTask":                        1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingPoll":                  1,
-		"/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingWorkerPolls":           1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingWorkerPolls":           2,
 		"/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueue":                      1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/ListTaskQueuePartitions":                1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/PollActivityTaskQueue":                  1,
@@ -55,7 +55,7 @@ var (
 		"/temporal.server.api.matchingservice.v1.MatchingService/CheckTaskQueueVersionMembership":        1,
 	}
 
-	APIPrioritiesOrdered = []int{0, 1}
+	APIPrioritiesOrdered = []int{0, 1, 2}
 )
 
 func NewPriorityRateLimiter(
