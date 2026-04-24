@@ -5873,16 +5873,20 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		}
 
 		workerKey := "test-worker"
+		partitionProto := &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     "test-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 1},
+		}
 
 		_, err := engine.CancelOutstandingWorkerPollsPartition(context.Background(),
 			&matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
-				NamespaceId: "test-namespace-id",
-				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-					TaskQueue:     "test-queue",
-					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-					PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 1},
-				},
-				WorkerInstanceKey: workerKey,
+				NamespaceId:        "test-namespace-id",
+				TaskQueuePartition: partitionProto,
+				Partitions:         []*taskqueuespb.TaskQueuePartition{partitionProto},
+				Workers: []*matchingservice.CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry{{
+					WorkerInstanceKey: workerKey,
+				}},
 			})
 
 		require.NoError(t, err)
@@ -5984,9 +5988,13 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		mockMatchingClient.EXPECT().
 			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
-				partitionID := req.GetTaskQueuePartition().GetNormalPartitionId()
+				require.Len(t, req.GetPartitions(), 1, "each child RPC should carry exactly 1 partition")
+				partitionID := req.GetPartitions()[0].GetNormalPartitionId()
+				require.Equal(t, partitionID, req.GetTaskQueuePartition().GetNormalPartitionId(), "routing partition should match payload partition")
 				count, ok := cancelledCountByPartition[partitionID]
 				require.True(t, ok, "unexpected partition ID: %d", partitionID)
+				require.Len(t, req.GetWorkers(), 1)
+				require.Equal(t, "worker-key", req.GetWorkers()[0].GetWorkerInstanceKey())
 				return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: count}, nil
 			}).
 			Times(2)
@@ -6023,7 +6031,8 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		mockMatchingClient.EXPECT().
 			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
-				partitionID := req.GetTaskQueuePartition().GetNormalPartitionId()
+				require.Len(t, req.GetPartitions(), 1)
+				partitionID := req.GetPartitions()[0].GetNormalPartitionId()
 				count, ok := cancelledCountByPartition[partitionID]
 				require.True(t, ok, "unexpected partition ID: %d", partitionID)
 				require.Equal(t, int32(6), req.GetPartitionCount())
@@ -6057,7 +6066,8 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		mockMatchingClient.EXPECT().
 			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
-				partitionID := req.GetTaskQueuePartition().GetNormalPartitionId()
+				require.Len(t, req.GetPartitions(), 1)
+				partitionID := req.GetPartitions()[0].GetNormalPartitionId()
 				require.True(t, expectedPartitionIDs[partitionID], "unexpected partition ID: %d", partitionID)
 				if partitionID == 1 {
 					return nil, errors.New("partition unavailable")
@@ -6093,10 +6103,13 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		mockMatchingClient.EXPECT().
 			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
-				partitionID := req.GetTaskQueuePartition().GetNormalPartitionId()
+				require.Len(t, req.GetPartitions(), 1)
+				partitionID := req.GetPartitions()[0].GetNormalPartitionId()
 				require.True(t, expectedPartitionIDs[partitionID], "unexpected partition ID: %d", partitionID)
 				require.Equal(t, int32(7), req.GetPartitionCount())
 				require.Equal(t, int32(2), req.GetDegree())
+				require.Len(t, req.GetWorkers(), 1)
+				require.Equal(t, "worker-key", req.GetWorkers()[0].GetWorkerInstanceKey())
 				return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: 1}, nil
 			}).
 			Times(2)
@@ -6109,21 +6122,25 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		}
 		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
 
+		partitionProto := &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     "test-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 1},
+		}
 		resp, err := engine.CancelOutstandingWorkerPollsPartition(context.Background(),
 			&matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
-				NamespaceId: "test-namespace-id",
-				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-					TaskQueue:     "test-queue",
-					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-					PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 1},
-				},
-				WorkerInstanceKey: "worker-key",
-				PartitionCount:    7,
-				Degree:            2,
+				NamespaceId:        "test-namespace-id",
+				TaskQueuePartition: partitionProto,
+				Partitions:         []*taskqueuespb.TaskQueuePartition{partitionProto},
+				Workers: []*matchingservice.CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry{{
+					WorkerInstanceKey: "worker-key",
+				}},
+				PartitionCount: 7,
+				Degree:         2,
 			})
 
 		require.NoError(t, err)
 		// Node 1 cancels 1 local + children 3 and 4 return 1 each = 3 total
-		require.Equal(t, int32(3), resp.CancelledCount)
+		require.Equal(t, int32(3), resp.GetCancelledCount())
 	})
 }

@@ -26,7 +26,7 @@ var File_temporal_server_api_matchingservice_v1_service_proto protoreflect.FileD
 
 const file_temporal_server_api_matchingservice_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"4temporal/server/api/matchingservice/v1/service.proto\x12&temporal.server.api.matchingservice.v1\x1a=temporal/server/api/matchingservice/v1/request_response.proto\x1a0temporal/server/api/common/v1/api_category.proto2\xfc9\n" +
+	"4temporal/server/api/matchingservice/v1/service.proto\x12&temporal.server.api.matchingservice.v1\x1a=temporal/server/api/matchingservice/v1/request_response.proto\x1a0temporal/server/api/common/v1/api_category.proto2\x82:\n" +
 	"\x0fMatchingService\x12\xac\x01\n" +
 	"\x15PollWorkflowTaskQueue\x12D.temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest\x1aE.temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse\"\x06\x8a\xb5\x18\x02\b\x02\x12\xac\x01\n" +
 	"\x15PollActivityTaskQueue\x12D.temporal.server.api.matchingservice.v1.PollActivityTaskQueueRequest\x1aE.temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse\"\x06\x8a\xb5\x18\x02\b\x02\x12\x9a\x01\n" +
@@ -39,8 +39,8 @@ const file_temporal_server_api_matchingservice_v1_service_proto_rawDesc = "" +
 	"\x19RespondNexusTaskCompleted\x12H.temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedRequest\x1aI.temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xaf\x01\n" +
 	"\x16RespondNexusTaskFailed\x12E.temporal.server.api.matchingservice.v1.RespondNexusTaskFailedRequest\x1aF.temporal.server.api.matchingservice.v1.RespondNexusTaskFailedResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xac\x01\n" +
 	"\x15CancelOutstandingPoll\x12D.temporal.server.api.matchingservice.v1.CancelOutstandingPollRequest\x1aE.temporal.server.api.matchingservice.v1.CancelOutstandingPollResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xc1\x01\n" +
-	"\x1cCancelOutstandingWorkerPolls\x12K.temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsRequest\x1aL.temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xd6\x01\n" +
-	"%CancelOutstandingWorkerPollsPartition\x12T.temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsPartitionRequest\x1aU.temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsPartitionResponse\"\x00\x12\xa0\x01\n" +
+	"\x1cCancelOutstandingWorkerPolls\x12K.temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsRequest\x1aL.temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xdc\x01\n" +
+	"%CancelOutstandingWorkerPollsPartition\x12T.temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsPartitionRequest\x1aU.temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsPartitionResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xa0\x01\n" +
 	"\x11DescribeTaskQueue\x12@.temporal.server.api.matchingservice.v1.DescribeTaskQueueRequest\x1aA.temporal.server.api.matchingservice.v1.DescribeTaskQueueResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xbb\x01\n" +
 	"\x1aDescribeTaskQueuePartition\x12I.temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionRequest\x1aJ.temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xbe\x01\n" +
 	"\x1bDescribeVersionedTaskQueues\x12J.temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest\x1aK.temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xb2\x01\n" +

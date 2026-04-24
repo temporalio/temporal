@@ -1270,89 +1270,105 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 		tag.NewInt32("degree", int32(degree)),
 	)
 
+	rootPartitionProto := &taskqueuespb.TaskQueuePartition{
+		TaskQueue:     rootPartition.TaskQueue().Name(),
+		TaskQueueType: request.GetTaskQueueType(),
+		PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+	}
+	// TODO: batch multiple concurrent ShutdownWorker calls for the same task queue into a single
+	// request with multiple workers.
 	resp, err := e.CancelOutstandingWorkerPollsPartition(ctx, &matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
-		NamespaceId: request.GetNamespaceId(),
-		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-			TaskQueue:     rootPartition.TaskQueue().Name(),
-			TaskQueueType: request.GetTaskQueueType(),
-			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
-		},
-		WorkerInstanceKey: request.GetWorkerInstanceKey(),
-		WorkerIdentity:    request.GetWorkerIdentity(),
-		PartitionCount:    int32(numPartitions),
-		Degree:            int32(degree),
+		NamespaceId:        request.GetNamespaceId(),
+		TaskQueuePartition: rootPartitionProto,
+		Partitions:         []*taskqueuespb.TaskQueuePartition{rootPartitionProto},
+		Workers: []*matchingservice.CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry{{
+			WorkerInstanceKey: request.GetWorkerInstanceKey(),
+			WorkerIdentity:    request.GetWorkerIdentity(),
+		}},
+		PartitionCount: int32(numPartitions),
+		Degree:         int32(degree),
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: resp.CancelledCount}, nil
+	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: resp.GetCancelledCount()}, nil
 }
 
-// CancelOutstandingWorkerPollsPartition cancels outstanding polls for a worker on this partition
+// CancelOutstandingWorkerPollsPartition cancels outstanding polls for workers on partitions
 // and propagates to child partitions in the partition tree.
 func (e *matchingEngineImpl) CancelOutstandingWorkerPollsPartition(
 	ctx context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsPartitionRequest,
 ) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
-	partition := tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId())
-	partitionID := int(request.GetTaskQueuePartition().GetNormalPartitionId())
-	numPartitions := int(request.GetPartitionCount())
-	degree := int(request.GetDegree())
-
-	e.logger.Debug("Cancelling worker polls on partition",
-		tag.WorkflowTaskQueueName(partition.RpcName()),
-		tag.NewStringTag("worker-instance-key", request.GetWorkerInstanceKey()),
-		tag.NewInt32("partition-id", int32(partitionID)),
-		tag.NewInt32("partition-count", int32(numPartitions)),
-		tag.NewInt32("degree", int32(degree)),
+	e.logger.Debug("Cancelling worker polls",
+		tag.NewInt("worker-count", len(request.GetWorkers())),
+		tag.NewInt("partition-count", len(request.GetPartitions())),
 	)
 
-	if request.WorkerInstanceKey != "" {
-		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
+	// Cancel polls for each worker.
+	var cancelledCount int32
+	for _, worker := range request.GetWorkers() {
+		if worker.GetWorkerInstanceKey() != "" {
+			e.shutdownWorkers.Put(worker.GetWorkerInstanceKey(), struct{}{})
+		}
+		cancelledCount += e.workerInstancePollers.CancelAll(worker.GetWorkerInstanceKey())
 	}
-	cancelledCount := e.workerInstancePollers.CancelAll(request.GetWorkerInstanceKey())
-	e.removePollerFromHistory(ctx, partition, request.GetWorkerIdentity())
+
+	// Remove each worker from poller history for each partition.
+	for _, partitionProto := range request.GetPartitions() {
+		partition := tqid.PartitionFromPartitionProto(partitionProto, request.GetNamespaceId())
+		for _, worker := range request.GetWorkers() {
+			e.removePollerFromHistory(ctx, partition, worker.GetWorkerIdentity())
+		}
+	}
 
 	// Fan out to child partitions in the tree. Children of partition P are [P*D+1, ..., P*D+D].
+	numPartitions := int(request.GetPartitionCount())
+	degree := int(request.GetDegree())
 	if degree <= 0 || numPartitions <= 0 {
 		return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: cancelledCount}, nil
 	}
 
 	var totalChildCancelled atomic.Int32
 	var wg sync.WaitGroup
-	firstChild := partitionID*degree + 1
-	for childID := firstChild; childID < firstChild+degree && childID < numPartitions; childID++ {
-		wg.Go(func() {
-			childReq := &matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
-				NamespaceId: request.GetNamespaceId(),
-				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-					TaskQueue:     request.GetTaskQueuePartition().GetTaskQueue(),
-					TaskQueueType: request.GetTaskQueuePartition().GetTaskQueueType(),
-					PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(childID)},
-				},
-				WorkerInstanceKey: request.GetWorkerInstanceKey(),
-				WorkerIdentity:    request.GetWorkerIdentity(),
-				PartitionCount:    request.GetPartitionCount(),
-				Degree:            request.GetDegree(),
+	for _, partitionProto := range request.GetPartitions() {
+		partitionID := int(partitionProto.GetNormalPartitionId())
+		firstChild := partitionID*degree + 1
+		for childID := firstChild; childID < firstChild+degree && childID < numPartitions; childID++ {
+			childPartitionProto := &taskqueuespb.TaskQueuePartition{
+				TaskQueue:     partitionProto.GetTaskQueue(),
+				TaskQueueType: partitionProto.GetTaskQueueType(),
+				PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(childID)},
 			}
-			resp, err := e.matchingRawClient.CancelOutstandingWorkerPollsPartition(ctx, childReq)
-			if err != nil {
-				childPartition := partition.TaskQueue().NormalPartition(childID)
-				e.logger.Warn("Failed to cancel outstanding worker polls for child partition",
-					tag.WorkflowTaskQueueName(childPartition.RpcName()),
-					tag.NewStringTag("worker-instance-key", request.GetWorkerInstanceKey()),
-					tag.NewInt32("partition-count", int32(numPartitions)),
-					tag.NewInt32("degree", int32(degree)),
-					tag.Error(err))
-				return
-			}
-			totalChildCancelled.Add(resp.CancelledCount)
-		})
+			wg.Go(func() {
+				// TODO: group children by destination host (via Route()) to send one RPC per host
+				// with multiple partitions, instead of one RPC per child.
+				childReq := &matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+					NamespaceId:        request.GetNamespaceId(),
+					TaskQueuePartition: childPartitionProto,
+					Partitions:         []*taskqueuespb.TaskQueuePartition{childPartitionProto},
+					Workers:            request.GetWorkers(),
+					PartitionCount:     request.GetPartitionCount(),
+					Degree:             request.GetDegree(),
+				}
+				resp, err := e.matchingRawClient.CancelOutstandingWorkerPollsPartition(ctx, childReq)
+				if err != nil {
+					e.logger.Warn("Failed to cancel outstanding worker polls for child partition",
+						tag.NewInt32("partition-id", int32(childID)),
+						tag.NewInt32("partition-count", int32(numPartitions)),
+						tag.NewInt32("degree", int32(degree)),
+						tag.Error(err))
+					return
+				}
+				totalChildCancelled.Add(resp.GetCancelledCount())
+			})
+		}
 	}
 	wg.Wait()
-	cancelledCount += totalChildCancelled.Load()
 
-	return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: cancelledCount}, nil
+	return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{
+		CancelledCount: cancelledCount + totalChildCancelled.Load(),
+	}, nil
 }
 
 // removePollerFromHistory eagerly removes the worker from pollerHistory so
