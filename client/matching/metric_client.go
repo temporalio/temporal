@@ -232,7 +232,8 @@ func (c *metricClient) finishMetricsRecording(
 			*serviceerror.QueryFailed,
 			*serviceerror.NamespaceNotFound,
 			*serviceerror.NewerBuildExists,
-			*serviceerror.WorkflowExecutionAlreadyStarted:
+			*serviceerror.WorkflowExecutionAlreadyStarted,
+			*serviceerror.ResourceExhausted:
 			// noop - not interest and too many logs
 		default:
 			c.throttledLogger.Info("matching client encountered error", tag.Error(err), tag.ServiceErrorType(err))
