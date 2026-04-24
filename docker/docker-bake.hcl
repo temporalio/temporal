@@ -10,7 +10,11 @@ variable "IMAGE_REPO" {
   default = "temporaliotest"
 }
 
-variable "IMAGE_SHA_TAG" {
+variable "IMAGE_SHA_SHORT_TAG" {
+  default = ""
+}
+
+variable "IMAGE_SHA_FULL_TAG" {
   default = ""
 }
 
@@ -30,13 +34,11 @@ variable "TAG_LATEST" {
   default = false
 }
 
-# IMPORTANT: When updating ALPINE_TAG, also update the default value in:
-# - docker/targets/admin-tools.Dockerfile
-# - docker/targets/server.Dockerfile
+# ALPINE_TAG is the single source of truth for the Alpine base image version.
 # NOTE: We use just the tag without a digest pin because digest-pinned manifest lists
 # cause platform resolution issues in multi-arch buildx builds (InvalidBaseImagePlatform warnings).
 variable "ALPINE_TAG" {
-  default = "3.23"
+  default = "3.23.4"
 }
 
 target "admin-tools" {
@@ -46,7 +48,8 @@ target "admin-tools" {
     ALPINE_TAG = "${ALPINE_TAG}"
   }
   tags = compact([
-    "${IMAGE_REPO}/admin-tools:${IMAGE_SHA_TAG}",
+    "${IMAGE_REPO}/admin-tools:${IMAGE_SHA_SHORT_TAG}",
+    "${IMAGE_REPO}/admin-tools:${IMAGE_SHA_FULL_TAG}",
     "${IMAGE_REPO}/admin-tools:${SAFE_IMAGE_BRANCH_TAG}",
     TAG_LATEST ? "${IMAGE_REPO}/admin-tools:latest" : "",
   ])
@@ -71,7 +74,8 @@ target "server" {
     ALPINE_TAG = "${ALPINE_TAG}"
   }
   tags = compact([
-    "${IMAGE_REPO}/server:${IMAGE_SHA_TAG}",
+    "${IMAGE_REPO}/server:${IMAGE_SHA_SHORT_TAG}",
+    "${IMAGE_REPO}/server:${IMAGE_SHA_FULL_TAG}",
     "${IMAGE_REPO}/server:${SAFE_IMAGE_BRANCH_TAG}",
     TAG_LATEST ? "${IMAGE_REPO}/server:latest" : "",
   ])

@@ -14,15 +14,18 @@ type (
 		componentType string
 		goType        reflect.Type
 
-		// Those two fields are initialized when the component is registered to a library.
+		// Following three fields are initialized when the component is registered to a library.
 		library     namer
 		componentID uint32
+		fqn         string
 
 		ephemeral     bool
 		singleCluster bool
 		detached      bool
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
+
+		contextValues map[any]any
 	}
 
 	RegistrableComponentOption func(*RegistrableComponent)
@@ -153,6 +156,29 @@ func WithSearchAttributes(
 	}
 }
 
+// WithContextValues allows specifying key-value pairs that will be available in the Context
+// via the Value() method whenever the chasm framework starts, updates, reads, polls, executes or
+// validates tasks on a component.
+//
+// This is useful for propagating values needed for those processing logic but are not avaiable via the
+// component's struct definition, such as configurations.
+//
+// Keys need to be globally unique across components. Conflicting keys across will cause component registration to fail.
+//
+// Manually added key-value pairs via ContextWithValue() will take precedence over registered context values.
+func WithContextValues(
+	keyVals map[any]any,
+) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		if rc.contextValues == nil {
+			rc.contextValues = make(map[any]any, len(keyVals))
+		}
+		for k, v := range keyVals {
+			rc.contextValues[k] = v
+		}
+	}
+}
+
 func (rc *RegistrableComponent) registerToLibrary(
 	library namer,
 ) (string, uint32, error) {
@@ -161,10 +187,9 @@ func (rc *RegistrableComponent) registerToLibrary(
 	}
 
 	rc.library = library
-
-	fqn := rc.fqType()
-	rc.componentID = GenerateTypeID(fqn)
-	return fqn, rc.componentID, nil
+	rc.fqn = FullyQualifiedName(rc.library.Name(), rc.componentType)
+	rc.componentID = GenerateTypeID(rc.fqn)
+	return rc.fqn, rc.componentID, nil
 }
 
 // SearchAttributesMapper returns the search attributes mapper for this component.
@@ -198,9 +223,9 @@ func (rc *RegistrableComponent) GoType() reflect.Type {
 // the library name and the component type. This is used to uniquely identify
 // the component in the registry.
 func (rc *RegistrableComponent) fqType() string {
-	if rc.library == nil {
+	if rc.fqn == "" {
 		// this should never happen because the component is only accessible from the library.
 		panic("component is not registered to a library")
 	}
-	return FullyQualifiedName(rc.library.Name(), rc.componentType)
+	return rc.fqn
 }

@@ -60,7 +60,8 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer *tasktoken.Serializer,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
+	reactivationSignaler api.VersionReactivationSignalerFn,
 	testHooks testhooks.TestHooks,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.WorkflowId)
@@ -100,7 +101,8 @@ func Invoke(
 			tokenSerializer,
 			startReq,
 			matchingClient,
-			versionMembershipCache,
+			versionCache,
+			reactivationSignaler,
 			uws.workflowLeaseCallback(ctx),
 		)
 		if err != nil {
@@ -138,7 +140,7 @@ func Invoke(
 			return nil, err
 		}
 
-		testhooks.Call(uws.testHooks, testhooks.UpdateWithStartOnClosingWorkflowRetry)
+		testhooks.Call(uws.testHooks, testhooks.UpdateWithStartOnClosingWorkflowRetry, uws.namespaceId)
 
 		res, err = uws.Invoke(ctx)
 		if err != nil {
@@ -225,7 +227,7 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 		workflowLease.GetReleaseFn()(nil)
 	}
 
-	testhooks.Call(uws.testHooks, testhooks.UpdateWithStartInBetweenLockAndStart)
+	testhooks.Call(uws.testHooks, testhooks.UpdateWithStartInBetweenLockAndStart, uws.namespaceId)
 
 	// Workflow does not exist or requires a new run - start and update it!
 	return uws.startAndUpdateWorkflow(ctx)

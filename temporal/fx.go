@@ -26,6 +26,7 @@ import (
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -95,7 +96,7 @@ type (
 	serverOptionsProvider struct {
 		fx.Out
 		ServerOptions              *serverOptions
-		StopChan                   chan interface{}
+		StopChan                   chan any
 		StartupSynchronizationMode synchronizationModeParams
 
 		Config      *config.Config
@@ -105,9 +106,11 @@ type (
 		ServiceNames    resource.ServiceNames
 		NamespaceLogger resource.NamespaceLogger
 
-		ServiceResolver        resolver.ServiceResolver
-		CustomDataStoreFactory persistenceClient.AbstractDataStoreFactory
-		CustomVisibilityStore  visibility.VisibilityStoreFactory
+		ServiceResolver                 resolver.ServiceResolver
+		CustomDataStoreFactory          persistenceClient.AbstractDataStoreFactory
+		CustomVisibilityStore           visibility.VisibilityStoreFactory
+		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
+		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 
 		SearchAttributesMapper     searchattribute.Mapper
 		CustomFrontendInterceptors []grpc.UnaryServerInterceptor
@@ -192,7 +195,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		return serverOptionsProvider{}, err
 	}
 
-	stopChan := make(chan interface{})
+	stopChan := make(chan any)
 
 	// ClientFactoryProvider
 	clientFactoryProvider := so.clientFactoryProvider
@@ -214,7 +217,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	if dcClient == nil {
 		dcConfig := so.config.DynamicConfigClient
 		if dcConfig != nil {
-			dcClient, err = dynamicconfig.NewFileBasedClient(dcConfig, logger, stopChan)
+			dcClient, err = dynamicconfig.NewFileBasedClientWithMetrics(dcConfig, logger, stopChan, metricHandler)
 			if err != nil {
 				return serverOptionsProvider{}, fmt.Errorf("unable to create dynamic config client: %w", err)
 			}
@@ -289,9 +292,11 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		ServiceHosts:    so.hostsByService,
 		NamespaceLogger: so.namespaceLogger,
 
-		ServiceResolver:        so.persistenceServiceResolver,
-		CustomDataStoreFactory: so.customDataStoreFactory,
-		CustomVisibilityStore:  so.customVisibilityStoreFactory,
+		ServiceResolver:                 so.persistenceServiceResolver,
+		CustomDataStoreFactory:          so.customDataStoreFactory,
+		CustomVisibilityStore:           so.customVisibilityStoreFactory,
+		CustomHistoryArchiverFactory:    so.customHistoryArchiverFactory,
+		CustomVisibilityArchiverFactory: so.customVisibilityArchiverFactory,
 
 		SearchAttributesMapper:     so.searchAttributesMapper,
 		CustomFrontendInterceptors: so.customFrontendInterceptors,
@@ -344,30 +349,32 @@ type (
 	ServiceProviderParamsCommon struct {
 		fx.In
 
-		Cfg                        *config.Config
-		ServiceNames               resource.ServiceNames
-		Logger                     log.Logger
-		NamespaceLogger            resource.NamespaceLogger
-		DynamicConfigClient        dynamicconfig.Client
-		MetricsHandler             metrics.Handler
-		EsClient                   esclient.Client
-		TlsConfigProvider          encryption.TLSConfigProvider
-		PersistenceConfig          config.Persistence
-		ClusterMetadata            *cluster.Config
-		ClientFactoryProvider      client.FactoryProvider
-		AudienceGetter             authorization.JWTAudienceMapper
-		PersistenceServiceResolver resolver.ServiceResolver
-		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
-		SearchAttributesMapper     searchattribute.Mapper
-		CustomFrontendInterceptors []grpc.UnaryServerInterceptor
-		Authorizer                 authorization.Authorizer
-		ClaimMapper                authorization.ClaimMapper
-		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
-		VisibilityStoreFactory     visibility.VisibilityStoreFactory
-		SpanExporters              []otelsdktrace.SpanExporter
-		InstanceID                 resource.InstanceID                     `optional:"true"`
-		StaticServiceHosts         map[primitives.ServiceName]static.Hosts `optional:"true"`
-		TaskCategoryRegistry       tasks.TaskCategoryRegistry
+		Cfg                             *config.Config
+		ServiceNames                    resource.ServiceNames
+		Logger                          log.Logger
+		NamespaceLogger                 resource.NamespaceLogger
+		DynamicConfigClient             dynamicconfig.Client
+		MetricsHandler                  metrics.Handler
+		EsClient                        esclient.Client
+		TlsConfigProvider               encryption.TLSConfigProvider //nolint:staticcheck // should be TLSConfigProvider
+		PersistenceConfig               config.Persistence
+		ClusterMetadata                 *cluster.Config
+		ClientFactoryProvider           client.FactoryProvider
+		AudienceGetter                  authorization.JWTAudienceMapper
+		PersistenceServiceResolver      resolver.ServiceResolver
+		PersistenceFactoryProvider      persistenceClient.FactoryProviderFn
+		SearchAttributesMapper          searchattribute.Mapper
+		CustomFrontendInterceptors      []grpc.UnaryServerInterceptor
+		Authorizer                      authorization.Authorizer
+		ClaimMapper                     authorization.ClaimMapper
+		DataStoreFactory                persistenceClient.AbstractDataStoreFactory
+		VisibilityStoreFactory          visibility.VisibilityStoreFactory
+		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
+		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
+		SpanExporters                   []otelsdktrace.SpanExporter
+		InstanceID                      resource.InstanceID                     `optional:"true"`
+		StaticServiceHosts              map[primitives.ServiceName]static.Hosts `optional:"true"`
+		TaskCategoryRegistry            tasks.TaskCategoryRegistry
 	}
 )
 
@@ -400,6 +407,12 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			},
 			func() visibility.VisibilityStoreFactory {
 				return params.VisibilityStoreFactory
+			},
+			func() provider.CustomHistoryArchiverFactory {
+				return params.CustomHistoryArchiverFactory
+			},
+			func() provider.CustomVisibilityArchiverFactory {
+				return params.CustomVisibilityArchiverFactory
 			},
 			func() client.FactoryProvider {
 				return params.ClientFactoryProvider
@@ -542,7 +555,7 @@ func genericFrontendServiceProvider(
 			case primitives.FrontendService:
 				return params.ClaimMapper
 			case primitives.InternalFrontendService:
-				return authorization.NewNoopClaimMapper()
+				return authorization.NewInternalClaimMapper()
 			default:
 				panic("Unexpected frontend service name")
 			}
@@ -552,7 +565,7 @@ func genericFrontendServiceProvider(
 			// extra tag to differentiate.
 			tags := []tag.Tag{tag.Service(primitives.FrontendService)}
 			if serviceName == primitives.InternalFrontendService {
-				tags = append(tags, tag.NewBoolTag("internal-frontend", true))
+				tags = append(tags, tag.Bool("internal-frontend", true))
 			}
 			return log.With(params.Logger, tags...)
 		}),
@@ -651,9 +664,7 @@ func ApplyClusterMetadataConfigProvider(
 	}
 	indexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
 	for _, ds := range visDataStores {
-		if ds.SQL != nil || ds.CustomDataStoreConfig != nil {
-			indexSearchAttributes[ds.GetIndexName()] = sadefs.GetDBIndexSearchAttributes(visCSAOverride)
-		}
+		indexSearchAttributes[ds.GetIndexName()] = sadefs.GetDBIndexSearchAttributes(visCSAOverride)
 	}
 
 	clusterMetadata := svc.ClusterMetadata
@@ -1096,83 +1107,83 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 	case *fxevent.OnStartExecuting:
 		l.logger.Debug("OnStart hook executing",
 			tag.ComponentFX,
-			tag.NewStringTag("callee", e.FunctionName),
-			tag.NewStringTag("caller", e.CallerName),
+			tag.String("callee", e.FunctionName),
+			tag.String("caller", e.CallerName),
 		)
 	case *fxevent.OnStartExecuted:
 		if e.Err != nil {
 			l.logger.Error("OnStart hook failed",
 				tag.ComponentFX,
-				tag.NewStringTag("callee", e.FunctionName),
-				tag.NewStringTag("caller", e.CallerName),
+				tag.String("callee", e.FunctionName),
+				tag.String("caller", e.CallerName),
 				tag.Error(e.Err),
 			)
 		} else {
 			l.logger.Debug("OnStart hook executed",
 				tag.ComponentFX,
-				tag.NewStringTag("callee", e.FunctionName),
-				tag.NewStringTag("caller", e.CallerName),
-				tag.NewStringerTag("runtime", e.Runtime),
+				tag.String("callee", e.FunctionName),
+				tag.String("caller", e.CallerName),
+				tag.Stringer("runtime", e.Runtime),
 			)
 		}
 	case *fxevent.OnStopExecuting:
 		l.logger.Debug("OnStop hook executing",
 			tag.ComponentFX,
-			tag.NewStringTag("callee", e.FunctionName),
-			tag.NewStringTag("caller", e.CallerName),
+			tag.String("callee", e.FunctionName),
+			tag.String("caller", e.CallerName),
 		)
 	case *fxevent.OnStopExecuted:
 		if e.Err != nil {
 			l.logger.Error("OnStop hook failed",
 				tag.ComponentFX,
-				tag.NewStringTag("callee", e.FunctionName),
-				tag.NewStringTag("caller", e.CallerName),
+				tag.String("callee", e.FunctionName),
+				tag.String("caller", e.CallerName),
 				tag.Error(e.Err),
 			)
 		} else {
 			l.logger.Debug("OnStop hook executed",
 				tag.ComponentFX,
-				tag.NewStringTag("callee", e.FunctionName),
-				tag.NewStringTag("caller", e.CallerName),
-				tag.NewStringerTag("runtime", e.Runtime),
+				tag.String("callee", e.FunctionName),
+				tag.String("caller", e.CallerName),
+				tag.Stringer("runtime", e.Runtime),
 			)
 		}
 	case *fxevent.Supplied:
 		if e.Err != nil {
 			l.logger.Error("supplied",
 				tag.ComponentFX,
-				tag.NewStringTag("type", e.TypeName),
-				tag.NewStringTag("module", e.ModuleName),
+				tag.String("type", e.TypeName),
+				tag.String("module", e.ModuleName),
 				tag.Error(e.Err))
 		}
 	case *fxevent.Provided:
 		if e.Err != nil {
 			l.logger.Error("error encountered while applying options",
 				tag.ComponentFX,
-				tag.NewStringTag("module", e.ModuleName),
+				tag.String("module", e.ModuleName),
 				tag.Error(e.Err))
 		}
 	case *fxevent.Replaced:
 		if e.Err != nil {
 			l.logger.Error("error encountered while replacing",
 				tag.ComponentFX,
-				tag.NewStringTag("module", e.ModuleName),
+				tag.String("module", e.ModuleName),
 				tag.Error(e.Err))
 		}
 	case *fxevent.Decorated:
 		if e.Err != nil {
 			l.logger.Error("error encountered while applying options",
 				tag.ComponentFX,
-				tag.NewStringTag("module", e.ModuleName),
+				tag.String("module", e.ModuleName),
 				tag.Error(e.Err))
 		}
 	case *fxevent.Run:
 		if e.Err != nil {
 			l.logger.Error("error returned",
 				tag.ComponentFX,
-				tag.NewStringTag("name", e.Name),
-				tag.NewStringTag("kind", e.Kind),
-				tag.NewStringTag("module", e.ModuleName),
+				tag.String("name", e.Name),
+				tag.String("kind", e.Kind),
+				tag.String("module", e.ModuleName),
 				tag.Error(e.Err),
 			)
 		}
@@ -1180,23 +1191,23 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 		// Do not log stack as it will make logs hard to read.
 		l.logger.Debug("invoking",
 			tag.ComponentFX,
-			tag.NewStringTag("function", e.FunctionName),
-			tag.NewStringTag("module", e.ModuleName),
+			tag.String("function", e.FunctionName),
+			tag.String("module", e.ModuleName),
 		)
 	case *fxevent.Invoked:
 		if e.Err != nil {
 			l.logger.Error("invoke failed",
 				tag.ComponentFX,
 				tag.Error(e.Err),
-				tag.NewStringTag("stack", e.Trace),
-				tag.NewStringTag("function", e.FunctionName),
-				tag.NewStringTag("module", e.ModuleName),
+				tag.String("stack", e.Trace),
+				tag.String("function", e.FunctionName),
+				tag.String("module", e.ModuleName),
 			)
 		}
 	case *fxevent.Stopping:
 		l.logger.Info("received signal",
 			tag.ComponentFX,
-			tag.NewStringerTag("signal", e.Signal))
+			tag.Stringer("signal", e.Signal))
 	case *fxevent.Stopped:
 		if e.Err != nil {
 			l.logger.Error("stop failed", tag.ComponentFX, tag.Error(e.Err))
@@ -1219,14 +1230,14 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 		} else {
 			l.logger.Debug("initialized custom fxevent.Logger",
 				tag.ComponentFX,
-				tag.NewStringTag("function", e.ConstructorName))
+				tag.String("function", e.ConstructorName))
 		}
 	case *fxevent.BeforeRun:
 		l.logger.Debug("before run",
 			tag.ComponentFX,
-			tag.NewStringTag("name", e.Name),
-			tag.NewStringTag("kind", e.Kind),
-			tag.NewStringTag("module", e.ModuleName),
+			tag.String("name", e.Name),
+			tag.String("kind", e.Kind),
+			tag.String("module", e.ModuleName),
 		)
 	default:
 		l.logger.Warn("unknown fx log type, update fxLogAdapter",

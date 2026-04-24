@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -21,21 +20,22 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type WorkflowFailuresTestSuite struct {
-	testcore.FunctionalTestBase
+type WorkflowFailuresSuite struct {
+	parallelsuite.Suite[*WorkflowFailuresSuite]
 }
 
 func TestWorkflowFailuresTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(WorkflowFailuresTestSuite))
+	parallelsuite.Run(t, &WorkflowFailuresSuite{})
 }
 
-func (s *WorkflowFailuresTestSuite) TestWorkflowTimeout() {
+func (suite *WorkflowFailuresSuite) TestWorkflowTimeout() {
+	s := testcore.NewEnv(suite.T())
 	startTime := time.Now().UTC()
 
 	id := "functional-workflow-timeout"
@@ -64,7 +64,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTimeout() {
 
 	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
@@ -91,7 +91,7 @@ GetHistoryLoop:
 
 	closedCount := 0
 ListClosedLoop:
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		resp, err3 := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 100,
@@ -112,7 +112,8 @@ ListClosedLoop:
 	s.Equal(1, closedCount)
 }
 
-func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
+func (suite *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
+	s := testcore.NewEnv(suite.T())
 	id := "functional-workflowtask-failed-test"
 	wt := "functional-workflowtask-failed-test-type"
 	tl := "functional-workflowtask-failed-test-taskqueue"
@@ -173,7 +174,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -316,10 +317,11 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 	lastWorkflowTaskStartedEvent := events[25]
 	s.Equal(lastWorkflowTaskTime, lastWorkflowTaskStartedEvent.GetEventTime().AsTime())
 	wfCompletedEvent := events[27]
-	s.True(wfCompletedEvent.GetEventTime().AsTime().Sub(lastWorkflowTaskTime) >= time.Second)
+	s.GreaterOrEqual(wfCompletedEvent.GetEventTime().AsTime().Sub(lastWorkflowTaskTime), time.Second)
 }
 
-func (s *WorkflowFailuresTestSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalidArgument() {
+func (suite *WorkflowFailuresSuite) TestRespondWorkflowTaskCompletedReturnsErrorIfInvalidArgument() {
+	s := testcore.NewEnv(suite.T())
 	id := "functional-respond-workflow-task-completed-test"
 	wt := "functional-respond-workflow-task-completed-test-type"
 	tq := "functional-respond-workflow-task-completed-test-taskqueue"
@@ -378,5 +380,6 @@ func (s *WorkflowFailuresTestSuite) TestRespondWorkflowTaskCompleted_ReturnsErro
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, historyEvents)
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled`, historyEvents)
 }

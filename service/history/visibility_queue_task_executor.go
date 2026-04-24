@@ -78,6 +78,7 @@ func (t *visibilityQueueTaskExecutor) Execute(
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
+		executable.GetWorkflowID(),
 	)
 	metricsTags := []metrics.Tag{
 		namespaceTag,
@@ -367,7 +368,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	}
 
 	valid, err := validateChasmSideEffectTask(ctx, mutableState, task)
-	if err != nil || valid == nil {
+	if err != nil || !valid {
 		return err
 	}
 
@@ -414,7 +415,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		if err != nil {
 			// To reach here, either the search attribute has been deregistered before task execution, which is valid behavior,
 			// or there are delays in propagating search attribute mappings to History.
-			t.logger.Warn("Failed to get field name for alias, ignoring search attribute", tag.NewStringTag("alias", alias), tag.Error(err))
+			t.logger.Warn("Failed to get field name for alias, ignoring search attribute", tag.String("alias", alias), tag.Error(err))
 			continue
 		}
 		searchattributes[fieldName] = value
@@ -574,10 +575,12 @@ func (t *visibilityQueueTaskExecutor) getClosedVisibilityRequest(
 	if t.externalPayloadsEnabled(namespaceEntry.Name().String()) {
 		externalPayloadCount := executionInfo.GetExecutionStats().GetExternalPayloadCount()
 		externalPayloadSizeBytes := executionInfo.GetExecutionStats().GetExternalPayloadSize()
-		externalPayloadCountPayload, _ := payload.Encode(externalPayloadCount)
-		externalPayloadSizeBytesPayload, _ := payload.Encode(externalPayloadSizeBytes)
-		base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadCount] = externalPayloadCountPayload
-		base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadSizeBytes] = externalPayloadSizeBytesPayload
+		if externalPayloadCount > 0 {
+			externalPayloadCountPayload, _ := payload.Encode(externalPayloadCount)
+			externalPayloadSizeBytesPayload, _ := payload.Encode(externalPayloadSizeBytes)
+			base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadCount] = externalPayloadCountPayload
+			base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadSizeBytes] = externalPayloadSizeBytesPayload
+		}
 	}
 
 	return &manager.RecordWorkflowExecutionClosedRequest{

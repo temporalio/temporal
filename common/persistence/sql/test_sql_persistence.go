@@ -134,7 +134,7 @@ func (s *TestCluster) CreateDatabase() {
 	if err != nil {
 		panic(err)
 	}
-	s.logger.Info("created database", tag.NewStringTag("database", s.cfg.DatabaseName))
+	s.logger.Info("created database", tag.String("database", s.cfg.DatabaseName))
 }
 
 // DropDatabase from PersistenceTestCluster interface
@@ -168,7 +168,7 @@ func (s *TestCluster) DropDatabase() {
 	if err != nil {
 		panic(err)
 	}
-	s.logger.Info("dropped database", tag.NewStringTag("database", s.cfg.DatabaseName))
+	s.logger.Info("dropped database", tag.String("database", s.cfg.DatabaseName))
 }
 
 // LoadSchema from PersistenceTestCluster interface

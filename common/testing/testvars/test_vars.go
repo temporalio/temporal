@@ -282,20 +282,14 @@ func (tv *TestVars) DeploymentVersionTransition() *workflowpb.DeploymentVersionT
 	return ret
 }
 
-func (tv *TestVars) VersioningOverridePinned(useV32 bool) *workflowpb.VersioningOverride {
-	if useV32 {
-		return &workflowpb.VersioningOverride{
-			Override: &workflowpb.VersioningOverride_Pinned{
-				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  tv.ExternalDeploymentVersion(),
-				},
-			},
-		}
-	}
+func (tv *TestVars) VersioningOverridePinned() *workflowpb.VersioningOverride {
 	return &workflowpb.VersioningOverride{
-		Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-		PinnedVersion: tv.DeploymentVersionString(),
+		Override: &workflowpb.VersioningOverride_Pinned{
+			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				Version:  tv.ExternalDeploymentVersion(),
+			},
+		},
 	}
 }
 
@@ -394,6 +388,15 @@ func (tv *TestVars) ClientIdentity() string {
 
 func (tv *TestVars) WorkerIdentity() string {
 	return getOrCreate(tv, "worker_identity", tv.uniqueString, tv.stringNSetter)
+}
+
+func (tv *TestVars) WorkerInstanceKey() string {
+	return getOrCreate(tv, "worker_instance_key", tv.uniqueString, tv.stringNSetter)
+}
+
+// ControlQueueName returns the Nexus task queue name used to deliver control tasks to this worker.
+func (tv *TestVars) ControlQueueName(ns string) string {
+	return fmt.Sprintf("/temporal-sys/worker-commands/%s/%s", ns, tv.WorkerInstanceKey())
 }
 
 func (tv *TestVars) TimerID() string {

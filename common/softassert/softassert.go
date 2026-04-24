@@ -39,7 +39,7 @@ func That(logger log.Logger, condition bool, staticMessage string, tags ...tag.T
 // Dynamic information should be passed via `tags`.
 //
 // Example:
-// softassert.Fail(logger, "unreachable code reached", tag.NewStringTag("state", object.state))
+// softassert.Fail(logger, "unreachable code reached", tag.String("state", object.state))
 func Fail(logger log.Logger, staticMessage string, tags ...tag.Tag) {
 	logger.Error("failed assertion: "+staticMessage, append([]tag.Tag{tag.FailedAssertion}, tags...)...)
 }

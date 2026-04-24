@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -26,6 +24,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
@@ -33,15 +32,15 @@ import (
 )
 
 type QueryWorkflowSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*QueryWorkflowSuite]
 }
 
 func TestQueryWorkflowSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(QueryWorkflowSuite))
+	parallelsuite.Run(t, &QueryWorkflowSuite{})
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_Sticky() {
+	env := testcore.NewEnv(s.T())
 	var replayCount int32
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		// every replay will start from here
@@ -57,23 +56,23 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Sticky() {
 		return msg, nil
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	id := "test-query-sticky"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
-		TaskQueue:          s.TaskQueue(),
+		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
-	queryResult, err := s.SdkClient().QueryWorkflow(ctx, id, "", "test", "test")
+	queryResult, err := env.SdkClient().QueryWorkflow(ctx, id, "", "test", "test")
 	s.NoError(err)
 
 	var queryResultStr string
@@ -87,6 +86,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Sticky() {
 
 //nolint:forbidigo
 func (s *QueryWorkflowSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
+	env := testcore.NewEnv(s.T())
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		var receivedMsgs string
 		_ = workflow.SetQueryHandler(ctx, "test", func() (string, error) {
@@ -107,29 +107,29 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		}
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	id := "test-query-consistent"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
-		TaskQueue:          s.TaskQueue(),
+		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
-	err = s.SdkClient().SignalWorkflow(ctx, id, "", "test", "pause")
+	err = env.SdkClient().SignalWorkflow(ctx, id, "", "test", "pause")
 	s.NoError(err)
 
-	err = s.SdkClient().SignalWorkflow(ctx, id, "", "test", "abc")
+	err = env.SdkClient().SignalWorkflow(ctx, id, "", "test", "abc")
 	s.NoError(err)
 
-	queryResult, err := s.SdkClient().QueryWorkflow(ctx, id, "", "test")
+	queryResult, err := env.SdkClient().QueryWorkflow(ctx, id, "", "test")
 	s.NoError(err)
 
 	var queryResultStr string
@@ -141,7 +141,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
-
+	env := testcore.NewEnv(s.T())
 	tv := testvars.New(s.T())
 	workflowFn := func(ctx workflow.Context) error {
 		_ = workflow.SetQueryHandler(ctx, tv.QueryType(), func() (string, error) {
@@ -149,7 +149,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
 		})
 		return nil
 	}
-	s.Worker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	testCases := []struct {
 		testName       string
@@ -172,11 +172,11 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
 	}
 
 	for tci, tc := range testCases {
-		s.T().Run(tc.testName, func(t *testing.T) {
-			tv = tv.WithWorkflowIDNumber(tci)
+		tvi := tv.WithWorkflowIDNumber(tci)
+		s.Run(tc.testName, func(s *QueryWorkflowSuite) {
 			workflowOptions := sdkclient.StartWorkflowOptions{
-				ID:         tv.WorkflowID(),
-				TaskQueue:  s.TaskQueue(),
+				ID:         tvi.WorkflowID(),
+				TaskQueue:  env.WorkerTaskQueue(),
 				StartDelay: tc.startDelay,
 			}
 
@@ -185,29 +185,30 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*tc.contextTimeout)
 			defer cancel()
 
-			t.Log(fmt.Sprintf("Start workflow with delay %v", tc.startDelay))
-			workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-			assert.NoError(t, err, "Start workflow failed")
-			assert.NotNil(t, workflowRun)
-			assert.NotEmpty(t, workflowRun.GetRunID())
+			env.Logger.Info(fmt.Sprintf("Start workflow with delay %v", tc.startDelay))
+			workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+			s.NoError(err, "Start workflow failed")
+			s.NotNil(workflowRun)
+			s.NotEmpty(workflowRun.GetRunID())
 
-			queryResp, err := s.SdkClient().QueryWorkflow(ctx, tv.WorkflowID(), workflowRun.GetRunID(), tv.QueryType())
+			queryResp, err := env.SdkClient().QueryWorkflow(ctx, tvi.WorkflowID(), workflowRun.GetRunID(), tvi.QueryType())
 
 			if tc.err != nil {
-				assert.Error(t, err)
-				assert.ErrorContains(t, err, tc.err.Error())
-				assert.Nil(t, queryResp)
+				s.Error(err)
+				s.ErrorContains(err, tc.err.Error())
+				s.Nil(queryResp)
 			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, queryResp)
+				s.NoError(err)
+				s.NotNil(queryResp)
 			}
 		})
 	}
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
+	env := testcore.NewEnv(s.T())
 	// stop the worker, so the workflow won't be started before query
-	s.Worker().Stop()
+	env.SdkWorker().Stop()
 
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		status := "initialized"
@@ -223,50 +224,55 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 	id := "test-query-before-start"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
-		TaskQueue:          s.TaskQueue(),
+		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
+	var queryErr, getErr error
+	var queryResultStr string
+	var queryDuration time.Duration
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 
 		startTime := time.Now()
-		queryResult, err := s.SdkClient().QueryWorkflow(ctx, id, "", "test")
-		endTime := time.Now()
-		s.NoError(err)
-		var queryResultStr string
-		err = queryResult.Get(&queryResultStr)
-		s.NoError(err)
-
-		// verify query sees all signals before it
-		s.Equal("started", queryResultStr)
-
-		s.True(endTime.Sub(startTime) > time.Second)
+		queryResult, err := env.SdkClient().QueryWorkflow(ctx, id, "", "test")
+		queryDuration = time.Since(startTime)
+		queryErr = err
+		if err == nil {
+			getErr = queryResult.Get(&queryResultStr)
+		}
 	}()
 
 	// delay 2s to start worker, this will block query for 2s
 	time.Sleep(time.Second * 2) //nolint:forbidigo
 	var queryWorker worker.Worker
 
-	queryWorker = worker.New(s.SdkClient(), s.TaskQueue(), worker.Options{})
+	queryWorker = worker.New(env.SdkClient(), env.WorkerTaskQueue(), worker.Options{})
 	queryWorker.RegisterWorkflow(workflowFn)
 	err = queryWorker.Start()
 	s.NoError(err)
 
 	// wait query
 	wg.Wait()
+
+	s.NoError(queryErr)
+	s.NoError(getErr)
+	// verify query sees all signals before it
+	s.Equal("started", queryResultStr)
+	s.Greater(queryDuration, time.Second)
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
+	env := testcore.NewEnv(s.T())
 	testname := s.T().Name()
 	var failures int32
 	workflowFn := func(ctx workflow.Context) (string, error) {
@@ -282,35 +288,36 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 		panic("Workflow failed")
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	id := "test-query-failed-workflow-task"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                  id,
-		TaskQueue:           s.TaskQueue(),
+		TaskQueue:           env.WorkerTaskQueue(),
 		WorkflowTaskTimeout: time.Second * 1, // use shorter wft timeout to make this test faster
 		WorkflowRunTimeout:  20 * time.Second,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	s.Eventually(func() bool {
 		// wait for workflow task to fail 3 times
 		return atomic.LoadInt32(&failures) >= 3
 	}, 10*time.Second, 50*time.Millisecond)
 
-	_, err = s.SdkClient().QueryWorkflow(ctx, id, "", testname)
+	_, err = env.SdkClient().QueryWorkflow(ctx, id, "", testname)
 	s.Error(err)
 	s.IsType(&serviceerror.WorkflowNotReady{}, err)
 
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted() {
+	env := testcore.NewEnv(s.T())
 	testname := s.T().Name()
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		return "", errors.New("workflow should never execute") //nolint:err113
@@ -318,101 +325,132 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted(
 	id := "test-query-after-terminate"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        id,
-		TaskQueue: s.TaskQueue(),
+		TaskQueue: env.WorkerTaskQueue(),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	s.NoError(err)
-	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
-
-	err = s.SdkClient().TerminateWorkflow(ctx, id, "", "terminating to make sure query fails")
-	s.NoError(err)
-
-	_, err = s.SdkClient().QueryWorkflow(ctx, id, "", testname)
-	s.Error(err)
-	s.ErrorContains(err, consts.ErrWorkflowClosedBeforeWorkflowTaskStarted.Error())
-}
-
-func (s *QueryWorkflowSuite) TestQueryWorkflow_WithRawHistoryBytesToMatchingService() {
-	// Enable SendRawHistoryBytesToMatchingService to test the raw history path
-	s.OverrideDynamicConfig(dynamicconfig.SendRawHistoryBytesToMatchingService, true)
-
-	// Stop the default worker, so we can control sticky behavior
-	s.Worker().Stop()
-
-	workflowFn := func(ctx workflow.Context) (string, error) {
-		status := "initialized"
-		_ = workflow.SetQueryHandler(ctx, "test", func() (string, error) {
-			return status, nil
-		})
-
-		status = "started"
-		signalCh := workflow.GetSignalChannel(ctx, "done")
-		var msg string
-		signalCh.Receive(ctx, &msg)
-		return msg, nil
-	}
-
-	id := "test-query-raw-history-bytes"
-	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                 id,
-		TaskQueue:          s.TaskQueue(),
-		WorkflowRunTimeout: 20 * time.Second,
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Start a new worker
-	queryWorker := worker.New(s.SdkClient(), s.TaskQueue(), worker.Options{})
-	queryWorker.RegisterWorkflow(workflowFn)
-	err := queryWorker.Start()
-	s.NoError(err)
-	defer queryWorker.Stop()
-
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 	s.NotNil(workflowRun)
 	s.NotEmpty(workflowRun.GetRunID())
 
-	// Stop the worker to clear sticky cache
+	err = env.SdkClient().TerminateWorkflow(ctx, id, "", "terminating to make sure query fails")
+	s.NoError(err)
+
+	_, err = env.SdkClient().QueryWorkflow(ctx, id, "", testname)
+	s.Error(err)
+	s.ErrorContains(err, consts.ErrWorkflowClosedBeforeWorkflowTaskStarted.Error())
+}
+
+// TestQueryWorkflow_NonStickyMultiPageHistory verifies that the NextPageToken from a
+// non-sticky query task poll is a valid HistoryContinuation token usable with
+// GetWorkflowExecutionHistory. Fails with "Invalid NextPageToken" if matching service
+// returns a RawHistoryContinuation token instead.
+// Uses a dedicated cluster with MatchingHistoryMaxPageSize=14 (for query tasks) and
+// HistoryMaxPageSize=14 (for regular workflow tasks via RecordWorkflowTaskStarted).
+// With 5 activities generating ~16 history blobs, page size 14 ensures any task type
+// produces a multi-page history response with a non-empty NextPageToken. 14 is large
+// enough that activity-phase WFTs (≤14 blobs) don't need extra pagination roundtrips.
+func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDedicatedCluster(),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingHistoryMaxPageSize, 14),
+		testcore.WithDynamicConfig(dynamicconfig.HistoryMaxPageSize, 14),
+	)
+
+	activityFn := func(ctx context.Context) error { return nil }
+	workflowFn := func(ctx workflow.Context) (string, error) {
+		_ = workflow.SetQueryHandler(ctx, "test", func() (string, error) {
+			return "query works", nil
+		})
+		// Run activities to generate multiple event batches in history.
+		ao := workflow.ActivityOptions{StartToCloseTimeout: 5 * time.Second}
+		actCtx := workflow.WithActivityOptions(ctx, ao)
+		for range 5 {
+			_ = workflow.ExecuteActivity(actCtx, activityFn).Get(ctx, nil)
+		}
+		// Keep workflow alive for query.
+		workflow.GetSignalChannel(ctx, "done").Receive(ctx, nil)
+		return "done", nil
+	}
+
+	tq := env.WorkerTaskQueue()
+	id := "test-query-non-sticky-multi-page"
+	ctx, cancel := context.WithTimeout(env.Context(), 30*time.Second)
+	defer cancel()
+
+	queryWorker := worker.New(env.SdkClient(), tq, worker.Options{})
+	queryWorker.RegisterWorkflow(workflowFn)
+	queryWorker.RegisterActivity(activityFn)
+	s.NoError(queryWorker.Start())
+
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:                 id,
+		TaskQueue:          tq,
+		WorkflowRunTimeout: 20 * time.Second,
+	}, workflowFn)
+	s.NoError(err)
+	s.NotNil(workflowRun)
+
+	// Wait for all activities to complete, generating many event batches.
+	s.Eventually(func() bool {
+		resp, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+		})
+		return err == nil && resp.GetWorkflowExecutionInfo().GetHistoryLength() > 30
+	}, 10*time.Second, 200*time.Millisecond)
+
+	// Stop worker so the query goes through the non-sticky path.
 	queryWorker.Stop()
 
-	// Start a new worker - queries will now go through non-sticky path
-	// which exercises getHistoryForQueryTask with raw history bytes
-	queryWorker2 := worker.New(s.SdkClient(), s.TaskQueue(), worker.Options{})
-	queryWorker2.RegisterWorkflow(workflowFn)
-	err = queryWorker2.Start()
-	s.NoError(err)
-	defer queryWorker2.Stop()
-
-	// Execute query - this should use the raw history bytes path
-	queryResult, err := s.SdkClient().QueryWorkflow(ctx, id, "", "test")
+	// Clear stickiness so the query dispatches directly to the normal queue
+	// without waiting for StickyScheduleToStartTimeout (~5s).
+	_, err = env.FrontendClient().ResetStickyTaskQueue(ctx, &workflowservice.ResetStickyTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+	})
 	s.NoError(err)
 
-	var queryResultStr string
-	err = queryResult.Get(&queryResultStr)
+	// Terminate the workflow to prevent any further workflow tasks from being scheduled.
+	err = env.SdkClient().TerminateWorkflow(ctx, id, "", "test cleanup")
 	s.NoError(err)
 
-	// Verify query returns correct result
-	s.Equal("started", queryResultStr)
+	go func() { _, _ = env.SdkClient().QueryWorkflow(ctx, id, "", "test") }()
 
-	// Complete the workflow
-	err = s.SdkClient().SignalWorkflow(ctx, id, "", "done", "complete")
-	s.NoError(err)
+	// Poll for the query task on the normal (non-sticky) task queue.
+	var pollResp *workflowservice.PollWorkflowTaskQueueResponse
+	s.Eventually(func() bool {
+		pollCtx, pollCancel := context.WithTimeout(ctx, 3*time.Second)
+		defer pollCancel()
+		pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  "test-worker",
+		})
+		return err == nil && len(pollResp.GetTaskToken()) > 0
+	}, 20*time.Second, 100*time.Millisecond)
 
-	var result string
-	err = workflowRun.Get(ctx, &result)
+	s.NotNil(pollResp.GetHistory())
+	s.NotEmpty(pollResp.GetNextPageToken(), "multi-page history should have NextPageToken")
+
+	// Use the token with GetWorkflowExecutionHistory — this is what the worker SDK does.
+	// Fails with "Invalid NextPageToken" if the token is a RawHistoryContinuation.
+	histResp, err := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace:     env.Namespace().String(),
+		Execution:     &commonpb.WorkflowExecution{WorkflowId: id},
+		NextPageToken: pollResp.GetNextPageToken(),
+	})
 	s.NoError(err)
-	s.Equal("complete", result)
+	s.NotNil(histResp)
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
-	ctx := testcore.NewContext()
+	env := testcore.NewEnv(s.T())
+	ctx := env.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: taskQueue}, "workflow")
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: taskQueue}, "workflow")
 	s.NoError(err)
 
 	// Create a channel for errors generated in background goroutines.
@@ -422,8 +460,8 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 	// API.
 	// Query the workflow in the background to have the query delivered with the first workflow task in the Queries map.
 	go func() {
-		_, err := s.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
-			Namespace: s.Namespace().String(),
+		_, err := env.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
+			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowRun.GetID(),
 			},
@@ -438,8 +476,8 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 	// There's really no other way to ensure that the query is included in the task unfortunately.
 	util.InterruptibleSleep(ctx, 3*time.Second)
 
-	task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	task, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
 		Identity:  s.T().Name(),
 	})
@@ -447,7 +485,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 	s.Len(task.Queries, 1)
 	qKey := slices.Collect(maps.Keys(task.Queries))[0]
 
-	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: task.TaskToken,
 		Identity:  s.T().Name(),
 		QueryResults: map[string]*querypb.WorkflowQueryResult{
@@ -483,8 +521,8 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 	// Second query, should come in the workflow task Query field and responded to via the RespondQueryTaskCompleted
 	// API.
 	go func() {
-		task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: s.Namespace().String(),
+		task, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
 			Identity:  s.T().Name(),
 		})
@@ -493,8 +531,8 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 			return
 		}
 
-		_, err = s.FrontendClient().RespondQueryTaskCompleted(ctx, &workflowservice.RespondQueryTaskCompletedRequest{
-			Namespace:     s.Namespace().String(),
+		_, err = env.FrontendClient().RespondQueryTaskCompleted(ctx, &workflowservice.RespondQueryTaskCompletedRequest{
+			Namespace:     env.Namespace().String(),
 			TaskToken:     task.TaskToken,
 			CompletedType: enumspb.QUERY_RESULT_TYPE_FAILED,
 			ErrorMessage:  "my error message",
@@ -506,8 +544,8 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 		errChan <- err
 	}()
 
-	_, err = s.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowRun.GetID(),
 		},

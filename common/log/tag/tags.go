@@ -147,11 +147,6 @@ func WorkflowBinaryChecksum(cs string) ZapTag {
 	return NewStringTag("wf-binary-checksum", cs)
 }
 
-// WorkflowActivityID returns tag for WorkflowActivityID
-func WorkflowActivityID(id string) ZapTag {
-	return NewStringTag("wf-activity-id", id)
-}
-
 // WorkflowTimerID returns tag for WorkflowTimerID
 func WorkflowTimerID(id string) ZapTag {
 	return NewStringTag("wf-timer-id", id)
@@ -463,22 +458,22 @@ func Name(k string) ZapTag {
 }
 
 // Value returns tag for Value
-func Value(v interface{}) ZapTag {
+func Value(v any) ZapTag {
 	return NewAnyTag("value", v)
 }
 
 // ValueType returns tag for ValueType
-func ValueType(v interface{}) ZapTag {
+func ValueType(v any) ZapTag {
 	return NewStringTag("value-type", fmt.Sprintf("%T", v))
 }
 
 // DefaultValue returns tag for DefaultValue
-func DefaultValue(v interface{}) ZapTag {
+func DefaultValue(v any) ZapTag {
 	return NewAnyTag("default-value", v)
 }
 
 // IgnoredValue returns tag for IgnoredValue
-func IgnoredValue(v interface{}) ZapTag {
+func IgnoredValue(v any) ZapTag {
 	return NewAnyTag("ignored-value", v)
 }
 
@@ -537,11 +532,6 @@ func NextNumber(n int64) ZapTag {
 	return NewInt64("next-number", n)
 }
 
-// Bool returns tag for Bool
-func Bool(b bool) ZapTag {
-	return NewBoolTag("bool", b)
-}
-
 // ServerName returns tag for ServerName
 func ServerName(serverName string) ZapTag {
 	return NewStringTag("server-name", serverName)
@@ -552,7 +542,7 @@ func CertThumbprint(thumbprint string) ZapTag {
 	return NewStringTag("cert-thumbprint", thumbprint)
 }
 
-func WorkerComponent(v interface{}) ZapTag {
+func WorkerComponent(v any) ZapTag {
 	return NewStringTag("worker-component", fmt.Sprintf("%T", v))
 }
 
@@ -567,7 +557,7 @@ func ShardID(shardID int32) ZapTag {
 }
 
 // ShardTime returns tag for ShardTime
-func ShardTime(shardTime interface{}) ZapTag {
+func ShardTime(shardTime any) ZapTag {
 	return NewAnyTag("shard-time", shardTime)
 }
 
@@ -607,7 +597,7 @@ func MaxLevel(lv int64) ZapTag {
 }
 
 // ShardQueueAcks returns tag for shard queue ack levels
-func ShardQueueAcks(categoryName string, ackLevel interface{}) ZapTag {
+func ShardQueueAcks(categoryName string, ackLevel any) ZapTag {
 	return NewAnyTag("shard-"+categoryName+"-queue-acks", ackLevel)
 }
 
@@ -619,12 +609,12 @@ func QueueReaderID(readerID int64) ZapTag {
 }
 
 // QueueAlert returns tag for queue alert
-func QueueAlert(alert interface{}) ZapTag {
+func QueueAlert(alert any) ZapTag {
 	return NewAnyTag("queue-alert", alert)
 }
 
 // Task returns tag for Task
-func Task(task interface{}) ZapTag {
+func Task(task any) ZapTag {
 	return NewAnyTag("queue-task", task)
 }
 
@@ -634,7 +624,7 @@ func TaskID(taskID int64) ZapTag {
 }
 
 // TaskKey returns tag for TaskKey
-func TaskKey(key interface{}) ZapTag {
+func TaskKey(key any) ZapTag {
 	return NewAnyTag("queue-task-key", key)
 }
 
@@ -745,7 +735,7 @@ func ESValue(ESValue []byte) ZapTag {
 }
 
 // ESConfig returns tag for ESConfig
-func ESConfig(c interface{}) ZapTag {
+func ESConfig(c any) ZapTag {
 	return NewAnyTag("es-config", c)
 }
 
@@ -800,7 +790,7 @@ func SourceShardID(shardID int32) ZapTag {
 func TargetShardID(shardID int32) ZapTag {
 	return NewInt32("xdc-target-shard-id", shardID)
 }
-func ReplicationTask(replicationTask interface{}) ZapTag {
+func ReplicationTask(replicationTask any) ZapTag {
 	return NewAnyTag("xdc-replication-task", replicationTask)
 }
 
@@ -918,13 +908,23 @@ func TransportType(transportType string) ZapTag {
 }
 
 // ActivityInfo returns tag for activity info
-func ActivityInfo(activityInfo interface{}) ZapTag {
+func ActivityInfo(activityInfo any) ZapTag {
 	return NewAnyTag("activity-info", activityInfo)
 }
 
-// ActivityID returns tag for a standalone activity ID
+// ActivityID returns tag for an activity ID
 func ActivityID(id string) ZapTag {
 	return NewStringTag("activity-id", id)
+}
+
+// OperationID returns tag for a nexus operation ID
+func OperationID(id string) ZapTag {
+	return NewStringTag("operation-id", id)
+}
+
+// ChasmRunID returns tag for an entity run ID
+func ChasmRunID(id string) ZapTag {
+	return NewStringTag("run-id", id)
 }
 
 // ActivitySize returns a tag for a standalone activity size
@@ -938,7 +938,7 @@ func WorkflowTaskRequestId(s string) ZapTag {
 }
 
 // AckLevel returns tag for ack level
-func AckLevel(s interface{}) ZapTag {
+func AckLevel(s any) ZapTag {
 	return NewAnyTag("ack-level", s)
 }
 

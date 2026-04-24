@@ -112,20 +112,24 @@ var (
 		"ResetActivity":                  func() any { return &workflowservice.ResetActivityResponse{} },
 		"UpdateWorkflowExecutionOptions": func() any { return &workflowservice.UpdateWorkflowExecutionOptionsResponse{} },
 
-		"DescribeDeployment":                    func() any { return &workflowservice.DescribeDeploymentResponse{} },        // [cleanup-wv-pre-release]
-		"ListDeployments":                       func() any { return &workflowservice.ListDeploymentsResponse{} },           // [cleanup-wv-pre-release]
-		"GetDeploymentReachability":             func() any { return &workflowservice.GetDeploymentReachabilityResponse{} }, // [cleanup-wv-pre-release]
-		"GetCurrentDeployment":                  func() any { return &workflowservice.GetCurrentDeploymentResponse{} },      // [cleanup-wv-pre-release]
-		"SetCurrentDeployment":                  func() any { return &workflowservice.SetCurrentDeploymentResponse{} },      // [cleanup-wv-pre-release]
-		"DescribeWorkerDeployment":              func() any { return &workflowservice.DescribeWorkerDeploymentResponse{} },
-		"DescribeWorkerDeploymentVersion":       func() any { return &workflowservice.DescribeWorkerDeploymentVersionResponse{} },
-		"SetWorkerDeploymentCurrentVersion":     func() any { return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{} },
-		"SetWorkerDeploymentRampingVersion":     func() any { return &workflowservice.SetWorkerDeploymentRampingVersionResponse{} },
-		"SetWorkerDeploymentManager":            func() any { return &workflowservice.SetWorkerDeploymentManagerResponse{} },
-		"ListWorkerDeployments":                 func() any { return &workflowservice.ListWorkerDeploymentsResponse{} },
-		"DeleteWorkerDeployment":                func() any { return &workflowservice.DeleteWorkerDeploymentResponse{} },
-		"DeleteWorkerDeploymentVersion":         func() any { return &workflowservice.DeleteWorkerDeploymentVersionResponse{} },
-		"UpdateWorkerDeploymentVersionMetadata": func() any { return &workflowservice.UpdateWorkerDeploymentVersionMetadataResponse{} },
+		"DescribeDeployment":                           func() any { return &workflowservice.DescribeDeploymentResponse{} },        // [cleanup-wv-pre-release]
+		"ListDeployments":                              func() any { return &workflowservice.ListDeploymentsResponse{} },           // [cleanup-wv-pre-release]
+		"GetDeploymentReachability":                    func() any { return &workflowservice.GetDeploymentReachabilityResponse{} }, // [cleanup-wv-pre-release]
+		"GetCurrentDeployment":                         func() any { return &workflowservice.GetCurrentDeploymentResponse{} },      // [cleanup-wv-pre-release]
+		"SetCurrentDeployment":                         func() any { return &workflowservice.SetCurrentDeploymentResponse{} },      // [cleanup-wv-pre-release]
+		"DescribeWorkerDeployment":                     func() any { return &workflowservice.DescribeWorkerDeploymentResponse{} },
+		"DescribeWorkerDeploymentVersion":              func() any { return &workflowservice.DescribeWorkerDeploymentVersionResponse{} },
+		"SetWorkerDeploymentCurrentVersion":            func() any { return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{} },
+		"SetWorkerDeploymentRampingVersion":            func() any { return &workflowservice.SetWorkerDeploymentRampingVersionResponse{} },
+		"SetWorkerDeploymentManager":                   func() any { return &workflowservice.SetWorkerDeploymentManagerResponse{} },
+		"ListWorkerDeployments":                        func() any { return &workflowservice.ListWorkerDeploymentsResponse{} },
+		"CreateWorkerDeployment":                       func() any { return &workflowservice.CreateWorkerDeploymentResponse{} },
+		"DeleteWorkerDeployment":                       func() any { return &workflowservice.DeleteWorkerDeploymentResponse{} },
+		"CreateWorkerDeploymentVersion":                func() any { return &workflowservice.CreateWorkerDeploymentVersionResponse{} },
+		"UpdateWorkerDeploymentVersionComputeConfig":   func() any { return &workflowservice.UpdateWorkerDeploymentVersionComputeConfigResponse{} },
+		"ValidateWorkerDeploymentVersionComputeConfig": func() any { return &workflowservice.ValidateWorkerDeploymentVersionComputeConfigResponse{} },
+		"DeleteWorkerDeploymentVersion":                func() any { return &workflowservice.DeleteWorkerDeploymentVersionResponse{} },
+		"UpdateWorkerDeploymentVersionMetadata":        func() any { return &workflowservice.UpdateWorkerDeploymentVersionMetadataResponse{} },
 
 		"CreateWorkflowRule":    func() any { return &workflowservice.CreateWorkflowRuleResponse{} },
 		"DescribeWorkflowRule":  func() any { return &workflowservice.DescribeWorkflowRuleResponse{} },
@@ -147,6 +151,15 @@ var (
 		"RequestCancelActivityExecution": func() any { return &workflowservice.RequestCancelActivityExecutionResponse{} },
 		"TerminateActivityExecution":     func() any { return &workflowservice.TerminateActivityExecutionResponse{} },
 		"DeleteActivityExecution":        func() any { return &workflowservice.DeleteActivityExecutionResponse{} },
+
+		"CountNexusOperationExecutions":        func() any { return &workflowservice.CountNexusOperationExecutionsResponse{} },
+		"DeleteNexusOperationExecution":        func() any { return &workflowservice.DeleteNexusOperationExecutionResponse{} },
+		"DescribeNexusOperationExecution":      func() any { return &workflowservice.DescribeNexusOperationExecutionResponse{} },
+		"ListNexusOperationExecutions":         func() any { return &workflowservice.ListNexusOperationExecutionsResponse{} },
+		"PollNexusOperationExecution":          func() any { return &workflowservice.PollNexusOperationExecutionResponse{} },
+		"RequestCancelNexusOperationExecution": func() any { return &workflowservice.RequestCancelNexusOperationExecutionResponse{} },
+		"StartNexusOperationExecution":         func() any { return &workflowservice.StartNexusOperationExecutionResponse{} },
+		"TerminateNexusOperationExecution":     func() any { return &workflowservice.TerminateNexusOperationExecutionResponse{} },
 	}
 )
 
@@ -254,20 +267,20 @@ func (i *Redirection) handleRedirectAPIInvocation(
 	namespaceName namespace.Name,
 ) (_ any, retError error) {
 	var resp any
-	var clusterName string
+	var targetClusterName = i.currentClusterName
 	var err error
 
 	scope, startTime := i.BeforeCall(dcRedirectionMetricsPrefix + methodName)
 	defer func() {
-		i.AfterCall(scope, startTime, clusterName, namespaceName.String(), retError)
+		i.AfterCall(scope, startTime, targetClusterName, namespaceName.String(), retError)
 	}()
 
 	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, methodName, req, func(targetDC string) error {
-		clusterName = targetDC
-		if targetDC == i.currentClusterName {
+		targetClusterName = targetDC
+		if targetClusterName == i.currentClusterName {
 			resp, err = handler(ctx, req)
 		} else {
-			remoteClient, _, err := i.clientBean.GetRemoteFrontendClient(targetDC)
+			remoteClient, _, err := i.clientBean.GetRemoteFrontendClient(targetClusterName)
 			if err != nil {
 				return err
 			}
@@ -292,17 +305,20 @@ func (i *Redirection) BeforeCall(
 func (i *Redirection) AfterCall(
 	metricsHandler metrics.Handler,
 	startTime time.Time,
-	clusterName string,
+	targetClusterName string,
 	namespaceName string,
 	retError error,
 ) {
-	metricsHandler = metricsHandler.WithTags(metrics.TargetClusterTag(clusterName))
-	metrics.ClientRedirectionLatency.With(metricsHandler).Record(i.timeSource.Now().Sub(startTime))
-	metricsHandler = metricsHandler.WithTags(metrics.NamespaceTag(namespaceName))
-	metrics.ClientRedirectionRequests.With(metricsHandler).Record(1)
-	if retError != nil {
-		metrics.ClientRedirectionFailures.With(metricsHandler).Record(1,
-			metrics.ServiceErrorTypeTag(retError))
+	// Only emit redirection metrics when actual cross-cluster redirection occurred
+	if targetClusterName != i.currentClusterName {
+		metricsHandler = metricsHandler.WithTags(metrics.TargetClusterTag(targetClusterName))
+		metrics.ClientRedirectionLatency.With(metricsHandler).Record(i.timeSource.Now().Sub(startTime))
+		metricsHandler = metricsHandler.WithTags(metrics.NamespaceTag(namespaceName))
+		metrics.ClientRedirectionRequests.With(metricsHandler).Record(1)
+		if retError != nil {
+			metrics.ClientRedirectionFailures.With(metricsHandler).Record(1,
+				metrics.ServiceErrorTypeTag(retError))
+		}
 	}
 }
 

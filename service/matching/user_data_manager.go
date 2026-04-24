@@ -39,6 +39,10 @@ const (
 
 const maxFastUserDataFetches = 5
 
+// noEphemeralDataVersion as a value for LastKnownEphemeralDataVersion means
+// the caller does not want to receive ephemeral data.
+const noEphemeralDataVersion = -1
+
 type (
 	userDataManager interface {
 		Start()
@@ -429,9 +433,9 @@ func (m *userDataManagerImpl) refreshUserDataFromDB(ctx context.Context) error {
 
 	tags := []tag.Tag{
 		tag.UserDataVersion(response.UserData.GetVersion()),
-		tag.NewInt64("expected-user-data-version", m.userData.GetVersion()),
+		tag.Int64("expected-user-data-version", m.userData.GetVersion()),
 		tag.Timestamp(hybrid_logical_clock.UTC(response.UserData.GetData().GetClock())),
-		tag.NewTimeTag("expected-user-data-timestamp", hybrid_logical_clock.UTC(m.userData.GetData().GetClock())),
+		tag.Time("expected-user-data-timestamp", hybrid_logical_clock.UTC(m.userData.GetData().GetClock())),
 	}
 
 	if response.UserData.GetVersion() < m.userData.GetVersion() {
@@ -524,7 +528,7 @@ func (m *userDataManagerImpl) updateUserData(
 		return userData, false, err
 	}
 	if err != nil {
-		m.logger.Error("user data update function failed", tag.Error(err), tag.NewStringTag("user-data-update-source", options.Source))
+		m.logger.Error("user data update function failed", tag.Error(err), tag.String("user-data-update-source", options.Source))
 		return nil, false, err
 	}
 
@@ -559,7 +563,7 @@ func (m *userDataManagerImpl) updateUserData(
 	}
 
 	updatedVersionedData := &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion + 1, Data: updatedUserData}
-	m.logNewUserData("modified user data", updatedVersionedData, tag.NewStringTag("user-data-update-source", options.Source))
+	m.logNewUserData("modified user data", updatedVersionedData, tag.String("user-data-update-source", options.Source))
 	m.setUserDataLocked(updatedVersionedData)
 
 	return updatedVersionedData, shouldReplicate, err
@@ -588,20 +592,21 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 			// If we're closing, return a success with no data, as if the request expired. We shouldn't
 			// close due to idleness (because of the MarkAlive above), so we're probably closing due to a
 			// change of ownership. The caller will retry and be redirected to the new owner.
-			m.logger.Debug("returning empty user data (closing)", tag.NewBoolTag("long-poll", req.WaitNewData))
+			m.logger.Debug("returning empty user data (closing)", tag.Bool("long-poll", req.WaitNewData))
 			return &matchingservice.GetTaskQueueUserDataResponse{}, nil
 		} else if err != nil {
 			return nil, err
 		}
 		newUserData := userData.GetVersion() > lastVersion
-		newEphData := ephData.GetVersion() > lastEphVersion
+		// noEphemeralDataVersion means the caller does not want ephemeral data
+		newEphData := lastEphVersion != noEphemeralDataVersion && ephData.GetVersion() > lastEphVersion
 		if newUserData || newEphData {
-			m.logger.Info("returning user data",
-				tag.NewBoolTag("long-poll", req.WaitNewData),
-				tag.NewInt64("request-known-version", lastVersion),
+			m.logger.Debug("returning user data",
+				tag.Bool("long-poll", req.WaitNewData),
+				tag.Int64("request-known-version", lastVersion),
 				tag.UserDataVersion(userData.GetVersion()),
-				tag.NewInt64("request-eph-data-version", lastEphVersion),
-				tag.NewInt64("eph-data-version", ephData.GetVersion()),
+				tag.Int64("request-eph-data-version", lastEphVersion),
+				tag.Int64("eph-data-version", ephData.GetVersion()),
 			)
 			var res matchingservice.GetTaskQueueUserDataResponse
 			if newUserData {
@@ -620,7 +625,7 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 			// due to an edge case in during ownership transfer.
 			// We rely on client retries in this case to let the system eventually self-heal.
 			m.logger.Error("requested task queue user data for version greater than known version",
-				tag.NewInt64("request-known-version", lastVersion),
+				tag.Int64("request-known-version", lastVersion),
 				tag.UserDataVersion(userData.Version),
 			)
 			return nil, errRequestedVersionTooLarge
@@ -638,7 +643,7 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 		select {
 		case <-ctx.Done():
 			m.logger.Debug("returning empty user data (expired)",
-				tag.NewInt64("request-known-version", lastVersion),
+				tag.Int64("request-known-version", lastVersion),
 				tag.UserDataVersion(userData.GetVersion()),
 			)
 			return &matchingservice.GetTaskQueueUserDataResponse{}, nil
@@ -709,7 +714,7 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 	for i := 1; i < wfPartitions; i++ {
 		go check(i, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	}
-	for i := 0; i < actPartitions; i++ {
+	for i := range actPartitions {
 		go check(i, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	}
 
@@ -721,6 +726,7 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 	}
 }
 
+// LocalBacklogPriorityChanged can be called on any normal partition.
 func (m *userDataManagerImpl) LocalBacklogPriorityChanged(backlogPriority map[PhysicalTaskQueueVersion]int64) {
 	// TODO: later, we'll send this data to the root to propagate instead of just keeping it
 	// locally and merging.
@@ -738,30 +744,49 @@ func (m *userDataManagerImpl) LocalBacklogPriorityChanged(backlogPriority map[Ph
 		})
 	}
 
-	newEph := &taskqueuespb.VersionedEphemeralData{
-		Data: &taskqueuespb.EphemeralData{
-			Partition: []*taskqueuespb.EphemeralData_ByPartition{
-				&taskqueuespb.EphemeralData_ByPartition{
-					Partition: int32(normal.PartitionId()),
-					Version:   byVersion,
-				},
-			},
+	newPartition := []*taskqueuespb.EphemeralData_ByPartition{
+		&taskqueuespb.EphemeralData_ByPartition{
+			Partition: int32(normal.PartitionId()),
+			Version:   byVersion,
 		},
-		Version: time.Now().UnixNano(),
+	}
+
+	m.updateEphemeralData(func(newData *taskqueuespb.EphemeralData) {
+		newData.Partition = newPartition
+	})
+}
+
+func (m *userDataManagerImpl) gotIncomingEphemeralData(eph *taskqueuespb.VersionedEphemeralData) {
+	if m.partition.IsRoot() {
+		// Root activity/nexus partition should not get ephemeral data from its fetch source
+		// (root workflow partition). This is done by setting LastKnownEphemeralDataVersion to
+		// -1 on root non-wf partitions and having HandleGetUserDataRequest not send ephemeral
+		// data in that case. But if we do get it (e.g. during deployment), ignore it.
+		return
 	}
 
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	m.myEphemeralData = newEph
+	m.incomingEphemeralData = eph
 	m.mergeEphemeralDataLocked()
 }
 
-func (m *userDataManagerImpl) gotIncomingEphemeralData(eph *taskqueuespb.VersionedEphemeralData) {
+// updateEphemeralData updates the ephemeral data owned by this partition. The update function
+// will be given a non-nil clone of the current data, which it should mutate.
+func (m *userDataManagerImpl) updateEphemeralData(update func(*taskqueuespb.EphemeralData)) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	m.incomingEphemeralData = eph
+	newData := common.CloneProto(m.myEphemeralData.GetData())
+	if newData == nil {
+		newData = &taskqueuespb.EphemeralData{}
+	}
+	update(newData)
+	m.myEphemeralData = &taskqueuespb.VersionedEphemeralData{
+		Data:    newData,
+		Version: time.Now().UnixNano(),
+	}
 	m.mergeEphemeralDataLocked()
 }
 
@@ -773,6 +798,12 @@ func (m *userDataManagerImpl) getMergedEphemeralData() (*taskqueuespb.VersionedE
 }
 
 func (m *userDataManagerImpl) getIncomingEphemeralDataVersion() int64 {
+	if m.partition.IsRoot() {
+		// The root activity/nexus partition should not fetch ephemeral data from the root
+		// workflow partition.
+		return noEphemeralDataVersion
+	}
+
 	m.lock.Lock()
 	defer m.lock.Unlock()
 

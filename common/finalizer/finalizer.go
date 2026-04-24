@@ -2,10 +2,10 @@ package finalizer
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
 	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/log"
@@ -106,8 +106,8 @@ func (f *Finalizer) Run(
 	}
 
 	f.logger.Debug("finalizer starting",
-		tag.NewInt("items", totalCount),
-		tag.NewDurationTag("timeout", timeout))
+		tag.Int("items", totalCount),
+		tag.Duration("timeout", timeout))
 
 	startTime := time.Now()
 	defer func() { metrics.FinalizerLatency.With(f.metricsHandler).Record(time.Since(startTime)) }()
@@ -150,14 +150,14 @@ func (f *Finalizer) Run(
 			completedCallbacks += 1
 			if completedCallbacks == totalCount {
 				f.logger.Debug("finalizer completed",
-					tag.NewInt("completed", completedCallbacks))
+					tag.Int("completed", completedCallbacks))
 				return completedCallbacks
 			}
 
 		case <-ctx.Done():
 			f.logger.Error("finalizer timed out",
-				tag.NewInt("completed", completedCallbacks),
-				tag.NewInt("unfinished", totalCount-completedCallbacks))
+				tag.Int("completed", completedCallbacks),
+				tag.Int("unfinished", totalCount-completedCallbacks))
 			return completedCallbacks
 		}
 	}

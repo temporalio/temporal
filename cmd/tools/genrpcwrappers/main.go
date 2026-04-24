@@ -88,18 +88,27 @@ var (
 		"metricsClient.history.StreamWorkflowReplicationMessages":   true,
 		"retryableClient.history.StreamWorkflowReplicationMessages": true,
 
+		// Nexus metrics are an exception since they use the information from the request.
+		"metricsClient.history.StartNexusOperation":  true,
+		"metricsClient.history.CancelNexusOperation": true,
+
 		// these need to pick a partition. too complicated.
 		"client.matching.AddActivityTask":       true,
 		"client.matching.AddWorkflowTask":       true,
 		"client.matching.PollActivityTaskQueue": true,
 		"client.matching.PollWorkflowTaskQueue": true,
 		"client.matching.QueryWorkflow":         true,
+		"client.matching.DispatchNexusTask":     true,
+		"client.matching.PollNexusTaskQueue":    true,
+
 		// these do forwarding stats. too complicated.
 		"metricsClient.matching.AddActivityTask":       true,
 		"metricsClient.matching.AddWorkflowTask":       true,
 		"metricsClient.matching.PollActivityTaskQueue": true,
 		"metricsClient.matching.PollWorkflowTaskQueue": true,
 		"metricsClient.matching.QueryWorkflow":         true,
+		"metricsClient.matching.DispatchNexusTask":     true,
+		"metricsClient.matching.PollNexusTaskQueue":    true,
 	}
 	// Fields to ignore when looking for the routing fields in a request object.
 	ignoreField = map[string]bool{

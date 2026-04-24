@@ -102,9 +102,12 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueueWithReachability": {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListDeployments":                   {},
 		"/temporal.api.workflowservice.v1.WorkflowService/GetDeploymentReachability":         {},
+		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":             {},
 
-		"/temporal.api.workflowservice.v1.WorkflowService/CountActivityExecutions": {},
-		"/temporal.api.workflowservice.v1.WorkflowService/ListActivityExecutions":  {},
+		"/temporal.api.workflowservice.v1.WorkflowService/CountActivityExecutions":       {},
+		"/temporal.api.workflowservice.v1.WorkflowService/ListActivityExecutions":        {},
+		"/temporal.api.workflowservice.v1.WorkflowService/CountNexusOperationExecutions": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/ListNexusOperationExecutions":  {},
 	}
 
 	var service workflowservice.WorkflowServiceServer
@@ -124,10 +127,14 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 
 func (s *quotasSuite) TestNamespaceReplicationInducingAPIs() {
 	apis := map[string]struct{}{
-		"/temporal.api.workflowservice.v1.WorkflowService/RegisterNamespace":                {},
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateNamespace":                  {},
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerBuildIdCompatibility": {},
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerVersioningRules":      {},
+		"/temporal.api.workflowservice.v1.WorkflowService/RegisterNamespace":                 {},
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateNamespace":                   {},
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerBuildIdCompatibility":  {},
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerVersioningRules":       {},
+		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentCurrentVersion": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentRampingVersion": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkerDeploymentVersion":     {},
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateTaskQueueConfig":             {},
 	}
 
 	var service workflowservice.WorkflowServiceServer
@@ -201,7 +208,7 @@ func (s *quotasSuite) testOperatorPrioritized(limiter quotas.RequestRateLimiter,
 	requestTime := time.Now()
 	limitCount := 0
 
-	for i := 0; i < 12; i++ {
+	for range 12 {
 		if !limiter.Allow(requestTime, apiRequest) {
 			limitCount++
 			s.True(limiter.Allow(requestTime, operatorRequest))

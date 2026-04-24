@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/testing/protoassert"
@@ -86,49 +87,36 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 		urls    []string
 		header  map[string]string
 		message string
-		allow   bool
 	}{
-		{
-			name:    "disabled",
-			urls:    []string{"http://some-ignored-address"},
-			allow:   false,
-			message: "attaching workflow callbacks is disabled for this namespace",
-		},
 		{
 			name:    "invalid-scheme",
 			urls:    []string{"invalid"},
-			allow:   true,
 			message: "invalid url: unknown scheme: invalid",
 		},
 		{
 			name:    "url-length-too-long",
 			urls:    []string{"http://some-very-very-very-very-very-very-very-long-url"},
-			allow:   true,
 			message: "invalid url: url length longer than max length allowed of 50",
 		},
 		{
 			name:    "header-size-too-large",
 			urls:    []string{"http://some-ignored-address"},
 			header:  map[string]string{"too": "long"},
-			allow:   true,
 			message: "invalid header: header size longer than max allowed size of 6",
 		},
 		{
 			name:    "too many callbacks",
 			urls:    []string{"http://url-1", "http://url-2", "http://url-3"},
-			allow:   true,
-			message: "cannot attach more than 2 callbacks to a workflow",
+			message: "cannot attach more than 2 callbacks to an execution",
 		},
 		{
 			name:    "url not configured",
 			urls:    []string{"http://some-unconfigured-address"},
-			allow:   true,
 			message: "invalid url: url does not match any configured callback address: http://some-unconfigured-address",
 		},
 		{
 			name:    "https required",
 			urls:    []string{"http://some-secure-address"},
-			allow:   true,
 			message: "invalid url: callback address does not allow insecure connections: http://some-secure-address",
 		},
 	}
@@ -136,6 +124,7 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 	s.OverrideDynamicConfig(dynamicconfig.FrontendCallbackURLMaxLength, 50)
 	s.OverrideDynamicConfig(dynamicconfig.FrontendCallbackHeaderMaxSize, 6)
 	s.OverrideDynamicConfig(dynamicconfig.MaxCallbacksPerWorkflow, 2)
+	s.OverrideDynamicConfig(callback.MaxPerExecution, 2)
 	s.OverrideDynamicConfig(
 		callbacks.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "some-ignored-address", "AllowInsecure": true}, map[string]any{"Pattern": "some-secure-address", "AllowInsecure": false}},
@@ -143,7 +132,6 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
-			s.OverrideDynamicConfig(dynamicconfig.EnableNexus, tc.allow)
 			cbs := make([]*commonpb.Callback, 0, len(tc.urls))
 			for _, url := range tc.urls {
 				cbs = append(cbs, &commonpb.Callback{
@@ -364,7 +352,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 					var err error
 					if attempt < numAttempts {
 						// force retry
-						err = nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional error")
+						err = nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional error")
 					}
 					ch.requestCompleteCh <- err
 				}
@@ -392,7 +380,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				s.EventuallyWithT(func(col *assert.CollectT) {
 					description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, "")
 					require.NoError(col, err)
-					require.Equal(col, len(cbs), len(description.Callbacks))
+					require.Len(col, description.Callbacks, len(cbs))
 					descCbs := make([]*commonpb.Callback, 0, len(description.Callbacks))
 					for _, callbackInfo := range description.Callbacks {
 						protorequire.ProtoEqual(
@@ -563,7 +551,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, description.WorkflowExecutionInfo.Status)
 
 	// Should not be invoked during a reset
-	s.Equal(len(cbs), len(description.Callbacks))
+	s.Len(description.Callbacks, len(cbs))
 	descCbs := make([]*commonpb.Callback, 0, len(description.Callbacks))
 	for _, callbackInfo := range description.Callbacks {
 		s.Equal(enumspb.CALLBACK_STATE_STANDBY, callbackInfo.State)
@@ -602,7 +590,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 				description.WorkflowExecutionInfo.Status,
 			)
 
-			require.Equal(t, len(cbs), len(description.Callbacks))
+			require.Len(t, description.Callbacks, len(cbs))
 			descCbs = make([]*commonpb.Callback, 0, len(description.Callbacks))
 			for _, callbackInfo := range description.Callbacks {
 				require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)

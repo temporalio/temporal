@@ -13,6 +13,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -23,12 +24,14 @@ type (
 	}
 	// queryTaskInfo contains the info for a query task
 	queryTaskInfo struct {
-		taskID  string
-		request *matchingservice.QueryWorkflowRequest
+		taskID     string
+		createTime *timestamppb.Timestamp
+		request    *matchingservice.QueryWorkflowRequest
 	}
 	// nexusTaskInfo contains the info for a nexus task
 	nexusTaskInfo struct {
 		taskID            string
+		createTime        *timestamppb.Timestamp
 		deadline          time.Time
 		operationDeadline time.Time
 		request           *matchingservice.DispatchNexusTaskRequest
@@ -58,9 +61,12 @@ type (
 		// a parent partition receiving forwarded tasks makes no versioning decisions and only follows what the source
 		// partition instructed.
 		forwardInfo *taskqueuespb.TaskForwardInfo
-		// redirectInfo is only set when redirect rule is applied on the task. for forwarded tasks, this is populated
-		// based on forwardInfo.
+		// redirectInfo is only set when redirect rule is applied on the task. for forwarded tasks,
+		// this is populated based on forwardInfo (V2 versioning).
 		redirectInfo *taskqueuespb.BuildIdRedirectInfo
+		// redirectedFromBacklog is true if this task was redirectedFromBacklog from the backlog it was read from
+		// (V2 and V3 versioning).
+		redirectedFromBacklog bool
 		// pollerScalingDecision is assigned when the queue has advice to give to the poller about whether
 		// it should adjust its poller count
 		pollerScalingDecision *taskqueuepb.PollerScalingDecision
@@ -162,14 +168,22 @@ func newInternalQueryTask(
 ) *internalTask {
 	return &internalTask{
 		query: &queryTaskInfo{
-			taskID:  taskID,
-			request: request,
+			taskID:     taskID,
+			createTime: getCreateTime(request.GetForwardInfo()),
+			request:    request,
 		},
 		forwardInfo:       request.GetForwardInfo(),
 		responseC:         make(chan taskResponse, 1),
 		source:            enumsspb.TASK_SOURCE_HISTORY,
 		effectivePriority: effectivePriorityFactor * priorityKey(request.GetPriority().GetPriorityKey()),
 	}
+}
+
+func getCreateTime(f *taskqueuespb.TaskForwardInfo) *timestamppb.Timestamp {
+	if t := f.GetCreateTime(); t != nil {
+		return t
+	}
+	return timestamppb.Now()
 }
 
 func newInternalNexusTask(
@@ -181,6 +195,7 @@ func newInternalNexusTask(
 	return &internalTask{
 		nexus: &nexusTaskInfo{
 			taskID:            taskID,
+			createTime:        getCreateTime(request.GetForwardInfo()),
 			deadline:          deadline,
 			operationDeadline: operationDeadline,
 			request:           request,
@@ -226,6 +241,20 @@ func (task *internalTask) isForwarded() bool {
 
 func (task *internalTask) isSyncMatchTask() bool {
 	return task.responseC != nil
+}
+
+func (task *internalTask) getCreateTime() *timestamppb.Timestamp {
+	if task.forwardInfo.GetCreateTime() != nil {
+		return task.forwardInfo.GetCreateTime()
+	} else if task.event != nil {
+		return task.event.Data.GetCreateTime()
+	} else if task.query != nil {
+		return task.query.createTime
+	} else if task.nexus != nil {
+		return task.nexus.createTime
+	}
+
+	return timestamppb.Now()
 }
 
 func (task *internalTask) workflowExecution() *commonpb.WorkflowExecution {

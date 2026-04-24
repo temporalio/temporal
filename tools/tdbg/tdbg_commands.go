@@ -65,6 +65,12 @@ func getCommands(
 			},
 		},
 		{
+			Name:        "schedule",
+			Aliases:     []string{"sch"},
+			Usage:       "Run admin operation on a schedule",
+			Subcommands: newAdminScheduleCommands(clientFactory),
+		},
+		{
 			Name:        "decode",
 			Usage:       "Decode payload",
 			Subcommands: newDecodeCommands(taskBlobEncoder),
@@ -130,7 +136,12 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 				&cli.StringFlag{
 					Name:  FlagOutputFilename,
 					Usage: "output file",
-				}},
+				},
+				&cli.BoolFlag{
+					Name:  FlagDecode,
+					Usage: "Automatically decode payload data to JSON",
+				},
+			},
 			Action: func(c *cli.Context) error {
 				return AdminShowWorkflow(c, clientFactory)
 			},
@@ -154,6 +165,10 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Name:        FlagArchetype,
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
+				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
 				},
 			},
 			Action: func(c *cli.Context) error {
@@ -179,6 +194,10 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Name:        FlagArchetype,
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
+				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
 				},
 				&cli.StringFlag{
 					Name:  FlagVisibilityQuery,
@@ -237,6 +256,10 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
 				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				return AdminReplicateWorkflow(c, clientFactory)
@@ -262,9 +285,38 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
 				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDeleteWorkflow(c, clientFactory, prompterFactory(c))
+			},
+		},
+	}
+}
+
+func newAdminScheduleCommands(clientFactory ClientFactory) []*cli.Command {
+	return []*cli.Command{
+		{
+			Name:  "migrate",
+			Usage: "Migrate a schedule between V1 (workflow-backed) and V2 (CHASM)",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagScheduleID,
+					Aliases:  FlagScheduleIDAlias,
+					Usage:    "Schedule ID",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagTarget,
+					Usage:    "Target scheduler implementation: chasm, workflow",
+					Required: true,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminMigrateSchedule(c, clientFactory)
 			},
 		},
 	}
@@ -628,6 +680,35 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 			},
 			Action: func(c *cli.Context) error {
 				return AdminForceUnloadTaskQueuePartition(c, clientFactory)
+			},
+		},
+		{
+			Name:  "get-user-data",
+			Usage: "Get per-type user data stored for a task queue",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagNamespace,
+					Usage:    "Namespace name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagTaskQueue,
+					Usage:    "Task Queue name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:  FlagTaskQueueType,
+					Value: "TASK_QUEUE_TYPE_WORKFLOW",
+					Usage: "Task Queue type: TASK_QUEUE_TYPE_WORKFLOW, TASK_QUEUE_TYPE_ACTIVITY, TASK_QUEUE_TYPE_NEXUS (default TASK_QUEUE_TYPE_WORKFLOW)",
+				},
+				&cli.Int64Flag{
+					Name:  FlagPartitionID,
+					Usage: "Partition ID to fetch user data from (default 0 = root partition)",
+					Value: 0,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminGetTaskQueueUserData(c, clientFactory)
 			},
 		},
 	}

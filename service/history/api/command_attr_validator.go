@@ -76,6 +76,7 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 	namespaceID namespace.ID,
 	attributes *commandpb.ScheduleActivityTaskCommandAttributes,
 	runTimeout *durationpb.Duration,
+	workflowTaskQueue string,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES
 
@@ -108,7 +109,7 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 		RetryPolicy:            attributes.RetryPolicy,
 	}
 
-	err := activity.ValidateAndNormalizeActivityAttributes(
+	err := activity.ValidateAndNormalizeEmbeddedActivity(
 		activityID,
 		activityType,
 		v.getDefaultActivityRetrySettings,
@@ -116,7 +117,8 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 		namespaceID,
 		opts,
 		attributes.GetPriority(),
-		runTimeout)
+		runTimeout,
+		workflowTaskQueue)
 
 	if err != nil {
 		return failedCause, err
@@ -408,7 +410,8 @@ func (v *CommandAttrValidator) ValidateContinueAsNewWorkflowExecutionAttributes(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
 	}
-	if err := tqid.NormalizeAndValidate(attributes.TaskQueue, executionInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
+	if err := tqid.NormalizeAndValidateUserDefined(
+		attributes.TaskQueue, executionInfo.TaskQueue, executionInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
 		return failedCause, fmt.Errorf("error validating ContinueAsNewWorkflowExecutionCommand TaskQueue: %w. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue)
 	}
 
@@ -532,7 +535,8 @@ func (v *CommandAttrValidator) ValidateStartChildExecutionAttributes(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
 	}
-	if err := tqid.NormalizeAndValidate(attributes.TaskQueue, parentInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
+	if err := tqid.NormalizeAndValidateUserDefined(
+		attributes.TaskQueue, parentInfo.TaskQueue, parentInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
 		return failedCause, fmt.Errorf("invalid TaskQueue on StartChildWorkflowExecutionCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s TaskQueue=%s", err, wfID, wfType, ns, attributes.TaskQueue)
 	}
 

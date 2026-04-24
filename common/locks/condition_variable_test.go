@@ -139,7 +139,7 @@ func (s *conditionVariableSuite) TestBroadcast() {
 		broadcastWaitGroup.Done()
 		s.cv.Wait(nil)
 	}
-	for i := 0; i < waitThreads; i++ {
+	for range waitThreads {
 		go waitFn()
 	}
 
@@ -210,10 +210,10 @@ func (s *conditionVariableSuite) TestCase_ProducerConsumer() {
 		}
 	}
 
-	for i := 0; i < numConsumer; i++ {
+	for range numConsumer {
 		go consumerFn()
 	}
-	for i := 0; i < numProducer; i++ {
+	for range numProducer {
 		go produceFn()
 	}
 

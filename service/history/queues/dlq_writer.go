@@ -123,7 +123,7 @@ func (q *DLQWriter) WriteTaskToDLQ(
 		tag.SourceCluster(sourceCluster),
 		tag.TargetCluster(targetCluster),
 		tag.TaskType(task.GetType()),
-		tag.NewStringTag("task-category", task.GetCategory().Name()),
+		tag.String("task-category", task.GetCategory().Name()),
 		namespaceTag,
 	)
 	return nil

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/common/config"
 )
 
@@ -29,7 +30,7 @@ type CallTarget struct {
 	// The nexus endpoint name being targeted (if any).
 	NexusEndpointName string
 	// Request contains a deserialized copy of the API request object
-	Request interface{}
+	Request any
 }
 
 // @@@SNIPEND
@@ -40,6 +41,8 @@ type (
 		Decision Decision
 		// Reason may contain a message explaining the value of the Decision field.
 		Reason string
+		// Principal is the server-computed identity of the caller. Can be nil when not computed.
+		Principal *commonpb.Principal
 	}
 
 	// Decision is enum type for auth decision

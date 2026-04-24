@@ -503,6 +503,26 @@ func (mr *MockAdminServiceClientMockRecorder) GetTaskQueueTasks(ctx, in any, opt
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).GetTaskQueueTasks), varargs...)
 }
 
+// GetTaskQueueUserData mocks base method.
+func (m *MockAdminServiceClient) GetTaskQueueUserData(ctx context.Context, in *adminservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*adminservice.GetTaskQueueUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetTaskQueueUserData", varargs...)
+	ret0, _ := ret[0].(*adminservice.GetTaskQueueUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTaskQueueUserData indicates an expected call of GetTaskQueueUserData.
+func (mr *MockAdminServiceClientMockRecorder) GetTaskQueueUserData(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueUserData", reflect.TypeOf((*MockAdminServiceClient)(nil).GetTaskQueueUserData), varargs...)
+}
+
 // GetWorkflowExecutionRawHistory mocks base method.
 func (m *MockAdminServiceClient) GetWorkflowExecutionRawHistory(ctx context.Context, in *adminservice.GetWorkflowExecutionRawHistoryRequest, opts ...grpc.CallOption) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 	m.ctrl.T.Helper()
@@ -681,6 +701,26 @@ func (mr *MockAdminServiceClientMockRecorder) MergeDLQTasks(ctx, in any, opts ..
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).MergeDLQTasks), varargs...)
+}
+
+// MigrateSchedule mocks base method.
+func (m *MockAdminServiceClient) MigrateSchedule(ctx context.Context, in *adminservice.MigrateScheduleRequest, opts ...grpc.CallOption) (*adminservice.MigrateScheduleResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "MigrateSchedule", varargs...)
+	ret0, _ := ret[0].(*adminservice.MigrateScheduleResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MigrateSchedule indicates an expected call of MigrateSchedule.
+func (mr *MockAdminServiceClientMockRecorder) MigrateSchedule(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MigrateSchedule", reflect.TypeOf((*MockAdminServiceClient)(nil).MigrateSchedule), varargs...)
 }
 
 // PurgeDLQMessages mocks base method.
@@ -1430,6 +1470,21 @@ func (mr *MockAdminServiceServerMockRecorder) GetTaskQueueTasks(arg0, arg1 any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).GetTaskQueueTasks), arg0, arg1)
 }
 
+// GetTaskQueueUserData mocks base method.
+func (m *MockAdminServiceServer) GetTaskQueueUserData(arg0 context.Context, arg1 *adminservice.GetTaskQueueUserDataRequest) (*adminservice.GetTaskQueueUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTaskQueueUserData", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.GetTaskQueueUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTaskQueueUserData indicates an expected call of GetTaskQueueUserData.
+func (mr *MockAdminServiceServerMockRecorder) GetTaskQueueUserData(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueUserData", reflect.TypeOf((*MockAdminServiceServer)(nil).GetTaskQueueUserData), arg0, arg1)
+}
+
 // GetWorkflowExecutionRawHistory mocks base method.
 func (m *MockAdminServiceServer) GetWorkflowExecutionRawHistory(arg0 context.Context, arg1 *adminservice.GetWorkflowExecutionRawHistoryRequest) (*adminservice.GetWorkflowExecutionRawHistoryResponse, error) {
 	m.ctrl.T.Helper()
@@ -1563,6 +1618,21 @@ func (m *MockAdminServiceServer) MergeDLQTasks(arg0 context.Context, arg1 *admin
 func (mr *MockAdminServiceServerMockRecorder) MergeDLQTasks(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).MergeDLQTasks), arg0, arg1)
+}
+
+// MigrateSchedule mocks base method.
+func (m *MockAdminServiceServer) MigrateSchedule(arg0 context.Context, arg1 *adminservice.MigrateScheduleRequest) (*adminservice.MigrateScheduleResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MigrateSchedule", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.MigrateScheduleResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MigrateSchedule indicates an expected call of MigrateSchedule.
+func (mr *MockAdminServiceServerMockRecorder) MigrateSchedule(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MigrateSchedule", reflect.TypeOf((*MockAdminServiceServer)(nil).MigrateSchedule), arg0, arg1)
 }
 
 // PurgeDLQMessages mocks base method.

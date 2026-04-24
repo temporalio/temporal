@@ -400,6 +400,18 @@ type (
 		SerialConsistency string `yaml:"serialConsistency"`
 	}
 
+	// PasswordCommandConfig configures an external command to fetch the datastore password.
+	// The command's stdout is used as the password.
+	PasswordCommandConfig struct {
+		// Command is the path to the executable to run.
+		Command string `yaml:"command"`
+		// Args is the list of arguments to pass to the command.
+		Args []string `yaml:"args"`
+		// Timeout is the maximum duration to wait for the command to complete.
+		// Defaults to 30 seconds if unset.
+		Timeout time.Duration `yaml:"timeout"`
+	}
+
 	// SQL is the configuration for connecting to a SQL backed datastore
 	SQL struct {
 		// Connect is a function that returns a sql db connection. String based configuration is ignored if this is provided.
@@ -408,6 +420,11 @@ type (
 		User string `yaml:"user"`
 		// Password is the password corresponding to the user name
 		Password string `yaml:"password"`
+		// PasswordCommand executes an external command and uses its stdout as the password.
+		// Mutually exclusive with Password.
+		// If the command returns an expiring token (e.g. cloud IAM), set MaxConnLifetime
+		// to ensure connections are recycled before the token expires.
+		PasswordCommand *PasswordCommandConfig `yaml:"passwordCommand"`
 		// PluginName is the name of SQL plugin
 		PluginName string `yaml:"pluginName" validate:"nonzero"`
 		// DatabaseName is the name of SQL database to connect to
@@ -484,6 +501,9 @@ type (
 		Filestore *FilestoreArchiver `yaml:"filestore"`
 		Gstorage  *GstorageArchiver  `yaml:"gstorage"`
 		S3store   *S3Archiver        `yaml:"s3store"`
+		// CustomStores contains the config for all custom history archivers
+		// The structure is a map of archiver name (scheme) to a map of config key-values
+		CustomStores map[string]map[string]any `yaml:"customStores"`
 	}
 
 	// VisibilityArchival contains the config for visibility archival
@@ -501,6 +521,9 @@ type (
 		Filestore *FilestoreArchiver `yaml:"filestore"`
 		S3store   *S3Archiver        `yaml:"s3store"`
 		Gstorage  *GstorageArchiver  `yaml:"gstorage"`
+		// CustomStores contains the config for all custom visibility archivers
+		// The structure is a map of archiver name (scheme) to a map of config key-values
+		CustomStores map[string]map[string]any `yaml:"customStores"`
 	}
 
 	// FilestoreArchiver contain the config for filestore archiver

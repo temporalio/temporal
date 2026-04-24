@@ -16,7 +16,7 @@ import (
 )
 
 type (
-	GeneratorTaskExecutorOptions struct {
+	GeneratorTaskHandlerOptions struct {
 		fx.In
 
 		Config         *Config
@@ -26,7 +26,8 @@ type (
 		SpecBuilder    *scheduler.SpecBuilder
 	}
 
-	GeneratorTaskExecutor struct {
+	GeneratorTaskHandler struct {
+		chasm.PureTaskHandlerBase
 		config         *Config
 		metricsHandler metrics.Handler
 		baseLogger     log.Logger
@@ -35,8 +36,8 @@ type (
 	}
 )
 
-func NewGeneratorTaskExecutor(opts GeneratorTaskExecutorOptions) *GeneratorTaskExecutor {
-	return &GeneratorTaskExecutor{
+func NewGeneratorTaskHandler(opts GeneratorTaskHandlerOptions) *GeneratorTaskHandler {
+	return &GeneratorTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
 		baseLogger:     opts.BaseLogger,
@@ -45,7 +46,7 @@ func NewGeneratorTaskExecutor(opts GeneratorTaskExecutorOptions) *GeneratorTaskE
 	}
 }
 
-func (g *GeneratorTaskExecutor) Execute(
+func (g *GeneratorTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	generator *Generator,
 	_ chasm.TaskAttributes,
@@ -56,9 +57,11 @@ func (g *GeneratorTaskExecutor) Execute(
 	metricsHandler := newTaggedMetricsHandler(g.metricsHandler, scheduler)
 	invoker := scheduler.Invoker.Get(ctx)
 
+	now := ctx.Now(generator)
+
 	// If we have no last processed time, this is a new schedule.
 	if generator.LastProcessedTime == nil {
-		createdAt := timestamppb.New(ctx.Now(generator))
+		createdAt := timestamppb.New(now)
 		generator.LastProcessedTime = createdAt
 		scheduler.Info.CreateTime = createdAt
 
@@ -73,11 +76,11 @@ func (g *GeneratorTaskExecutor) Execute(
 
 	// Process time range between last high water mark and system time.
 	t1 := generator.LastProcessedTime.AsTime()
-	t2 := ctx.Now(generator).UTC()
+	t2 := now.UTC()
 	if t2.Before(t1) {
 		logger.Error("time went backwards",
-			tag.NewStringerTag("time", t1),
-			tag.NewStringerTag("time", t2))
+			tag.Stringer("time", t1),
+			tag.Stringer("time", t2))
 		t2 = t1
 	}
 
@@ -99,7 +102,7 @@ func (g *GeneratorTaskExecutor) Execute(
 	// Emit metrics and update state for any dropped actions.
 	if result.DroppedCount > 0 {
 		logger.Warn("Buffer overrun, dropping actions",
-			tag.NewInt64("dropped-count", result.DroppedCount))
+			tag.Int64("dropped-count", result.DroppedCount))
 		metricsHandler.Counter(metrics.ScheduleBufferOverruns.Name()).Record(result.DroppedCount)
 		scheduler.Info.BufferDropped += result.DroppedCount
 	}
@@ -141,13 +144,13 @@ func (g *GeneratorTaskExecutor) Execute(
 	return nil
 }
 
-func (g *GeneratorTaskExecutor) logSchedule(logger log.Logger, msg string, scheduler *Scheduler) {
+func (g *GeneratorTaskHandler) logSchedule(logger log.Logger, msg string, sched *Scheduler) {
 	logger.Debug(msg,
-		tag.NewStringerTag("spec", jsonStringer{scheduler.Schedule.Spec}),
-		tag.NewStringerTag("policies", jsonStringer{scheduler.Schedule.Policies}))
+		tag.Stringer("spec", jsonStringer{sched.Schedule.Spec}),
+		tag.Stringer("policies", jsonStringer{sched.Schedule.Policies}))
 }
 
-func (g *GeneratorTaskExecutor) Validate(
+func (g *GeneratorTaskHandler) Validate(
 	ctx chasm.Context,
 	generator *Generator,
 	attrs chasm.TaskAttributes,

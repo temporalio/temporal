@@ -131,7 +131,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	s.NoError(err)
 	err = chasmRegistry.Register(&testChasmLibrary{})
 	s.NoError(err)
-	err = chasmRegistry.Register(chasmworkflow.NewLibrary())
+	err = chasmRegistry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry()))
 	s.NoError(err)
 
 	s.mockShard.SetEventsCacheForTesting(events.NewHostLevelEventsCache(
@@ -749,7 +749,8 @@ func (s *visibilityQueueTaskExecutorSuite) buildChasmMutableState(
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: visComponentTypeID,
+						TypeId:   visComponentTypeID,
+						Detached: true,
 					},
 				},
 			},

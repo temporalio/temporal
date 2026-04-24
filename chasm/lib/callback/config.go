@@ -14,20 +14,26 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+var MaxPerExecution = dynamicconfig.NewNamespaceIntSetting(
+	"callback.maxPerExecution",
+	2000,
+	`MaxPerExecution is the maximum number of callbacks that can be attached to an execution (workflow or standalone activity).`,
+)
+
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
-	"chasm.callback.request.timeout",
+	"callback.request.timeout",
 	time.Second*10,
 	`RequestTimeout is the timeout for executing a single callback request.`,
 )
 
 var RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
-	"chasm.callback.retryPolicy.initialInterval",
+	"callback.retryPolicy.initialInterval",
 	time.Second,
 	`The initial backoff interval between every callback request attempt for a given callback.`,
 )
 
 var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
-	"chasm.callback.retryPolicy.maxInterval",
+	"callback.retryPolicy.maxInterval",
 	time.Hour,
 	`The maximum backoff interval between every callback request attempt for a given callback.`,
 )

@@ -5,10 +5,27 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
+// RoutingStrategy determines how a business ID is used for routing decisions.
+type RoutingStrategy int
+
+const (
+	// RoutingStrategyDefault is the default routing strategy.
+	RoutingStrategyDefault RoutingStrategy = iota
+	// RoutingStrategyPollerGroup routes based on the poller group.
+	RoutingStrategyPollerGroup
+)
+
+// RoutingKey holds routing ID (either the business ID or the poller group ID) and the routing strategy.
+type RoutingKey struct {
+	ID       string
+	Strategy RoutingStrategy
+}
+
 type ReplicationResolver interface {
-	ActiveClusterName(businessID string) string
+	ActiveClusterName(routingKey RoutingKey) string
+	ActiveInCluster(clusterName string) bool
 	ClusterNames(businessID string) []string
-	ReplicationState() enumspb.ReplicationState
+	ReplicationState(businessID string) enumspb.ReplicationState
 	IsGlobalNamespace() bool
 	FailoverVersion(businessID string) int64
 	FailoverNotificationVersion() int64
@@ -44,11 +61,20 @@ func NewDefaultReplicationResolverFactory() ReplicationResolverFactory {
 	}
 }
 
-func (r *defaultReplicationResolver) ActiveClusterName(businessID string) string {
+func (r *defaultReplicationResolver) ActiveClusterName(_ RoutingKey) string {
 	if r.replicationConfig == nil {
 		return ""
 	}
 	return r.replicationConfig.ActiveClusterName
+}
+
+func (r *defaultReplicationResolver) ActiveInCluster(clusterName string) bool {
+	if !r.IsGlobalNamespace() {
+		// namespace is not a global namespace, meaning namespace is always
+		// "active" within each cluster
+		return true
+	}
+	return r.replicationConfig.ActiveClusterName == clusterName
 }
 
 func (r *defaultReplicationResolver) ClusterNames(businessID string) []string {
@@ -61,7 +87,7 @@ func (r *defaultReplicationResolver) ClusterNames(businessID string) []string {
 	return out
 }
 
-func (r *defaultReplicationResolver) ReplicationState() enumspb.ReplicationState {
+func (r *defaultReplicationResolver) ReplicationState(_ string) enumspb.ReplicationState {
 	if r.replicationConfig == nil {
 		return enumspb.REPLICATION_STATE_UNSPECIFIED
 	}

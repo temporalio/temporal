@@ -42,6 +42,7 @@ type TaskMatcher struct {
 	backlogTasksCreateTime map[int64]int   // task creation time (unix nanos) -> number of tasks with that time
 	backlogTasksLock       sync.Mutex
 	lastPoller             atomic.Int64 // unix nanos of most recent poll start time
+	waitingPollerCount     atomic.Int64
 }
 
 var (
@@ -373,6 +374,9 @@ forLoop:
 }
 
 func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
+	if tm.config.EmitTaskDispatchLatencyAtPoll() {
+		return // metric will be emitted at poll response
+	}
 	if task.event.Data.CreateTime == nil {
 		return // should not happen but for safety
 	}
@@ -465,6 +469,11 @@ func (tm *TaskMatcher) poll(
 		return task, false, nil
 	default:
 	}
+
+	// From here on the goroutine will block on taskC (in step 3 or 4), so it
+	// is ready to receive a sync-matched task.
+	tm.waitingPollerCount.Add(1)
+	defer tm.waitingPollerCount.Add(-1)
 
 	if tm.isBacklogNegligible() {
 		// 3. forwarding (and all other clauses repeated)
@@ -614,6 +623,12 @@ func (tm *TaskMatcher) emitForwardedSourceStats(
 
 func (tm *TaskMatcher) timeSinceLastPoll() time.Duration {
 	return time.Since(time.Unix(0, tm.lastPoller.Load()))
+}
+
+// HasWaitingPoller returns true if it there's a poller ready and waiting
+// this is mostly useful in testing to avoid test races on setup
+func (tm *TaskMatcher) HasWaitingPoller() bool {
+	return tm.waitingPollerCount.Load() > 0
 }
 
 // contextWithCancelOnChannelClose returns a child Context and CancelFunc just like

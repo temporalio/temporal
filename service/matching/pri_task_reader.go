@@ -317,7 +317,9 @@ func (tr *priTaskReader) addErrorBehavior(err error) (drop, retry bool) {
 	// - versioning wants to re-spool the task on a different queue and that failed
 	// - versioning says StickyWorkerUnavailable
 	if errors.Is(err, errTaskQueueClosed) || common.IsContextCanceledErr(err) {
-		return false, false
+		// maybe we tried to add a task to a versioned queue as it was unloading, and have to
+		// retry here. if tqCtx is closing, addTaskToMatcher will give up.
+		return false, true
 	}
 	var stickyUnavailable *serviceerrors.StickyWorkerUnavailable
 	if errors.As(err, &stickyUnavailable) {
@@ -376,7 +378,8 @@ func (tr *priTaskReader) signalNewTasks(resp subqueueCreateTasksResponse) {
 			// Because we checked readLevel, we know that getTasksPump can't have beat us to
 			// adding these tasks to outstandingTasks. So they should definitely not be there.
 			_, found := tr.outstandingTasks.Get(t.TaskId)
-			return softassert.That(tr.logger, !found, "newly-written task already present in outstanding tasks")
+			softassert.That(tr.logger, !found, "newly-written task already present in outstanding tasks")
+			return found
 		})
 
 	if !canAddDirect {
@@ -424,8 +427,11 @@ func (tr *priTaskReader) getLoadedTasks() int {
 func (tr *priTaskReader) isDrained() bool {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel(tr.subqueue)
-	return tr.readLevel >= maxReadLevel && tr.outstandingTasks.Empty()
+	return tr.isDrainedLocked()
+}
+
+func (tr *priTaskReader) isDrainedLocked() bool {
+	return tr.outstandingTasks.Empty() && tr.readLevel >= tr.backlogMgr.db.GetMaxReadLevel(tr.subqueue)
 }
 
 func (tr *priTaskReader) ackTaskLocked(taskId int64) int64 {
@@ -451,6 +457,12 @@ func (tr *priTaskReader) ackTaskLocked(taskId int64) int64 {
 		tr.outstandingTasks.Remove(minId)
 		numAcked += 1
 	}
+
+	// Also if we're completely drained, we can move the ack level up to the read level.
+	if tr.isDrainedLocked() {
+		tr.ackLevel = tr.readLevel
+	}
+
 	return numAcked
 }
 
@@ -541,5 +553,8 @@ func (tr *priTaskReader) finalGC() {
 	tr.lock.Lock()
 	ackLevel := tr.ackLevel
 	tr.lock.Unlock()
+	if ackLevel == 0 {
+		return
+	}
 	_, _ = tr.doGCAt(ackLevel)
 }

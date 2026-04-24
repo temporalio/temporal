@@ -51,7 +51,7 @@ type ComponentRef struct {
 	componentPath      []string
 	componentInitialVT *persistencespb.VersionedTransition
 
-	validationFn func(NodeBackend, Context, Component) error
+	validationFn func(NodeBackend, Context, Component, *Registry) error
 }
 
 // NewComponentRef creates a new ComponentRef with a registered root component go type.
@@ -64,6 +64,19 @@ func NewComponentRef[C Component](
 	return ComponentRef{
 		ExecutionKey:    executionKey,
 		executionGoType: reflect.TypeFor[C](),
+	}
+}
+
+// NewComponentRefByArchetypeID creates a new ComponentRef with a known archetype ID.
+// This should only be used by CHASM framework internals.
+// CHASM library developers should use [NewComponentRef] instead.
+func NewComponentRefByArchetypeID(
+	executionKey ExecutionKey,
+	archetypeID ArchetypeID,
+) ComponentRef {
+	return ComponentRef{
+		ExecutionKey: executionKey,
+		archetypeID:  archetypeID,
 	}
 }
 

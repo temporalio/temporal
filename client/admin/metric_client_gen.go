@@ -331,6 +331,20 @@ func (c *metricClient) GetTaskQueueTasks(
 	return c.client.GetTaskQueueTasks(ctx, request, opts...)
 }
 
+func (c *metricClient) GetTaskQueueUserData(
+	ctx context.Context,
+	request *adminservice.GetTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.GetTaskQueueUserDataResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientGetTaskQueueUserData")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetTaskQueueUserData(ctx, request, opts...)
+}
+
 func (c *metricClient) GetWorkflowExecutionRawHistory(
 	ctx context.Context,
 	request *adminservice.GetWorkflowExecutionRawHistoryRequest,
@@ -455,6 +469,20 @@ func (c *metricClient) MergeDLQTasks(
 	}()
 
 	return c.client.MergeDLQTasks(ctx, request, opts...)
+}
+
+func (c *metricClient) MigrateSchedule(
+	ctx context.Context,
+	request *adminservice.MigrateScheduleRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.MigrateScheduleResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientMigrateSchedule")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.MigrateSchedule(ctx, request, opts...)
 }
 
 func (c *metricClient) PurgeDLQMessages(

@@ -83,7 +83,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow() {
 			// Schedule 3 activities on first workflow task
 			isFirstTaskProcessed = true
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
 
 			var scheduleActivityCommands []*commandpb.Command
 			for i := 1; i <= activityCount; i++ {
@@ -950,7 +950,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	s.Worker().RegisterWorkflow(CaNOnceWorkflow)
+	s.SdkWorker().RegisterWorkflow(CaNOnceWorkflow)
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: s.TaskQueue()}, CaNOnceWorkflow, "")
 	s.NoError(err)
 
@@ -1136,7 +1136,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
-	s.Logger.Info("Workflow reset complete", tag.WorkflowRunID(resetResp.GetRunId()), tag.NewInt64("ResetToEventID", resetToEventID))
+	s.Logger.Info("Workflow reset complete", tag.WorkflowRunID(resetResp.GetRunId()), tag.Int64("ResetToEventID", resetToEventID))
 
 	descResp, descErr = s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
@@ -1151,4 +1151,8 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 	s.NotNil(descResp.WorkflowExecutionInfo.ExternalPayloadCount)
 	s.Equal(int64(1), descResp.WorkflowExecutionInfo.ExternalPayloadCount)
 	s.Equal(workflowExternalPayloadSize, descResp.WorkflowExecutionInfo.ExternalPayloadSizeBytes)
+}
+
+func (s *ResetWorkflowTestSuite) Context() context.Context {
+	return s.T().Context()
 }

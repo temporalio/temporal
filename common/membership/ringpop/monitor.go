@@ -61,6 +61,7 @@ type monitor struct {
 	propagationTime           time.Duration
 	joinTime                  time.Time
 	rings                     map[primitives.ServiceName]*serviceResolver
+	replicaPoints             int
 	logger                    log.Logger
 	metadataManager           persistence.ClusterMetadataManager
 	broadcastHostPortResolver func() (string, error)
@@ -81,6 +82,7 @@ func newMonitor(
 	maxJoinDuration time.Duration,
 	propagationTime time.Duration,
 	joinTime time.Time,
+	replicaPoints int,
 ) *monitor {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	lifecycleCtx = headers.SetCallerInfo(
@@ -100,6 +102,7 @@ func newMonitor(
 		services:                  services,
 		rp:                        rp,
 		rings:                     make(map[primitives.ServiceName]*serviceResolver),
+		replicaPoints:             replicaPoints,
 		logger:                    logger,
 		metadataManager:           metadataManager,
 		broadcastHostPortResolver: broadcastHostPortResolver,
@@ -110,7 +113,7 @@ func newMonitor(
 		joinTime:                  joinTime,
 	}
 	for service, port := range services {
-		rpo.rings[service] = newServiceResolver(service, port, rp, logger)
+		rpo.rings[service] = newServiceResolver(service, port, rp, replicaPoints, logger)
 	}
 	return rpo
 }
@@ -227,25 +230,6 @@ func (rpo *monitor) WaitUntilInitialized(ctx context.Context) error {
 	return err
 }
 
-func serviceNameToServiceTypeEnum(name primitives.ServiceName) (persistence.ServiceType, error) {
-	switch name {
-	case primitives.AllServices:
-		return persistence.All, nil
-	case primitives.FrontendService:
-		return persistence.Frontend, nil
-	case primitives.InternalFrontendService:
-		return persistence.InternalFrontend, nil
-	case primitives.HistoryService:
-		return persistence.History, nil
-	case primitives.MatchingService:
-		return persistence.Matching, nil
-	case primitives.WorkerService:
-		return persistence.Worker, nil
-	default:
-		return persistence.All, fmt.Errorf("unable to parse servicename '%s'", name)
-	}
-}
-
 func (rpo *monitor) upsertMyMembership(
 	ctx context.Context,
 	request *persistence.UpsertClusterMembershipRequest,
@@ -348,7 +332,6 @@ func (rpo *monitor) fetchCurrentBootstrapHostports() ([]string, error) {
 				PageSize:            pageSize,
 				NextPageToken:       nextPageToken,
 			})
-
 		if err != nil {
 			return nil, err
 		}
@@ -381,7 +364,6 @@ func (rpo *monitor) startHeartbeatUpsertLoop(request *persistence.UpsertClusterM
 			default:
 			}
 			err := rpo.upsertMyMembership(rpo.lifecycleCtx, request)
-
 			if err != nil {
 				rpo.logger.Error("Membership upsert failed.", tag.Error(err))
 			}
@@ -473,4 +455,30 @@ func replaceServicePort(address string, servicePort int) (string, error) {
 		return "", membership.ErrIncorrectAddressFormat
 	}
 	return net.JoinHostPort(host, convert.IntToString(servicePort)), nil
+}
+
+var (
+	serviceNameToServiceTypeEnumMap = map[primitives.ServiceName]persistence.ServiceType{}
+)
+
+// RegisterServiceNameToServiceTypeEnum must be called from a static init().
+func RegisterServiceNameToServiceTypeEnum(serviceName primitives.ServiceName, serviceType persistence.ServiceType) {
+	serviceNameToServiceTypeEnumMap[serviceName] = serviceType
+}
+
+func init() {
+	RegisterServiceNameToServiceTypeEnum(primitives.AllServices, persistence.All)
+	RegisterServiceNameToServiceTypeEnum(primitives.FrontendService, persistence.Frontend)
+	RegisterServiceNameToServiceTypeEnum(primitives.InternalFrontendService, persistence.InternalFrontend)
+	RegisterServiceNameToServiceTypeEnum(primitives.HistoryService, persistence.History)
+	RegisterServiceNameToServiceTypeEnum(primitives.MatchingService, persistence.Matching)
+	RegisterServiceNameToServiceTypeEnum(primitives.WorkerService, persistence.Worker)
+}
+
+func serviceNameToServiceTypeEnum(name primitives.ServiceName) (persistence.ServiceType, error) {
+	if serviceType, ok := serviceNameToServiceTypeEnumMap[name]; ok {
+		return serviceType, nil
+	}
+
+	return persistence.All, fmt.Errorf("unable to parse servicename '%s'", name)
 }

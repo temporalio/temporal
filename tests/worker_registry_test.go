@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -29,7 +30,6 @@ func TestWorkerRegistryTestSuite(t *testing.T) {
 }
 
 func (s *WorkerRegistryTestSuite) SetupTest() {
-	s.OverrideDynamicConfig(dynamicconfig.ListWorkersEnabled, true)
 	s.OverrideDynamicConfig(dynamicconfig.WorkerHeartbeatsEnabled, true)
 	s.FunctionalTestBase.SetupTest()
 
@@ -118,6 +118,37 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_DescribeWorker() {
 	}
 }
 
+func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkersWithNoHeartbeats() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	resp, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
+		Namespace: s.Namespace().String(),
+		Query:     "TaskQueue='no-heartbeats-recorded-on-this-queue'",
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Empty(resp.GetWorkersInfo()) //nolint:staticcheck // testing deprecated field
+	s.Empty(resp.GetWorkers())
+}
+
+func (s *WorkerRegistryTestSuite) TestWorkerRegistry_DescribeWorkerWithNoHeartbeats() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	_, err := s.FrontendClient().DescribeWorker(ctx, &workflowservice.DescribeWorkerRequest{
+		Namespace:         s.Namespace().String(),
+		WorkerInstanceKey: "nonexistent-worker",
+	})
+	s.Require().Error(err)
+	var notFound *serviceerror.NotFound
+	var namespaceNotFound *serviceerror.NamespaceNotFound
+	s.True(
+		errors.As(err, &notFound) || errors.As(err, &namespaceNotFound),
+		"expected NotFound or NamespaceNotFound, got: %v", err,
+	)
+}
+
 func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -154,10 +185,17 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 		s.NotNil(resp)
 		s.Len(resp.GetWorkersInfo(), 1)
 
+		// Verify deprecated WorkersInfo field (backward compatibility)
 		workerHeartbeat := resp.GetWorkersInfo()[0].GetWorkerHeartbeat()
 		s.Equal(worker1Key, workerHeartbeat.WorkerInstanceKey)
 		s.Equal(sharedTaskQueue, workerHeartbeat.TaskQueue)
 		s.Equal(int32(1), workerHeartbeat.TotalStickyCacheHit)
+
+		// Verify new Workers field (WorkerListInfo)
+		s.Len(resp.GetWorkers(), 1)
+		workerListInfo := resp.GetWorkers()[0]
+		s.Equal(worker1Key, workerListInfo.GetWorkerInstanceKey())
+		s.Equal(sharedTaskQueue, workerListInfo.GetTaskQueue())
 	}
 	{
 		resp, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
@@ -167,28 +205,40 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 		s.NoError(err)
 		s.NotNil(resp)
 
+		// Verify deprecated WorkersInfo field
 		workers := resp.GetWorkersInfo()
-		// Collect workers by their instance key
 		workersByKey := make(map[string]*workerpb.WorkerHeartbeat)
 		for _, workerInfo := range workers {
 			heartbeat := workerInfo.GetWorkerHeartbeat()
 			workersByKey[heartbeat.WorkerInstanceKey] = heartbeat
 		}
-
-		// Verify we have exactly the workers we expect
 		s.Len(workersByKey, 2)
 
-		// Verify worker1
 		worker1, exists := workersByKey[worker1Key]
 		s.True(exists, "worker1 should exist")
 		s.Equal(sharedTaskQueue, worker1.TaskQueue)
 		s.Equal(int32(1), worker1.TotalStickyCacheHit)
 
-		// Verify worker2
 		worker2, exists := workersByKey[worker2Key]
 		s.True(exists, "worker2 should exist")
 		s.Equal(sharedTaskQueue, worker2.TaskQueue)
 		s.Equal(int32(2), worker2.TotalStickyCacheHit)
+
+		// Verify new Workers field (WorkerListInfo)
+		listInfos := resp.GetWorkers()
+		s.Len(listInfos, 2)
+		listInfoByKey := make(map[string]*workerpb.WorkerListInfo)
+		for _, info := range listInfos {
+			listInfoByKey[info.GetWorkerInstanceKey()] = info
+		}
+
+		listInfo1, exists := listInfoByKey[worker1Key]
+		s.True(exists, "worker1 list info should exist")
+		s.Equal(sharedTaskQueue, listInfo1.GetTaskQueue())
+
+		listInfo2, exists := listInfoByKey[worker2Key]
+		s.True(exists, "worker2 list info should exist")
+		s.Equal(sharedTaskQueue, listInfo2.GetTaskQueue())
 	}
 	{
 		nonExistentWorkerKey := s.tv.WorkerIdentity() + "_nonexistent"
@@ -198,7 +248,8 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 		})
 		s.NoError(err)
 		s.NotNil(resp)
-		s.Len(resp.GetWorkersInfo(), 0)
+		s.Empty(resp.GetWorkersInfo()) //nolint:staticcheck // testing deprecated field
+		s.Empty(resp.GetWorkers())
 	}
 }
 
@@ -211,7 +262,7 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkersPagination() {
 	// Create 5 workers with predictable keys for pagination testing
 	workerKeys := make([]string, 5)
 	heartbeats := make([]*workerpb.WorkerHeartbeat, 5)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		workerKeys[i] = fmt.Sprintf("%s_worker_%02d", s.tv.WorkerIdentity(), i)
 		heartbeats[i] = &workerpb.WorkerHeartbeat{
 			WorkerInstanceKey:   workerKeys[i],

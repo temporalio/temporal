@@ -5,6 +5,7 @@ package matching
 
 import (
 	"context"
+	"runtime"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -37,9 +38,10 @@ type clientImpl struct {
 	logger          log.Logger
 	loadBalancer    LoadBalancer
 	spreadRouting   dynamicconfig.TypedPropertyFn[dynamicconfig.GradualChange[int]]
+	partitionCache  *partitionCache
 }
 
-// NewClient creates a new history service gRPC client
+// NewClient creates a new matching service gRPC client
 func NewClient(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
@@ -49,7 +51,7 @@ func NewClient(
 	lb LoadBalancer,
 	spreadRouting dynamicconfig.TypedPropertyFn[dynamicconfig.GradualChange[int]],
 ) matchingservice.MatchingServiceClient {
-	return &clientImpl{
+	c := &clientImpl{
 		timeout:         timeout,
 		longPollTimeout: longPollTimeout,
 		clients:         clients,
@@ -57,24 +59,53 @@ func NewClient(
 		logger:          logger,
 		loadBalancer:    lb,
 		spreadRouting:   spreadRouting,
+		partitionCache:  newPartitionCache(metricsHandler),
 	}
+
+	// Start goroutine to prune partition count cache.
+	// Clean up on gc, since we can't easily hook into fx here.
+	c.partitionCache.Start()
+	runtime.AddCleanup(c, func(cache *partitionCache) { cache.Stop() }, c.partitionCache)
+
+	return c
 }
 
 func (c *clientImpl) AddActivityTask(
 	ctx context.Context,
 	request *matchingservice.AddActivityTaskRequest,
-	opts ...grpc.CallOption) (*matchingservice.AddActivityTaskResponse, error) {
+	opts ...grpc.CallOption,
+) (*matchingservice.AddActivityTaskResponse, error) {
+	if !isPartitionAwareKind(request.GetTaskQueue().GetKind()) {
+		return c.addActivityTask(ctx, PartitionCounts{}, request, opts)
+	}
+	pkey := c.partitionCache.makeKey(
+		request.GetNamespaceId(),
+		request.GetTaskQueue().GetName(),
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+	)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, request, opts, c.addActivityTask)
+}
+
+func (c *clientImpl) addActivityTask(
+	ctx context.Context,
+	pc PartitionCounts,
+	request *matchingservice.AddActivityTaskRequest,
+	opts []grpc.CallOption,
+) (*matchingservice.AddActivityTaskResponse, error) {
 	request = common.CloneProto(request)
 	client, err := c.pickClientForWrite(
 		request.GetTaskQueue(),
 		request.GetNamespaceId(),
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		request.GetForwardInfo().GetSourcePartition())
+		request.GetForwardInfo().GetSourcePartition(),
+		pc,
+	)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
+
 	return client.AddActivityTask(ctx, request, opts...)
 }
 
@@ -82,12 +113,31 @@ func (c *clientImpl) AddWorkflowTask(
 	ctx context.Context,
 	request *matchingservice.AddWorkflowTaskRequest,
 	opts ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
+	if !isPartitionAwareKind(request.GetTaskQueue().GetKind()) {
+		return c.addWorkflowTask(ctx, PartitionCounts{}, request, opts)
+	}
+	pkey := c.partitionCache.makeKey(
+		request.GetNamespaceId(),
+		request.GetTaskQueue().GetName(),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, request, opts, c.addWorkflowTask)
+}
+
+func (c *clientImpl) addWorkflowTask(
+	ctx context.Context,
+	pc PartitionCounts,
+	request *matchingservice.AddWorkflowTaskRequest,
+	opts []grpc.CallOption,
+) (*matchingservice.AddWorkflowTaskResponse, error) {
 	request = common.CloneProto(request)
 	client, err := c.pickClientForWrite(
 		request.GetTaskQueue(),
 		request.GetNamespaceId(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		request.GetForwardInfo().GetSourcePartition())
+		request.GetForwardInfo().GetSourcePartition(),
+		pc,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -99,13 +149,33 @@ func (c *clientImpl) AddWorkflowTask(
 func (c *clientImpl) PollActivityTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollActivityTaskQueueRequest,
-	opts ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
+	opts ...grpc.CallOption,
+) (*matchingservice.PollActivityTaskQueueResponse, error) {
+	if !isPartitionAwareKind(request.GetPollRequest().GetTaskQueue().GetKind()) {
+		return c.pollActivityTaskQueue(ctx, PartitionCounts{}, request, opts)
+	}
+	pkey := c.partitionCache.makeKey(
+		request.GetNamespaceId(),
+		request.GetPollRequest().GetTaskQueue().GetName(),
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+	)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, request, opts, c.pollActivityTaskQueue)
+}
+
+func (c *clientImpl) pollActivityTaskQueue(
+	ctx context.Context,
+	pc PartitionCounts,
+	request *matchingservice.PollActivityTaskQueueRequest,
+	opts []grpc.CallOption,
+) (*matchingservice.PollActivityTaskQueueResponse, error) {
 	request = common.CloneProto(request)
 	client, release, err := c.pickClientForRead(
 		request.GetPollRequest().GetTaskQueue(),
 		request.GetNamespaceId(),
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		request.GetForwardedSource())
+		request.GetForwardedSource(),
+		pc,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -120,13 +190,33 @@ func (c *clientImpl) PollActivityTaskQueue(
 func (c *clientImpl) PollWorkflowTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollWorkflowTaskQueueRequest,
-	opts ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+	opts ...grpc.CallOption,
+) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+	if !isPartitionAwareKind(request.GetPollRequest().GetTaskQueue().GetKind()) {
+		return c.pollWorkflowTaskQueue(ctx, PartitionCounts{}, request, opts)
+	}
+	pkey := c.partitionCache.makeKey(
+		request.GetNamespaceId(),
+		request.GetPollRequest().GetTaskQueue().GetName(),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, request, opts, c.pollWorkflowTaskQueue)
+}
+
+func (c *clientImpl) pollWorkflowTaskQueue(
+	ctx context.Context,
+	pc PartitionCounts,
+	request *matchingservice.PollWorkflowTaskQueueRequest,
+	opts []grpc.CallOption,
+) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 	request = common.CloneProto(request)
 	client, release, err := c.pickClientForRead(
 		request.GetPollRequest().GetTaskQueue(),
 		request.GetNamespaceId(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		request.GetForwardedSource())
+		request.GetForwardedSource(),
+		pc,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +228,28 @@ func (c *clientImpl) PollWorkflowTaskQueue(
 	return client.PollWorkflowTaskQueue(ctx, request, opts...)
 }
 
-func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest, opts ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
+func (c *clientImpl) QueryWorkflow(
+	ctx context.Context,
+	request *matchingservice.QueryWorkflowRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.QueryWorkflowResponse, error) {
+	if !isPartitionAwareKind(request.GetTaskQueue().GetKind()) {
+		return c.queryWorkflow(ctx, PartitionCounts{}, request, opts)
+	}
+	pkey := c.partitionCache.makeKey(
+		request.GetNamespaceId(),
+		request.GetTaskQueue().GetName(),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, request, opts, c.queryWorkflow)
+}
+
+func (c *clientImpl) queryWorkflow(
+	ctx context.Context,
+	pc PartitionCounts,
+	request *matchingservice.QueryWorkflowRequest,
+	opts []grpc.CallOption,
+) (*matchingservice.QueryWorkflowResponse, error) {
 	// use shallow copy since QueryRequest may contain a large payload
 	request = &matchingservice.QueryWorkflowRequest{
 		NamespaceId:      request.NamespaceId,
@@ -148,13 +259,104 @@ func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice
 		ForwardInfo:      request.ForwardInfo,
 		Priority:         request.Priority,
 	}
-	client, err := c.pickClientForWrite(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.GetForwardInfo().GetSourcePartition())
+	client, err := c.pickClientForWrite(
+		request.GetTaskQueue(),
+		request.GetNamespaceId(),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		request.GetForwardInfo().GetSourcePartition(),
+		pc,
+	)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.QueryWorkflow(ctx, request, opts...)
+}
+
+func (c *clientImpl) DispatchNexusTask(
+	ctx context.Context,
+	request *matchingservice.DispatchNexusTaskRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.DispatchNexusTaskResponse, error) {
+	if !isPartitionAwareKind(request.GetTaskQueue().GetKind()) {
+		return c.dispatchNexusTask(ctx, PartitionCounts{}, request, opts)
+	}
+	pkey := c.partitionCache.makeKey(
+		request.GetNamespaceId(),
+		request.GetTaskQueue().GetName(),
+		enumspb.TASK_QUEUE_TYPE_NEXUS,
+	)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, request, opts, c.dispatchNexusTask)
+}
+
+func (c *clientImpl) dispatchNexusTask(
+	ctx context.Context,
+	pc PartitionCounts,
+	request *matchingservice.DispatchNexusTaskRequest,
+	opts []grpc.CallOption,
+) (*matchingservice.DispatchNexusTaskResponse, error) {
+	// use shallow copy since Request may contain a large payload
+	request = &matchingservice.DispatchNexusTaskRequest{
+		NamespaceId: request.NamespaceId,
+		TaskQueue:   common.CloneProto(request.TaskQueue),
+		Request:     request.Request,
+		ForwardInfo: request.ForwardInfo,
+	}
+	client, err := c.pickClientForWrite(
+		request.GetTaskQueue(),
+		request.GetNamespaceId(),
+		enumspb.TASK_QUEUE_TYPE_NEXUS,
+		request.GetForwardInfo().GetSourcePartition(),
+		pc,
+	)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.DispatchNexusTask(ctx, request, opts...)
+}
+
+func (c *clientImpl) PollNexusTaskQueue(
+	ctx context.Context,
+	request *matchingservice.PollNexusTaskQueueRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.PollNexusTaskQueueResponse, error) {
+	if !isPartitionAwareKind(request.GetRequest().GetTaskQueue().GetKind()) {
+		return c.pollNexusTaskQueue(ctx, PartitionCounts{}, request, opts)
+	}
+	pkey := c.partitionCache.makeKey(
+		request.GetNamespaceId(),
+		request.GetRequest().GetTaskQueue().GetName(),
+		enumspb.TASK_QUEUE_TYPE_NEXUS,
+	)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, pkey, request, opts, c.pollNexusTaskQueue)
+}
+
+func (c *clientImpl) pollNexusTaskQueue(
+	ctx context.Context,
+	pc PartitionCounts,
+	request *matchingservice.PollNexusTaskQueueRequest,
+	opts []grpc.CallOption,
+) (*matchingservice.PollNexusTaskQueueResponse, error) {
+	request = common.CloneProto(request)
+	client, release, err := c.pickClientForRead(
+		request.GetRequest().GetTaskQueue(),
+		request.GetNamespaceId(),
+		enumspb.TASK_QUEUE_TYPE_NEXUS,
+		request.GetForwardedSource(),
+		pc,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if release != nil {
+		defer release()
+	}
+	ctx, cancel := c.createLongPollContext(ctx)
+	defer cancel()
+	return client.PollNexusTaskQueue(ctx, request, opts...)
 }
 
 // processInputPartition returns a partition in certain cases that load balancer involvement is not necessary,
@@ -164,7 +366,7 @@ func (c *clientImpl) processInputPartition(proto *taskqueuepb.TaskQueue, nsid st
 	if err != nil {
 		// We preserve the old logic (not returning error in case of invalid proto info) until it's verified that
 		// clients are not sending invalid names.
-		c.logger.Info("invalid tq partition", tag.Error(err), tag.NewStringerTag("proto", proto))
+		c.logger.Info("invalid tq partition", tag.Error(err), tag.Stringer("proto", proto))
 		metrics.MatchingClientInvalidTaskQueuePartition.With(c.metricsHandler).Record(1)
 		return tqid.UnsafeTaskQueueFamily(nsid, proto.GetName()).TaskQueue(taskType).RootPartition(), nil
 	}
@@ -182,20 +384,32 @@ func (c *clientImpl) processInputPartition(proto *taskqueuepb.TaskQueue, nsid st
 }
 
 // pickClientForWrite mutates the given proto. Callers should copy the proto before if necessary.
-func (c *clientImpl) pickClientForWrite(proto *taskqueuepb.TaskQueue, nsid string, taskType enumspb.TaskQueueType, forwardedFrom string) (matchingservice.MatchingServiceClient, error) {
+func (c *clientImpl) pickClientForWrite(
+	proto *taskqueuepb.TaskQueue,
+	nsid string,
+	taskType enumspb.TaskQueueType,
+	forwardedFrom string,
+	pc PartitionCounts,
+) (matchingservice.MatchingServiceClient, error) {
 	p, tq := c.processInputPartition(proto, nsid, taskType, forwardedFrom)
 	if tq != nil {
-		p = c.loadBalancer.PickWritePartition(tq)
+		p = c.loadBalancer.PickWritePartition(tq, pc)
 	}
 	proto.Name = p.RpcName()
 	return c.getClientForTaskQueuePartition(p)
 }
 
 // pickClientForRead mutates the given proto. Callers should copy the proto before if necessary.
-func (c *clientImpl) pickClientForRead(proto *taskqueuepb.TaskQueue, nsid string, taskType enumspb.TaskQueueType, forwardedFrom string) (client matchingservice.MatchingServiceClient, release func(), err error) {
+func (c *clientImpl) pickClientForRead(
+	proto *taskqueuepb.TaskQueue,
+	nsid string,
+	taskType enumspb.TaskQueueType,
+	forwardedFrom string,
+	pc PartitionCounts,
+) (client matchingservice.MatchingServiceClient, release func(), err error) {
 	p, tq := c.processInputPartition(proto, nsid, taskType, forwardedFrom)
 	if tq != nil {
-		token := c.loadBalancer.PickReadPartition(tq)
+		token := c.loadBalancer.PickReadPartition(tq, pc)
 		p = token.TQPartition
 		release = token.Release
 	}
@@ -231,4 +445,9 @@ func (c *clientImpl) getClientForTaskQueuePartition(
 		return nil, err
 	}
 	return client.(matchingservice.MatchingServiceClient), nil
+}
+
+func isPartitionAwareKind(kind enumspb.TaskQueueKind) bool {
+	// only normal partitions participate in scaling
+	return kind == enumspb.TASK_QUEUE_KIND_NORMAL
 }

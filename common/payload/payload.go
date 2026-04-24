@@ -28,11 +28,11 @@ func EncodeBytes(bytes []byte) *commonpb.Payload {
 	return p
 }
 
-func Encode(value interface{}) (*commonpb.Payload, error) {
+func Encode(value any) (*commonpb.Payload, error) {
 	return defaultDataConverter.ToPayload(value)
 }
 
-func Decode(p *commonpb.Payload, valuePtr interface{}) error {
+func Decode(p *commonpb.Payload, valuePtr any) error {
 	return defaultDataConverter.FromPayload(p, valuePtr)
 }
 
@@ -89,4 +89,36 @@ func isEqual(a, b *commonpb.Payload) bool {
 	aEnc := a.GetMetadata()[converter.MetadataEncoding]
 	bEnc := a.GetMetadata()[converter.MetadataEncoding]
 	return bytes.Equal(aEnc, bEnc) && bytes.Equal(a.GetData(), b.GetData())
+}
+
+// FilterNilSearchAttributes returns a new SearchAttributes with nil/empty payload values filtered out.
+// If the input is nil or all values are nil/empty, returns nil.
+// This is used to filter out nil search attributes from workflow start and continue-as-new events.
+// Reuses MergeMapOfPayload which already handles nil payload filtering.
+func FilterNilSearchAttributes(sa *commonpb.SearchAttributes) *commonpb.SearchAttributes {
+	if sa == nil || len(sa.GetIndexedFields()) == 0 {
+		return nil
+	}
+
+	filtered := MergeMapOfPayload(nil, sa.GetIndexedFields())
+	if len(filtered) == 0 {
+		return nil
+	}
+	return &commonpb.SearchAttributes{IndexedFields: filtered}
+}
+
+// FilterNilMemo returns a new Memo with nil/empty payload values filtered out.
+// If the input is nil or all values are nil/empty, returns nil.
+// This is used to filter out nil memo fields from workflow start, continue-as-new, and modify-properties events.
+// Reuses MergeMapOfPayload which already handles nil payload filtering.
+func FilterNilMemo(memo *commonpb.Memo) *commonpb.Memo {
+	if memo == nil || len(memo.GetFields()) == 0 {
+		return nil
+	}
+
+	filtered := MergeMapOfPayload(nil, memo.GetFields())
+	if len(filtered) == 0 {
+		return nil
+	}
+	return &commonpb.Memo{Fields: filtered}
 }

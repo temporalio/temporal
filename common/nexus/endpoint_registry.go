@@ -26,7 +26,6 @@ import (
 
 type (
 	EndpointRegistryConfig struct {
-		refreshEnabled         dynamicconfig.TypedSubscribable[bool]
 		refreshLongPollTimeout dynamicconfig.DurationPropertyFn
 		refreshPageSize        dynamicconfig.IntPropertyFn
 		refreshMinWait         dynamicconfig.DurationPropertyFn
@@ -57,8 +56,6 @@ type (
 		endpointsByID   map[string]*persistencespb.NexusEndpointEntry // Mapping of endpoint ID -> endpoint.
 		endpointsByName map[string]*persistencespb.NexusEndpointEntry // Mapping of endpoint name -> endpoint.
 
-		cancelDcSub func()
-
 		matchingClient matchingservice.MatchingServiceClient
 		persistence    p.NexusEndpointManager
 		logger         log.Logger
@@ -76,7 +73,6 @@ var ErrNexusDisabled = serviceerror.NewFailedPrecondition("nexus is disabled")
 
 func NewEndpointRegistryConfig(dc *dynamicconfig.Collection) *EndpointRegistryConfig {
 	config := &EndpointRegistryConfig{
-		refreshEnabled:         dynamicconfig.EnableNexus.Subscribe(dc),
 		refreshLongPollTimeout: dynamicconfig.RefreshNexusEndpointsLongPollTimeout.Get(dc),
 		refreshPageSize:        dynamicconfig.NexusEndpointListDefaultPageSize.Get(dc),
 		refreshMinWait:         dynamicconfig.RefreshNexusEndpointsMinWait.Get(dc),
@@ -110,15 +106,12 @@ func NewEndpointRegistry(
 // StartLifecycle starts this component. It should only be invoked by an fx lifecycle hook.
 // Should not be called multiple times or concurrently with StopLifecycle()
 func (r *EndpointRegistryImpl) StartLifecycle() {
-	initial, cancel := r.config.refreshEnabled(r.setEnabled)
-	r.cancelDcSub = cancel
-	r.setEnabled(initial)
+	r.setEnabled(true)
 }
 
 // StopLifecycle stops this component. It should only be invoked by an fx lifecycle hook.
 // Should not be called multiple times or concurrently with StartLifecycle()
 func (r *EndpointRegistryImpl) StopLifecycle() {
-	r.cancelDcSub()
 	r.setEnabled(false)
 }
 

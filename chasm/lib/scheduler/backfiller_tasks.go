@@ -10,13 +10,14 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	schedulescommon "go.temporal.io/server/common/schedules"
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
-	BackfillerTaskExecutorOptions struct {
+	BackfillerTaskHandlerOptions struct {
 		fx.In
 
 		Config         *Config
@@ -25,7 +26,8 @@ type (
 		SpecProcessor  SpecProcessor
 	}
 
-	BackfillerTaskExecutor struct {
+	BackfillerTaskHandler struct {
+		chasm.PureTaskHandlerBase
 		config         *Config
 		metricsHandler metrics.Handler
 		baseLogger     log.Logger
@@ -33,8 +35,8 @@ type (
 	}
 )
 
-func NewBackfillerTaskExecutor(opts BackfillerTaskExecutorOptions) *BackfillerTaskExecutor {
-	return &BackfillerTaskExecutor{
+func NewBackfillerTaskHandler(opts BackfillerTaskHandlerOptions) *BackfillerTaskHandler {
+	return &BackfillerTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
 		baseLogger:     opts.BaseLogger,
@@ -42,7 +44,7 @@ func NewBackfillerTaskExecutor(opts BackfillerTaskExecutorOptions) *BackfillerTa
 	}
 }
 
-func (b *BackfillerTaskExecutor) Validate(
+func (b *BackfillerTaskHandler) Validate(
 	ctx chasm.Context,
 	backfiller *Backfiller,
 	attrs chasm.TaskAttributes,
@@ -54,7 +56,7 @@ func (b *BackfillerTaskExecutor) Validate(
 	)
 }
 
-func (b *BackfillerTaskExecutor) Execute(
+func (b *BackfillerTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	backfiller *Backfiller,
 	_ chasm.TaskAttributes,
@@ -78,7 +80,7 @@ func (b *BackfillerTaskExecutor) Execute(
 		// Buffer is full, back off and retry later. Unlike the generator, the
 		// backfiller doesn't drop actions - it will retry after backoff.
 		logger.Debug("Buffer full, backing off backfill",
-			tag.NewStringTag("backfill-id", backfiller.GetBackfillId()))
+			tag.String("backfill-id", backfiller.GetBackfillId()))
 		b.rescheduleBackfill(ctx, backfiller)
 		return nil
 	}
@@ -106,7 +108,7 @@ func (b *BackfillerTaskExecutor) Execute(
 	// any more tasks.
 	if result.Complete {
 		logger.Debug("backfill complete, deleting Backfiller",
-			tag.NewStringTag("backfill-id", backfiller.GetBackfillId()))
+			tag.String("backfill-id", backfiller.GetBackfillId()))
 		delete(scheduler.Backfillers, backfiller.GetBackfillId())
 		return nil
 	}
@@ -118,13 +120,13 @@ func (b *BackfillerTaskExecutor) Execute(
 	return nil
 }
 
-func (b *BackfillerTaskExecutor) rescheduleBackfill(ctx chasm.MutableContext, backfiller *Backfiller) {
+func (b *BackfillerTaskHandler) rescheduleBackfill(ctx chasm.MutableContext, backfiller *Backfiller) {
 	backoffTime := ctx.Now(backfiller).Add(b.backoffDelay(backfiller))
 	backfiller.scheduleTask(ctx, backoffTime)
 }
 
 // processBackfill processes a Backfiller's BackfillRequest.
-func (b *BackfillerTaskExecutor) processBackfill(
+func (b *BackfillerTaskHandler) processBackfill(
 	_ chasm.MutableContext,
 	scheduler *Scheduler,
 	backfiller *Backfiller,
@@ -171,14 +173,14 @@ func (b *BackfillerTaskExecutor) processBackfill(
 }
 
 // backoffDelay returns the amount of delay that should be added when retrying.
-func (b *BackfillerTaskExecutor) backoffDelay(backfiller *Backfiller) time.Duration {
+func (b *BackfillerTaskHandler) backoffDelay(backfiller *Backfiller) time.Duration {
 	// Increment GetAttempt here early, to avoid needing to increment
 	// backfiller.Attempt wherever backoffDelay's result is needed.
 	return b.config.RetryPolicy().ComputeNextDelay(0, int(backfiller.GetAttempt()+1), nil)
 }
 
 // processTrigger processes a Backfiller's TriggerImmediatelyRequest.
-func (b *BackfillerTaskExecutor) processTrigger(
+func (b *BackfillerTaskHandler) processTrigger(
 	_ chasm.MutableContext,
 	scheduler *Scheduler,
 	backfiller *Backfiller,
@@ -194,7 +196,7 @@ func (b *BackfillerTaskExecutor) processTrigger(
 	nowpb := backfiller.GetLastProcessedTime()
 	now := nowpb.AsTime()
 	requestID := generateRequestID(scheduler, backfiller.GetBackfillId(), now, now)
-	workflowID := generateWorkflowID(scheduler.WorkflowID(), now)
+	workflowID := schedulescommon.GenerateWorkflowID(scheduler.WorkflowID(), now)
 	result.BufferedStarts = []*schedulespb.BufferedStart{
 		{
 			NominalTime:   nowpb,
@@ -213,7 +215,7 @@ func (b *BackfillerTaskExecutor) processTrigger(
 
 // allowedBufferedStarts returns the number of BufferedStarts that the Backfiller should
 // buffer, taking into account buffer limits and concurrent backfills.
-func (b *BackfillerTaskExecutor) allowedBufferedStarts(
+func (b *BackfillerTaskHandler) allowedBufferedStarts(
 	ctx chasm.Context,
 	scheduler *Scheduler,
 	invoker *Invoker,

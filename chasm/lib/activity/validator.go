@@ -7,9 +7,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/chasm"
-	activitystatepb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -23,6 +20,60 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+// ValidateAndNormalizeStandaloneActivity validates and normalizes the attributes for a standalone activity.
+func ValidateAndNormalizeStandaloneActivity(
+	activityID string,
+	activityType string,
+	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
+	maxIDLengthLimit int,
+	namespaceID namespace.ID,
+	options *activitypb.ActivityOptions,
+	priority *commonpb.Priority,
+	runTimeout *durationpb.Duration,
+) error {
+	// Standalone activities always use user defined task queues, so we can enforce user defined task queue validation
+	if err := tqid.NormalizeAndValidateUserDefined(options.TaskQueue, "", "", maxIDLengthLimit); err != nil {
+		return err
+	}
+
+	return validateAndNormalizeActivityAttributes(
+		activityID,
+		activityType,
+		getDefaultActivityRetrySettings,
+		maxIDLengthLimit,
+		namespaceID,
+		options,
+		priority,
+		runTimeout)
+}
+
+// ValidateAndNormalizeEmbeddedActivity validates and normalizes the attributes for an embedded activity.
+func ValidateAndNormalizeEmbeddedActivity(
+	activityID string,
+	activityType string,
+	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
+	maxIDLengthLimit int,
+	namespaceID namespace.ID,
+	options *activitypb.ActivityOptions,
+	priority *commonpb.Priority,
+	runTimeout *durationpb.Duration,
+	workflowTaskQueueName string,
+) error {
+	if err := tqid.NormalizeAndValidateUserDefined(options.TaskQueue, "", workflowTaskQueueName, maxIDLengthLimit); err != nil {
+		return err
+	}
+
+	return validateAndNormalizeActivityAttributes(
+		activityID,
+		activityType,
+		getDefaultActivityRetrySettings,
+		maxIDLengthLimit,
+		namespaceID,
+		options,
+		priority,
+		runTimeout)
+}
+
 // ValidateAndNormalizeActivityAttributes validates and normalizes the common activity request attributes.
 // This validation is shared by both standalone and embedded activities.
 // IMPORTANT: this method mutates the input params; in cases where it's critical to maintain immutability
@@ -34,7 +85,7 @@ import (
 // 3. If neither ScheduleToClose nor StartToClose is set, return error
 // 4. Ensure all timeouts do not exceed runTimeout if runTimeout is set (>0)
 // 5. Ensure HeartbeatTimeout does not exceed StartToClose
-func ValidateAndNormalizeActivityAttributes(
+func validateAndNormalizeActivityAttributes(
 	activityID string,
 	activityType string,
 	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
@@ -44,15 +95,11 @@ func ValidateAndNormalizeActivityAttributes(
 	priority *commonpb.Priority,
 	runTimeout *durationpb.Duration,
 ) error {
-	if err := tqid.NormalizeAndValidate(options.TaskQueue, "", maxIDLengthLimit); err != nil {
-		return err
-	}
-
 	if activityID == "" {
-		return serviceerror.NewInvalidArgumentf("ActivityId is not set. ActivityType=%s", activityType)
+		return serviceerror.NewInvalidArgument("activityId is not set")
 	}
 	if activityType == "" {
-		return serviceerror.NewInvalidArgumentf("ActivityType is not set. ActivityID=%s", activityID)
+		return serviceerror.NewInvalidArgument("activityType is not set")
 	}
 
 	if err := validateActivityRetryPolicy(namespaceID, options.RetryPolicy, getDefaultActivityRetrySettings); err != nil {
@@ -60,20 +107,19 @@ func ValidateAndNormalizeActivityAttributes(
 	}
 
 	if len(activityID) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgumentf("ActivityId exceeds length limit. ActivityId=%s ActivityType=%s Length=%d Limit=%d",
-			activityID, activityType, len(activityID), maxIDLengthLimit)
+		return serviceerror.NewInvalidArgumentf("activityId exceeds length limit. Length=%d Limit=%d",
+			len(activityID), maxIDLengthLimit)
 	}
 	if len(activityType) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgumentf("ActivityType exceeds length limit. ActivityId=%s ActivityType=%s Length=%d Limit=%d",
-			activityID, activityType, len(activityType), maxIDLengthLimit)
+		return serviceerror.NewInvalidArgumentf("activityType exceeds length limit. Length=%d Limit=%d",
+			len(activityType), maxIDLengthLimit)
 	}
 
 	if err := priorities.Validate(priority); err != nil {
-		return serviceerror.NewInvalidArgumentf("Invalid Priorities: %v ActivityId=%s ActivityType=%s",
-			err, activityID, activityType)
+		return serviceerror.NewInvalidArgumentf("invalid priorities: %v", err)
 	}
 
-	return normalizeAndValidateTimeouts(activityID,
+	return validateAndNormalizeTimeouts(activityID,
 		activityType,
 		runTimeout,
 		options)
@@ -93,7 +139,7 @@ func validateActivityRetryPolicy(
 	return retrypolicy.Validate(retryPolicy)
 }
 
-func normalizeAndValidateTimeouts(
+func validateAndNormalizeTimeouts(
 	activityID string,
 	activityType string,
 	runTimeout *durationpb.Duration,
@@ -101,20 +147,16 @@ func normalizeAndValidateTimeouts(
 ) error {
 	// Only attempt to deduce and fill in unspecified timeouts only when all timeouts are non-negative.
 	if err := timestamp.ValidateAndCapProtoDuration(options.GetScheduleToCloseTimeout()); err != nil {
-		return serviceerror.NewInvalidArgumentf("Invalid ScheduleToCloseTimeout: %v ActivityId=%s ActivityType=%s",
-			err, activityID, activityType)
+		return serviceerror.NewInvalidArgumentf("invalid ScheduleToCloseTimeout: %v", err)
 	}
 	if err := timestamp.ValidateAndCapProtoDuration(options.GetScheduleToStartTimeout()); err != nil {
-		return serviceerror.NewInvalidArgumentf("Invalid ScheduleToStartTimeout: %v ActivityId=%s ActivityType=%s",
-			err, activityID, activityType)
+		return serviceerror.NewInvalidArgumentf("invalid ScheduleToStartTimeout: %v", err)
 	}
 	if err := timestamp.ValidateAndCapProtoDuration(options.GetStartToCloseTimeout()); err != nil {
-		return serviceerror.NewInvalidArgumentf("Invalid StartToCloseTimeout: %v ActivityId=%s ActivityType=%s",
-			err, activityID, activityType)
+		return serviceerror.NewInvalidArgumentf("invalid StartToCloseTimeout: %v", err)
 	}
 	if err := timestamp.ValidateAndCapProtoDuration(options.GetHeartbeatTimeout()); err != nil {
-		return serviceerror.NewInvalidArgumentf("Invalid HeartbeatTimeout: %v ActivityId=%s ActivityType=%s",
-			err, activityID, activityType)
+		return serviceerror.NewInvalidArgumentf("invalid HeartbeatTimeout: %v", err)
 	}
 
 	scheduleToCloseSet := options.GetScheduleToCloseTimeout().AsDuration() > 0
@@ -140,7 +182,7 @@ func normalizeAndValidateTimeouts(
 		}
 	} else {
 		// Deduction failed as there's not enough information to fill in missing timeouts.
-		return serviceerror.NewInvalidArgumentf("A valid StartToClose or ScheduleToCloseTimeout is not set on ScheduleActivityTaskCommand. ActivityId=%s ActivityType=%s",
+		return serviceerror.NewInvalidArgumentf("a valid StartToClose or ScheduleToCloseTimeout is not set on ScheduleActivityTaskCommand. ActivityId=%s ActivityType=%s",
 			activityID, activityType)
 	}
 	// ensure activity timeout never larger than workflow timeout
@@ -165,7 +207,7 @@ func normalizeAndValidateTimeouts(
 	return nil
 }
 
-func normalizeAndValidateIDPolicy(req *workflowservice.StartActivityExecutionRequest) error {
+func validateAndNormalizeIDPolicy(req *workflowservice.StartActivityExecutionRequest) error {
 	if req.GetIdReusePolicy() == enumspb.ACTIVITY_ID_REUSE_POLICY_UNSPECIFIED {
 		req.IdReusePolicy = enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
@@ -177,28 +219,28 @@ func normalizeAndValidateIDPolicy(req *workflowservice.StartActivityExecutionReq
 	return nil
 }
 
-func validateInputSize(
+func validateBlobSize(
 	activityID string,
 	blobSizeViolationTagValue string,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	inputSize int,
+	blobSize int,
 	logger log.Logger,
 	namespaceName string,
 ) error {
 	sizeWarnLimit := blobSizeLimitWarn(namespaceName)
 	sizeErrorLimit := blobSizeLimitError(namespaceName)
 
-	if inputSize > sizeWarnLimit {
-		logger.Warn("Activity input size exceeds the warning limit.",
+	if blobSize > sizeWarnLimit {
+		logger.Warn("Activity blob size exceeds the warning limit.",
 			tag.WorkflowNamespace(namespaceName),
 			tag.ActivityID(activityID),
-			tag.ActivitySize(int64(inputSize)),
+			tag.ActivitySize(int64(blobSize)),
 			tag.BlobSizeViolationOperation(blobSizeViolationTagValue))
+	}
 
-		if inputSize > sizeErrorLimit {
-			return common.ErrBlobSizeExceedsLimit
-		}
+	if blobSize > sizeErrorLimit {
+		return common.ErrBlobSizeExceedsLimit
 	}
 
 	return nil
@@ -228,8 +270,7 @@ func validateAndNormalizeSearchAttributes(
 	return saValidator.ValidateSize(saToValidate, namespaceName)
 }
 
-// ValidateDescribeActivityExecutionRequest validates DescribeActivityExecutionRequest.
-func ValidateDescribeActivityExecutionRequest(
+func validateDescribeActivityExecutionRequest(
 	req *workflowservice.DescribeActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
@@ -255,8 +296,7 @@ func ValidateDescribeActivityExecutionRequest(
 	return nil
 }
 
-// ValidatePollActivityExecutionRequest validates PollActivityExecutionRequest.
-func ValidatePollActivityExecutionRequest(
+func validatePollActivityExecutionRequest(
 	req *workflowservice.PollActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
@@ -276,18 +316,173 @@ func ValidatePollActivityExecutionRequest(
 	return nil
 }
 
-// ValidateActivityTaskToken validates a task token against the current activity state.
-func ValidateActivityTaskToken(
-	ctx chasm.Context,
-	a *Activity,
-	token *tokenspb.Task,
+func validateAndNormalizeStartRequest(
+	req *workflowservice.StartActivityExecutionRequest,
+	maxIDLengthLimit int,
+	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	logger log.Logger,
+	saMapperProvider searchattribute.MapperProvider,
+	saValidator *searchattribute.Validator,
 ) error {
-	if a.Status != activitystatepb.ACTIVITY_EXECUTION_STATUS_STARTED &&
-		a.Status != activitystatepb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
-		return serviceerror.NewNotFound("activity task not found")
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	} else if len(req.GetRequestId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRequestId()), maxIDLengthLimit)
 	}
-	if token.Attempt != a.LastAttempt.Get(ctx).GetCount() {
-		return serviceerror.NewNotFound("activity task not found")
+
+	if len(req.GetIdentity()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
 	}
+
+	if err := validateAndNormalizeIDPolicy(req); err != nil {
+		return err
+	}
+
+	if err := validateBlobSize(
+		req.GetActivityId(),
+		"StartActivityExecution",
+		blobSizeLimitError,
+		blobSizeLimitWarn,
+		req.Input.Size(),
+		logger,
+		req.GetNamespace()); err != nil {
+		return serviceerror.NewInvalidArgument("input exceeds length limit")
+	}
+
+	if req.GetSearchAttributes() != nil {
+		if err := validateAndNormalizeSearchAttributes(
+			req,
+			saMapperProvider,
+			saValidator); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateAndNormalizeCancelRequest(
+	req *workflowservice.RequestCancelActivityExecutionRequest,
+	maxIDLengthLimit int,
+	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	logger log.Logger,
+) error {
+	if req.GetActivityId() == "" {
+		return serviceerror.NewInvalidArgument("activity ID is required")
+	}
+
+	if len(req.GetActivityId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("activity ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetActivityId()), maxIDLengthLimit)
+	}
+
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	} else if len(req.GetRequestId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRequestId()), maxIDLengthLimit)
+	}
+
+	if len(req.GetIdentity()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
+	}
+
+	if runID := req.GetRunId(); runID != "" {
+		_, err := uuid.Parse(runID)
+		if err != nil {
+			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
+		}
+	}
+
+	err := validateBlobSize(
+		req.GetActivityId(),
+		"RequestCancelActivityExecution",
+		blobSizeLimitError,
+		blobSizeLimitWarn,
+		len(req.GetReason()),
+		logger,
+		req.GetNamespace())
+	if err != nil {
+		return serviceerror.NewInvalidArgument("reason exceeds length limit")
+	}
+
+	return nil
+}
+
+func validateAndNormalizeDeleteRequest(
+	req *workflowservice.DeleteActivityExecutionRequest,
+	maxIDLengthLimit int,
+) error {
+	if req.GetActivityId() == "" {
+		return serviceerror.NewInvalidArgument("activity ID is required")
+	}
+
+	if len(req.GetActivityId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("activity ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetActivityId()), maxIDLengthLimit)
+	}
+
+	if runID := req.GetRunId(); runID != "" {
+		_, err := uuid.Parse(runID)
+		if err != nil {
+			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
+		}
+	}
+
+	return nil
+}
+
+func validateAndNormalizeTerminateRequest(
+	req *workflowservice.TerminateActivityExecutionRequest,
+	maxIDLengthLimit int,
+	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	logger log.Logger,
+) error {
+	if req.GetActivityId() == "" {
+		return serviceerror.NewInvalidArgument("activity ID is required")
+	}
+
+	if len(req.GetActivityId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("activity ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetActivityId()), maxIDLengthLimit)
+	}
+
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	} else if len(req.GetRequestId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRequestId()), maxIDLengthLimit)
+	}
+
+	if len(req.GetIdentity()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
+	}
+
+	if runID := req.GetRunId(); runID != "" {
+		_, err := uuid.Parse(runID)
+		if err != nil {
+			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
+		}
+	}
+
+	err := validateBlobSize(
+		req.GetActivityId(),
+		"TerminateActivityExecution",
+		blobSizeLimitError,
+		blobSizeLimitWarn,
+		len(req.GetReason()),
+		logger,
+		req.GetNamespace())
+	if err != nil {
+		return serviceerror.NewInvalidArgument("reason exceeds length limit")
+	}
+
 	return nil
 }

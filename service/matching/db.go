@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"math"
@@ -8,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -17,13 +17,13 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/service/matching/counter"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
-	initialRangeID     = 1 // Id of the first range of a new task queue
-	stickyTaskQueueTTL = 24 * time.Hour
+	initialRangeID = 1 // Id of the first range of a new task queue
 
 	// Subqueue zero corresponds to "the queue" before migrating metadata to subqueues.
 	// For backwards compatibility, some operations only apply to subqueue zero for now.
@@ -207,8 +207,8 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 
 		// If we are the draining one, then assume the other has tasks, so we can migrate
 		// backwards safely. Also assume other has tasks if the config allows for migration
-		// (and we're not sticky) since we may have just turned on fairness and need to migrate.
-		canMigrate := (db.config.NewMatcher || db.config.EnableFairness) && db.queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY
+		// (and the partition supports fairness) since we may have just turned on fairness and need to migrate.
+		canMigrate := (db.config.NewMatcher || db.config.EnableFairness) && db.queue.Partition().SupportsFairness()
 		db.otherHasTasks = canMigrate || db.isDraining
 
 		if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
@@ -275,24 +275,56 @@ func (db *taskQueueDB) OldUpdateState(
 	if err != nil {
 		db.subqueues[subqueueZero].AckLevel = prevAckLevel
 	}
-	db.emitBacklogGaugesLocked()
+	db.emitPhysicalBacklogGaugesLocked()
 	return err
+}
+
+// shouldUpdateMetadataOnAppendLocked returns whether a task append should also write the
+// metadata blob. This is always true when enough time has passed since the last metadata
+// write (controlled by MetadataUpdateOnAppendInterval), so that backlog counts stay
+// reasonably fresh. When the interval is zero, metadata is updated on every append
+// (previous behavior). Caller must hold db.Mutex.
+func (db *taskQueueDB) shouldUpdateMetadataOnAppendLocked() bool {
+	interval := db.config.MetadataUpdateOnAppendInterval()
+	return interval <= 0 || time.Since(db.lastWrite) >= interval
 }
 
 func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	db.Lock()
 	defer db.Unlock()
-	defer db.emitBacklogGaugesLocked()
+	defer db.emitPhysicalBacklogGaugesLocked()
 
-	// We only need to write if something changed, or if we're past half of the sticky queue TTL.
-	// Note that we use the same threshold for non-sticky queues even though they don't have a
-	// persistence TTL, since the scavenger looks for metadata that hasn't been updated in 48 hours.
-	needWrite := db.lastChange.After(db.lastWrite) || time.Since(db.lastWrite) > stickyTaskQueueTTL/2
+	// We only need to write if something changed, or if we're past half of the persistence TTL.
+	// Cap at 24h so that the scavenger (which looks for metadata not updated in 48h) doesn't
+	// mistake the queue for idle, even if a future partition kind has a longer TTL.
+	ttl := min(24*time.Hour, cmp.Or(db.queue.Partition().PersistenceTTL(), 24*time.Hour))
+	needWrite := db.lastChange.After(db.lastWrite) || time.Since(db.lastWrite) > ttl/2
 	if !needWrite {
-		return nil
+		// If we don't write, though, we wouldn't know if someone else has stolen ownership
+		// momentarily (this could happen due to eventual consistency of membership updates).
+		// So instead, do a (cheaper) read to just check the range id.
+		return db.verifyOwnershipLocked(ctx)
 	}
 
 	return db.updateTaskQueueLocked(ctx, false)
+}
+
+func (db *taskQueueDB) verifyOwnershipLocked(ctx context.Context) error {
+	response, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
+		NamespaceID: db.queue.NamespaceId(),
+		TaskQueue:   db.queue.PersistenceName(),
+		TaskType:    db.queue.TaskType(),
+	})
+	if err != nil {
+		return err
+	}
+	if response.RangeID != db.rangeID {
+		return &persistence.ConditionFailedError{
+			Msg: fmt.Sprintf("task queue ownership lost: stored rangeID %d, in-memory rangeID %d",
+				response.RangeID, db.rangeID),
+		}
+	}
+	return nil
 }
 
 func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue subqueueIndex, newAckLevel int64, countDelta int64, oldestTime time.Time) {
@@ -303,9 +335,9 @@ func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue subqueueIndex, new
 	if newAckLevel < dbQueue.AckLevel {
 		softassert.Fail(db.logger,
 			"ack level in subqueue should not move backwards",
-			tag.NewInt("subqueue-id", int(subqueue)),
-			tag.NewAnyTag("cur-ack-level", dbQueue.AckLevel),
-			tag.NewAnyTag("new-ack-level", newAckLevel))
+			tag.Int("subqueue-id", int(subqueue)),
+			tag.Any("cur-ack-level", dbQueue.AckLevel),
+			tag.Any("new-ack-level", newAckLevel))
 	}
 	if dbQueue.AckLevel != newAckLevel {
 		db.lastChange = time.Now()
@@ -334,9 +366,9 @@ func (db *taskQueueDB) updateFairAckLevel(subqueue subqueueIndex, newAckLevel fa
 	if prev := fairLevelFromProto(dbQueue.FairAckLevel); newAckLevel.less(prev) {
 		softassert.Fail(db.logger,
 			"ack level in subqueue should not move backwards",
-			tag.NewInt("subqueue-id", int(subqueue)),
-			tag.NewAnyTag("cur-ack-level", prev),
-			tag.NewAnyTag("new-ack-level", newAckLevel))
+			tag.Int("subqueue-id", int(subqueue)),
+			tag.Any("cur-ack-level", prev),
+			tag.Any("new-ack-level", newAckLevel))
 	}
 	dbQueue.FairAckLevel = newAckLevel.toProto()
 
@@ -385,6 +417,34 @@ func (db *taskQueueDB) updateBacklogStatsLocked(subqueue subqueueIndex, countDel
 		*count += countDelta
 	}
 	db.subqueues[subqueue].oldestTime = oldestTime
+}
+
+func (db *taskQueueDB) persistTopKFairnessKeys(subqueue subqueueIndex, entries []counter.TopKEntry) {
+	db.Lock()
+	defer db.Unlock()
+
+	counts := make([]*persistencespb.FairnessKeyCount, len(entries))
+	for i, entry := range entries {
+		counts[i] = &persistencespb.FairnessKeyCount{Key: entry.Key, Count: entry.Count}
+	}
+
+	db.subqueues[subqueue].TopKFairnessCounts = counts
+	db.lastChange = time.Now()
+}
+
+func (db *taskQueueDB) getTopKFairnessKeys(subqueue subqueueIndex) []counter.TopKEntry {
+	db.Lock()
+	defer db.Unlock()
+
+	if subqueue >= subqueueIndex(len(db.subqueues)) {
+		return nil
+	}
+	counts := db.subqueues[subqueue].TopKFairnessCounts
+	entries := make([]counter.TopKEntry, len(counts))
+	for i, count := range counts {
+		entries[i] = counter.TopKEntry{Key: count.Key, Count: count.Count}
+	}
+	return entries
 }
 
 // getApproximateBacklogCountsBySubqueue return the approximate backlog count for each subqueue.
@@ -471,6 +531,11 @@ func (db *taskQueueDB) CreateTasks(
 		db.subqueues[sq].ApproximateBacklogCount += int64(len(update.tasks))
 	}
 
+	// Decide whether to include metadata in the write. We always need the LWT for the
+	// range ID check, but updating the full metadata blob on every append has extra cost.
+	// We piggyback the metadata update if enough time has passed since the last write.
+	updateMetadata := db.shouldUpdateMetadataOnAppendLocked()
+
 	resp, err := db.store.CreateTasks(
 		ctx,
 		&persistence.CreateTasksRequest{
@@ -478,8 +543,9 @@ func (db *taskQueueDB) CreateTasks(
 				Data:    db.cachedQueueInfo(),
 				RangeID: db.rangeID,
 			},
-			Tasks:     allTasks,
-			Subqueues: allSubqueues,
+			Tasks:          allTasks,
+			Subqueues:      allSubqueues,
+			UpdateMetadata: updateMetadata,
 		})
 
 	// Update the maxReadLevel after the writes are completed, but before we send the response,
@@ -551,6 +617,8 @@ func (db *taskQueueDB) CreateFairTasks(
 		db.subqueues[sq].FairMaxReadLevel = fairLevelFromProto(db.subqueues[sq].FairMaxReadLevel).max(level).toProto()
 	}
 
+	updateMetadata := db.shouldUpdateMetadataOnAppendLocked()
+
 	resp, err := db.store.CreateTasks(
 		ctx,
 		&persistence.CreateTasksRequest{
@@ -558,8 +626,9 @@ func (db *taskQueueDB) CreateFairTasks(
 				Data:    db.cachedQueueInfo(),
 				RangeID: db.rangeID,
 			},
-			Tasks:     allTasks,
-			Subqueues: allSubqueues,
+			Tasks:          allTasks,
+			Subqueues:      allSubqueues,
+			UpdateMetadata: updateMetadata,
 		})
 
 	if err == nil {
@@ -704,14 +773,10 @@ func (db *taskQueueDB) AllocateSubqueue(
 }
 
 func (db *taskQueueDB) expiryTime() *timestamppb.Timestamp {
-	switch db.queue.Partition().Kind() {
-	case enumspb.TASK_QUEUE_KIND_NORMAL:
-		return nil
-	case enumspb.TASK_QUEUE_KIND_STICKY:
-		return timestamppb.New(time.Now().Add(stickyTaskQueueTTL))
-	default:
-		panic(fmt.Sprintf("taskQueueDB encountered unknown task kind: %v", db.queue.Partition().Kind()))
+	if ttl := db.queue.Partition().PersistenceTTL(); ttl > 0 {
+		return timestamppb.New(time.Now().Add(ttl))
 	}
+	return nil
 }
 
 func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
@@ -733,14 +798,33 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 	}
 }
 
-// emitBacklogGaugesLocked emits the approximate_backlog_count, approximate_backlog_age_seconds, and the legacy
-// task_lag_per_tl gauges. For these gauges to be emitted, BreakdownMetricsByTaskQueue and BreakdownMetricsByPartition
-// should be enabled. Additionally, for versioned queues, BreakdownMetricsByBuildID should also be enabled.
-func (db *taskQueueDB) emitBacklogGaugesLocked() {
-	if !db.config.BreakdownMetricsByTaskQueue() ||
-		!db.config.BreakdownMetricsByPartition() ||
-		(db.queue.IsVersioned() && !db.config.BreakdownMetricsByBuildID()) {
+// emitPhysicalBacklogGaugesLocked emits backlog gauges tagged by priority key, along with
+// the legacy task_lag_per_tl gauge.
+//
+// When version-attributed backlog metrics are enabled (BacklogMetricsEmitInterval > 0), this
+// emits physical_approximate_backlog_count and physical_approximate_backlog_age_seconds for
+// the unversioned queue only. Version-attributed metrics (including appropriate attribution of
+// the default queue's tasks to current and ramping versions) are emitted separately by the
+// partition manager via fetchAndEmitLogicalBacklogMetrics.
+//
+// When version-attributed metrics are disabled (BacklogMetricsEmitInterval == 0), this falls back
+// to emitting the original approximate_backlog_count and approximate_backlog_age_seconds for
+// all queues (including versioned queues when BreakdownMetricsByBuildID is enabled).
+func (db *taskQueueDB) emitPhysicalBacklogGaugesLocked() {
+	if !db.config.BreakdownMetricsByTaskQueue() || !db.config.BreakdownMetricsByPartition() {
 		return
+	}
+
+	attributionEnabled := db.config.BacklogMetricsEmitInterval() > 0
+
+	if attributionEnabled {
+		if db.queue.IsVersioned() {
+			return
+		}
+	} else {
+		if db.queue.IsVersioned() && !db.config.BreakdownMetricsByBuildID() {
+			return
+		}
 	}
 
 	var totalLag int64
@@ -760,13 +844,20 @@ func (db *taskQueueDB) emitBacklogGaugesLocked() {
 		}
 	}
 
+	backlogCountGauge := metrics.ApproximateBacklogCount
+	backlogAgeGauge := metrics.ApproximateBacklogAgeSeconds
+	if attributionEnabled {
+		backlogCountGauge = metrics.PhysicalApproximateBacklogCount
+		backlogAgeGauge = metrics.PhysicalApproximateBacklogAgeSeconds
+	}
+
 	for priority, count := range counts {
-		metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(float64(count), metrics.MatchingTaskPriorityTag(priority))
+		backlogCountGauge.With(db.metricsHandler).Record(float64(count), metrics.MatchingTaskPriorityTag(priority))
 	}
 	if oldestTime.IsZero() {
-		metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
+		backlogAgeGauge.With(db.metricsHandler).Record(0)
 	} else {
-		metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(time.Since(oldestTime).Seconds())
+		backlogAgeGauge.With(db.metricsHandler).Record(time.Since(oldestTime).Seconds())
 	}
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(float64(totalLag))
 }
@@ -823,11 +914,21 @@ func (db *taskQueueDB) cloneSubqueues() []persistencespb.SubqueueInfo {
 	return infos
 }
 
-func (db *taskQueueDB) emitZeroBacklogGauges() {
-	if !db.config.BreakdownMetricsByTaskQueue() ||
-		!db.config.BreakdownMetricsByPartition() ||
-		(db.queue.IsVersioned() && !db.config.BreakdownMetricsByBuildID()) {
+func (db *taskQueueDB) emitZeroPhysicalBacklogGauges() {
+	if !db.config.BreakdownMetricsByTaskQueue() || !db.config.BreakdownMetricsByPartition() {
 		return
+	}
+
+	attributionEnabled := db.config.BacklogMetricsEmitInterval() > 0
+
+	if attributionEnabled {
+		if db.queue.IsVersioned() {
+			return
+		}
+	} else {
+		if db.queue.IsVersioned() && !db.config.BreakdownMetricsByBuildID() {
+			return
+		}
 	}
 
 	priorities := make(map[int32]struct{})
@@ -837,9 +938,16 @@ func (db *taskQueueDB) emitZeroBacklogGauges() {
 	}
 	db.Unlock()
 
-	for k := range priorities {
-		metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(0, metrics.MatchingTaskPriorityTag(k))
+	backlogCountGauge := metrics.ApproximateBacklogCount
+	backlogAgeGauge := metrics.ApproximateBacklogAgeSeconds
+	if attributionEnabled {
+		backlogCountGauge = metrics.PhysicalApproximateBacklogCount
+		backlogAgeGauge = metrics.PhysicalApproximateBacklogAgeSeconds
 	}
-	metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
+
+	for k := range priorities {
+		backlogCountGauge.With(db.metricsHandler).Record(0, metrics.MatchingTaskPriorityTag(k))
+	}
+	backlogAgeGauge.With(db.metricsHandler).Record(0)
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(0)
 }

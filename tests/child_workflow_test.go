@@ -14,12 +14,16 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -27,6 +31,12 @@ import (
 
 type ChildWorkflowSuite struct {
 	testcore.FunctionalTestBase
+}
+
+type testName string
+
+func (n testName) Name() string {
+	return string(n)
 }
 
 func TestChildWorkflowSuite(t *testing.T) {
@@ -486,7 +496,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	s.True(seenChildStarted)
 
 	// Run through three executions of the child workflow
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err = pollerChild.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err), tag.Counter(i))
 		s.NoError(err)
@@ -510,7 +520,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 			WorkflowId: childID,
 		},
 	})
-	s.Nil(terminateErr)
+	s.NoError(terminateErr)
 
 	// Process ChildExecution terminated event and complete parent execution
 	_, err = pollerParent.PollAndProcessWorkflowTask()
@@ -525,7 +535,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	startFilter.EarliestTime = timestamppb.New(startParentWorkflowTS)
 	startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 	var closedExecutions []*workflowpb.WorkflowExecutionInfo
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		resp, err := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 100,
@@ -940,5 +950,297 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 	// Child failure should be present in completion event
 	s.NotNil(completedEvent)
 	attrs := completedEvent.GetChildWorkflowExecutionFailedEventAttributes()
-	s.Equal(attrs.Failure.Message, "Failed attempt 3")
+	s.Equal("Failed attempt 3", attrs.Failure.Message)
+}
+
+func (s *ChildWorkflowSuite) TestChildWorkflowExecution_AlreadyRunning_RecordsFailedEvent() {
+	tvParent := testvars.New(testName(s.T().Name() + "/parent"))
+	tvChild := testvars.New(testName(s.T().Name() + "/child"))
+
+	// Start a child workflow directly and leave it running so the parent's child-start transfer task
+	// hits a running workflow ID conflict with the default child conflict policy.
+	_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           tvChild.RequestID(),
+		Namespace:           s.Namespace().String(),
+		WorkflowId:          tvChild.WorkflowID(),
+		WorkflowType:        tvChild.WorkflowType(),
+		TaskQueue:           tvChild.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            tvParent.WorkerIdentity(),
+	})
+	s.NoError(err)
+
+	_, err = s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           tvParent.RequestID(),
+		Namespace:           s.Namespace().String(),
+		WorkflowId:          tvParent.WorkflowID(),
+		WorkflowType:        tvParent.WorkflowType(),
+		TaskQueue:           tvParent.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            tvParent.WorkerIdentity(),
+	})
+	s.NoError(err)
+
+	startedChild := false
+	var failedAttrs *historypb.StartChildWorkflowExecutionFailedEventAttributes
+	wtHandlerParent := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		if !startedChild {
+			startedChild = true
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
+					StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
+						WorkflowId:          tvChild.WorkflowID(),
+						WorkflowType:        tvChild.WorkflowType(),
+						TaskQueue:           tvChild.TaskQueue(),
+						Input:               payloads.EncodeString("duplicate-child"),
+						WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+					},
+				},
+			}}, nil
+		}
+
+		for _, event := range task.History.Events[task.PreviousStartedEventId:] {
+			if event.GetEventType() == enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED {
+				failedAttrs = event.GetStartChildWorkflowExecutionFailedEventAttributes()
+				return []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+						CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+							Result: payloads.EncodeString("Done"),
+						},
+					},
+				}}, nil
+			}
+		}
+
+		return nil, nil
+	}
+
+	pollerParent := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+
+	_, err = pollerParent.PollAndHandleWorkflowTask(tvParent, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		cmds, err := wtHandlerParent(task)
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: cmds}, err
+	})
+	s.NoError(err)
+
+	_, err = pollerParent.PollAndHandleWorkflowTask(tvParent, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		cmds, err := wtHandlerParent(task)
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: cmds}, err
+	})
+	s.NoError(err)
+	s.NotNil(failedAttrs)
+	s.Equal(enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS, failedAttrs.GetCause())
+	s.Equal(tvChild.WorkflowID(), failedAttrs.GetWorkflowId())
+	s.Equal(tvChild.WorkflowType().GetName(), failedAttrs.GetWorkflowType().GetName())
+}
+
+func (s *ChildWorkflowSuite) TestChildWorkflowExecution_AlreadyRunning_TerminateIfRunningStartsNewChild() {
+	tvParent := testvars.New(testName(s.T().Name() + "/parent"))
+	tvChild := testvars.New(testName(s.T().Name() + "/child"))
+
+	// Pre-create the child workflow ID so the parent's StartChild transfer task has to resolve
+	// a duplicate child ID through the history StartWorkflowExecution path.
+	existingChildResp, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           tvChild.RequestID(),
+		Namespace:           s.Namespace().String(),
+		WorkflowId:          tvChild.WorkflowID(),
+		WorkflowType:        tvChild.WorkflowType(),
+		TaskQueue:           tvChild.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            tvParent.WorkerIdentity(),
+	})
+	s.NoError(err)
+
+	_, err = s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           tvParent.RequestID(),
+		Namespace:           s.Namespace().String(),
+		WorkflowId:          tvParent.WorkflowID(),
+		WorkflowType:        tvParent.WorkflowType(),
+		TaskQueue:           tvParent.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            tvParent.WorkerIdentity(),
+	})
+	s.NoError(err)
+
+	startedChild := false
+	var startedAttrs *historypb.ChildWorkflowExecutionStartedEventAttributes
+	var failedAttrs *historypb.StartChildWorkflowExecutionFailedEventAttributes
+	wtHandlerParent := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		if !startedChild {
+			startedChild = true
+			// This deprecated policy is the compatibility case under test. Without the history-side
+			// migration, child start handling will not preserve the old terminate-and-restart behavior.
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
+					StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
+						WorkflowId:          tvChild.WorkflowID(),
+						WorkflowType:        tvChild.WorkflowType(),
+						TaskQueue:           tvChild.TaskQueue(),
+						Input:               payloads.EncodeString("duplicate-child"),
+						WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+						//nolint:staticcheck // SA1019: intentional compatibility coverage for deprecated policy
+						WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
+					},
+				},
+			}}, nil
+		}
+
+		for _, event := range task.History.Events[task.PreviousStartedEventId:] {
+			switch event.GetEventType() {
+			case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
+				startedAttrs = event.GetChildWorkflowExecutionStartedEventAttributes()
+				return []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+						CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+							Result: payloads.EncodeString("Done"),
+						},
+					},
+				}}, nil
+			case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED:
+				failedAttrs = event.GetStartChildWorkflowExecutionFailedEventAttributes()
+				return []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+						CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+							Result: payloads.EncodeString("Done"),
+						},
+					},
+				}}, nil
+			default:
+			}
+		}
+
+		return nil, nil
+	}
+
+	pollerParent := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+
+	_, err = pollerParent.PollAndHandleWorkflowTask(tvParent, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		cmds, err := wtHandlerParent(task)
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: cmds}, err
+	})
+	s.NoError(err)
+
+	_, err = pollerParent.PollAndHandleWorkflowTask(tvParent, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		cmds, err := wtHandlerParent(task)
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: cmds}, err
+	})
+	s.NoError(err)
+
+	s.Nil(failedAttrs)
+	s.NotNil(startedAttrs)
+	s.Equal(tvChild.WorkflowID(), startedAttrs.GetWorkflowExecution().GetWorkflowId())
+	s.Equal(tvChild.WorkflowType().GetName(), startedAttrs.GetWorkflowType().GetName())
+	s.NotEqual(existingChildResp.GetRunId(), startedAttrs.GetWorkflowExecution().GetRunId())
+
+	// The old execution should be terminated once the child start is migrated to
+	// conflict=TERMINATE_EXISTING for the running-workflow case.
+	s.Eventually(func() bool {
+		resp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: tvChild.WorkflowID(),
+				RunId:      existingChildResp.GetRunId(),
+			},
+		})
+		return err == nil && resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
+func (s *ChildWorkflowSuite) TestStartChildWorkflowWithInternalTaskQueue_Blocked() {
+	parentID := testcore.RandomizeStr(s.T().Name())
+	childID := testcore.RandomizeStr(s.T().Name())
+	wtParent := "test-child-workflow-start-internal-taskqueue-parent-type"
+	wtChild := "test-child-workflow-start-internal-taskqueue-child-type"
+	tlParent := "test-child-workflow-start-internal-taskqueue-parent-taskqueue"
+	identity := "worker1"
+
+	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
+	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
+	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.Namespace().String(),
+		WorkflowId:          parentID,
+		WorkflowType:        parentWorkflowType,
+		TaskQueue:           taskQueueParent,
+		Input:               nil,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            identity,
+	}
+
+	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	s.NoError(err)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	// Parent workflow logic: try to start child workflow on internal task queue
+	tv := testvars.New(s.T()).WithTaskQueue(tlParent)
+	childExecutionStarted := false
+	wtHandlerParent := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		s.Logger.Info("Processing workflow task for Parent", tag.WorkflowID(task.WorkflowExecution.WorkflowId))
+
+		if !childExecutionStarted {
+			s.Logger.Info("Starting child execution on internal task queue")
+			childExecutionStarted = true
+
+			commands := []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
+					StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
+						WorkflowId:   childID,
+						WorkflowType: childWorkflowType,
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: primitives.PerNSWorkerTaskQueue,
+							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+						},
+						Input:               payloads.EncodeString("child-workflow-input"),
+						WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+						WorkflowTaskTimeout: durationpb.New(2 * time.Second),
+					},
+				},
+			}}
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: commands,
+			}, nil
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+
+	pollerParent := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+
+	// Process parent workflow task - should fail when trying to start child on internal task queue
+	_, err = pollerParent.PollAndHandleWorkflowTask(tv, wtHandlerParent)
+	s.Error(err, "Expected error when starting child workflow on internal task queue")
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+
+	// Verify workflow task failed
+	historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: parentID,
+		RunId:      we.RunId,
+	})
+
+	var foundTaskFailed bool
+	for _, event := range historyEvents {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
+			foundTaskFailed = true
+			attrs := event.GetWorkflowTaskFailedEventAttributes()
+			s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, attrs.GetCause())
+			s.Contains(attrs.GetFailure().GetMessage(), "internal per-namespace task queue")
+			break
+		}
+	}
+	s.True(foundTaskFailed, "WorkflowTaskFailed event should be recorded")
 }

@@ -3,6 +3,7 @@ package history
 import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -20,6 +21,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
 )
 
@@ -45,11 +47,13 @@ type (
 		TaskCategoryRegistry            tasks.TaskCategoryRegistry
 		ReplicationDLQWriter            replication.DLQWriter
 		CommandHandlerRegistry          *workflow.CommandHandlerRegistry
+		ChasmWorkflowRegistry           *chasmworkflow.Registry
 		OutboundQueueCBPool             *circuitbreakerpool.OutboundQueueCircuitBreakerPool
 		PersistenceRateLimiter          replication.PersistenceRateLimiter
 		TestHooks                       testhooks.TestHooks
 		ChasmEngine                     chasm.Engine
-		VersionMembershipCache          worker_versioning.VersionMembershipCache
+		VersionMembershipCache          worker_versioning.VersionMembershipAndReactivationStatusCache
+		WorkerDeploymentClient          workerdeployment.Client
 		RoutingInfoCache                worker_versioning.RoutingInfoCache
 	}
 
@@ -69,6 +73,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.EventNotifier,
 		f.Config,
 		f.VersionMembershipCache,
+		f.WorkerDeploymentClient,
 		f.RoutingInfoCache,
 		f.RawMatchingClient,
 		f.WorkflowCache,
@@ -84,6 +89,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.TaskCategoryRegistry,
 		f.ReplicationDLQWriter,
 		f.CommandHandlerRegistry,
+		f.ChasmWorkflowRegistry,
 		f.OutboundQueueCBPool,
 		f.PersistenceRateLimiter,
 		f.TestHooks,

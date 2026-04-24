@@ -79,7 +79,7 @@ func (s *HistoryV2PersistenceSuite) TestGenUUIDs() {
 	wg := sync.WaitGroup{}
 	m := sync.Map{}
 	concurrency := 1000
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -89,7 +89,7 @@ func (s *HistoryV2PersistenceSuite) TestGenUUIDs() {
 	}
 	wg.Wait()
 	cnt := 0
-	m.Range(func(k, v interface{}) bool {
+	m.Range(func(k, v any) bool {
 		cnt++
 		return true
 	})
@@ -108,7 +108,7 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 	totalTrees := 1002
 	pgSize := 100
 
-	for i := 0; i < totalTrees; i++ {
+	for range totalTrees {
 		treeID := uuid.NewString()
 		bi, err := s.newHistoryBranch(treeID)
 		s.Nil(err)
@@ -345,7 +345,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 	m := &sync.Map{}
 
 	// test create new branch along with appending new nodes
-	for i := 0; i < concurrency; i++ {
+	for i := range concurrency {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -390,7 +390,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 	wg = sync.WaitGroup{}
 	// test appending nodes(override and new nodes) on each branch concurrently
-	for i := 0; i < concurrency; i++ {
+	for i := range concurrency {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -447,7 +447,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 	wg.Wait()
 	// Finally lets clean up all branches
-	m.Range(func(k, v interface{}) bool {
+	m.Range(func(k, v any) bool {
 		br := v.([]byte)
 		// delete old branches along with create new branches
 		err := s.deleteHistoryBranch(br)
@@ -506,7 +506,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	level1ID := new(sync.Map)
 	level1Br := new(sync.Map)
 	// test forking from master branch and append nodes
-	for i := 0; i < concurrency; i++ {
+	for i := range concurrency {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -628,7 +628,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	s.Equal(concurrency, masterCnt)
 
 	// Finally lets clean up all branches
-	level1Br.Range(func(k, v interface{}) bool {
+	level1Br.Range(func(k, v any) bool {
 		br := v.([]byte)
 		// delete old branches along with create new branches
 		err := s.deleteHistoryBranch(br)
@@ -636,7 +636,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 
 		return true
 	})
-	level2Br.Range(func(k, v interface{}) bool {
+	level2Br.Range(func(k, v any) bool {
 		br := v.([]byte)
 		// delete old branches along with create new branches
 		err := s.deleteHistoryBranch(br)

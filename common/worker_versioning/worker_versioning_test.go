@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -40,15 +41,17 @@ var (
 )
 
 type testVersionMembershipCache struct {
-	mu sync.Mutex
-	m  map[versionMembershipCacheKey]bool
+	mu       sync.Mutex
+	m        map[versionMembershipCacheKey]versionTaskQueueInfoCacheValue
+	getCalls int
+	putCalls int
 }
 
 func newTestVersionMembershipCache() *testVersionMembershipCache {
-	return &testVersionMembershipCache{m: make(map[versionMembershipCacheKey]bool)}
+	return &testVersionMembershipCache{m: make(map[versionMembershipCacheKey]versionTaskQueueInfoCacheValue)}
 }
 
-var _ VersionMembershipCache = (*testVersionMembershipCache)(nil)
+var _ VersionMembershipAndReactivationStatusCache = (*testVersionMembershipCache)(nil)
 
 func (c *testVersionMembershipCache) Get(
 	namespaceID string,
@@ -56,9 +59,10 @@ func (c *testVersionMembershipCache) Get(
 	taskQueueType enumspb.TaskQueueType,
 	deploymentName string,
 	buildID string,
-) (isMember bool, ok bool) {
+) (isMember bool, shouldSkipReactivation bool, revisionNumber int64, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.getCalls++
 	v, ok := c.m[versionMembershipCacheKey{
 		namespaceID:    namespaceID,
 		taskQueue:      taskQueue,
@@ -66,7 +70,7 @@ func (c *testVersionMembershipCache) Get(
 		deploymentName: deploymentName,
 		buildID:        buildID,
 	}]
-	return v, ok
+	return v.isMember, v.shouldSkipReactivation, v.revisionNumber, ok
 }
 
 func (c *testVersionMembershipCache) Put(
@@ -76,16 +80,171 @@ func (c *testVersionMembershipCache) Put(
 	deploymentName string,
 	buildID string,
 	isMember bool,
+	shouldSkipReactivation bool,
+	revisionNumber int64,
 ) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.putCalls++
 	c.m[versionMembershipCacheKey{
 		namespaceID:    namespaceID,
 		taskQueue:      taskQueue,
 		taskQueueType:  taskQueueType,
 		deploymentName: deploymentName,
 		buildID:        buildID,
-	}] = isMember
+	}] = versionTaskQueueInfoCacheValue{isMember: isMember, shouldSkipReactivation: shouldSkipReactivation, revisionNumber: revisionNumber}
+}
+
+func TestShouldSkipReactivation(t *testing.T) {
+	tests := []struct {
+		name                   string
+		deployments            *persistencespb.DeploymentData
+		deploymentName         string
+		buildID                string
+		expected               bool
+		expectedRevisionNumber int64
+	}{
+		{
+			name:                   "nil deployments returns false (not found → caller should send signal)",
+			deployments:            nil,
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               false,
+			expectedRevisionNumber: 0,
+		},
+		{
+			name: "version not found returns false",
+			deployments: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{},
+			},
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               false,
+			expectedRevisionNumber: 0,
+		},
+		{
+			name: "new format: DRAINED returns false (caller should send signal) with revision_number",
+			deployments: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED, RevisionNumber: 42},
+					}},
+				},
+			},
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               false,
+			expectedRevisionNumber: 42,
+		},
+		{
+			name: "new format: INACTIVE returns false with revision_number",
+			deployments: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, RevisionNumber: 7},
+					}},
+				},
+			},
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               false,
+			expectedRevisionNumber: 7,
+		},
+		{
+			name: "new format: CURRENT returns true with revision_number",
+			deployments: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, RevisionNumber: 3},
+					}},
+				},
+			},
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               true,
+			expectedRevisionNumber: 3,
+		},
+		{
+			name: "new format: RAMPING returns true",
+			deployments: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING},
+					}},
+				},
+			},
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               true,
+			expectedRevisionNumber: 0,
+		},
+		{
+			name: "new format: DRAINING returns true",
+			deployments: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, RevisionNumber: 11},
+					}},
+				},
+			},
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               true,
+			expectedRevisionNumber: 11,
+		},
+		{
+			name: "new format: deleted version returns false (treated as not-found)",
+			deployments: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"dep": {Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+						"build": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED, Deleted: true, RevisionNumber: 99},
+					}},
+				},
+			},
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               false,
+			expectedRevisionNumber: 0,
+		},
+		{
+			name: "old format: DRAINED returns false with revision_number 0 (no field in old format)",
+			deployments: &persistencespb.DeploymentData{
+				Versions: []*deploymentspb.DeploymentVersionData{
+					{
+						Version: &deploymentspb.WorkerDeploymentVersion{DeploymentName: "dep", BuildId: "build"},
+						Status:  enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+					},
+				},
+			},
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               false,
+			expectedRevisionNumber: 0,
+		},
+		{
+			name: "old format: CURRENT returns true with revision_number 0",
+			deployments: &persistencespb.DeploymentData{
+				Versions: []*deploymentspb.DeploymentVersionData{
+					{
+						Version: &deploymentspb.WorkerDeploymentVersion{DeploymentName: "dep", BuildId: "build"},
+						Status:  enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+					},
+				},
+			},
+			deploymentName:         "dep",
+			buildID:                "build",
+			expected:               true,
+			expectedRevisionNumber: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, revisionNumber := ShouldSkipReactivation(tt.deployments, tt.deploymentName, tt.buildID)
+			require.Equal(t, tt.expected, result)
+			require.Equal(t, tt.expectedRevisionNumber, revisionNumber)
+		})
+	}
 }
 
 func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
@@ -598,20 +757,50 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 
 func TestFindDeploymentVersionForWorkflowID(t *testing.T) {
 	tests := []struct {
-		name    string
-		current *deploymentspb.DeploymentVersionData
-		ramping *deploymentspb.DeploymentVersionData
-		want    *deploymentspb.WorkerDeploymentVersion
+		name              string
+		current           *deploymentspb.DeploymentVersionData
+		ramping           *deploymentspb.DeploymentVersionData
+		useRampingVersion bool
+		want              *deploymentspb.WorkerDeploymentVersion
 	}{
 		{name: "nil current and ramping info", want: nil},
 		{name: "with current version", current: &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, want: v1},
 		{name: "with full ramp", current: &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, ramping: &deploymentspb.DeploymentVersionData{Version: v2, RampPercentage: 100, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, want: v2},
 		{name: "with full ramp to unversioned", current: &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, ramping: &deploymentspb.DeploymentVersionData{RampPercentage: 100, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, want: nil},
 		{name: "with full ramp from unversioned", ramping: &deploymentspb.DeploymentVersionData{Version: v1, RampPercentage: 100, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, want: v1},
+		// useRampingVersion=true: always routes to ramping version regardless of ramp percentage
+		{
+			name:              "useRampingVersion with partial ramp bypasses hash and returns ramping",
+			current:           &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())},
+			ramping:           &deploymentspb.DeploymentVersionData{Version: v2, RampPercentage: 30, RoutingUpdateTime: timestamp.TimePtr(time.Now())},
+			useRampingVersion: true,
+			want:              v2,
+		},
+		// useRampingVersion=true: always routes to ramping version with 0% ramp percentage
+		{
+			name:              "useRampingVersion with zero ramp bypasses hash and returns ramping",
+			current:           &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())},
+			ramping:           &deploymentspb.DeploymentVersionData{Version: v2, RampPercentage: 0, RoutingUpdateTime: timestamp.TimePtr(time.Now())},
+			useRampingVersion: true,
+			want:              v2,
+		},
+		{
+			// When useRampingVersion is set but there is no ramping version, falls back to current.
+			name:              "useRampingVersion with no ramping version falls back to current",
+			current:           &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())},
+			useRampingVersion: true,
+			want:              v1,
+		},
+		{
+			// When useRampingVersion is set but both current and ramping are nil (unversioned task queue), returns nil.
+			name:              "useRampingVersion with no current and no ramping returns nil",
+			useRampingVersion: true,
+			want:              nil,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(tt.current.GetVersion(), 0, tt.ramping.GetVersion(), tt.ramping.GetRampPercentage(), 0, "my-wf-id"); !got.Equal(tt.want) {
+			if got, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(tt.current.GetVersion(), 0, tt.ramping.GetVersion(), tt.ramping.GetRampPercentage(), 0, "my-wf-id", tt.useRampingVersion); !got.Equal(tt.want) {
 				t.Errorf("FindTargetDeploymentVersionAndRevisionNumberForWorkflowID() = %v, want %v", got, tt.want)
 			}
 		})
@@ -645,8 +834,8 @@ func TestFindDeploymentVersionForWorkflowID_PartialRamp(t *testing.T) {
 			}
 			histogram := make(map[string]int)
 			runs := 1000000
-			for i := 0; i < runs; i++ {
-				v, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current.GetVersion(), 0, ramping.GetVersion(), ramping.GetRampPercentage(), 0, "wf-"+strconv.Itoa(i))
+			for i := range runs {
+				v, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current.GetVersion(), 0, ramping.GetVersion(), ramping.GetRampPercentage(), 0, "wf-"+strconv.Itoa(i), false)
 				histogram[v.GetBuildId()]++
 			}
 
@@ -780,7 +969,7 @@ func TestWorkerDeploymentVersionFromStringV32(t *testing.T) {
 	}
 }
 
-func TestValidateVersioningOverride(t *testing.T) {
+func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 	testNamespaceID := "test-namespace-id"
 	testTaskQueue := "test-task-queue"
 	testVersion := &deploymentpb.WorkerDeploymentVersion{
@@ -794,13 +983,15 @@ func TestValidateVersioningOverride(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		override      *workflowpb.VersioningOverride
-		taskQueueType enumspb.TaskQueueType
-		setupCache    func(c *testVersionMembershipCache)
-		setupMock     func(m *matchingservicemock.MockMatchingServiceClient)
-		expectError   bool
-		errorContains string
+		name                           string
+		override                       *workflowpb.VersioningOverride
+		taskQueueType                  enumspb.TaskQueueType
+		setupCache                     func(c *testVersionMembershipCache)
+		setupMock                      func(m *matchingservicemock.MockMatchingServiceClient)
+		expectError                    bool
+		errorContains                  string
+		expectedShouldSkipReactivation bool
+		expectedRevisionNumber         int64
 	}{
 		{
 			name:        "nil override returns nil",
@@ -821,7 +1012,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "v0.32: Pinned override, with cache hit, returns nil",
+			name: "v0.32: Pinned override, with cache hit (drained), returns isDrainedOrInactive=true and cached revision",
 			override: &workflowpb.VersioningOverride{
 				Override: &workflowpb.VersioningOverride_Pinned{
 					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
@@ -831,12 +1022,36 @@ func TestValidateVersioningOverride(t *testing.T) {
 				},
 			},
 			setupCache: func(c *testVersionMembershipCache) {
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true)
+				// Cache says the version is drained/inactive (shouldSkipReactivation=false)
+				// with revision 42.
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true, false, 42)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
 			},
-			expectError: false,
+			expectError:                    false,
+			expectedShouldSkipReactivation: false,
+			expectedRevisionNumber:         42,
+		},
+		{
+			name: "v0.32: Pinned override, with cache hit (active), returns isDrainedOrInactive=false",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{
+					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+						Version:  testVersion,
+					},
+				},
+			},
+			setupCache: func(c *testVersionMembershipCache) {
+				// Cache says the version is active (shouldSkipReactivation=true).
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true, true, 0)
+			},
+			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
+				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
+			},
+			expectError:                    false,
+			expectedShouldSkipReactivation: true,
 		},
 		{
 			name: "v0.32: Pinned override, with cache hit, returns error (since version is not present in the task queue)",
@@ -849,7 +1064,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 				},
 			},
 			setupCache: func(c *testVersionMembershipCache) {
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, false)
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, false, false, 0)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
@@ -869,7 +1084,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 				},
 			},
 			setupCache: func(c *testVersionMembershipCache) {
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true)
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true, false, 0)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(
@@ -904,7 +1119,55 @@ func TestValidateVersioningOverride(t *testing.T) {
 			errorContains: getPinnedVersionErrorMsg(testVersion, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 		},
 		{
-			name: "v0.32: Pinned override, with cache miss, calls RPC and caches true",
+			name: "v0.32: Pinned override, with cache miss, RPC returns member and drained with revision",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{
+					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+						Version:  testVersion,
+					},
+				},
+			},
+			setupCache: func(c *testVersionMembershipCache) {},
+			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
+				m.EXPECT().CheckTaskQueueVersionMembership(
+					gomock.Any(),
+					gomock.Any(),
+				).Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{
+					IsMember:               true,
+					ShouldSkipReactivation: false, // drained/inactive on matching's side
+					RevisionNumber:         7,
+				}, nil)
+			},
+			expectError:                    false,
+			expectedShouldSkipReactivation: false,
+			expectedRevisionNumber:         7,
+		},
+		{
+			name: "v0.32: Pinned override, with cache miss, RPC returns member and active",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{
+					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+						Version:  testVersion,
+					},
+				},
+			},
+			setupCache: func(c *testVersionMembershipCache) {},
+			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
+				m.EXPECT().CheckTaskQueueVersionMembership(
+					gomock.Any(),
+					gomock.Any(),
+				).Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{
+					IsMember:               true,
+					ShouldSkipReactivation: true, // active on matching's side
+				}, nil)
+			},
+			expectError:                    false,
+			expectedShouldSkipReactivation: true,
+		},
+		{
+			name: "v0.32: Pinned override, with cache miss, RPC returns member without eligibility (old matching)",
 			override: &workflowpb.VersioningOverride{
 				Override: &workflowpb.VersioningOverride_Pinned{
 					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
@@ -922,7 +1185,8 @@ func TestValidateVersioningOverride(t *testing.T) {
 					IsMember: true,
 				}, nil)
 			},
-			expectError: false,
+			expectError:                    false,
+			expectedShouldSkipReactivation: false, // old matching server — zero-value treated as "don't know, send signal"
 		},
 		{
 			name: "v0.32: Pinned override, without version, returns error",
@@ -995,7 +1259,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 				PinnedVersion: "test-deployment.test-build-id",
 			},
 			setupCache: func(c *testVersionMembershipCache) {
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "test-deployment", "test-build-id", true)
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "test-deployment", "test-build-id", true, false, 0)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0)
@@ -1009,7 +1273,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 				PinnedVersion: "test-deployment.test-build-id",
 			},
 			setupCache: func(c *testVersionMembershipCache) {
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "test-deployment", "test-build-id", false)
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "test-deployment", "test-build-id", false, false, 0)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0)
@@ -1083,6 +1347,75 @@ func TestValidateVersioningOverride(t *testing.T) {
 			expectError:   true,
 			errorContains: "override behavior is required",
 		},
+		// Unimplemented fallback tests
+		{
+			name: "v0.32: Pinned override, Unimplemented fallback, version is member",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{
+					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+						Version:  testVersion,
+					},
+				},
+			},
+			setupCache: func(c *testVersionMembershipCache) {},
+			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
+				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
+					Return(nil, serviceerror.NewUnimplemented("RPC not implemented"))
+				m.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
+					Return(&matchingservice.GetTaskQueueUserDataResponse{
+						UserData: &persistencespb.VersionedTaskQueueUserData{
+							Data: &persistencespb.TaskQueueUserData{
+								PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+									int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+										DeploymentData: &persistencespb.DeploymentData{
+											DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+												testVersion.DeploymentName: {
+													Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+														testVersion.BuildId: {},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					}, nil)
+			},
+			expectError:                    false,
+			expectedShouldSkipReactivation: false, // version data exists with UNSPECIFIED status — not in {CURRENT, RAMPING, DRAINING}
+		},
+		{
+			name: "v0.32: Pinned override, Unimplemented fallback, version is not member",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{
+					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+						Version:  testVersion,
+					},
+				},
+			},
+			setupCache: func(c *testVersionMembershipCache) {},
+			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
+				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
+					Return(nil, serviceerror.NewUnimplemented("not implemented"))
+				m.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
+					Return(&matchingservice.GetTaskQueueUserDataResponse{
+						UserData: &persistencespb.VersionedTaskQueueUserData{
+							Data: &persistencespb.TaskQueueUserData{
+								PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+									int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+										DeploymentData: &persistencespb.DeploymentData{},
+									},
+								},
+							},
+						},
+					}, nil)
+			},
+			expectError:   true,
+			errorContains: getPinnedVersionErrorMsg(testVersion, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		},
 	}
 
 	for _, tt := range tests {
@@ -1100,7 +1433,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 			if tqType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
 				tqType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
 			}
-			err := ValidateVersioningOverride(
+			shouldSkipReactivation, revisionNumber, err := ValidateVersioningOverrideAndGetReactivationEligibility(
 				context.Background(),
 				tt.override,
 				mockMatchingClient,
@@ -1117,9 +1450,222 @@ func TestValidateVersioningOverride(t *testing.T) {
 				}
 			} else {
 				require.NoError(t, err)
+				require.Equal(t, tt.expectedShouldSkipReactivation, shouldSkipReactivation)
+				require.Equal(t, tt.expectedRevisionNumber, revisionNumber)
 			}
 		})
 	}
+}
+
+func TestGetIsWFTaskQueueInVersionDetector_UnimplementedFallback(t *testing.T) {
+	testNamespaceID := "test-namespace-id"
+	testTaskQueue := "test-task-queue"
+	testVersion := &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: "test-deployment",
+		BuildId:        "test-build-id",
+	}
+
+	tests := []struct {
+		name       string
+		setupMock  func(m *matchingservicemock.MockMatchingServiceClient)
+		wantMember bool
+		wantErr    bool
+	}{
+		{
+			name: "fallback returns true when version is member",
+			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
+				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
+					Return(nil, serviceerror.NewUnimplemented("not implemented"))
+				m.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
+					Return(&matchingservice.GetTaskQueueUserDataResponse{
+						UserData: &persistencespb.VersionedTaskQueueUserData{
+							Data: &persistencespb.TaskQueueUserData{
+								PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+									int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+										DeploymentData: &persistencespb.DeploymentData{
+											DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+												testVersion.DeploymentName: {
+													Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+														testVersion.BuildId: {},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					}, nil)
+			},
+			wantMember: true,
+		},
+		{
+			name: "fallback returns false when version is not member",
+			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
+				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
+					Return(nil, serviceerror.NewUnimplemented("not implemented"))
+				m.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
+					Return(&matchingservice.GetTaskQueueUserDataResponse{
+						UserData: &persistencespb.VersionedTaskQueueUserData{
+							Data: &persistencespb.TaskQueueUserData{
+								PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+									int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+										DeploymentData: &persistencespb.DeploymentData{},
+									},
+								},
+							},
+						},
+					}, nil)
+			},
+			wantMember: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+			tt.setupMock(mockClient)
+
+			function := GetIsWFTaskQueueInVersionDetector(mockClient, newTestVersionMembershipCache())
+			isMember, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
+
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantMember, isMember)
+			}
+		})
+	}
+}
+
+func TestGetIsWFTaskQueueInVersionDetector(t *testing.T) {
+	testNamespaceID := "test-namespace-id"
+	testTaskQueue := "test-task-queue"
+	testVersion := &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: "test-deployment",
+		BuildId:        "test-build-id",
+	}
+
+	t.Run("RPC returns isMember true", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		mockClient.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
+			Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{IsMember: true}, nil)
+
+		function := GetIsWFTaskQueueInVersionDetector(mockClient, newTestVersionMembershipCache())
+		isMember, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
+		require.NoError(t, err)
+		assert.True(t, isMember)
+	})
+
+	t.Run("RPC returns isMember false", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		mockClient.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
+			Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{IsMember: false}, nil)
+
+		function := GetIsWFTaskQueueInVersionDetector(mockClient, newTestVersionMembershipCache())
+		isMember, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
+		require.NoError(t, err)
+		assert.False(t, isMember)
+	})
+
+	t.Run("RPC error propagated", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		mockClient.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
+			Return(nil, serviceerror.NewInternal("internal error"))
+
+		function := GetIsWFTaskQueueInVersionDetector(mockClient, newTestVersionMembershipCache())
+		_, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
+		require.Error(t, err)
+	})
+
+	t.Run("cache hit returns cached value - no RPC", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		// No EXPECT on mockClient — any call will fail the test.
+
+		cache := newTestVersionMembershipCache()
+		cache.m[versionMembershipCacheKey{
+			namespaceID:    testNamespaceID,
+			taskQueue:      testTaskQueue,
+			taskQueueType:  enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			deploymentName: testVersion.DeploymentName,
+			buildID:        testVersion.BuildId,
+		}] = versionTaskQueueInfoCacheValue{isMember: true}
+
+		function := GetIsWFTaskQueueInVersionDetector(mockClient, cache)
+		isMember, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
+		require.NoError(t, err)
+		assert.True(t, isMember)
+		assert.Equal(t, 1, cache.getCalls)
+		assert.Equal(t, 0, cache.putCalls)
+	})
+
+	t.Run("cache hit returns false - no RPC", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+
+		cache := newTestVersionMembershipCache()
+		cache.m[versionMembershipCacheKey{
+			namespaceID:    testNamespaceID,
+			taskQueue:      testTaskQueue,
+			taskQueueType:  enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			deploymentName: testVersion.DeploymentName,
+			buildID:        testVersion.BuildId,
+		}] = versionTaskQueueInfoCacheValue{isMember: false}
+
+		function := GetIsWFTaskQueueInVersionDetector(mockClient, cache)
+		isMember, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
+		require.NoError(t, err)
+		assert.False(t, isMember)
+	})
+
+	t.Run("cache miss triggers RPC and populates cache", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		mockClient.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
+			Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{IsMember: true}, nil)
+
+		cache := newTestVersionMembershipCache()
+		function := GetIsWFTaskQueueInVersionDetector(mockClient, cache)
+		isMember, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
+		require.NoError(t, err)
+		assert.True(t, isMember)
+		assert.Equal(t, 1, cache.getCalls)
+		assert.Equal(t, 1, cache.putCalls)
+
+		// Verify the value was actually stored.
+		cached, _, _, ok := cache.Get(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId)
+		assert.True(t, ok)
+		assert.True(t, cached)
+	})
+
+	t.Run("cache not populated on RPC error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		mockClient.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
+			Return(nil, serviceerror.NewInternal("internal error"))
+
+		cache := newTestVersionMembershipCache()
+		function := GetIsWFTaskQueueInVersionDetector(mockClient, cache)
+		_, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
+		require.Error(t, err)
+		assert.Equal(t, 1, cache.getCalls)
+		assert.Equal(t, 0, cache.putCalls)
+	})
 }
 
 func TestCleanupOldDeletedVersions(t *testing.T) {

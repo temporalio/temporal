@@ -40,12 +40,11 @@ type (
 	TestSubComponent1 struct {
 		UnimplementedComponent
 
-		SubComponent1Data    *protoMessageType
-		SubComponent11       Field[*TestSubComponent11]
-		SubComponent11_2     Field[*TestSubComponent11]
-		SubData11            Field[*protoMessageType] // Random proto message.
-		SubComponent2Pointer Field[*TestSubComponent2]
-		DataPointer          Field[*protoMessageType]
+		SubComponent1Data *protoMessageType
+		SubComponent11    Field[*TestSubComponent11]
+		SubComponent11_2  Field[*TestSubComponent11]
+		SubData11         Field[*protoMessageType] // Random proto message.
+		RootPointer       Field[*TestComponent]
 
 		ParentPtr ParentPtr[*TestComponent]
 	}
@@ -54,6 +53,8 @@ type (
 		UnimplementedComponent
 
 		SubComponent11Data *protoMessageType
+		GrandparentPointer Field[*TestComponent]
+		ParentComponentPtr Field[*TestSubComponent1]
 
 		ParentPtr ParentPtr[*TestSubComponent1]
 	}
@@ -80,6 +81,7 @@ var (
 
 	_ VisibilitySearchAttributesProvider = (*TestComponent)(nil)
 	_ VisibilityMemoProvider             = (*TestComponent)(nil)
+	_ RootComponent                      = (*TestComponent)(nil)
 )
 
 func (tc *TestComponent) LifecycleState(_ Context) LifecycleState {
@@ -107,6 +109,11 @@ func (tc *TestComponent) Complete(_ MutableContext) {
 
 func (tc *TestComponent) Fail(_ MutableContext) {
 	tc.ComponentData.Status = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+}
+
+func (tc *TestComponent) ContextMetadata(_ Context) map[string]string {
+	// TODO: Export context metadata from this test root.
+	return nil
 }
 
 // SearchAttributes implements VisibilitySearchAttributesProvider interface.

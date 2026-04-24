@@ -256,6 +256,7 @@ func startAndSignalWithoutCurrentWorkflow(
 		newWorkflowLease.GetMutableState(),
 		newWorkflow,
 		newWorkflowEventsSeq,
+		historyi.TransactionPolicyActive,
 	)
 	switch failedErr := err.(type) {
 	case nil:

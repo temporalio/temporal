@@ -28,20 +28,20 @@ func GetEventBatchesFromTestEvents(fileName string, workflowId string) ([][]*his
 	if err != nil {
 		return nil, nil, err
 	}
-	var result map[string]interface{}
+	var result map[string]any
 
 	// Unmarshal the JSON data into a map
 	err = json.Unmarshal(content, &result)
 	if err != nil {
 		return nil, nil, err
 	}
-	batches, ok := result[workflowId].([]interface{})
+	batches, ok := result[workflowId].([]any)
 	if !ok {
 		return nil, nil, errors.New("workflowId not found in test data")
 	}
 	var elements [][]byte
 	for i, v := range batches {
-		subArray, ok := v.([]interface{})
+		subArray, ok := v.([]any)
 		if !ok {
 			return nil, nil, fmt.Errorf("element %d is not a sub-array, is type %s", i, fmt.Sprintf("%T", v))
 		}

@@ -82,7 +82,7 @@ func (e *statsdExporter) Export(ctx context.Context, rm *metricdata.ResourceMetr
 	for _, sm := range rm.ScopeMetrics {
 		for _, m := range sm.Metrics {
 			if err := e.exportMetric(m); err != nil {
-				e.logger.Error("Failed to export metric to StatsD", tag.Error(err), tag.NewStringTag("metric_name", m.Name))
+				e.logger.Error("Failed to export metric to StatsD", tag.Error(err), tag.String("metric_name", m.Name))
 			}
 		}
 	}
@@ -124,7 +124,7 @@ func (e *statsdExporter) exportMetric(m metricdata.Metrics) error {
 	case metricdata.Histogram[float64]:
 		return e.exportHistogramFloat64(m.Name, data)
 	default:
-		e.logger.Warn("Unsupported metric type for StatsD export", tag.NewStringTag("metric_name", m.Name))
+		e.logger.Warn("Unsupported metric type for StatsD export", tag.String("metric_name", m.Name))
 		return nil
 	}
 }

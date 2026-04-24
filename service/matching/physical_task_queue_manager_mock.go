@@ -60,9 +60,11 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) AddSpooledTask(task any) *go
 }
 
 // AddSpooledTaskToMatcher mocks base method.
-func (m *MockphysicalTaskQueueManager) AddSpooledTaskToMatcher(task *internalTask) {
+func (m *MockphysicalTaskQueueManager) AddSpooledTaskToMatcher(task *internalTask) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "AddSpooledTaskToMatcher", task)
+	ret := m.ctrl.Call(m, "AddSpooledTaskToMatcher", task)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // AddSpooledTaskToMatcher indicates an expected call of AddSpooledTaskToMatcher.
@@ -72,33 +74,33 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) AddSpooledTaskToMatcher(task
 }
 
 // DispatchNexusTask mocks base method.
-func (m *MockphysicalTaskQueueManager) DispatchNexusTask(ctx context.Context, taskId string, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error) {
+func (m *MockphysicalTaskQueueManager) DispatchNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DispatchNexusTask", ctx, taskId, request)
+	ret := m.ctrl.Call(m, "DispatchNexusTask", ctx, task)
 	ret0, _ := ret[0].(*matchingservice.DispatchNexusTaskResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DispatchNexusTask indicates an expected call of DispatchNexusTask.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchNexusTask(ctx, taskId, request any) *gomock.Call {
+func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchNexusTask(ctx, task any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchNexusTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).DispatchNexusTask), ctx, taskId, request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchNexusTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).DispatchNexusTask), ctx, task)
 }
 
 // DispatchQueryTask mocks base method.
-func (m *MockphysicalTaskQueueManager) DispatchQueryTask(ctx context.Context, taskId string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error) {
+func (m *MockphysicalTaskQueueManager) DispatchQueryTask(ctx context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DispatchQueryTask", ctx, taskId, request)
+	ret := m.ctrl.Call(m, "DispatchQueryTask", ctx, task)
 	ret0, _ := ret[0].(*matchingservice.QueryWorkflowResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DispatchQueryTask indicates an expected call of DispatchQueryTask.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchQueryTask(ctx, taskId, request any) *gomock.Call {
+func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchQueryTask(ctx, task any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchQueryTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).DispatchQueryTask), ctx, taskId, request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchQueryTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).DispatchQueryTask), ctx, task)
 }
 
 // DispatchSpooledTask mocks base method.
@@ -278,6 +280,30 @@ func (m *MockphysicalTaskQueueManager) QueueKey() *PhysicalTaskQueueKey {
 func (mr *MockphysicalTaskQueueManagerMockRecorder) QueueKey() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueKey", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).QueueKey))
+}
+
+// RemovePoller mocks base method.
+func (m *MockphysicalTaskQueueManager) RemovePoller(arg0 pollerIdentity) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RemovePoller", arg0)
+}
+
+// RemovePoller indicates an expected call of RemovePoller.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) RemovePoller(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemovePoller", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).RemovePoller), arg0)
+}
+
+// ReprocessRedirectedTasksAfterStop mocks base method.
+func (m *MockphysicalTaskQueueManager) ReprocessRedirectedTasksAfterStop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ReprocessRedirectedTasksAfterStop")
+}
+
+// ReprocessRedirectedTasksAfterStop indicates an expected call of ReprocessRedirectedTasksAfterStop.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) ReprocessRedirectedTasksAfterStop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReprocessRedirectedTasksAfterStop", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).ReprocessRedirectedTasksAfterStop))
 }
 
 // SetupDraining mocks base method.
