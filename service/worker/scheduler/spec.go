@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	rrule "github.com/teambition/rrule-go"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
@@ -21,6 +22,8 @@ type (
 		tz       *time.Location
 		calendar []*compiledCalendar
 		excludes []*compiledCalendar
+		// RFC 5545 rules with DTSTART applied; union with calendar and interval.
+		rrules []*rrule.RRule
 	}
 
 	GetNextTimeResult struct {
@@ -77,11 +80,17 @@ func (b *SpecBuilder) NewCompiledSpec(spec *schedulepb.ScheduleSpec) (*CompiledS
 		excludes[i] = newCompiledCalendar(excal, tz)
 	}
 
+	rrules, err := compileRRuleStrings(spec, tz)
+	if err != nil {
+		return nil, err
+	}
+
 	cspec := &CompiledSpec{
 		spec:     spec,
 		tz:       tz,
 		calendar: ccs,
 		excludes: excludes,
+		rrules:   rrules,
 	}
 
 	return cspec, nil
@@ -315,6 +324,12 @@ func (cs *CompiledSpec) rawNextTime(after time.Time) (nominal time.Time) {
 		next := cs.nextIntervalTime(iv, after)
 		if next < minTimestamp {
 			minTimestamp = next
+		}
+	}
+
+	if len(cs.rrules) > 0 {
+		if n := nextRRuleTime(cs.rrules, after); n < minTimestamp {
+			minTimestamp = n
 		}
 	}
 

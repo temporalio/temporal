@@ -36,6 +36,9 @@ const (
 
 	// max length of one calendar comment field
 	maxCommentLen = 200
+
+	maxRruleCount     = 32
+	maxRruleStringLen = 4096
 )
 
 const (
