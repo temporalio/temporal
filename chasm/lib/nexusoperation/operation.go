@@ -240,11 +240,9 @@ func (o *Operation) onTimedOut(ctx chasm.MutableContext, cause *failurepb.Failur
 	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationTimedOut(ctx, o, cause, fromAttempt)
 	}
-	timeoutType := cause.GetTimeoutFailureInfo().GetTimeoutType()
 	return TransitionTimedOut.Apply(o, ctx, EventTimedOut{
 		Failure:     cause,
 		FromAttempt: fromAttempt,
-		TimeoutType: timeoutType,
 	})
 }
 

@@ -4,7 +4,6 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
@@ -305,7 +304,6 @@ type EventTimedOut struct {
 	Failure *failurepb.Failure
 	// FromAttempt is true when the failure came from an invocation attempt.
 	FromAttempt bool
-	TimeoutType enumspb.TimeoutType
 }
 
 var TransitionTimedOut = chasm.NewTransition(
@@ -321,7 +319,8 @@ var TransitionTimedOut = chasm.NewTransition(
 		if err != nil {
 			return err
 		}
-		o.emitOnTimedOutMetrics(metricsHandler, closeTime, event.TimeoutType.String())
+		timeoutType := event.Failure.GetTimeoutFailureInfo().GetTimeoutType().String()
+		o.emitOnTimedOutMetrics(metricsHandler, closeTime, timeoutType)
 		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime, event.FromAttempt)
 	},
 )

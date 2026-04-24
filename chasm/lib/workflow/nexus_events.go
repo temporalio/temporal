@@ -330,8 +330,7 @@ func (d TimedOutEventDefinition) Apply(ctx chasm.MutableContext, wf *Workflow, e
 	op := field.Get(ctx)
 
 	if err := nexusoperation.TransitionTimedOut.Apply(op, ctx, nexusoperation.EventTimedOut{
-		Failure:     attrs.GetFailure().GetCause(),
-		TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		Failure: attrs.GetFailure().GetCause(),
 	}); err != nil {
 		return err
 	}
