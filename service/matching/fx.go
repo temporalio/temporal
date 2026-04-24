@@ -120,9 +120,9 @@ func NamespaceRateLimitInterceptorProvider(
 			namespaceRateFn,
 			serviceConfig.OperatorRPSRatio,
 		),
-		map[string]int{},      // no token overrides
-		map[string]struct{}{}, // no long polls on history service
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // no long poll methods
+		map[string]int{},       // no token overrides
+		configs.PollTaskAPISet, // set of APIs that will wait for token instead of immediate rejection
+		serviceConfig.PollWaitForNamespaceRateLimitToken,
 		metricsHandler,
 	)
 }
