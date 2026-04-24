@@ -17,6 +17,7 @@ type Config struct {
 	HistoryReplicationDLQV2             dynamicconfig.BoolPropertyFn
 
 	RPS                                         dynamicconfig.IntPropertyFn
+	NamespaceRPS                                dynamicconfig.IntPropertyFnWithNamespaceFilter
 	OperatorRPSRatio                            dynamicconfig.FloatPropertyFn
 	MaxIDLengthLimit                            dynamicconfig.IntPropertyFn
 	PersistenceMaxQPS                           dynamicconfig.IntPropertyFn
@@ -439,6 +440,7 @@ func NewConfig(
 		HistoryReplicationDLQV2:             dynamicconfig.EnableHistoryReplicationDLQV2.Get(dc),
 
 		RPS:                                  dynamicconfig.HistoryRPS.Get(dc),
+		NamespaceRPS:                         dynamicconfig.HistoryNamespaceRPS.Get(dc),
 		OperatorRPSRatio:                     dynamicconfig.OperatorRPSRatio.Get(dc),
 		MaxIDLengthLimit:                     dynamicconfig.MaxIDLengthLimit.Get(dc),
 		PersistenceMaxQPS:                    dynamicconfig.HistoryPersistenceMaxQPS.Get(dc),
