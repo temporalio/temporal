@@ -2153,8 +2153,11 @@ func TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken(t *testing.T) {
 	}
 	handlerNexusLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
-	var callbackToken string
-	var callbackURL string
+	type callbackInfo struct {
+		token string
+		url   string
+	}
+	callbackCh := make(chan callbackInfo, 1)
 	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(t, listenAddr, nexustest.Handler{
 		OnStartOperation: func(
@@ -2164,8 +2167,10 @@ func TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken(t *testing.T) {
 			input *nexus.LazyValue,
 			options nexus.StartOperationOptions,
 		) (nexus.HandlerStartOperationResult[any], error) {
-			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
-			callbackURL = options.CallbackURL
+			callbackCh <- callbackInfo{
+				token: options.CallbackHeader.Get(commonnexus.CallbackTokenHeader),
+				url:   options.CallbackURL,
+			}
 			nexus.AddHandlerLinks(ctx, handlerNexusLink)
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-operation-token"}, nil
 		},
@@ -2193,9 +2198,15 @@ func TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
 	defer cancel()
-	require.Eventually(t, func() bool {
-		return callbackToken != "" && callbackURL != ""
-	}, 10*time.Second, 100*time.Millisecond)
+	var callbackToken string
+	var callbackURL string
+	select {
+	case callback := <-callbackCh:
+		callbackToken = callback.token
+		callbackURL = callback.url
+	case <-ctx.Done():
+		require.FailNow(t, "timed out waiting for Nexus callback details", ctx.Err().Error())
+	}
 
 	gen := &commonnexus.CallbackTokenGenerator{}
 	decodedToken, err := commonnexus.DecodeCallbackToken(callbackToken)
