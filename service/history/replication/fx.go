@@ -180,7 +180,7 @@ func replicationStreamLowPrioritySchedulerProvider(
 	// P-way parallelism for executions of the same workflow (per ReplicationLowPriorityTaskParallelism)
 	// is modeled as P distinct per-namespace-workflow queue IDs. We bucket by execution (RunID) so all
 	// low-priority tasks for one execution share a queue; the third field stores the slot index, not
-	// the run UUID. WorkflowKeyHashFn must be used so map shard selection is deterministic for that id.
+	// the run UUID.
 	queueFactory := func(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
 		item := task.QueueID()
 		workflowKey, ok := item.(definition.WorkflowKey)
