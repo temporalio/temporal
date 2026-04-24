@@ -4,6 +4,7 @@ package frontend
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -946,13 +947,19 @@ func (d *namespaceHandler) upsertCustomSearchAttributesAliases(
 	upsert map[string]string,
 ) (map[string]string, error) {
 	result := util.CloneMapNonNil(current)
+	currentAliasToField := util.InverseMap(current)
 	for key, value := range upsert {
 		if value == "" {
 			delete(result, key)
-		} else if _, ok := current[key]; !ok {
-			result[key] = value
-		} else {
+		} else if _, aliasExists := currentAliasToField[value]; aliasExists {
+			d.logger.Warn(
+				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, value),
+				tag.String("visibility-search-attribute", value),
+			)
+		} else if _, ok := current[key]; ok {
 			return nil, errCustomSearchAttributeFieldAlreadyAllocated
+		} else {
+			result[key] = value
 		}
 	}
 	return result, nil
