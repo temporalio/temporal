@@ -367,6 +367,14 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		req.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
+	if err := validateStartDelay(req.GetStartDelay()); err != nil {
+		return nil, err
+	}
+	if req.GetStartDelay().AsDuration() > 0 && !h.config.StartDelayEnabled(req.GetNamespace()) {
+		return nil, serviceerror.NewInvalidArgument("start_delay is not enabled for this namespace")
+	}
+	// TODO(saa): when eager start is supported, deny it if start delay > 0 (same as workflow behavior).
+
 	opts := activityOptionsFromStartRequest(req)
 	err := ValidateAndNormalizeStandaloneActivity(
 		req.ActivityId,
