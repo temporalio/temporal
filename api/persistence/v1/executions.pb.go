@@ -2754,11 +2754,9 @@ type ActivityInfo struct {
 	//
 	// Replication: This field is part of ActivityInfo and is automatically replicated
 	// via state-based replication. No special handling is needed.
-	StartedClock *v15.VectorClock `protobuf:"bytes,52,opt,name=started_clock,json=startedClock,proto3" json:"started_clock,omitempty"`
-	// Total number of heartbeats recorded across all attempts of this activity, including retries.
-	TotalHeartbeatCount int64 `protobuf:"varint,53,opt,name=total_heartbeat_count,json=totalHeartbeatCount,proto3" json:"total_heartbeat_count,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	StartedClock  *v15.VectorClock `protobuf:"bytes,52,opt,name=started_clock,json=startedClock,proto3" json:"started_clock,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ActivityInfo) Reset() {
@@ -3143,13 +3141,6 @@ func (x *ActivityInfo) GetStartedClock() *v15.VectorClock {
 		return x.StartedClock
 	}
 	return nil
-}
-
-func (x *ActivityInfo) GetTotalHeartbeatCount() int64 {
-	if x != nil {
-		return x.TotalHeartbeatCount
-	}
-	return 0
 }
 
 type isActivityInfo_BuildIdInfo interface {
@@ -5110,7 +5101,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x17NexusInvocationTaskInfo\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\"4\n" +
 	"\x18NexusCancelationTaskInfo\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattempt\"\xdd\x1c\n" +
+	"\aattempt\x18\x01 \x01(\x05R\aattempt\"\xa9\x1c\n" +
 	"\fActivityInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x127\n" +
 	"\x18scheduled_event_batch_id\x18\x02 \x01(\x03R\x15scheduledEventBatchId\x12A\n" +
@@ -5165,8 +5156,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x10reset_heartbeats\x180 \x01(\bR\x0fresetHeartbeats\x12#\n" +
 	"\rstart_version\x182 \x01(\x03R\fstartVersion\x129\n" +
 	"\x19worker_control_task_queue\x183 \x01(\tR\x16workerControlTaskQueue\x12N\n" +
-	"\rstarted_clock\x184 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\fstartedClock\x122\n" +
-	"\x15total_heartbeat_count\x185 \x01(\x03R\x13totalHeartbeatCount\x1ay\n" +
+	"\rstarted_clock\x184 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\fstartedClock\x1ay\n" +
 	"\x16UseWorkflowBuildIdInfo\x12+\n" +
 	"\x12last_used_build_id\x18\x01 \x01(\tR\x0flastUsedBuildId\x122\n" +
 	"\x15last_redirect_counter\x18\x02 \x01(\x03R\x13lastRedirectCounter\x1a\x89\x02\n" +

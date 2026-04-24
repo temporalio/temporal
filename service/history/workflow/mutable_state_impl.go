@@ -409,7 +409,7 @@ func NewMutableState(
 		s.bufferEventsInDB,
 		s.metricsHandler,
 	)
-	s.taskGenerator = taskGeneratorProvider.NewTaskGenerator(shard, s)
+	s.taskGenerator = GetTaskGeneratorProvider().NewTaskGenerator(shard, s)
 	s.workflowTaskManager = newWorkflowTaskStateMachine(s, s.metricsHandler)
 
 	s.mustInitHSM()
