@@ -81,6 +81,10 @@ var (
 	}
 	defaultMaxIDLengthLimit = dynamicconfig.MaxIDLengthLimit.Get(
 		dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), log.NewNoopLogger()))()
+	// Safety margin for assertions involving timer tasks. Must exceed TimerProcessorMaxTimeShift to account for timer
+	// queue processing jitter.
+	timerSafetyMargin = dynamicconfig.TimerProcessorMaxTimeShift.Get(
+		dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), log.NewNoopLogger()))() * 3 / 2
 )
 
 type standaloneActivityTestSuite struct {
@@ -4931,7 +4935,6 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 		requestID := testcore.RandomizeStr("request-id")
 		startDelay := 3 * time.Second
-		safetyMargin := 1500 * time.Millisecond // must exceed TimerProcessorMaxTimeShift (default 1s) to account for timer queue processing jitter
 
 		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:           s.Namespace().String(),
@@ -4956,11 +4959,10 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 				RunId:      startResp.GetRunId(),
 			})
 			return err != nil || describeResp.GetInfo().GetRunState() != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
-		}, startDelay-safetyMargin, 100*time.Millisecond,
+		}, startDelay-timerSafetyMargin, 100*time.Millisecond,
 			"expected activity to remain in SCHEDULED state during start delay")
 
-		// Wait for the remaining delay, then poll — should get the task.
-		time.Sleep(safetyMargin) //nolint:forbidigo
+		// Poll blocks until the task is dispatched after the delay elapses.
 		pollResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
 		require.NoError(t, err)
 		require.NotEmpty(t, pollResp.GetTaskToken(), "expected task after start delay")
@@ -4988,8 +4990,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		})
 		require.NoError(t, err)
 
-		// Wait for delay, poll, and complete.
-		time.Sleep(startDelay) //nolint:forbidigo
+		// Poll blocks until the task is dispatched after the delay elapses.
 		pollResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
 		require.NoError(t, err)
 		require.NotEmpty(t, pollResp.GetTaskToken())
@@ -5022,7 +5023,6 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		requestID := testcore.RandomizeStr("request-id")
 		startDelay := 3 * time.Second
 		scheduleToStartTimeout := 1 * time.Second
-		safetyMargin := 1500 * time.Millisecond // must exceed TimerProcessorMaxTimeShift (default 1s) to account for timer queue processing jitter
 
 		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:              s.Namespace().String(),
@@ -5047,7 +5047,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 				RunId:      startResp.RunId,
 			})
 			return err != nil || descResp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
-		}, startDelay+scheduleToStartTimeout-safetyMargin, 100*time.Millisecond,
+		}, startDelay+scheduleToStartTimeout-timerSafetyMargin, 100*time.Millisecond,
 			"activity should not time out before startDelay + scheduleToStartTimeout")
 
 		// Now wait for the ScheduleToStart timeout to actually fire (measured from after delay).
@@ -5070,7 +5070,6 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		requestID := testcore.RandomizeStr("request-id")
 		startDelay := 3 * time.Second
 		scheduleToCloseTimeout := 1 * time.Second
-		safetyMargin := 1500 * time.Millisecond // must exceed TimerProcessorMaxTimeShift (default 1s) to account for timer queue processing jitter
 
 		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:              s.Namespace().String(),
@@ -5094,7 +5093,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 				RunId:      startResp.RunId,
 			})
 			return err != nil || descResp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
-		}, startDelay+scheduleToCloseTimeout-safetyMargin, 100*time.Millisecond,
+		}, startDelay+scheduleToCloseTimeout-timerSafetyMargin, 100*time.Millisecond,
 			"activity should not time out before startDelay + scheduleToCloseTimeout")
 
 		// Now wait for the ScheduleToClose timeout to actually fire (measured from after delay).
@@ -5223,8 +5222,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.NoError(t, err)
 		require.NotEmpty(t, startResp.GetRunId())
 
-		// Wait for the start delay, then poll attempt 1.
-		time.Sleep(startDelay) //nolint:forbidigo
+		// Poll blocks until the task is dispatched after the delay elapses.
 		pollResp1, err := s.pollActivityTaskQueue(ctx, taskQueue)
 		require.NoError(t, err)
 		require.NotEmpty(t, pollResp1.GetTaskToken())
