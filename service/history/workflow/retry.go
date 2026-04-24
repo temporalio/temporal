@@ -340,6 +340,9 @@ func SetupNewWorkflowForRetryOrCron(
 		InheritedAutoUpgradeInfo: inheritedAutoUpgradeInfo,
 		// For retries, pass through the declined value from the started event directly.
 		DeclinedTargetVersionUpgrade: startAttr.GetDeclinedTargetVersionUpgrade(),
+		// Retry and Cron inherit InitialSkippedDuration from the previous run's
+		// WorkflowExecutionStarted event verbatim — same semantics as TimeSkippingConfig above.
+		InitialSkippedDuration: startAttr.GetInitialSkippedDuration(),
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {

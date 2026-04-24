@@ -1364,6 +1364,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 		attributes,
 		testNamespaceID,
 		nil,
+		nil,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -2567,6 +2568,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated_NilSearch
 		rand.Int63(),
 		command,
 		testNamespaceID,
+		nil,
 		nil,
 	)
 

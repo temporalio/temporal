@@ -41,8 +41,9 @@
 //	then reapplies any WorkflowExecutionOptionsUpdated events that occurred between
 //	the reset point and the original run's terminal state. Reapply is unconditional
 //	— there is no ResetReapplyExcludeType value that can suppress OPTIONS_UPDATED.
-//	AccumulatedSkippedDuration on the reset run starts from the event #1 PSD (same
-//	as Group 2); original-run in-flight skip is not carried forward.
+//	AccumulatedSkippedDuration on the reset run starts from the event #1
+//	InitialSkippedDuration (same as Group 2); original-run in-flight skip is not
+//	carried forward.
 //
 //	Covered by:
 //	  - TestTSPInReset
@@ -88,11 +89,11 @@ func TestTimeSkippingPropagationTestSuite(t *testing.T) {
 // propagation of TimeSkippingConfig + AccumulatedSkippedDuration from parent to child,
 // together with the idle-only skipping invariant on the parent.
 //
-// The parent's StartChildWorkflowExecutionInitiated event carries a PSD snapshot of
-// the parent's accumulated skip at child-start time. applyTimeSkippingConfig on the
-// child's MS converts that PSD into AccumulatedSkippedDuration and strips PSD from
-// the stored Config, so the child's virtual clock continues from where the parent
-// left off.
+// The parent's StartChildWorkflowExecutionInitiated event carries an InitialSkippedDuration
+// snapshot of the parent's accumulated skip at child-start time (separate from the
+// TimeSkippingConfig Config snapshot). applyTimeSkippingConfig on the child's MS uses the
+// initial skip to seed AccumulatedSkippedDuration, so the child's virtual clock continues
+// from where the parent left off.
 //
 // Scenario:
 //   - Parent starts with TimeSkippingConfig{Enabled: true}.
@@ -101,8 +102,8 @@ func TestTimeSkippingPropagationTestSuite(t *testing.T) {
 //   - t1 fires. Parent issues StartChildWorkflow(child) and StartTimer(t2, 1h).
 //     Parent now has a pending child → NOT idle → parent does NOT skip.
 //   - Child is started. Its MS is seeded with AccumulatedSkippedDuration = 1h
-//     (converted from the PSD=1h on the initiated event) and Config.Enabled = true
-//     (Config.PSD stripped by applyTimeSkippingConfig).
+//     (from the InitialSkippedDuration=1h on the initiated event) and Config.Enabled
+//     = true (cloned verbatim from parent's Config).
 //   - Child issues StartTimer(tc, 3h). Child is idle → server skips 3h.
 //     After skip: child.AccumulatedSkippedDuration = 1h + 3h = 4h.
 //   - tc fires. Child completes.
@@ -114,11 +115,10 @@ func TestTimeSkippingPropagationTestSuite(t *testing.T) {
 // End-state assertions:
 //   - parent.AccumulatedSkippedDuration == 2h.
 //   - child.TimeSkippingInfo.Config.Enabled == true (propagated).
-//   - child.TimeSkippingInfo.Config.PropagatedSkippedDuration is unset on the MS —
-//     applyTimeSkippingConfig stripped it after converting to AccumulatedSkippedDuration.
 //   - child.AccumulatedSkippedDuration == 4h (1h inherited + 3h own from tc).
-//   - The parent's StartChildWorkflowExecutionInitiated event retains PSD=1h (the
-//     pre-apply snapshot; it is the wire form the transfer task consumes).
+//   - The parent's StartChildWorkflowExecutionInitiated event carries
+//     TimeSkippingConfig{Enabled=true} and InitialSkippedDuration=1h (the pre-apply
+//     snapshots; the wire form the transfer task consumes).
 //   - Wall-clock elapsed is nowhere near 5h of virtual time.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 	env := testcore.NewEnv(s.T())
@@ -210,27 +210,27 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 	childCfg := childTSI.GetConfig()
 	s.NotNil(childCfg)
 	s.True(childCfg.GetEnabled(), "child TSC.Enabled propagated from parent")
-	s.Zero(childCfg.GetPropagatedSkippedDuration().AsDuration(),
-		"child Config.PSD is stripped on apply; the inherited skip lives in AccumulatedSkippedDuration")
 	s.approxDuration(4*time.Hour, childTSI.GetAccumulatedSkippedDuration().AsDuration(),
 		"child AccumulatedSkippedDuration == parent's accumulated at child-start (1h) + child's own skip for tc (3h) = 4h")
 
 	// The parent's StartChildWorkflowExecutionInitiated event must carry the propagated
-	// TimeSkippingConfig — this is what the transfer task consumes when it starts the child.
+	// TimeSkippingConfig and InitialSkippedDuration — these are what the transfer task
+	// consumes when it starts the child.
 	initEvents := s.initiatedChildEvents(ctx, env, parentWFID, parentRunID)
 	s.Len(initEvents, 1)
-	initTSC := initEvents[0].GetStartChildWorkflowExecutionInitiatedEventAttributes().GetTimeSkippingConfig()
+	initAttrs := initEvents[0].GetStartChildWorkflowExecutionInitiatedEventAttributes()
+	initTSC := initAttrs.GetTimeSkippingConfig()
 	s.NotNil(initTSC, "initiated event should carry TimeSkippingConfig snapshot")
 	s.True(initTSC.GetEnabled(), "snapshot mirrors parent's Enabled flag")
-	s.approxDuration(time.Hour, initTSC.GetPropagatedSkippedDuration().AsDuration(),
-		"snapshot PSD == parent's AccumulatedSkippedDuration at command time (1h)")
+	s.approxDuration(time.Hour, initAttrs.GetInitialSkippedDuration().AsDuration(),
+		"initiated event InitialSkippedDuration == parent's AccumulatedSkippedDuration at command time (1h)")
 }
 
 // TestTSPInChildWf_TwoChildren verifies that:
 //   - All children started in the same WFT inherit the parent's TimeSkippingConfig
 //     and have their AccumulatedSkippedDuration seeded to the parent's accumulated
-//     skip at child-start time (via the PSD snapshot on the initiated event, which
-//     applyTimeSkippingConfig converts into AccumulatedSkippedDuration).
+//     skip at child-start time (via InitialSkippedDuration on the initiated event,
+//     which applyTimeSkippingConfig converts into AccumulatedSkippedDuration).
 //   - The parent is blocked from skipping while ANY child is pending, and resumes
 //     skipping only after all children complete (idle-only invariant).
 //
@@ -335,22 +335,21 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_TwoChildren() {
 		childTSI := childMS.State.ExecutionInfo.GetTimeSkippingInfo()
 		s.NotNil(childTSI, "%s TSI", id)
 		s.True(childTSI.GetConfig().GetEnabled(), "%s inherited Enabled", id)
-		s.Zero(childTSI.GetConfig().GetPropagatedSkippedDuration().AsDuration(),
-			"%s Config.PSD is stripped on apply; the inherited skip lives in AccumulatedSkippedDuration", id)
 		s.approxDuration(3*time.Hour, childTSI.GetAccumulatedSkippedDuration().AsDuration(),
 			"%s AccumulatedSkippedDuration == parent's accumulated at child-start (1h) + own skip for tc (2h) = 3h", id)
 	}
 
 	// Both children are initiated in the same WFT — the parent's history must carry two
-	// StartChildWorkflowExecutionInitiated events, each with the snapshot (Enabled=true,
-	// PSD=1h) computed from parent state at command time.
+	// StartChildWorkflowExecutionInitiated events, each with the snapshot (Config{Enabled=true},
+	// InitialSkippedDuration=1h) computed from parent state at command time.
 	initEvents := s.initiatedChildEvents(ctx, env, parentWFID, parentRunID)
 	s.Len(initEvents, 2)
 	for _, e := range initEvents {
-		tsc := e.GetStartChildWorkflowExecutionInitiatedEventAttributes().GetTimeSkippingConfig()
+		attrs := e.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+		tsc := attrs.GetTimeSkippingConfig()
 		s.NotNil(tsc)
 		s.True(tsc.GetEnabled())
-		s.approxDuration(time.Hour, tsc.GetPropagatedSkippedDuration().AsDuration())
+		s.approxDuration(time.Hour, attrs.GetInitialSkippedDuration().AsDuration())
 	}
 }
 
@@ -359,18 +358,18 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_TwoChildren() {
 // parent's accumulated skip (which already includes all ancestors' contributions) seeded
 // into AccumulatedSkippedDuration, then adds its own skipping on top.
 //
-// The initiated-event PSD snapshot on any parent reflects that parent's full accumulated
-// skip at command time — which includes the parent's own inherited portion. There is no
-// "direct-parent-only" carve-out; the ancestry's virtual clock is continuous.
+// The initiated-event InitialSkippedDuration snapshot on any parent reflects that parent's
+// full accumulated skip at command time — which includes the parent's own inherited portion.
+// There is no "direct-parent-only" carve-out; the ancestry's virtual clock is continuous.
 //
 // Scenario:
 //   - Grandparent (G) TSC enabled. G: StartTimer(gt1, 1h) → skips 1h → G.accum = 1h.
-//   - G: StartChild(P) + StartTimer(gt2, 1h). P's initiated event snapshots PSD=1h.
-//     P's MS: AccumulatedSkippedDuration seeded to 1h, Config.PSD stripped.
+//   - G: StartChild(P) + StartTimer(gt2, 1h). P's initiated event snapshots
+//     InitialSkippedDuration=1h. P's MS: AccumulatedSkippedDuration seeded to 1h.
 //   - P: StartTimer(pt1, 2h) → skips 2h → P.accum = 1h + 2h = 3h.
-//   - P: StartChild(C) + StartTimer(pt2, 1h). C's initiated event snapshots PSD=3h
-//     (P's full accumulated at command time, which already includes G's 1h).
-//     C's MS: AccumulatedSkippedDuration seeded to 3h, Config.PSD stripped.
+//   - P: StartChild(C) + StartTimer(pt2, 1h). C's initiated event snapshots
+//     InitialSkippedDuration=3h (P's full accumulated at command time, which already
+//     includes G's 1h). C's MS: AccumulatedSkippedDuration seeded to 3h.
 //   - C: StartTimer(ct, 1h) → skips 1h → C.accum = 3h + 1h = 4h → completes.
 //   - P: idle on pt2 → skips 1h → P.accum = 3h + 1h = 4h. pt2 fires. P completes.
 //   - G: idle on gt2 → skips 1h → G.accum = 1h + 1h = 2h. gt2 fires. G completes.
@@ -488,8 +487,6 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ThreeGenerations() {
 	pTSI := pMS.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(pTSI)
 	s.True(pTSI.GetConfig().GetEnabled())
-	s.Zero(pTSI.GetConfig().GetPropagatedSkippedDuration().AsDuration(),
-		"P.Config.PSD is stripped on apply; the inherited skip lives in AccumulatedSkippedDuration")
 	s.approxDuration(4*time.Hour, pTSI.GetAccumulatedSkippedDuration().AsDuration(),
 		"P.accum == G's accumulated at P-start (1h) + P's own pt1 (2h) + P's own pt2 (1h) = 4h")
 
@@ -499,26 +496,25 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ThreeGenerations() {
 	cTSI := cMS.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(cTSI)
 	s.True(cTSI.GetConfig().GetEnabled())
-	s.Zero(cTSI.GetConfig().GetPropagatedSkippedDuration().AsDuration(),
-		"C.Config.PSD is stripped on apply")
 	s.approxDuration(4*time.Hour, cTSI.GetAccumulatedSkippedDuration().AsDuration(),
 		"C.accum == P's accumulated at C-start (3h, which already includes G's 1h) + C's own ct (1h) = 4h")
 
-	// History-side check: G's initiated event for P snapshots PSD=1h (G's accumulated
-	// at command time); P's initiated event for C snapshots PSD=3h (P's full accumulated
-	// at command time — includes G's 1h contribution, which propagates transitively).
+	// History-side check: G's initiated event for P snapshots InitialSkippedDuration=1h
+	// (G's accumulated at command time); P's initiated event for C snapshots
+	// InitialSkippedDuration=3h (P's full accumulated at command time — includes G's 1h
+	// contribution, which propagates transitively).
 	gInit := s.initiatedChildEvents(ctx, env, gWFID, gRunID)
 	s.Len(gInit, 1)
-	gInitTSC := gInit[0].GetStartChildWorkflowExecutionInitiatedEventAttributes().GetTimeSkippingConfig()
-	s.NotNil(gInitTSC)
-	s.approxDuration(time.Hour, gInitTSC.GetPropagatedSkippedDuration().AsDuration())
+	gInitAttrs := gInit[0].GetStartChildWorkflowExecutionInitiatedEventAttributes()
+	s.NotNil(gInitAttrs.GetTimeSkippingConfig())
+	s.approxDuration(time.Hour, gInitAttrs.GetInitialSkippedDuration().AsDuration())
 
 	pRunID := pMS.State.ExecutionState.RunId
 	pInit := s.initiatedChildEvents(ctx, env, pWFID, pRunID)
 	s.Len(pInit, 1)
-	pInitTSC := pInit[0].GetStartChildWorkflowExecutionInitiatedEventAttributes().GetTimeSkippingConfig()
-	s.NotNil(pInitTSC)
-	s.approxDuration(3*time.Hour, pInitTSC.GetPropagatedSkippedDuration().AsDuration(),
+	pInitAttrs := pInit[0].GetStartChildWorkflowExecutionInitiatedEventAttributes()
+	s.NotNil(pInitAttrs.GetTimeSkippingConfig())
+	s.approxDuration(3*time.Hour, pInitAttrs.GetInitialSkippedDuration().AsDuration(),
 		"P's initiated event for C carries P's full accumulated at command time (3h = G's 1h + P's pt1 2h)")
 }
 
@@ -902,19 +898,19 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInReset() {
 // AccumulatedSkippedDuration are propagated to the new run on continue-as-new.
 //
 // CaN uses the same propagation mechanism as child workflows: the previous run's
-// AccumulatedSkippedDuration is snapshotted as PropagatedSkippedDuration on the new
-// run's WorkflowExecutionStarted event. applyTimeSkippingConfig then converts that
-// PSD into AccumulatedSkippedDuration on the new MS (stripping PSD from the stored
-// Config) so the virtual clock continues seamlessly.
+// AccumulatedSkippedDuration is snapshotted as InitialSkippedDuration on the new
+// run's WorkflowExecutionStarted event (separate from the TimeSkippingConfig snapshot).
+// applyTimeSkippingConfig uses InitialSkippedDuration to seed AccumulatedSkippedDuration
+// on the new MS, so the virtual clock continues seamlessly.
 //
 // Scenario:
 //   - Run 1 starts with TimeSkippingConfig{Enabled: true}.
 //   - Run 1 issues StartTimer(t1, 1h). Idle → server skips 1h.
 //     After skip: run1.AccumulatedSkippedDuration = 1h.
 //   - t1 fires. Run 1 issues ContinueAsNew (same type, same task queue).
-//   - Run 2 starts. Its WorkflowExecutionStarted event carries TSC with Enabled=true
-//     and PropagatedSkippedDuration=1h. The applied MS has Config.Enabled=true,
-//     Config.PSD unset, AccumulatedSkippedDuration=1h.
+//   - Run 2 starts. Its WorkflowExecutionStarted event carries
+//     TimeSkippingConfig{Enabled=true} and InitialSkippedDuration=1h. The applied MS
+//     has Config.Enabled=true and AccumulatedSkippedDuration=1h.
 //   - Run 2 issues StartTimer(t2, 2h). Idle → skips 2h.
 //     After skip: run2.AccumulatedSkippedDuration = 1h + 2h = 3h.
 //   - t2 fires. Run 2 completes.
@@ -923,11 +919,9 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInReset() {
 //   - run1.status == CONTINUED_AS_NEW, run1.AccumulatedSkippedDuration == 1h.
 //   - run2.status == COMPLETED.
 //   - run2.TimeSkippingInfo.Config.Enabled == true (propagated).
-//   - run2.TimeSkippingInfo.Config.PropagatedSkippedDuration is unset on the MS —
-//     applyTimeSkippingConfig stripped it after converting to AccumulatedSkippedDuration.
 //   - run2.AccumulatedSkippedDuration == 3h.
-//   - run2 WorkflowExecutionStarted event retains the PSD=1h snapshot (history
-//     observability — the event is created before applyTimeSkippingConfig runs).
+//   - run2 WorkflowExecutionStarted event retains the InitialSkippedDuration=1h snapshot
+//     (history observability — the event is created before applyTimeSkippingConfig runs).
 //   - Wall-clock elapsed is nowhere near 3h of virtual time.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN() {
 	env := testcore.NewEnv(s.T())
@@ -998,8 +992,6 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN() {
 	run2Cfg := run2TSI.GetConfig()
 	s.NotNil(run2Cfg)
 	s.True(run2Cfg.GetEnabled(), "run 2 TSC.Enabled propagated from run 1")
-	s.Zero(run2Cfg.GetPropagatedSkippedDuration().AsDuration(),
-		"CaN must not leave PropagatedSkippedDuration set on the Config; the inherited skip goes into AccumulatedSkippedDuration")
 	s.approxDuration(3*time.Hour, run2TSI.GetAccumulatedSkippedDuration().AsDuration(),
 		"run 2 AccumulatedSkippedDuration == run 1's accumulated (1h) + run 2's own skip for t2 (2h) = 3h")
 
@@ -1017,19 +1009,20 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN() {
 	startedTSC := startedAttr.GetTimeSkippingConfig()
 	s.NotNil(startedTSC, "run 2's WorkflowExecutionStarted must carry the TSC snapshot")
 	s.True(startedTSC.GetEnabled(), "started event TSC.Enabled mirrors run 1's config")
-	s.approxDuration(time.Hour, startedTSC.GetPropagatedSkippedDuration().AsDuration(),
-		"started event retains PSD=1h (run 1's accumulated at CaN time); applyTimeSkippingConfig converts it to AccumulatedSkippedDuration on the MS but the event snapshot is unchanged")
+	s.approxDuration(time.Hour, startedAttr.GetInitialSkippedDuration().AsDuration(),
+		"started event retains InitialSkippedDuration=1h (run 1's accumulated at CaN time); applyTimeSkippingConfig uses it to seed AccumulatedSkippedDuration on the MS but the event snapshot is unchanged")
 }
 
 // TestTSPInRetry verifies that TimeSkippingConfig is propagated from the
 // original run's WorkflowExecutionStarted event to a retried workflow run.
 //
 // Retry's createRequest.TimeSkippingConfig is a verbatim copy of startAttr.TimeSkippingConfig
-// (event #1 of the previous run). applyTimeSkippingConfig then produces the same MS state
+// (event #1 of the previous run), and req.InitialSkippedDuration is a verbatim copy of
+// startAttr.InitialSkippedDuration. applyTimeSkippingConfig then produces the same MS state
 // the original run was booted with: Config.Enabled preserved; if the original event #1 had
-// a non-zero PSD snapshot (e.g., the original run was itself started as a child or via CaN),
-// that PSD is converted to AccumulatedSkippedDuration on the retry — otherwise the retry
-// starts with Accum=0.
+// a non-zero InitialSkippedDuration snapshot (e.g., the original run was itself started as
+// a child or via CaN), that value seeds AccumulatedSkippedDuration on the retry — otherwise
+// the retry starts with Accum=0.
 //
 // Key semantic: unlike continue-as-new, the previous attempt's *in-flight* accumulated
 // skip (skip that happened during the attempt) is NOT carried forward to the retry.
@@ -1038,21 +1031,23 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN() {
 //
 // Scenario:
 //   - Start a top-level workflow with TimeSkippingConfig{Enabled: true} and
-//     RetryPolicy{MaximumAttempts: 2}. Event #1's TSC has PSD=0 (no parent, no prior CaN).
+//     RetryPolicy{MaximumAttempts: 2}. Event #1's InitialSkippedDuration is unset
+//     (no parent, no prior CaN).
 //   - Attempt 1 issues StartTimer(t1, 1h). Idle → server skips 1h → attempt1.Accum = 1h.
 //   - Attempt 1 issues FailWorkflowExecution with a bare (retryable) Failure.
 //   - Server schedules retry. Attempt 2 (retry run) starts.
-//     Its MS applies startAttr.TimeSkippingConfig: Config.Enabled=true, PSD=0 → Accum=0.
-//     Attempt 1's 1h in-flight skip is NOT carried forward.
+//     Its MS applies startAttr.TimeSkippingConfig: Config.Enabled=true, no initial skip
+//     → Accum=0. Attempt 1's 1h in-flight skip is NOT carried forward.
 //   - Attempt 2 issues StartTimer(t2, 2h). Idle → server skips 2h → attempt2.Accum = 2h.
 //   - Attempt 2 completes.
 //
 // End-state assertions:
 //   - Attempt 1: status=FAILED, Config.Enabled=true, Accum=1h.
-//   - Attempt 2: status=COMPLETED, Config.Enabled=true, Config.PSD unset on the MS,
-//     Accum=2h (own skip only; 1h from attempt 1 is NOT inherited).
+//   - Attempt 2: status=COMPLETED, Config.Enabled=true, Accum=2h (own skip only;
+//     1h from attempt 1 is NOT inherited).
 //   - Attempt 2's WorkflowExecutionStarted carries the same TSC snapshot as attempt 1's
-//     event #1 (Enabled=true, PSD=0) and references attempt 1 as ContinuedExecutionRunId.
+//     event #1 (Enabled=true, no InitialSkippedDuration) and references attempt 1 as
+//     ContinuedExecutionRunId.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
@@ -1128,8 +1123,6 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 	attempt2Cfg := attempt2TSI.GetConfig()
 	s.NotNil(attempt2Cfg)
 	s.True(attempt2Cfg.GetEnabled(), "attempt 2 TSC.Enabled propagated from attempt 1's event #1")
-	s.Zero(attempt2Cfg.GetPropagatedSkippedDuration().AsDuration(),
-		"attempt 2 Config.PSD unset — original event #1 had PSD=0 and applyTimeSkippingConfig strips PSD regardless")
 	s.approxDuration(2*time.Hour, attempt2TSI.GetAccumulatedSkippedDuration().AsDuration(),
 		"attempt 2 accumulated only its own 2h from t2; attempt 1's 1h in-flight skip is NOT carried forward on retry")
 
@@ -1149,34 +1142,36 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 	startedTSC := startedAttr.GetTimeSkippingConfig()
 	s.NotNil(startedTSC, "attempt 2's WorkflowExecutionStarted must carry the TSC snapshot")
 	s.True(startedTSC.GetEnabled(), "started event TSC.Enabled mirrors attempt 1's event #1")
-	s.Zero(startedTSC.GetPropagatedSkippedDuration().AsDuration(),
-		"started event PSD matches attempt 1's event #1 (PSD=0 for a top-level workflow)")
+	s.Zero(startedAttr.GetInitialSkippedDuration().AsDuration(),
+		"started event InitialSkippedDuration matches attempt 1's event #1 (unset for a top-level workflow)")
 }
 
 // TestTSPInCron verifies that TimeSkippingConfig (Enabled + Bound) is
 // propagated from the previous run's WorkflowExecutionStarted event to a cron-scheduled
 // next run verbatim, while AccumulatedSkippedDuration is NOT inherited.
 //
-// Cron and retry share SetupNewWorkflowForRetryOrCron, which unconditionally copies
-// createRequest.TimeSkippingConfig = startAttr.GetTimeSkippingConfig() (event #1 of
-// the previous run) onto the new run. applyTimeSkippingConfig then strips PSD and
-// seeds AccumulatedSkippedDuration from it. For a top-level cron workflow, event #1
-// has PSD=0, so each cron run starts with Accum=0 — the previous run's in-flight
-// skip is NOT carried forward.
+// Cron and retry share SetupNewWorkflowForRetryOrCron, which copies
+// createRequest.TimeSkippingConfig = startAttr.GetTimeSkippingConfig() and
+// req.InitialSkippedDuration = startAttr.GetInitialSkippedDuration() from event #1 of
+// the previous run onto the new run. applyTimeSkippingConfig then seeds
+// AccumulatedSkippedDuration from InitialSkippedDuration. For a top-level cron workflow,
+// event #1 has no InitialSkippedDuration, so each cron run starts with Accum=0 — the
+// previous run's in-flight skip is NOT carried forward.
 //
 // Scenario:
 //   - Start a cron workflow (`* * * * *`) with TimeSkippingConfig{Enabled: true,
-//     Bound: MaxSkippedDuration(1h)}. Event #1's TSC has PSD=0 (no parent, no prior CaN).
+//     Bound: MaxSkippedDuration(1h)}. Event #1's InitialSkippedDuration is unset
+//     (no parent, no prior CaN).
 //   - Run 1 issues StartTimer(t1, 50min). Idle → server skips 50min → run1.Accum ≈ 50min.
 //   - Run 1 completes. Cron rolls forward; server creates run 2 with
 //     createRequest.TimeSkippingConfig = run 1's event #1 TSC (Enabled=true,
-//     Bound=MaxSkippedDuration(1h), PSD=0). applyTimeSkippingConfig strips PSD →
-//     run 2 MS has Config{Enabled: true, Bound: MaxSkippedDuration(1h)}, Accum=0.
+//     Bound=MaxSkippedDuration(1h)) and no InitialSkippedDuration → run 2 MS has
+//     Config{Enabled: true, Bound: MaxSkippedDuration(1h)}, Accum=0.
 //   - Run 2 completes immediately (no own skipping). Run 1's 50min accum is NOT inherited.
 //
 // End-state assertions:
 //   - Run 1: Config{Enabled, Bound=1h}, Accum ≈ 50min.
-//   - Run 2: Config{Enabled, Bound=1h} (inherited verbatim, PSD unset),
+//   - Run 2: Config{Enabled, Bound=1h} (inherited verbatim),
 //     Accum ≪ 50min (the previous run's in-flight skip is not carried forward).
 //   - Run 2's WorkflowExecutionStarted event carries the verbatim TSC snapshot from
 //     run 1's event #1, with initiator=CRON_SCHEDULE.
@@ -1221,22 +1216,16 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 		case state == 1 && fired["t1"]:
 			state = 2
 			return cmdsResponse(completeCmd()), nil
-		case state == 2:
-			// Run 2's first WFT: complete immediately. We only need run 2 to start
-			// so we can read its propagated Config; its own skipping behavior is
-			// not the subject of this test.
-			state = 3
-			return cmdsResponse(completeCmd()), nil
 		}
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
 	}
 
-	// Phase 1: drive run 1 to non-RUNNING (CONTINUED_AS_NEW once cron rolls forward).
+	// Drive run 1 to non-RUNNING (CONTINUED_AS_NEW once cron rolls forward). Run 2's
+	// assertions below only read state that's populated at run 2 creation (mutable state
+	// + event #1), so we don't need to drive run 2 through its cron backoff.
 	s.drivePollsUntilRunNotRunning(ctx, env, tv, handler, wfID, run1ID, 30)
 
 	// After run 1 closes, describe (no runID) gives the current chain run — that's run 2.
-	// Run 2 hasn't started executing yet (our state machine only fires on poll), so cron
-	// hasn't rolled past run 2.
 	desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: wfID},
@@ -1245,13 +1234,10 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 	run2ID := desc.WorkflowExecutionInfo.Execution.RunId
 	s.NotEqual(run1ID, run2ID, "cron should have rolled forward to a new run")
 
-	// Phase 2: drive run 2 to non-RUNNING.
-	s.drivePollsUntilRunNotRunning(ctx, env, tv, handler, wfID, run2ID, 30)
-
 	elapsed := time.Since(startWall)
 	s.Less(elapsed, 3*time.Minute, "wall-clock elapsed (%s) should be far less than virtual time", elapsed)
 
-	// Stop the cron chain so run 3 (or later) doesn't keep firing.
+	// Stop the cron chain so run 2 (still in cron backoff) and any subsequent runs don't fire.
 	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace:         env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: wfID},
@@ -1263,7 +1249,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 	run1TSI := run1MS.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(run1TSI)
 	s.True(proto.Equal(inputCfg, run1TSI.GetConfig()),
-		"run 1 Config mirrors the start request: Enabled=true, Bound=MaxSkippedDuration(1h), PSD unset")
+		"run 1 Config mirrors the start request: Enabled=true, Bound=MaxSkippedDuration(1h)")
 	// Tolerance absorbs per-skip clock drift plus up to ~60s of cron backoff that may
 	// be skipped while waiting for the first WFT.
 	s.InDelta(float64(50*time.Minute), float64(run1TSI.GetAccumulatedSkippedDuration().AsDuration()), float64(90*time.Second),
@@ -1274,7 +1260,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 	run2TSI := run2MS.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(run2TSI, "run 2 should have TimeSkippingInfo propagated from run 1's event #1")
 	s.True(proto.Equal(inputCfg, run2TSI.GetConfig()),
-		"run 2 Config matches run 1's event #1 verbatim: Enabled=true and Bound=MaxSkippedDuration(1h) are inherited; Config.PSD is stripped by applyTimeSkippingConfig")
+		"run 2 Config matches run 1's event #1 verbatim: Enabled=true and Bound=MaxSkippedDuration(1h) are inherited")
 	s.Less(run2TSI.GetAccumulatedSkippedDuration().AsDuration(), 10*time.Minute,
 		"run 2 Accum is fresh — nowhere near run 1's 50min; the previous run's in-flight skip is NOT carried forward on cron")
 
@@ -1292,5 +1278,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, startedAttr.GetInitiator(),
 		"run 2 is initiated by cron schedule")
 	s.True(proto.Equal(inputCfg, startedAttr.GetTimeSkippingConfig()),
-		"started event carries Enabled=true, Bound=MaxSkippedDuration(1h), PSD=0 — the verbatim snapshot from run 1's event #1")
+		"started event carries Enabled=true, Bound=MaxSkippedDuration(1h) — the verbatim snapshot from run 1's event #1")
+	s.Zero(startedAttr.GetInitialSkippedDuration().AsDuration(),
+		"started event InitialSkippedDuration is unset for a top-level cron workflow")
 }

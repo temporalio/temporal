@@ -269,14 +269,5 @@ func mergeWorkflowExecutionOptions(
 		}
 	}
 
-	if _, ok := updateFields["timeSkippingConfig.maxTargetTime"]; ok {
-		if mergeInto.TimeSkippingConfig == nil {
-			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
-		}
-		mergeInto.TimeSkippingConfig.Bound = &workflowpb.TimeSkippingConfig_MaxTargetTime{
-			MaxTargetTime: mergeFrom.GetTimeSkippingConfig().GetMaxTargetTime(),
-		}
-	}
-
 	return mergeInto, nil
 }

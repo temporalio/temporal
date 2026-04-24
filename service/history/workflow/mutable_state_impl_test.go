@@ -4132,6 +4132,7 @@ func (s *mutableStateSuite) TestStartChildWorkflowRequestID() {
 		attributes,
 		tests.NamespaceID,
 		nil,
+		nil,
 	)
 	createRequestID := fmt.Sprintf("%s:%d:%d", s.mutableState.executionState.RunId, event.GetEventId(), event.GetVersion())
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
@@ -4151,56 +4152,49 @@ func (s *mutableStateSuite) TestStartChildWorkflowRequestID() {
 // so the snapshot must faithfully represent what the parent workflow observed.
 func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_TimeSkippingSnapshot() {
 	cases := []struct {
-		name      string
-		parentTSI *persistencespb.TimeSkippingInfo
-		expectNil bool
-		expectCfg *workflowpb.TimeSkippingConfig
+		name              string
+		parentTSI         *persistencespb.TimeSkippingInfo
+		expectNilCfg      bool
+		expectCfg         *workflowpb.TimeSkippingConfig
+		expectInitialSkip *durationpb.Duration
 	}{
 		{
-			name:      "no TimeSkippingInfo on parent → no snapshot on event",
-			parentTSI: nil,
-			expectNil: true,
+			name:         "no TimeSkippingInfo on parent → no snapshot on event",
+			parentTSI:    nil,
+			expectNilCfg: true,
 		},
 		{
-			name: "config only, no accumulated skip → config cloned verbatim",
+			name: "config only, no accumulated skip → config cloned verbatim, no initial skip",
 			parentTSI: &persistencespb.TimeSkippingInfo{
 				Config: &workflowpb.TimeSkippingConfig{Enabled: true},
 			},
 			expectCfg: &workflowpb.TimeSkippingConfig{Enabled: true},
 		},
 		{
-			name: "config + accumulated skip → PSD overwritten from parent's accumulated",
+			name: "config + accumulated skip → config cloned, InitialSkippedDuration = parent's accumulated",
 			parentTSI: &persistencespb.TimeSkippingInfo{
 				Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 			},
-			expectCfg: &workflowpb.TimeSkippingConfig{
-				Enabled:                   true,
-				PropagatedSkippedDuration: durationpb.New(time.Hour),
-			},
+			expectCfg:         &workflowpb.TimeSkippingConfig{Enabled: true},
+			expectInitialSkip: durationpb.New(time.Hour),
 		},
 		{
-			name: "multi-generation: parent's own config carries inherited PSD from grandparent, parent's accumulated overrides it so grandparent contribution is NOT re-added",
+			name: "multi-generation: parent's accumulated (which already includes grandparent's contribution) becomes InitialSkippedDuration",
 			parentTSI: &persistencespb.TimeSkippingInfo{
-				Config: &workflowpb.TimeSkippingConfig{
-					Enabled:                   true,
-					PropagatedSkippedDuration: durationpb.New(30 * time.Minute), // from grandparent
-				},
+				Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
 				AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
 			},
-			expectCfg: &workflowpb.TimeSkippingConfig{
-				Enabled:                   true,
-				PropagatedSkippedDuration: durationpb.New(2 * time.Hour),
-			},
+			expectCfg:         &workflowpb.TimeSkippingConfig{Enabled: true},
+			expectInitialSkip: durationpb.New(2 * time.Hour),
 		},
 		{
-			name: "accumulated skip only, no config (corrupt-ish but handled) → bare TSC with PSD",
+			name: "accumulated skip only, no config (corrupt-ish but handled) → no config snapshot, just InitialSkippedDuration",
 			parentTSI: &persistencespb.TimeSkippingInfo{
 				AccumulatedSkippedDuration: durationpb.New(15 * time.Minute),
 			},
-			expectCfg: &workflowpb.TimeSkippingConfig{
-				PropagatedSkippedDuration: durationpb.New(15 * time.Minute),
-			},
+			expectNilCfg:      true,
+			expectInitialSkip: durationpb.New(15 * time.Minute),
 		},
 	}
 
@@ -4219,8 +4213,18 @@ func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_Tim
 			)
 			s.NoError(err)
 
-			gotTSC := event.GetStartChildWorkflowExecutionInitiatedEventAttributes().GetTimeSkippingConfig()
-			if tc.expectNil {
+			gotAttrs := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+			gotTSC := gotAttrs.GetTimeSkippingConfig()
+			gotInitialSkip := gotAttrs.GetInitialSkippedDuration()
+
+			if tc.expectInitialSkip == nil {
+				s.Nil(gotInitialSkip)
+			} else {
+				s.NotNil(gotInitialSkip)
+				s.Equal(tc.expectInitialSkip.AsDuration(), gotInitialSkip.AsDuration())
+			}
+
+			if tc.expectNilCfg {
 				s.Nil(gotTSC)
 				return
 			}
