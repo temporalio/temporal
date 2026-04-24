@@ -566,7 +566,6 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 // EnrichMetricsHandler returns a metrics handler enriched with nexus operation tags.
 // Panics if the context value is missing, which indicates a library registration bug.
 func (o *Operation) enrichMetricsHandler(ctx chasm.Context) (metrics.Handler, error) {
-	// nolint:revive // unchecked-type-assertion: intentional panic on missing context value
 	namespaceName := ctx.NamespaceEntry().Name().String()
 
 	wftt := WorkflowTypeTag
@@ -579,6 +578,7 @@ func (o *Operation) enrichMetricsHandler(ctx chasm.Context) (metrics.Handler, er
 		metrics.WorkflowTypeTag(wftt),
 	}
 
+	// nolint:revive // unchecked-type-assertion: intentional panic on missing context value
 	opCtx := ctx.Value(OperationContextKey).(*OperationContext)
 	conf := opCtx.MetricTagConfig()
 	if conf.IncludeServiceTag {
