@@ -380,19 +380,25 @@ func (tm *priTaskMatcher) forwardPolls(
 //   - ratelimit is exceeded (does not apply to query task)
 //   - context deadline is exceeded
 //   - task is matched and consumer returns error in response channel
-func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (matched bool, rateLimited bool, err error) {
-	finish := func() (bool, bool, error) {
+// offerResult contains the outcome of an Offer attempt.
+type offerResult struct {
+	matched bool
+	err     error
+}
+
+func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) offerResult {
+	finish := func() offerResult {
 		res, ok := task.getResponse()
 		if !softassert.That(tm.logger, ok, "expected a sync match task") {
-			return false, false, nil
+			return offerResult{}
 		}
 		if res.forwarded {
 			if res.forwardErr == nil {
 				// task was remotely sync matched on the parent partition
 				tm.emitDispatchLatency(task, true)
-				return true, false, nil
+				return offerResult{matched: true}
 			}
-			return false, false, nil // forward error, give up here
+			return offerResult{} // forward error, give up here
 		}
 		// TODO(pri): can we just always do this on the parent and simplify this to:
 		// if res.startErr == nil { tm.emitDispatchLatency(task, task.isForwarded) }
@@ -400,7 +406,7 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (matche
 		if res.startErr == nil && !task.isForwarded() {
 			tm.emitDispatchLatency(task, false)
 		}
-		return true, false, res.startErr
+		return offerResult{matched: true, err: res.startErr}
 	}
 
 	// Fast path if we have a waiting poller (or forwarder).
@@ -410,7 +416,7 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (matche
 	if immediateResult.gotSyncMatch {
 		return finish()
 	} else if !immediateResult.canSyncMatch {
-		return false, false, nil
+		return offerResult{}
 	}
 
 	// We only block if we are the root and the task is forwarded from a backlog.
@@ -418,15 +424,15 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (matche
 	if tm.isForwardingAllowed() ||
 		task.source != enumsspb.TASK_SOURCE_DB_BACKLOG ||
 		!task.isForwarded() {
-		return false, false, nil
+		return offerResult{}
 	}
 
 	res := tm.data.EnqueueTaskAndWait([]context.Context{ctx, tm.tqCtx}, task)
 	if res.ctxErr != nil {
-		return false, false, res.ctxErr
+		return offerResult{err: res.ctxErr}
 	}
 	if !softassert.That(tm.logger, res.poller != nil, "expeced poller from match") {
-		return false, false, nil
+		return offerResult{}
 	}
 
 	return finish()
