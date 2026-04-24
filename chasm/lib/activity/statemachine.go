@@ -45,11 +45,16 @@ var TransitionScheduled = chasm.NewTransition(
 		attempt.Count++
 		attempt.Stamp++
 
+		// Start delay defers the dispatch and extends ScheduleToClose and ScheduleToStart timeouts. StartToClose and
+		// Heartbeat timeouts are unaffected as they only start when a worker picks up the task.
+		startDelay := a.GetStartDelay().AsDuration()
+		delayedScheduleTime := currentTime.Add(startDelay)
+
 		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
-					ScheduledTime: currentTime.Add(timeout),
+					ScheduledTime: delayedScheduleTime.Add(timeout),
 				},
 				&activitypb.ScheduleToStartTimeoutTask{
 					Stamp: attempt.GetStamp(),
@@ -60,14 +65,18 @@ var TransitionScheduled = chasm.NewTransition(
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
-					ScheduledTime: currentTime.Add(timeout),
+					ScheduledTime: delayedScheduleTime.Add(timeout),
 				},
 				&activitypb.ScheduleToCloseTimeoutTask{})
 		}
 
+		dispatchAttrs := chasm.TaskAttributes{}
+		if startDelay > 0 {
+			dispatchAttrs.ScheduledTime = delayedScheduleTime
+		}
 		ctx.AddTask(
 			a,
-			chasm.TaskAttributes{},
+			dispatchAttrs,
 			&activitypb.ActivityDispatchTask{
 				Stamp: attempt.GetStamp(),
 			})

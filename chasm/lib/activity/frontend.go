@@ -367,6 +367,11 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		req.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
+	if err := validateStartDelay(req.GetStartDelay()); err != nil {
+		return nil, err
+	}
+	// TODO(saa): when eager start is supported, deny it if start delay > 0 (same as workflow behavior).
+
 	opts := activityOptionsFromStartRequest(req)
 	err := ValidateAndNormalizeStandaloneActivity(
 		req.ActivityId,

@@ -4920,6 +4920,366 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 	})
 }
 
+func (s *standaloneActivityTestSuite) TestStartDelay() {
+	t := s.T()
+
+	t.Run("Dispatch", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		requestID := testcore.RandomizeStr("request-id")
+		startDelay := 3 * time.Second
+		safetyMargin := 1500 * time.Millisecond // must exceed TimerProcessorMaxTimeShift (default 1s) to account for timer queue processing jitter
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			Identity:            s.tv.WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           requestID,
+			StartDelay:          durationpb.New(startDelay),
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, startResp.GetRunId())
+		require.True(t, startResp.Started)
+
+		// Verify activity stays in SCHEDULED state throughout the delay (not dispatched early).
+		require.Never(t, func() bool {
+			describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.GetRunId(),
+			})
+			return err != nil || describeResp.GetInfo().GetRunState() != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
+		}, startDelay-safetyMargin, 100*time.Millisecond,
+			"expected activity to remain in SCHEDULED state during start delay")
+
+		// Wait for the remaining delay, then poll — should get the task.
+		time.Sleep(safetyMargin)
+		pollResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
+		require.NoError(t, err)
+		require.NotEmpty(t, pollResp.GetTaskToken(), "expected task after start delay")
+	})
+
+	t.Run("CompleteAfterDelay", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		requestID := testcore.RandomizeStr("request-id")
+		startDelay := 1 * time.Second
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			Identity:            s.tv.WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           requestID,
+			StartDelay:          durationpb.New(startDelay),
+		})
+		require.NoError(t, err)
+
+		// Wait for delay, poll, and complete.
+		time.Sleep(startDelay)
+		pollResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
+		require.NoError(t, err)
+		require.NotEmpty(t, pollResp.GetTaskToken())
+
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          startResp.RunId,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+		protorequire.ProtoEqual(t, defaultResult, descResp.GetOutcome().GetResult())
+	})
+
+	t.Run("ScheduleToStartTimeoutExtended", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		requestID := testcore.RandomizeStr("request-id")
+		startDelay := 3 * time.Second
+		scheduleToStartTimeout := 1 * time.Second
+		safetyMargin := 1500 * time.Millisecond // must exceed TimerProcessorMaxTimeShift (default 1s) to account for timer queue processing jitter
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              s.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           s.tv.ActivityType(),
+			Identity:               s.tv.WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout:    durationpb.New(30 * time.Second),
+			ScheduleToStartTimeout: durationpb.New(scheduleToStartTimeout),
+			StartDelay:             durationpb.New(startDelay),
+			RequestId:              requestID,
+		})
+		require.NoError(t, err)
+
+		// Activity should stay running (not timed out) throughout startDelay + most of scheduleToStartTimeout.
+		// The timeout should only fire after startDelay + scheduleToStartTimeout.
+		require.Never(t, func() bool {
+			descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.RunId,
+			})
+			return err != nil || descResp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+		}, startDelay+scheduleToStartTimeout-safetyMargin, 100*time.Millisecond,
+			"activity should not time out before startDelay + scheduleToStartTimeout")
+
+		// Now wait for the ScheduleToStart timeout to actually fire (measured from after delay).
+		require.Eventually(t, func() bool {
+			resp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.RunId,
+			})
+			return err == nil && resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+		}, 10*time.Second, 100*time.Millisecond)
+	})
+
+	t.Run("ScheduleToCloseTimeoutExtended", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		requestID := testcore.RandomizeStr("request-id")
+		startDelay := 3 * time.Second
+		scheduleToCloseTimeout := 1 * time.Second
+		safetyMargin := 1500 * time.Millisecond // must exceed TimerProcessorMaxTimeShift (default 1s) to account for timer queue processing jitter
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              s.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           s.tv.ActivityType(),
+			Identity:               s.tv.WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			ScheduleToCloseTimeout: durationpb.New(scheduleToCloseTimeout),
+			StartDelay:             durationpb.New(startDelay),
+			RequestId:              requestID,
+		})
+		require.NoError(t, err)
+
+		// Activity should stay running (not timed out) throughout startDelay + most of scheduleToCloseTimeout.
+		// The timeout should only fire after startDelay + scheduleToCloseTimeout.
+		require.Never(t, func() bool {
+			descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.RunId,
+			})
+			return err != nil || descResp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+		}, startDelay+scheduleToCloseTimeout-safetyMargin, 100*time.Millisecond,
+			"activity should not time out before startDelay + scheduleToCloseTimeout")
+
+		// Now wait for the ScheduleToClose timeout to actually fire (measured from after delay).
+		require.Eventually(t, func() bool {
+			resp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.RunId,
+			})
+			return err == nil && resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+		}, 10*time.Second, 100*time.Millisecond)
+	})
+
+	t.Run("CancelDuringDelay", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		requestID := testcore.RandomizeStr("request-id")
+		startDelay := 10 * time.Second // Long delay so the activity stays in SCHEDULED state.
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			Identity:            s.tv.WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           requestID,
+			StartDelay:          durationpb.New(startDelay),
+		})
+		require.NoError(t, err)
+
+		// Cancel while still in the delay period (SCHEDULED state). Should immediately cancel.
+		_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			Identity:   defaultIdentity,
+			RequestId:  testcore.RandomizeStr("cancel-request-id"),
+			Reason:     "cancel during delay",
+		})
+		require.NoError(t, err)
+
+		// Activity should be CANCELED immediately, not waiting for the delay to elapse.
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          startResp.RunId,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, descResp.GetInfo().GetStatus())
+	})
+
+	t.Run("TerminateDuringDelay", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		requestID := testcore.RandomizeStr("request-id")
+		startDelay := 10 * time.Second // Long delay so the activity stays in SCHEDULED state.
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			Identity:            s.tv.WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           requestID,
+			StartDelay:          durationpb.New(startDelay),
+		})
+		require.NoError(t, err)
+
+		// Terminate while still in the delay period (SCHEDULED state).
+		_, err = s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			Identity:   defaultIdentity,
+			Reason:     "terminate during delay",
+		})
+		require.NoError(t, err)
+
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          startResp.RunId,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED, descResp.GetInfo().GetStatus())
+	})
+
+	// Validates that the retry deadline accounts for start delay: the effective ScheduleToClose
+	// window is ScheduleTime + StartDelay + ScheduleToClose. ScheduleToClose is set short enough
+	// that without the start delay extension, the retry after attempt 1 fails would be rejected
+	// (fail at ~T+2s, retryInterval 1s, deadline without extension = T+3s). With the extension
+	// the deadline is T+5s, so the server allows the retry and we observe attempt 2.
+	t.Run("RetryWithStartDelay", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		requestID := testcore.RandomizeStr("request-id")
+		startDelay := 2 * time.Second
+		scheduleToCloseTimeout := 3 * time.Second
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              s.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           s.tv.ActivityType(),
+			Identity:               s.tv.WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			ScheduleToCloseTimeout: durationpb.New(scheduleToCloseTimeout),
+			RequestId:              requestID,
+			StartDelay:             durationpb.New(startDelay),
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, startResp.GetRunId())
+
+		// Wait for the start delay, then poll attempt 1.
+		time.Sleep(startDelay)
+		pollResp1, err := s.pollActivityTaskQueue(ctx, taskQueue)
+		require.NoError(t, err)
+		require.NotEmpty(t, pollResp1.GetTaskToken())
+		require.EqualValues(t, 1, pollResp1.GetAttempt())
+
+		// Fail attempt 1 with a retryable error and short retry delay.
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp1.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+						NonRetryable: false,
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		// Attempt 2 should be scheduled (start delay extended the ScheduleToClose deadline).
+		pollResp2, err := s.pollActivityTaskQueue(ctx, taskQueue)
+		require.NoError(t, err)
+		require.NotEmpty(t, pollResp2.GetTaskToken(), "expected retry attempt 2 to be dispatched")
+		require.EqualValues(t, 2, pollResp2.GetAttempt())
+
+		// Complete attempt 2.
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp2.TaskToken,
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          startResp.RunId,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+		require.EqualValues(t, 2, descResp.GetInfo().GetAttempt())
+		protorequire.ProtoEqual(t, defaultResult, descResp.GetOutcome().GetResult())
+	})
+}
+
 func (s *standaloneActivityTestSuite) pollActivityTaskQueue(ctx context.Context, taskQueue string) (*workflowservice.PollActivityTaskQueueResponse, error) {
 	return s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: s.Namespace().String(),
