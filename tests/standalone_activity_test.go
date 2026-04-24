@@ -4664,6 +4664,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 			ActivityId:     activityID,
 			IncludeOutcome: true,
 		})
+		require.NoError(t, err)
 
 		require.Equal(t, int64(2), desc.Info.GetTotalHeartbeatCount(), "total heartbeat count")
 	})
