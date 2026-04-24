@@ -1479,7 +1479,7 @@ func (s *sutTestingAdapter) AddWorkflowExecutionSignaledEvent(_ ...eventConfig) 
 
 func (s *sutTestingAdapter) AddStartChildWorkflowExecutionInitiatedEvent(_ ...eventConfig) *historypb.HistoryEvent {
 	attrs := &commandpb.StartChildWorkflowExecutionCommandAttributes{}
-	return s.HistoryBuilder.AddStartChildWorkflowExecutionInitiatedEvent(64, attrs, namespace.ID("ns-target"))
+	return s.HistoryBuilder.AddStartChildWorkflowExecutionInitiatedEvent(64, attrs, namespace.ID("ns-target"), nil, nil)
 }
 
 func (s *sutTestingAdapter) AddChildWorkflowExecutionStartedEvent(optionalConfig ...eventConfig) *historypb.HistoryEvent {

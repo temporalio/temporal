@@ -734,14 +734,6 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 					namespace.MinTimeSkippingDuration,
 				)
 			}
-		// todo: need to adapt the timeSource after time-skipping timeSource is implemented
-		case *workflowpb.TimeSkippingConfig_MaxTargetTime:
-			if bound.MaxTargetTime.AsTime().Before(wh.namespaceHandler.timeSource.Now().Add(namespace.MinTimeSkippingDuration)) {
-				return serviceerror.NewInvalidArgumentf(
-					"Max target time must be at least %s from current time of the workflow",
-					namespace.MinTimeSkippingDuration,
-				)
-			}
 		default:
 			return serviceerror.NewInvalidArgumentf("unsupported time skipping bound type: %T", bound)
 		}

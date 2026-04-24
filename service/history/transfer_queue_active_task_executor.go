@@ -1643,6 +1643,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		UserMetadata:             userMetadata,
 		VersioningOverride:       inheritedPinnedOverride,
 		Priority:                 priority,
+		TimeSkippingConfig:       attributes.GetTimeSkippingConfig(),
 	}
 
 	request := common.CreateHistoryStartWorkflowRequest(
@@ -1666,6 +1667,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	request.SourceVersionStamp = sourceVersionStamp
 	request.InheritedBuildId = inheritedBuildId
 	request.InheritedPinnedVersion = inheritedPinnedVersion
+	request.InitialSkippedDuration = attributes.GetInitialSkippedDuration()
 
 	// Only set the AutoUpgrade info if the Pinned version is not set.
 	if request.InheritedPinnedVersion == nil {
