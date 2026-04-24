@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -37,7 +36,6 @@ import (
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -3044,17 +3042,15 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 			UserMetadata:           defaultUserMetadata,
 		}
 
-		diff := cmp.Diff(expected, respInfo,
-			protocmp.Transform(),
-			// Ignore non-deterministic fields. Validated separately.
-			protocmp.IgnoreFields(&activitypb.ActivityExecutionInfo{},
+		// Ignore non-deterministic fields. Validated separately.
+		protorequire.ProtoEqual(t, expected, respInfo,
+			protorequire.IgnoreFields(
 				"execution_duration",
 				"schedule_time",
 				"state_size_bytes",
 				"state_transition_count",
 			),
 		)
-		require.Empty(t, diff)
 		require.Equal(t, respInfo.GetExecutionDuration().AsDuration(), time.Duration(0)) // Never completed, so expect 0
 		require.Nil(t, describeResp.GetInfo().GetCloseTime())
 		require.Positive(t, respInfo.GetScheduleTime().AsTime().Unix())
@@ -3107,17 +3103,16 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 		Status:                 enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 		TaskQueue:              taskQueue.Name,
 	}
-	diff := cmp.Diff(expected, firstDescribeResp.GetInfo(),
-		protocmp.Transform(),
-		// Ignore non-deterministic fields. Validated separately.
-		protocmp.IgnoreFields(&activitypb.ActivityExecutionInfo{},
+
+	// Ignore non-deterministic fields. Validated separately.
+	protorequire.ProtoEqual(t, expected, firstDescribeResp.GetInfo(),
+		protorequire.IgnoreFields(
 			"execution_duration",
 			"schedule_time",
 			"state_size_bytes",
 			"state_transition_count",
 		),
 	)
-	require.Empty(t, diff)
 	require.Positive(t, firstDescribeResp.GetInfo().GetStateSizeBytes())
 
 	taskQueuePollErr := make(chan error, 1)
@@ -3167,10 +3162,10 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 			Status:                 enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 			TaskQueue:              taskQueue.Name,
 		}
-		diff := cmp.Diff(expected, describeResp.GetInfo(),
-			protocmp.Transform(),
-			// Ignore non-deterministic fields. Validated separately.
-			protocmp.IgnoreFields(&activitypb.ActivityExecutionInfo{},
+
+		// Ignore non-deterministic fields. Validated separately.
+		protorequire.ProtoEqual(t, expected, describeResp.GetInfo(),
+			protorequire.IgnoreFields(
 				"execution_duration",
 				"last_started_time",
 				"schedule_time",
@@ -3178,7 +3173,6 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 				"state_transition_count",
 			),
 		)
-		require.Empty(t, diff)
 		require.Positive(t, describeResp.GetInfo().GetStateSizeBytes())
 
 		protorequire.ProtoEqual(t, defaultInput, describeResp.Input)
