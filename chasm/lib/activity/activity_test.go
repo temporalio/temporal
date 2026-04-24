@@ -9,8 +9,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	activitypb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -250,57 +248,6 @@ func TestActivityTerminate(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestRecordHeartbeat_IncrementsHeartbeatCount(t *testing.T) {
-	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-	testNamespaceID := "test-namespace-id"
-
-	ctx := &chasm.MockMutableContext{
-		MockContext: chasm.MockContext{
-			HandleNow: func(chasm.Component) time.Time { return testTime },
-		},
-	}
-
-	ref := &persistencespb.ChasmComponentRef{
-		NamespaceId: testNamespaceID,
-		BusinessId:  "test-business-id",
-		RunId:       "test-run-id",
-	}
-	refBytes, err := ref.Marshal()
-	require.NoError(t, err)
-
-	token := &tokenspb.Task{
-		Attempt:      1,
-		ComponentRef: refBytes,
-	}
-
-	attemptState := &activitypb.ActivityAttemptState{Count: 1}
-	a := &Activity{
-		ActivityState: &activitypb.ActivityState{
-			Status: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-		},
-		LastAttempt: chasm.NewDataField(ctx, attemptState),
-	}
-
-	input := WithToken[*historyservice.RecordActivityTaskHeartbeatRequest]{
-		Token: token,
-		Request: &historyservice.RecordActivityTaskHeartbeatRequest{
-			NamespaceId: testNamespaceID,
-		},
-	}
-
-	_, err = a.RecordHeartbeat(ctx, input)
-	require.NoError(t, err)
-	heartbeat, ok := a.LastHeartbeat.TryGet(ctx)
-	require.True(t, ok)
-	require.Equal(t, int64(1), heartbeat.GetTotalHeartbeatCount())
-
-	_, err = a.RecordHeartbeat(ctx, input)
-	require.NoError(t, err)
-	heartbeat, ok = a.LastHeartbeat.TryGet(ctx)
-	require.True(t, ok)
-	require.Equal(t, int64(2), heartbeat.GetTotalHeartbeatCount())
 }
 
 func TestContextMetadata(t *testing.T) {
