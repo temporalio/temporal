@@ -8,9 +8,9 @@ import (
 
 var Module = fx.Module(
 	"chasm.lib.workflow",
-	fx.Provide(NewConfig),
-	fx.Provide(NewLibrary),
-	fx.Invoke(func(registry *chasm.Registry, library *Library) error {
+	fx.Provide(NewRegistry),
+	fx.Provide(newLibrary),
+	fx.Invoke(func(registry *chasm.Registry, library *library) error {
 		return registry.Register(library)
 	}),
 	fx.Invoke(func(library *Library, historyHandler historyservice.HistoryServiceServer) {

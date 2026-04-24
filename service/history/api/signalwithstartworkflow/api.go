@@ -8,7 +8,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -23,8 +22,7 @@ func Invoke(
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
-	reactivationSignalCache worker_versioning.ReactivationSignalCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	reactivationSignaler api.VersionReactivationSignalerFn,
 ) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(signalWithStartRequest.GetNamespaceId()), signalWithStartRequest.SignalWithStartRequest.WorkflowId)
@@ -53,21 +51,16 @@ func Invoke(
 		return nil, err
 	}
 
-	// TODO: remove this call in 1.25
-	enums.SetDefaultWorkflowIdConflictPolicy(
-		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdConflictPolicy,
-		enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)
-
-	api.MigrateWorkflowIdReusePolicyForRunningWorkflow(
-		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdReusePolicy,
-		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdConflictPolicy)
-
 	startRequest := ConvertToStartRequest(
 		namespaceID,
 		signalWithStartRequest.SignalWithStartRequest,
 		shard.GetTimeSource().Now(),
 	)
 	request := startRequest.StartRequest
+
+	api.MigrateWorkflowIDReusePolicyForRunningWorkflow(
+		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdReusePolicy,
+		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdConflictPolicy)
 
 	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistorySignalWithStartWorkflowExecutionScope, shard, shard.GetMetricsHandler())
 
@@ -77,7 +70,7 @@ func Invoke(
 	}
 
 	// Validation for versioning override, if any.
-	err = worker_versioning.ValidateVersioningOverride(ctx, request.GetVersioningOverride(), matchingClient, versionMembershipCache, request.GetTaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID.String())
+	shouldSkipReactivation, revisionNumber, err := worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, request.GetVersioningOverride(), matchingClient, versionCache, request.GetTaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +89,7 @@ func Invoke(
 
 	// Notify version workflow if we're starting a new workflow pinned to a potentially drained version
 	if started {
-		api.ReactivateVersionWorkflowIfPinned(ctx, namespaceEntry, request.GetVersioningOverride(), reactivationSignalCache, reactivationSignaler, shard.GetConfig().EnableVersionReactivationSignals())
+		api.ReactivateVersionWorkflowIfPinned(ctx, namespaceEntry, request.GetVersioningOverride(), reactivationSignaler, shard.GetConfig().EnableVersionReactivationSignals(), shouldSkipReactivation, revisionNumber)
 	}
 
 	return &historyservice.SignalWithStartWorkflowExecutionResponse{

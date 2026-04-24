@@ -55,11 +55,9 @@ type (
 func NewTaskRefresher(
 	shard historyi.ShardContext,
 ) *TaskRefresherImpl {
-
 	return &TaskRefresherImpl{
-		shard: shard,
-
-		taskGeneratorProvider: taskGeneratorProvider,
+		shard:                 shard,
+		taskGeneratorProvider: GetTaskGeneratorProvider(),
 	}
 }
 
@@ -441,6 +439,8 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 		return nil
 	}
 
+	// if mutableState.ExecutionInfo.TimeSkippingInfo changed,
+	// we need to
 	pendingTimerInfos := mutableState.GetPendingTimerInfos()
 	for _, timerInfo := range pendingTimerInfos {
 

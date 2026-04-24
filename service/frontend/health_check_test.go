@@ -82,7 +82,7 @@ func (s *healthCheckerSuite) Test_Check_Serving() {
 	})
 
 	result, err := s.checker.Check(context.Background())
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(enumsspb.HEALTH_STATE_SERVING, result.State)
 }
 
@@ -96,7 +96,7 @@ func (s *healthCheckerSuite) Test_Check_Not_Serving() {
 	})
 
 	result, err := s.checker.Check(context.Background())
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, result.State)
 }
 
@@ -112,7 +112,7 @@ func (s *healthCheckerSuite) Test_Check_Declined_Serving() {
 	})
 
 	result, err := s.checker.Check(context.Background())
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(enumsspb.HEALTH_STATE_DECLINED_SERVING, result.State)
 }
 
@@ -120,7 +120,7 @@ func (s *healthCheckerSuite) Test_Check_No_Available_Hosts() {
 	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{})
 
 	result, err := s.checker.Check(context.Background())
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, result.State)
 	s.NotNil(result.ServiceDetail)
 	s.Equal("no available hosts in membership", result.ServiceDetail.Message)
@@ -162,7 +162,7 @@ func (s *healthCheckerSuite) Test_Check_Boundary_Failure_Percentage_Equals_Thres
 	})
 
 	result, err := s.checker.Check(context.Background())
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(enumsspb.HEALTH_STATE_SERVING, result.State)
 }
 
@@ -201,7 +201,7 @@ func (s *healthCheckerSuite) Test_Check_Single_Host_Scenarios() {
 			})
 
 			result, err := s.checker.Check(context.Background())
-			s.NoError(err)
+			s.Require().NoError(err)
 			s.Equal(tc.expectedState, result.State)
 		})
 	}
@@ -287,7 +287,7 @@ func (s *healthCheckerSuite) Test_Check_Mixed_Host_States_Edge_Cases() {
 			s.resolver.EXPECT().AvailableMembers().Return(hostInfos)
 
 			result, err := s.checker.Check(context.Background())
-			s.NoError(err, tc.description)
+			s.Require().NoError(err, tc.description)
 			s.Equal(tc.expectedState, result.State, tc.description)
 		})
 	}
@@ -388,7 +388,7 @@ func (s *healthCheckerSuite) Test_GetProportionOfNotReadyHosts() {
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			proportion := ensureMinimumProportionOfHosts(tc.proportionOfDeclinedServingHosts, tc.totalHosts)
-			s.Equal(tc.expectedProportion, proportion)
+			s.InDelta(tc.expectedProportion, proportion, 0.01)
 		})
 	}
 }

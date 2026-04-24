@@ -8,6 +8,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -440,11 +441,11 @@ func buildSearchAttributes() *commonpb.SearchAttributes {
 }
 
 func makeNewVersionState(
-	deploymentName,
-	buildID string,
+	deploymentName, buildID string,
 	createTime time.Time,
 	identity string,
 	initialStatus enumspb.WorkerDeploymentVersionStatus,
+	computeConfig *computepb.ComputeConfigSummary,
 	syncBatchSize int32,
 ) *deploymentspb.VersionLocalState {
 	return &deploymentspb.VersionLocalState{
@@ -462,5 +463,6 @@ func makeNewVersionState(
 		Metadata:             nil,
 		SyncBatchSize:        syncBatchSize,
 		LastModifierIdentity: identity,
+		ComputeConfig:        computeConfig,
 	}
 }

@@ -389,7 +389,7 @@ func validateAndSetForceReplicationParams(ctx workflow.Context, params *ForceRep
 	return nil
 }
 
-func getClusterMetadata(ctx workflow.Context, params ForceReplicationParams) (metadataResponse, error) {
+func getClusterMetadata(ctx workflow.Context, params ForceReplicationParams) (MetadataResponse, error) {
 	// Get cluster metadata, we need namespace ID for history API call.
 	// TODO: remove this step.
 	lao := workflow.LocalActivityOptions{
@@ -398,10 +398,10 @@ func getClusterMetadata(ctx workflow.Context, params ForceReplicationParams) (me
 	}
 
 	actx := workflow.WithLocalActivityOptions(ctx, lao)
-	var metadataResp metadataResponse
-	metadataRequest := metadataRequest{Namespace: params.Namespace}
+	var metadataResp MetadataResponse
+	MetadataRequest := MetadataRequest{Namespace: params.Namespace}
 	var a *activities
-	err := workflow.ExecuteLocalActivity(actx, a.GetMetadata, metadataRequest).Get(ctx, &metadataResp)
+	err := workflow.ExecuteLocalActivity(actx, a.GetMetadata, MetadataRequest).Get(ctx, &metadataResp)
 	return metadataResp, err
 }
 

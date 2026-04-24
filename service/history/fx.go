@@ -8,9 +8,8 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
-	"go.temporal.io/server/chasm/lib/callback"
-	"go.temporal.io/server/chasm/lib/scheduler"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	chasmnexusworkflow "go.temporal.io/server/chasm/lib/nexusoperation/workflow"
 	"go.temporal.io/server/common"
 	commoncache "go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -35,8 +34,8 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
-	"go.temporal.io/server/components/nexusoperations"
-	nexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
+	hsmnexusoperations "go.temporal.io/server/components/nexusoperations"
+	hsmnexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/archival"
@@ -70,10 +69,11 @@ var Module = fx.Options(
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
+	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
 	fx.Provide(HealthCheckInterceptorProvider),
-	fx.Provide(MetadataContextInterceptorProvider),
+	fx.Provide(ContextMetadataInterceptorProvider),
 	fx.Provide(chasm.ChasmEngineInterceptorProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 	fx.Provide(HistoryAdditionalInterceptorsProvider),
@@ -93,18 +93,16 @@ var Module = fx.Options(
 	fx.Provide(NewService),
 	fx.Provide(ReplicationProgressCacheProvider),
 	fx.Provide(VersionMembershipCacheProvider),
-	fx.Provide(ReactivationSignalCacheProvider),
 	workerdeployment.ClientModule,
 	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 
 	callbacks.Module,
-	nexusoperations.Module,
-	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
+	hsmnexusoperations.Module,
+	fx.Invoke(hsmnexusworkflow.RegisterCommandHandlers),
 	activity.HistoryModule,
-	scheduler.Module,
-	callback.Module,
-	chasmworkflow.Module,
+	chasmnexus.Module,
+	chasmnexusworkflow.Module,
 )
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
@@ -253,22 +251,47 @@ func HealthCheckInterceptorProvider(
 	)
 }
 
-func MetadataContextInterceptorProvider() *interceptor.MetadataContextInterceptor {
-	return interceptor.NewMetadataContextInterceptor()
+func ContextMetadataInterceptorProvider(logger log.Logger) *interceptor.ContextMetadataInterceptor {
+	return interceptor.NewContextMetadataInterceptor(true, logger)
 }
 
 func HistoryAdditionalInterceptorsProvider(
 	healthCheckInterceptor *interceptor.HealthCheckInterceptor,
-	metadataContextInterceptor *interceptor.MetadataContextInterceptor,
 	chasmRequestEngineInterceptor *chasm.ChasmEngineInterceptor,
 	chasmRequestVisibilityInterceptor *chasm.ChasmVisibilityInterceptor,
 ) []grpc.UnaryServerInterceptor {
 	return []grpc.UnaryServerInterceptor{
-		metadataContextInterceptor.Intercept,
 		healthCheckInterceptor.UnaryIntercept,
 		chasmRequestEngineInterceptor.Intercept,
 		chasmRequestVisibilityInterceptor.Intercept,
 	}
+}
+
+func NamespaceRateLimitInterceptorProvider(
+	serviceConfig *configs.Config,
+	namespaceRegistry namespace.Registry,
+	metricsHandler metrics.Handler,
+) interceptor.NamespaceRateLimitInterceptor {
+
+	namespaceRateFn := func(namespaceName string) float64 {
+		if namespaceRPS := serviceConfig.NamespaceRPS(namespaceName); namespaceRPS > 0 {
+			return float64(namespaceRPS)
+		}
+		// This fallback to host level rps limit when NamespaceRPS is not configured (i.e. 0)
+		return float64(serviceConfig.RPS())
+	}
+
+	return interceptor.NewNamespaceRateLimitInterceptor(
+		namespaceRegistry,
+		configs.NewNamespaceRateLimiter(
+			namespaceRateFn,
+			serviceConfig.OperatorRPSRatio,
+		),
+		map[string]int{},      // no token overrides
+		map[string]struct{}{}, // no long polls on history service
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // no long poll methods
+		metricsHandler,
+	)
 }
 
 func RateLimitInterceptorProvider(
@@ -413,7 +436,7 @@ func VersionMembershipCacheProvider(
 	lc fx.Lifecycle,
 	serviceConfig *configs.Config,
 	metricsHandler metrics.Handler,
-) worker_versioning.VersionMembershipCache {
+) worker_versioning.VersionMembershipAndReactivationStatusCache {
 	c := commoncache.New(serviceConfig.VersionMembershipCacheMaxSize(), &commoncache.Options{
 		TTL: max(1*time.Second, serviceConfig.VersionMembershipCacheTTL()),
 	})
@@ -423,24 +446,7 @@ func VersionMembershipCacheProvider(
 			return nil
 		},
 	})
-	return worker_versioning.NewVersionMembershipCache(c, metricsHandler)
-}
-
-func ReactivationSignalCacheProvider(
-	lc fx.Lifecycle,
-	serviceConfig *configs.Config,
-	metricsHandler metrics.Handler,
-) worker_versioning.ReactivationSignalCache {
-	c := commoncache.New(serviceConfig.VersionReactivationSignalCacheMaxSize(), &commoncache.Options{
-		TTL: max(1*time.Second, serviceConfig.VersionReactivationSignalCacheTTL()),
-	})
-	lc.Append(fx.Hook{
-		OnStop: func(context.Context) error {
-			c.Stop()
-			return nil
-		},
-	})
-	return worker_versioning.NewReactivationSignalCache(c, metricsHandler)
+	return worker_versioning.NewVersionMembershipAndReactivationStatusCache(c, metricsHandler)
 }
 
 func RoutingInfoCacheProvider(

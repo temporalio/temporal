@@ -22,11 +22,11 @@ func GetActiveNamespace(
 	if err != nil {
 		return nil, err
 	}
-	if namespaceEntry.ActiveClusterName(businessID) != shard.GetClusterMetadata().GetCurrentClusterName() {
+	if namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: businessID}) != shard.GetClusterMetadata().GetCurrentClusterName() {
 		return nil, serviceerror.NewNamespaceNotActive(
 			namespaceEntry.Name().String(),
 			shard.GetClusterMetadata().GetCurrentClusterName(),
-			namespaceEntry.ActiveClusterName(businessID))
+			namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: businessID}))
 	}
 	return namespaceEntry, nil
 }

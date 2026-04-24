@@ -8592,7 +8592,14 @@ type CompleteNexusOperationChasmRequest struct {
 	//	*CompleteNexusOperationChasmRequest_Failure
 	Outcome isCompleteNexusOperationChasmRequest_Outcome `protobuf_oneof:"outcome"`
 	// Time when the operation was closed.
-	CloseTime     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
+	CloseTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
+	// Links from the Nexus completion callback (e.g. references to the handler workflow).
+	Links []*v14.Link `protobuf:"bytes,5,rep,name=links,proto3" json:"links,omitempty"`
+	// Async operation token from the callback request, used to synthesize a started event when
+	// completion arrives before the worker's start response.
+	OperationToken string `protobuf:"bytes,6,opt,name=operation_token,json=operationToken,proto3" json:"operation_token,omitempty"`
+	// Time when the operation was started. Used when completion is received before the started response.
+	StartTime     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8662,6 +8669,27 @@ func (x *CompleteNexusOperationChasmRequest) GetFailure() *v13.Failure {
 func (x *CompleteNexusOperationChasmRequest) GetCloseTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CloseTime
+	}
+	return nil
+}
+
+func (x *CompleteNexusOperationChasmRequest) GetLinks() []*v14.Link {
+	if x != nil {
+		return x.Links
+	}
+	return nil
+}
+
+func (x *CompleteNexusOperationChasmRequest) GetOperationToken() string {
+	if x != nil {
+		return x.OperationToken
+	}
+	return ""
+}
+
+func (x *CompleteNexusOperationChasmRequest) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
 	}
 	return nil
 }
@@ -11283,7 +11311,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x10ListTasksRequest\x12V\n" +
 	"\arequest\x18\x01 \x01(\v2<.temporal.server.api.adminservice.v1.ListHistoryTasksRequestR\arequest:\x16\x92\xc4\x03\x12\x1a\x10request.shard_id\"n\n" +
 	"\x11ListTasksResponse\x12Y\n" +
-	"\bresponse\x18\x01 \x01(\v2=.temporal.server.api.adminservice.v1.ListHistoryTasksResponseR\bresponse\"\xdd\x02\n" +
+	"\bresponse\x18\x01 \x01(\v2=.temporal.server.api.adminservice.v1.ListHistoryTasksResponseR\bresponse\"\xf5\x03\n" +
 	"\"CompleteNexusOperationChasmRequest\x12V\n" +
 	"\n" +
 	"completion\x18\x01 \x01(\v26.temporal.server.api.token.v1.NexusOperationCompletionR\n" +
@@ -11291,7 +11319,11 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\asuccess\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadH\x00R\asuccess\x12<\n" +
 	"\afailure\x18\x03 \x01(\v2 .temporal.api.failure.v1.FailureH\x00R\afailure\x129\n" +
 	"\n" +
-	"close_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime:\x1e\x92\xc4\x03\x1aB\x18completion.component_refB\t\n" +
+	"close_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\x122\n" +
+	"\x05links\x18\x05 \x03(\v2\x1c.temporal.api.common.v1.LinkR\x05links\x12'\n" +
+	"\x0foperation_token\x18\x06 \x01(\tR\x0eoperationToken\x129\n" +
+	"\n" +
+	"start_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime:\x1e\x92\xc4\x03\x1aB\x18completion.component_refB\t\n" +
 	"\aoutcome\"%\n" +
 	"#CompleteNexusOperationChasmResponse\"\xe0\x03\n" +
 	"\x1dCompleteNexusOperationRequest\x12V\n" +
@@ -11881,6 +11913,7 @@ var file_temporal_server_api_historyservice_v1_request_response_proto_depIdxs = 
 	243, // 178: temporal.server.api.historyservice.v1.RefreshWorkflowTasksRequest.request:type_name -> temporal.server.api.adminservice.v1.RefreshWorkflowTasksRequest
 	190, // 179: temporal.server.api.historyservice.v1.GenerateLastHistoryReplicationTasksRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
 	96,  // 180: temporal.server.api.historyservice.v1.GetReplicationStatusResponse.shards:type_name -> temporal.server.api.historyservice.v1.ShardReplicationStatus
+<<<<<<< HEAD
 	175, // 181: temporal.server.api.historyservice.v1.ShardReplicationStatus.shard_local_time:type_name -> google.protobuf.Timestamp
 	169, // 182: temporal.server.api.historyservice.v1.ShardReplicationStatus.remote_clusters:type_name -> temporal.server.api.historyservice.v1.ShardReplicationStatus.RemoteClustersEntry
 	170, // 183: temporal.server.api.historyservice.v1.ShardReplicationStatus.handover_namespaces:type_name -> temporal.server.api.historyservice.v1.ShardReplicationStatus.HandoverNamespacesEntry
@@ -11966,6 +11999,94 @@ var file_temporal_server_api_historyservice_v1_request_response_proto_depIdxs = 
 	260, // [260:261] is the sub-list for extension type_name
 	259, // [259:260] is the sub-list for extension extendee
 	0,   // [0:259] is the sub-list for field type_name
+=======
+	171, // 181: temporal.server.api.historyservice.v1.ShardReplicationStatus.shard_local_time:type_name -> google.protobuf.Timestamp
+	165, // 182: temporal.server.api.historyservice.v1.ShardReplicationStatus.remote_clusters:type_name -> temporal.server.api.historyservice.v1.ShardReplicationStatus.RemoteClustersEntry
+	166, // 183: temporal.server.api.historyservice.v1.ShardReplicationStatus.handover_namespaces:type_name -> temporal.server.api.historyservice.v1.ShardReplicationStatus.HandoverNamespacesEntry
+	171, // 184: temporal.server.api.historyservice.v1.ShardReplicationStatus.max_replication_task_visibility_time:type_name -> google.protobuf.Timestamp
+	171, // 185: temporal.server.api.historyservice.v1.ShardReplicationStatusPerCluster.acked_task_visibility_time:type_name -> google.protobuf.Timestamp
+	186, // 186: temporal.server.api.historyservice.v1.RebuildMutableStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	186, // 187: temporal.server.api.historyservice.v1.ImportWorkflowExecutionRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	226, // 188: temporal.server.api.historyservice.v1.ImportWorkflowExecutionRequest.history_batches:type_name -> temporal.api.common.v1.DataBlob
+	229, // 189: temporal.server.api.historyservice.v1.ImportWorkflowExecutionRequest.version_history:type_name -> temporal.server.api.history.v1.VersionHistory
+	186, // 190: temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	171, // 191: temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordRequest.workflow_start_time:type_name -> google.protobuf.Timestamp
+	171, // 192: temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordRequest.workflow_close_time:type_name -> google.protobuf.Timestamp
+	240, // 193: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionRequest.request:type_name -> temporal.api.workflowservice.v1.UpdateWorkflowExecutionRequest
+	241, // 194: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionResponse.response:type_name -> temporal.api.workflowservice.v1.UpdateWorkflowExecutionResponse
+	242, // 195: temporal.server.api.historyservice.v1.StreamWorkflowReplicationMessagesRequest.sync_replication_state:type_name -> temporal.server.api.replication.v1.SyncReplicationState
+	243, // 196: temporal.server.api.historyservice.v1.StreamWorkflowReplicationMessagesResponse.messages:type_name -> temporal.server.api.replication.v1.WorkflowReplicationMessages
+	244, // 197: temporal.server.api.historyservice.v1.PollWorkflowExecutionUpdateRequest.request:type_name -> temporal.api.workflowservice.v1.PollWorkflowExecutionUpdateRequest
+	245, // 198: temporal.server.api.historyservice.v1.PollWorkflowExecutionUpdateResponse.response:type_name -> temporal.api.workflowservice.v1.PollWorkflowExecutionUpdateResponse
+	246, // 199: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryRequest.request:type_name -> temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryRequest
+	247, // 200: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryResponse.response:type_name -> temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryResponse
+	200, // 201: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryResponse.history:type_name -> temporal.api.history.v1.History
+	247, // 202: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryResponseWithRaw.response:type_name -> temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryResponse
+	248, // 203: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryReverseRequest.request:type_name -> temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryReverseRequest
+	249, // 204: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryReverseResponse.response:type_name -> temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryReverseResponse
+	250, // 205: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryV2Request.request:type_name -> temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Request
+	251, // 206: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryV2Response.response:type_name -> temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response
+	252, // 207: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryRequest.request:type_name -> temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryRequest
+	253, // 208: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryResponse.response:type_name -> temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse
+	254, // 209: temporal.server.api.historyservice.v1.ForceDeleteWorkflowExecutionRequest.request:type_name -> temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest
+	255, // 210: temporal.server.api.historyservice.v1.ForceDeleteWorkflowExecutionResponse.response:type_name -> temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse
+	256, // 211: temporal.server.api.historyservice.v1.GetDLQTasksRequest.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
+	257, // 212: temporal.server.api.historyservice.v1.GetDLQTasksResponse.dlq_tasks:type_name -> temporal.server.api.common.v1.HistoryDLQTask
+	256, // 213: temporal.server.api.historyservice.v1.DeleteDLQTasksRequest.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
+	258, // 214: temporal.server.api.historyservice.v1.DeleteDLQTasksRequest.inclusive_max_task_metadata:type_name -> temporal.server.api.common.v1.HistoryDLQTaskMetadata
+	167, // 215: temporal.server.api.historyservice.v1.ListQueuesResponse.queues:type_name -> temporal.server.api.historyservice.v1.ListQueuesResponse.QueueInfo
+	168, // 216: temporal.server.api.historyservice.v1.AddTasksRequest.tasks:type_name -> temporal.server.api.historyservice.v1.AddTasksRequest.Task
+	259, // 217: temporal.server.api.historyservice.v1.ListTasksRequest.request:type_name -> temporal.server.api.adminservice.v1.ListHistoryTasksRequest
+	260, // 218: temporal.server.api.historyservice.v1.ListTasksResponse.response:type_name -> temporal.server.api.adminservice.v1.ListHistoryTasksResponse
+	261, // 219: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest.completion:type_name -> temporal.server.api.token.v1.NexusOperationCompletion
+	262, // 220: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest.success:type_name -> temporal.api.common.v1.Payload
+	173, // 221: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest.failure:type_name -> temporal.api.failure.v1.Failure
+	171, // 222: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest.close_time:type_name -> google.protobuf.Timestamp
+	185, // 223: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest.links:type_name -> temporal.api.common.v1.Link
+	171, // 224: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest.start_time:type_name -> google.protobuf.Timestamp
+	261, // 225: temporal.server.api.historyservice.v1.CompleteNexusOperationRequest.completion:type_name -> temporal.server.api.token.v1.NexusOperationCompletion
+	262, // 226: temporal.server.api.historyservice.v1.CompleteNexusOperationRequest.success:type_name -> temporal.api.common.v1.Payload
+	263, // 227: temporal.server.api.historyservice.v1.CompleteNexusOperationRequest.failure:type_name -> temporal.api.nexus.v1.Failure
+	171, // 228: temporal.server.api.historyservice.v1.CompleteNexusOperationRequest.start_time:type_name -> google.protobuf.Timestamp
+	185, // 229: temporal.server.api.historyservice.v1.CompleteNexusOperationRequest.links:type_name -> temporal.api.common.v1.Link
+	264, // 230: temporal.server.api.historyservice.v1.InvokeStateMachineMethodRequest.ref:type_name -> temporal.server.api.persistence.v1.StateMachineRef
+	265, // 231: temporal.server.api.historyservice.v1.DeepHealthCheckResponse.state:type_name -> temporal.server.api.enums.v1.HealthState
+	266, // 232: temporal.server.api.historyservice.v1.DeepHealthCheckResponse.checks:type_name -> temporal.server.api.health.v1.HealthCheck
+	186, // 233: temporal.server.api.historyservice.v1.SyncWorkflowStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	188, // 234: temporal.server.api.historyservice.v1.SyncWorkflowStateRequest.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	192, // 235: temporal.server.api.historyservice.v1.SyncWorkflowStateRequest.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
+	267, // 236: temporal.server.api.historyservice.v1.SyncWorkflowStateResponse.versioned_transition_artifact:type_name -> temporal.server.api.replication.v1.VersionedTransitionArtifact
+	268, // 237: temporal.server.api.historyservice.v1.UpdateActivityOptionsRequest.update_request:type_name -> temporal.api.workflowservice.v1.UpdateActivityOptionsRequest
+	269, // 238: temporal.server.api.historyservice.v1.UpdateActivityOptionsResponse.activity_options:type_name -> temporal.api.activity.v1.ActivityOptions
+	270, // 239: temporal.server.api.historyservice.v1.PauseActivityRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.PauseActivityRequest
+	271, // 240: temporal.server.api.historyservice.v1.UnpauseActivityRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.UnpauseActivityRequest
+	272, // 241: temporal.server.api.historyservice.v1.ResetActivityRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.ResetActivityRequest
+	273, // 242: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionOptionsRequest.update_request:type_name -> temporal.api.workflowservice.v1.UpdateWorkflowExecutionOptionsRequest
+	274, // 243: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionOptionsResponse.workflow_execution_options:type_name -> temporal.api.workflow.v1.WorkflowExecutionOptions
+	275, // 244: temporal.server.api.historyservice.v1.PauseWorkflowExecutionRequest.pause_request:type_name -> temporal.api.workflowservice.v1.PauseWorkflowExecutionRequest
+	276, // 245: temporal.server.api.historyservice.v1.UnpauseWorkflowExecutionRequest.unpause_request:type_name -> temporal.api.workflowservice.v1.UnpauseWorkflowExecutionRequest
+	277, // 246: temporal.server.api.historyservice.v1.StartNexusOperationRequest.request:type_name -> temporal.api.nexus.v1.StartOperationRequest
+	278, // 247: temporal.server.api.historyservice.v1.StartNexusOperationResponse.response:type_name -> temporal.api.nexus.v1.StartOperationResponse
+	279, // 248: temporal.server.api.historyservice.v1.CancelNexusOperationRequest.request:type_name -> temporal.api.nexus.v1.CancelOperationRequest
+	280, // 249: temporal.server.api.historyservice.v1.CancelNexusOperationResponse.response:type_name -> temporal.api.nexus.v1.CancelOperationResponse
+	1,   // 250: temporal.server.api.historyservice.v1.ExecuteMultiOperationRequest.Operation.start_workflow:type_name -> temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest
+	105, // 251: temporal.server.api.historyservice.v1.ExecuteMultiOperationRequest.Operation.update_workflow:type_name -> temporal.server.api.historyservice.v1.UpdateWorkflowExecutionRequest
+	2,   // 252: temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse.Response.start_workflow:type_name -> temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse
+	106, // 253: temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse.Response.update_workflow:type_name -> temporal.server.api.historyservice.v1.UpdateWorkflowExecutionResponse
+	281, // 254: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
+	281, // 255: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
+	282, // 256: temporal.server.api.historyservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry.value:type_name -> temporal.server.api.replication.v1.ReplicationMessages
+	98,  // 257: temporal.server.api.historyservice.v1.ShardReplicationStatus.RemoteClustersEntry.value:type_name -> temporal.server.api.historyservice.v1.ShardReplicationStatusPerCluster
+	97,  // 258: temporal.server.api.historyservice.v1.ShardReplicationStatus.HandoverNamespacesEntry.value:type_name -> temporal.server.api.historyservice.v1.HandoverNamespaceInfo
+	226, // 259: temporal.server.api.historyservice.v1.AddTasksRequest.Task.blob:type_name -> temporal.api.common.v1.DataBlob
+	283, // 260: temporal.server.api.historyservice.v1.routing:extendee -> google.protobuf.MessageOptions
+	0,   // 261: temporal.server.api.historyservice.v1.routing:type_name -> temporal.server.api.historyservice.v1.RoutingOptions
+	262, // [262:262] is the sub-list for method output_type
+	262, // [262:262] is the sub-list for method input_type
+	261, // [261:262] is the sub-list for extension type_name
+	260, // [260:261] is the sub-list for extension extendee
+	0,   // [0:260] is the sub-list for field type_name
+>>>>>>> 8b4a7963fec0044db42472b4b9c56e340865e243
 }
 
 func init() { file_temporal_server_api_historyservice_v1_request_response_proto_init() }
