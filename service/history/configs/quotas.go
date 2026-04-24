@@ -30,7 +30,7 @@ func NewPriorityRateLimiter(
 	)
 }
 
-func NewNamespapceRateLimiter(
+func NewNamespaceRateLimiter(
 	namespaceRateFn quotas.NamespaceRateFn,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {

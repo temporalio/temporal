@@ -268,11 +268,10 @@ func NamespaceRateLimitInterceptorProvider(
 	serviceConfig *configs.Config,
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
-	logger log.SnTaggedLogger,
 ) interceptor.NamespaceRateLimitInterceptor {
 
-	namespaceRateFn := func(namespace string) float64 {
-		if namespaceRPS := serviceConfig.NamespaceRPS(namespace); namespaceRPS > 0 {
+	namespaceRateFn := func(namespaceName string) float64 {
+		if namespaceRPS := serviceConfig.NamespaceRPS(namespaceName); namespaceRPS > 0 {
 			return float64(namespaceRPS)
 		}
 		// This fallback to host level rps limit when NamespaceRPS is not configured (i.e. 0)
@@ -281,12 +280,12 @@ func NamespaceRateLimitInterceptorProvider(
 
 	return interceptor.NewNamespaceRateLimitInterceptor(
 		namespaceRegistry,
-		configs.NewNamespapceRateLimiter(
+		configs.NewNamespaceRateLimiter(
 			namespaceRateFn,
 			serviceConfig.OperatorRPSRatio,
 		),
 		map[string]int{},      // no token overrides
-		map[string]struct{}{}, // no long poll methods
+		map[string]struct{}{}, // no long polls on history service
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // no long poll methods
 		metricsHandler,
 	)
@@ -319,14 +318,14 @@ func ESProcessorConfigProvider(
 
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *configs.Config,
-	lazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
+	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
 	ownershipBasedQuotaScaler shard.LazyLoadedOwnershipBasedQuotaScaler,
 	logger log.SnTaggedLogger,
 ) service.PersistenceRateLimitingParams {
 	hostCalculator := calculator.NewLoggedCalculator(
 		shard.NewOwnershipAwareQuotaCalculator(
 			ownershipBasedQuotaScaler,
-			lazyLoadedServiceResolver,
+			persistenceLazyLoadedServiceResolver,
 			serviceConfig.PersistenceMaxQPS,
 			serviceConfig.PersistenceGlobalMaxQPS,
 		),
@@ -335,7 +334,7 @@ func PersistenceRateLimitingParamsProvider(
 	namespaceCalculator := calculator.NewLoggedNamespaceCalculator(
 		shard.NewOwnershipAwareNamespaceQuotaCalculator(
 			ownershipBasedQuotaScaler,
-			lazyLoadedServiceResolver,
+			persistenceLazyLoadedServiceResolver,
 			serviceConfig.PersistenceNamespaceMaxQPS,
 			serviceConfig.PersistenceGlobalNamespaceMaxQPS,
 		),
