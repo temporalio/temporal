@@ -494,3 +494,27 @@ func (s *specSuite) TestSpecJitterSeed() {
 		time.Date(2022, 3, 24, 0, 39, 16, 922000000, time.UTC),
 	)
 }
+
+// TestSpecIntervalCivilDayUSPacificDST documents that 24h intervals with a non-UTC
+// schedule timezone step by local calendar day at a fixed local time, so the UTC
+// fire time shifts when DST changes (e.g. US Pacific fall 2018).
+func (s *specSuite) TestSpecIntervalCivilDayUSPacificDST() {
+	la, err := time.LoadLocation("America/Los_Angeles")
+	s.NoError(err)
+	// 8h phase: first grid tick 1970-01-01 00:00:00 in this zone = local midnight of that day.
+	spec := &schedulepb.ScheduleSpec{
+		TimezoneName: "America/Los_Angeles",
+		Interval: []*schedulepb.IntervalSpec{{
+			Interval: durationpb.New(24 * time.Hour),
+			Phase:    durationpb.New(8 * time.Hour),
+		}},
+	}
+	// 2018-11-04: US fall back 2:00am -> 1:00am. Consecutive local midnights: Nov 4 00:00
+	// is still PDT (07:00Z); Nov 5 00:00 is PST (08:00Z).
+	s.checkSequenceRaw(
+		spec,
+		time.Date(2018, 11, 3, 12, 0, 0, 0, la),
+		time.Date(2018, 11, 4, 0, 0, 0, 0, la).UTC(),
+		time.Date(2018, 11, 5, 0, 0, 0, 0, la).UTC(),
+	)
+}

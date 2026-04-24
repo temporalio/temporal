@@ -311,9 +311,8 @@ func (cs *CompiledSpec) rawNextTime(after time.Time) (nominal time.Time) {
 		}
 	}
 
-	ts := after.Unix()
 	for _, iv := range cs.spec.Interval {
-		next := cs.nextIntervalTime(iv, ts)
+		next := cs.nextIntervalTime(iv, after)
 		if next < minTimestamp {
 			minTimestamp = next
 		}
@@ -325,8 +324,11 @@ func (cs *CompiledSpec) rawNextTime(after time.Time) (nominal time.Time) {
 	return time.Unix(minTimestamp, 0).UTC()
 }
 
-// Returns the next matching time for a single interval spec.
-func (cs *CompiledSpec) nextIntervalTime(iv *schedulepb.IntervalSpec, ts int64) int64 {
+// Returns the next matching time for a single interval spec. When the interval
+// is a multiple of 86400 seconds and a non-UTC location is set, advance by
+// whole calendar days in that zone (observing DST); otherwise use fixed
+// Unix-second alignment (backwards compatible when timezone is empty/UTC).
+func (cs *CompiledSpec) nextIntervalTime(iv *schedulepb.IntervalSpec, after time.Time) int64 {
 	interval := int64(timestamp.DurationValue(iv.Interval) / time.Second)
 	if interval < 1 {
 		interval = 1
@@ -335,6 +337,10 @@ func (cs *CompiledSpec) nextIntervalTime(iv *schedulepb.IntervalSpec, ts int64) 
 	if phase < 0 {
 		phase = 0
 	}
+	if u, ok := nextCivilIntervalTick(phase, interval, after, cs.tz); ok {
+		return u
+	}
+	ts := after.Unix()
 	return (((ts-phase)/interval)+1)*interval + phase
 }
 
