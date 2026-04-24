@@ -274,6 +274,7 @@ func (u *Updater) OnSuccess(
 		return nil, err
 	}
 	resp := u.CreateResponse(u.wfKey, status.Outcome, status.Stage)
+
 	// Attach a link to the response. For accepted/completed updates, use a WorkflowEvent link
 	// with a RequestIdReference pointing to the accepted event. For rejected updates (stage
 	// COMPLETED with a failure outcome and no acceptance), use a Workflow link since rejected
