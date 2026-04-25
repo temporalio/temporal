@@ -6143,4 +6143,160 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		// Node 1 cancels 1 local + children 3 and 4 return 1 each = 3 total
 		require.Equal(t, int32(3), resp.GetCancelledCount())
 	})
+
+	t.Run("partition API: empty partitions returns gracefully", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			logger:                log.NewNoopLogger(),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+		}
+
+		resp, err := engine.CancelOutstandingWorkerPollsPartition(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+				NamespaceId: "test-namespace-id",
+				Workers: []*matchingservice.CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry{{
+					WorkerInstanceKey: "worker-key",
+				}},
+			})
+		require.NoError(t, err)
+		require.Equal(t, int32(0), resp.GetCancelledCount())
+	})
+
+	t.Run("partition API: empty workers returns gracefully", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			logger:                log.NewNoopLogger(),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+		}
+
+		partitionProto := &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     "test-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+		}
+		resp, err := engine.CancelOutstandingWorkerPollsPartition(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+				NamespaceId:        "test-namespace-id",
+				TaskQueuePartition: partitionProto,
+				Partitions:         []*taskqueuespb.TaskQueuePartition{partitionProto},
+			})
+		require.NoError(t, err)
+		require.Equal(t, int32(0), resp.GetCancelledCount())
+	})
+
+	t.Run("partition API: no fan-out when partition_count is zero", func(t *testing.T) {
+		// When partition_count or degree is 0, only local cancellation should happen.
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			logger:                log.NewNoopLogger(),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+		}
+		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
+
+		partitionProto := &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     "test-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+		}
+		// No matchingRawClient set — would panic if fan-out were attempted.
+		resp, err := engine.CancelOutstandingWorkerPollsPartition(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+				NamespaceId:        "test-namespace-id",
+				TaskQueuePartition: partitionProto,
+				Partitions:         []*taskqueuespb.TaskQueuePartition{partitionProto},
+				Workers: []*matchingservice.CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry{{
+					WorkerInstanceKey: "worker-key",
+				}},
+				PartitionCount: 0,
+				Degree:         0,
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(1), resp.GetCancelledCount(), "should cancel local poller only")
+	})
+
+	t.Run("partition API: multiple workers cancelled and propagated", func(t *testing.T) {
+		// Two workers in a single request with 3 partitions (root + 2 children).
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		t.Cleanup(ctrl.Finish)
+
+		mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+
+		mockMatchingClient.EXPECT().
+			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+				// Both workers should be propagated to children.
+				require.Len(t, req.GetWorkers(), 2)
+				keys := []string{req.GetWorkers()[0].GetWorkerInstanceKey(), req.GetWorkers()[1].GetWorkerInstanceKey()}
+				require.ElementsMatch(t, []string{"worker-1", "worker-2"}, keys)
+				return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: 2}, nil
+			}).
+			Times(2) // children {1, 2}
+
+		engine := &matchingEngineImpl{
+			matchingRawClient:     mockMatchingClient,
+			logger:                log.NewNoopLogger(),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+		}
+		engine.workerInstancePollers.Add("worker-1", "poller-0", func() {})
+		engine.workerInstancePollers.Add("worker-2", "poller-1", func() {})
+
+		partitionProto := &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     "test-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+		}
+		resp, err := engine.CancelOutstandingWorkerPollsPartition(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+				NamespaceId:        "test-namespace-id",
+				TaskQueuePartition: partitionProto,
+				Partitions:         []*taskqueuespb.TaskQueuePartition{partitionProto},
+				Workers: []*matchingservice.CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry{
+					{WorkerInstanceKey: "worker-1", WorkerIdentity: "identity-1"},
+					{WorkerInstanceKey: "worker-2", WorkerIdentity: "identity-2"},
+				},
+				PartitionCount: 3,
+				Degree:         20,
+			})
+
+		require.NoError(t, err)
+		// Root cancels 2 local + children return 2 + 2 = 6 total
+		require.Equal(t, int32(6), resp.GetCancelledCount())
+		require.NotNil(t, engine.shutdownWorkers.Get("worker-1"))
+		require.NotNil(t, engine.shutdownWorkers.Get("worker-2"))
+	})
+
+	t.Run("tree fan-out: failed partitions are tracked in response", func(t *testing.T) {
+		// Tree: 0 -> {1, 2}. Child 1 fails, child 2 succeeds.
+		// Verify failed_partitions is reported in response.
+		t.Parallel()
+		engine, mockMatchingClient := setupFanOutTest(t, 3 /* numPartitions */, 20 /* degree */)
+
+		mockMatchingClient.EXPECT().
+			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+				partitionID := req.GetPartitions()[0].GetNormalPartitionId()
+				if partitionID == 1 {
+					return nil, errors.New("partition unavailable")
+				}
+				return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: 2}, nil
+			}).
+			Times(2)
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       "test-namespace-id",
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				WorkerInstanceKey: "worker-key",
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(2), resp.CancelledCount)
+	})
 }

@@ -3843,9 +3843,17 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithEagerPollCancellation() {
 	taskQueue := "my-task-queue"
 	workerInstanceKey := "worker-instance-123"
 
-	// Expect cancellation for 2 task types (workflow, activity); matching fans out to partitions internally
+	// Expect cancellation for 2 task types (workflow, activity); matching fans out to partitions internally.
+	// Verify frontend sends root partition (task queue name, not /_sys/.../N).
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil).
+		DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsRequest, _ ...interface{}) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+			s.Equal(s.testNamespaceID.String(), req.GetNamespaceId())
+			s.Equal(taskQueue, req.GetTaskQueue().GetName(), "should send root partition name, not a child partition")
+			s.Equal(enumspb.TASK_QUEUE_KIND_NORMAL, req.GetTaskQueue().GetKind())
+			s.Equal(workerInstanceKey, req.GetWorkerInstanceKey())
+			s.Equal("worker", req.GetWorkerIdentity())
+			return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil
+		}).
 		Times(2)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()

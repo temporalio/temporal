@@ -1665,8 +1665,6 @@ type CancelOutstandingWorkerPollsPartitionRequest struct {
 	// Partitions to cancel polls on and propagate to child partitions.
 	Partitions []*v18.TaskQueuePartition `protobuf:"bytes,3,rep,name=partitions,proto3" json:"partitions,omitempty"`
 	// Workers to cancel. All workers must be on the same task queue.
-	// Batched at the top level (cancelOutstandingWorkerPollsForAllPartitions) using
-	// stream_batcher to combine concurrent ShutdownWorker calls for the same task queue.
 	Workers []*CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry `protobuf:"bytes,4,rep,name=workers,proto3" json:"workers,omitempty"`
 	// Tree fan-out parameters, set by root and passed down so each node can compute
 	// its children without loading config.
@@ -1762,8 +1760,10 @@ func (x *CancelOutstandingWorkerPollsPartitionRequest) GetDegree() int32 {
 type CancelOutstandingWorkerPollsPartitionResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	CancelledCount int32                  `protobuf:"varint,1,opt,name=cancelled_count,json=cancelledCount,proto3" json:"cancelled_count,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Number of child partitions that failed during tree fan-out.
+	FailedPartitions int32 `protobuf:"varint,2,opt,name=failed_partitions,json=failedPartitions,proto3" json:"failed_partitions,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *CancelOutstandingWorkerPollsPartitionResponse) Reset() {
@@ -1799,6 +1799,13 @@ func (*CancelOutstandingWorkerPollsPartitionResponse) Descriptor() ([]byte, []in
 func (x *CancelOutstandingWorkerPollsPartitionResponse) GetCancelledCount() int32 {
 	if x != nil {
 		return x.CancelledCount
+	}
+	return 0
+}
+
+func (x *CancelOutstandingWorkerPollsPartitionResponse) GetFailedPartitions() int32 {
+	if x != nil {
+		return x.FailedPartitions
 	}
 	return 0
 }
@@ -6116,9 +6123,10 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x06degree\x18\x06 \x01(\x05R\x06degree\x1af\n" +
 	"\vWorkerEntry\x12.\n" +
 	"\x13worker_instance_key\x18\x01 \x01(\tR\x11workerInstanceKey\x12'\n" +
-	"\x0fworker_identity\x18\x02 \x01(\tR\x0eworkerIdentity\"X\n" +
+	"\x0fworker_identity\x18\x02 \x01(\tR\x0eworkerIdentity\"\x85\x01\n" +
 	"-CancelOutstandingWorkerPollsPartitionResponse\x12'\n" +
-	"\x0fcancelled_count\x18\x01 \x01(\x05R\x0ecancelledCount\"\xf1\x01\n" +
+	"\x0fcancelled_count\x18\x01 \x01(\x05R\x0ecancelledCount\x12+\n" +
+	"\x11failed_partitions\x18\x02 \x01(\x05R\x10failedPartitions\"\xf1\x01\n" +
 	"\x18DescribeTaskQueueRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\\\n" +
 	"\fdesc_request\x18\x02 \x01(\v29.temporal.api.workflowservice.v1.DescribeTaskQueueRequestR\vdescRequest\x12T\n" +

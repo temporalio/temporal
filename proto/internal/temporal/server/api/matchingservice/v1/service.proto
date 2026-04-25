@@ -86,7 +86,7 @@ service MatchingService {
         option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
 
-    // CancelOutstandingWorkerPollsPartition cancels outstanding polls for a worker on a specific partition.
+    // CancelOutstandingWorkerPollsPartition cancels outstanding polls for workers on partitions and propagates to child partitions in the tree.
     rpc CancelOutstandingWorkerPollsPartition (CancelOutstandingWorkerPollsPartitionRequest) returns (CancelOutstandingWorkerPollsPartitionResponse) {
         option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
