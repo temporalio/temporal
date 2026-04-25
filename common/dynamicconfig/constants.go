@@ -99,6 +99,26 @@ values in system search attributes.`,
 query.`,
 	)
 
+	// FrontendAPIVariant selects which frontend API variant the
+	// frontend exposes at startup. Empty (default) registers stable
+	// WorkflowService only. A non-empty value (e.g. "ping", "tinker") looks
+	// up the named variant in the experimental registry and registers it
+	// IN PLACE OF stable WorkflowService at the same wire path; the variant
+	// delegates stable methods to the existing stable handler. Toggling
+	// requires a frontend restart.
+	//
+	// A variant name is only resolvable if the corresponding build tag was
+	// set (e.g. -tags experimental). With no tag, the registry is
+	// empty and any non-empty value here causes Start() to log Fatal —
+	// production binaries cannot accidentally expose experimental surface.
+	FrontendAPIVariant = NewGlobalStringSetting(
+		"frontend.apiVariant",
+		"",
+		`FrontendAPIVariant selects which frontend API variant the
+frontend exposes. Empty = stable only. See service/frontend/services/
+for the list of supported variants in this build.`,
+	)
+
 	HistoryArchivalState = NewGlobalStringSetting(
 		"system.historyArchivalState",
 		"", // actual default is from static config

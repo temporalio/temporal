@@ -15,7 +15,6 @@ import (
 	"github.com/google/uuid"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/api/operatorservice/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -563,8 +562,12 @@ func (tc *TestCluster) ArchiverBase() *ArchiverBase {
 	return tc.archiverBase
 }
 
-func (tc *TestCluster) FrontendClient() workflowservice.WorkflowServiceClient {
+func (tc *TestCluster) FrontendClient() FrontendClient {
 	return tc.host.FrontendClient()
+}
+
+func (tc *TestCluster) ExperimentalFrontend() FrontendClients {
+	return tc.host.ExperimentalFrontend()
 }
 
 func (tc *TestCluster) AdminClient() adminservice.AdminServiceClient {
