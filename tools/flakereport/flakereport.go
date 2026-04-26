@@ -86,6 +86,25 @@ func NewCliApp() *cli.App {
 					Name:  "sha",
 					Usage: "Git commit SHA (for failure messages)",
 				},
+				&cli.BoolFlag{
+					Name:  "bisect",
+					Usage: "Run Bayesian commit bisect on all qualifying flaky tests after generating the report",
+				},
+				&cli.IntFlag{
+					Name:  "bisect-top-n",
+					Value: 0,
+					Usage: "Limit bisect to the N flakiest qualifying tests; 0 = all qualifying tests",
+				},
+				&cli.IntFlag{
+					Name:  "bisect-days",
+					Value: 28,
+					Usage: "Lookback window in days for bisect artifact data (independent of --days)",
+				},
+				&cli.Float64Flag{
+					Name:  "bisect-min-probability",
+					Value: 0.50,
+					Usage: "Only report tests where the top suspect commit has at least this probability (0–1)",
+				},
 			},
 			Action: runGenerateCommand,
 		},
@@ -94,10 +113,11 @@ func NewCliApp() *cli.App {
 	return app
 }
 
-// fetchAndAnalyzeWorkflowRuns fetches workflow runs and counts successes
-func fetchAndAnalyzeWorkflowRuns(ctx context.Context, repo string, workflowID int64, branch string, days int) ([]WorkflowRun, int, error) {
+// fetchAndAnalyzeWorkflowRuns fetches workflow runs between since and until and counts successes.
+// until is zero for an open-ended (up to now) window.
+func fetchAndAnalyzeWorkflowRuns(ctx context.Context, repo string, workflowID int64, branch string, since, until time.Time) ([]WorkflowRun, int, error) {
 	fmt.Println("\n=== Fetching workflow runs ===")
-	runs, err := fetchWorkflowRuns(ctx, repo, workflowID, branch, days)
+	runs, err := fetchWorkflowRuns(ctx, repo, workflowID, branch, since, until)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to fetch workflow runs: %w", err)
 	}
@@ -202,7 +222,10 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	runID := c.String("run-id")
 	refName := c.String("ref-name")
 	sha := c.String("sha")
-
+	runBisect := c.Bool("bisect")
+	bisectTopN := c.Int("bisect-top-n")
+	bisectDays := c.Int("bisect-days")
+	bisectMinProbability := c.Float64("bisect-min-probability")
 	// Send failure notification on error
 	defer func() {
 		if err != nil {
@@ -222,7 +245,9 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	defer cancel()
 
 	// Fetch and analyze workflow runs
-	runs, successfulRuns, err := fetchAndAnalyzeWorkflowRuns(ctx, repo, workflowID, branch, days)
+	now := time.Now()
+	reportSince := now.AddDate(0, 0, -days)
+	runs, successfulRuns, err := fetchAndAnalyzeWorkflowRuns(ctx, repo, workflowID, branch, reportSince, time.Time{})
 	if err != nil {
 		return err
 	}
@@ -292,6 +317,36 @@ func runGenerateCommand(c *cli.Context) (err error) {
 		allFailures, allTestRuns, runs, successfulRuns,
 	)
 
+	// Optionally run Bayesian bisect analysis
+	var bisectReports []TestBisectReport
+	if runBisect {
+		fmt.Println("\n=== Running Bayesian bisect analysis ===")
+		// Extend the run set with the incremental window (days→bisectDays) to avoid
+		// re-fetching runs we already have from the report window.
+		bisectRuns := runs
+		if bisectDays > days {
+			bisectSince := now.AddDate(0, 0, -bisectDays)
+			fmt.Printf("Fetching incremental runs for bisect (days %d–%d)...\n", days, bisectDays)
+			extraRuns, _, extraErr := fetchAndAnalyzeWorkflowRuns(ctx, repo, workflowID, branch, bisectSince, reportSince)
+			if extraErr != nil {
+				fmt.Printf("Warning: Failed to fetch bisect runs: %v\n", extraErr)
+			} else {
+				bisectRuns = append(extraRuns, runs...)
+			}
+		}
+		bisectCfg := BisectConfig{
+			Repo:           repo,
+			TopN:           bisectTopN,
+			MinFailures:    minBisectFailures,
+			MinRuns:        minBisectRuns,
+			MinProbability: bisectMinProbability,
+		}
+		bisectReports, err = runBisectAnalysis(ctx, bisectCfg, allTestRuns, bisectRuns)
+		if err != nil {
+			fmt.Printf("Warning: Bisect analysis failed: %v\n", err)
+		}
+	}
+
 	fmt.Println("\n=== Writing report files ===")
 	if err = os.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
@@ -305,6 +360,9 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	// Write GitHub summary (to GITHUB_STEP_SUMMARY if set, otherwise to output dir)
 	fmt.Println("\n=== Writing GitHub summary ===")
 	summaryContent := generateGitHubSummary(summary, runID, maxLinks)
+	if len(bisectReports) > 0 {
+		summaryContent += generateBisectSummary(bisectReports, repo, bisectMinProbability)
+	}
 	if err := writeGitHubSummary(summaryContent, outputDir); err != nil {
 		fmt.Printf("Warning: Failed to write GitHub summary: %v\n", err)
 	}

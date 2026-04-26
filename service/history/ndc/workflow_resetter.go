@@ -541,6 +541,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 			// skipping versioning checks because this task is not actually dispatched but will fail immediately.
 			true,
 			nil,
+			0,
 		)
 		if err != nil {
 			return err
@@ -969,6 +970,7 @@ func reapplyEvents(
 				event.Links,
 				attr.GetIdentity(),
 				attr.GetPriority(),
+				attr.GetTimeSkippingConfig(),
 			); err != nil {
 				return reappliedEvents, err
 			}

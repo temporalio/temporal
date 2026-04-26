@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/addsearchattributes"
@@ -783,7 +784,7 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 		return nil, err
 	}
 
-	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	archetypeID, err := adh.validateAndResolveArchetypeID(request.GetArchetype(), request.GetArchetypeId())
 	if err != nil {
 		return nil, err
 	}
@@ -1560,7 +1561,7 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 		return nil, err
 	}
 
-	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	archetypeID, err := adh.validateAndResolveArchetypeID(request.GetArchetype(), request.GetArchetypeId())
 	if err != nil {
 		return nil, err
 	}
@@ -1829,6 +1830,61 @@ func (adh *AdminHandler) ForceUnloadTaskQueuePartition(
 	}, nil
 }
 
+func (adh *AdminHandler) GetTaskQueueUserData(
+	ctx context.Context,
+	request *adminservice.GetTaskQueueUserDataRequest,
+) (_ *adminservice.GetTaskQueueUserDataResponse, err error) {
+	defer log.CapturePanic(adh.logger, &err)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	// Admin API takes namespace name; matching requires namespace ID.
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// Build the partition object to get its wire-format RPC name.
+	// partition_id=0 (root) → bare task queue name, e.g. "my-queue".
+	// partition_id=N       → mangled name, e.g. "/_sys/my-queue/N".
+	// The matching client uses this name for consistent-hash routing to the correct host,
+	// and the matching engine parses it to find the right in-memory partition manager.
+	// namespaceID is passed for correctness even though RpcName() only uses the task queue name.
+	family, err := tqid.NewTaskQueueFamily(namespaceID.String(), request.GetTaskQueue())
+	if err != nil {
+		return nil, err
+	}
+	partition := family.TaskQueue(request.GetTaskQueueType()).NormalPartition(int(request.GetPartitionId()))
+
+	// Fetch the user data currently loaded by the target partition.
+	// LastKnownUserDataVersion=0: no cached version, always return current data.
+	// LastKnownEphemeralDataVersion=-1: skip ephemeral data; we only need persisted per-type data.
+	resp, err := adh.matchingClient.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:                   namespaceID.String(),
+		TaskQueue:                     partition.RpcName(),
+		TaskQueueType:                 request.GetTaskQueueType(),
+		LastKnownUserDataVersion:      0,
+		LastKnownEphemeralDataVersion: -1,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// User data is a family-level map keyed by TaskQueueType (int32).
+	// Extract only the entry for the requested type and return it alongside the version,
+	// so callers can compare versions across partitions to check replication lag.
+	perType := resp.GetUserData().GetData().GetPerType()
+	return &adminservice.GetTaskQueueUserDataResponse{
+		UserData: perType[int32(request.GetTaskQueueType())],
+		Version:  resp.GetUserData().GetVersion(),
+	}, nil
+}
+
 func (adh *AdminHandler) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *adminservice.DeleteWorkflowExecutionRequest,
@@ -1848,7 +1904,7 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		return nil, err
 	}
 
-	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	archetypeID, err := adh.validateAndResolveArchetypeID(request.GetArchetype(), request.GetArchetypeId())
 	if err != nil {
 		return nil, err
 	}
@@ -2313,7 +2369,7 @@ func (adh *AdminHandler) GenerateLastHistoryReplicationTasks(
 		return nil, err
 	}
 
-	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	archetypeID, err := adh.validateAndResolveArchetypeID(request.GetArchetype(), request.GetArchetypeId())
 	if err != nil {
 		return nil, err
 	}
@@ -2349,7 +2405,35 @@ func (adh *AdminHandler) getDLQWorkflowID(
 	)
 }
 
-func (adh *AdminHandler) archetypeNameToID(archetype chasm.Archetype) (chasm.ArchetypeID, error) {
+// validateAndResolveArchetypeID validates the archetype and archetypeID fields and returns the resolved archetype ID.
+// It performs the following checks:
+// 1. If archetypeID is specified (non-zero), validates it's registered in the chasm registry
+// 2. If both archetypeID and archetype are specified, validates they match each other
+// 3. If only archetype is specified, converts it to an ID
+func (adh *AdminHandler) validateAndResolveArchetypeID(
+	archetype chasm.Archetype,
+	archetypeID uint32,
+) (chasm.ArchetypeID, error) {
+	// If archetypeID is specified, use it
+	if archetypeID != chasm.UnspecifiedArchetypeID {
+		// Validate that the archetypeID is registered in the chasm registry
+		archetypeFqn, ok := adh.chasmRegistry.ComponentFqnByID(archetypeID)
+		if !ok {
+			return chasm.UnspecifiedArchetypeID, serviceerror.NewInvalidArgumentf(
+				"unknown archetype ID: %d", archetypeID)
+		}
+
+		// If both archetype and archetypeID are specified, validate they match
+		if len(archetype) > 0 && archetype != archetypeFqn {
+			return chasm.UnspecifiedArchetypeID, serviceerror.NewInvalidArgumentf(
+				"archetype mismatch: archetypeID (%d) does not match archetype name (%s), registered name %s",
+				archetypeID, archetype, archetypeFqn)
+		}
+
+		return chasm.ArchetypeID(archetypeID), nil
+	}
+
+	// If only archetype is specified, convert it to an ID
 	if len(archetype) == 0 {
 		// For backwards compatibility, default to Workflow
 		return chasm.WorkflowArchetypeID, nil

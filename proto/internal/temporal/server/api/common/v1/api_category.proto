@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package temporal.server.api.common.v1;
 
-option go_package = "go.temporal.io/server/api/common/v1;commonspb";
-
 import "google/protobuf/descriptor.proto";
+
+option go_package = "go.temporal.io/server/api/common/v1;commonspb";
 
 extend google.protobuf.MethodOptions {
   optional ApiCategoryOptions api_category = 50001;

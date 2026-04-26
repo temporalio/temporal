@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
@@ -131,9 +132,33 @@ func (h *HealthCheckInterceptor) UnaryIntercept(
 		return resp, err
 	}
 
+	if specialCaseAPIIsPolling(req) {
+		return resp, err
+	}
+
 	// Record health signal for standard APIs
 	h.healthSignalAggregator.Record(elapsed, err)
 	return resp, err
+}
+
+// specialCaseAPIIsPolling checks if an API is a long-polling API and should be excluded from health signals.
+// Note that this interceptor may run in multiple Temporal services, so it needs to handle every version of
+// each special request type. (for example, historyservice GetWorkflowExecutionHistory vs. workflowservice)
+func specialCaseAPIIsPolling(req any) bool {
+	switch request := req.(type) {
+	// history
+	case *historyservice.GetWorkflowExecutionHistoryRequest:
+		inner := request.GetRequest()
+		return inner != nil && inner.GetWaitNewEvent()
+
+	// frontend
+	case *workflowservice.GetWorkflowExecutionHistoryRequest:
+		return request.GetWaitNewEvent()
+	case *workflowservice.DescribeActivityExecutionRequest:
+		return len(request.GetLongPollToken()) > 0
+	default:
+		return false
+	}
 }
 
 // NewHealthSignalAggregator creates a new instance of HealthSignalAggregatorImpl

@@ -78,6 +78,7 @@ func (t *visibilityQueueTaskExecutor) Execute(
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
+		executable.GetWorkflowID(),
 	)
 	metricsTags := []metrics.Tag{
 		namespaceTag,
@@ -425,12 +426,6 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		return err
 	}
 
-	visTaskContext = chasm.AugmentContextForComponent(
-		visTaskContext,
-		rootComponent,
-		t.shardContext.ChasmRegistry(),
-	)
-
 	var chasmTaskQueue string
 	if chasmSAProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
 		for _, chasmSA := range chasmSAProvider.SearchAttributes(visTaskContext) {
@@ -580,10 +575,12 @@ func (t *visibilityQueueTaskExecutor) getClosedVisibilityRequest(
 	if t.externalPayloadsEnabled(namespaceEntry.Name().String()) {
 		externalPayloadCount := executionInfo.GetExecutionStats().GetExternalPayloadCount()
 		externalPayloadSizeBytes := executionInfo.GetExecutionStats().GetExternalPayloadSize()
-		externalPayloadCountPayload, _ := payload.Encode(externalPayloadCount)
-		externalPayloadSizeBytesPayload, _ := payload.Encode(externalPayloadSizeBytes)
-		base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadCount] = externalPayloadCountPayload
-		base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadSizeBytes] = externalPayloadSizeBytesPayload
+		if externalPayloadCount > 0 {
+			externalPayloadCountPayload, _ := payload.Encode(externalPayloadCount)
+			externalPayloadSizeBytesPayload, _ := payload.Encode(externalPayloadSizeBytes)
+			base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadCount] = externalPayloadCountPayload
+			base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadSizeBytes] = externalPayloadSizeBytesPayload
+		}
 	}
 
 	return &manager.RecordWorkflowExecutionClosedRequest{

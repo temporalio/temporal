@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
@@ -347,4 +348,177 @@ func TestActivityInfoMatchEvaluator_SupportedTimeFields(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWorkerQueryEngine_IsNullString(t *testing.T) {
+	hbWithDeployment := &workerpb.WorkerHeartbeat{
+		TaskQueue: "task_queue",
+		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: "my-deployment",
+		},
+	}
+	hbWithoutDeployment := &workerpb.WorkerHeartbeat{
+		TaskQueue: "task_queue",
+	}
+
+	engine, err := newWorkerQueryEngine("nsID", fmt.Sprintf("%s IS NULL", workerDeploymentNameColName))
+	require.NoError(t, err)
+
+	match, err := engine.EvaluateWorker(hbWithoutDeployment)
+	require.NoError(t, err)
+	assert.True(t, match, "IS NULL should match when DeploymentName is empty")
+
+	match, err = engine.EvaluateWorker(hbWithDeployment)
+	require.NoError(t, err)
+	assert.False(t, match, "IS NULL should not match when DeploymentName is set")
+}
+
+func TestWorkerQueryEngine_IsNotNullString(t *testing.T) {
+	hbWithDeployment := &workerpb.WorkerHeartbeat{
+		TaskQueue: "task_queue",
+		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: "my-deployment",
+		},
+	}
+	hbWithoutDeployment := &workerpb.WorkerHeartbeat{
+		TaskQueue: "task_queue",
+	}
+
+	engine, err := newWorkerQueryEngine("nsID", fmt.Sprintf("%s IS NOT NULL", workerDeploymentNameColName))
+	require.NoError(t, err)
+
+	match, err := engine.EvaluateWorker(hbWithDeployment)
+	require.NoError(t, err)
+	assert.True(t, match, "IS NOT NULL should match when DeploymentName is set")
+
+	match, err = engine.EvaluateWorker(hbWithoutDeployment)
+	require.NoError(t, err)
+	assert.False(t, match, "IS NOT NULL should not match when DeploymentName is empty")
+}
+
+func TestWorkerQueryEngine_IsNullTime(t *testing.T) {
+	startTimeStr := "2023-10-26T14:30:00Z"
+	startTime, err := sqlquery.ConvertToTime(fmt.Sprintf("'%s'", startTimeStr))
+	require.NoError(t, err)
+
+	hbWithTime := &workerpb.WorkerHeartbeat{
+		TaskQueue:     "task_queue",
+		StartTime:     timestamppb.New(startTime),
+		HeartbeatTime: timestamppb.New(startTime),
+	}
+	hbWithoutTime := &workerpb.WorkerHeartbeat{
+		TaskQueue: "task_queue",
+	}
+
+	for _, colName := range []string{workerStartTimeColName, workerHeartbeatTimeColName} {
+		engine, err := newWorkerQueryEngine("nsID", fmt.Sprintf("%s IS NULL", colName))
+		require.NoError(t, err)
+
+		t.Run(fmt.Sprintf("%s matches when not set", colName), func(t *testing.T) {
+			match, err := engine.EvaluateWorker(hbWithoutTime)
+			require.NoError(t, err)
+			assert.True(t, match)
+		})
+
+		t.Run(fmt.Sprintf("%s does not match when set", colName), func(t *testing.T) {
+			match, err := engine.EvaluateWorker(hbWithTime)
+			require.NoError(t, err)
+			assert.False(t, match)
+		})
+	}
+}
+
+func TestWorkerQueryEngine_IsNotNullTime(t *testing.T) {
+	startTimeStr := "2023-10-26T14:30:00Z"
+	startTime, err := sqlquery.ConvertToTime(fmt.Sprintf("'%s'", startTimeStr))
+	require.NoError(t, err)
+
+	hbWithTime := &workerpb.WorkerHeartbeat{
+		TaskQueue:     "task_queue",
+		StartTime:     timestamppb.New(startTime),
+		HeartbeatTime: timestamppb.New(startTime),
+	}
+	hbWithoutTime := &workerpb.WorkerHeartbeat{
+		TaskQueue: "task_queue",
+	}
+
+	for _, colName := range []string{workerStartTimeColName, workerHeartbeatTimeColName} {
+		engine, err := newWorkerQueryEngine("nsID", fmt.Sprintf("%s IS NOT NULL", colName))
+		require.NoError(t, err)
+
+		t.Run(fmt.Sprintf("%s matches when set", colName), func(t *testing.T) {
+			match, err := engine.EvaluateWorker(hbWithTime)
+			require.NoError(t, err)
+			assert.True(t, match)
+		})
+
+		t.Run(fmt.Sprintf("%s does not match when not set", colName), func(t *testing.T) {
+			match, err := engine.EvaluateWorker(hbWithoutTime)
+			require.NoError(t, err)
+			assert.False(t, match)
+		})
+	}
+}
+
+func TestWorkerQueryEngine_IsNullComposite(t *testing.T) {
+	hb := &workerpb.WorkerHeartbeat{
+		TaskQueue: "task_queue",
+		SdkName:   "temporal-go",
+	}
+
+	tests := []struct {
+		name          string
+		query         string
+		expectedMatch bool
+	}{
+		{
+			name:          "IS NOT NULL AND equality, both match",
+			query:         fmt.Sprintf("%s IS NOT NULL AND %s = 'task_queue'", workerSdkNameColName, workerTaskQueueColName),
+			expectedMatch: true,
+		},
+		{
+			name:          "IS NULL OR equality, right matches",
+			query:         fmt.Sprintf("%s IS NULL OR %s = 'task_queue'", workerSdkNameColName, workerTaskQueueColName),
+			expectedMatch: true,
+		},
+		{
+			name:          "IS NULL AND equality, left fails",
+			query:         fmt.Sprintf("%s IS NULL AND %s = 'task_queue'", workerSdkNameColName, workerTaskQueueColName),
+			expectedMatch: false,
+		},
+		{
+			name:          "IS NULL with empty field in composite",
+			query:         fmt.Sprintf("%s IS NULL AND %s IS NOT NULL", workerDeploymentNameColName, workerSdkNameColName),
+			expectedMatch: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine, err := newWorkerQueryEngine("nsID", tt.query)
+			require.NoError(t, err)
+			match, err := engine.EvaluateWorker(hb)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedMatch, match)
+		})
+	}
+}
+
+func TestWorkerQueryEngine_IsNullRejectsUnknownColumn(t *testing.T) {
+	hb := &workerpb.WorkerHeartbeat{TaskQueue: "task_queue"}
+	engine, err := newWorkerQueryEngine("nsID", "UnknownField IS NULL")
+	require.NoError(t, err)
+	_, err = engine.EvaluateWorker(hb)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown or unsupported")
+}
+
+// Only IS NULL and IS NOT NULL are supported; other IS operators (e.g., IS TRUE) should be rejected.
+func TestWorkerQueryEngine_IsExprRejectsUnsupportedOperators(t *testing.T) {
+	hb := &workerpb.WorkerHeartbeat{TaskQueue: "task_queue"}
+	engine, err := newWorkerQueryEngine("nsID", fmt.Sprintf("%s IS TRUE", workerTaskQueueColName))
+	require.NoError(t, err)
+	_, err = engine.EvaluateWorker(hb)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not supported")
 }

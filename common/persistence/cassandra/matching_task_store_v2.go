@@ -20,24 +20,24 @@ const (
 		`WHERE namespace_id = ? ` +
 		`and task_queue_name = ? ` +
 		`and task_queue_type = ? ` +
-		`and type = ? ` +
-		`and (pass, task_id) >= (?, ?)`
+		`and (type, pass, task_id) >= (?, ?, ?) ` +
+		`and (type, pass, task_id) < (?, ?, ?)`
 
 	templateGetTasksQuery_v2_limit = `SELECT task_id, task, task_encoding ` +
 		`FROM tasks_v2 ` +
 		`WHERE namespace_id = ? ` +
 		`and task_queue_name = ? ` +
 		`and task_queue_type = ? ` +
-		`and type = ? ` +
-		`and (pass, task_id) >= (?, ?) ` +
+		`and (type, pass, task_id) >= (?, ?, ?) ` +
+		`and (type, pass, task_id) < (?, ?, ?) ` +
 		`LIMIT ?`
 
 	templateCompleteTasksLessThanQuery_v2 = `DELETE FROM tasks_v2 ` +
 		`WHERE namespace_id = ? ` +
 		`AND task_queue_name = ? ` +
 		`AND task_queue_type = ? ` +
-		`AND type = ? ` +
-		`and (pass, task_id) < (?, ?)`
+		`AND (type, pass, task_id) >= (?, ?, ?) ` +
+		`AND (type, pass, task_id) < (?, ?, ?)`
 )
 
 // matchingTaskStoreV2 is a fork of matchingTaskStoreV1 that uses a new task schema.
@@ -84,18 +84,32 @@ func (d *matchingTaskStoreV2) CreateTasks(
 			task.Task.EncodingType.String())
 	}
 
-	// The following query is used to ensure that range_id didn't change
-	batch.Query(switchTasksTable(templateUpdateTaskQueueQuery, matchingTaskVersion2),
-		request.RangeID,
-		request.TaskQueueInfo.Data,
-		request.TaskQueueInfo.EncodingType.String(),
-		namespaceID,
-		taskQueue,
-		taskQueueType,
-		rowTypeTaskQueue,
-		taskQueueTaskID,
-		request.RangeID,
-	)
+	// The following query is used to ensure that range_id didn't change.
+	// When UpdateMetadata is true, we also write the metadata blob (backlog counts, etc.).
+	// When false, we only check the range_id for write fencing.
+	if request.UpdateMetadata {
+		batch.Query(switchTasksTable(templateUpdateTaskQueueQuery, matchingTaskVersion2),
+			request.RangeID,
+			request.TaskQueueInfo.Data,
+			request.TaskQueueInfo.EncodingType.String(),
+			namespaceID,
+			taskQueue,
+			taskQueueType,
+			rowTypeTaskQueue,
+			taskQueueTaskID,
+			request.RangeID,
+		)
+	} else {
+		batch.Query(switchTasksTable(templateCheckRangeIDQuery, matchingTaskVersion2),
+			request.RangeID,
+			namespaceID,
+			taskQueue,
+			taskQueueType,
+			rowTypeTaskQueue,
+			taskQueueTaskID,
+			request.RangeID,
+		)
+	}
 
 	previous := make(map[string]any)
 	applied, _, err := d.Session.MapExecuteBatchCAS(batch, previous)
@@ -110,7 +124,7 @@ func (d *matchingTaskStoreV2) CreateTasks(
 		}
 	}
 
-	return &p.CreateTasksResponse{UpdatedMetadata: true}, nil
+	return &p.CreateTasksResponse{UpdatedMetadata: request.UpdateMetadata}, nil
 }
 
 // GetTasks get a task
@@ -128,14 +142,18 @@ func (d *matchingTaskStoreV2) GetTasks(
 
 	// Reading taskqueue tasks need to be quorum level consistent, otherwise we could lose tasks
 	var query gocql.Query
+	rowType := rowTypeTaskInSubqueue(request.Subqueue)
 	if request.UseLimit {
 		query = d.Session.Query(templateGetTasksQuery_v2_limit,
 			request.NamespaceID,
 			request.TaskQueue,
 			request.TaskType,
-			rowTypeTaskInSubqueue(request.Subqueue),
+			rowType,
 			request.InclusiveMinPass,
 			request.InclusiveMinTaskID,
+			rowType,
+			int64(math.MaxInt64),
+			int64(math.MaxInt64),
 			request.PageSize,
 		)
 	} else {
@@ -143,9 +161,12 @@ func (d *matchingTaskStoreV2) GetTasks(
 			request.NamespaceID,
 			request.TaskQueue,
 			request.TaskType,
-			rowTypeTaskInSubqueue(request.Subqueue),
+			rowType,
 			request.InclusiveMinPass,
 			request.InclusiveMinTaskID,
+			rowType,
+			int64(math.MaxInt64),
+			int64(math.MaxInt64),
 		)
 	}
 	iter := query.WithContext(ctx).PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
@@ -203,12 +224,16 @@ func (d *matchingTaskStoreV2) CompleteTasksLessThan(
 		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on fair queue")
 	}
 
+	rowType := rowTypeTaskInSubqueue(request.Subqueue)
 	query := d.Session.Query(
 		templateCompleteTasksLessThanQuery_v2,
 		request.NamespaceID,
 		request.TaskQueueName,
 		request.TaskType,
-		rowTypeTaskInSubqueue(request.Subqueue),
+		rowType,
+		int64(0),
+		int64(0),
+		rowType,
 		request.ExclusiveMaxPass,
 		request.ExclusiveMaxTaskID,
 	).WithContext(ctx)

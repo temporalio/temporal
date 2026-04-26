@@ -463,6 +463,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	skipVersioningCheck bool,
 	updateReg update.Registry,
 	targetDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
+	targetRevisionNumber int64,
 ) (*historypb.HistoryEvent, *historyi.WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	workflowTask := m.GetWorkflowTaskByID(scheduledEventID)
@@ -515,15 +516,15 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 			// TODO (Shivam): Revision number mechanics to strengthen this check
 			m.ms.executionInfo.DeclinedTargetVersionUpgrade = nil
 			m.ms.executionInfo.LastNotifiedTargetVersion = nil
-		// 4. Previously declined upgrade — target unchanged since the decline.
+		// 4. Previously declined upgrade — target revision is not newer than what was declined.
 		case m.ms.executionInfo.GetDeclinedTargetVersionUpgrade() != nil &&
-			m.ms.executionInfo.GetDeclinedTargetVersionUpgrade().GetDeploymentVersion().GetBuildId() == targetDeploymentVersion.GetBuildId() &&
-			m.ms.executionInfo.GetDeclinedTargetVersionUpgrade().GetDeploymentVersion().GetDeploymentName() == targetDeploymentVersion.GetDeploymentName():
+			targetRevisionNumber <= m.ms.executionInfo.GetDeclinedTargetVersionUpgrade().GetRevisionNumber():
 		default:
 			// Otherwise — target changed + did not decline to upgrade on CaN/retry. Signal the SDK.
 			targetDeploymentVersionChanged = true
 			m.ms.executionInfo.LastNotifiedTargetVersion = &persistencespb.LastNotifiedTargetVersion{
 				DeploymentVersion: targetDeploymentVersion,
+				RevisionNumber:    targetRevisionNumber,
 			}
 			m.ms.executionInfo.DeclinedTargetVersionUpgrade = nil
 		}
@@ -774,6 +775,14 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		)
 
 		workflowTask.ScheduledEventID = scheduledEvent.GetEventId()
+		//nolint:staticcheck // SA1019
+		versioningStamp := request.GetWorkerVersionStamp()
+		if versioningStamp.GetUseVersioning() && m.ms.GetAssignedBuildId() == "" {
+			// WV2 is not used. making sure the versioning stamp does not go through otherwise the
+			// workflow will start using WV2 which can cause issues.
+			// TODO: remove this block after deleting old wv [cleanup-old-wv]
+			versioningStamp = nil
+		}
 		startedEvent := m.ms.hBuilder.AddWorkflowTaskStartedEvent(
 			workflowTask.ScheduledEventID,
 			workflowTask.RequestID,
@@ -781,7 +790,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 			workflowTask.StartedTime,
 			workflowTask.SuggestContinueAsNew,
 			workflowTask.HistorySizeBytes,
-			request.WorkerVersionStamp,
+			versioningStamp,
 			workflowTask.BuildIdRedirectCounter,
 			workflowTask.SuggestContinueAsNewReasons,
 			workflowTask.TargetWorkerDeploymentVersionChanged,

@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.nexusoperation.proto.v1;
+
+import "chasm/lib/nexusoperation/proto/v1/request_response.proto";
+import "temporal/server/api/common/v1/api_category.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpb";
+
+service NexusOperationService {
+  rpc StartNexusOperation(StartNexusOperationRequest) returns (StartNexusOperationResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.operation_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc DescribeNexusOperation(DescribeNexusOperationRequest) returns (DescribeNexusOperationResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.operation_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc RequestCancelNexusOperation(RequestCancelNexusOperationRequest) returns (RequestCancelNexusOperationResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.operation_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc TerminateNexusOperation(TerminateNexusOperationRequest) returns (TerminateNexusOperationResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.operation_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc DeleteNexusOperation(DeleteNexusOperationRequest) returns (DeleteNexusOperationResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.operation_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc PollNexusOperation(PollNexusOperationRequest) returns (PollNexusOperationResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.operation_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
+  }
+}

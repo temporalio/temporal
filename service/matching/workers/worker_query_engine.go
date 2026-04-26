@@ -64,11 +64,15 @@ Example query:
 
 Different fields can support different operators.
   - string fields (e.g., WorkerIdentity, HostName, TaskQueue, DeploymentName, BuildId, SdkName, SdkVersion):
-		starts_with, not starts_with
+		=, !=, starts_with, not starts_with, IS NULL, IS NOT NULL
   - time fields (e.g., StartTime, HeartbeatTime):
-		 =, !=, >, >=, <, <=, between
+		 =, !=, >, >=, <, <=, between, IS NULL, IS NOT NULL
   - metric fields (e.g., total_sticky_cache_hit):
 		=, !=, >, >=, <, <=
+
+For string fields, IS NULL matches workers where the field is empty, and IS NOT NULL matches
+workers where the field is non-empty. For time fields, IS NULL matches workers where the
+timestamp is not set.
 
 Returns the list of workers for which the query matches the worker heartbeat, or an error,
 Errors are:
@@ -219,7 +223,7 @@ func (w *workerQueryEngine) evaluateExpression(expr sqlparser.Expr) (bool, error
 	case *sqlparser.RangeCond:
 		return w.evaluateRange(e)
 	case *sqlparser.IsExpr:
-		return false, serviceerror.NewInvalidArgumentf("%s: 'is' expression", notSupportedErrMessage)
+		return w.evaluateIsExpr(e)
 	case *sqlparser.NotExpr:
 		return false, serviceerror.NewInvalidArgumentf("%s: 'not' expression", notSupportedErrMessage)
 	case *sqlparser.FuncExpr:
@@ -252,6 +256,42 @@ func (w *workerQueryEngine) evaluateOr(expr *sqlparser.OrExpr) (bool, error) {
 	}
 	// if left is false, then right must be evaluated
 	return w.evaluateExpression(expr.Right)
+}
+
+func (w *workerQueryEngine) evaluateIsExpr(expr *sqlparser.IsExpr) (bool, error) {
+	if expr == nil {
+		return false, serviceerror.NewInvalidArgumentf("IsExpr input expression cannot be nil")
+	}
+
+	colNameExpr, ok := expr.Expr.(*sqlparser.ColName)
+	if !ok {
+		return false, serviceerror.NewInvalidArgumentf("invalid filter name: %s", sqlparser.String(expr.Expr))
+	}
+	colName := strings.ReplaceAll(sqlparser.String(colNameExpr), "`", "")
+
+	if expr.Operator != sqlparser.IsNullStr && expr.Operator != sqlparser.IsNotNullStr {
+		return false, serviceerror.NewInvalidArgumentf(
+			"%s: 'is' operator %q is not supported; only IS NULL and IS NOT NULL are supported",
+			notSupportedErrMessage, expr.Operator)
+	}
+
+	isNull := expr.Operator == sqlparser.IsNullStr
+
+	if propertyFunc, ok := propertyMapFuncs[colName]; ok {
+		isEmpty := propertyFunc(w.currentWorker) == ""
+		return isEmpty == isNull, nil
+	}
+
+	switch colName {
+	case workerStartTimeColName, workerHeartbeatTimeColName:
+		timeValue, err := w.getTimeValue(colName)
+		if err != nil {
+			return false, err
+		}
+		return timeValue.IsZero() == isNull, nil
+	default:
+		return false, serviceerror.NewInvalidArgumentf("unknown or unsupported worker heartbeat search field: %s", colName)
+	}
 }
 
 func (w *workerQueryEngine) evaluateComparison(expr *sqlparser.ComparisonExpr) (bool, error) {

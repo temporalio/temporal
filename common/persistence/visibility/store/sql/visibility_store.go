@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -204,22 +205,22 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 
 func (s *VisibilityStore) ListChasmExecutions(
 	ctx context.Context,
-	request *manager.ListChasmExecutionsRequest,
+	request *visibilityservice.ListChasmExecutionsRequest,
 ) (*store.InternalListExecutionsResponse, error) {
-	rc, ok := s.chasmRegistry.ComponentByID(request.ArchetypeID)
+	rc, ok := s.chasmRegistry.ComponentByID(request.ArchetypeId)
 	if !ok {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unknown archetype ID: %d", request.ArchetypeID))
+		return nil, serviceerror.NewInvalidArgumentf("unknown archetype ID: %d", request.ArchetypeId)
 	}
 	mapper := rc.SearchAttributesMapper()
 
 	requestInternal := &listExecutionsRequestInternal{
-		NamespaceID:   request.NamespaceID,
-		Namespace:     request.Namespace,
+		NamespaceID:   namespace.ID(request.NamespaceId),
+		Namespace:     namespace.Name(request.Namespace),
 		Query:         request.Query,
-		PageSize:      request.PageSize,
+		PageSize:      int(request.PageSize),
 		NextPageToken: request.NextPageToken,
 		ChasmMapper:   mapper,
-		ArchetypeID:   request.ArchetypeID,
+		ArchetypeID:   request.ArchetypeId,
 	}
 
 	if s.enableUnifiedQueryConverter() {
@@ -231,11 +232,11 @@ func (s *VisibilityStore) ListChasmExecutions(
 
 func (s *VisibilityStore) CountChasmExecutions(
 	ctx context.Context,
-	request *manager.CountChasmExecutionsRequest,
+	request *visibilityservice.CountChasmExecutionsRequest,
 ) (*store.InternalCountExecutionsResponse, error) {
-	rc, ok := s.chasmRegistry.ComponentByID(request.ArchetypeID)
+	rc, ok := s.chasmRegistry.ComponentByID(request.ArchetypeId)
 	if !ok {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unknown archetype ID: %d", request.ArchetypeID))
+		return nil, serviceerror.NewInvalidArgumentf("unknown archetype ID: %d", request.ArchetypeId)
 	}
 	mapper := rc.SearchAttributesMapper()
 
@@ -247,7 +248,7 @@ func (s *VisibilityStore) CountChasmExecutions(
 
 func (s *VisibilityStore) countChasmExecutions(
 	ctx context.Context,
-	request *manager.CountChasmExecutionsRequest,
+	request *visibilityservice.CountChasmExecutionsRequest,
 	mapper *chasm.VisibilitySearchAttributesMapper,
 ) (*store.InternalCountExecutionsResponse, error) {
 	sqlQC, err := NewSQLQueryConverter(s.GetName())
@@ -260,20 +261,20 @@ func (s *VisibilityStore) countChasmExecutions(
 		return nil, err
 	}
 
-	saMapper, err := s.searchAttributesMapperProvider.GetMapper(request.Namespace)
+	saMapper, err := s.searchAttributesMapperProvider.GetMapper(namespace.Name(request.Namespace))
 	if err != nil {
 		return nil, err
 	}
 
 	queryParams, err := buildQueryParams(
-		request.NamespaceID,
-		request.Namespace,
+		namespace.ID(request.NamespaceId),
+		namespace.Name(request.Namespace),
 		request.Query,
 		sqlQC,
 		saTypeMap,
 		saMapper,
 		mapper,
-		request.ArchetypeID,
+		request.ArchetypeId,
 	)
 	if err != nil {
 		var converterErr *query.ConverterError
@@ -300,7 +301,7 @@ func (s *VisibilityStore) countChasmExecutions(
 
 func (s *VisibilityStore) countChasmExecutionsLegacy(
 	ctx context.Context,
-	request *manager.CountChasmExecutionsRequest,
+	request *visibilityservice.CountChasmExecutionsRequest,
 	mapper *chasm.VisibilitySearchAttributesMapper,
 ) (*store.InternalCountExecutionsResponse, error) {
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
@@ -308,20 +309,20 @@ func (s *VisibilityStore) countChasmExecutionsLegacy(
 		return nil, err
 	}
 
-	saMapper, err := s.searchAttributesMapperProvider.GetMapper(request.Namespace)
+	saMapper, err := s.searchAttributesMapperProvider.GetMapper(namespace.Name(request.Namespace))
 	if err != nil {
 		return nil, err
 	}
 
 	converter := NewQueryConverterLegacy(
 		s.GetName(),
-		request.Namespace,
-		request.NamespaceID,
+		namespace.Name(request.Namespace),
+		namespace.ID(request.NamespaceId),
 		saTypeMap,
 		saMapper,
 		request.Query,
 		mapper,
-		request.ArchetypeID,
+		request.ArchetypeId,
 	)
 	selectFilter, err := converter.BuildCountStmt()
 	if err != nil {

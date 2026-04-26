@@ -2,10 +2,13 @@ package chasm
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 )
 
 type Context interface {
@@ -20,19 +23,20 @@ type Context interface {
 	Now(Component) time.Time
 	// ExecutionKey returns the execution key for the execution the context is operating on.
 	ExecutionKey() ExecutionKey
-	// StateTransitionCount returns the number of create/update transactions in the history of this execution.
-	StateTransitionCount() int64
-	// ExecutionCloseTime returns the time when the execution was closed. An execution is closed when its root component reaches a terminal
-	// state in its lifecycle. If the component is still running (not yet closed), it returns a zero time.Time value.
-	ExecutionCloseTime() time.Time
+	// ExecutionInfo returns metadata information about the execution.
+	ExecutionInfo() ExecutionInfo
 	// Logger returns a logger tagged with execution key and other chasm framework internal information.
 	Logger() log.Logger
-	// MetricsHandler returns a metrics handler with bare minimum tags (no namespace tag).
+	// NamespaceEntry returns the namespace entry for the execution.
+	NamespaceEntry() *namespace.Namespace
+	// EndpointByName resolves a nexus endpoint entry.
+	EndpointByName(endpointName string) (*persistencespb.NexusEndpointEntry, error)
+	// MetricsHandler returns a metrics handler with namespace tag.
 	MetricsHandler() metrics.Handler
 	// Value returns the value associated with this context for key. The behavior is the same as context.Context.Value().
 	// Use WithContextValues RegistrableComponentOption to set key values pair for a component upon registration.
 	// Registered key-value pairs will automatically be added to the Context whenever framework accesses the component.
-	// Alternatively, use ContextWithValue() to manually set values on Context.
+	// Alternatively, use ContextWithValue() to manually set values on Context which will take precedence over registered ones.
 	Value(key any) any
 
 	// Intent() OperationIntent
@@ -46,16 +50,28 @@ type Context interface {
 	goContext() context.Context
 }
 
+type ExecutionInfo struct {
+	// StateTransitionCount is the number of create/update transactions in the history of this execution.
+	StateTransitionCount int64
+	// ApproximateStateSize is the approximate size in bytes of the persisted execution state of this execution.
+	ApproximateStateSize int
+	// CloseTime is the time when the execution was closed.
+	// An execution is closed when its root component reaches a terminal state in its lifecycle.
+	// If the component is still running (not yet closed), it returns a zero time.Time value.
+	CloseTime time.Time
+}
+
+type EndpointRegistry interface {
+	GetByName(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistencespb.NexusEndpointEntry, error)
+}
+
 type MutableContext interface {
 	Context
 
 	// AddTask adds a task to be emitted as part of the current transaction.
-	// The task is associated with the given component and will be invoked via the registered executor for the given task
+	// The task is associated with the given component and will be invoked via the registered handler for the given task
 	// referencing the component.
 	AddTask(Component, TaskAttributes, any)
-
-	// Add more methods here for other storage commands/primitives.
-	// e.g. HistoryEvent
 
 	// Get a Ref for the component
 	// This ref to the component state at the end of the transition
@@ -124,16 +140,20 @@ func (c *immutableCtx) ExecutionKey() ExecutionKey {
 	return c.executionKey
 }
 
-func (c *immutableCtx) StateTransitionCount() int64 {
-	return c.root.backend.GetExecutionInfo().GetStateTransitionCount()
-}
+func (c *immutableCtx) ExecutionInfo() ExecutionInfo {
+	executionInfo := c.root.backend.GetExecutionInfo()
 
-func (c *immutableCtx) ExecutionCloseTime() time.Time {
-	closeTime := c.root.backend.GetExecutionInfo().GetCloseTime()
-	if closeTime == nil {
-		return time.Time{}
+	var closeTime time.Time
+	closeTimestamp := executionInfo.GetCloseTime()
+	if closeTimestamp != nil {
+		closeTime = closeTimestamp.AsTime()
 	}
-	return closeTime.AsTime()
+
+	return ExecutionInfo{
+		StateTransitionCount: executionInfo.GetStateTransitionCount(),
+		ApproximateStateSize: c.root.backend.GetApproximatePersistedSize(),
+		CloseTime:            closeTime,
+	}
 }
 
 func (c *immutableCtx) Logger() log.Logger {
@@ -145,7 +165,11 @@ func (c *immutableCtx) MetricsHandler() metrics.Handler {
 }
 
 func (c *immutableCtx) Value(key any) any {
-	return c.goContext().Value(key)
+	if v := c.goContext().Value(key); v != nil {
+		return v
+	}
+
+	return c.root.registry.componentContextValue(key)
 }
 
 func (c *immutableCtx) withValue(key any, value any) Context {
@@ -160,8 +184,20 @@ func (c *immutableCtx) structuredRef(component Component) (ComponentRef, error) 
 	return c.root.structuredRef(component)
 }
 
+func (c *immutableCtx) NamespaceEntry() *namespace.Namespace {
+	return c.root.backend.GetNamespaceEntry()
+}
+
 func (c *immutableCtx) goContext() context.Context {
 	return c.ctx
+}
+
+func (c *immutableCtx) EndpointByName(name string) (*persistencespb.NexusEndpointEntry, error) {
+	reg := c.root.backend.EndpointRegistry()
+	if reg == nil {
+		return nil, errors.New("endpoint registry not available")
+	}
+	return reg.GetByName(c.ctx, c.NamespaceEntry().ID(), name)
 }
 
 // NewMutableContext creates a new MutableContext from an existing Context and root Node.
@@ -197,36 +233,4 @@ func (c *mutableCtx) withValue(key any, value any) Context {
 func ContextWithValue[C Context](c C, key any, value any) C {
 	//nolint:revive // unchecked-type-assertion
 	return any(c.withValue(key, value)).(C)
-}
-
-// AugmentContextForComponent returns a new Context with all context values
-// associated with the given component in the registry added.
-// This method should only be used by CHASM framework internal code,
-// NOT CHASM library developers.
-func AugmentContextForComponent[C Context](
-	ctx C,
-	component any,
-	registry *Registry,
-) C {
-	rc, ok := registry.componentFor(component)
-	if ok {
-		for key, value := range rc.contextValues {
-			ctx = ContextWithValue(ctx, key, value)
-		}
-	}
-	return ctx
-}
-
-func augmentContextForArchetypeID[C Context](
-	ctx C,
-	archetypeID ArchetypeID,
-	registry *Registry,
-) C {
-	rc, ok := registry.ComponentByID(archetypeID)
-	if ok {
-		for key, value := range rc.contextValues {
-			ctx = ContextWithValue(ctx, key, value)
-		}
-	}
-	return ctx
 }

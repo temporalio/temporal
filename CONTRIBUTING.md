@@ -149,7 +149,7 @@ make start-sqlite-file
 To run with Postgres:
 ```bash
 make install-schema-postgresql
-make start-postgresql
+make start-postgres
 ```
 
 To run with MySQL:

@@ -5,6 +5,7 @@ import (
 	"container/list"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"slices"
@@ -199,10 +200,10 @@ func WithoutCaller() LoggerOption {
 // SetLogLevel overrides the temporal test log level during this test.
 func SetLogLevel(tt CleanupCapableT, level zapcore.Level) LoggerOption {
 	return func(t *TestLogger) {
-		oldLevel := os.Getenv("TEMPORAL_TEST_LOG_LEVEL")
-		_ = os.Setenv("TEMPORAL_TEST_LOG_LEVEL", level.String())
+		oldLevel := os.Getenv(log.TestLogLevelEnvVar)
+		_ = os.Setenv(log.TestLogLevelEnvVar, level.String())
 		tt.Cleanup(func() {
-			_ = os.Setenv("TEMPORAL_TEST_LOG_LEVEL", oldLevel)
+			_ = os.Setenv(log.TestLogLevelEnvVar, oldLevel)
 		})
 
 		t.state.level = level
@@ -210,6 +211,46 @@ func SetLogLevel(tt CleanupCapableT, level zapcore.Level) LoggerOption {
 }
 
 var _ log.Logger = (*TestLogger)(nil)
+
+// globalFileCore is a process-wide singleton zapcore.Core that writes to the file specified
+// by TEMPORAL_TEST_LOG_FILE. It is a NopCore when the env var is unset.
+var (
+	globalFileCore     zapcore.Core = zapcore.NewNopCore()
+	globalFileCoreOnce sync.Once
+)
+
+func getGlobalFileCore() zapcore.Core {
+	globalFileCoreOnce.Do(func() {
+		logFile := os.Getenv(log.TestLogFileEnvVar)
+		if logFile == "" {
+			return
+		}
+		if err := os.MkdirAll(filepath.Dir(logFile), 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "testlogger: failed to create log file dir %s: %v\n", filepath.Dir(logFile), err)
+			return
+		}
+		f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "testlogger: failed to open log file %s: %v\n", logFile, err)
+			return
+		}
+		format := cmp.Or(os.Getenv(log.TestLogFileFormatEnvVar), "json")
+		var enc zapcore.Encoder
+		switch strings.ToLower(format) {
+		case "console":
+			enc = zapcore.NewConsoleEncoder(log.DefaultZapEncoderConfig)
+		default: // "json" and anything unrecognized
+			enc = zapcore.NewJSONEncoder(log.DefaultZapEncoderConfig)
+		}
+		level := zapcore.DebugLevel
+		if levelV := os.Getenv(log.TestLogFileLevelEnvVar); levelV != "" {
+			level = log.ParseZapLevel(levelV)
+		}
+		globalFileCore = zapcore.NewCore(enc, zapcore.AddSync(f), level)
+		fmt.Fprintf(os.Stderr, "testlogger: file logging enabled → %s (format=%s level=%s)\n", logFile, format, level)
+	})
+	return globalFileCore
+}
 
 // NewTestLogger creates a new TestLogger that logs to the provided testing.T.
 // Mode controls the behavior of the logger for when an expected or unexpected error is encountered.
@@ -232,21 +273,26 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 	}
 	if tl.wrapped == nil {
 		writer := zaptest.NewTestingWriter(t)
-		var enc zapcore.Encoder
+
+		// Console core: format and level controlled by TEMPORAL_TEST_LOG_FORMAT / TEMPORAL_TEST_LOG_LEVEL.
+		var consoleEnc zapcore.Encoder
 		format := cmp.Or(os.Getenv(log.TestLogFormatEnvVar), "console")
 		switch strings.ToLower(format) {
 		case "console":
-			enc = zapcore.NewConsoleEncoder(log.DefaultZapEncoderConfig)
+			consoleEnc = zapcore.NewConsoleEncoder(log.DefaultZapEncoderConfig)
 		case "json":
-			enc = zapcore.NewJSONEncoder(log.DefaultZapEncoderConfig)
+			consoleEnc = zapcore.NewJSONEncoder(log.DefaultZapEncoderConfig)
 		default:
 			t.Fatalf("unknown log encoding %q", format)
 		}
-		level := tl.state.level
+		consoleLevel := tl.state.level
 		if levelV := os.Getenv(log.TestLogLevelEnvVar); levelV != "" {
-			level = log.ParseZapLevel(levelV)
+			consoleLevel = log.ParseZapLevel(levelV)
 		}
-		core := zapcore.NewCore(enc, writer, level)
+		core := zapcore.NewTee(
+			zapcore.NewCore(consoleEnc, writer, consoleLevel),
+			getGlobalFileCore())
+
 		zapOptions := []zap.Option{
 			// Send zap errors to the same writer and mark the test as failed if
 			// that happens.

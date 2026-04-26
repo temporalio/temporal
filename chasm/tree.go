@@ -13,6 +13,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -22,6 +23,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/transitionhistory"
@@ -188,7 +190,7 @@ type (
 		Nodes map[string]*persistencespb.ChasmNode // encoded node path -> chasm node
 	}
 
-	// NodeBackend is a set of methods needed from MutableState
+	// NodeBackend is a set of methods needed from MutableState.
 	//
 	// This is for breaking cycle dependency between
 	// this package and service/history/workflow package
@@ -197,11 +199,16 @@ type (
 		// TODO: Add methods needed from MutateState here.
 		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
+		GetApproximatePersistedSize() int
+		GetNamespaceEntry() *namespace.Namespace
 		GetCurrentVersion() int64
 		NextTransitionCount() int64
 		CurrentVersionedTransition() *persistencespb.VersionedTransition
 		GetWorkflowKey() definition.WorkflowKey
 		AddTasks(...tasks.Task)
+		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
+		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
+		HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool) bool
 		DeleteCHASMPureTasks(maxScheduledTime time.Time)
 		UpdateWorkflowStateStatus(
 			state enumsspb.WorkflowExecutionState,
@@ -212,6 +219,7 @@ type (
 			ctx context.Context,
 			requestID string,
 		) (nexusrpc.CompleteOperationOptions, error)
+		EndpointRegistry() EndpointRegistry
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.
@@ -327,12 +335,7 @@ func newTreeInitSearchAttributesAndMemo(
 	root *Node,
 	registry *Registry,
 ) error {
-	immutableContext := augmentContextForArchetypeID(
-		NewContext(context.Background(), root),
-		root.ArchetypeID(),
-		registry,
-	)
-
+	immutableContext := NewContext(context.Background(), root)
 	rootComponent, err := root.Component(immutableContext, ComponentRef{})
 	if err != nil {
 		return err
@@ -362,7 +365,7 @@ func searchAttributeKeyValuesToMap(saSlice []SearchAttributeKeyValue) map[string
 }
 
 func (n *Node) SetRootComponent(
-	rootComponent Component,
+	rootComponent RootComponent,
 ) error {
 	root := n.root()
 	root.setValue(rootComponent)
@@ -496,7 +499,7 @@ func (n *Node) validateAccessHelper(ctx Context) error {
 	}
 	componentValue, _ := n.value.(Component) //nolint:revive // unchecked-type-assertion
 
-	if componentValue.LifecycleState(AugmentContextForComponent(ctx, componentValue, n.registry)).IsClosed() {
+	if componentValue.LifecycleState(ctx).IsClosed() {
 		return errAccessCheckFailed
 	}
 
@@ -1446,12 +1449,7 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		TransitionCount:          n.backend.NextTransitionCount(),
 	}
 
-	immutableContext := augmentContextForArchetypeID(
-		NewContext(context.TODO(), n),
-		n.ArchetypeID(),
-		n.registry,
-	)
-
+	immutableContext := NewContext(context.TODO(), n)
 	rootLifecycleChanged, err := n.closeTransactionHandleRootLifecycleChange(immutableContext)
 	if err != nil {
 		return NodesMutation{}, err
@@ -2074,6 +2072,15 @@ func (n *Node) resolveDeferredPointers() error {
 				switch value := internal.value().(type) {
 				case Component:
 					resolvedPath, err = n.componentNodePath(value)
+					if err == nil {
+						targetNode := n.valueToNode[value]
+						if !targetNode.isAncestorOf(node) {
+							err = fmt.Errorf(
+								"pointer target is not an ancestor of component at path %v",
+								node.path(),
+							)
+						}
+					}
 				case proto.Message:
 					resolvedPath, err = n.dataNodePath(value)
 				default:
@@ -2114,7 +2121,10 @@ func (n *Node) andAllChildren() iter.Seq2[[]string, *Node] {
 				return false
 			}
 			for _, child := range node.children {
-				if !walk(append(path, child.nodeName), child) {
+				childPath := make([]string, len(path)+1)
+				copy(childPath, path)
+				childPath[len(path)] = child.nodeName
+				if !walk(childPath, child) {
 					return false
 				}
 			}
@@ -2233,11 +2243,7 @@ func (n *Node) ApplyMutation(
 	//
 	// TODO: combine this with the logic in CloseTransactionForceUpdateVisibility
 	// right that force update logic only applies to the active cluster.
-	immutableContext := augmentContextForArchetypeID(
-		NewContext(context.Background(), n),
-		n.ArchetypeID(),
-		n.registry,
-	)
+	immutableContext := NewContext(context.TODO(), n)
 	rootComponent, err := n.root().Component(immutableContext, ComponentRef{})
 	if err != nil {
 		return err
@@ -2343,8 +2349,10 @@ func (n *Node) applyUpdates(
 			newNode.resetTaskStatus()
 			if isSystemUpdates {
 				n.systemMutation.UpdatedNodes[encodedPath] = newNode.serializedNode
+				delete(n.systemMutation.DeletedNodes, encodedPath)
 			} else {
 				n.mutation.UpdatedNodes[encodedPath] = newNode.serializedNode
+				delete(n.mutation.DeletedNodes, encodedPath)
 			}
 			continue
 		}
@@ -2372,8 +2380,10 @@ func (n *Node) applyUpdates(
 
 			if isSystemUpdates {
 				n.systemMutation.UpdatedNodes[encodedPath] = updatedNode
+				delete(n.systemMutation.DeletedNodes, encodedPath)
 			} else {
 				n.mutation.UpdatedNodes[encodedPath] = updatedNode
+				delete(n.mutation.DeletedNodes, encodedPath)
 			}
 			node.setValue(nil)
 			node.setValueState(valueStateNeedDeserialize)
@@ -2471,6 +2481,19 @@ func (n *Node) findNode(
 	return childNode.findNode(path[1:])
 }
 
+// isAncestorOf returns true if n is a proper ancestor of descendant.
+// It walks from descendant up through parent links to check if n is encountered.
+func (n *Node) isAncestorOf(descendant *Node) bool {
+	current := descendant.parent
+	for current != nil {
+		if current == n {
+			return true
+		}
+		current = current.parent
+	}
+	return false
+}
+
 func (n *Node) delete(isSystemDelete bool) error {
 	for _, childNode := range n.children {
 		if err := childNode.delete(isSystemDelete); err != nil {
@@ -2493,6 +2516,16 @@ func (n *Node) delete(isSystemDelete bool) error {
 		return err
 	}
 
+	// TODO: consider remove entries from UpdatedNodes map as well
+	// if the same node is updated and then deleted in the same transaction.
+	//
+	// That's not a problem today though and DeletedNodes entries are always added
+	// before UpdatedNodes entires.
+	// - For active logic, DeletedNodes are added upon syncSubComponents(),
+	//   and UpdatedNodes are added when closing transaction and serializing nodes.
+	// - For standby replication logic, mutable state calls ApplyMutation() twice,
+	//   first with a deletion only mutation for tombstone nodes, and then an
+	//   update only mutation.
 	if isSystemDelete {
 		n.systemMutation.DeletedNodes[encodedPath] = struct{}{}
 	} else {
@@ -2562,16 +2595,11 @@ func (n *Node) Terminate(
 		)
 	}
 
-	mutableContext := augmentContextForArchetypeID(
-		NewMutableContext(context.Background(), n.root()),
-		n.ArchetypeID(),
-		n.registry,
-	)
+	mutableContext := NewMutableContext(context.TODO(), n.root())
 	component, err := n.Component(mutableContext, ComponentRef{})
 	if err != nil {
 		return err
 	}
-
 	rootComponent, ok := component.(RootComponent)
 	if !ok {
 		return softassert.UnexpectedInternalErr(
@@ -2649,7 +2677,7 @@ func isComponentTaskExpired(
 // close).
 func (n *Node) EachPureTask(
 	referenceTime time.Time,
-	callback func(executor NodePureTask, taskAttributes TaskAttributes, taskInstance any) (bool, error),
+	callback func(handler NodePureTask, taskAttributes TaskAttributes, taskInstance any) (bool, error),
 ) error {
 	chasmContext := NewContext(context.Background(), n)
 
@@ -3009,7 +3037,14 @@ func (n *Node) ExecutePureTask(
 
 	defer log.CapturePanic(n.logger, &retErr)
 
-	return true, registrableTask.pureTaskExecuteFn(
+	archetypeTag := metrics.ArchetypeTag("")
+	if name, ok := n.registry.ArchetypeDisplayName(n.ArchetypeID()); ok {
+		archetypeTag = metrics.ArchetypeTag(name)
+	}
+	chasmTaskTypeTag := metrics.ChasmTaskTypeTag(registrableTask.fqType())
+	metricsHandler := n.metricsHandler.WithTags(archetypeTag)
+
+	execErr := registrableTask.pureTaskExecuteFn(
 		executionContext,
 		component,
 		taskAttributes,
@@ -3017,16 +3052,25 @@ func (n *Node) ExecutePureTask(
 		n.registry,
 	)
 
+	metrics.ChasmPureTaskRequests.With(metricsHandler).Record(1, chasmTaskTypeTag)
+
+	if execErr != nil {
+		metrics.ChasmPureTaskErrors.With(metricsHandler).Record(1, chasmTaskTypeTag)
+		return true, execErr
+	}
+
 	// TODO - a task validator must succeed validation after a task executes
 	// successfully (without error), otherwise it will generate an infinite loop.
 	// Check for this case by marking the in-memory task as having executed, which the
 	// CloseTransaction method will check against.
 	//
 	// See: https://github.com/temporalio/temporal/pull/7701#discussion_r2072026993
+
+	return true, nil
 }
 
 // ValidatePureTask runs a pure task's associated validator, returning true
-// if the task is valid. Intended for use by standby executors as part of
+// if the task is valid. Intended for use by standby handlers as part of
 // EachPureTask's callback.
 // This method assumes the node's value has already been prepared (hydrated).
 func (n *Node) ValidatePureTask(
@@ -3043,7 +3087,7 @@ func (n *Node) ValidatePureTask(
 
 // ValidateSideEffectTask runs a side effect task's associated validator,
 // returning the deserialized task instance if the task is valid. Intended for
-// use by standby executors.
+// use by standby handlers.
 //
 // If validation succeeds but the task is invalid, nil is returned to signify the
 // task can be skipped/deleted.
@@ -3153,12 +3197,6 @@ func (n *Node) ExecuteSideEffectDiscardTask(
 	if err != nil {
 		return err
 	}
-	if !rt.HasDiscardHandler() {
-		return softassert.UnexpectedInternalErr(
-			n.logger,
-			"ExecuteSideEffectDiscardTask called on executor without SideEffectTaskDiscarder",
-			fmt.Errorf("%s", rt.fqType()))
-	}
 	return n.invokeSideEffectTaskFn(ctx, rt, executionKey, chasmTask, validate, rt.sideEffectTaskDiscardFn)
 }
 
@@ -3231,7 +3269,7 @@ func (n *Node) invokeSideEffectTaskFn(
 		componentPath:         taskInfo.Path,
 		componentInitialVT:    taskInfo.ComponentInitialVersionedTransition,
 
-		// Validate the Ref only once it is accessed by the task's executor.
+		// Validate the Ref only once it is accessed by the task's handler.
 		validationFn: makeValidationFn(registrableTask, validate, taskAttributes, taskValue),
 	}
 
@@ -3283,7 +3321,7 @@ func makeValidationFn(
 			return err
 		}
 
-		// Side effect's task validator is invoked inside the task executor,
+		// Side effect's task validator is invoked inside the task handler,
 		// so the panic wrapper ExecuteSideEffectTask() will cover this case.
 
 		// Call the TaskValidator.

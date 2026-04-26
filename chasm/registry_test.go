@@ -117,15 +117,14 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
 	lib.EXPECT().NexusServiceProcessors().Return(nil)
 
 	lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{
-		chasm.NewRegistrableSideEffectTask[*chasm.MockComponent, testTask1](
+		chasm.NewRegistrableSideEffectTask(
 			"Task1",
-			chasm.NewMockTaskValidator[*chasm.MockComponent, testTask1](ctrl),
-			chasm.NewMockSideEffectTaskExecutor[*chasm.MockComponent, testTask1](ctrl),
+			chasm.NewMockSideEffectTaskHandler[*chasm.MockComponent, testTask1](ctrl),
+			chasm.WithTaskGroup("test-task-group"),
 		),
-		chasm.NewRegistrablePureTask[testTaskComponentInterface, testTask2](
+		chasm.NewRegistrablePureTask(
 			"Task2",
-			chasm.NewMockTaskValidator[testTaskComponentInterface, testTask2](ctrl),
-			chasm.NewMockPureTaskExecutor[testTaskComponentInterface, testTask2](ctrl),
+			chasm.NewMockPureTaskHandler[testTaskComponentInterface, testTask2](ctrl),
 		),
 	})
 
@@ -135,6 +134,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
 	rt1, ok := r.Task("TestLibrary.Task1")
 	require.True(s.T(), ok)
 	require.Equal(s.T(), "TestLibrary.Task1", rt1.FqType())
+	s.Require().Equal("test-task-group", rt1.TaskGroup())
 
 	missingRT, ok := r.Task("TestLibrary.TaskMissing")
 	require.False(s.T(), ok)
@@ -144,6 +144,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
 	rt2, ok := r.TaskFor(tInstance1)
 	require.True(s.T(), ok)
 	require.Equal(s.T(), "TestLibrary.Task2", rt2.FqType())
+	s.Require().Equal(rt2.FqType(), rt2.TaskGroup())
 
 	rt2, ok = r.TaskOf(reflect.TypeOf(tInstance1))
 	require.True(s.T(), ok)
@@ -375,8 +376,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Error() {
 		lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{
 			chasm.NewRegistrablePureTask[*chasm.MockComponent, testTask1](
 				"",
-				chasm.NewMockTaskValidator[*chasm.MockComponent, testTask1](ctrl),
-				chasm.NewMockPureTaskExecutor[*chasm.MockComponent, testTask1](ctrl),
+				chasm.NewMockPureTaskHandler[*chasm.MockComponent, testTask1](ctrl),
 			),
 		})
 		err := r.Register(lib)
@@ -388,8 +388,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Error() {
 		lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{
 			chasm.NewRegistrablePureTask[*chasm.MockComponent, testTask1](
 				"bad.task.name",
-				chasm.NewMockTaskValidator[*chasm.MockComponent, testTask1](ctrl),
-				chasm.NewMockPureTaskExecutor[*chasm.MockComponent, testTask1](ctrl),
+				chasm.NewMockPureTaskHandler[*chasm.MockComponent, testTask1](ctrl),
 			),
 		})
 		r := chasm.NewRegistry(s.logger)
@@ -402,13 +401,11 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Error() {
 		lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{
 			chasm.NewRegistrablePureTask[*chasm.MockComponent, testTask1](
 				"Task1",
-				chasm.NewMockTaskValidator[*chasm.MockComponent, testTask1](ctrl),
-				chasm.NewMockPureTaskExecutor[*chasm.MockComponent, testTask1](ctrl),
+				chasm.NewMockPureTaskHandler[*chasm.MockComponent, testTask1](ctrl),
 			),
 			chasm.NewRegistrableSideEffectTask[*chasm.MockComponent, testTask1](
 				"Task1",
-				chasm.NewMockTaskValidator[*chasm.MockComponent, testTask1](ctrl),
-				chasm.NewMockSideEffectTaskExecutor[*chasm.MockComponent, testTask1](ctrl),
+				chasm.NewMockSideEffectTaskHandler[*chasm.MockComponent, testTask1](ctrl),
 			),
 		})
 		r := chasm.NewRegistry(s.logger)
@@ -421,13 +418,11 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Error() {
 		lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{
 			chasm.NewRegistrablePureTask[*chasm.MockComponent, testTask1](
 				"Task1",
-				chasm.NewMockTaskValidator[*chasm.MockComponent, testTask1](ctrl),
-				chasm.NewMockPureTaskExecutor[*chasm.MockComponent, testTask1](ctrl),
+				chasm.NewMockPureTaskHandler[*chasm.MockComponent, testTask1](ctrl),
 			),
 			chasm.NewRegistrablePureTask[*chasm.MockComponent, testTask1](
 				"Task2",
-				chasm.NewMockTaskValidator[*chasm.MockComponent, testTask1](ctrl),
-				chasm.NewMockPureTaskExecutor[*chasm.MockComponent, testTask1](ctrl),
+				chasm.NewMockPureTaskHandler[*chasm.MockComponent, testTask1](ctrl),
 			),
 		})
 		r := chasm.NewRegistry(s.logger)
@@ -445,8 +440,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Error() {
 		lib2.EXPECT().NexusServiceProcessors().Return(nil)
 		task := chasm.NewRegistrablePureTask[*chasm.MockComponent, testTask1](
 			"Task1",
-			chasm.NewMockTaskValidator[*chasm.MockComponent, testTask1](ctrl),
-			chasm.NewMockPureTaskExecutor[*chasm.MockComponent, testTask1](ctrl),
+			chasm.NewMockPureTaskHandler[*chasm.MockComponent, testTask1](ctrl),
 		)
 		lib2.EXPECT().Tasks().Return([]*chasm.RegistrableTask{task})
 		r2 := chasm.NewRegistry(s.logger)
@@ -464,8 +458,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Error() {
 		lib.EXPECT().Tasks().Return([]*chasm.RegistrableTask{
 			chasm.NewRegistrablePureTask[*chasm.MockComponent, string](
 				"Task1",
-				chasm.NewMockTaskValidator[*chasm.MockComponent, string](ctrl),
-				chasm.NewMockPureTaskExecutor[*chasm.MockComponent, string](ctrl),
+				chasm.NewMockPureTaskHandler[*chasm.MockComponent, string](ctrl),
 			),
 		})
 		r := chasm.NewRegistry(s.logger)
