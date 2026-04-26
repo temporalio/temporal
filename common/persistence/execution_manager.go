@@ -586,7 +586,7 @@ func (m *executionManagerImpl) DeserializeBufferedEvents( // unexport
 	blobs []*commonpb.DataBlob,
 ) ([]*historypb.HistoryEvent, error) {
 
-	events := make([]*historypb.HistoryEvent, 0)
+	events := make([]*historypb.HistoryEvent, 0, len(blobs))
 	for _, b := range blobs {
 		if b == nil {
 			// Should not happen, log and discard to prevent callers from consuming
@@ -656,7 +656,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		UpsertSignalInfos: make(map[int64]*commonpb.DataBlob, len(input.UpsertSignalInfos)),
 		DeleteSignalInfos: input.DeleteSignalInfos,
 
-		UpsertChasmNodes: make(map[string]InternalChasmNode, len(input.UpsertChasmNodes)),
+		UpsertChasmNodes: nil,
 		DeleteChasmNodes: input.DeleteChasmNodes,
 
 		UpsertSignalRequestedIDs: input.UpsertSignalRequestedIDs,
@@ -1143,12 +1143,12 @@ func (m *executionManagerImpl) trimHistoryNode(
 
 func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkflowMutableState) (*persistencespb.WorkflowMutableState, error) {
 	state := &persistencespb.WorkflowMutableState{
-		ActivityInfos:       make(map[int64]*persistencespb.ActivityInfo),
-		TimerInfos:          make(map[string]*persistencespb.TimerInfo),
-		ChildExecutionInfos: make(map[int64]*persistencespb.ChildExecutionInfo),
-		RequestCancelInfos:  make(map[int64]*persistencespb.RequestCancelInfo),
-		SignalInfos:         make(map[int64]*persistencespb.SignalInfo),
-		ChasmNodes:          make(map[string]*persistencespb.ChasmNode),
+		ActivityInfos:       make(map[int64]*persistencespb.ActivityInfo, len(internState.ActivityInfos)),
+		TimerInfos:          make(map[string]*persistencespb.TimerInfo, len(internState.TimerInfos)),
+		ChildExecutionInfos: make(map[int64]*persistencespb.ChildExecutionInfo, len(internState.ChildExecutionInfos)),
+		RequestCancelInfos:  make(map[int64]*persistencespb.RequestCancelInfo, len(internState.RequestCancelInfos)),
+		SignalInfos:         make(map[int64]*persistencespb.SignalInfo, len(internState.SignalInfos)),
+		ChasmNodes:          make(map[string]*persistencespb.ChasmNode, len(internState.ChasmNodes)),
 		SignalRequestedIds:  internState.SignalRequestedIDs,
 		NextEventId:         internState.NextEventID,
 		BufferedEvents:      make([]*historypb.HistoryEvent, len(internState.BufferedEvents)),
