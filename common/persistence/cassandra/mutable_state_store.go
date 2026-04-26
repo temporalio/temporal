@@ -516,48 +516,47 @@ func (d *MutableStateStore) GetWorkflowExecution(
 		return nil, serviceerror.NewUnavailablef("GetWorkflowExecution operation failed. Error: %v", err)
 	}
 
-	activityInfos := make(map[int64]*commonpb.DataBlob)
 	aMap := result["activity_map"].(map[int64][]byte)
 	aMapEncoding := result["activity_map_encoding"].(string)
+	activityInfos := make(map[int64]*commonpb.DataBlob, len(aMap))
 	for key, value := range aMap {
 		activityInfos[key] = p.NewDataBlob(value, aMapEncoding)
 	}
 	state.ActivityInfos = activityInfos
 
-	timerInfos := make(map[string]*commonpb.DataBlob)
 	tMapEncoding := result["timer_map_encoding"].(string)
 	tMap := result["timer_map"].(map[string][]byte)
+	timerInfos := make(map[string]*commonpb.DataBlob, len(tMap))
 	for key, value := range tMap {
 		timerInfos[key] = p.NewDataBlob(value, tMapEncoding)
 	}
 	state.TimerInfos = timerInfos
 
-	childExecutionInfos := make(map[int64]*commonpb.DataBlob)
 	cMap := result["child_executions_map"].(map[int64][]byte)
 	cMapEncoding := result["child_executions_map_encoding"].(string)
+	childExecutionInfos := make(map[int64]*commonpb.DataBlob, len(cMap))
 	for key, value := range cMap {
 		childExecutionInfos[key] = p.NewDataBlob(value, cMapEncoding)
 	}
 	state.ChildExecutionInfos = childExecutionInfos
 
-	requestCancelInfos := make(map[int64]*commonpb.DataBlob)
 	rMapEncoding := result["request_cancel_map_encoding"].(string)
 	rMap := result["request_cancel_map"].(map[int64][]byte)
+	requestCancelInfos := make(map[int64]*commonpb.DataBlob, len(rMap))
 	for key, value := range rMap {
 		requestCancelInfos[key] = p.NewDataBlob(value, rMapEncoding)
 	}
 	state.RequestCancelInfos = requestCancelInfos
 
-	signalInfos := make(map[int64]*commonpb.DataBlob)
 	sMapEncoding := result["signal_map_encoding"].(string)
 	sMap := result["signal_map"].(map[int64][]byte)
+	signalInfos := make(map[int64]*commonpb.DataBlob, len(sMap))
 	for key, value := range sMap {
 		signalInfos[key] = p.NewDataBlob(value, sMapEncoding)
 	}
 	state.SignalInfos = signalInfos
 	state.SignalRequestedIDs = gocql.UUIDsToStringSlice(result["signal_requested"])
 
-	chasmNodeBlobs := make(map[string]p.InternalChasmNode)
 	chasmNodeEncoding, ok := result["chasm_node_map_encoding"].(string)
 	if !ok {
 		return nil, serviceerror.NewInternal("GetWorkflowExecution failed: unknown chasm_node_map_encoding type")
@@ -566,6 +565,7 @@ func (d *MutableStateStore) GetWorkflowExecution(
 	if !ok {
 		return nil, serviceerror.NewInternal("GetWorkflowExecution failed: unknown chasm_node_map type")
 	}
+	chasmNodeBlobs := make(map[string]p.InternalChasmNode, len(chasmNodeBytes))
 	for key, value := range chasmNodeBytes {
 		chasmNodeBlobs[key] = p.InternalChasmNode{
 			CassandraBlob: p.NewDataBlob(value, chasmNodeEncoding),
