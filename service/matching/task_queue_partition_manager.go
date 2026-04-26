@@ -1035,6 +1035,7 @@ func (pm *taskQueuePartitionManagerImpl) describe(
 		if b == "" {
 			dbq := pm.defaultQueue()
 			if dbq == nil {
+				pm.versionedQueuesLock.RUnlock()
 				return nil, errDefaultQueueNotInit
 			}
 			versions[dbq.QueueKey().Version()] = true
