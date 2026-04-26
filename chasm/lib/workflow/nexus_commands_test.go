@@ -44,6 +44,7 @@ type testContext struct {
 	scheduleHandler CommandHandler
 	cancelHandler   CommandHandler
 	history         *historypb.History
+	registry        *Registry
 }
 
 func (tcx *testContext) setHasAnyBufferedEvent(value bool) {
@@ -73,9 +74,9 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 			return &persistencespb.NexusEndpointEntry{Id: "endpoint-id"}, nil
 		},
 	}
-	chReg := NewRegistry()
+	wfreg := NewRegistry()
 	nexusProcessor := chasm.NewNexusEndpointProcessor()
-	require.NoError(t, chReg.Register(newNexusLibrary(cfg, nexusProcessor)))
+	require.NoError(t, wfreg.Register(newNexusLibrary(cfg, nexusProcessor)))
 
 	execInfo := &persistencespb.WorkflowExecutionInfo{}
 	backend := &chasm.MockNodeBackend{
@@ -110,15 +111,15 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 				return endpointReg.GetByName(context.Background(), tests.GlobalNamespaceEntry.ID(), name)
 			},
 		},
-	}, chReg)
+	}, wfreg)
 
 	wf := &Workflow{
 		MSPointer: chasm.NewMSPointer(backend),
 	}
 
-	scheduleHandler, ok := chReg.CommandHandler(enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION)
+	scheduleHandler, ok := wfreg.CommandHandler(enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION)
 	require.True(t, ok)
-	cancelHandler, ok := chReg.CommandHandler(enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION)
+	cancelHandler, ok := wfreg.CommandHandler(enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION)
 	require.True(t, ok)
 
 	return testContext{
@@ -129,6 +130,7 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 		history:         history,
 		scheduleHandler: scheduleHandler,
 		cancelHandler:   cancelHandler,
+		registry:        wfreg,
 	}
 }
 

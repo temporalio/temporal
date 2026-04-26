@@ -9,7 +9,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -37,7 +36,7 @@ func scheduleOperation(t *testing.T, tcx testContext) (*historypb.HistoryEvent, 
 
 func applyStartedEvent(t *testing.T, tcx testContext, scheduledEventID int64, eventTime time.Time) {
 	t.Helper()
-	applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, &historypb.HistoryEvent{
+	applyEventDefinition[StartedEventDefinition](t, tcx, &historypb.HistoryEvent{
 		EventTime: timestamppb.New(eventTime),
 		Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
 			NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
@@ -48,16 +47,13 @@ func applyStartedEvent(t *testing.T, tcx testContext, scheduledEventID int64, ev
 	})
 }
 
-func applyEventDefinition(
+func applyEventDefinition[D EventDefinition](
 	t *testing.T,
 	tcx testContext,
-	eventType enumspb.EventType,
 	event *historypb.HistoryEvent,
 ) {
 	t.Helper()
-	chReg := NewRegistry()
-	require.NoError(t, chReg.Register(newNexusLibrary(defaultConfig, chasm.NewNexusEndpointProcessor())))
-	def, ok := chReg.EventDefinitionByEventType(eventType)
+	def, ok := eventDefinitionByGoType[D](tcx.registry)
 	require.True(t, ok)
 	err := def.Apply(tcx.chasmCtx, tcx.wf, event)
 	require.NoError(t, err)
@@ -178,7 +174,7 @@ func TestCompletedEventDefinitionApply(t *testing.T) {
 		require.True(t, ok)
 		op := field.Get(tcx.chasmCtx)
 		// no start event
-		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, buildEvent(scheduledEvent.EventId))
+		applyEventDefinition[CompletedEventDefinition](t, tcx, buildEvent(scheduledEvent.EventId))
 		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_SUCCEEDED)
 		require.Equal(t, eventTime, op.GetClosedTime().AsTime())
 	})
@@ -190,7 +186,7 @@ func TestCompletedEventDefinitionApply(t *testing.T) {
 		require.True(t, ok)
 		op := field.Get(tcx.chasmCtx)
 		applyStartedEvent(t, tcx, scheduledEvent.EventId, eventTime) // add start event firsts
-		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, buildEvent(scheduledEvent.EventId))
+		applyEventDefinition[CompletedEventDefinition](t, tcx, buildEvent(scheduledEvent.EventId))
 		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_SUCCEEDED)
 		require.Equal(t, eventTime, op.GetClosedTime().AsTime())
 	})
@@ -220,7 +216,7 @@ func TestFailedEventDefinitionApply(t *testing.T) {
 		require.True(t, ok)
 		op := field.Get(tcx.chasmCtx)
 		// no start event
-		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, buildEvent(scheduledEvent.EventId))
+		applyEventDefinition[FailedEventDefinition](t, tcx, buildEvent(scheduledEvent.EventId))
 		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_FAILED)
 		require.Equal(t, eventTime, op.GetClosedTime().AsTime())
 	})
@@ -232,7 +228,7 @@ func TestFailedEventDefinitionApply(t *testing.T) {
 		require.True(t, ok)
 		op := field.Get(tcx.chasmCtx)
 		applyStartedEvent(t, tcx, scheduledEvent.EventId, eventTime) // add start event first
-		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, buildEvent(scheduledEvent.EventId))
+		applyEventDefinition[FailedEventDefinition](t, tcx, buildEvent(scheduledEvent.EventId))
 		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_FAILED)
 		require.Equal(t, eventTime, op.GetClosedTime().AsTime())
 	})
@@ -262,7 +258,7 @@ func TestCanceledEventDefinitionApply(t *testing.T) {
 		require.True(t, ok)
 		op := field.Get(tcx.chasmCtx)
 		// no start event
-		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, buildEvent(scheduledEvent.EventId))
+		applyEventDefinition[CanceledEventDefinition](t, tcx, buildEvent(scheduledEvent.EventId))
 		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_CANCELED)
 		require.Equal(t, eventTime, op.GetClosedTime().AsTime())
 	})
@@ -274,7 +270,7 @@ func TestCanceledEventDefinitionApply(t *testing.T) {
 		require.True(t, ok)
 		op := field.Get(tcx.chasmCtx)
 		applyStartedEvent(t, tcx, scheduledEvent.EventId, eventTime) // add start event first
-		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, buildEvent(scheduledEvent.EventId))
+		applyEventDefinition[CanceledEventDefinition](t, tcx, buildEvent(scheduledEvent.EventId))
 		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_CANCELED)
 		require.Equal(t, eventTime, op.GetClosedTime().AsTime())
 	})
@@ -304,7 +300,7 @@ func TestTimedOutEventDefinitionApply(t *testing.T) {
 		require.True(t, ok)
 		op := field.Get(tcx.chasmCtx)
 		// no start event
-		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, buildEvent(scheduledEvent.EventId))
+		applyEventDefinition[TimedOutEventDefinition](t, tcx, buildEvent(scheduledEvent.EventId))
 		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_TIMED_OUT)
 	})
 
@@ -315,7 +311,7 @@ func TestTimedOutEventDefinitionApply(t *testing.T) {
 		require.True(t, ok)
 		op := field.Get(tcx.chasmCtx)
 		applyStartedEvent(t, tcx, scheduledEvent.EventId, eventTime) // add start event first
-		applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, buildEvent(scheduledEvent.EventId))
+		applyEventDefinition[TimedOutEventDefinition](t, tcx, buildEvent(scheduledEvent.EventId))
 		assertTerminalEventApplied(t, tcx, key, op.OperationState, nexusoperationpb.OPERATION_STATUS_TIMED_OUT)
 	})
 }
@@ -339,7 +335,7 @@ func TestScheduledEventDefinitionApply(t *testing.T) {
 		},
 	}
 
-	applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, event)
+	applyEventDefinition[ScheduledEventDefinition](t, tcx, event)
 
 	field, ok := tcx.wf.Operations[event.EventId]
 	require.True(t, ok)
@@ -357,7 +353,7 @@ func TestStartedEventDefinitionApply(t *testing.T) {
 	event, key := scheduleOperation(t, tcx)
 	startTime := time.Now().UTC()
 
-	applyEventDefinition(t, tcx, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, &historypb.HistoryEvent{
+	applyEventDefinition[StartedEventDefinition](t, tcx, &historypb.HistoryEvent{
 		EventTime: timestamppb.New(startTime),
 		Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
 			NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
@@ -380,8 +376,7 @@ func TestCancelRequestedEventDefinitionApply(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		event, key := scheduleOperation(t, tcx)
 
-		def := CancelRequestedEventDefinition{}
-		err := def.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
+		applyEventDefinition[CancelRequestedEventDefinition](t, tcx, &historypb.HistoryEvent{
 			EventId:   int64(20),
 			EventTime: timestamppb.Now(),
 			Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
@@ -390,7 +385,6 @@ func TestCancelRequestedEventDefinitionApply(t *testing.T) {
 				},
 			},
 		})
-		require.NoError(t, err)
 
 		field, ok := tcx.wf.Operations[key]
 		require.True(t, ok)
@@ -402,8 +396,7 @@ func TestCancelRequestedEventDefinitionApply(t *testing.T) {
 	t.Run("tolerates missing operation", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 
-		def := CancelRequestedEventDefinition{}
-		err := def.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
+		applyEventDefinition[CancelRequestedEventDefinition](t, tcx, &historypb.HistoryEvent{
 			EventId:   int64(20),
 			EventTime: timestamppb.Now(),
 			Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
@@ -412,7 +405,6 @@ func TestCancelRequestedEventDefinitionApply(t *testing.T) {
 				},
 			},
 		})
-		require.NoError(t, err)
 	})
 }
 
@@ -421,8 +413,7 @@ func TestCancelRequestCompletedEventDefinitionApply(t *testing.T) {
 	event, key := scheduleOperation(t, tcx)
 
 	// First, request cancellation.
-	cancelDef := CancelRequestedEventDefinition{}
-	err := cancelDef.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
+	applyEventDefinition[CancelRequestedEventDefinition](t, tcx, &historypb.HistoryEvent{
 		EventId:   int64(20),
 		EventTime: timestamppb.Now(),
 		Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
@@ -431,11 +422,9 @@ func TestCancelRequestCompletedEventDefinitionApply(t *testing.T) {
 			},
 		},
 	})
-	require.NoError(t, err)
 
 	// Transition the operation to STARTED so the cancellation gets scheduled.
-	startDef := StartedEventDefinition{}
-	err = startDef.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
+	applyEventDefinition[StartedEventDefinition](t, tcx, &historypb.HistoryEvent{
 		EventTime: timestamppb.Now(),
 		Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
 			NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
@@ -444,11 +433,9 @@ func TestCancelRequestCompletedEventDefinitionApply(t *testing.T) {
 			},
 		},
 	})
-	require.NoError(t, err)
 
 	// Now complete the cancel request.
-	completedDef := CancelRequestCompletedEventDefinition{}
-	err = completedDef.Apply(tcx.chasmCtx, tcx.wf, &historypb.HistoryEvent{
+	applyEventDefinition[CancelRequestCompletedEventDefinition](t, tcx, &historypb.HistoryEvent{
 		EventTime: timestamppb.Now(),
 		Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestCompletedEventAttributes{
 			NexusOperationCancelRequestCompletedEventAttributes: &historypb.NexusOperationCancelRequestCompletedEventAttributes{
@@ -456,7 +443,6 @@ func TestCancelRequestCompletedEventDefinitionApply(t *testing.T) {
 			},
 		},
 	})
-	require.NoError(t, err)
 
 	field, ok := tcx.wf.Operations[key]
 	require.True(t, ok)
