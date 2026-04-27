@@ -64,6 +64,7 @@ func TestBacklogManager_Fair_Suite(t *testing.T) {
 }
 
 func (s *BacklogManagerTestSuite) SetupTest() {
+	s.capturedTasksSlice = nil
 	s.controller = gomock.NewController(s.T())
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 	if s.fairness {
@@ -443,31 +444,68 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	s.Zero(totalApproximateBacklogCount(s.blm))
 }
 
-func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_AllExpiredThenValid() {
-	s.testSkipExpiredTasks(10, 0, 33, 3)
+func (s *BacklogManagerTestSuite) TestSyncState_UnloadsOnOwnershipLoss() {
+	if !s.newMatcher {
+		s.T().Skip("SyncState is only used by the new backlog manager")
+	}
+
+	s.cfgcli.OverrideValue(dynamicconfig.MatchingUpdateAckInterval.Key(), 100*time.Millisecond)
+
+	s.blm.Start()
+	defer s.blm.Stop()
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
+
+	// physical queue should unload soon
+	var unloadCalled atomic.Bool
+	s.ptqMgr.EXPECT().UnloadFromPartitionManager(unloadCauseConflict).Do(func(unloadCause) {
+		unloadCalled.Store(true)
+	}).AnyTimes()
+
+	// simulate another partition stealing and releasing ownership
+	db := s.blm.getDB()
+	tqd := s.taskMgr.getQueueDataByKey(db.queue)
+	tqd.Lock()
+	tqd.rangeID++
+	tqd.Unlock()
+
+	s.Eventually(unloadCalled.Load, time.Second, 100*time.Millisecond)
+}
+
+type taskBlock struct {
+	count   int
+	expired bool
+}
+
+func expiredBlock(n int) taskBlock { return taskBlock{count: n, expired: true} }
+func validBlock(n int) taskBlock   { return taskBlock{count: n, expired: false} }
+
+func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_ExpiredThenValid() {
+	s.testSkipExpiredTasks(10, expiredBlock(33), validBlock(3))
 }
 
 func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_ValidExpiredValid() {
-	s.testSkipExpiredTasks(10, 3, 33, 3)
+	s.testSkipExpiredTasks(10, validBlock(3), expiredBlock(33), validBlock(3))
+}
+
+func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_ValidThenExpired() {
+	s.testSkipExpiredTasks(10, validBlock(3), expiredBlock(33))
+}
+
+func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_AllExpired() {
+	if s.newMatcher && !s.fairness {
+		s.T().Skip("this case doesn't work with priTaskReader yet")
+	}
+	s.testSkipExpiredTasks(10, expiredBlock(33))
 }
 
 // testSkipExpiredTasks verifies that the task reader correctly skips over expired tasks
 // in the DB and advances the ack level past them.
-// expiredPattern is: # valid, # expired, # valid, # expired, ...
-func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, numValidExpired ...int) {
+func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, blocks ...taskBlock) {
 	if !s.newMatcher {
 		s.T().Skip("not compatible with classic backlog manager")
 	}
 
 	s.cfgcli.OverrideValue(dynamicconfig.MatchingGetTasksBatchSize.Key(), batchSize)
-
-	// expand 1, 3, 2 -> {false, true, true, true, false, false}
-	var expiredPattern []bool
-	var isExpired bool
-	for _, num := range numValidExpired {
-		expiredPattern = append(expiredPattern, slices.Repeat([]bool{isExpired}, num)...)
-		isExpired = !isExpired
-	}
 
 	// Pre-populate the DB with tasks before starting the backlog manager.
 	// This simulates tasks that were written and then expired before reading.
@@ -487,24 +525,27 @@ func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, numValidEx
 
 	var dbTasks []*persistencespb.AllocatedTaskInfo
 	numValid := 0
-	for i, expired := range expiredPattern {
-		id := int64(i + 1)
-		task := &persistencespb.AllocatedTaskInfo{
-			TaskId: id,
-			Data: &persistencespb.TaskInfo{
-				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-3600),
-			},
+	lastID := int64(0)
+	for _, block := range blocks {
+		for range block.count {
+			lastID++
+			task := &persistencespb.AllocatedTaskInfo{
+				TaskId: lastID,
+				Data: &persistencespb.TaskInfo{
+					CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-3600),
+				},
+			}
+			if block.expired {
+				task.Data.ExpiryTime = timestamp.TimeNowPtrUtcAddSeconds(-60)
+			} else {
+				task.Data.ExpiryTime = timestamp.TimeNowPtrUtcAddSeconds(3600)
+				numValid++
+			}
+			if s.fairness {
+				task.TaskPass = lastID * 1000 // spread out pass numbers
+			}
+			dbTasks = append(dbTasks, task)
 		}
-		if expired {
-			task.Data.ExpiryTime = timestamp.TimeNowPtrUtcAddSeconds(-60)
-		} else {
-			task.Data.ExpiryTime = timestamp.TimeNowPtrUtcAddSeconds(3600)
-			numValid++
-		}
-		if s.fairness {
-			task.TaskPass = id * 1000 // spread out pass numbers
-		}
-		dbTasks = append(dbTasks, task)
 	}
 	_, err = s.taskMgr.CreateTasks(ctx, &persistence.CreateTasksRequest{
 		TaskQueueInfo: &persistence.PersistedTaskQueueInfo{Data: queueInfo, RangeID: 1},
@@ -530,7 +571,6 @@ func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, numValidEx
 	}
 
 	// Verify the ack level advances past all tasks (expired + valid).
-	lastID := int64(len(expiredPattern))
 	s.Eventually(func() bool {
 		db := s.blm.getDB()
 		db.Lock()

@@ -41,6 +41,16 @@ message TaskVersionDirective {
   // Counter copied from the workflow execution's WorkflowExecutionVersioningInfo
   // during enqueue time.
   int64 revision_number = 6;
+  // If behavior is AutoUpgrade and use_ramping_version is true, then this task should use the
+  // Ramping Version of its Task Queue regardless of workflow_id and ramp_percentage.
+  // If there is no Ramping Version at the time of task dispatch, the Current Version will be used instead.
+  //
+  // If use_ramping_version is false, the Target Version is chosen with the default formula:
+  //   if calcRampThreshold(workflow_id) <= ramp_percentage:
+  //     target=ramping_version
+  //   else:
+  //     target=current_version
+  bool use_ramping_version = 7;
 }
 
 message FairLevel {
@@ -82,7 +92,8 @@ message PhysicalTaskQueueInfo {
   map<int32, temporal.api.taskqueue.v1.TaskQueueStats> task_queue_stats_by_priority_key = 4;
 }
 
-// Represents a normal or sticky partition of a task queue.
+// Internal representation of a task queue partition, used for server-to-server RPCs.
+// This is the internal equivalent of temporal.api.taskqueue.v1.TaskQueue.
 message TaskQueuePartition {
   // This is the user-facing name for this task queue
   string task_queue = 1;
@@ -91,8 +102,11 @@ message TaskQueuePartition {
   oneof partition_id {
     int32 normal_partition_id = 3;
     string sticky_name = 4;
+    WorkerCommandsPartitionId worker_commands = 5;
   }
 }
+
+message WorkerCommandsPartitionId {}
 
 // Information about redirect intention sent by Matching to History in Record*TaskStarted calls.
 // Deprecated.
@@ -154,4 +168,10 @@ message EphemeralData {
 message VersionedEphemeralData {
   EphemeralData data = 1;
   int64 version = 2;
+}
+
+// ClientPartitionCounts is propagated from the matching service to clients in grpc headers/trailers.
+message ClientPartitionCounts {
+  int32 read = 1;
+  int32 write = 2;
 }

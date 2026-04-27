@@ -57,9 +57,11 @@ func (g *GeneratorTaskHandler) Execute(
 	metricsHandler := newTaggedMetricsHandler(g.metricsHandler, scheduler)
 	invoker := scheduler.Invoker.Get(ctx)
 
+	now := ctx.Now(generator)
+
 	// If we have no last processed time, this is a new schedule.
 	if generator.LastProcessedTime == nil {
-		createdAt := timestamppb.New(ctx.Now(generator))
+		createdAt := timestamppb.New(now)
 		generator.LastProcessedTime = createdAt
 		scheduler.Info.CreateTime = createdAt
 
@@ -74,7 +76,7 @@ func (g *GeneratorTaskHandler) Execute(
 
 	// Process time range between last high water mark and system time.
 	t1 := generator.LastProcessedTime.AsTime()
-	t2 := ctx.Now(generator).UTC()
+	t2 := now.UTC()
 	if t2.Before(t1) {
 		logger.Error("time went backwards",
 			tag.Stringer("time", t1),

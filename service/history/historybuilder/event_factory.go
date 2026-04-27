@@ -85,6 +85,12 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		InheritedAutoUpgradeInfo:     request.InheritedAutoUpgradeInfo,
 		DeclinedTargetVersionUpgrade: request.DeclinedTargetVersionUpgrade,
 	}
+	if req.TimeSkippingConfig != nil {
+		attributes.TimeSkippingConfig = req.TimeSkippingConfig
+	}
+	if request.GetInitialSkippedDuration() != nil {
+		attributes.InitialSkippedDuration = request.GetInitialSkippedDuration()
+	}
 
 	parentInfo := request.ParentExecutionInfo
 	if parentInfo != nil {
@@ -404,6 +410,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 	links []*commonpb.Link,
 	identity string,
 	priority *commonpb.Priority,
+	timeSkippingConfig *workflowpb.TimeSkippingConfig,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
@@ -414,6 +421,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 			AttachedCompletionCallbacks: attachCompletionCallbacks,
 			Identity:                    identity,
 			Priority:                    priority,
+			TimeSkippingConfig:          timeSkippingConfig,
 		},
 	}
 	event.Links = links
@@ -835,6 +843,8 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	targetNamespaceID namespace.ID,
+	timeSkippingConfig *workflowpb.TimeSkippingConfig,
+	initialSkippedDuration *durationpb.Duration,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{
@@ -857,11 +867,13 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 			// Filter nil values here rather than in the API layer because not all
 			// creation paths go through the frontend (continue-as-new, child workflows, replication).
 			// This CaN event is created on the parent workflow, so we need to filter nil values here.
-			Memo:              payload.FilterNilMemo(command.Memo),
-			SearchAttributes:  payload.FilterNilSearchAttributes(command.SearchAttributes),
-			ParentClosePolicy: command.GetParentClosePolicy(),
-			InheritBuildId:    command.InheritBuildId, //nolint:staticcheck // SA1019: worker versioning v0.2
-			Priority:          command.Priority,
+			Memo:                   payload.FilterNilMemo(command.Memo),
+			SearchAttributes:       payload.FilterNilSearchAttributes(command.SearchAttributes),
+			ParentClosePolicy:      command.GetParentClosePolicy(),
+			InheritBuildId:         command.InheritBuildId, //nolint:staticcheck // SA1019: worker versioning v0.2
+			Priority:               command.Priority,
+			TimeSkippingConfig:     timeSkippingConfig,
+			InitialSkippedDuration: initialSkippedDuration,
 		},
 	}
 	return event
@@ -1078,4 +1090,22 @@ func (b *EventFactory) createHistoryEvent(
 	historyEvent.TaskId = common.EmptyEventTaskID
 
 	return historyEvent
+}
+
+func (b *EventFactory) CreateWorkflowExecutionTimeSkippingTransitionedEvent(
+	targetTime time.Time,
+	triggeredDisable bool,
+) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED, b.timeSource.Now())
+	transitionedAttr := &historypb.WorkflowExecutionTimeSkippingTransitionedEventAttributes{
+		WallClockTime:      timestamppb.New(b.timeSource.Now()),
+		DisabledAfterBound: triggeredDisable,
+	}
+	if !targetTime.IsZero() {
+		transitionedAttr.TargetTime = timestamppb.New(targetTime.UTC())
+	}
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionTimeSkippingTransitionedEventAttributes{
+		WorkflowExecutionTimeSkippingTransitionedEventAttributes: transitionedAttr,
+	}
+	return event
 }

@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"math"
@@ -8,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -23,8 +23,7 @@ import (
 )
 
 const (
-	initialRangeID     = 1 // Id of the first range of a new task queue
-	stickyTaskQueueTTL = 24 * time.Hour
+	initialRangeID = 1 // Id of the first range of a new task queue
 
 	// Subqueue zero corresponds to "the queue" before migrating metadata to subqueues.
 	// For backwards compatibility, some operations only apply to subqueue zero for now.
@@ -208,8 +207,8 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 
 		// If we are the draining one, then assume the other has tasks, so we can migrate
 		// backwards safely. Also assume other has tasks if the config allows for migration
-		// (and we're not sticky) since we may have just turned on fairness and need to migrate.
-		canMigrate := (db.config.NewMatcher || db.config.EnableFairness) && db.queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY
+		// (and the partition supports fairness) since we may have just turned on fairness and need to migrate.
+		canMigrate := (db.config.NewMatcher || db.config.EnableFairness) && db.queue.Partition().SupportsFairness()
 		db.otherHasTasks = canMigrate || db.isDraining
 
 		if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
@@ -280,20 +279,52 @@ func (db *taskQueueDB) OldUpdateState(
 	return err
 }
 
+// shouldUpdateMetadataOnAppendLocked returns whether a task append should also write the
+// metadata blob. This is always true when enough time has passed since the last metadata
+// write (controlled by MetadataUpdateOnAppendInterval), so that backlog counts stay
+// reasonably fresh. When the interval is zero, metadata is updated on every append
+// (previous behavior). Caller must hold db.Mutex.
+func (db *taskQueueDB) shouldUpdateMetadataOnAppendLocked() bool {
+	interval := db.config.MetadataUpdateOnAppendInterval()
+	return interval <= 0 || time.Since(db.lastWrite) >= interval
+}
+
 func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	db.Lock()
 	defer db.Unlock()
 	defer db.emitPhysicalBacklogGaugesLocked()
 
-	// We only need to write if something changed, or if we're past half of the sticky queue TTL.
-	// Note that we use the same threshold for non-sticky queues even though they don't have a
-	// persistence TTL, since the scavenger looks for metadata that hasn't been updated in 48 hours.
-	needWrite := db.lastChange.After(db.lastWrite) || time.Since(db.lastWrite) > stickyTaskQueueTTL/2
+	// We only need to write if something changed, or if we're past half of the persistence TTL.
+	// Cap at 24h so that the scavenger (which looks for metadata not updated in 48h) doesn't
+	// mistake the queue for idle, even if a future partition kind has a longer TTL.
+	ttl := min(24*time.Hour, cmp.Or(db.queue.Partition().PersistenceTTL(), 24*time.Hour))
+	needWrite := db.lastChange.After(db.lastWrite) || time.Since(db.lastWrite) > ttl/2
 	if !needWrite {
-		return nil
+		// If we don't write, though, we wouldn't know if someone else has stolen ownership
+		// momentarily (this could happen due to eventual consistency of membership updates).
+		// So instead, do a (cheaper) read to just check the range id.
+		return db.verifyOwnershipLocked(ctx)
 	}
 
 	return db.updateTaskQueueLocked(ctx, false)
+}
+
+func (db *taskQueueDB) verifyOwnershipLocked(ctx context.Context) error {
+	response, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
+		NamespaceID: db.queue.NamespaceId(),
+		TaskQueue:   db.queue.PersistenceName(),
+		TaskType:    db.queue.TaskType(),
+	})
+	if err != nil {
+		return err
+	}
+	if response.RangeID != db.rangeID {
+		return &persistence.ConditionFailedError{
+			Msg: fmt.Sprintf("task queue ownership lost: stored rangeID %d, in-memory rangeID %d",
+				response.RangeID, db.rangeID),
+		}
+	}
+	return nil
 }
 
 func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue subqueueIndex, newAckLevel int64, countDelta int64, oldestTime time.Time) {
@@ -500,6 +531,11 @@ func (db *taskQueueDB) CreateTasks(
 		db.subqueues[sq].ApproximateBacklogCount += int64(len(update.tasks))
 	}
 
+	// Decide whether to include metadata in the write. We always need the LWT for the
+	// range ID check, but updating the full metadata blob on every append has extra cost.
+	// We piggyback the metadata update if enough time has passed since the last write.
+	updateMetadata := db.shouldUpdateMetadataOnAppendLocked()
+
 	resp, err := db.store.CreateTasks(
 		ctx,
 		&persistence.CreateTasksRequest{
@@ -507,8 +543,9 @@ func (db *taskQueueDB) CreateTasks(
 				Data:    db.cachedQueueInfo(),
 				RangeID: db.rangeID,
 			},
-			Tasks:     allTasks,
-			Subqueues: allSubqueues,
+			Tasks:          allTasks,
+			Subqueues:      allSubqueues,
+			UpdateMetadata: updateMetadata,
 		})
 
 	// Update the maxReadLevel after the writes are completed, but before we send the response,
@@ -580,6 +617,8 @@ func (db *taskQueueDB) CreateFairTasks(
 		db.subqueues[sq].FairMaxReadLevel = fairLevelFromProto(db.subqueues[sq].FairMaxReadLevel).max(level).toProto()
 	}
 
+	updateMetadata := db.shouldUpdateMetadataOnAppendLocked()
+
 	resp, err := db.store.CreateTasks(
 		ctx,
 		&persistence.CreateTasksRequest{
@@ -587,8 +626,9 @@ func (db *taskQueueDB) CreateFairTasks(
 				Data:    db.cachedQueueInfo(),
 				RangeID: db.rangeID,
 			},
-			Tasks:     allTasks,
-			Subqueues: allSubqueues,
+			Tasks:          allTasks,
+			Subqueues:      allSubqueues,
+			UpdateMetadata: updateMetadata,
 		})
 
 	if err == nil {
@@ -733,14 +773,10 @@ func (db *taskQueueDB) AllocateSubqueue(
 }
 
 func (db *taskQueueDB) expiryTime() *timestamppb.Timestamp {
-	switch db.queue.Partition().Kind() {
-	case enumspb.TASK_QUEUE_KIND_NORMAL:
-		return nil
-	case enumspb.TASK_QUEUE_KIND_STICKY:
-		return timestamppb.New(time.Now().Add(stickyTaskQueueTTL))
-	default:
-		panic(fmt.Sprintf("taskQueueDB encountered unknown task kind: %v", db.queue.Partition().Kind()))
+	if ttl := db.queue.Partition().PersistenceTTL(); ttl > 0 {
+		return timestamppb.New(time.Now().Add(ttl))
 	}
+	return nil
 }
 
 func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {

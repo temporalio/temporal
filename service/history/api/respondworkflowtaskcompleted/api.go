@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
@@ -61,8 +62,9 @@ type (
 		searchAttributesValidator      *searchattribute.Validator
 		persistenceVisibilityMgr       manager.VisibilityManager
 		commandHandlerRegistry         *workflow.CommandHandlerRegistry
+		chasmWorkflowRegistry          *chasmworkflow.Registry
 		matchingClient                 matchingservice.MatchingServiceClient
-		versionMembershipCache         worker_versioning.VersionMembershipCache
+		versionCache                   worker_versioning.VersionMembershipAndReactivationStatusCache
 	}
 )
 
@@ -71,11 +73,12 @@ func NewWorkflowTaskCompletedHandler(
 	tokenSerializer *tasktoken.Serializer,
 	eventNotifier events.Notifier,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
+	chasmWorkflowRegistry *chasmworkflow.Registry,
 	searchAttributesValidator *searchattribute.Validator,
 	visibilityManager manager.VisibilityManager,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 ) *WorkflowTaskCompletedHandler {
 	return &WorkflowTaskCompletedHandler{
 		config:                     shardContext.GetConfig(),
@@ -97,8 +100,9 @@ func NewWorkflowTaskCompletedHandler(
 		searchAttributesValidator:      searchAttributesValidator,
 		persistenceVisibilityMgr:       visibilityManager,
 		commandHandlerRegistry:         commandHandlerRegistry,
+		chasmWorkflowRegistry:          chasmWorkflowRegistry,
 		matchingClient:                 matchingClient,
-		versionMembershipCache:         versionMembershipCache,
+		versionCache:                   versionCache,
 	}
 }
 
@@ -389,6 +393,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 
 		workflowTaskHandler := newWorkflowTaskCompletedHandler(
 			request.GetIdentity(),
+			request.GetWorkerControlTaskQueue(),
 			completedEvent.GetEventId(), // If completedEvent is nil, then GetEventId() returns 0 and this value shouldn't be used in workflowTaskHandler.
 			ms,
 			updateRegistry,
@@ -403,8 +408,9 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			handler.searchAttributesMapperProvider,
 			hasBufferedEventsOrMessages,
 			handler.commandHandlerRegistry,
+			handler.chasmWorkflowRegistry,
 			handler.matchingClient,
-			handler.versionMembershipCache,
+			handler.versionCache,
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(
@@ -597,6 +603,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
 				nil,
+				0,
 			)
 			if err != nil {
 				return nil, err
@@ -722,6 +729,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			workflowLease.GetContext().UpdateRegistry(ctx),
 			false,
 			nil,
+			0,
 		)
 		if err != nil {
 			return nil, err

@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -401,6 +402,12 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 		return response, h.convertError(err)
 	}
 
+	if !contextutil.ContextMetadataMarkActivityID(ctx, taskToken.GetActivityId()) {
+		h.throttledLogger.Warn("Failed to mark activity ID in context metadata",
+			tag.WorkflowID(taskToken.GetWorkflowId()),
+			tag.ActivityID(taskToken.GetActivityId()))
+	}
+
 	// Handle worklow activity (mutable state backed implementation).
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
@@ -456,10 +463,6 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 	}
 
 	response, err := engine.RecordActivityTaskStarted(ctx, request)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-	response.Clock, err = shardContext.NewVectorClock()
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -2253,9 +2256,32 @@ func (h *Handler) CompleteNexusOperationChasm(
 	ctx context.Context,
 	request *historyservice.CompleteNexusOperationChasmRequest,
 ) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+	componentRef := request.GetCompletion().GetComponentRef()
+	if len(componentRef) == 0 {
+		return nil, serviceerror.NewInvalidArgument("invalid component ref")
+	}
+
+	// Ignore transition-history fields when applying completion,
+	// use Request ID to accept or reject the completion instead.
+	// TODO(stephan): This should be a CHASM transition option.
+	ref := &persistencespb.ChasmComponentRef{}
+	if err := ref.Unmarshal(componentRef); err != nil {
+		return nil, serviceerror.NewInvalidArgument("invalid component ref")
+	}
+	ref.ExecutionVersionedTransition = nil
+	ref.ComponentInitialVersionedTransition = nil
+	var err error
+	componentRef, err = ref.Marshal()
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument("invalid component ref")
+	}
+
 	completion := &persistencespb.ChasmNexusCompletion{
-		CloseTime: request.CloseTime,
-		RequestId: request.Completion.RequestId,
+		StartTime:      request.StartTime,
+		CloseTime:      request.CloseTime,
+		RequestId:      request.Completion.RequestId,
+		Links:          request.Links,
+		OperationToken: request.OperationToken,
 	}
 	switch variant := request.Outcome.(type) {
 	case *historyservice.CompleteNexusOperationChasmRequest_Failure:
@@ -2274,9 +2300,9 @@ func (h *Handler) CompleteNexusOperationChasm(
 	// this similarly as we would a pure task (holding an exclusive lock), as the
 	// assumption is that the accessed component will be recording (or generating a
 	// task) based on this result.
-	_, _, err := chasm.UpdateComponent(
+	_, _, err = chasm.UpdateComponent(
 		ctx,
-		request.GetCompletion().GetComponentRef(),
+		componentRef,
 		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
 			return nil, c.HandleNexusCompletion(ctx, completion)
 		},
