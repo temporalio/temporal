@@ -3,6 +3,7 @@ package nexusoperation
 import (
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
@@ -160,7 +161,7 @@ type EventSucceeded struct {
 	// If not nil, uses the provided time instead of the current component time.
 	// Used when a completion comes in before start is recorded (rare race).
 	CompleteTime *time.Time
-	// TODO(stephan): Store result
+	Result       *commonpb.Payload
 }
 
 var TransitionSucceeded = chasm.NewTransition(
@@ -179,6 +180,11 @@ var TransitionSucceeded = chasm.NewTransition(
 		}
 		o.NextAttemptScheduleTime = nil
 		o.ClosedTime = timestamppb.New(closeTime)
+
+		o.getOrCreateOutcome(ctx).Variant = &nexusoperationpb.OperationOutcome_Successful_{
+			Successful: &nexusoperationpb.OperationOutcome_Successful{Result: event.Result},
+		}
+
 		// Terminal state - no tasks to emit.
 		return nil
 	},
@@ -204,7 +210,9 @@ var TransitionFailed = chasm.NewTransition(
 		if event.CompleteTime != nil {
 			closeTime = *event.CompleteTime
 		}
-		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime)
+		// Attempts only execute in SCHEDULED, so that status identifies attempt-originated failures.
+		fromAttempt := o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED
+		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime, fromAttempt)
 	},
 )
 
@@ -228,12 +236,47 @@ var TransitionCanceled = chasm.NewTransition(
 		if event.CompleteTime != nil {
 			closeTime = *event.CompleteTime
 		}
-		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime)
+		// Attempts only execute in SCHEDULED, so that status identifies attempt-originated cancels.
+		fromAttempt := o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED
+		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime, fromAttempt)
+	},
+)
+
+// EventTerminated is triggered when the operation is terminated by user request.
+type EventTerminated struct {
+	chasm.TerminateComponentRequest
+}
+
+var TransitionTerminated = chasm.NewTransition(
+	[]nexusoperationpb.OperationStatus{
+		nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+		nexusoperationpb.OPERATION_STATUS_STARTED,
+		nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+		nexusoperationpb.OPERATION_STATUS_CANCELED,
+	},
+	nexusoperationpb.OPERATION_STATUS_TERMINATED,
+	func(o *Operation, ctx chasm.MutableContext, event EventTerminated) error {
+		closeTime := ctx.Now(o)
+		o.TerminateState = &nexusoperationpb.NexusOperationTerminateState{
+			RequestId: event.RequestID,
+		}
+		failure := &failurepb.Failure{
+			Message: event.Reason,
+			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+				TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{
+					Identity: event.Identity,
+				},
+			},
+		}
+		return o.resolveUnsuccessfully(ctx, failure, closeTime, false)
 	},
 )
 
 // EventTimedOut is triggered when the schedule-to-close timeout is triggered for an operation.
 type EventTimedOut struct {
+	Failure *failurepb.Failure
+	// FromAttempt is true when the failure came from an invocation attempt.
+	FromAttempt bool
 }
 
 var TransitionTimedOut = chasm.NewTransition(
@@ -244,11 +287,6 @@ var TransitionTimedOut = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
 	func(o *Operation, ctx chasm.MutableContext, event EventTimedOut) error {
-		// Clear the next attempt schedule time when leaving BACKING_OFF state. This field is only valid in
-		// BACKING_OFF state.
-		o.NextAttemptScheduleTime = nil
-		o.ClosedTime = timestamppb.New(ctx.Now(o))
-		// Terminal state - no tasks to emit.
-		return nil
+		return o.resolveUnsuccessfully(ctx, event.Failure, ctx.Now(o), event.FromAttempt)
 	},
 )

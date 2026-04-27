@@ -195,6 +195,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockMetadata,
 		s.mockResource.GetMetadataManager(),
 		nsreplication.NewNoopDataMerger(),
+		nsreplication.NewDefaultAdmitter(),
 		s.mockResource.GetNamespaceReplicationQueue(),
 		s.mockResource.GetLogger(),
 	)

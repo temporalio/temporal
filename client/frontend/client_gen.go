@@ -19,6 +19,16 @@ func (c *clientImpl) CountActivityExecutions(
 	return c.client.CountActivityExecutions(ctx, request, opts...)
 }
 
+func (c *clientImpl) CountNexusOperationExecutions(
+	ctx context.Context,
+	request *workflowservice.CountNexusOperationExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CountNexusOperationExecutionsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.CountNexusOperationExecutions(ctx, request, opts...)
+}
+
 func (c *clientImpl) CountSchedules(
 	ctx context.Context,
 	request *workflowservice.CountSchedulesRequest,
@@ -87,6 +97,16 @@ func (c *clientImpl) DeleteActivityExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.DeleteActivityExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) DeleteNexusOperationExecution(
+	ctx context.Context,
+	request *workflowservice.DeleteNexusOperationExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteNexusOperationExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DeleteNexusOperationExecution(ctx, request, opts...)
 }
 
 func (c *clientImpl) DeleteSchedule(
@@ -187,6 +207,16 @@ func (c *clientImpl) DescribeNamespace(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.DescribeNamespace(ctx, request, opts...)
+}
+
+func (c *clientImpl) DescribeNexusOperationExecution(
+	ctx context.Context,
+	request *workflowservice.DescribeNexusOperationExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeNexusOperationExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeNexusOperationExecution(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeSchedule(
@@ -439,6 +469,16 @@ func (c *clientImpl) ListNamespaces(
 	return c.client.ListNamespaces(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListNexusOperationExecutions(
+	ctx context.Context,
+	request *workflowservice.ListNexusOperationExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListNexusOperationExecutionsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ListNexusOperationExecutions(ctx, request, opts...)
+}
+
 func (c *clientImpl) ListOpenWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListOpenWorkflowExecutionsRequest,
@@ -569,6 +609,16 @@ func (c *clientImpl) PollActivityTaskQueue(
 	return c.client.PollActivityTaskQueue(ctx, request, opts...)
 }
 
+func (c *clientImpl) PollNexusOperationExecution(
+	ctx context.Context,
+	request *workflowservice.PollNexusOperationExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PollNexusOperationExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.PollNexusOperationExecution(ctx, request, opts...)
+}
+
 func (c *clientImpl) PollNexusTaskQueue(
 	ctx context.Context,
 	request *workflowservice.PollNexusTaskQueueRequest,
@@ -657,6 +707,16 @@ func (c *clientImpl) RequestCancelActivityExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.RequestCancelActivityExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) RequestCancelNexusOperationExecution(
+	ctx context.Context,
+	request *workflowservice.RequestCancelNexusOperationExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RequestCancelNexusOperationExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.RequestCancelNexusOperationExecution(ctx, request, opts...)
 }
 
 func (c *clientImpl) RequestCancelWorkflowExecution(
@@ -909,6 +969,16 @@ func (c *clientImpl) StartBatchOperation(
 	return c.client.StartBatchOperation(ctx, request, opts...)
 }
 
+func (c *clientImpl) StartNexusOperationExecution(
+	ctx context.Context,
+	request *workflowservice.StartNexusOperationExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.StartNexusOperationExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.StartNexusOperationExecution(ctx, request, opts...)
+}
+
 func (c *clientImpl) StartWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.StartWorkflowExecutionRequest,
@@ -937,6 +1007,16 @@ func (c *clientImpl) TerminateActivityExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.TerminateActivityExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) TerminateNexusOperationExecution(
+	ctx context.Context,
+	request *workflowservice.TerminateNexusOperationExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.TerminateNexusOperationExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.TerminateNexusOperationExecution(ctx, request, opts...)
 }
 
 func (c *clientImpl) TerminateWorkflowExecution(

@@ -12,6 +12,10 @@ type (
 	// is no guarantee about when these are called.
 	StateChangeCallbackFn func(ns *Namespace, deletedFromDb bool)
 
+	// NamespaceStateChangedFn determines whether a namespace state change is significant enough
+	// to trigger callbacks. It can be overridden to add custom change detection logic.
+	NamespaceStateChangedFn func(currentClusterName string, oldNs *Namespace, newNs *Namespace) bool
+
 	// Registry provides access to Namespace objects by name or by ID.
 	Registry interface {
 		pingable.Pingable

@@ -108,6 +108,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			metricsHandler,
 			logger,
 			namespace.NewDefaultReplicationResolverFactory(),
+			nsregistry.DefaultNamespaceStateChanged,
 		)
 		out.handler = newWorkflowTaskCompletedHandler(
 			t.Name(), // identity

@@ -177,7 +177,6 @@ func NewAdminHandler(
 		args.MembershipMonitor,
 		args.Config.HistoryHostErrorPercentage,
 		args.Config.HistoryHostSelfErrorProportion,
-		args.Config.HistoryHostFailureTimeThreshold,
 		func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error) {
 			return args.HistoryClient.DeepHealthCheck(ctx, &historyservice.DeepHealthCheckRequest{HostAddress: hostAddress})
 		},
@@ -260,7 +259,7 @@ func (adh *AdminHandler) DeepHealthCheck(
 ) (_ *adminservice.DeepHealthCheckResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	result, err := adh.historyHealthChecker.Check(ctx, time.Now())
+	result, err := adh.historyHealthChecker.Check(ctx)
 	if err != nil {
 		return nil, err
 	}
