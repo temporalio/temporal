@@ -144,9 +144,9 @@ func serializeTimerTask(
 
 func timeSkippingTimerTaskToProto(task *tasks.TimeSkippingTimerTask) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
-		NamespaceId:    task.WorkflowKey.NamespaceID,
-		WorkflowId:     task.WorkflowKey.WorkflowID,
-		RunId:          task.WorkflowKey.RunID,
+		NamespaceId:    task.NamespaceID,
+		WorkflowId:     task.WorkflowID,
+		RunId:          task.RunID,
 		TaskId:         task.TaskID,
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
 		TaskType:       enumsspb.TASK_TYPE_TIMESKIPPING_TIMER,

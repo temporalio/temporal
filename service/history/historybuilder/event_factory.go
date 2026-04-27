@@ -85,7 +85,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		InheritedAutoUpgradeInfo:     request.InheritedAutoUpgradeInfo,
 		DeclinedTargetVersionUpgrade: request.DeclinedTargetVersionUpgrade,
 	}
-	if req.TimeSkippingConfig != nil {
+	if req.GetTimeSkippingConfig() != nil {
 		attributes.TimeSkippingConfig = req.TimeSkippingConfig
 	}
 	if request.GetInitialSkippedDuration() != nil {

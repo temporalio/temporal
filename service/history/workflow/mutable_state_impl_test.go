@@ -6740,7 +6740,7 @@ func (s *mutableStateSuite) TestApplyToTimeSkippingInfo() {
 	s.Run("InitNoBoundNoInitialSkipped", func() {
 		cfg := &workflowpb.TimeSkippingConfig{Enabled: true}
 
-		s.mutableState.applyToTimeSkippingInfo(cfg, nil)
+		s.mutableState.initTimeSkippingInfo(cfg, nil, common.FirstEventID)
 
 		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.Require().NotNil(tsi)
@@ -6760,7 +6760,7 @@ func (s *mutableStateSuite) TestApplyToTimeSkippingInfo() {
 		}
 
 		before := s.mutableState.Now()
-		s.mutableState.applyToTimeSkippingInfo(cfg, nil)
+		s.mutableState.initTimeSkippingInfo(cfg, nil, common.FirstEventID)
 		after := s.mutableState.Now()
 
 		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
@@ -6790,7 +6790,7 @@ func (s *mutableStateSuite) TestApplyToTimeSkippingInfo() {
 			},
 		}
 
-		s.mutableState.applyToTimeSkippingInfo(cfg, nil)
+		s.mutableState.initTimeSkippingInfo(cfg, nil, common.FirstEventID)
 
 		s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo().GetBoundTargetTime())
 	})
@@ -6798,22 +6798,23 @@ func (s *mutableStateSuite) TestApplyToTimeSkippingInfo() {
 	s.Run("InitWithPositiveInitialSkippedSeedsAccum", func() {
 		cfg := &workflowpb.TimeSkippingConfig{Enabled: true}
 
-		s.mutableState.applyToTimeSkippingInfo(cfg, durationpb.New(2*time.Hour))
+		s.mutableState.initTimeSkippingInfo(cfg, durationpb.New(2*time.Hour), common.FirstEventID)
 
 		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.Require().NotNil(tsi.GetAccumulatedSkippedDuration())
 		s.Equal(2*time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration())
 	})
 
-	s.Run("InitWithZeroInitialSkippedLeavesAccumNil", func() {
+	s.Run("InitWithZeroInitialSkippedLeavesAccumZero", func() {
 		cfg := &workflowpb.TimeSkippingConfig{Enabled: true}
 
-		s.mutableState.applyToTimeSkippingInfo(cfg, durationpb.New(0))
+		s.mutableState.initTimeSkippingInfo(cfg, durationpb.New(0), common.FirstEventID)
 
-		s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration())
+		// Zero seed produces zero accumulated, not nil.
+		s.Equal(time.Duration(0), s.mutableState.executionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration())
 	})
 
-	s.Run("UpdateReplacesConfigAndPreservesAccumWhenInitialSkippedNil", func() {
+	s.Run("UpdateReplacesConfigAndPreservesAccum", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
 			AccumulatedSkippedDuration: durationpb.New(3 * time.Hour),
@@ -6825,7 +6826,7 @@ func (s *mutableStateSuite) TestApplyToTimeSkippingInfo() {
 				MaxElapsedDuration: durationpb.New(30 * time.Minute),
 			},
 		}
-		s.mutableState.applyToTimeSkippingInfo(newCfg, nil)
+		s.mutableState.updateTimeSkippingInfo(newCfg, common.FirstEventID)
 
 		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.True(proto.Equal(newCfg, tsi.GetConfig()))
@@ -6833,15 +6834,18 @@ func (s *mutableStateSuite) TestApplyToTimeSkippingInfo() {
 		s.NotNil(tsi.GetBoundTargetTime())
 	})
 
-	s.Run("UpdateWithPositiveInitialSkippedOverwritesAccum", func() {
+	s.Run("UpdateClearsBoundTargetWhenNewConfigHasNoBound", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
-			AccumulatedSkippedDuration: durationpb.New(3 * time.Hour),
+			Config:             &workflowpb.TimeSkippingConfig{Enabled: true},
+			BoundTargetTime:    timestamppb.New(time.Now().Add(time.Hour)),
+			BoundSourceEventId: 7,
 		}
 
-		s.mutableState.applyToTimeSkippingInfo(&workflowpb.TimeSkippingConfig{Enabled: true}, durationpb.New(5*time.Hour))
+		s.mutableState.updateTimeSkippingInfo(&workflowpb.TimeSkippingConfig{Enabled: true}, common.FirstEventID)
 
-		s.Equal(5*time.Hour, s.mutableState.executionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration())
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Nil(tsi.GetBoundTargetTime())
+		s.Equal(int64(0), tsi.GetBoundSourceEventId())
 	})
 }
 
@@ -6857,7 +6861,7 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingDecision() {
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1", ExpiryTime: timestamppb.New(later)}
 		s.mutableState.pendingTimerInfoIDs["t2"] = &persistencespb.TimerInfo{TimerId: "t2", ExpiryTime: timestamppb.New(earlier)}
 
-		decision, err := s.mutableState.calculateTimeSkippingDecision()
+		decision, err := s.mutableState.calculateTimeSkippingTransition()
 		s.NoError(err)
 		s.True(decision.isValid())
 		s.False(decision.disabledAfterBound)
@@ -6869,7 +6873,7 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingDecision() {
 			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
 		}
 
-		decision, err := s.mutableState.calculateTimeSkippingDecision()
+		decision, err := s.mutableState.calculateTimeSkippingTransition()
 		s.NoError(err)
 		s.False(decision.isValid())
 	})
@@ -6883,7 +6887,7 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingDecision() {
 			// BoundTargetTime intentionally nil.
 		}
 
-		_, err := s.mutableState.calculateTimeSkippingDecision()
+		_, err := s.mutableState.calculateTimeSkippingTransition()
 		s.Error(err)
 	})
 
@@ -6900,7 +6904,7 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingDecision() {
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1", ExpiryTime: timestamppb.New(timerExpiry)}
 
-		decision, err := s.mutableState.calculateTimeSkippingDecision()
+		decision, err := s.mutableState.calculateTimeSkippingTransition()
 		s.NoError(err)
 		s.True(decision.isValid())
 		s.True(decision.disabledAfterBound)
@@ -6920,7 +6924,7 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingDecision() {
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1", ExpiryTime: timestamppb.New(timerExpiry)}
 
-		decision, err := s.mutableState.calculateTimeSkippingDecision()
+		decision, err := s.mutableState.calculateTimeSkippingTransition()
 		s.NoError(err)
 		s.True(decision.isValid())
 		s.False(decision.disabledAfterBound)
@@ -6937,7 +6941,7 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingDecision() {
 		}
 
 		before := s.mutableState.Now()
-		decision, err := s.mutableState.calculateTimeSkippingDecision()
+		decision, err := s.mutableState.calculateTimeSkippingTransition()
 		after := s.mutableState.Now()
 		s.NoError(err)
 		s.True(decision.isValid())
@@ -6956,7 +6960,7 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingDecision() {
 			AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
 		}
 
-		_, err := s.mutableState.calculateTimeSkippingDecision()
+		_, err := s.mutableState.calculateTimeSkippingTransition()
 		s.Error(err)
 	})
 }

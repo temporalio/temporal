@@ -337,10 +337,7 @@ message TimeSkippingInfo {
   // Used as the task event ID for the time skipping timer task so reset / replication-conflict
   // resolution can detect obsolete bound tasks via the standard staleness check.
   int64 bound_source_event_id = 4;
-
 }
-
-
 
 // Internal wrapper message to distinguish "never notified" (nil wrapper) from
 // "notified about an unversioned target" (non-nil wrapper with nil deployment_version).

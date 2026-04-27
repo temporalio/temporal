@@ -28,7 +28,6 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -1093,19 +1092,16 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 
 	// (3) elapsed-duration bound timer — regenerate when configured so its real-time
 	// VisibilityTimestamp tracks the new accumulated skip.
-	tsi := r.mutableState.GetExecutionInfo().TimeSkippingInfo
-	boundTargetTime := tsi.GetBoundTargetTime()
-	if !timeNotSet(boundTargetTime) {
-		r.mutableState.AddTasks(&tasks.TimeSkippingTimerTask{
-			// TaskID is set by shard
-			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			VisibilityTimestamp: boundTargetTime.AsTime(),
-			EventID:             tsi.GetBoundSourceEventId(),
-		})
+	tsi := r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	if tsi.GetConfig().GetEnabled() {
+		if !timeNotSet(tsi.GetBoundTargetTime()) {
+			r.mutableState.AddTasks(&tasks.TimeSkippingTimerTask{
+				// TaskID is set by shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: tsi.GetBoundTargetTime().AsTime(),
+				EventID:             tsi.GetBoundSourceEventId(),
+			})
+		}
 	}
 	return nil
-}
-
-func timeNotSet(ts *timestamppb.Timestamp) bool {
-	return ts == nil || ts.AsTime().IsZero()
 }
