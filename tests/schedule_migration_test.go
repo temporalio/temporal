@@ -1193,6 +1193,9 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 	}
 	env.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
 
+	// Disable CHASM to create V1 schedule.
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, false)
+
 	// Create a V1 schedule with an immediate trigger.
 	sched := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
