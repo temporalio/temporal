@@ -6692,18 +6692,41 @@ func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
 		s.False(s.mutableState.shouldExecuteTimeSkipping())
 	})
 
-	s.Run("FalseWhenNoPendingTimers", func() {
+	s.Run("FalseWhenNoPendingTimersAndNoBound", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
 		}
-		// No pending timers — nothing to skip to.
-		// TODO@time-skipping: bound support will add another path to return true here.
 		s.False(s.mutableState.shouldExecuteTimeSkipping())
 	})
 
-	s.Run("TrueWhenPendingTimerAndNoPendingWork", func() {
+	s.Run("TrueWhenPendingTimerAndNoBound", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		s.True(s.mutableState.shouldExecuteTimeSkipping())
+	})
+
+	s.Run("TrueWhenBoundAndNoPendingTimer", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{
+				Enabled: true,
+				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
+					MaxSkippedDuration: durationpb.New(time.Hour),
+				},
+			},
+		}
+		s.True(s.mutableState.shouldExecuteTimeSkipping())
+	})
+
+	s.Run("TrueWhenBoundAndPendingTimer", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{
+				Enabled: true,
+				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
+					MaxSkippedDuration: durationpb.New(time.Hour),
+				},
+			},
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		s.True(s.mutableState.shouldExecuteTimeSkipping())

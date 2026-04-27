@@ -4011,7 +4011,8 @@ func (ms *MutableStateImpl) shouldExecuteTimeSkipping() bool {
 	if tsi == nil {
 		return false
 	}
-	if tsi.GetConfig() == nil || !tsi.GetConfig().Enabled {
+	config := tsi.GetConfig()
+	if config == nil || !config.Enabled {
 		return false
 	}
 
@@ -4037,10 +4038,12 @@ func (ms *MutableStateImpl) shouldExecuteTimeSkipping() bool {
 		return false
 	}
 
-	// time point check
+	// time point check, we should check this at last, because
+	// we only need to consider which time point to skip to when all previous checks are passed.
 	// TODO@time-skipping: need to support start-with-delay
-	// TODO@time-skipping: when bound is introduced, we need to check if the bound is reached
-	if len(ms.GetPendingTimerInfos()) == 0 {
+	hasBound := config.GetBound() != nil
+	hasUserTimer := len(ms.GetPendingTimerInfos()) > 0
+	if !hasBound && !hasUserTimer {
 		noSkippingReason = "no related time point to skip to"
 		return false
 	}
@@ -7318,6 +7321,7 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
+	// todo@time-skipping: seems to have a bug here in the sequence of time skipping close trx handling in this function
 	regenTimerTasksForTimeSkipping := ms.closeTransactionHandleTimeSkipping(ctx, transactionPolicy)
 
 	// Save if the state is dirty before closeTransactionPrepareEvents since it flushes the buffer
@@ -8560,6 +8564,7 @@ func (ms *MutableStateImpl) closeTransactionRegenerateTimerTasksForTimeSkipping(
 ) error {
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
+		// todo@time-skipping: impacts of paused workflow to be considered
 		if !ms.IsWorkflowExecutionRunning() {
 			return nil
 		}

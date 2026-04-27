@@ -324,9 +324,15 @@ message TimeSkippingInfo {
   // Current time-skipping configuration for the workflow.
   temporal.api.workflow.v1.TimeSkippingConfig config = 1;
 
+  // Current bound target time for the workflow, changes with the config.
+  google.protobuf.Timestamp bound_target_time = 3;
+
   // Runtime history of time skipping for the workflow.
   google.protobuf.Duration accumulated_skipped_duration = 2;
+
 }
+
+
 
 // Internal wrapper message to distinguish "never notified" (nil wrapper) from
 // "notified about an unversioned target" (non-nil wrapper with nil deployment_version).
