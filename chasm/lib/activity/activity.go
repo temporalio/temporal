@@ -644,6 +644,12 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		}
 	}
 
+	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityPausedScope)
+	if err != nil {
+		return nil, err
+	}
+	a.emitOnUpdateOptionsMetrics(metricsHandler)
+
 	return &activitypb.UpdateActivityExecutionOptionsResponse{
 		FrontendResponse: &workflowservice.UpdateActivityExecutionOptionsResponse{
 			ActivityOptions: &apiactivitypb.ActivityOptions{
@@ -1568,22 +1574,25 @@ func (a *Activity) emitOnTimedOutMetrics(
 func (a *Activity) emitOnPausedMetrics(
 	handler metrics.Handler,
 ) {
-	metrics.ActivityPauseRequests.With(handler).Record(1)
-	metrics.ActivityPause.With(handler).Record(1)
+	metrics.ActivityPause.With(handler.WithTags(metrics.WorkflowTypeTag(WorkflowTypeTag))).Record(1)
+}
+
+func (a *Activity) emitOnUpdateOptionsMetrics(
+	handler metrics.Handler,
+) {
+	metrics.ActivityUpdateOptions.With(handler.WithTags(metrics.WorkflowTypeTag(WorkflowTypeTag))).Record(1)
 }
 
 func (a *Activity) emitOnUnpausedMetrics(
 	handler metrics.Handler,
 ) {
-	metrics.ActivityUnpauseRequests.With(handler).Record(1)
-	metrics.ActivityUnpause.With(handler).Record(1)
+	metrics.ActivityUnpause.With(handler.WithTags(metrics.WorkflowTypeTag(WorkflowTypeTag))).Record(1)
 }
 
 func (a *Activity) emitOnResetMetrics(
 	handler metrics.Handler,
 ) {
-	metrics.ActivityResetRequests.With(handler).Record(1)
-	metrics.ActivityReset.With(handler).Record(1)
+	metrics.ActivityReset.With(handler.WithTags(metrics.WorkflowTypeTag(WorkflowTypeTag))).Record(1)
 }
 
 // SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface.
