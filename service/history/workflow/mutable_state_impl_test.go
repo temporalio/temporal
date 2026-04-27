@@ -6768,6 +6768,18 @@ func (s *mutableStateSuite) TestApplyToTimeSkippingInfo() {
 		got := tsi.GetBoundTargetTime().AsTime()
 		s.False(got.Before(before.Add(maxElapsed)), "BoundTargetTime %s should not predate before+maxElapsed %s", got, before.Add(maxElapsed))
 		s.False(got.After(after.Add(maxElapsed)), "BoundTargetTime %s should not exceed after+maxElapsed %s", got, after.Add(maxElapsed))
+
+		// A TimeSkippingTimerTask is enqueued at the bound deadline so the bound
+		// fires even when the workflow is otherwise dormant.
+		var bound *tasks.TimeSkippingTimerTask
+		for _, task := range s.mutableState.InsertTasks[tasks.CategoryTimer] {
+			if t, ok := task.(*tasks.TimeSkippingTimerTask); ok {
+				s.Nil(bound, "TimeSkippingTimerTask emitted more than once")
+				bound = t
+			}
+		}
+		s.Require().NotNil(bound, "TimeSkippingTimerTask should be enqueued for MaxElapsedDuration bound")
+		s.True(bound.VisibilityTimestamp.Equal(got), "task fire time should match BoundTargetTime")
 	})
 
 	s.Run("InitWithMaxSkippedBoundLeavesBoundTargetTimeNil", func() {

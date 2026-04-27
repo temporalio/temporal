@@ -123,6 +123,8 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		err = t.executeChasmPureTimerTask(ctx, task)
 	case *tasks.ChasmTask:
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
+	case *tasks.TimeSkippingTimerTask:
+		err = t.executeTimeSkippingTimerTask(ctx, task)
 	default:
 		err = queueserrors.NewUnprocessableTaskError("unknown task type")
 	}
@@ -898,6 +900,45 @@ func (t *timerQueueActiveTaskExecutor) getTimerSequence(
 	mutableState historyi.MutableState,
 ) workflow.TimerSequence {
 	return workflow.NewTimerSequence(mutableState)
+}
+
+// executeTimeSkippingTimerTask wakes the workflow when an elapsed-duration time-skipping
+// bound is reached. The actual disable-transition is emitted by closeTransactionHandleTimeSkipping
+// when the workflow is idle; this handler just commits a transaction so that path runs.
+func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
+	ctx context.Context,
+	task *tasks.TimeSkippingTimerTask,
+) (retError error) {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
+	if err != nil {
+		return err
+	}
+	if mutableState == nil {
+		release(nil)
+		return consts.ErrWorkflowExecutionNotFound
+	}
+
+	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil)
+		return consts.ErrWorkflowCompleted
+	}
+
+	// Drop the task if the elapsed-duration bound is no longer configured.
+	if mutableState.GetExecutionInfo().GetTimeSkippingInfo().GetBoundTargetTime() == nil {
+		release(nil)
+		return errNoTimerFired
+	}
+
+	return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
 }
 
 func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(

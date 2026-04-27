@@ -1090,6 +1090,19 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 			Version:             startVersion,
 		})
 	}
+
+	// (3) elapsed-duration bound timer — regenerate when configured so its real-time
+	// VisibilityTimestamp tracks the new accumulated skip.
+	tsi := r.mutableState.GetExecutionInfo().TimeSkippingInfo
+	boundTargetTime := tsi.GetBoundTargetTime()
+	if !timeNotSet(boundTargetTime) {
+		r.mutableState.AddTasks(&tasks.TimeSkippingTimerTask{
+			// TaskID is set by shard
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: boundTargetTime.AsTime(),
+			EventID:             tsi.GetBoundSourceEventId(),
+		})
+	}
 	return nil
 }
 

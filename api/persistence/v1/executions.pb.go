@@ -1183,8 +1183,13 @@ type TimeSkippingInfo struct {
 	BoundTargetTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=bound_target_time,json=boundTargetTime,proto3" json:"bound_target_time,omitempty"`
 	// Runtime history of time skipping for the workflow.
 	AccumulatedSkippedDuration *durationpb.Duration `protobuf:"bytes,2,opt,name=accumulated_skipped_duration,json=accumulatedSkippedDuration,proto3" json:"accumulated_skipped_duration,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	// Event ID of the WorkflowExecutionStartedEvent (= 1) or
+	// WorkflowExecutionOptionsUpdatedEvent that introduced the current time skipping configuration.
+	// Used as the task event ID for the time skipping timer task so reset / replication-conflict
+	// resolution can detect obsolete bound tasks via the standard staleness check.
+	BoundSourceEventId int64 `protobuf:"varint,4,opt,name=bound_source_event_id,json=boundSourceEventId,proto3" json:"bound_source_event_id,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *TimeSkippingInfo) Reset() {
@@ -1236,6 +1241,13 @@ func (x *TimeSkippingInfo) GetAccumulatedSkippedDuration() *durationpb.Duration 
 		return x.AccumulatedSkippedDuration
 	}
 	return nil
+}
+
+func (x *TimeSkippingInfo) GetBoundSourceEventId() int64 {
+	if x != nil {
+		return x.BoundSourceEventId
+	}
+	return 0
 }
 
 // Internal wrapper message to distinguish "never notified" (nil wrapper) from
@@ -4968,11 +4980,12 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"&ChildrenInitializedPostResetPointEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12H\n" +
 	"\x05value\x18\x02 \x01(\v22.temporal.server.api.persistence.v1.ResetChildInfoR\x05value:\x028\x01B\x1c\n" +
-	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\xfd\x01\n" +
+	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\xb0\x02\n" +
 	"\x10TimeSkippingInfo\x12D\n" +
 	"\x06config\x18\x01 \x01(\v2,.temporal.api.workflow.v1.TimeSkippingConfigR\x06config\x12F\n" +
 	"\x11bound_target_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x0fboundTargetTime\x12[\n" +
-	"\x1caccumulated_skipped_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x1aaccumulatedSkippedDuration\"\xa8\x01\n" +
+	"\x1caccumulated_skipped_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x1aaccumulatedSkippedDuration\x121\n" +
+	"\x15bound_source_event_id\x18\x04 \x01(\x03R\x12boundSourceEventId\"\xa8\x01\n" +
 	"\x19LastNotifiedTargetVersion\x12b\n" +
 	"\x12deployment_version\x18\x01 \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x11deploymentVersion\x12'\n" +
 	"\x0frevision_number\x18\x02 \x01(\x03R\x0erevisionNumber\"\x9d\x01\n" +

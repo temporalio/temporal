@@ -331,6 +331,13 @@ message TimeSkippingInfo {
 
   // Runtime history of time skipping for the workflow.
   google.protobuf.Duration accumulated_skipped_duration = 2;
+
+  // Event ID of the WorkflowExecutionStartedEvent (= 1) or
+  // WorkflowExecutionOptionsUpdatedEvent that introduced the current time skipping configuration.
+  // Used as the task event ID for the time skipping timer task so reset / replication-conflict
+  // resolution can detect obsolete bound tasks via the standard staleness check.
+  int64 bound_source_event_id = 4;
+
 }
 
 

@@ -2817,7 +2817,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	}
 
 	if tsc := startRequest.GetStartRequest().GetTimeSkippingConfig(); tsc != nil {
-		ms.applyToTimeSkippingInfo(tsc, startRequest.GetInitialSkippedDuration())
+		ms.applyToTimeSkippingInfo(tsc, startRequest.GetInitialSkippedDuration(), event.GetEventId())
 	}
 	return event, nil
 }
@@ -3051,7 +3051,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.Priority = event.Priority
 
 	if tsc := event.GetTimeSkippingConfig(); tsc != nil {
-		ms.applyToTimeSkippingInfo(tsc, event.GetInitialSkippedDuration())
+		ms.applyToTimeSkippingInfo(tsc, event.GetInitialSkippedDuration(), startEvent.EventId)
 	}
 
 	ms.approximateSize += ms.executionInfo.Size()
@@ -4029,6 +4029,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	// ms state changes
 	ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(accumulatedSkippedDuration)
 	ms.executionInfo.TimeSkippingInfo.Config.Enabled = !attr.GetDisabledAfterBound()
+	if attr.GetDisabledAfterBound() {
+		ms.executionInfo.TimeSkippingInfo.BoundTargetTime = nil
+	}
 	ms.timeSkippingInfoUpdated = true
 
 	return nil
@@ -5593,7 +5596,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 	if tsc := attributes.GetTimeSkippingConfig(); tsc != nil {
 		// WorkflowExecutionOptionsUpdated does not carry an initial skipped duration;
 		// inherited seeding only applies on first TSI init at workflow start.
-		ms.applyToTimeSkippingInfo(tsc, nil)
+		ms.applyToTimeSkippingInfo(tsc, nil, event.GetEventId())
 	}
 
 	// Finally, reschedule the pending workflow task if so requested.
@@ -9527,10 +9530,15 @@ func (ms *MutableStateImpl) wrapTimeSourceWithTimeSkipping() {
 
 // applyToTimeSkippingInfo is a wrapping method for both init and update
 // so that callers don't need to check if the time skipping has been initialized or not.
+// boundSourceEventID is the event ID of the WorkflowExecutionStartedEvent or
+// WorkflowExecutionOptionsUpdatedEvent that carries this config; it is stamped onto
+// the bound timer task so reset / replication-conflict resolution can detect obsolete
+// bound tasks via the standard staleness check.
 // todo@time-skipping: change this to init and update
 func (ms *MutableStateImpl) applyToTimeSkippingInfo(
 	config *workflowpb.TimeSkippingConfig,
 	initialSkippedDuration *durationpb.Duration,
+	boundSourceEventID int64,
 ) {
 	// config
 	if ms.executionInfo.GetTimeSkippingInfo() == nil {
@@ -9547,7 +9555,17 @@ func (ms *MutableStateImpl) applyToTimeSkippingInfo(
 		if maxElapsed, ok := bound.(*workflowpb.TimeSkippingConfig_MaxElapsedDuration); ok && maxElapsed.MaxElapsedDuration != nil {
 			targetTime := ms.Now().Add(maxElapsed.MaxElapsedDuration.AsDuration())
 			ms.executionInfo.TimeSkippingInfo.BoundTargetTime = timestamppb.New(targetTime)
+			ms.executionInfo.TimeSkippingInfo.BoundSourceEventId = boundSourceEventID
+			ms.AddTasks(&tasks.TimeSkippingTimerTask{
+				WorkflowKey:         ms.GetWorkflowKey(),
+				VisibilityTimestamp: targetTime,
+				EventID:             boundSourceEventID,
+			})
 		}
+	} else {
+		// clean any possible stale bound target time
+		ms.executionInfo.TimeSkippingInfo.BoundTargetTime = nil
+		ms.executionInfo.TimeSkippingInfo.BoundSourceEventId = 0
 	}
 
 	// accumulated skipped duration
