@@ -1,0 +1,16 @@
+name: govulncheck
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: temporalio/public-actions/golang/govulncheck@main
