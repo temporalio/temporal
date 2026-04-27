@@ -10,7 +10,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	activitypb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
