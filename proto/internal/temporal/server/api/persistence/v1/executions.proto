@@ -324,12 +324,13 @@ message TimeSkippingInfo {
   // Current time-skipping configuration for the workflow.
   temporal.api.workflow.v1.TimeSkippingConfig config = 1;
 
-  // Current bound target time for the workflow, changes with the config.
+  // If elapsed duration is used for the bound, this bound_target_time will be set,
+  // and if skipped duration is used, this target time will not be generated.
+  // Virtual time is used for the target time.
   google.protobuf.Timestamp bound_target_time = 3;
 
   // Runtime history of time skipping for the workflow.
   google.protobuf.Duration accumulated_skipped_duration = 2;
-
 }
 
 

@@ -6733,6 +6733,106 @@ func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
 	})
 }
 
+func (s *mutableStateSuite) TestApplyToTimeSkippingInfo() {
+	// Each s.Run() gets a fresh mutable state via SetupSubTest().
+	// Default state has TimeSkippingInfo == nil.
+
+	s.Run("InitNoBoundNoInitialSkipped", func() {
+		cfg := &workflowpb.TimeSkippingConfig{Enabled: true}
+
+		s.mutableState.applyToTimeSkippingInfo(cfg, nil)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi)
+		s.True(proto.Equal(cfg, tsi.GetConfig()))
+		s.Nil(tsi.GetBoundTargetTime())
+		s.Nil(tsi.GetAccumulatedSkippedDuration())
+		s.True(s.mutableState.timeSkippingInfoUpdated)
+	})
+
+	s.Run("InitWithMaxElapsedBoundSetsBoundTargetTime", func() {
+		maxElapsed := time.Hour
+		cfg := &workflowpb.TimeSkippingConfig{
+			Enabled: true,
+			Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
+				MaxElapsedDuration: durationpb.New(maxElapsed),
+			},
+		}
+
+		before := s.mutableState.Now()
+		s.mutableState.applyToTimeSkippingInfo(cfg, nil)
+		after := s.mutableState.Now()
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi.GetBoundTargetTime())
+		got := tsi.GetBoundTargetTime().AsTime()
+		s.False(got.Before(before.Add(maxElapsed)), "BoundTargetTime %s should not predate before+maxElapsed %s", got, before.Add(maxElapsed))
+		s.False(got.After(after.Add(maxElapsed)), "BoundTargetTime %s should not exceed after+maxElapsed %s", got, after.Add(maxElapsed))
+	})
+
+	s.Run("InitWithMaxSkippedBoundLeavesBoundTargetTimeNil", func() {
+		cfg := &workflowpb.TimeSkippingConfig{
+			Enabled: true,
+			Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
+				MaxSkippedDuration: durationpb.New(time.Hour),
+			},
+		}
+
+		s.mutableState.applyToTimeSkippingInfo(cfg, nil)
+
+		s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo().GetBoundTargetTime())
+	})
+
+	s.Run("InitWithPositiveInitialSkippedSeedsAccum", func() {
+		cfg := &workflowpb.TimeSkippingConfig{Enabled: true}
+
+		s.mutableState.applyToTimeSkippingInfo(cfg, durationpb.New(2*time.Hour))
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi.GetAccumulatedSkippedDuration())
+		s.Equal(2*time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration())
+	})
+
+	s.Run("InitWithZeroInitialSkippedLeavesAccumNil", func() {
+		cfg := &workflowpb.TimeSkippingConfig{Enabled: true}
+
+		s.mutableState.applyToTimeSkippingInfo(cfg, durationpb.New(0))
+
+		s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration())
+	})
+
+	s.Run("UpdateReplacesConfigAndPreservesAccumWhenInitialSkippedNil", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
+			AccumulatedSkippedDuration: durationpb.New(3 * time.Hour),
+		}
+
+		newCfg := &workflowpb.TimeSkippingConfig{
+			Enabled: true,
+			Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
+				MaxElapsedDuration: durationpb.New(30 * time.Minute),
+			},
+		}
+		s.mutableState.applyToTimeSkippingInfo(newCfg, nil)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.True(proto.Equal(newCfg, tsi.GetConfig()))
+		s.Equal(3*time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration())
+		s.NotNil(tsi.GetBoundTargetTime())
+	})
+
+	s.Run("UpdateWithPositiveInitialSkippedOverwritesAccum", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
+			AccumulatedSkippedDuration: durationpb.New(3 * time.Hour),
+		}
+
+		s.mutableState.applyToTimeSkippingInfo(&workflowpb.TimeSkippingConfig{Enabled: true}, durationpb.New(5*time.Hour))
+
+		s.Equal(5*time.Hour, s.mutableState.executionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration())
+	})
+}
+
 func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEvent() {
 	// Use fixed UTC times so duration arithmetic is exact.
 	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)

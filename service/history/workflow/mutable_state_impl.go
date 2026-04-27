@@ -2817,7 +2817,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	}
 
 	if tsc := startRequest.GetStartRequest().GetTimeSkippingConfig(); tsc != nil {
-		ms.applyTimeSkippingConfig(tsc, startRequest.GetInitialSkippedDuration())
+		ms.applyToTimeSkippingInfo(tsc, startRequest.GetInitialSkippedDuration())
 	}
 	return event, nil
 }
@@ -3051,7 +3051,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.Priority = event.Priority
 
 	if tsc := event.GetTimeSkippingConfig(); tsc != nil {
-		ms.applyTimeSkippingConfig(tsc, event.GetInitialSkippedDuration())
+		ms.applyToTimeSkippingInfo(tsc, event.GetInitialSkippedDuration())
 	}
 
 	ms.approximateSize += ms.executionInfo.Size()
@@ -4062,6 +4062,15 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(ct
 	// The event shall at least has one of skipped duration or disabled after bound flag.
 	// TODO@time-skipping: both calculation of disabledAfterBound and nextTimePointToSkip will be changed when bound is introduced
 	disabledAfterBound := false
+	config := ms.GetExecutionInfo().GetTimeSkippingInfo().GetConfig()
+	if config == nil {
+		return nil, serviceerror.NewInternal("time skipping config is not set when time-skipping transitioned event is added")
+	}
+	bound := config.GetBound()
+	if bound == nil {
+		return nil, serviceerror.NewInternal("time skipping bound is not set when time-skipping transitioned event is added")
+	}
+
 	var nextTimePointToSkip *persistencespb.TimerInfo
 	for _, timerInfo := range ms.GetPendingTimerInfos() {
 		if nextTimePointToSkip == nil || timerInfo.ExpiryTime.AsTime().Before(nextTimePointToSkip.ExpiryTime.AsTime()) {
@@ -5676,7 +5685,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 	if tsc := attributes.GetTimeSkippingConfig(); tsc != nil {
 		// WorkflowExecutionOptionsUpdated does not carry an initial skipped duration;
 		// inherited seeding only applies on first TSI init at workflow start.
-		ms.applyTimeSkippingConfig(tsc, nil)
+		ms.applyToTimeSkippingInfo(tsc, nil)
 	}
 
 	// Finally, reschedule the pending workflow task if so requested.
@@ -9608,31 +9617,35 @@ func (ms *MutableStateImpl) wrapTimeSourceWithTimeSkipping() {
 	ms.hBuilder.SetTimeSource(ms.timeSource)
 }
 
-// applyTimeSkippingConfig applies the time skipping config from the request or event to the mutable state.
-// initialSkippedDuration (from a parent workflow on child start, or the previous run on
-// continue-as-new) seeds the new MS's AccumulatedSkippedDuration so the virtual clock continues
-// from where the originator left off. It is only used on first TSI init; subsequent applies
-// (e.g., UpdateWorkflowExecutionOptions) pass nil.
-func (ms *MutableStateImpl) applyTimeSkippingConfig(
+// applyToTimeSkippingInfo is a wrapping method for both init and update
+// so that callers don't need to check if the time skipping has been initialized or not.
+func (ms *MutableStateImpl) applyToTimeSkippingInfo(
 	config *workflowpb.TimeSkippingConfig,
 	initialSkippedDuration *durationpb.Duration,
 ) {
-	var inheritedAccum *durationpb.Duration
-	if initialSkippedDuration != nil && initialSkippedDuration.AsDuration() > 0 {
-		inheritedAccum = durationpb.New(initialSkippedDuration.AsDuration())
-	}
+	// config
 	if ms.executionInfo.GetTimeSkippingInfo() == nil {
 		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config:                     config,
-			AccumulatedSkippedDuration: inheritedAccum,
+			Config: config,
 		}
 		ms.wrapTimeSourceWithTimeSkipping() // time source should be wrapped when time skipping info is initialized
 	} else {
 		ms.executionInfo.TimeSkippingInfo.Config = config
-		// AccumulatedSkippedDuration is not overwritten here — inherited seeding only
-		// applies on first TSI init; subsequent applies (e.g., UpdateWorkflowExecutionOptions)
-		// carry only a user-provided Config.
 	}
+
+	// elasped-duration-based bound
+	if bound := config.GetBound(); bound != nil {
+		if maxElapsed, ok := bound.(*workflowpb.TimeSkippingConfig_MaxElapsedDuration); ok && maxElapsed.MaxElapsedDuration != nil {
+			targetTime := ms.Now().Add(maxElapsed.MaxElapsedDuration.AsDuration())
+			ms.executionInfo.TimeSkippingInfo.BoundTargetTime = timestamppb.New(targetTime)
+		}
+	}
+
+	// accumulated skipped duration
+	if initialSkippedDuration != nil && initialSkippedDuration.AsDuration() > 0 {
+		ms.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(initialSkippedDuration.AsDuration())
+	}
+
 	ms.timeSkippingInfoUpdated = true
 }
 
