@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/iancoleman/strcase"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
+	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/driver"
 	"go.temporal.io/server/common/resolver"
@@ -26,6 +29,20 @@ const (
 	sslCA   = "sslrootcert"
 	sslKey  = "sslkey"
 	sslCert = "sslcert"
+
+	krbSrvName = "krbsrvname"
+	krbSPN     = "krbspn"
+)
+
+// gssProviderOnce guards one-time registration of the GSSAPI
+// provider with pgx. pgx stores the provider in a package-level var,
+// so re-registering would leak configuration across SQL instances.
+// The first Kerberos-enabled connection wins; subsequent connections
+// with different Kerberos configs will return an error from
+// registerGSSProvider below.
+var (
+	gssProviderOnce sync.Once
+	gssProviderCfg  *auth.Kerberos
 )
 
 type Session struct {
@@ -57,6 +74,12 @@ func createConnection(
 ) (*sqlx.DB, error) {
 	var db *sqlx.DB
 	var err error
+
+	if cfg.Kerberos != nil && cfg.Kerberos.Enabled {
+		if err := registerGSSProvider(cfg.Kerberos); err != nil {
+			return nil, err
+		}
+	}
 
 	if cfg.PasswordCommand != nil {
 		db, err = d.CreateRefreshableConnection(func() (string, error) {
@@ -160,5 +183,56 @@ func buildDSNAttr(cfg *config.SQL) (url.Values, error) {
 		parameters.Set(sslMode, sslModeNoop)
 	}
 
+	if cfg.Kerberos != nil && cfg.Kerberos.Enabled {
+		if cfg.PasswordCommand != nil {
+			return nil, errors.New("failed to build postgresql DSN: kerberos and passwordCommand are mutually exclusive")
+		}
+		if cfg.Kerberos.ServiceName != "" {
+			if parameters.Get(krbSrvName) != "" && parameters.Get(krbSrvName) != cfg.Kerberos.ServiceName {
+				return nil, fmt.Errorf("failed to build postgresql DSN: kerberos serviceName %q conflicts with connectAttribute krbsrvname %q",
+					cfg.Kerberos.ServiceName, parameters.Get(krbSrvName))
+			}
+			parameters.Set(krbSrvName, cfg.Kerberos.ServiceName)
+		}
+		if cfg.Kerberos.SPN != "" {
+			if parameters.Get(krbSPN) != "" && parameters.Get(krbSPN) != cfg.Kerberos.SPN {
+				return nil, fmt.Errorf("failed to build postgresql DSN: kerberos SPN %q conflicts with connectAttribute krbspn %q",
+					cfg.Kerberos.SPN, parameters.Get(krbSPN))
+			}
+			parameters.Set(krbSPN, cfg.Kerberos.SPN)
+		}
+	}
+
 	return parameters, nil
+}
+
+// registerGSSProvider registers a pgx GSSAPI provider on first call.
+// Subsequent calls succeed only when presented with an identical
+// Kerberos configuration — pgx stores the provider in a package
+// global, so two SQL stores with divergent Kerberos settings cannot
+// both be honoured within one process.
+func registerGSSProvider(cfg *auth.Kerberos) error {
+	var registerErr error
+	gssProviderOnce.Do(func() {
+		gssProviderCfg = cfg
+		factory := kerberosGSSFactory(cfg)
+		pgconn.RegisterGSSProvider(func() (pgconn.GSS, error) {
+			return factory()
+		})
+	})
+	if gssProviderCfg != nil && !kerberosConfigEqual(gssProviderCfg, cfg) {
+		registerErr = errors.New("kerberos provider already registered with a different configuration; " +
+			"all SQL datastores in a single process must share the same kerberos settings")
+	}
+	return registerErr
+}
+
+func kerberosConfigEqual(a, b *auth.Kerberos) bool {
+	if a == b {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return *a == *b
 }

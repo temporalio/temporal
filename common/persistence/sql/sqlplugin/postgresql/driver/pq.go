@@ -43,6 +43,8 @@ func (p *PQDriver) IsDupDatabaseError(err error) bool {
 	return ok && pqErr.Code == dupDatabaseCode
 }
 
+func (p *PQDriver) SupportsGSSAPI() bool { return false }
+
 func (p *PQDriver) IsConnNeedsRefreshError(err error) bool {
 	pqErr, ok := err.(*pq.Error)
 	if !ok {

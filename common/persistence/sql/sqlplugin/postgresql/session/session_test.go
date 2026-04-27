@@ -236,3 +236,127 @@ type mockServiceResolver struct {
 func (m *mockServiceResolver) Resolve(addr string) []string {
 	return []string{m.addr}
 }
+
+func TestBuildDSNAttr_KerberosDisabled_NoKerberosParams(t *testing.T) {
+	cfg := &config.SQL{
+		Kerberos: &auth.Kerberos{
+			Enabled:     false,
+			ServiceName: "postgres",
+		},
+	}
+	result, err := buildDSNAttr(cfg)
+	require.NoError(t, err)
+	require.Empty(t, result.Get(krbSrvName), "krbsrvname should not be set when kerberos is disabled")
+	require.Empty(t, result.Get(krbSPN))
+}
+
+func TestBuildDSNAttr_KerberosEnabled_ServiceName(t *testing.T) {
+	cfg := &config.SQL{
+		Kerberos: &auth.Kerberos{
+			Enabled:     true,
+			ServiceName: "postgres",
+		},
+	}
+	result, err := buildDSNAttr(cfg)
+	require.NoError(t, err)
+	require.Equal(t, "postgres", result.Get(krbSrvName))
+	require.Empty(t, result.Get(krbSPN), "krbspn not set when SPN is empty")
+}
+
+func TestBuildDSNAttr_KerberosEnabled_SPNOverride(t *testing.T) {
+	cfg := &config.SQL{
+		Kerberos: &auth.Kerberos{
+			Enabled:     true,
+			ServiceName: "postgres",
+			SPN:         "postgres/db.example.com@CORP.EXAMPLE.COM",
+		},
+	}
+	result, err := buildDSNAttr(cfg)
+	require.NoError(t, err)
+	require.Equal(t, "postgres", result.Get(krbSrvName))
+	require.Equal(t, "postgres/db.example.com@CORP.EXAMPLE.COM", result.Get(krbSPN))
+}
+
+func TestBuildDSNAttr_KerberosWithTLS_BothEmitted(t *testing.T) {
+	cfg := &config.SQL{
+		TLS: &auth.TLS{
+			Enabled:                true,
+			EnableHostVerification: true,
+		},
+		Kerberos: &auth.Kerberos{
+			Enabled:     true,
+			ServiceName: "postgres",
+		},
+	}
+	result, err := buildDSNAttr(cfg)
+	require.NoError(t, err)
+	require.Equal(t, "verify-full", result.Get(sslMode), "TLS parameters still emitted alongside Kerberos")
+	require.Equal(t, "postgres", result.Get(krbSrvName))
+}
+
+func TestBuildDSNAttr_KerberosAndPasswordCommand_ReturnsError(t *testing.T) {
+	cfg := &config.SQL{
+		PasswordCommand: &config.PasswordCommandConfig{Command: "/usr/bin/echo"},
+		Kerberos: &auth.Kerberos{
+			Enabled:     true,
+			ServiceName: "postgres",
+		},
+	}
+	_, err := buildDSNAttr(cfg)
+	require.ErrorContains(t, err, "kerberos and passwordCommand are mutually exclusive")
+}
+
+func TestBuildDSNAttr_KerberosConflictingServiceName_ReturnsError(t *testing.T) {
+	cfg := &config.SQL{
+		ConnectAttributes: map[string]string{
+			krbSrvName: "different",
+		},
+		Kerberos: &auth.Kerberos{
+			Enabled:     true,
+			ServiceName: "postgres",
+		},
+	}
+	_, err := buildDSNAttr(cfg)
+	require.ErrorContains(t, err, "conflicts with connectAttribute krbsrvname")
+}
+
+func TestBuildDSNAttr_KerberosServiceNameMatchesAttribute_NoError(t *testing.T) {
+	cfg := &config.SQL{
+		ConnectAttributes: map[string]string{
+			krbSrvName: "postgres",
+		},
+		Kerberos: &auth.Kerberos{
+			Enabled:     true,
+			ServiceName: "postgres",
+		},
+	}
+	result, err := buildDSNAttr(cfg)
+	require.NoError(t, err)
+	require.Equal(t, "postgres", result.Get(krbSrvName))
+}
+
+func TestBuildDSNAttr_KerberosConflictingSPN_ReturnsError(t *testing.T) {
+	cfg := &config.SQL{
+		ConnectAttributes: map[string]string{
+			krbSPN: "postgres/other@CORP",
+		},
+		Kerberos: &auth.Kerberos{
+			Enabled: true,
+			SPN:     "postgres/db@CORP",
+		},
+	}
+	_, err := buildDSNAttr(cfg)
+	require.ErrorContains(t, err, "conflicts with connectAttribute krbspn")
+}
+
+func TestKerberosConfigEqual(t *testing.T) {
+	a := &auth.Kerberos{Enabled: true, ServiceName: "postgres", Realm: "CORP"}
+	b := &auth.Kerberos{Enabled: true, ServiceName: "postgres", Realm: "CORP"}
+	c := &auth.Kerberos{Enabled: true, ServiceName: "postgres", Realm: "OTHER"}
+	require.True(t, kerberosConfigEqual(a, a), "same pointer should be equal")
+	require.True(t, kerberosConfigEqual(a, b), "equal field values should be equal")
+	require.False(t, kerberosConfigEqual(a, c), "differing fields should not be equal")
+	require.False(t, kerberosConfigEqual(a, nil))
+	require.False(t, kerberosConfigEqual(nil, b))
+	require.True(t, kerberosConfigEqual(nil, nil))
+}

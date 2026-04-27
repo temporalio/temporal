@@ -49,6 +49,8 @@ func (p *PGXDriver) IsDupDatabaseError(err error) bool {
 	return ok && pqErr.Code == dupDatabaseCode
 }
 
+func (p *PGXDriver) SupportsGSSAPI() bool { return true }
+
 func (p *PGXDriver) IsConnNeedsRefreshError(err error) bool {
 	pqErr, ok := err.(*pgconn.PgError)
 	if !ok {

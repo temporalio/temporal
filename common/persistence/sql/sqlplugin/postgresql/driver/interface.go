@@ -25,6 +25,10 @@ type Driver interface {
 	IsDupEntryError(error) bool
 	IsDupDatabaseError(error) bool
 	IsConnNeedsRefreshError(error) bool
+	// SupportsGSSAPI reports whether the underlying driver can perform
+	// GSSAPI/Kerberos authentication. Only the pgx driver does today;
+	// lib/pq does not implement the protocol exchange.
+	SupportsGSSAPI() bool
 }
 
 func isConnNeedsRefreshError(code, message string) bool {

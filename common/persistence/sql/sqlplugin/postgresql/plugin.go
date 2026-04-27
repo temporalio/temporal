@@ -58,6 +58,13 @@ func (p *plugin) CreateDB(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) (sqlplugin.GenericDB, error) {
+	if cfg.Kerberos != nil && cfg.Kerberos.Enabled && !p.driver.SupportsGSSAPI() {
+		return nil, fmt.Errorf(
+			"postgres plugin %q does not support kerberos authentication; "+
+				"use plugin %q (pgx driver) instead",
+			PluginName, PluginNamePGX,
+		)
+	}
 	connect := func() (*sqlx.DB, error) {
 		if cfg.Connect != nil {
 			return cfg.Connect(cfg)
