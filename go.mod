@@ -37,6 +37,7 @@ require (
 	github.com/lib/pq v1.12.3
 	github.com/maruel/panicparse/v2 v2.5.0
 	github.com/mitchellh/mapstructure v1.5.0
+	github.com/nexus-rpc/nexus-proto-annotations v0.1.0
 	github.com/nexus-rpc/sdk-go v0.6.0
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
@@ -231,3 +232,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+replace go.temporal.io/api => ../api-go-sys-nexus-endpoint

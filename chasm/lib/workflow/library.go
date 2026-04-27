@@ -1,24 +1,44 @@
 package workflow
 
 import (
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type library struct {
 	chasm.UnimplementedLibrary
 
-	registry *Registry
+	registry                    *Registry
+	workflowServiceNexusHandler *workflowServiceNexusHandler
+	config                      Config
+	saMapperProvider            searchattribute.MapperProvider
+	saValidator                 *searchattribute.Validator
 }
 
-func newLibrary(registry *Registry) *library {
+func newLibrary(
+	registry *Registry,
+	namespaceRegistry namespace.Registry,
+	config Config,
+	saMapperProvider searchattribute.MapperProvider,
+	saValidator *searchattribute.Validator,
+) *library {
 	return &library{
-		registry: registry,
+		registry:         registry,
+		config:           config,
+		saMapperProvider: saMapperProvider,
+		saValidator:      saValidator,
+		workflowServiceNexusHandler: &workflowServiceNexusHandler{
+			namespaceRegistry: namespaceRegistry,
+		},
 	}
 }
 
 // NewLibrary creates a new CHASM library for the workflow package.
+// Use newLibrary (via fx) for the full setup including Nexus services.
 func NewLibrary(registry *Registry) chasm.Library {
-	return newLibrary(registry)
+	return &library{registry: registry}
 }
 
 func (l *library) Name() string {
@@ -53,4 +73,22 @@ func (l *library) Components() []*chasm.RegistrableComponent {
 // useful for tests that construct MockMutableContext directly.
 func SetEventRegistryOnContext[C chasm.Context](ctx C, registry *Registry) C {
 	return chasm.ContextWithValue(ctx, ctxKeyWorkflowContext, &workflowContext{registry: registry})
+}
+
+func (l *library) NexusServices() []*nexus.Service {
+	if l.workflowServiceNexusHandler == nil {
+		return nil
+	}
+	return []*nexus.Service{
+		mustNewWorkflowServiceNexusHandler(l.workflowServiceNexusHandler),
+	}
+}
+
+func (l *library) NexusServiceProcessors() []*chasm.NexusServiceProcessor {
+	if l.workflowServiceNexusHandler == nil {
+		return nil
+	}
+	return []*chasm.NexusServiceProcessor{
+		NewWorkflowServiceNexusServiceProcessor(l.config, l.saMapperProvider, l.saValidator),
+	}
 }

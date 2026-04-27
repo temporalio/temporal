@@ -8,8 +8,11 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmnexusworkflow "go.temporal.io/server/chasm/lib/nexusoperation/workflow"
+	"go.temporal.io/server/chasm/lib/scheduler"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	commoncache "go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -55,8 +58,10 @@ import (
 
 var Module = fx.Options(
 	resource.Module,
+	fx.Provide(resource.SearchAttributeValidatorProvider),
 	fx.Provide(hsm.NewRegistry),
 	workflow.Module,
+
 	shard.Module,
 	events.Module,
 	cache.Module,
@@ -86,6 +91,7 @@ var Module = fx.Options(
 	fx.Provide(EventNotifierProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
+	fx.Provide(HistoryServiceServerProvider),
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(ReplicationProgressCacheProvider),
@@ -98,12 +104,19 @@ var Module = fx.Options(
 	hsmnexusoperations.Module,
 	fx.Invoke(hsmnexusworkflow.RegisterCommandHandlers),
 	activity.HistoryModule,
+	scheduler.Module,
+	callback.Module,
+	chasmworkflow.Module,
 	chasmnexus.Module,
 	chasmnexusworkflow.Module,
 )
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
 	return grpc.NewServer(grpcServerOptions...)
+}
+
+func HistoryServiceServerProvider(handler *Handler) historyservice.HistoryServiceServer {
+	return handler
 }
 
 func ServiceResolverProvider(
