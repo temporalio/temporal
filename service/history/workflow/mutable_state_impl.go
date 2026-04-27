@@ -4038,55 +4038,74 @@ func (ms *MutableStateImpl) shouldExecuteTimeSkipping() bool {
 		return false
 	}
 
-	// time point check, we should check this at last, because
-	// we only need to consider which time point to skip to when all previous checks are passed.
-	// TODO@time-skipping: need to support start-with-delay
-	hasBound := config.GetBound() != nil
-	hasUserTimer := len(ms.GetPendingTimerInfos()) > 0
-	if !hasBound && !hasUserTimer {
-		noSkippingReason = "no related time point to skip to"
+	// this calculation is done preliminary to avoid unncesary call to add events
+	decision, err := ms.calculateTimeSkippingDecision()
+	if err != nil {
+		noSkippingReason = fmt.Sprintf("error calculating time skipping decision: %v", err)
+		ms.logger.Error(
+			"error calculating time skipping decision, and ignore this error and continue",
+			tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
+			tag.WorkflowRunID(ms.GetExecutionState().RunId),
+			tag.Error(err),
+		)
+		return false
+	}
+	if !decision.isValid() {
+		noSkippingReason = "time skipping has no candidate target time nor disabled after bound flag"
 		return false
 	}
 	return true
 }
 
-func (ms *MutableStateImpl) calculateTimeSkippingDecision() (nextTimePointToSkip *time.Time, disabledAfterBound bool, err error) {
+type timeSkippingDecision struct {
+	targetTime         time.Time
+	disabledAfterBound bool
+}
+
+func (d timeSkippingDecision) isValid() bool {
+	return !d.targetTime.IsZero() || d.disabledAfterBound
+}
+
+// calculateTimeSkippingDecision picks the earliest target virtual time the workflow
+// should skip to. Candidates are the earliest pending user timer and, if a bound is
+// configured, the bound's deadline. disabledAfterBound is true when the bound's
+// candidate wins, signalling that time skipping auto-disables after the transition.
+// Returns an internal error if the configured bound is in an inconsistent state.
+// The returned decision may be invalid (see isValid) — callers must check before use.
+func (ms *MutableStateImpl) calculateTimeSkippingDecision() (timeSkippingDecision, error) {
+	// TODO@time-skipping: need to support start-with-delay
+	var decision timeSkippingDecision
+	advance := func(candidate time.Time, dueToBound bool) {
+		if decision.targetTime.IsZero() || candidate.Before(decision.targetTime) {
+			decision.targetTime = candidate
+			decision.disabledAfterBound = dueToBound
+		}
+	}
+
 	for _, timerInfo := range ms.GetPendingTimerInfos() {
-		timerTime := timerInfo.ExpiryTime.AsTime()
-		if nextTimePointToSkip == nil || timerTime.Before(*nextTimePointToSkip) {
-			nextTimePointToSkip = &timerTime
-		}
+		advance(timerInfo.ExpiryTime.AsTime(), false)
 	}
+
 	info := ms.GetExecutionInfo().GetTimeSkippingInfo()
-	bound := info.GetConfig().GetBound()
-	if bound != nil {
-		switch bound.(type) {
-		case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
-			if info.GetBoundTargetTime() != nil {
-				targetTime := info.GetBoundTargetTime().AsTime()
-				if nextTimePointToSkip == nil || targetTime.Before(*nextTimePointToSkip) {
-					nextTimePointToSkip = &targetTime
-					disabledAfterBound = true
-				}
-			} else {
-				return nil, false, serviceerror.NewInternal("time skipping bound target time is not set for elapsed-duration-based bound when time-skipping transitioned event is added")
-			}
-		case *workflowpb.TimeSkippingConfig_MaxSkippedDuration:
-			boundMaxSkippedDuration := bound.(*workflowpb.TimeSkippingConfig_MaxSkippedDuration).MaxSkippedDuration.AsDuration()
-			remainingSkippedDuration := max(0, boundMaxSkippedDuration-info.GetAccumulatedSkippedDuration().AsDuration())
-			if remainingSkippedDuration < 0 {
-				return nil, false, serviceerror.NewInternal("time skipping accumulated skipped duration is greater than the max skipped duration")
-			}
-			targetTime := ms.Now().Add(remainingSkippedDuration)
-			if nextTimePointToSkip == nil || targetTime.Before(*nextTimePointToSkip) {
-				nextTimePointToSkip = &targetTime
-				disabledAfterBound = true
-			}
-		default:
-			return nil, false, serviceerror.NewInternal("unknown time skipping bound type")
+	switch b := info.GetConfig().GetBound().(type) {
+	case nil:
+		// no bound configured
+	case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
+		if info.GetBoundTargetTime() == nil {
+			return timeSkippingDecision{}, serviceerror.NewInternal("time skipping bound target time is not set for elapsed-duration bound")
 		}
+		advance(info.GetBoundTargetTime().AsTime(), true)
+	case *workflowpb.TimeSkippingConfig_MaxSkippedDuration:
+		accumulated := info.GetAccumulatedSkippedDuration().AsDuration()
+		maxSkipped := b.MaxSkippedDuration.AsDuration()
+		if accumulated > maxSkipped {
+			return timeSkippingDecision{}, serviceerror.NewInternal("accumulated skipped duration exceeds the configured max skipped duration")
+		}
+		advance(ms.Now().Add(maxSkipped-accumulated), true)
+	default:
+		return timeSkippingDecision{}, serviceerror.NewInternal("unknown time skipping bound type")
 	}
-	return nextTimePointToSkip, disabledAfterBound, nil
+	return decision, nil
 }
 
 // AddWorkflowExecutionTimeSkippingTransitionedEvent adds a workflow execution time skipping transitioned event to the mutable state.
@@ -4096,14 +4115,14 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(ct
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-	targetTime, disabledAfterBound, err := ms.calculateTimeSkippingDecision()
+	decision, err := ms.calculateTimeSkippingDecision()
 	if err != nil {
 		return nil, err
 	}
-	if !disabledAfterBound && targetTime == nil {
-		return nil, serviceerror.NewInternal("time skipping is triggered when conditions are not met")
+	if !decision.isValid() {
+		return nil, serviceerror.NewInternal("time skipping has no candidate target time nor disabled after bound flag")
 	}
-	event := ms.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(*targetTime, disabledAfterBound)
+	event := ms.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(decision.targetTime, decision.disabledAfterBound)
 	return event, ms.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx, event)
 }
 

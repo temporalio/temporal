@@ -6833,6 +6833,122 @@ func (s *mutableStateSuite) TestApplyToTimeSkippingInfo() {
 	})
 }
 
+func (s *mutableStateSuite) TestCalculateTimeSkippingDecision() {
+	// Each s.Run() gets a fresh mutable state via SetupSubTest().
+
+	s.Run("UserTimerOnlyReturnsEarliestExpiryAndFlagFalse", func() {
+		earlier := s.mockShard.GetTimeSource().Now().Add(time.Hour)
+		later := earlier.Add(time.Hour)
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1", ExpiryTime: timestamppb.New(later)}
+		s.mutableState.pendingTimerInfoIDs["t2"] = &persistencespb.TimerInfo{TimerId: "t2", ExpiryTime: timestamppb.New(earlier)}
+
+		decision, err := s.mutableState.calculateTimeSkippingDecision()
+		s.NoError(err)
+		s.True(decision.isValid())
+		s.False(decision.disabledAfterBound)
+		s.True(decision.targetTime.Equal(earlier))
+	})
+
+	s.Run("NoCandidateReturnsInvalidDecision", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+		}
+
+		decision, err := s.mutableState.calculateTimeSkippingDecision()
+		s.NoError(err)
+		s.False(decision.isValid())
+	})
+
+	s.Run("MaxElapsedWithoutBoundTargetTimeReturnsError", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{
+				Enabled: true,
+				Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)},
+			},
+			// BoundTargetTime intentionally nil.
+		}
+
+		_, err := s.mutableState.calculateTimeSkippingDecision()
+		s.Error(err)
+	})
+
+	s.Run("MaxElapsedBoundEarlierThanTimerWinsAndSetsFlag", func() {
+		now := s.mockShard.GetTimeSource().Now()
+		boundTarget := now.Add(time.Hour)
+		timerExpiry := now.Add(2 * time.Hour)
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{
+				Enabled: true,
+				Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)},
+			},
+			BoundTargetTime: timestamppb.New(boundTarget),
+		}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1", ExpiryTime: timestamppb.New(timerExpiry)}
+
+		decision, err := s.mutableState.calculateTimeSkippingDecision()
+		s.NoError(err)
+		s.True(decision.isValid())
+		s.True(decision.disabledAfterBound)
+		s.True(decision.targetTime.Equal(boundTarget))
+	})
+
+	s.Run("MaxElapsedTimerEarlierThanBoundWinsAndFlagStaysFalse", func() {
+		now := s.mockShard.GetTimeSource().Now()
+		timerExpiry := now.Add(time.Hour)
+		boundTarget := now.Add(2 * time.Hour)
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{
+				Enabled: true,
+				Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
+			},
+			BoundTargetTime: timestamppb.New(boundTarget),
+		}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1", ExpiryTime: timestamppb.New(timerExpiry)}
+
+		decision, err := s.mutableState.calculateTimeSkippingDecision()
+		s.NoError(err)
+		s.True(decision.isValid())
+		s.False(decision.disabledAfterBound)
+		s.True(decision.targetTime.Equal(timerExpiry))
+	})
+
+	s.Run("MaxSkippedRemainingDurationWinsAndSetsFlag", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{
+				Enabled: true,
+				Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(2 * time.Hour)},
+			},
+			AccumulatedSkippedDuration: durationpb.New(30 * time.Minute),
+		}
+
+		before := s.mutableState.Now()
+		decision, err := s.mutableState.calculateTimeSkippingDecision()
+		after := s.mutableState.Now()
+		s.NoError(err)
+		s.True(decision.isValid())
+		s.True(decision.disabledAfterBound)
+		// Remaining = 2h - 30m = 1h30m, anchored to ms.Now() captured during the call.
+		s.False(decision.targetTime.Before(before.Add(90 * time.Minute)))
+		s.False(decision.targetTime.After(after.Add(90 * time.Minute)))
+	})
+
+	s.Run("MaxSkippedAccumulatedExceedsMaxReturnsError", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &workflowpb.TimeSkippingConfig{
+				Enabled: true,
+				Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
+			},
+			AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
+		}
+
+		_, err := s.mutableState.calculateTimeSkippingDecision()
+		s.Error(err)
+	})
+}
+
 func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEvent() {
 	// Use fixed UTC times so duration arithmetic is exact.
 	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
