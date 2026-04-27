@@ -3981,133 +3981,6 @@ func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
 	)
 }
 
-// hasInflightWorkToPreventTimeSkipping checks if there is no-inflight work and time can skip.
-func (ms *MutableStateImpl) hasInflightWorkToPreventTimeSkipping() (bool, string) {
-	if ms.HasPendingWorkflowTask() {
-		return true, "has pending workflow task"
-	}
-	if len(ms.GetPendingActivityInfos()) > 0 {
-		return true, "has pending activity"
-	}
-	if len(ms.GetPendingChildExecutionInfos()) > 0 {
-		return true, "has pending child execution"
-	}
-	if nexusoperations.MachineCollection(ms.HSM()).Size() > 0 {
-		return true, "has pending nexus operations"
-	}
-
-	// TODO@time-skipping: handle pending external transfer tasks
-	// (signals and cancel requests), their completion is not guaranteed to trigger
-	// a mutable state mutation — and without one, time skipping won't be re-triggered.
-	// We need a separate mechanism to catch these missed trigger opportunities.
-	return false, ""
-}
-
-// ShouldExecuteTimeSkipping checks if one mutable state should execute time skipping,
-// i.e. there is no in-flight work and there is a time point to skip to.
-func (ms *MutableStateImpl) shouldExecuteTimeSkipping() bool {
-	// configuration check
-	tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
-	if tsi == nil {
-		return false
-	}
-	config := tsi.GetConfig()
-	if config == nil || !config.Enabled {
-		return false
-	}
-
-	// runtime check
-	noSkippingReason := ""
-	defer func() {
-		if noSkippingReason != "" {
-			ms.logger.Debug(fmt.Sprintf("time skipping skipped for: %s", noSkippingReason),
-				tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
-				tag.WorkflowRunID(ms.GetExecutionState().RunId),
-			)
-		}
-	}()
-
-	if !ms.IsWorkflowExecutionRunning() {
-		noSkippingReason = "workflow is not running"
-		return false
-	}
-
-	// pending work exists
-	if hasPendingWork, detailedReason := ms.hasInflightWorkToPreventTimeSkipping(); hasPendingWork {
-		noSkippingReason = fmt.Sprintf("pending work: %s", detailedReason)
-		return false
-	}
-
-	// this calculation is done preliminary to avoid unncesary call to add events
-	decision, err := ms.calculateTimeSkippingDecision()
-	if err != nil {
-		noSkippingReason = fmt.Sprintf("error calculating time skipping decision: %v", err)
-		ms.logger.Error(
-			"error calculating time skipping decision, and ignore this error and continue",
-			tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
-			tag.WorkflowRunID(ms.GetExecutionState().RunId),
-			tag.Error(err),
-		)
-		return false
-	}
-	if !decision.isValid() {
-		noSkippingReason = "time skipping has no candidate target time nor disabled after bound flag"
-		return false
-	}
-	return true
-}
-
-type timeSkippingDecision struct {
-	targetTime         time.Time
-	disabledAfterBound bool
-}
-
-func (d timeSkippingDecision) isValid() bool {
-	return !d.targetTime.IsZero() || d.disabledAfterBound
-}
-
-// calculateTimeSkippingDecision picks the earliest target virtual time the workflow
-// should skip to. Candidates are the earliest pending user timer and, if a bound is
-// configured, the bound's deadline. disabledAfterBound is true when the bound's
-// candidate wins, signalling that time skipping auto-disables after the transition.
-// Returns an internal error if the configured bound is in an inconsistent state.
-// The returned decision may be invalid (see isValid) — callers must check before use.
-func (ms *MutableStateImpl) calculateTimeSkippingDecision() (timeSkippingDecision, error) {
-	// TODO@time-skipping: need to support start-with-delay
-	var decision timeSkippingDecision
-	advance := func(candidate time.Time, dueToBound bool) {
-		if decision.targetTime.IsZero() || candidate.Before(decision.targetTime) {
-			decision.targetTime = candidate
-			decision.disabledAfterBound = dueToBound
-		}
-	}
-
-	for _, timerInfo := range ms.GetPendingTimerInfos() {
-		advance(timerInfo.ExpiryTime.AsTime(), false)
-	}
-
-	info := ms.GetExecutionInfo().GetTimeSkippingInfo()
-	switch b := info.GetConfig().GetBound().(type) {
-	case nil:
-		// no bound configured
-	case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
-		if info.GetBoundTargetTime() == nil {
-			return timeSkippingDecision{}, serviceerror.NewInternal("time skipping bound target time is not set for elapsed-duration bound")
-		}
-		advance(info.GetBoundTargetTime().AsTime(), true)
-	case *workflowpb.TimeSkippingConfig_MaxSkippedDuration:
-		accumulated := info.GetAccumulatedSkippedDuration().AsDuration()
-		maxSkipped := b.MaxSkippedDuration.AsDuration()
-		if accumulated > maxSkipped {
-			return timeSkippingDecision{}, serviceerror.NewInternal("accumulated skipped duration exceeds the configured max skipped duration")
-		}
-		advance(ms.Now().Add(maxSkipped-accumulated), true)
-	default:
-		return timeSkippingDecision{}, serviceerror.NewInternal("unknown time skipping bound type")
-	}
-	return decision, nil
-}
-
 // AddWorkflowExecutionTimeSkippingTransitionedEvent adds a workflow execution time skipping transitioned event to the mutable state.
 // This should only be called only when `ShouldExecuteTimeSkipping` returns true.
 func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context) (*historypb.HistoryEvent, error) {
@@ -9654,6 +9527,7 @@ func (ms *MutableStateImpl) wrapTimeSourceWithTimeSkipping() {
 
 // applyToTimeSkippingInfo is a wrapping method for both init and update
 // so that callers don't need to check if the time skipping has been initialized or not.
+// todo@time-skipping: change this to init and update
 func (ms *MutableStateImpl) applyToTimeSkippingInfo(
 	config *workflowpb.TimeSkippingConfig,
 	initialSkippedDuration *durationpb.Duration,
@@ -9682,6 +9556,134 @@ func (ms *MutableStateImpl) applyToTimeSkippingInfo(
 	}
 
 	ms.timeSkippingInfoUpdated = true
+}
+
+// hasInflightWorkToPreventTimeSkipping checks if there is no-inflight work and time can skip.
+func (ms *MutableStateImpl) hasInflightWorkToPreventTimeSkipping() (bool, string) {
+	if ms.HasPendingWorkflowTask() {
+		return true, "has pending workflow task"
+	}
+	if len(ms.GetPendingActivityInfos()) > 0 {
+		return true, "has pending activity"
+	}
+	if len(ms.GetPendingChildExecutionInfos()) > 0 {
+		return true, "has pending child execution"
+	}
+	if nexusoperations.MachineCollection(ms.HSM()).Size() > 0 {
+		return true, "has pending nexus operations"
+	}
+
+	// TODO@time-skipping: handle pending external transfer tasks
+	// (signals and cancel requests), their completion is not guaranteed to trigger
+	// a mutable state mutation — and without one, time skipping won't be re-triggered.
+	// We need a separate mechanism to catch these missed trigger opportunities.
+	return false, ""
+}
+
+// ShouldExecuteTimeSkipping checks if one mutable state should execute time skipping,
+// i.e. there is no in-flight work and there is a time point to skip to.
+func (ms *MutableStateImpl) shouldExecuteTimeSkipping() bool {
+	// configuration check
+	tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
+	if tsi == nil {
+		return false
+	}
+	config := tsi.GetConfig()
+	if config == nil || !config.Enabled {
+		return false
+	}
+
+	// runtime check
+	noSkippingReason := ""
+	defer func() {
+		if noSkippingReason != "" {
+			ms.logger.Debug(fmt.Sprintf("time skipping skipped for: %s", noSkippingReason),
+				tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
+				tag.WorkflowRunID(ms.GetExecutionState().RunId),
+			)
+		}
+	}()
+
+	if !ms.IsWorkflowExecutionRunning() {
+		noSkippingReason = "workflow is not running"
+		return false
+	}
+
+	// pending work exists
+	if hasPendingWork, detailedReason := ms.hasInflightWorkToPreventTimeSkipping(); hasPendingWork {
+		noSkippingReason = fmt.Sprintf("pending work: %s", detailedReason)
+		return false
+	}
+
+	// this calculation is done preliminary to avoid unncesary call to add events
+	decision, err := ms.calculateTimeSkippingDecision()
+	if err != nil {
+		noSkippingReason = fmt.Sprintf("error calculating time skipping decision: %v", err)
+		ms.logger.Error(
+			"error calculating time skipping decision, and ignore this error and continue",
+			tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
+			tag.WorkflowRunID(ms.GetExecutionState().RunId),
+			tag.Error(err),
+		)
+		return false
+	}
+	if !decision.isValid() {
+		noSkippingReason = "time skipping has no candidate target time nor disabled after bound flag"
+		return false
+	}
+	return true
+}
+
+type timeSkippingDecision struct {
+	targetTime         time.Time
+	disabledAfterBound bool
+}
+
+func (d timeSkippingDecision) isValid() bool {
+	return !d.targetTime.IsZero() || d.disabledAfterBound
+}
+
+// calculateTimeSkippingDecision picks the earliest target virtual time the workflow
+// should skip to. Candidates are the earliest pending user timer and bound target time if any.
+// Returns an internal error if the configured bound is in an inconsistent state.
+// The returned decision may be invalid (see isValid) — callers must check before use.
+// TODO@time-skipping: need to support start-with-delay
+func (ms *MutableStateImpl) calculateTimeSkippingDecision() (timeSkippingDecision, error) {
+	var decision timeSkippingDecision
+	advance := func(candidate time.Time, dueToBound bool) {
+		if decision.targetTime.IsZero() || candidate.Before(decision.targetTime) {
+			decision.targetTime = candidate
+			decision.disabledAfterBound = dueToBound
+		}
+	}
+
+	for _, timerInfo := range ms.GetPendingTimerInfos() {
+		advance(timerInfo.ExpiryTime.AsTime(), false)
+	}
+
+	info := ms.GetExecutionInfo().GetTimeSkippingInfo()
+	bound := info.GetConfig().GetBound()
+	if bound == nil {
+		return decision, nil
+	}
+
+	switch b := bound.(type) {
+	case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
+		if info.GetBoundTargetTime() == nil {
+			return timeSkippingDecision{}, serviceerror.NewInternal("time skipping bound target time is not set for elapsed-duration bound")
+		}
+		advance(info.GetBoundTargetTime().AsTime(), true)
+	case *workflowpb.TimeSkippingConfig_MaxSkippedDuration:
+		accumulated := info.GetAccumulatedSkippedDuration().AsDuration()
+		maxSkipped := b.MaxSkippedDuration.AsDuration()
+		if accumulated > maxSkipped {
+			return timeSkippingDecision{}, serviceerror.NewInternal("accumulated skipped duration exceeds the configured max skipped duration")
+		}
+		advance(ms.Now().Add(maxSkipped-accumulated), true)
+	default:
+		return timeSkippingDecision{}, serviceerror.NewInternal("unknown time skipping bound type")
+	}
+	return decision, nil
 }
 
 // snapshotTimeSkippingInfo returns a clone of the source execution's TimeSkippingConfig
