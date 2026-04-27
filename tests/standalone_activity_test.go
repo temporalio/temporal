@@ -4660,13 +4660,12 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		require.NoError(t, err)
 
 		desc, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:      s.Namespace().String(),
-			ActivityId:     activityID,
-			IncludeOutcome: true,
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
 		})
 		require.NoError(t, err)
 
-		require.Equal(t, int64(2), desc.Info.GetTotalHeartbeatCount(), "total heartbeat count")
+		require.Equal(t, int64(2), desc.GetInfo().GetTotalHeartbeatCount(), "total heartbeat count")
 	})
 
 	t.Run("ActivityTimesOutWithoutHeartbeat", func(t *testing.T) {
