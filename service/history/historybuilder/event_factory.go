@@ -84,12 +84,8 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		EagerExecutionAccepted:       req.GetRequestEagerExecution(),
 		InheritedAutoUpgradeInfo:     request.InheritedAutoUpgradeInfo,
 		DeclinedTargetVersionUpgrade: request.DeclinedTargetVersionUpgrade,
-	}
-	if req.GetTimeSkippingConfig() != nil {
-		attributes.TimeSkippingConfig = req.TimeSkippingConfig
-	}
-	if request.GetInitialSkippedDuration() != nil {
-		attributes.InitialSkippedDuration = request.GetInitialSkippedDuration()
+		TimeSkippingConfig:           req.GetTimeSkippingConfig(),
+		InitialSkippedDuration:       request.GetInitialSkippedDuration(),
 	}
 
 	parentInfo := request.ParentExecutionInfo
