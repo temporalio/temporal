@@ -932,13 +932,29 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		return consts.ErrWorkflowCompleted
 	}
 
-	// Drop the task if the elapsed-duration bound is no longer configured.
-	if mutableState.GetExecutionInfo().GetTimeSkippingInfo().GetBoundTargetTime() == nil {
+	// drop the timer task directly when time skipping is disabled
+	// or the bound this timer task is related to is no longer valid.
+	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	if tsi == nil || !tsi.GetConfig().GetEnabled() {
+		release(nil)
+		return errNoTimerFired
+	}
+	if tsi.GetBoundTargetTime() == nil {
+		release(nil)
+		return errNoTimerFired
+	}
+	if tsi.GetBoundSourceEventId() != task.EventID {
 		release(nil)
 		return errNoTimerFired
 	}
 
-	return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
+	// todo@time-skipping:
+	// when this user timer task fired, and time-skipping is still enabled,
+	// we need to force add a time-skipping transitioned event
+	// regardless of whether there is in-flight work
+	// need to make sure there is no race-condition -> refer to how user timer task is executed
+	_, err = mutableState.AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx)
+	return err
 }
 
 func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
