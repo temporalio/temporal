@@ -35,7 +35,6 @@ func (h *activityDispatchTaskHandler) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.ActivityDispatchTask,
 ) (bool, error) {
-	// TODO(saa-preview): make sure we handle resets when we support them, as they will reset the attempt count
 	// Do not dispatch while the activity has a pause flag set (SCHEDULED + PauseState from a retry
 	// while a STARTED activity was flag-paused). TransitionStarted.Possible already returns false for
 	// real PAUSED status activities (source must be SCHEDULED, and PAUSED → SCHEDULED via unpause).

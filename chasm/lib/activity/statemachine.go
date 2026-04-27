@@ -100,10 +100,7 @@ var TransitionRescheduled = chasm.NewTransition(
 			a.ActivityReset = false
 			if a.ResetHeartbeats {
 				a.ResetHeartbeats = false
-				if hb, ok := a.LastHeartbeat.TryGet(ctx); ok {
-					hb.Details = nil
-					hb.RecordedTime = nil
-				}
+				a.clearHeartbeat(ctx)
 			}
 		}
 

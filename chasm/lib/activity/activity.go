@@ -888,16 +888,20 @@ func (a *Activity) pause(
 	a.emitOnPausedMetrics(event.metricsHandler)
 }
 
+func (a *Activity) clearHeartbeat(ctx chasm.MutableContext) {
+	if hb, ok := a.LastHeartbeat.TryGet(ctx); ok {
+		hb.Details = nil
+		hb.RecordedTime = nil
+	}
+}
+
 func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
 	attempt := a.LastAttempt.Get(ctx)
 	attempt.Count = 1
 	attempt.Stamp++
 	attempt.CurrentRetryInterval = nil
 	if event.req.GetResetHeartbeat() {
-		if hb, ok := a.LastHeartbeat.TryGet(ctx); ok {
-			hb.Details = nil
-			hb.RecordedTime = nil
-		}
+		a.clearHeartbeat(ctx)
 	}
 	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 		ctx.AddTask(
@@ -973,10 +977,7 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 				attempt.Stamp++
 				attempt.CurrentRetryInterval = nil
 				if frontendReq.GetResetHeartbeat() {
-					if hb, ok := a.LastHeartbeat.TryGet(ctx); ok {
-						hb.Details = nil
-						hb.RecordedTime = nil
-					}
+					a.clearHeartbeat(ctx)
 				}
 				a.emitOnResetMetrics(metricsHandler)
 				return &activitypb.ResetActivityExecutionResponse{}, nil
