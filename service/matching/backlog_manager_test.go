@@ -444,6 +444,106 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	s.Zero(totalApproximateBacklogCount(s.blm))
 }
 
+// TestPriorityOrdering_ColdStartLoadsHighPriorityFirst verifies that when a
+// partition cold-starts against an existing on-disk backlog containing both
+// low- and high-priority tasks, the very first task handed to the matcher is
+// the highest-priority one.
+//
+// Scenario: low-priority (P5) tasks were spooled before high-priority (P1)
+// tasks, so persistence ends up with subqueues in order [default(P3), P5, P1].
+// On cold start, each subqueue reader currently primes its own pump on
+// Start(), so the lowest-priority subqueue's reader (started first because of
+// persistence order) ends up populating the matcher before higher-priority
+// readers — and the first dispatch is P5 instead of P1.
+func (s *BacklogManagerTestSuite) TestPriorityOrdering_ColdStartLoadsHighPriorityFirst() {
+	if !s.newMatcher || s.fairness {
+		s.T().Skip("only for priority backlog manager")
+	}
+
+	// Single AddSpooledTask interceptor; only capture during phase 2 so that
+	// phase-1 bypass-path deliveries don't pollute the captured order.
+	var captureEnabled atomic.Bool
+	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).DoAndReturn(func(t *internalTask) error {
+		if captureEnabled.Load() {
+			s.capturedTasksLock.Lock()
+			defer s.capturedTasksLock.Unlock()
+			s.capturedTasksSlice = append(s.capturedTasksSlice, t)
+		}
+		return nil
+	}).AnyTimes()
+
+	// Phase 1: populate persistence by spooling P5 tasks first, then P1 tasks.
+	// SpoolTask -> AllocateSubqueue is FCFS, so subqueues land in persistence
+	// in the order [default(P3), P5, P1].
+	s.blm.Start()
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
+
+	const numEach = 3
+	for range numEach {
+		s.Require().NoError(s.blm.SpoolTask(&persistencespb.TaskInfo{
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			CreateTime: timestamp.TimeNowPtrUtc(),
+			Priority:   &commonpb.Priority{PriorityKey: 5},
+		}))
+	}
+	for range numEach {
+		s.Require().NoError(s.blm.SpoolTask(&persistencespb.TaskInfo{
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			CreateTime: timestamp.TimeNowPtrUtc(),
+			Priority:   &commonpb.Priority{PriorityKey: 1},
+		}))
+	}
+
+	// Tear down phase 1 fully so its goroutines don't interfere with phase 2.
+	s.blm.Stop()
+	s.cancelCtx()
+
+	// Phase 2: cold-start a fresh backlog manager against the persisted state.
+	// This is the path exercised when a partition is reloaded onto a host —
+	// the readers must load the backlog from persistence, which is exactly
+	// where the priority-ordering bug lives.
+	tlCfg := newTaskQueueConfig(
+		s.ptqMgr.QueueKey().Partition().TaskQueue(),
+		NewConfig(s.cfgcol),
+		"test-namespace",
+	)
+	freshCtx, cancelFresh := context.WithCancel(context.Background())
+	defer cancelFresh()
+
+	freshBlm := newPriBacklogManager(
+		freshCtx,
+		s.ptqMgr,
+		tlCfg,
+		s.taskMgr,
+		s.logger,
+		s.logger,
+		nil,
+		metrics.NoopMetricsHandler,
+		false,
+	)
+
+	captureEnabled.Store(true)
+	freshBlm.Start()
+	defer freshBlm.Stop()
+	s.Require().NoError(freshBlm.WaitUntilInitialized(context.Background()))
+
+	s.Require().Eventually(func() bool {
+		return s.capturedTasksLen() >= 2*numEach
+	}, 5*time.Second, 10*time.Millisecond,
+		"timed out waiting for backlog to be re-loaded after cold start")
+
+	captured := s.capturedTasks()
+	priorities := make([]int32, len(captured))
+	for i, t := range captured {
+		priorities[i] = t.getPriority().GetPriorityKey()
+	}
+	s.T().Logf("cold-start delivery order: %v", priorities)
+
+	s.Equal(int32(1), priorities[0],
+		"first task delivered to the matcher should be P1 (highest priority); "+
+			"got P%d. Full delivery order: %v", priorities[0], priorities)
+}
+
 type taskBlock struct {
 	count   int
 	expired bool

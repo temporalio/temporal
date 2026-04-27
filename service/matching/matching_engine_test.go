@@ -4820,6 +4820,10 @@ type testQueueData struct {
 	info     *persistencespb.TaskQueueInfo
 	tasks    treemap.Map
 	userData *persistencespb.VersionedTaskQueueUserData
+	// taskSubqueue maps TaskId to subqueue index. Tasks without an entry are treated
+	// as subqueue 0 so single-subqueue tests that don't set CreateTasksRequest.Subqueues
+	// keep working.
+	taskSubqueue map[int64]int
 
 	testQueuePersistenceStats
 }
@@ -4834,7 +4838,10 @@ type testQueuePersistenceStats struct {
 }
 
 func newTestQueueData() *testQueueData {
-	return &testQueueData{tasks: *newFairLevelTreeMap()}
+	return &testQueueData{
+		tasks:        *newFairLevelTreeMap(),
+		taskSubqueue: make(map[int64]int),
+	}
 }
 
 func (q *testQueueData) String() string {
@@ -5066,8 +5073,11 @@ func (m *testTaskManager) CreateTasks(
 	}
 
 	// Then insert all tasks if no errors
-	for _, task := range request.Tasks {
+	for i, task := range request.Tasks {
 		tlm.tasks.Put(fairLevelFromAllocatedTask(task), common.CloneProto(task))
+		if i < len(request.Subqueues) {
+			tlm.taskSubqueue[task.TaskId] = request.Subqueues[i]
+		}
 		tlm.createTaskCount++
 	}
 	tlm.createTaskBatchCount++
@@ -5118,6 +5128,9 @@ func (m *testTaskManager) GetTasks(
 			if level.id >= request.ExclusiveMaxTaskID {
 				break
 			}
+		}
+		if tlm.taskSubqueue[level.id] != request.Subqueue {
+			continue
 		}
 		tasks = append(tasks, it.Value().(*persistencespb.AllocatedTaskInfo))
 	}

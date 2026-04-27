@@ -152,11 +152,44 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 	tr.backlogMgr.db.updateAckLevelAndBacklogStats(tr.subqueue, tr.ackLevel, -numAcked, tr.backlogAge.oldestTime())
 }
 
+// loadInitial synchronously drains the subqueue's backlog up to the reload
+// threshold (mirroring what getTasksPump would do, but in the caller's
+// goroutine). The backlog manager calls this on each new reader in priority
+// order on cold start so the matcher sees high-priority tasks before
+// low-priority ones — relying on Start() / goroutine scheduling order is not
+// enough, since the runtime can run spawned getTasksPump goroutines in any
+// order. Draining fully (including through expired-only gaps) also matches
+// the pre-fix invariant that by the time WaitUntilInitialized returns, readers
+// have advanced their readLevel as far as the loaded threshold allows; tests
+// and callers that rely on isDrainedLocked depend on this.
+func (tr *priTaskReader) loadInitial(ctx context.Context) {
+	for {
+		if tr.getLoadedTasks() > tr.backlogMgr.config.GetTasksReloadAt() {
+			return
+		}
+		batch, err := tr.getTaskBatch(ctx)
+		if err != nil {
+			return // pump will retry once started
+		}
+		if len(batch.tasks) == 0 {
+			tr.setReadLevelAfterGap(batch.readLevel)
+			if batch.isReadBatchDone {
+				return
+			}
+			continue
+		}
+		tr.processTaskBatch(batch.tasks)
+	}
+}
+
 // nolint:revive // can simplify later
 func (tr *priTaskReader) getTasksPump() {
 	ctx := tr.backlogMgr.tqCtx
 
-	tr.SignalTaskLoading() // prime pump
+	// Cold-start priming is done synchronously by loadInitial in priority order.
+	// The pump only handles ongoing notifications (new task signals, reload-threshold
+	// signals). Self-priming here would race with concurrent SpoolTask deliveries
+	// arriving via signalNewTasks just after init.
 	for {
 		select {
 		case <-ctx.Done():

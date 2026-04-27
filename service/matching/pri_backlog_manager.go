@@ -161,10 +161,34 @@ func (c *priBacklogManagerImpl) initState(state taskQueueState, err error) {
 	}
 
 	c.subqueueLock.Lock()
-	defer c.subqueueLock.Unlock()
+	fresh := c.loadSubqueuesLocked(state.subqueues)
+	c.subqueueLock.Unlock()
 
-	c.loadSubqueuesLocked(state.subqueues)
+	// Drain each new reader's initial backlog in priority order, then start the
+	// pump goroutines. This runs in a background goroutine — not in the writer
+	// init path — for two reasons:
+	//   1. processTaskBatch ultimately calls partitionMgr.AddSpooledTask, which
+	//      can load other queues and would deadlock or stall if it ran while
+	//      callers were blocked on WaitUntilInitialized.
+	//   2. WaitUntilInitialized has tight timeouts at some call sites (e.g.
+	//      getVersionedQueue uses 100ms in tests), and we should not block them
+	//      on the synchronous backlog read.
+	// The matcher only dispatches tasks that have been loaded, so even though
+	// initialization is signaled before loadInitial finishes, no out-of-order
+	// dispatch is possible: high-priority tasks always reach the matcher first
+	// because loadInitial calls are sequenced highest-priority-first here.
+	go c.coldStartLoad(fresh)
+
 	go c.periodicSync()
+}
+
+func (c *priBacklogManagerImpl) coldStartLoad(fresh []*priTaskReader) {
+	for _, r := range fresh {
+		r.loadInitial(c.tqCtx)
+	}
+	for _, r := range fresh {
+		r.Start()
+	}
 }
 
 func (c *priBacklogManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -172,18 +196,36 @@ func (c *priBacklogManagerImpl) WaitUntilInitialized(ctx context.Context) error 
 	return err
 }
 
-func (c *priBacklogManagerImpl) loadSubqueuesLocked(subqueues []persistencespb.SubqueueInfo) {
-	// TODO(pri): This assumes that subqueues never shrinks, and priority/fairness index of
-	// existing subqueues never changes. If we change that, this logic will need to change.
+// loadSubqueuesLocked creates readers for any new subqueues and updates the priority
+// maps. It returns the newly-created readers sorted highest-priority first, so the
+// caller can drive their initial load + Start in priority order outside this lock.
+//
+// TODO(pri): This assumes that subqueues never shrinks, and priority/fairness index
+// of existing subqueues never changes. If we change that, this logic will need to
+// change. Each reader's subqueueIndex must match its persistence position (it's used
+// to filter GetTasks calls), so c.subqueues stays indexed in persistence
+// (FCFS-allocation) order regardless of priority.
+func (c *priBacklogManagerImpl) loadSubqueuesLocked(subqueues []persistencespb.SubqueueInfo) []*priTaskReader {
+	type newReader struct {
+		r   *priTaskReader
+		pri priorityKey
+	}
+	var added []newReader
 	for i := range subqueues {
 		if i >= len(c.subqueues) {
 			r := newPriTaskReader(c, subqueueIndex(i), subqueues[i].AckLevel)
-			r.Start()
 			c.subqueues = append(c.subqueues, r)
+			added = append(added, newReader{r: r, pri: priorityKey(subqueues[i].Key.Priority)})
 		}
 		c.subqueuesByPriority[priorityKey(subqueues[i].Key.Priority)] = subqueueIndex(i)
 		c.priorityBySubqueue[subqueueIndex(i)] = priorityKey(subqueues[i].Key.Priority)
 	}
+	slices.SortFunc(added, func(a, b newReader) int { return int(a.pri) - int(b.pri) })
+	fresh := make([]*priTaskReader, len(added))
+	for i, nr := range added {
+		fresh[i] = nr.r
+	}
+	return fresh
 }
 
 func (c *priBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) subqueueIndex {
@@ -209,7 +251,12 @@ func (c *priBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) sub
 		return subqueueZero
 	}
 
-	c.loadSubqueuesLocked(subqueues)
+	fresh := c.loadSubqueuesLocked(subqueues)
+	// A newly-allocated subqueue has no backlog, so we skip loadInitial here and just
+	// start the pump. Tasks spooled to this priority will arrive via signalNewTasks.
+	for _, r := range fresh {
+		r.Start()
+	}
 
 	// After AllocateSubqueue added a subqueue for this priority, and we merged the result into
 	// our state with loadSubqueuesLocked, this lookup should now find a subqueue.
