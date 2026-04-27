@@ -3,15 +3,12 @@ package chasm
 import (
 	"fmt"
 	"math/rand/v2"
-	"reflect"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/temporalproto"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
-	"google.golang.org/protobuf/proto"
 )
 
 // NexusOperationProcessorContext contains context for processing a Nexus operation's input, including the target
@@ -84,30 +81,8 @@ type RegisterableNexusOperationProcessor struct {
 func nexusOperationProcessorAdapter[I any](processor NexusOperationProcessor[I]) func(ctx NexusOperationProcessorContext, input *commonpb.Payload) (*NexusOperationProcessorResult, error) {
 	return func(ctx NexusOperationProcessorContext, input *commonpb.Payload) (*NexusOperationProcessorResult, error) {
 		var i I
-		decoded := false
-		// For json/plain payloads, proto.Message types use SDK shorthand encoding where
-		// nested payload fields are plain JSON values rather than proto Payload objects.
-		// Use the shorthand-aware unmarshaler so they decode correctly.
-		if string(input.GetMetadata()["encoding"]) == "json/plain" {
-			// Initialize pointer types before the proto.Message interface check — a nil
-			// pointer satisfies the interface check but cannot be unmarshaled into.
-			iType := reflect.TypeOf(&i).Elem()
-			if iType.Kind() == reflect.Ptr {
-				i = reflect.New(iType.Elem()).Interface().(I)
-			}
-			if msg, ok := any(i).(proto.Message); ok {
-				if err := (temporalproto.CustomJSONUnmarshalOptions{
-					Metadata: map[string]interface{}{commonpb.EnablePayloadShorthandMetadataKey: true},
-				}).Unmarshal(input.GetData(), msg); err != nil {
-					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to decode input payload: %v", err)
-				}
-				decoded = true
-			}
-		}
-		if !decoded {
-			if err := payloads.Decode(&commonpb.Payloads{Payloads: []*commonpb.Payload{input}}, &i); err != nil {
-				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to decode input payload: %v", err)
-			}
+		if err := payloads.Decode(&commonpb.Payloads{Payloads: []*commonpb.Payload{input}}, &i); err != nil {
+			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to decode input payload: %v", err)
 		}
 		result, err := processor.ProcessInput(ctx, i)
 		if err != nil {
@@ -178,6 +153,7 @@ func (p *NexusServiceProcessor) ProcessInput(ctx NexusOperationProcessorContext,
 	if !ok {
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "operation %q not found", opName)
 	}
+
 	return op.processInput(ctx, input)
 }
 

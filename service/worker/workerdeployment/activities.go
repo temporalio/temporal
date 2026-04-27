@@ -281,7 +281,7 @@ func (a *Activities) StartWorkerDeploymentVersionWorkflow(
 
 func (a *Activities) UpdateWorkerControllerInstanceFromDeployment(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) (*computepb.ComputeConfigSummary, error) {
 	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
-	err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups())
+	_, err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups())
 	if err != nil {
 		var invalidArgs *serviceerror.InvalidArgument
 		if errors.As(err, &invalidArgs) {
