@@ -4050,44 +4050,60 @@ func (ms *MutableStateImpl) shouldExecuteTimeSkipping() bool {
 	return true
 }
 
+func (ms *MutableStateImpl) calculateTimeSkippingDecision() (nextTimePointToSkip *time.Time, disabledAfterBound bool, err error) {
+	for _, timerInfo := range ms.GetPendingTimerInfos() {
+		timerTime := timerInfo.ExpiryTime.AsTime()
+		if nextTimePointToSkip == nil || timerTime.Before(*nextTimePointToSkip) {
+			nextTimePointToSkip = &timerTime
+		}
+	}
+	info := ms.GetExecutionInfo().GetTimeSkippingInfo()
+	bound := info.GetConfig().GetBound()
+	if bound != nil {
+		switch bound.(type) {
+		case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
+			if info.GetBoundTargetTime() != nil {
+				targetTime := info.GetBoundTargetTime().AsTime()
+				if nextTimePointToSkip == nil || targetTime.Before(*nextTimePointToSkip) {
+					nextTimePointToSkip = &targetTime
+					disabledAfterBound = true
+				}
+			} else {
+				return nil, false, serviceerror.NewInternal("time skipping bound target time is not set for elapsed-duration-based bound when time-skipping transitioned event is added")
+			}
+		case *workflowpb.TimeSkippingConfig_MaxSkippedDuration:
+			boundMaxSkippedDuration := bound.(*workflowpb.TimeSkippingConfig_MaxSkippedDuration).MaxSkippedDuration.AsDuration()
+			remainingSkippedDuration := max(0, boundMaxSkippedDuration-info.GetAccumulatedSkippedDuration().AsDuration())
+			if remainingSkippedDuration < 0 {
+				return nil, false, serviceerror.NewInternal("time skipping accumulated skipped duration is greater than the max skipped duration")
+			}
+			targetTime := ms.Now().Add(remainingSkippedDuration)
+			if nextTimePointToSkip == nil || targetTime.Before(*nextTimePointToSkip) {
+				nextTimePointToSkip = &targetTime
+				disabledAfterBound = true
+			}
+		default:
+			return nil, false, serviceerror.NewInternal("unknown time skipping bound type")
+		}
+	}
+	return nextTimePointToSkip, disabledAfterBound, nil
+}
+
 // AddWorkflowExecutionTimeSkippingTransitionedEvent adds a workflow execution time skipping transitioned event to the mutable state.
 // This should only be called only when `ShouldExecuteTimeSkipping` returns true.
 func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context) (*historypb.HistoryEvent, error) {
-
 	opTag := tag.WorkflowActionWorkflowExecutionTimeSkippingTransitioned
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-
-	// The event shall at least has one of skipped duration or disabled after bound flag.
-	// TODO@time-skipping: both calculation of disabledAfterBound and nextTimePointToSkip will be changed when bound is introduced
-	disabledAfterBound := false
-	config := ms.GetExecutionInfo().GetTimeSkippingInfo().GetConfig()
-	if config == nil {
-		return nil, serviceerror.NewInternal("time skipping config is not set when time-skipping transitioned event is added")
+	targetTime, disabledAfterBound, err := ms.calculateTimeSkippingDecision()
+	if err != nil {
+		return nil, err
 	}
-	bound := config.GetBound()
-	if bound == nil {
-		return nil, serviceerror.NewInternal("time skipping bound is not set when time-skipping transitioned event is added")
-	}
-
-	var nextTimePointToSkip *persistencespb.TimerInfo
-	for _, timerInfo := range ms.GetPendingTimerInfos() {
-		if nextTimePointToSkip == nil || timerInfo.ExpiryTime.AsTime().Before(nextTimePointToSkip.ExpiryTime.AsTime()) {
-			nextTimePointToSkip = timerInfo
-		}
-	}
-
-	// shouldn't happen if called after `ShouldExecuteTimeSkipping` returns true
-	if !disabledAfterBound && nextTimePointToSkip == nil {
+	if !disabledAfterBound && targetTime == nil {
 		return nil, serviceerror.NewInternal("time skipping is triggered when conditions are not met")
 	}
-
-	var targetTime time.Time
-	if nextTimePointToSkip != nil {
-		targetTime = nextTimePointToSkip.ExpiryTime.AsTime()
-	}
-	event := ms.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(targetTime, disabledAfterBound)
+	event := ms.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(*targetTime, disabledAfterBound)
 	return event, ms.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx, event)
 }
 
