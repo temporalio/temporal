@@ -1373,7 +1373,11 @@ var (
 	NamespaceReplicationEnqueueDLQCount               = NewCounterDef("namespace_replication_dlq_enqueue_requests")
 	ParentClosePolicyProcessorSuccess                 = NewCounterDef("parent_close_policy_processor_requests")
 	ParentClosePolicyProcessorFailures                = NewCounterDef("parent_close_policy_processor_errors")
-	ScheduleMissedCatchupWindow                       = NewCounterDef(
+	SignalExternalWorkflowExecutionFailed             = NewCounterDef(
+		"signal_external_workflow_execution_failed",
+		WithDescription("The number of signal external workflow execution failures by cause."),
+	)
+	ScheduleMissedCatchupWindow = NewCounterDef(
 		"schedule_missed_catchup_window",
 		WithDescription("The number of times a schedule missed an action due to the configured catchup window"),
 	)
