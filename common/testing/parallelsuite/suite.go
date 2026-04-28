@@ -45,7 +45,6 @@ func (s *Suite[T]) initSuite(t *testing.T) {
 	g := &s.guardT
 	g.name = t.Name()
 	g.T = t
-	g.asserted.Store(false)
 	g.hasSubtests.Store(false)
 	s.Assertions = require.New(g)
 	s.ProtoAssertions = protorequire.New(g)
