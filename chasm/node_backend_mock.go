@@ -30,6 +30,7 @@ type MockNodeBackend struct {
 	HandleUpdateWorkflowStateStatus   func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error)
 	HandleIsWorkflow                  func() bool
 	HandleGetNexusCompletion          func(ctx context.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
+	HandleGetNexusUpdateCompletion    func(ctx context.Context, updateID string, requestID string) (nexusrpc.CompleteOperationOptions, error)
 	HandleAddHistoryEvent             func(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 	HandleLoadHistoryEvent            func(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 	HandleHasAnyBufferedEvent         func(filter func(*historypb.HistoryEvent) bool) bool
@@ -219,6 +220,17 @@ func (m *MockNodeBackend) EndpointRegistry() EndpointRegistry {
 		return m.HandleEndpointRegistry()
 	}
 	return nil
+}
+
+func (m *MockNodeBackend) GetNexusUpdateCompletion(
+	ctx context.Context,
+	updateID string,
+	requestID string,
+) (nexusrpc.CompleteOperationOptions, error) {
+	if m.HandleGetNexusUpdateCompletion != nil {
+		return m.HandleGetNexusUpdateCompletion(ctx, updateID, requestID)
+	}
+	return nexusrpc.CompleteOperationOptions{}, nil
 }
 
 func (m *MockNodeBackend) NumTasksAdded() int {

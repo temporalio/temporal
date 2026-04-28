@@ -165,6 +165,17 @@ func (u *Updater) ApplyRequest(
 		return nil, err
 	}
 
+	callbacksAttached, err := u.upd.AttachCallbacks(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
+	if err != nil {
+		return nil, err
+	}
+	if callbacksAttached {
+		return &api.UpdateWorkflowAction{
+			Noop:               false,
+			CreateWorkflowTask: false,
+		}, nil
+	}
+
 	// If WT is scheduled, but not started, updates will be attached to it, when WT is started.
 	// If WT has already started, new speculative WT will be created when started WT completes.
 	// If update is duplicate, then WT for this update was already created.
@@ -263,6 +274,44 @@ func (u *Updater) OnSuccess(
 		return nil, err
 	}
 	resp := u.CreateResponse(u.wfKey, status.Outcome, status.Stage)
+	// Attach a link to the response. For accepted/completed updates, use a WorkflowEvent link
+	// with a RequestIdReference pointing to the accepted event. For rejected updates (stage
+	// COMPLETED with a failure outcome and no acceptance), use a Workflow link since rejected
+	// updates don't write any event to history.
+	requestID := u.req.GetRequest().GetRequest().GetRequestId()
+	isRejection := status.Outcome.GetFailure() != nil &&
+		status.Stage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED &&
+		u.upd.AcceptedEventID() == common.EmptyEventID
+	if isRejection {
+		// Rejected update: never accepted, so no event in history — link to the workflow itself.
+		resp.Response.Link = &commonpb.Link{
+			Variant: &commonpb.Link_Workflow_{
+				Workflow: &commonpb.Link_Workflow{
+					Namespace:  u.req.Request.Namespace,
+					WorkflowId: u.wfKey.WorkflowID,
+					RunId:      u.wfKey.RunID,
+					Reason:     "Update rejected",
+				},
+			},
+		}
+	} else if status.Stage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED || status.Stage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
+		// Accepted or completed update: link to the accepted event.
+		resp.Response.Link = &commonpb.Link{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  u.req.Request.Namespace,
+					WorkflowId: u.wfKey.WorkflowID,
+					RunId:      u.wfKey.RunID,
+					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+							RequestId: requestID,
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+						},
+					},
+				},
+			},
+		}
+	}
 	return resp, nil
 }
 
