@@ -8144,9 +8144,12 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping_Bound() {
 		s.NotNil(attr.GetTargetTime())
 		s.True(attr.GetDisabledAfterBound())
 		s.False(ms.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)
-		// Accumulated must equal the cap (advanced from 20m to 1h). Allow microsecond
-		// rounding from proto duration conversion.
+		// Accumulated must equal the cap (advanced from 20m to 1h). Tolerate
+		// scheduling jitter between the two ms.Now() reads (calculateTimeSkippingTransition
+		// vs historybuilder.AddEvent) — typical drift is microseconds; 1ms is comfortably
+		// loose without hiding a real "no skip happened" regression (which would be
+		// 40 min off, not <1 ms).
 		got := ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration()
-		s.InDelta(float64(time.Hour), float64(got), float64(time.Microsecond))
+		s.InDelta(float64(time.Hour), float64(got), float64(time.Millisecond))
 	})
 }
