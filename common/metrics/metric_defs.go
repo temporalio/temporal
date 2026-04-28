@@ -927,7 +927,7 @@ var (
 	ActivityCancel                                   = NewCounterDef("activity_cancel", WithDescription("Number of activities that are cancelled."))
 	ActivityTerminate                                = NewCounterDef("activity_terminate", WithDescription("Number of activities that are terminated."))
 	ActivityTaskTimeout                              = NewCounterDef("activity_task_timeout", WithDescription("Number of activity task timeouts (including retries)."))
-	ActivityUpdateOptions                            = NewCounterDef("activity_update_options")
+	ActivityUpdateOptions                            = NewCounterDef("activity_update_options", WithDescription("Number of activity update options calls."))
 	ActivityPause                                    = NewCounterDef("activity_pause", WithDescription("Number of activity pauses."))
 	ActivityUnpause                                  = NewCounterDef("activity_unpause", WithDescription("Number of activity unpauses."))
 	ActivityReset                                    = NewCounterDef("activity_reset", WithDescription("Number of activity resets."))
