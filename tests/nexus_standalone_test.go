@@ -27,23 +27,32 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-var nexusStandaloneOpts = []testcore.TestOption{
-	testcore.WithDedicatedCluster(),
-	testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
-	testcore.WithDynamicConfig(nexusoperation.Enabled, true),
+type NexusStandaloneTestSuite struct {
+	parallelsuite.Suite[*NexusStandaloneTestSuite]
 }
 
-func TestStartStandaloneNexusOperation(t *testing.T) {
-	t.Parallel()
+func TestNexusStandaloneTestSuite(t *testing.T) {
+	parallelsuite.Run(t, &NexusStandaloneTestSuite{})
+}
 
-	t.Run("StartAndDescribe", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+func (s *NexusStandaloneTestSuite) newTestEnv(opts ...testcore.TestOption) *NexusTestEnv {
+	return newNexusTestEnv(s.T(), true, append(
+		opts,
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(nexusoperation.Enabled, true),
+	)...)
+}
+
+func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
+	s.Run("StartAndDescribe", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
 		testInput := payload.EncodeString("test-input")
 		testHeader := map[string]string{"test-key": "test-value"}
@@ -58,7 +67,7 @@ func TestStartStandaloneNexusOperation(t *testing.T) {
 				"CustomKeywordField": payload.EncodeString("test-value"),
 			},
 		}
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId:            "test-op",
 			Endpoint:               endpointName,
 			Input:                  testInput,
@@ -78,9 +87,9 @@ func TestStartStandaloneNexusOperation(t *testing.T) {
 			{name: "WithRunID", runID: startResp.RunId},
 			{name: "WithEmptyRunID", runID: ""},
 		} {
-			t.Run(tc.name, func(t *testing.T) {
-				descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-					Namespace:   s.Namespace().String(),
+			s.Run(tc.name, func(s *NexusStandaloneTestSuite) {
+				descResp, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+					Namespace:   env.Namespace().String(),
 					OperationId: "test-op",
 					RunId:       tc.runID,
 				})
@@ -88,7 +97,7 @@ func TestStartStandaloneNexusOperation(t *testing.T) {
 				s.Equal(startResp.RunId, descResp.RunId)
 
 				info := descResp.GetInfo()
-				protorequire.ProtoEqual(t, &nexuspb.NexusOperationExecutionInfo{
+				protorequire.ProtoEqual(s.T(), &nexuspb.NexusOperationExecutionInfo{
 					OperationId:            "test-op",
 					RunId:                  startResp.RunId,
 					Endpoint:               endpointName,
@@ -118,34 +127,35 @@ func TestStartStandaloneNexusOperation(t *testing.T) {
 			})
 		}
 
-		// Describe with IncludeInput.
-		descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-			Namespace:    s.Namespace().String(),
-			OperationId:  "test-op",
-			RunId:        startResp.RunId,
-			IncludeInput: true,
+		s.Run("IncludeInput", func(s *NexusStandaloneTestSuite) {
+			descResp, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+				Namespace:    env.Namespace().String(),
+				OperationId:  "test-op",
+				RunId:        startResp.RunId,
+				IncludeInput: true,
+			})
+			s.NoError(err)
+			protorequire.ProtoEqual(s.T(), testInput, descResp.GetInput())
 		})
-		s.NoError(err)
-		protorequire.ProtoEqual(t, testInput, descResp.GetInput())
 	})
 
 	// Validates that request validation is wired up in the frontend.
 	// Exhaustive validation cases are covered in unit tests.
-	t.Run("Validation", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+	s.Run("Validation", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
 
-		_, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "", // required field
 		})
 		s.Error(err)
 		s.Contains(err.Error(), "operation_id is required")
 	})
 
-	t.Run("IDConflictPolicyFail", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("IDConflictPolicyFail", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-		resp1, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		resp1, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 			RequestId:   "first-request-id",
@@ -153,7 +163,7 @@ func TestStartStandaloneNexusOperation(t *testing.T) {
 		s.NoError(err)
 
 		// Second start with different request ID should fail.
-		_, err = startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		_, err = s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 			RequestId:   "different-request-id",
@@ -166,7 +176,7 @@ func TestStartStandaloneNexusOperation(t *testing.T) {
 		s.Equal("first-request-id", alreadyStartedErr.StartRequestId)
 
 		// Second start with same request ID should return existing run.
-		resp2, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		resp2, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 			RequestId:   "first-request-id",
@@ -176,17 +186,17 @@ func TestStartStandaloneNexusOperation(t *testing.T) {
 		s.False(resp2.GetStarted())
 	})
 
-	t.Run("IDConflictPolicyUseExisting", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("IDConflictPolicyUseExisting", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-		resp1, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		resp1, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 		})
 		s.NoError(err)
 
-		resp2, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		resp2, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId:      "test-op",
 			Endpoint:         endpointName,
 			RequestId:        "different-request-id",
@@ -198,14 +208,12 @@ func TestStartStandaloneNexusOperation(t *testing.T) {
 	})
 }
 
-func TestDescribeStandaloneNexusOperation(t *testing.T) {
-	t.Parallel()
+func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
+	s.Run("NotFound", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
 
-	t.Run("NotFound", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-
-		_, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "does-not-exist",
 		})
 		var notFound *serviceerror.NotFound
@@ -213,19 +221,19 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 		s.Equal("operation not found for ID: does-not-exist", notFound.Error())
 	})
 
-	t.Run("LongPollStateChange", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("LongPollStateChange", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 		})
 		s.NoError(err)
 
 		// Obtain longpoll token.
-		firstResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		firstResp, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 		})
@@ -233,7 +241,7 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 		s.NotEmpty(firstResp.GetLongPollToken())
 		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING, firstResp.GetInfo().GetStatus())
 
-		ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
 		defer cancel()
 
 		// Start polling.
@@ -244,8 +252,8 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 		describeResultCh := make(chan describeResult, 1)
 
 		go func() {
-			resp, err := s.FrontendClient().DescribeNexusOperationExecution(ctx, &workflowservice.DescribeNexusOperationExecutionRequest{
-				Namespace:      s.Namespace().String(),
+			resp, err := env.FrontendClient().DescribeNexusOperationExecution(ctx, &workflowservice.DescribeNexusOperationExecutionRequest{
+				Namespace:      env.Namespace().String(),
 				OperationId:    "test-op",
 				RunId:          startResp.RunId,
 				IncludeOutcome: true,
@@ -257,16 +265,16 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 		// Wait 1s to ensure the poll is still active.
 		select {
 		case result := <-describeResultCh:
-			require.NoError(t, result.err)
-			t.Fatal("DescribeNexusOperationExecution returned before the state changed")
+			s.NoError(result.err)
+			s.T().Fatal("DescribeNexusOperationExecution returned before the state changed")
 		case <-time.After(1 * time.Second):
 		}
 
 		// Terminate the operation.
 		terminateErrCh := make(chan error, 1)
 		go func() {
-			_, err := s.FrontendClient().TerminateNexusOperationExecution(ctx, &workflowservice.TerminateNexusOperationExecutionRequest{
-				Namespace:   s.Namespace().String(),
+			_, err := env.FrontendClient().TerminateNexusOperationExecution(ctx, &workflowservice.TerminateNexusOperationExecutionRequest{
+				Namespace:   env.Namespace().String(),
 				OperationId: "test-op",
 				RunId:       startResp.RunId,
 				Reason:      "test termination",
@@ -276,19 +284,19 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 
 		select {
 		case err := <-terminateErrCh:
-			require.NoError(t, err)
+			s.NoError(err)
 		case <-ctx.Done():
-			t.Fatal("TerminateNexusOperationExecution timed out")
+			s.T().Fatal("TerminateNexusOperationExecution timed out")
 		}
 
 		// Verify the longpoll result.
 		var longPollResp *workflowservice.DescribeNexusOperationExecutionResponse
 		select {
 		case result := <-describeResultCh:
-			require.NoError(t, result.err)
+			s.NoError(result.err)
 			longPollResp = result.resp
 		case <-ctx.Done():
-			t.Fatal("DescribeNexusOperationExecution timed out")
+			s.T().Fatal("DescribeNexusOperationExecution timed out")
 		}
 
 		s.Equal(startResp.RunId, longPollResp.GetRunId())
@@ -296,64 +304,64 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 		s.Greater(longPollResp.GetInfo().GetStateTransitionCount(), firstResp.GetInfo().GetStateTransitionCount())
 	})
 
-	t.Run("LongPollTimeoutReturnsEmptyResponse", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("LongPollTimeoutReturnsEmptyResponse", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 		})
 		s.NoError(err)
 
-		firstResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		firstResp, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 		})
 		s.NoError(err)
 		s.NotEmpty(firstResp.GetLongPollToken())
 
-		t.Run("CallerDeadlineNotExceeded", func(t *testing.T) {
-			s.OverrideDynamicConfig(nexusoperation.LongPollBuffer, time.Second)
-			s.OverrideDynamicConfig(nexusoperation.LongPollTimeout, 10*time.Millisecond)
+		s.Run("CallerDeadlineNotExceeded", func(s *NexusStandaloneTestSuite) {
+			env.OverrideDynamicConfig(nexusoperation.LongPollBuffer, time.Second)
+			env.OverrideDynamicConfig(nexusoperation.LongPollTimeout, 10*time.Millisecond)
 
-			ctx, cancel := context.WithTimeout(s.Context(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(env.Context(), 5*time.Second)
 			defer cancel()
 
-			longPollResp, err := s.FrontendClient().DescribeNexusOperationExecution(ctx, &workflowservice.DescribeNexusOperationExecutionRequest{
-				Namespace:     s.Namespace().String(),
+			longPollResp, err := env.FrontendClient().DescribeNexusOperationExecution(ctx, &workflowservice.DescribeNexusOperationExecutionRequest{
+				Namespace:     env.Namespace().String(),
 				OperationId:   "test-op",
 				RunId:         startResp.RunId,
 				LongPollToken: firstResp.GetLongPollToken(),
 			})
 			s.NoError(err)
-			protorequire.ProtoEqual(t, &workflowservice.DescribeNexusOperationExecutionResponse{}, longPollResp)
+			protorequire.ProtoEqual(s.T(), &workflowservice.DescribeNexusOperationExecutionResponse{}, longPollResp)
 		})
 
-		t.Run("NoCallerDeadline", func(t *testing.T) {
+		s.Run("NoCallerDeadline", func(s *NexusStandaloneTestSuite) {
 			// Frontend still imposes its own deadline upstream, so the buffer must fit within that.
-			s.OverrideDynamicConfig(nexusoperation.LongPollBuffer, 29*time.Second)
-			s.OverrideDynamicConfig(nexusoperation.LongPollTimeout, 10*time.Millisecond)
+			env.OverrideDynamicConfig(nexusoperation.LongPollBuffer, 29*time.Second)
+			env.OverrideDynamicConfig(nexusoperation.LongPollTimeout, 10*time.Millisecond)
 
-			longPollResp, err := s.FrontendClient().DescribeNexusOperationExecution(context.Background(), &workflowservice.DescribeNexusOperationExecutionRequest{
-				Namespace:     s.Namespace().String(),
+			longPollResp, err := env.FrontendClient().DescribeNexusOperationExecution(context.Background(), &workflowservice.DescribeNexusOperationExecutionRequest{
+				Namespace:     env.Namespace().String(),
 				OperationId:   "test-op",
 				RunId:         startResp.RunId,
 				LongPollToken: firstResp.GetLongPollToken(),
 			})
 			s.NoError(err)
-			protorequire.ProtoEqual(t, &workflowservice.DescribeNexusOperationExecutionResponse{}, longPollResp)
+			protorequire.ProtoEqual(s.T(), &workflowservice.DescribeNexusOperationExecutionResponse{}, longPollResp)
 		})
 	})
 
-	t.Run("IncludeOutcome_Success", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		taskQueue := testcore.RandomizedNexusEndpoint(t.Name())
-		endpointName := createNexusEndpointWithTaskQueue(s, taskQueue)
+	s.Run("IncludeOutcome_Success", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		taskQueue := testcore.RandomizedNexusEndpoint(s.T().Name())
+		endpointName := env.createNexusEndpoint(s.T(), testcore.RandomizedNexusEndpoint(s.T().Name()), taskQueue).GetSpec().GetName()
 		expectedResult := payload.EncodeString("successful result")
 		handlerLink := &commonpb.Link_WorkflowEvent{
-			Namespace:  s.Namespace().String(),
+			Namespace:  env.Namespace().String(),
 			WorkflowId: "handler-workflow",
 			RunId:      "handler-run-id",
 			Reference: &commonpb.Link_WorkflowEvent_EventRef{
@@ -364,19 +372,19 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 			},
 		}
 
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 		})
 		s.NoError(err)
 
-		ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
 		defer cancel()
 
 		pollerErrCh := make(chan error, 1)
 		go func() {
-			task, err := s.FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
-				Namespace: s.Namespace().String(),
+			task, err := env.FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+				Namespace: env.Namespace().String(),
 				Identity:  "test-worker",
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: taskQueue,
@@ -388,7 +396,7 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 				return
 			}
 			expectedLink := commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
-				Namespace:   s.Namespace().String(),
+				Namespace:   env.Namespace().String(),
 				OperationId: "test-op",
 				RunId:       startResp.RunId,
 			})
@@ -406,8 +414,8 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 				return
 			}
 
-			_, err = s.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
-				Namespace: s.Namespace().String(),
+			_, err = env.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+				Namespace: env.Namespace().String(),
 				Identity:  "test-worker",
 				TaskToken: task.GetTaskToken(),
 				Response: &nexuspb.Response{
@@ -428,9 +436,9 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 			pollerErrCh <- err
 		}()
 
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
-			descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-				Namespace:      s.Namespace().String(),
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			descResp, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+				Namespace:      env.Namespace().String(),
 				OperationId:    "test-op",
 				RunId:          startResp.RunId,
 				IncludeOutcome: true,
@@ -446,8 +454,8 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 				},
 			}, descResp.GetInfo().GetLinks())
 
-			pollResp, err := s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
-				Namespace:   s.Namespace().String(),
+			pollResp, err := env.FrontendClient().PollNexusOperationExecution(env.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+				Namespace:   env.Namespace().String(),
 				OperationId: "test-op",
 				RunId:       startResp.RunId,
 				WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
@@ -459,25 +467,25 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 		s.NoError(<-pollerErrCh)
 	})
 
-	t.Run("IncludeOutcome_Failure", func(t *testing.T) {
+	s.Run("IncludeOutcome_Failure", func(s *NexusStandaloneTestSuite) {
 		// TODO: Add canceled last-attempt-failure coverage here once standalone cancellation tasks
 		// can be completed through the public Nexus task APIs.
 
-		t.Run("ScheduleToStartTimeout", func(t *testing.T) {
-			s := testcore.NewEnv(t, nexusStandaloneOpts...)
-			taskQueue := testcore.RandomizedNexusEndpoint(t.Name())
-			endpointName := createNexusEndpointWithTaskQueue(s, taskQueue)
+		s.Run("ScheduleToStartTimeout", func(s *NexusStandaloneTestSuite) {
+			env := s.newTestEnv()
+			taskQueue := testcore.RandomizedNexusEndpoint(s.T().Name())
+			endpointName := env.createNexusEndpoint(s.T(), testcore.RandomizedNexusEndpoint(s.T().Name()), taskQueue).GetSpec().GetName()
 
-			startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 				OperationId:            "test-op",
 				Endpoint:               endpointName,
 				ScheduleToStartTimeout: durationpb.New(2 * time.Second),
 			})
 			s.NoError(err)
 
-			require.EventuallyWithT(t, func(t *assert.CollectT) {
-				descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-					Namespace:      s.Namespace().String(),
+			s.EventuallyWithT(func(t *assert.CollectT) {
+				descResp, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+					Namespace:      env.Namespace().String(),
 					OperationId:    "test-op",
 					RunId:          startResp.RunId,
 					IncludeOutcome: true,
@@ -493,8 +501,8 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 					},
 				}, descResp.GetFailure())
 
-				pollResp, err := s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
-					Namespace:   s.Namespace().String(),
+				pollResp, err := env.FrontendClient().PollNexusOperationExecution(env.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+					Namespace:   env.Namespace().String(),
 					OperationId: "test-op",
 					RunId:       startResp.RunId,
 					WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
@@ -511,21 +519,21 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 			}, 10*time.Second, 100*time.Millisecond)
 		})
 
-		t.Run("ScheduleToCloseTimeout_BeforeStart", func(t *testing.T) {
-			s := testcore.NewEnv(t, nexusStandaloneOpts...)
-			taskQueue := testcore.RandomizedNexusEndpoint(t.Name())
-			endpointName := createNexusEndpointWithTaskQueue(s, taskQueue)
+		s.Run("ScheduleToCloseTimeout_BeforeStart", func(s *NexusStandaloneTestSuite) {
+			env := s.newTestEnv()
+			taskQueue := testcore.RandomizedNexusEndpoint(s.T().Name())
+			endpointName := env.createNexusEndpoint(s.T(), testcore.RandomizedNexusEndpoint(s.T().Name()), taskQueue).GetSpec().GetName()
 
-			startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 				OperationId:            "test-op",
 				Endpoint:               endpointName,
 				ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
 			})
 			s.NoError(err)
 
-			require.EventuallyWithT(t, func(t *assert.CollectT) {
-				descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-					Namespace:      s.Namespace().String(),
+			s.EventuallyWithT(func(t *assert.CollectT) {
+				descResp, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+					Namespace:      env.Namespace().String(),
 					OperationId:    "test-op",
 					RunId:          startResp.RunId,
 					IncludeOutcome: true,
@@ -541,8 +549,8 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 					},
 				}, descResp.GetFailure())
 
-				pollResp, err := s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
-					Namespace:   s.Namespace().String(),
+				pollResp, err := env.FrontendClient().PollNexusOperationExecution(env.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+					Namespace:   env.Namespace().String(),
 					OperationId: "test-op",
 					RunId:       startResp.RunId,
 					WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
@@ -562,7 +570,7 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 		testCases := []struct {
 			name          string
 			setupReq      func(*workflowservice.StartNexusOperationExecutionRequest)
-			respond       func(context.Context, *testcore.TestEnv, *workflowservice.PollNexusTaskQueueResponse) error
+			respond       func(context.Context, *NexusTestEnv, *workflowservice.PollNexusTaskQueueResponse) error
 			assertOutcome func(*assert.CollectT, *workflowservice.DescribeNexusOperationExecutionResponse, *workflowservice.PollNexusOperationExecutionResponse)
 		}{
 			{
@@ -570,9 +578,9 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 				setupReq: func(req *workflowservice.StartNexusOperationExecutionRequest) {
 					req.StartToCloseTimeout = durationpb.New(2 * time.Second)
 				},
-				respond: func(ctx context.Context, s *testcore.TestEnv, task *workflowservice.PollNexusTaskQueueResponse) error {
-					_, err := s.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
-						Namespace: s.Namespace().String(),
+				respond: func(ctx context.Context, env *NexusTestEnv, task *workflowservice.PollNexusTaskQueueResponse) error {
+					_, err := env.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+						Namespace: env.Namespace().String(),
 						Identity:  "test-worker",
 						TaskToken: task.GetTaskToken(),
 						Response: &nexuspb.Response{
@@ -614,9 +622,9 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 				setupReq: func(req *workflowservice.StartNexusOperationExecutionRequest) {
 					req.ScheduleToCloseTimeout = durationpb.New(4 * time.Second)
 				},
-				respond: func(ctx context.Context, s *testcore.TestEnv, task *workflowservice.PollNexusTaskQueueResponse) error {
-					_, err := s.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
-						Namespace: s.Namespace().String(),
+				respond: func(ctx context.Context, env *NexusTestEnv, task *workflowservice.PollNexusTaskQueueResponse) error {
+					_, err := env.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+						Namespace: env.Namespace().String(),
 						Identity:  "test-worker",
 						TaskToken: task.GetTaskToken(),
 						Response: &nexuspb.Response{
@@ -658,9 +666,9 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 				setupReq: func(req *workflowservice.StartNexusOperationExecutionRequest) {
 					req.ScheduleToCloseTimeout = durationpb.New(4 * time.Second)
 				},
-				respond: func(ctx context.Context, s *testcore.TestEnv, task *workflowservice.PollNexusTaskQueueResponse) error {
-					_, err := s.FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
-						Namespace: s.Namespace().String(),
+				respond: func(ctx context.Context, env *NexusTestEnv, task *workflowservice.PollNexusTaskQueueResponse) error {
+					_, err := env.FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
+						Namespace: env.Namespace().String(),
 						Identity:  "test-worker",
 						TaskToken: task.GetTaskToken(),
 						Error: &nexuspb.HandlerError{
@@ -694,9 +702,9 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 			},
 			{
 				name: "TerminalFailure",
-				respond: func(ctx context.Context, s *testcore.TestEnv, task *workflowservice.PollNexusTaskQueueResponse) error {
-					_, err := s.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
-						Namespace: s.Namespace().String(),
+				respond: func(ctx context.Context, env *NexusTestEnv, task *workflowservice.PollNexusTaskQueueResponse) error {
+					_, err := env.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+						Namespace: env.Namespace().String(),
 						Identity:  "test-worker",
 						TaskToken: task.GetTaskToken(),
 						Response: &nexuspb.Response{
@@ -721,10 +729,10 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 		}
 
 		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				s := testcore.NewEnv(t, nexusStandaloneOpts...)
-				taskQueue := testcore.RandomizedNexusEndpoint(t.Name())
-				endpointName := createNexusEndpointWithTaskQueue(s, taskQueue)
+			s.Run(tc.name, func(s *NexusStandaloneTestSuite) {
+				env := s.newTestEnv()
+				taskQueue := testcore.RandomizedNexusEndpoint(s.T().Name())
+				endpointName := env.createNexusEndpoint(s.T(), testcore.RandomizedNexusEndpoint(s.T().Name()), taskQueue).GetSpec().GetName()
 				startReq := &workflowservice.StartNexusOperationExecutionRequest{
 					OperationId: "test-op",
 					Endpoint:    endpointName,
@@ -733,16 +741,16 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 					tc.setupReq(startReq)
 				}
 
-				startResp, err := startNexusOperation(s, startReq)
+				startResp, err := s.startNexusOperation(env, startReq)
 				s.NoError(err)
 
-				ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+				ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
 				defer cancel()
 
 				pollerErrCh := make(chan error, 1)
 				go func() {
-					task, err := s.FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
-						Namespace: s.Namespace().String(),
+					task, err := env.FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+						Namespace: env.Namespace().String(),
 						Identity:  "test-worker",
 						TaskQueue: &taskqueuepb.TaskQueue{
 							Name: taskQueue,
@@ -753,20 +761,20 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 						pollerErrCh <- err
 						return
 					}
-					pollerErrCh <- tc.respond(ctx, s, task)
+					pollerErrCh <- tc.respond(ctx, env, task)
 				}()
 
-				require.EventuallyWithT(t, func(t *assert.CollectT) {
-					descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-						Namespace:      s.Namespace().String(),
+				s.EventuallyWithT(func(t *assert.CollectT) {
+					descResp, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+						Namespace:      env.Namespace().String(),
 						OperationId:    "test-op",
 						RunId:          startResp.RunId,
 						IncludeOutcome: true,
 					})
 					require.NoError(t, err)
 
-					pollResp, err := s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
-						Namespace:   s.Namespace().String(),
+					pollResp, err := env.FrontendClient().PollNexusOperationExecution(env.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+						Namespace:   env.Namespace().String(),
 						OperationId: "test-op",
 						RunId:       startResp.RunId,
 						WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
@@ -782,46 +790,44 @@ func TestDescribeStandaloneNexusOperation(t *testing.T) {
 
 	// Validates that request validation is wired up in the frontend.
 	// Exhaustive validation cases are covered in unit tests.
-	t.Run("Validation", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+	s.Run("Validation", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
 
-		_, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-			Namespace: s.Namespace().String(),
+		_, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace: env.Namespace().String(),
 		})
 		s.Error(err)
 		s.ErrorContains(err, "operation_id is required")
 	})
 }
 
-func TestStandaloneNexusOperationCancel(t *testing.T) {
-	t.Parallel()
+func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
+	s.Run("RequestCancel", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-	t.Run("RequestCancel", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
-
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 		})
 		s.NoError(err)
 		s.True(startResp.GetStarted())
 
-		_, err = s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().RequestCancelNexusOperationExecution(env.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 		})
 		s.NoError(err)
 
 		// Verify state after cancel — operation is still running
-		descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 		})
 		s.NoError(err)
-		protorequire.ProtoEqual(t, &nexuspb.NexusOperationExecutionInfo{
+		protorequire.ProtoEqual(s.T(), &nexuspb.NexusOperationExecutionInfo{
 			OperationId:            "test-op",
 			RunId:                  startResp.RunId,
 			Endpoint:               endpointName,
@@ -843,19 +849,19 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING, descResp.GetInfo().GetStatus())
 	})
 
-	t.Run("AlreadyCanceled", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("AlreadyCanceled", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 		})
 		s.NoError(err)
 
 		// Cancel the operation.
-		_, err = s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().RequestCancelNexusOperationExecution(env.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 			RequestId:   "cancel-request-id",
@@ -863,8 +869,8 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 		s.NoError(err)
 
 		// Cancel again with same request ID — should be idempotent.
-		_, err = s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().RequestCancelNexusOperationExecution(env.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 			RequestId:   "cancel-request-id",
@@ -872,8 +878,8 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 		s.NoError(err)
 
 		// Cancel with a different request ID — should error.
-		_, err = s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().RequestCancelNexusOperationExecution(env.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 			RequestId:   "different-request-id",
@@ -882,13 +888,13 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 		s.Contains(err.Error(), "cancellation already requested")
 	})
 
-	t.Run("RequestCancel_ForwardsOriginalNexusHeaders", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := testcore.RandomizedNexusEndpoint(t.Name())
+	s.Run("RequestCancel_ForwardsOriginalNexusHeaders", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 		taskHeaderCh := make(chan string, 1)
 
 		listenAddr := nexustest.AllocListenAddress()
-		nexustest.NewNexusServer(t, listenAddr, nexustest.Handler{
+		nexustest.NewNexusServer(s.T(), listenAddr, nexustest.Handler{
 			OnStartOperation: func(
 				ctx context.Context,
 				service string,
@@ -904,7 +910,7 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 			},
 		})
 
-		_, err := s.OperatorClient().CreateNexusEndpoint(s.Context(), &operatorservice.CreateNexusEndpointRequest{
+		_, err := env.OperatorClient().CreateNexusEndpoint(env.Context(), &operatorservice.CreateNexusEndpointRequest{
 			Spec: &nexuspb.EndpointSpec{
 				Name: endpointName,
 				Target: &nexuspb.EndpointTarget{
@@ -918,23 +924,23 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 		})
 		s.NoError(err)
 
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 			NexusHeader: map[string]string{"x-test-header": "expected-value"},
 		})
 		s.NoError(err)
 
-		_, err = s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().PollNexusOperationExecution(env.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
 		})
 		s.NoError(err)
 
-		_, err = s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().RequestCancelNexusOperationExecution(env.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 		})
@@ -942,25 +948,25 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 
 		select {
 		case headerValue := <-taskHeaderCh:
-			require.Equal(t, "expected-value", headerValue)
+			s.Equal("expected-value", headerValue)
 		case <-time.After(10 * time.Second):
-			t.Fatal("CancelOperation was not invoked")
+			s.T().Fatal("CancelOperation was not invoked")
 		}
 	})
 
-	t.Run("AlreadyTerminated", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("AlreadyTerminated", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 		})
 		s.NoError(err)
 
 		// Terminate the operation first.
-		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().TerminateNexusOperationExecution(env.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 			RequestId:   "terminate-request-id",
@@ -970,8 +976,8 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 		s.NoError(err)
 
 		// Cancel a terminated operation — should error.
-		_, err = s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().RequestCancelNexusOperationExecution(env.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 		})
@@ -979,11 +985,11 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 		s.Contains(err.Error(), "operation already completed")
 	})
 
-	t.Run("NotFound", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+	s.Run("NotFound", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
 
-		_, err := s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err := env.FrontendClient().RequestCancelNexusOperationExecution(env.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "does-not-exist",
 		})
 		var notFound *serviceerror.NotFound
@@ -992,11 +998,11 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 
 	// Validates that request validation is wired up in the frontend.
 	// Exhaustive validation cases are covered in unit tests.
-	t.Run("Validation", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+	s.Run("Validation", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
 
-		_, err := s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err := env.FrontendClient().RequestCancelNexusOperationExecution(env.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "", // required field
 		})
 		s.Error(err)
@@ -1004,22 +1010,20 @@ func TestStandaloneNexusOperationCancel(t *testing.T) {
 	})
 }
 
-func TestTerminateStandaloneNexusOperation(t *testing.T) {
-	t.Parallel()
+func (s *NexusStandaloneTestSuite) TestTerminateStandaloneNexusOperation() {
+	s.Run("Terminate", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-	t.Run("Terminate", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
-
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 		})
 		s.NoError(err)
 		s.True(startResp.GetStarted())
 
-		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().TerminateNexusOperationExecution(env.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 			RequestId:   "terminate-request-id",
@@ -1029,8 +1033,8 @@ func TestTerminateStandaloneNexusOperation(t *testing.T) {
 		s.NoError(err)
 
 		// Verify outcome after terminate.
-		descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-			Namespace:      s.Namespace().String(),
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:      env.Namespace().String(),
 			OperationId:    "test-op",
 			RunId:          startResp.RunId,
 			IncludeOutcome: true,
@@ -1044,19 +1048,19 @@ func TestTerminateStandaloneNexusOperation(t *testing.T) {
 		s.Equal("test-identity", failure.GetTerminatedFailureInfo().GetIdentity())
 	})
 
-	t.Run("AlreadyTerminated", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("AlreadyTerminated", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 		})
 		s.NoError(err)
 
 		// Terminate the operation.
-		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().TerminateNexusOperationExecution(env.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 			RequestId:   "terminate-request-id",
@@ -1065,8 +1069,8 @@ func TestTerminateStandaloneNexusOperation(t *testing.T) {
 		s.NoError(err)
 
 		// Terminate again with same request ID — should be idempotent.
-		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().TerminateNexusOperationExecution(env.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 			RequestId:   "terminate-request-id",
@@ -1075,8 +1079,8 @@ func TestTerminateStandaloneNexusOperation(t *testing.T) {
 		s.NoError(err)
 
 		// Terminate with a different request ID — should error.
-		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().TerminateNexusOperationExecution(env.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 			RequestId:   "different-request-id",
@@ -1086,27 +1090,27 @@ func TestTerminateStandaloneNexusOperation(t *testing.T) {
 		s.Contains(err.Error(), "already terminated")
 	})
 
-	t.Run("AlreadyCanceled", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("AlreadyCanceled", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 		})
 		s.NoError(err)
 
 		// Cancel the operation first.
-		_, err = s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().RequestCancelNexusOperationExecution(env.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 		})
 		s.NoError(err)
 
 		// Terminate a canceled operation — should succeed.
-		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().TerminateNexusOperationExecution(env.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 			RequestId:   "terminate-request-id",
@@ -1115,8 +1119,8 @@ func TestTerminateStandaloneNexusOperation(t *testing.T) {
 		s.NoError(err)
 
 		// Verify state changed to terminated (terminate overrides cancel request).
-		descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 		})
@@ -1124,11 +1128,11 @@ func TestTerminateStandaloneNexusOperation(t *testing.T) {
 		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TERMINATED, descResp.GetInfo().GetStatus())
 	})
 
-	t.Run("NotFound", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+	s.Run("NotFound", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
 
-		_, err := s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err := env.FrontendClient().TerminateNexusOperationExecution(env.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "does-not-exist",
 			Reason:      "test termination",
 		})
@@ -1138,11 +1142,11 @@ func TestTerminateStandaloneNexusOperation(t *testing.T) {
 
 	// Validates that request validation is wired up in the frontend.
 	// Exhaustive validation cases are covered in unit tests.
-	t.Run("Validation", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+	s.Run("Validation", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
 
-		_, err := s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err := env.FrontendClient().TerminateNexusOperationExecution(env.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "", // required field
 		})
 		s.Error(err)
@@ -1150,14 +1154,12 @@ func TestTerminateStandaloneNexusOperation(t *testing.T) {
 	})
 }
 
-func TestListStandaloneNexusOperation(t *testing.T) {
-	t.Parallel()
+func (s *NexusStandaloneTestSuite) TestListStandaloneNexusOperation() {
+	s.Run("ListAndVerifyFields", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-	t.Run("ListAndVerifyFields", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
-
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "list-test-op",
 			Endpoint:    endpointName,
 		})
@@ -1166,15 +1168,15 @@ func TestListStandaloneNexusOperation(t *testing.T) {
 		var listResp *workflowservice.ListNexusOperationExecutionsResponse
 		s.EventuallyWithT(func(t *assert.CollectT) {
 			var err error
-			listResp, err = s.FrontendClient().ListNexusOperationExecutions(s.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
-				Namespace: s.Namespace().String(),
+			listResp, err = env.FrontendClient().ListNexusOperationExecutions(env.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
+				Namespace: env.Namespace().String(),
 				Query:     "OperationId = 'list-test-op'",
 			})
 			require.NoError(t, err)
 			require.Len(t, listResp.GetOperations(), 1)
 		}, testcore.WaitForESToSettle, 100*time.Millisecond)
 		op := listResp.GetOperations()[0]
-		protorequire.ProtoEqual(t, &nexuspb.NexusOperationExecutionListInfo{
+		protorequire.ProtoEqual(s.T(), &nexuspb.NexusOperationExecutionListInfo{
 			OperationId:          "list-test-op",
 			RunId:                startResp.RunId,
 			Endpoint:             endpointName,
@@ -1186,19 +1188,19 @@ func TestListStandaloneNexusOperation(t *testing.T) {
 			// Dynamic fields copied from actual response for comparison.
 			ScheduleTime: op.GetScheduleTime(),
 		}, op)
-		require.NotNil(t, op.GetScheduleTime())
+		s.NotNil(op.GetScheduleTime())
 	})
 
-	t.Run("ListWithCustomSearchAttributes", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("ListWithCustomSearchAttributes", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
 		testSA := &commonpb.SearchAttributes{
 			IndexedFields: map[string]*commonpb.Payload{
 				"CustomKeywordField": payload.EncodeString("list-sa-value"),
 			},
 		}
-		_, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId:      "sa-op",
 			Endpoint:         endpointName,
 			SearchAttributes: testSA,
@@ -1208,26 +1210,26 @@ func TestListStandaloneNexusOperation(t *testing.T) {
 		var listResp *workflowservice.ListNexusOperationExecutionsResponse
 		s.EventuallyWithT(func(t *assert.CollectT) {
 			var err error
-			listResp, err = s.FrontendClient().ListNexusOperationExecutions(s.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
-				Namespace: s.Namespace().String(),
+			listResp, err = env.FrontendClient().ListNexusOperationExecutions(env.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
+				Namespace: env.Namespace().String(),
 				Query:     "CustomKeywordField = 'list-sa-value'",
 			})
 			require.NoError(t, err)
 			require.Len(t, listResp.GetOperations(), 1)
 		}, testcore.WaitForESToSettle, 100*time.Millisecond)
-		require.Equal(t, "sa-op", listResp.GetOperations()[0].GetOperationId())
+		s.Equal("sa-op", listResp.GetOperations()[0].GetOperationId())
 		returnedSA := listResp.GetOperations()[0].GetSearchAttributes().GetIndexedFields()["CustomKeywordField"]
-		require.NotNil(t, returnedSA)
+		s.NotNil(returnedSA)
 		var returnedValue string
-		require.NoError(t, payload.Decode(returnedSA, &returnedValue))
-		require.Equal(t, "list-sa-value", returnedValue)
+		s.NoError(payload.Decode(returnedSA, &returnedValue))
+		s.Equal("list-sa-value", returnedValue)
 	})
 
-	t.Run("QueryByMultipleFields", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("QueryByMultipleFields", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-		_, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "multi-op",
 			Endpoint:    endpointName,
 			Service:     "multi-service",
@@ -1237,22 +1239,22 @@ func TestListStandaloneNexusOperation(t *testing.T) {
 		var listResp *workflowservice.ListNexusOperationExecutionsResponse
 		s.EventuallyWithT(func(t *assert.CollectT) {
 			var err error
-			listResp, err = s.FrontendClient().ListNexusOperationExecutions(s.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
-				Namespace: s.Namespace().String(),
+			listResp, err = env.FrontendClient().ListNexusOperationExecutions(env.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
+				Namespace: env.Namespace().String(),
 				Query:     fmt.Sprintf("Endpoint = '%s' AND Service = 'multi-service'", endpointName),
 			})
 			require.NoError(t, err)
 			require.Len(t, listResp.GetOperations(), 1)
 		}, testcore.WaitForESToSettle, 100*time.Millisecond)
-		require.Equal(t, "multi-op", listResp.GetOperations()[0].GetOperationId())
+		s.Equal("multi-op", listResp.GetOperations()[0].GetOperationId())
 	})
 
-	t.Run("QueryBySupportedSearchAttributes", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("QueryBySupportedSearchAttributes", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 		testStartTime := time.Now().UTC().Format(time.RFC3339Nano)
 
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "supported-closed-op",
 			Endpoint:    endpointName,
 			Service:     "supported-closed-service",
@@ -1260,8 +1262,8 @@ func TestListStandaloneNexusOperation(t *testing.T) {
 		})
 		s.NoError(err)
 
-		descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "supported-closed-op",
 			RunId:       startResp.RunId,
 		})
@@ -1269,8 +1271,8 @@ func TestListStandaloneNexusOperation(t *testing.T) {
 		requestID := descResp.GetInfo().GetRequestId()
 		s.NotEmpty(requestID)
 
-		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().TerminateNexusOperationExecution(env.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "supported-closed-op",
 			RunId:       startResp.RunId,
 			RequestId:   "supported-closed-op-terminate",
@@ -1371,29 +1373,29 @@ func TestListStandaloneNexusOperation(t *testing.T) {
 				},
 			},
 		} {
-			t.Run(tc.name, func(t *testing.T) {
+			s.Run(tc.name, func(s *NexusStandaloneTestSuite) {
 				var resp *workflowservice.ListNexusOperationExecutionsResponse
 				s.EventuallyWithT(func(t *assert.CollectT) {
 					var err error
-					resp, err = s.FrontendClient().ListNexusOperationExecutions(s.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
-						Namespace: s.Namespace().String(),
+					resp, err = env.FrontendClient().ListNexusOperationExecutions(env.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
+						Namespace: env.Namespace().String(),
 						PageSize:  10,
 						Query:     tc.query,
 					})
 					require.NoError(t, err, "case=%s query=%s", tc.name, tc.query)
 					require.Len(t, resp.GetOperations(), 1, "case=%s query=%s", tc.name, tc.query)
 				}, testcore.WaitForESToSettle, 100*time.Millisecond)
-				tc.assert(t, resp.GetOperations()[0])
+				tc.assert(s.T(), resp.GetOperations()[0])
 			})
 		}
 	})
 
-	t.Run("PageSizeCapping", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("PageSizeCapping", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
 		for i := range 2 {
-			_, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 				OperationId: fmt.Sprintf("paged-op-%d", i),
 				Endpoint:    endpointName,
 			})
@@ -1403,8 +1405,8 @@ func TestListStandaloneNexusOperation(t *testing.T) {
 		// Wait for both to be indexed.
 		query := fmt.Sprintf("Endpoint = '%s'", endpointName)
 		s.EventuallyWithT(func(t *assert.CollectT) {
-			resp, err := s.FrontendClient().ListNexusOperationExecutions(s.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
-				Namespace: s.Namespace().String(),
+			resp, err := env.FrontendClient().ListNexusOperationExecutions(env.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
+				Namespace: env.Namespace().String(),
 				Query:     query,
 			})
 			require.NoError(t, err)
@@ -1412,74 +1414,74 @@ func TestListStandaloneNexusOperation(t *testing.T) {
 		}, testcore.WaitForESToSettle, 100*time.Millisecond)
 
 		// Override max page size to 1.
-		s.OverrideDynamicConfig(dynamicconfig.FrontendVisibilityMaxPageSize, 1)
+		env.OverrideDynamicConfig(dynamicconfig.FrontendVisibilityMaxPageSize, 1)
 
 		// PageSize 0 should default to max (1), returning only 1 result.
-		resp, err := s.FrontendClient().ListNexusOperationExecutions(s.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
-			Namespace: s.Namespace().String(),
+		resp, err := env.FrontendClient().ListNexusOperationExecutions(env.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
+			Namespace: env.Namespace().String(),
 			PageSize:  0,
 			Query:     query,
 		})
-		require.NoError(t, err)
-		require.Len(t, resp.GetOperations(), 1)
+		s.NoError(err)
+		s.Len(resp.GetOperations(), 1)
 
 		// PageSize > max should also be capped. First page.
-		resp, err = s.FrontendClient().ListNexusOperationExecutions(s.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
-			Namespace: s.Namespace().String(),
+		resp, err = env.FrontendClient().ListNexusOperationExecutions(env.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
+			Namespace: env.Namespace().String(),
 			PageSize:  2,
 			Query:     query,
 		})
-		require.NoError(t, err)
-		require.Len(t, resp.GetOperations(), 1)
+		s.NoError(err)
+		s.Len(resp.GetOperations(), 1)
 
 		// Second page.
-		resp, err = s.FrontendClient().ListNexusOperationExecutions(s.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
-			Namespace:     s.Namespace().String(),
+		resp, err = env.FrontendClient().ListNexusOperationExecutions(env.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
+			Namespace:     env.Namespace().String(),
 			PageSize:      2,
 			Query:         query,
 			NextPageToken: resp.GetNextPageToken(),
 		})
-		require.NoError(t, err)
-		require.Len(t, resp.GetOperations(), 1)
+		s.NoError(err)
+		s.Len(resp.GetOperations(), 1)
 
 		// No more results.
-		resp, err = s.FrontendClient().ListNexusOperationExecutions(s.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
-			Namespace:     s.Namespace().String(),
+		resp, err = env.FrontendClient().ListNexusOperationExecutions(env.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
+			Namespace:     env.Namespace().String(),
 			PageSize:      2,
 			Query:         query,
 			NextPageToken: resp.GetNextPageToken(),
 		})
-		require.NoError(t, err)
-		require.Empty(t, resp.GetOperations())
-		require.Nil(t, resp.GetNextPageToken())
+		s.NoError(err)
+		s.Empty(resp.GetOperations())
+		s.Nil(resp.GetNextPageToken())
 	})
 
-	t.Run("InvalidQuery", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+	s.Run("InvalidQuery", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
 
-		_, err := s.FrontendClient().ListNexusOperationExecutions(s.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
-			Namespace: s.Namespace().String(),
+		_, err := env.FrontendClient().ListNexusOperationExecutions(env.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
+			Namespace: env.Namespace().String(),
 			Query:     "invalid query syntax !!!",
 		})
 		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 		s.ErrorContains(err, "invalid query")
 	})
 
-	t.Run("InvalidSearchAttribute", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+	s.Run("InvalidSearchAttribute", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
 
-		_, err := s.FrontendClient().ListNexusOperationExecutions(s.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
-			Namespace: s.Namespace().String(),
+		_, err := env.FrontendClient().ListNexusOperationExecutions(env.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
+			Namespace: env.Namespace().String(),
 			Query:     "NonExistentField = 'value'",
 		})
 		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 		s.ErrorContains(err, "NonExistentField")
 	})
 
-	t.Run("NamespaceNotFound", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+	s.Run("NamespaceNotFound", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
 
-		_, err := s.FrontendClient().ListNexusOperationExecutions(s.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
+		_, err := env.FrontendClient().ListNexusOperationExecutions(env.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
 			Namespace: "non-existent-namespace",
 		})
 		s.ErrorAs(err, new(*serviceerror.NamespaceNotFound))
@@ -1487,22 +1489,20 @@ func TestListStandaloneNexusOperation(t *testing.T) {
 	})
 }
 
-func TestCountStandaloneNexusOperation(t *testing.T) {
-	t.Parallel()
+func (s *NexusStandaloneTestSuite) TestCountStandaloneNexusOperation() {
+	s.Run("CountByOperationID", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-	t.Run("CountByOperationID", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
-
-		_, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "count-op",
 			Endpoint:    endpointName,
 		})
 		s.NoError(err)
 
 		s.EventuallyWithT(func(t *assert.CollectT) {
-			resp, err := s.FrontendClient().CountNexusOperationExecutions(s.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
-				Namespace: s.Namespace().String(),
+			resp, err := env.FrontendClient().CountNexusOperationExecutions(env.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
+				Namespace: env.Namespace().String(),
 				Query:     "OperationId = 'count-op'",
 			})
 			require.NoError(t, err)
@@ -1510,12 +1510,12 @@ func TestCountStandaloneNexusOperation(t *testing.T) {
 		}, testcore.WaitForESToSettle, 100*time.Millisecond)
 	})
 
-	t.Run("CountByEndpoint", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("CountByEndpoint", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
 		for i := range 3 {
-			_, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 				OperationId: fmt.Sprintf("count-ep-op-%d", i),
 				Endpoint:    endpointName,
 			})
@@ -1523,8 +1523,8 @@ func TestCountStandaloneNexusOperation(t *testing.T) {
 		}
 
 		s.EventuallyWithT(func(t *assert.CollectT) {
-			resp, err := s.FrontendClient().CountNexusOperationExecutions(s.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
-				Namespace: s.Namespace().String(),
+			resp, err := env.FrontendClient().CountNexusOperationExecutions(env.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
+				Namespace: env.Namespace().String(),
 				Query:     fmt.Sprintf("Endpoint = '%s'", endpointName),
 			})
 			require.NoError(t, err)
@@ -1532,19 +1532,19 @@ func TestCountStandaloneNexusOperation(t *testing.T) {
 		}, testcore.WaitForESToSettle, 100*time.Millisecond)
 	})
 
-	t.Run("CountByExecutionStatus", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("CountByExecutionStatus", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-		_, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "count-status-op",
 			Endpoint:    endpointName,
 		})
 		s.NoError(err)
 
 		s.EventuallyWithT(func(t *assert.CollectT) {
-			resp, err := s.FrontendClient().CountNexusOperationExecutions(s.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
-				Namespace: s.Namespace().String(),
+			resp, err := env.FrontendClient().CountNexusOperationExecutions(env.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
+				Namespace: env.Namespace().String(),
 				Query:     fmt.Sprintf("ExecutionStatus = 'Running' AND Endpoint = '%s'", endpointName),
 			})
 			require.NoError(t, err)
@@ -1552,12 +1552,12 @@ func TestCountStandaloneNexusOperation(t *testing.T) {
 		}, testcore.WaitForESToSettle, 100*time.Millisecond)
 	})
 
-	t.Run("GroupByExecutionStatus", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("GroupByExecutionStatus", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
 		for i := range 3 {
-			_, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 				OperationId: fmt.Sprintf("group-op-%d", i),
 				Endpoint:    endpointName,
 			})
@@ -1567,26 +1567,26 @@ func TestCountStandaloneNexusOperation(t *testing.T) {
 		var countResp *workflowservice.CountNexusOperationExecutionsResponse
 		s.EventuallyWithT(func(t *assert.CollectT) {
 			var err error
-			countResp, err = s.FrontendClient().CountNexusOperationExecutions(s.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
-				Namespace: s.Namespace().String(),
+			countResp, err = env.FrontendClient().CountNexusOperationExecutions(env.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
+				Namespace: env.Namespace().String(),
 				Query:     fmt.Sprintf("Endpoint = '%s' GROUP BY ExecutionStatus", endpointName),
 			})
 			require.NoError(t, err)
 			require.Equal(t, int64(3), countResp.GetCount())
 		}, testcore.WaitForESToSettle, 100*time.Millisecond)
-		require.Len(t, countResp.GetGroups(), 1)
-		require.Equal(t, int64(3), countResp.GetGroups()[0].GetCount())
+		s.Len(countResp.GetGroups(), 1)
+		s.Equal(int64(3), countResp.GetGroups()[0].GetCount())
 		var groupValue string
-		require.NoError(t, payload.Decode(countResp.GetGroups()[0].GetGroupValues()[0], &groupValue))
-		require.Equal(t, "Running", groupValue)
+		s.NoError(payload.Decode(countResp.GetGroups()[0].GetGroupValues()[0], &groupValue))
+		s.Equal("Running", groupValue)
 	})
 
-	t.Run("CountByCustomSearchAttribute", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("CountByCustomSearchAttribute", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
 		for i := range 2 {
-			_, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 				OperationId: fmt.Sprintf("count-sa-op-%d", i),
 				Endpoint:    endpointName,
 				SearchAttributes: &commonpb.SearchAttributes{
@@ -1599,8 +1599,8 @@ func TestCountStandaloneNexusOperation(t *testing.T) {
 		}
 
 		s.EventuallyWithT(func(t *assert.CollectT) {
-			resp, err := s.FrontendClient().CountNexusOperationExecutions(s.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
-				Namespace: s.Namespace().String(),
+			resp, err := env.FrontendClient().CountNexusOperationExecutions(env.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
+				Namespace: env.Namespace().String(),
 				Query:     "CustomKeywordField = 'count-sa-value'",
 			})
 			require.NoError(t, err)
@@ -1608,43 +1608,43 @@ func TestCountStandaloneNexusOperation(t *testing.T) {
 		}, testcore.WaitForESToSettle, 100*time.Millisecond)
 	})
 
-	t.Run("GroupByUnsupportedField", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+	s.Run("GroupByUnsupportedField", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
 
-		_, err := s.FrontendClient().CountNexusOperationExecutions(s.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
-			Namespace: s.Namespace().String(),
+		_, err := env.FrontendClient().CountNexusOperationExecutions(env.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
+			Namespace: env.Namespace().String(),
 			Query:     "GROUP BY Endpoint",
 		})
 		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 		s.ErrorContains(err, "'GROUP BY' clause is only supported for ExecutionStatus")
 	})
 
-	t.Run("InvalidQuery", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+	s.Run("InvalidQuery", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
 
-		_, err := s.FrontendClient().CountNexusOperationExecutions(s.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
-			Namespace: s.Namespace().String(),
+		_, err := env.FrontendClient().CountNexusOperationExecutions(env.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
+			Namespace: env.Namespace().String(),
 			Query:     "invalid query syntax !!!",
 		})
 		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 		s.ErrorContains(err, "invalid query")
 	})
 
-	t.Run("InvalidSearchAttribute", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+	s.Run("InvalidSearchAttribute", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
 
-		_, err := s.FrontendClient().CountNexusOperationExecutions(s.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
-			Namespace: s.Namespace().String(),
+		_, err := env.FrontendClient().CountNexusOperationExecutions(env.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
+			Namespace: env.Namespace().String(),
 			Query:     "NonExistentField = 'value'",
 		})
 		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 		s.ErrorContains(err, "NonExistentField")
 	})
 
-	t.Run("NamespaceNotFound", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+	s.Run("NamespaceNotFound", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
 
-		_, err := s.FrontendClient().CountNexusOperationExecutions(s.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
+		_, err := env.FrontendClient().CountNexusOperationExecutions(env.Context(), &workflowservice.CountNexusOperationExecutionsRequest{
 			Namespace: "non-existent-namespace",
 		})
 		s.ErrorAs(err, new(*serviceerror.NamespaceNotFound))
@@ -1652,80 +1652,78 @@ func TestCountStandaloneNexusOperation(t *testing.T) {
 	})
 }
 
-func TestDeleteStandaloneNexusOperation(t *testing.T) {
-	t.Parallel()
+func (s *NexusStandaloneTestSuite) TestDeleteStandaloneNexusOperation() {
+	s.Run("Scheduled", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-	t.Run("Scheduled", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
-
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 		})
 		s.NoError(err)
 
-		_, err = s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().DeleteNexusOperationExecution(env.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 		})
 		s.NoError(err)
 
-		eventuallyNexusOperationDeleted(s, t, "test-op", startResp.RunId)
+		s.eventuallyDeleted(env, s.T(), "test-op", startResp.RunId)
 	})
 
-	t.Run("NoRunID", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("NoRunID", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 			// RunId not set
 		})
 		s.NoError(err)
 
-		_, err = s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().DeleteNexusOperationExecution(env.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 		})
 		s.NoError(err)
 
-		eventuallyNexusOperationDeleted(s, t, "test-op", startResp.RunId)
+		s.eventuallyDeleted(env, s.T(), "test-op", startResp.RunId)
 	})
 
-	t.Run("NotFound", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+	s.Run("NotFound", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
 
-		_, err := s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err := env.FrontendClient().DeleteNexusOperationExecution(env.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "does-not-exist",
 		})
 		s.ErrorAs(err, new(*serviceerror.NotFound))
 	})
 
-	t.Run("AlreadyDeleted", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("AlreadyDeleted", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 		})
 		s.NoError(err)
 
-		_, err = s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().DeleteNexusOperationExecution(env.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 		})
 		s.NoError(err)
 
-		eventuallyNexusOperationDeleted(s, t, "test-op", startResp.RunId)
+		s.eventuallyDeleted(env, s.T(), "test-op", startResp.RunId)
 
-		_, err = s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().DeleteNexusOperationExecution(env.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 		})
@@ -1734,26 +1732,24 @@ func TestDeleteStandaloneNexusOperation(t *testing.T) {
 
 	// Validates that request validation is wired up in the frontend.
 	// Exhaustive validation cases are covered in unit tests.
-	t.Run("Validation", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+	s.Run("Validation", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
 
-		_, err := s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
-			Namespace: s.Namespace().String(),
+		_, err := env.FrontendClient().DeleteNexusOperationExecution(env.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+			Namespace: env.Namespace().String(),
 		})
 		s.Error(err)
 		s.ErrorContains(err, "operation_id is required")
 	})
 }
 
-func TestStandaloneNexusOperationPoll(t *testing.T) {
-	t.Parallel()
-
-	t.Run("WaitStageStarted", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		taskQueue := testcore.RandomizedNexusEndpoint(t.Name())
-		endpointName := createNexusEndpointWithTaskQueue(s, taskQueue)
+func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
+	s.Run("WaitStageStarted", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		taskQueue := testcore.RandomizedNexusEndpoint(s.T().Name())
+		endpointName := env.createNexusEndpoint(s.T(), testcore.RandomizedNexusEndpoint(s.T().Name()), taskQueue).GetSpec().GetName()
 		handlerLink := &commonpb.Link_WorkflowEvent{
-			Namespace:  s.Namespace().String(),
+			Namespace:  env.Namespace().String(),
 			WorkflowId: "handler-workflow",
 			RunId:      "handler-run-id",
 			Reference: &commonpb.Link_WorkflowEvent_EventRef{
@@ -1764,13 +1760,13 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 			},
 		}
 
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 		})
-		require.NoError(t, err)
+		s.NoError(err)
 
-		ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
 		defer cancel()
 
 		type pollResult struct {
@@ -1782,8 +1778,8 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 
 		go func() {
 			pollStartedCh <- struct{}{}
-			resp, err := s.FrontendClient().PollNexusOperationExecution(ctx, &workflowservice.PollNexusOperationExecutionRequest{
-				Namespace:   s.Namespace().String(),
+			resp, err := env.FrontendClient().PollNexusOperationExecution(ctx, &workflowservice.PollNexusOperationExecutionRequest{
+				Namespace:   env.Namespace().String(),
 				OperationId: "test-op",
 				RunId:       startResp.RunId,
 				WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
@@ -1794,39 +1790,39 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 		select {
 		case <-pollStartedCh:
 		case <-ctx.Done():
-			t.Fatal("PollNexusOperationExecution did not start before timeout")
+			s.T().Fatal("PollNexusOperationExecution did not start before timeout")
 		}
 
 		// PollNexusOperationExecution should not resolve before the operation is started.
 		select {
 		case result := <-pollResultCh:
-			require.NoError(t, result.err)
-			t.Fatal("PollNexusOperationExecution returned before the operation started")
+			s.NoError(result.err)
+			s.T().Fatal("PollNexusOperationExecution returned before the operation started")
 		default:
 		}
 
-		task, err := s.FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
-			Namespace: s.Namespace().String(),
+		task, err := env.FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+			Namespace: env.Namespace().String(),
 			Identity:  "test-worker",
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
 		})
-		require.NoError(t, err)
+		s.NoError(err)
 
 		expectedLink := commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
-			Namespace:   s.Namespace().String(),
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 		})
 		startRequest := task.GetRequest().GetStartOperation()
-		require.Len(t, startRequest.GetLinks(), 1)
-		require.Equal(t, expectedLink.URL.String(), startRequest.GetLinks()[0].GetUrl())
-		require.Equal(t, expectedLink.Type, startRequest.GetLinks()[0].GetType())
+		s.Len(startRequest.GetLinks(), 1)
+		s.Equal(expectedLink.URL.String(), startRequest.GetLinks()[0].GetUrl())
+		s.Equal(expectedLink.Type, startRequest.GetLinks()[0].GetType())
 
-		_, err = s.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
-			Namespace: s.Namespace().String(),
+		_, err = env.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
 			Identity:  "test-worker",
 			TaskToken: task.GetTaskToken(),
 			Response: &nexuspb.Response{
@@ -1844,28 +1840,28 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 				},
 			},
 		})
-		require.NoError(t, err)
+		s.NoError(err)
 
 		// Verify the poll result.
 		select {
 		case result := <-pollResultCh:
-			require.NoError(t, result.err)
-			protorequire.ProtoEqual(t, &workflowservice.PollNexusOperationExecutionResponse{
+			s.NoError(result.err)
+			protorequire.ProtoEqual(s.T(), &workflowservice.PollNexusOperationExecutionResponse{
 				RunId:          startResp.RunId,
 				WaitStage:      enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
 				OperationToken: "test-operation-token",
 			}, result.resp)
 		case <-ctx.Done():
-			t.Fatal("PollNexusOperationExecution did not resolve before timeout")
+			s.T().Fatal("PollNexusOperationExecution did not resolve before timeout")
 		}
 
-		descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 		})
-		require.NoError(t, err)
-		protorequire.ProtoSliceEqual(t, []*commonpb.Link{
+		s.NoError(err)
+		protorequire.ProtoSliceEqual(s.T(), []*commonpb.Link{
 			{
 				Variant: &commonpb.Link_WorkflowEvent_{
 					WorkflowEvent: handlerLink,
@@ -1874,7 +1870,7 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 		}, descResp.GetInfo().GetLinks())
 	})
 
-	t.Run("WaitStageClosed", func(t *testing.T) {
+	s.Run("WaitStageClosed", func(s *NexusStandaloneTestSuite) {
 		for _, tc := range []struct {
 			name      string
 			withRunID bool
@@ -1882,17 +1878,17 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 			{name: "WithEmptyRunID"},
 			{name: "WithRunID", withRunID: true},
 		} {
-			t.Run(tc.name, func(t *testing.T) {
-				s := testcore.NewEnv(t, nexusStandaloneOpts...)
-				endpointName := createNexusEndpoint(s)
+			s.Run(tc.name, func(s *NexusStandaloneTestSuite) {
+				env := s.newTestEnv()
+				endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-				startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+				startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 					OperationId: "test-op",
 					Endpoint:    endpointName,
 				})
-				require.NoError(t, err)
+				s.NoError(err)
 
-				ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+				ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
 				defer cancel()
 
 				// Start pollling.
@@ -1910,8 +1906,8 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 					}
 
 					pollStartedCh <- struct{}{}
-					resp, err := s.FrontendClient().PollNexusOperationExecution(ctx, &workflowservice.PollNexusOperationExecutionRequest{
-						Namespace:   s.Namespace().String(),
+					resp, err := env.FrontendClient().PollNexusOperationExecution(ctx, &workflowservice.PollNexusOperationExecutionRequest{
+						Namespace:   env.Namespace().String(),
 						OperationId: "test-op",
 						RunId:       runID,
 						WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
@@ -1922,22 +1918,22 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 				select {
 				case <-pollStartedCh:
 				case <-ctx.Done():
-					t.Fatal("PollNexusOperationExecution did not start before timeout")
+					s.T().Fatal("PollNexusOperationExecution did not start before timeout")
 				}
 
 				// PollNexusOperationExecution should not resolve before the operation is closed.
 				select {
 				case result := <-pollResultCh:
-					require.NoError(t, result.err)
-					t.Fatal("PollNexusOperationExecution returned before the state changed")
+					s.NoError(result.err)
+					s.T().Fatal("PollNexusOperationExecution returned before the state changed")
 				default:
 				}
 
 				// Terminate the operation.
 				terminateErrCh := make(chan error, 1)
 				go func() {
-					_, err := s.FrontendClient().TerminateNexusOperationExecution(ctx, &workflowservice.TerminateNexusOperationExecutionRequest{
-						Namespace:   s.Namespace().String(),
+					_, err := env.FrontendClient().TerminateNexusOperationExecution(ctx, &workflowservice.TerminateNexusOperationExecutionRequest{
+						Namespace:   env.Namespace().String(),
 						OperationId: "test-op",
 						RunId:       startResp.RunId,
 						Reason:      "test termination",
@@ -1947,9 +1943,9 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 
 				select {
 				case err := <-terminateErrCh:
-					require.NoError(t, err)
+					s.NoError(err)
 				case <-ctx.Done():
-					t.Fatal("TerminateNexusOperationExecution timed out")
+					s.T().Fatal("TerminateNexusOperationExecution timed out")
 				}
 
 				// Verify the poll result.
@@ -1957,12 +1953,12 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 				select {
 				case result = <-pollResultCh:
 				case <-ctx.Done():
-					t.Fatal("PollNexusOperationExecution did not resolve before timeout")
+					s.T().Fatal("PollNexusOperationExecution did not resolve before timeout")
 				}
-				require.NoError(t, result.err)
+				s.NoError(result.err)
 				pollResp := result.resp
 
-				protorequire.ProtoEqual(t, &workflowservice.PollNexusOperationExecutionResponse{
+				protorequire.ProtoEqual(s.T(), &workflowservice.PollNexusOperationExecutionResponse{
 					RunId:          startResp.RunId,
 					WaitStage:      enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
 					OperationToken: pollResp.GetOperationToken(),
@@ -1970,39 +1966,39 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 						Failure: pollResp.GetFailure(),
 					},
 				}, pollResp)
-				require.NotNil(t, pollResp.GetFailure().GetTerminatedFailureInfo())
+				s.NotNil(pollResp.GetFailure().GetTerminatedFailureInfo())
 			})
 		}
 	})
 
-	t.Run("UnspecifiedWaitStageDefaultsToClosed", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("UnspecifiedWaitStageDefaultsToClosed", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 		})
-		require.NoError(t, err)
+		s.NoError(err)
 
 		// Terminate the operation.
-		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().TerminateNexusOperationExecution(env.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 			Reason:      "test termination",
 		})
-		require.NoError(t, err)
+		s.NoError(err)
 
 		// Poll with UNSPECIFIED WaitStage — should behave the same as CLOSED.
-		pollResp, err := s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		pollResp, err := env.FrontendClient().PollNexusOperationExecution(env.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_UNSPECIFIED,
 		})
-		require.NoError(t, err)
-		protorequire.ProtoEqual(t, &workflowservice.PollNexusOperationExecutionResponse{
+		s.NoError(err)
+		protorequire.ProtoEqual(s.T(), &workflowservice.PollNexusOperationExecutionResponse{
 			RunId:          startResp.RunId,
 			WaitStage:      enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
 			OperationToken: pollResp.GetOperationToken(),
@@ -2010,28 +2006,28 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 				Failure: pollResp.GetFailure(),
 			},
 		}, pollResp)
-		require.NotNil(t, pollResp.GetFailure().GetTerminatedFailureInfo())
+		s.NotNil(pollResp.GetFailure().GetTerminatedFailureInfo())
 	})
 
-	t.Run("ReturnsLastAttemptFailure", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		taskQueue := testcore.RandomizedNexusEndpoint(t.Name())
-		endpointName := createNexusEndpointWithTaskQueue(s, taskQueue)
+	s.Run("ReturnsLastAttemptFailure", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		taskQueue := testcore.RandomizedNexusEndpoint(s.T().Name())
+		endpointName := env.createNexusEndpoint(s.T(), testcore.RandomizedNexusEndpoint(s.T().Name()), taskQueue).GetSpec().GetName()
 
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId:            "test-op",
 			Endpoint:               endpointName,
 			ScheduleToCloseTimeout: durationpb.New(4 * time.Second),
 		})
 		s.NoError(err)
 
-		ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
 		defer cancel()
 
 		pollerErrCh := make(chan error, 1)
 		go func() {
-			task, err := s.FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
-				Namespace: s.Namespace().String(),
+			task, err := env.FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+				Namespace: env.Namespace().String(),
 				Identity:  "test-worker",
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: taskQueue,
@@ -2042,8 +2038,8 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 				pollerErrCh <- err
 				return
 			}
-			_, err = s.FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
-				Namespace: s.Namespace().String(),
+			_, err = env.FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
+				Namespace: env.Namespace().String(),
 				Identity:  "test-worker",
 				TaskToken: task.GetTaskToken(),
 				Error: &nexuspb.HandlerError{
@@ -2056,9 +2052,9 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 			pollerErrCh <- err
 		}()
 
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
-			pollResp, err := s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
-				Namespace:   s.Namespace().String(),
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			pollResp, err := env.FrontendClient().PollNexusOperationExecution(env.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+				Namespace:   env.Namespace().String(),
 				OperationId: "test-op",
 				RunId:       startResp.RunId,
 				WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
@@ -2078,55 +2074,55 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 		s.NoError(<-pollerErrCh)
 	})
 
-	t.Run("NamespaceNotFound", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("NamespaceNotFound", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 		})
-		require.NoError(t, err)
+		s.NoError(err)
 
-		_, err = s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+		_, err = env.FrontendClient().PollNexusOperationExecution(env.Context(), &workflowservice.PollNexusOperationExecutionRequest{
 			Namespace:   "non-existent-namespace",
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
 		})
 		var namespaceNotFoundErr *serviceerror.NamespaceNotFound
-		require.ErrorAs(t, err, &namespaceNotFoundErr)
-		require.Contains(t, namespaceNotFoundErr.Error(), "non-existent-namespace")
+		s.ErrorAs(err, &namespaceNotFoundErr)
+		s.Contains(namespaceNotFoundErr.Error(), "non-existent-namespace")
 	})
 
-	t.Run("NotFound", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
-		endpointName := createNexusEndpoint(s)
+	s.Run("NotFound", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.T()).GetSpec().GetName()
 
-		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
 		})
-		require.NoError(t, err)
+		s.NoError(err)
 
-		_, err = s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err = env.FrontendClient().PollNexusOperationExecution(env.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "non-existent-op",
 			RunId:       startResp.RunId,
 			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
 		})
 		var notFoundErr *serviceerror.NotFound
-		require.ErrorAs(t, err, &notFoundErr)
-		require.Equal(t, "operation not found for ID: non-existent-op", notFoundErr.Error())
+		s.ErrorAs(err, &notFoundErr)
+		s.Equal("operation not found for ID: non-existent-op", notFoundErr.Error())
 	})
 
 	// Validates that request validation is wired up in the frontend.
 	// Exhaustive validation cases are covered in unit tests.
-	t.Run("Validation", func(t *testing.T) {
-		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+	s.Run("Validation", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
 
-		_, err := s.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err := env.FrontendClient().PollNexusOperationExecution(env.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: "", // required field
 			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
 		})
@@ -2135,13 +2131,11 @@ func TestStandaloneNexusOperationPoll(t *testing.T) {
 	})
 }
 
-func TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken(t *testing.T) {
-	t.Parallel()
-
-	s := testcore.NewEnv(t, nexusStandaloneOpts...)
-	endpointName := testcore.RandomizedNexusEndpoint(t.Name())
+func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken() {
+	env := s.newTestEnv()
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 	handlerLink := &commonpb.Link_WorkflowEvent{
-		Namespace:  s.Namespace().String(),
+		Namespace:  env.Namespace().String(),
 		WorkflowId: "handler-workflow",
 		RunId:      "handler-run-id",
 		Reference: &commonpb.Link_WorkflowEvent_EventRef{
@@ -2159,7 +2153,7 @@ func TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken(t *testing.T) {
 	}
 	callbackCh := make(chan callbackInfo, 1)
 	listenAddr := nexustest.AllocListenAddress()
-	nexustest.NewNexusServer(t, listenAddr, nexustest.Handler{
+	nexustest.NewNexusServer(s.T(), listenAddr, nexustest.Handler{
 		OnStartOperation: func(
 			ctx context.Context,
 			service string,
@@ -2176,7 +2170,7 @@ func TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken(t *testing.T) {
 		},
 	})
 
-	_, err := s.OperatorClient().CreateNexusEndpoint(s.Context(), &operatorservice.CreateNexusEndpointRequest{
+	_, err := env.OperatorClient().CreateNexusEndpoint(env.Context(), &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: endpointName,
 			Target: &nexuspb.EndpointTarget{
@@ -2190,13 +2184,13 @@ func TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken(t *testing.T) {
 	})
 	s.NoError(err)
 
-	startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+	startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 		OperationId: "test-op",
 		Endpoint:    endpointName,
 	})
 	s.NoError(err)
 
-	ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
 	defer cancel()
 	var callbackToken string
 	var callbackURL string
@@ -2205,7 +2199,7 @@ func TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken(t *testing.T) {
 		callbackToken = callback.token
 		callbackURL = callback.url
 	case <-ctx.Done():
-		require.FailNow(t, "timed out waiting for Nexus callback details", ctx.Err().Error())
+		s.FailNow("timed out waiting for Nexus callback details", ctx.Err().Error())
 	}
 
 	gen := &commonnexus.CallbackTokenGenerator{}
@@ -2243,9 +2237,9 @@ func TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken(t *testing.T) {
 	})
 	s.NoError(err)
 
-	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		descResp, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-			Namespace:      s.Namespace().String(),
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:      env.Namespace().String(),
 			OperationId:    "test-op",
 			RunId:          startResp.RunId,
 			IncludeOutcome: true,
@@ -2263,52 +2257,30 @@ func TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken(t *testing.T) {
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func startNexusOperation(
-	s *testcore.TestEnv,
+func (s *NexusStandaloneTestSuite) startNexusOperation(
+	env *NexusTestEnv,
 	req *workflowservice.StartNexusOperationExecutionRequest,
 ) (*workflowservice.StartNexusOperationExecutionResponse, error) {
-	req.Namespace = cmp.Or(req.Namespace, s.Namespace().String())
+	req.Namespace = cmp.Or(req.Namespace, env.Namespace().String())
 	req.Service = cmp.Or(req.Service, "test-service")
 	req.Operation = cmp.Or(req.Operation, "test-operation")
-	req.RequestId = cmp.Or(req.RequestId, s.Tv().RequestID())
+	req.RequestId = cmp.Or(req.RequestId, env.Tv().RequestID())
 	if req.ScheduleToCloseTimeout == nil {
 		req.ScheduleToCloseTimeout = durationpb.New(10 * time.Minute)
 	}
-	return s.FrontendClient().StartNexusOperationExecution(s.Context(), req)
+
+	return env.FrontendClient().StartNexusOperationExecution(env.Context(), req)
 }
 
-func createNexusEndpoint(s *testcore.TestEnv) string {
-	return createNexusEndpointWithTaskQueue(s, "unused-for-test")
-}
-
-func createNexusEndpointWithTaskQueue(s *testcore.TestEnv, taskQueue string) string {
-	name := testcore.RandomizedNexusEndpoint(s.T().Name())
-	_, err := s.OperatorClient().CreateNexusEndpoint(s.Context(), &operatorservice.CreateNexusEndpointRequest{
-		Spec: &nexuspb.EndpointSpec{
-			Name: name,
-			Target: &nexuspb.EndpointTarget{
-				Variant: &nexuspb.EndpointTarget_Worker_{
-					Worker: &nexuspb.EndpointTarget_Worker{
-						Namespace: s.Namespace().String(),
-						TaskQueue: taskQueue,
-					},
-				},
-			},
-		},
-	})
-	s.NoError(err)
-	return name
-}
-
-func eventuallyNexusOperationDeleted(s *testcore.TestEnv, t *testing.T, operationID, runID string) {
+func (s *NexusStandaloneTestSuite) eventuallyDeleted(env *NexusTestEnv, t *testing.T, operationID, runID string) {
 	t.Helper()
 	require.Eventually(t, func() bool {
-		_, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-			Namespace:   s.Namespace().String(),
+		_, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
 			OperationId: operationID,
 			RunId:       runID,
 		})
-		var notFoundErr *serviceerror.NotFound
-		return errors.As(err, &notFoundErr)
+		_, ok := errors.AsType[*serviceerror.NotFound](err)
+		return ok
 	}, 10*time.Second, 100*time.Millisecond)
 }

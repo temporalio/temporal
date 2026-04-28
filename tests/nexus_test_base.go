@@ -3,7 +3,9 @@ package tests
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -47,6 +49,7 @@ func (env *NexusTestEnv) createNexusEndpoint(t *testing.T, name string, taskQueu
 		},
 	})
 	require.NoError(t, err)
+
 	t.Cleanup(func() {
 		// Delete the endpoint so the cluster can be safely reused by subsequent tests.
 		_, _ = env.OperatorClient().DeleteNexusEndpoint(testcore.NewContext(), &operatorservice.DeleteNexusEndpointRequest{
@@ -54,7 +57,27 @@ func (env *NexusTestEnv) createNexusEndpoint(t *testing.T, name string, taskQueu
 			Version: resp.Endpoint.Version,
 		})
 	})
+
+	// Wait for the endpoint to be visible to StartNexusOperationExecution.
+	require.Eventually(t, func() bool {
+		_, err := env.FrontendClient().StartNexusOperationExecution(testcore.NewContext(), &workflowservice.StartNexusOperationExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Endpoint:  name,
+			Service:   "probe",
+			Operation: "probe",
+			RequestId: "probe",
+		})
+		if notFound, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+			msg := notFound.Error()
+			return msg != "endpoint not registered" && !strings.HasPrefix(msg, "could not find Nexus endpoint by name:")
+		}
+		return true
+	}, 10*time.Second, 100*time.Millisecond, "endpoint should become visible")
 	return resp.Endpoint
+}
+
+func (env *NexusTestEnv) createRandomNexusEndpoint(t *testing.T) *nexuspb.Endpoint {
+	return env.createNexusEndpoint(t, testcore.RandomizedNexusEndpoint(t.Name()), "unused")
 }
 
 // nexusTaskResponse represents a successful response from a nexus task handler.
@@ -116,11 +139,9 @@ func (env *NexusTestEnv) versionedNexusTaskPollerDo(ctx context.Context, t *test
 	}
 	result, handlerErr := handler(t, res)
 	if handlerErr != nil {
-		var opErr *nexus.OperationError
-		var he *nexus.HandlerError
-		if errors.As(handlerErr, &opErr) {
+		if opErr, ok := errors.AsType[*nexus.OperationError](handlerErr); ok {
 			return env.respondNexusTaskCompletedWithOperationError(ctx, res.TaskToken, opErr)
-		} else if errors.As(handlerErr, &he) {
+		} else if he, ok := errors.AsType[*nexus.HandlerError](handlerErr); ok {
 			return env.respondNexusTaskFailed(ctx, res.TaskToken, he)
 		}
 		return handlerErr
@@ -185,7 +206,7 @@ func (env *NexusTestEnv) versionedNexusTaskPollerDo(ctx context.Context, t *test
 		TaskToken: res.TaskToken,
 		Response:  response,
 	})
-	if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); err != nil && ctx.Err() == nil && !ok {
 		return err
 	}
 	return nil
@@ -207,7 +228,7 @@ func (env *NexusTestEnv) respondNexusTaskFailed(ctx context.Context, taskToken [
 			TaskToken: taskToken,
 			Failure:   temporalFailure,
 		})
-		if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); err != nil && ctx.Err() == nil && !ok {
 			return err
 		}
 		return nil
@@ -241,7 +262,7 @@ func (env *NexusTestEnv) respondNexusTaskFailed(ctx context.Context, taskToken [
 		TaskToken: taskToken,
 		Error:     protoError,
 	})
-	if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); err != nil && ctx.Err() == nil && !ok {
 		return err
 	}
 	return nil
@@ -272,7 +293,7 @@ func (env *NexusTestEnv) respondNexusTaskCompletedWithOperationError(ctx context
 			TaskToken: taskToken,
 			Response:  response,
 		})
-		if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); err != nil && ctx.Err() == nil && !ok {
 			return err
 		}
 		return nil
@@ -306,7 +327,7 @@ func (env *NexusTestEnv) respondNexusTaskCompletedWithOperationError(ctx context
 		TaskToken: taskToken,
 		Response:  response,
 	})
-	if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); err != nil && ctx.Err() == nil && !ok {
 		return err
 	}
 	return nil
