@@ -1104,5 +1104,36 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 			})
 		}
 	}
+
+	// (4) start delays (start-with-delay, cron, retry in CAN, etc).
+	// Gate matches calculateTimeSkippingTransition: only regenerate when there's a real backoff
+	// configured (ExecutionTime > StartTime) — a child workflow with !HadOrHasWorkflowTask but
+	// no backoff has no real timer to regenerate.
+	if !r.mutableState.HadOrHasWorkflowTask() {
+		ei := r.mutableState.GetExecutionInfo()
+		executionTime := ei.GetExecutionTime().AsTime()
+		startTime := ei.GetStartTime().AsTime()
+		if executionTime.After(startTime) {
+			startVersion, err := r.mutableState.GetStartVersion()
+			if err != nil {
+				return err
+			}
+			var backOffType enumsspb.WorkflowBackoffType
+			if ei.CronSchedule != "" {
+				backOffType = enumsspb.WORKFLOW_BACKOFF_TYPE_CRON
+			} else if ei.Attempt > 1 {
+				backOffType = enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY
+			} else {
+				backOffType = enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START
+			}
+			r.mutableState.AddTasks(&tasks.WorkflowBackoffTimerTask{
+				// TaskID is set by shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: executionTime,
+				Version:             startVersion,
+				WorkflowBackoffType: backOffType,
+			})
+		}
+	}
 	return nil
 }

@@ -9687,11 +9687,6 @@ func (d timeSkippingTransition) isValid() bool {
 	return !d.targetTime.IsZero() || d.disabledAfterBound
 }
 
-// calculateTimeSkippingDecision picks the earliest target virtual time the workflow
-// should skip to. Candidates are the earliest pending user timer and bound target time if any.
-// Returns an internal error if the configured bound is in an inconsistent state.
-// The returned decision may be invalid (see isValid) — callers must check before use.
-// TODO@time-skipping: need to support start-with-delay
 func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTransition, error) {
 	var decision timeSkippingTransition
 	advance := func(candidate time.Time, dueToBound bool) {
@@ -9703,6 +9698,22 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 
 	for _, timerInfo := range ms.GetPendingTimerInfos() {
 		advance(timerInfo.ExpiryTime.AsTime(), false)
+	}
+
+	if !ms.HadOrHasWorkflowTask() {
+		// Support start-with-delay, cron, retry, and CaN-with-backoff: the workflow is
+		// waiting on a WorkflowBackoffTimerTask. Two extra checks are needed:
+		//   - ExecutionTime > StartTime: a backoff is actually configured (FirstWorkflowTaskBackoff > 0).
+		//     For child workflows, !HadOrHasWorkflowTask is also true between "start event applied"
+		//     and "ScheduleWorkflowTask API call" but no backoff exists, so ExecutionTime == StartTime.
+		//   - ExecutionTime > ms.Now(): the candidate is in the (virtual) future. Defends against
+		//     CaN-with-backoff that inherits accumulated > backoff — past candidates would produce
+		//     a negative delta in ApplyWorkflowExecutionTimeSkippingTransitionedEvent and decrement accumulated.
+		executionTime := ms.executionInfo.GetExecutionTime().AsTime()
+		startTime := ms.executionInfo.GetStartTime().AsTime()
+		if executionTime.After(startTime) && executionTime.After(ms.Now()) {
+			advance(executionTime, false)
+		}
 	}
 
 	info := ms.GetExecutionInfo().GetTimeSkippingInfo()
