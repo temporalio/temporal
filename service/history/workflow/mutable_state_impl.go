@@ -3992,9 +3992,8 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(
 }
 
 // ApplyWorkflowExecutionTimeSkippingTransitionedEvent applies the WorkflowExecutionTimeSkippingTransitionedEvent to the mutable state.
-// todo@time-skipping: this method is not idempotent, and need to check if idempotency is needed for all the scenarios
-// todo@time-skipping: need to handle time precision
-// of applying an event.
+// todo@time-skipping: this method is not idempotent; verify whether idempotency is required across all replay/reapply scenarios.
+// todo@time-skipping: handle time precision when applying an event.
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error {
 
 	attr := event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
@@ -7236,9 +7235,9 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
-	// time-skipping handling should be called after closeTransactionHandleWorkflowTask so that
-	// workflow tasks are visible to the time-skipping logic,
-	// is better be called before isStateDirty.
+	// Run time-skipping after closeTransactionHandleWorkflowTask so a just-scheduled
+	// workflow task is visible to (and suppresses) the idle check, and before isStateDirty
+	// so the transition event we emit here participates in the dirty-state computation.
 	// todo@time-skipping: but chasm close transaction logic is after isStateDirty,
 	// and need to reconsider the sequence of time skipping close trx handling in this function
 	// when supporting chasm.
@@ -8454,7 +8453,7 @@ func (ms *MutableStateImpl) closeTransactionHandleTimeSkipping(
 			return false
 		}
 		if shouldExecute, transition := ms.shouldExecuteTimeSkipping(); shouldExecute {
-			event, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(
+			_, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 				ctx, transition.targetTime, transition.disabledAfterBound)
 			if err != nil {
 				ms.metricsHandler.Counter(metrics.ExecutionTimeSkippingTransitionedErrorCounter.Name()).Record(1)
@@ -8466,8 +8465,7 @@ func (ms *MutableStateImpl) closeTransactionHandleTimeSkipping(
 				)
 				return false
 			}
-			targetTime := event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetTargetTime()
-			return !timeNotSet(targetTime)
+			return !transition.targetTime.IsZero()
 		}
 		return false
 	case historyi.TransactionPolicyPassive:
@@ -9526,8 +9524,30 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 		Config:                     config,
 		AccumulatedSkippedDuration: initialSkippedDuration,
 	}
-	ms.applyTimeSkippingBound(currentEventID)
 	ms.wrapTimeSourceWithTimeSkipping()
+
+	// Shift admission timestamps from wall to virtual frame so all time fields in
+	// MS live in the virtual frame consistently. Only meaningful when non-zero
+	// accumulated is inherited (e.g. live propagation to child / continue-as-new).
+	// TODO@time-skipping: impacts of start time, execution time to external visibility
+	if accum := initialSkippedDuration.AsDuration(); accum > 0 {
+		if ms.executionState.StartTime != nil {
+			ms.executionState.StartTime = timestamppb.New(ms.executionState.StartTime.AsTime().Add(accum))
+		}
+		if ms.executionInfo.StartTime != nil {
+			ms.executionInfo.StartTime = timestamppb.New(ms.executionInfo.StartTime.AsTime().Add(accum))
+		}
+		if ms.executionInfo.ExecutionTime != nil {
+			ms.executionInfo.ExecutionTime = timestamppb.New(ms.executionInfo.ExecutionTime.AsTime().Add(accum))
+		}
+		if ms.executionInfo.WorkflowRunExpirationTime != nil {
+			ms.executionInfo.WorkflowRunExpirationTime = timestamppb.New(ms.executionInfo.WorkflowRunExpirationTime.AsTime().Add(accum))
+		}
+		if ms.executionInfo.WorkflowExecutionExpirationTime != nil {
+			ms.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(ms.executionInfo.WorkflowExecutionExpirationTime.AsTime().Add(accum))
+		}
+	}
+	ms.applyTimeSkippingBound(currentEventID)
 	ms.timeSkippingInfoUpdated = true
 }
 
@@ -9541,28 +9561,52 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 }
 
 // applyTimeSkippingBound should be called when time skipping config is updated.
+// todo@time-skipping: MaxElapsedDuration uses pre-computed bound state + wake-up task
+// while MaxSkippedDuration is enforced lazily — unify both paths under one approach
+// (either pre-compute MaxSkippedDuration or drop CurrentElapsedDurationBound) before
+// adding a third bound type to avoid copying the asymmetry.
 func (ms *MutableStateImpl) applyTimeSkippingBound(currentEventID int64) {
 	config := ms.GetExecutionInfo().GetTimeSkippingInfo().GetConfig()
 	if config == nil {
 		return
 	}
-	if bound := config.GetBound(); bound != nil {
-		if maxElapsed, ok := bound.(*workflowpb.TimeSkippingConfig_MaxElapsedDuration); ok && maxElapsed.MaxElapsedDuration != nil {
-			boundInfo := &persistencespb.TimeSkippingBoundInfo{
-				TargetTime:    timestamppb.New(ms.Now().Add(maxElapsed.MaxElapsedDuration.AsDuration())),
-				SourceEventId: currentEventID,
-				HasReached:    false,
-			}
-			targetTime := ms.Now().Add(maxElapsed.MaxElapsedDuration.AsDuration())
-			ms.executionInfo.TimeSkippingInfo.CurrentElapsedDurationBound = boundInfo
-			ms.AddTasks(&tasks.TimeSkippingTimerTask{
-				WorkflowKey:         ms.GetWorkflowKey(),
-				VisibilityTimestamp: targetTime,
-				EventID:             currentEventID,
-			})
+	if !config.GetEnabled() {
+		return
+	}
+	tsi := ms.executionInfo.TimeSkippingInfo
+	bound := config.GetBound()
+	if bound == nil {
+		tsi.CurrentElapsedDurationBound = nil
+		return
+	}
+	switch b := bound.(type) {
+	case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
+		if b.MaxElapsedDuration == nil {
+			return
 		}
-	} else {
-		ms.executionInfo.TimeSkippingInfo.CurrentElapsedDurationBound = nil
+		target := ms.Now().Add(b.MaxElapsedDuration.AsDuration())
+		// Skip task emission when the existing bound already targets the same
+		// virtual time — avoids leaving a stale wake-up task with a superseded
+		// SourceEventId that the executor would then drop.
+		if existing := tsi.GetCurrentElapsedDurationBound(); existing != nil &&
+			existing.GetTargetTime().AsTime().Equal(target) {
+			return
+		}
+		tsi.CurrentElapsedDurationBound = &persistencespb.TimeSkippingBoundInfo{
+			TargetTime:    timestamppb.New(target),
+			SourceEventId: currentEventID,
+			HasReached:    false,
+		}
+		ms.AddTasks(&tasks.TimeSkippingTimerTask{
+			WorkflowKey:         ms.GetWorkflowKey(),
+			VisibilityTimestamp: target,
+			EventID:             currentEventID,
+		})
+	default:
+		// Non-elapsed bound types (e.g. MaxSkippedDuration) don't emit a
+		// wake-up task and must not leave a stale CurrentElapsedDurationBound
+		// from a previous elapsed-bound config.
+		tsi.CurrentElapsedDurationBound = nil
 	}
 }
 
@@ -9659,7 +9703,7 @@ func (ms *MutableStateImpl) shouldExecuteTimeSkipping() (bool, *timeSkippingTran
 		return false, nil
 	}
 
-	// this calculation is done preliminary to avoid unncesary call to add events
+	// Compute the transition early so we can short-circuit before allocating an event.
 	transition, err := ms.calculateTimeSkippingTransition()
 	if err != nil {
 		noSkippingReason = fmt.Sprintf("error calculating time skipping decision: %v", err)
@@ -9688,11 +9732,11 @@ func (d timeSkippingTransition) isValid() bool {
 }
 
 func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTransition, error) {
-	var decision timeSkippingTransition
+	var transition timeSkippingTransition
 	advance := func(candidate time.Time, dueToBound bool) {
-		if decision.targetTime.IsZero() || candidate.Before(decision.targetTime) {
-			decision.targetTime = candidate
-			decision.disabledAfterBound = dueToBound
+		if transition.targetTime.IsZero() || candidate.Before(transition.targetTime) {
+			transition.targetTime = candidate
+			transition.disabledAfterBound = dueToBound
 		}
 	}
 
@@ -9719,7 +9763,7 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 	info := ms.GetExecutionInfo().GetTimeSkippingInfo()
 	bound := info.GetConfig().GetBound()
 	if bound == nil {
-		return decision, nil
+		return transition, nil
 	}
 
 	switch b := bound.(type) {
@@ -9729,14 +9773,24 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 		}
 		advance(info.GetCurrentElapsedDurationBound().GetTargetTime().AsTime(), true)
 	case *workflowpb.TimeSkippingConfig_MaxSkippedDuration:
+		// MaxSkippedDuration enforces its cap lazily: no wake-up task is emitted, and the
+		// remaining-skip candidate is consulted on every MS mutation. The cap can therefore
+		// only be observed at-or-below the limit on the next transition — accumulated >
+		// maxSkipped never persists past a single transaction.
 		accumulated := info.GetAccumulatedSkippedDuration().AsDuration()
 		maxSkipped := b.MaxSkippedDuration.AsDuration()
 		if accumulated > maxSkipped {
 			return timeSkippingTransition{}, serviceerror.NewInternal("accumulated skipped duration exceeds the configured max skipped duration")
 		}
+		if accumulated == maxSkipped {
+			// Cap exactly hit — emit a "disable, no skip" transition. Going through
+			// advance(ms.Now(), true) would set targetTime to now and trigger a no-op
+			// regen pass downstream.
+			return timeSkippingTransition{disabledAfterBound: true}, nil
+		}
 		advance(ms.Now().Add(maxSkipped-accumulated), true)
 	default:
 		return timeSkippingTransition{}, serviceerror.NewInternal("unknown time skipping bound type")
 	}
-	return decision, nil
+	return transition, nil
 }

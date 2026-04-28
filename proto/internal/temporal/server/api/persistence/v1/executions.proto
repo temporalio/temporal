@@ -321,30 +321,29 @@ message WorkflowExecutionInfo {
 }
 
 message TimeSkippingInfo {
-  // Current time-skipping configuration for the workflow.
+  // Current time-skipping configuration applied to the workflow.
   temporal.api.workflow.v1.TimeSkippingConfig config = 1;
 
-  // Runtime history of time skipping for the workflow.
+  // Total duration that has been skipped over the lifetime of the workflow.
   google.protobuf.Duration accumulated_skipped_duration = 2;
 
-  // elapsed-duration based bound
+  // The active bound based on elapsed duration for time skipping.
   TimeSkippingBoundInfo current_elapsed_duration_bound = 3;
 }
 
 message TimeSkippingBoundInfo {
-  // If elapsed duration is used for the bound, this bound_target_time will be set,
-  // and if skipped duration is used, this target time will not be generated.
-  // Virtual time is used for the target time.
+  // Target time for a bound, expressed in virtual time.
   google.protobuf.Timestamp target_time = 1;
 
-  // Event ID of the WorkflowExecutionStartedEvent (= 1) or
-  // WorkflowExecutionOptionsUpdatedEvent that introduced the current time skipping configuration.
-  // Used as the task event ID for the time skipping timer task so reset / replication-conflict
-  // resolution can detect obsolete bound tasks via the standard staleness check.
-  int64 source_event_id = 2;
+  // Indicates whether this bound has already been reached, used for idempotency checks.
+  bool has_reached = 2;
 
-  // bound reached is used for idempotency check
-  bool has_reached = 3;
+  // Event ID of the WorkflowExecutionStartedEvent (always 1) or the most recent
+  // WorkflowExecutionOptionsUpdatedEvent that introduced the current time-skipping
+  // configuration. This is used as the task event ID for the time-skipping timer task,
+  // enabling reset and replication-conflict resolution to identify obsolete bound tasks
+  // via the standard staleness check.
+  int64 source_event_id = 3;
 }
 
 // Internal wrapper message to distinguish "never notified" (nil wrapper) from

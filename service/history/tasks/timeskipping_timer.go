@@ -11,14 +11,20 @@ import (
 var _ Task = (*TimeSkippingTimerTask)(nil)
 
 type (
+	// TimeSkippingTimerTask wakes a workflow when the elapsed-duration bound configured
+	// on its TimeSkippingConfig is reached, so the executor can emit a disable transition.
+	//
+	// EventID identifies the event (WorkflowExecutionStartedEvent or
+	// WorkflowExecutionOptionsUpdatedEvent) that installed the bound this task targets.
+	// It is matched against TimeSkippingInfo.CurrentElapsedDurationBound.SourceEventId at
+	// firing time to detect superseded tasks: re-configuring the bound emits a new task
+	// with a new EventID, and the old task is silently dropped on mismatch.
+	// todo@time-skipping: replication related feature (ndc)
 	TimeSkippingTimerTask struct {
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		// todo@time-skipping: replication related feature (ndc)
-		// This EventID is related to the WorkflowExecutionStartedEvent or WorkflowExecutionOptionsUpdatedEvent
-		// that initiated the time skipping configuration with a elapsed-duration bound.
-		EventID int64
+		EventID             int64
 	}
 )
 

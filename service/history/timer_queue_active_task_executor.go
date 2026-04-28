@@ -903,9 +903,10 @@ func (t *timerQueueActiveTaskExecutor) getTimerSequence(
 	return workflow.NewTimerSequence(mutableState)
 }
 
-// executeTimeSkippingTimerTask wakes the workflow when an elapsed-duration time-skipping
-// bound is reached. The actual disable-transition is emitted by closeTransactionHandleTimeSkipping
-// when the workflow is idle; this handler just commits a transaction so that path runs.
+// executeTimeSkippingTimerTask fires when the elapsed-duration bound is hit. It emits the
+// disable transition directly so the bound is honored even if the workflow has accumulated
+// in-flight work since the bound was configured. The bound's wake-up cue is wall-clock-anchored,
+// so by the time we get here the user-visible elapsed budget is genuinely exhausted.
 func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	ctx context.Context,
 	task *tasks.TimeSkippingTimerTask,
@@ -933,39 +934,37 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		return consts.ErrWorkflowCompleted
 	}
 
-	// drop the timer task directly when time skipping is disabled
-	// or the bound this timer task is related to is stale
-	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
-	if tsi == nil || !tsi.GetConfig().GetEnabled() {
-		release(nil)
-		return errNoTimerFired
-	}
-	boundInfo := tsi.GetCurrentElapsedDurationBound()
-	if boundInfo == nil || boundInfo.GetTargetTime() == nil || boundInfo.GetSourceEventId() == 0 || boundInfo.GetHasReached() {
-		release(nil)
-		return errNoTimerFired
-	}
-	if boundInfo.GetSourceEventId() != task.EventID {
+	if !timeSkippingBoundTaskIsLive(mutableState, task) {
 		release(nil)
 		return errNoTimerFired
 	}
 
-	// todo@time-skipping:
-	// when this user timer task fired, and time-skipping is still enabled,
-	// we need to force add a time-skipping transitioned event
-	// regardless of whether there is in-flight work
-	// need to make sure there is no race-condition -> refer to how user timer task is executed
-	// _, err = mutableState.AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx)
-	// return err
-
-	// generate time-skipping transitioned event
-	// if this event is triggered by this timer, there is no need to check in-flight work
+	// todo@time-skipping: gate emission on workflow idleness once an exported idle check
+	// (or equivalent in-flight gating) is available — today this fires the disable even
+	// when activities/WTs/child WFs are in flight, which is safe but emits the transition
+	// event mid-flight. Match the user-timer race-handling pattern when that gate lands.
 	_, err = mutableState.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 		ctx, time.Time{}, true)
 	if err != nil {
 		return err
 	}
 	return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
+}
+
+// timeSkippingBoundTaskIsLive returns false when the task should be dropped silently —
+// either time skipping has been disabled since the task was emitted, or the bound this
+// task was associated with has been superseded (different SourceEventId) or already fired
+// (HasReached=true). Dropping is harmless: the new bound, if any, has its own wake-up task.
+func timeSkippingBoundTaskIsLive(mutableState historyi.MutableState, task *tasks.TimeSkippingTimerTask) bool {
+	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	if tsi == nil || !tsi.GetConfig().GetEnabled() {
+		return false
+	}
+	boundInfo := tsi.GetCurrentElapsedDurationBound()
+	if boundInfo == nil || boundInfo.GetTargetTime() == nil || boundInfo.GetSourceEventId() == 0 || boundInfo.GetHasReached() {
+		return false
+	}
+	return boundInfo.GetSourceEventId() == task.EventID
 }
 
 func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(

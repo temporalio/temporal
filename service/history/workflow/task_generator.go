@@ -1041,53 +1041,58 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 		return nil
 	}
 	accumulatedSkippedDuration := r.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration()
-	if accumulatedSkippedDuration == 0 {
-		return nil
-	}
 
 	// timertasks that are not stale should be regenerated when time skipping transition happens:
 	// since time skipping transition only happens when there is no in-flight work,
 	// the only timers that are not stale can only be the following types:
 	// (1) next user timer
 	// (2) execution and run timeout timers
+	// (3) elapsed-duration bound timer
+	// (4) start-delay / cron / retry / CaN-with-backoff timers
 
-	// (1) user timers — regenerate one task per pending user timer. User timers
-	// are only one of the task types that may need regeneration, so continue to
-	// the timeout timers below even when none are pending.
-	for _, userTimerSequenceID := range r.getTimerSequence().LoadAndSortUserTimers() {
-		r.mutableState.AddTasks(&tasks.UserTimerTask{
-			// TaskID is set by shard
-			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			VisibilityTimestamp: userTimerSequenceID.Timestamp,
-			EventID:             userTimerSequenceID.EventID,
-		})
-	}
-
-	// (2) execution and run timeout timers
-	executionTimeoutTimer := r.mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime
-	if !timeNotSet(executionTimeoutTimer) {
-		r.mutableState.AddTasks(&tasks.WorkflowExecutionTimeoutTask{
-			// TaskID is set by shard
-			NamespaceID:         r.mutableState.GetExecutionInfo().NamespaceId,
-			WorkflowID:          r.mutableState.GetExecutionInfo().WorkflowId,
-			FirstRunID:          r.mutableState.GetExecutionInfo().FirstExecutionRunId,
-			VisibilityTimestamp: timestamp.TimeValue(executionTimeoutTimer),
-		})
-	}
-	runTimeoutTimer := r.mutableState.GetExecutionInfo().WorkflowRunExpirationTime
-	if !timeNotSet(runTimeoutTimer) {
-		// Version must match the workflow's start version so the executor's
-		// CheckTaskVersion passes for global namespaces (see timer_queue_active_task_executor.go).
-		startVersion, err := r.mutableState.GetStartVersion()
-		if err != nil {
-			return err
+	// Steps (1) and (2) only need re-emission when the accumulated skip changed —
+	// their VisibilityTime is the only thing the boundary conversion shifts. Steps
+	// (3) and (4) are independent of the new accumulated and must always run, so
+	// callers that invoke this without a transition still pick them up.
+	if accumulatedSkippedDuration > 0 {
+		// (1) user timers — regenerate one task per pending user timer. User timers
+		// are only one of the task types that may need regeneration, so continue to
+		// the timeout timers below even when none are pending.
+		for _, userTimerSequenceID := range r.getTimerSequence().LoadAndSortUserTimers() {
+			r.mutableState.AddTasks(&tasks.UserTimerTask{
+				// TaskID is set by shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: userTimerSequenceID.Timestamp,
+				EventID:             userTimerSequenceID.EventID,
+			})
 		}
-		r.mutableState.AddTasks(&tasks.WorkflowRunTimeoutTask{
-			// TaskID is set by shard
-			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			VisibilityTimestamp: timestamp.TimeValue(runTimeoutTimer),
-			Version:             startVersion,
-		})
+
+		// (2) execution and run timeout timers
+		executionTimeoutTimer := r.mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime
+		if !timeNotSet(executionTimeoutTimer) {
+			r.mutableState.AddTasks(&tasks.WorkflowExecutionTimeoutTask{
+				// TaskID is set by shard
+				NamespaceID:         r.mutableState.GetExecutionInfo().NamespaceId,
+				WorkflowID:          r.mutableState.GetExecutionInfo().WorkflowId,
+				FirstRunID:          r.mutableState.GetExecutionInfo().FirstExecutionRunId,
+				VisibilityTimestamp: timestamp.TimeValue(executionTimeoutTimer),
+			})
+		}
+		runTimeoutTimer := r.mutableState.GetExecutionInfo().WorkflowRunExpirationTime
+		if !timeNotSet(runTimeoutTimer) {
+			// Version must match the workflow's start version so the executor's
+			// CheckTaskVersion passes for global namespaces (see timer_queue_active_task_executor.go).
+			startVersion, err := r.mutableState.GetStartVersion()
+			if err != nil {
+				return err
+			}
+			r.mutableState.AddTasks(&tasks.WorkflowRunTimeoutTask{
+				// TaskID is set by shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: timestamp.TimeValue(runTimeoutTimer),
+				Version:             startVersion,
+			})
+		}
 	}
 
 	// (3) elapsed-duration bound timer — regenerate when configured so its real-time

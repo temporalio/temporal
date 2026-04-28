@@ -1175,11 +1175,11 @@ func (*WorkflowExecutionInfo_LastWorkflowTaskTimedOutType) isWorkflowExecutionIn
 
 type TimeSkippingInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Current time-skipping configuration for the workflow.
+	// Current time-skipping configuration applied to the workflow.
 	Config *v12.TimeSkippingConfig `protobuf:"bytes,1,opt,name=config,proto3" json:"config,omitempty"`
-	// Runtime history of time skipping for the workflow.
+	// Total duration that has been skipped over the lifetime of the workflow.
 	AccumulatedSkippedDuration *durationpb.Duration `protobuf:"bytes,2,opt,name=accumulated_skipped_duration,json=accumulatedSkippedDuration,proto3" json:"accumulated_skipped_duration,omitempty"`
-	// elapsed-duration based bound
+	// The active bound based on elapsed duration for time skipping.
 	CurrentElapsedDurationBound *TimeSkippingBoundInfo `protobuf:"bytes,3,opt,name=current_elapsed_duration_bound,json=currentElapsedDurationBound,proto3" json:"current_elapsed_duration_bound,omitempty"`
 	unknownFields               protoimpl.UnknownFields
 	sizeCache                   protoimpl.SizeCache
@@ -1238,17 +1238,16 @@ func (x *TimeSkippingInfo) GetCurrentElapsedDurationBound() *TimeSkippingBoundIn
 
 type TimeSkippingBoundInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// If elapsed duration is used for the bound, this bound_target_time will be set,
-	// and if skipped duration is used, this target time will not be generated.
-	// Virtual time is used for the target time.
+	// Target time for a bound, expressed in virtual time.
 	TargetTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=target_time,json=targetTime,proto3" json:"target_time,omitempty"`
-	// Event ID of the WorkflowExecutionStartedEvent (= 1) or
-	// WorkflowExecutionOptionsUpdatedEvent that introduced the current time skipping configuration.
-	// Used as the task event ID for the time skipping timer task so reset / replication-conflict
-	// resolution can detect obsolete bound tasks via the standard staleness check.
-	SourceEventId int64 `protobuf:"varint,2,opt,name=source_event_id,json=sourceEventId,proto3" json:"source_event_id,omitempty"`
-	// bound reached is used for idempotency check
-	HasReached    bool `protobuf:"varint,3,opt,name=has_reached,json=hasReached,proto3" json:"has_reached,omitempty"`
+	// Indicates whether this bound has already been reached, used for idempotency checks.
+	HasReached bool `protobuf:"varint,2,opt,name=has_reached,json=hasReached,proto3" json:"has_reached,omitempty"`
+	// Event ID of the WorkflowExecutionStartedEvent (always 1) or the most recent
+	// WorkflowExecutionOptionsUpdatedEvent that introduced the current time-skipping
+	// configuration. This is used as the task event ID for the time-skipping timer task,
+	// enabling reset and replication-conflict resolution to identify obsolete bound tasks
+	// via the standard staleness check.
+	SourceEventId int64 `protobuf:"varint,3,opt,name=source_event_id,json=sourceEventId,proto3" json:"source_event_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1290,18 +1289,18 @@ func (x *TimeSkippingBoundInfo) GetTargetTime() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *TimeSkippingBoundInfo) GetSourceEventId() int64 {
-	if x != nil {
-		return x.SourceEventId
-	}
-	return 0
-}
-
 func (x *TimeSkippingBoundInfo) GetHasReached() bool {
 	if x != nil {
 		return x.HasReached
 	}
 	return false
+}
+
+func (x *TimeSkippingBoundInfo) GetSourceEventId() int64 {
+	if x != nil {
+		return x.SourceEventId
+	}
+	return 0
 }
 
 // Internal wrapper message to distinguish "never notified" (nil wrapper) from
@@ -5041,10 +5040,10 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x1ecurrent_elapsed_duration_bound\x18\x03 \x01(\v29.temporal.server.api.persistence.v1.TimeSkippingBoundInfoR\x1bcurrentElapsedDurationBound\"\x9d\x01\n" +
 	"\x15TimeSkippingBoundInfo\x12;\n" +
 	"\vtarget_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"targetTime\x12&\n" +
-	"\x0fsource_event_id\x18\x02 \x01(\x03R\rsourceEventId\x12\x1f\n" +
-	"\vhas_reached\x18\x03 \x01(\bR\n" +
-	"hasReached\"\xa8\x01\n" +
+	"targetTime\x12\x1f\n" +
+	"\vhas_reached\x18\x02 \x01(\bR\n" +
+	"hasReached\x12&\n" +
+	"\x0fsource_event_id\x18\x03 \x01(\x03R\rsourceEventId\"\xa8\x01\n" +
 	"\x19LastNotifiedTargetVersion\x12b\n" +
 	"\x12deployment_version\x18\x01 \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x11deploymentVersion\x12'\n" +
 	"\x0frevision_number\x18\x02 \x01(\x03R\x0erevisionNumber\"\x9d\x01\n" +
