@@ -393,12 +393,7 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(sdkClientFactoryProvider),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() []grpc.UnaryServerInterceptor {
-				if c.replicationStreamRecorder != nil {
-					return []grpc.UnaryServerInterceptor{
-						c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName),
-					}
-				}
-				return nil
+				return c.testUnaryServerInterceptors()
 			}),
 			fx.Provide(func() []grpc.StreamServerInterceptor {
 				if c.replicationStreamRecorder != nil {
@@ -490,10 +485,7 @@ func (c *TemporalImpl) startHistory() {
 				return c.taskQueueRecorder
 			}),
 			fx.Decorate(func(base []grpc.UnaryServerInterceptor) []grpc.UnaryServerInterceptor {
-				if c.replicationStreamRecorder != nil {
-					return append(base, c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName))
-				}
-				return base
+				return append(base, c.testUnaryServerInterceptors()...)
 			}),
 			fx.Provide(func() []grpc.StreamServerInterceptor {
 				if c.replicationStreamRecorder != nil {
@@ -587,6 +579,9 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(c.GetTaskCategoryRegistry),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
+			fx.Provide(func() []grpc.UnaryServerInterceptor {
+				return c.testUnaryServerInterceptors()
+			}),
 			matching.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
@@ -655,6 +650,9 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(c.GetTaskCategoryRegistry),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
+			fx.Provide(func() []grpc.UnaryServerInterceptor {
+				return c.testUnaryServerInterceptors()
+			}),
 			worker.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
@@ -713,6 +711,21 @@ func (c *TemporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
 
 func (c *TemporalImpl) GetGrpcClientInterceptor() *grpcinject.Interceptor {
 	return c.grpcClientInterceptor
+}
+
+// testUnaryServerInterceptors returns the server-side unary interceptors
+// installed by tests in every service (frontend, history, matching, worker).
+// The test injector is shared with the client side via *grpcinject.Interceptor,
+// so a single env.SetServerUnaryInterceptor call covers all four services.
+func (c *TemporalImpl) testUnaryServerInterceptors() []grpc.UnaryServerInterceptor {
+	var ints []grpc.UnaryServerInterceptor
+	if c.replicationStreamRecorder != nil {
+		ints = append(ints, c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName))
+	}
+	if c.grpcClientInterceptor != nil {
+		ints = append(ints, c.grpcClientInterceptor.UnaryServer())
+	}
+	return ints
 }
 
 func (c *TemporalImpl) GetTaskCategoryRegistry() tasks.TaskCategoryRegistry {

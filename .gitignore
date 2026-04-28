@@ -19,6 +19,7 @@
 *.cov
 *.html
 /test.log
+testdata/
 
 # Executables produced by temporal repo
 /temporal-*
