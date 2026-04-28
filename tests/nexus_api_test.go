@@ -270,15 +270,15 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 
 	testFn := func(s *NexusApiTestSuite, tc testcase, dispatchOnlyByEndpoint bool) {
 		env := newNexusTestEnv(s.T(), useTemporalFailures)
-		endpoint := env.createNexusEndpoint(s.T(), tc.endpointName, testcore.RandomizeStr("task-queue"))
+		ctx, cancel := context.WithCancel(env.Context())
+		defer cancel()
+		endpoint := env.createNexusEndpoint(ctx, s.T(), tc.endpointName, testcore.RandomizeStr("task-queue"))
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
 			dispatchURL = getDispatchByEndpointURL(env.HttpAPIAddress(), endpoint.Id)
 		} else {
 			dispatchURL = getDispatchByNsAndTqURL(env.HttpAPIAddress(), env.Namespace().String(), endpoint.Spec.Target.GetWorker().TaskQueue)
 		}
-		ctx, cancel := context.WithCancel(testcore.NewContext())
-		defer cancel()
 
 		httpCaller, headerCapture := newHeaderCaptureCaller()
 		client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
@@ -416,16 +416,15 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims(useTemporalFailures b
 		})
 		defer env.GetTestCluster().Host().SetOnGetClaims(nil)
 
-		testEndpoint := env.createNexusEndpoint(s.T(), testcore.RandomizeStr("test-endpoint"), taskQueue)
+		ctx, cancel := context.WithCancel(env.Context())
+		defer cancel()
+		testEndpoint := env.createNexusEndpoint(ctx, s.T(), testcore.RandomizeStr("test-endpoint"), taskQueue)
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
 			dispatchURL = getDispatchByEndpointURL(env.HttpAPIAddress(), testEndpoint.Id)
 		} else {
 			dispatchURL = getDispatchByNsAndTqURL(env.HttpAPIAddress(), env.Namespace().String(), taskQueue)
 		}
-
-		ctx, cancel := context.WithCancel(testcore.NewContext())
-		defer cancel()
 
 		client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
 		s.NoError(err)
@@ -533,15 +532,15 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 
 	testFn := func(s *NexusApiTestSuite, tc testcase, dispatchOnlyByEndpoint bool) {
 		env := newNexusTestEnv(s.T(), useTemporalFailures)
-		endpoint := env.createNexusEndpoint(s.T(), tc.endpointName, testcore.RandomizeStr("task-queue"))
+		ctx, cancel := context.WithCancel(env.Context())
+		defer cancel()
+		endpoint := env.createNexusEndpoint(ctx, s.T(), tc.endpointName, testcore.RandomizeStr("task-queue"))
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
 			dispatchURL = getDispatchByEndpointURL(env.HttpAPIAddress(), endpoint.Id)
 		} else {
 			dispatchURL = getDispatchByNsAndTqURL(env.HttpAPIAddress(), env.Namespace().String(), endpoint.Spec.Target.GetWorker().TaskQueue)
 		}
-		ctx, cancel := context.WithCancel(testcore.NewContext())
-		defer cancel()
 
 		httpCaller, headerCapture := newHeaderCaptureCaller()
 		client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
@@ -615,7 +614,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Su
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningDataAPIs, true),
 	)
 
-	ctx, cancel := context.WithCancel(testcore.NewContext())
+	ctx, cancel := context.WithCancel(env.Context())
 	defer cancel()
 	taskQueue := testcore.RandomizeStr("task-queue")
 	err := env.SdkClient().UpdateWorkerBuildIdCompatibility(ctx, &sdkclient.UpdateWorkerBuildIdCompatibilityOptions{ //nolint:staticcheck // SA1019 deprecated
@@ -667,12 +666,11 @@ func (s *NexusApiTestSuite) TestNexusClientNameMetricPropagation(useTemporalFail
 	env := newNexusTestEnv(s.T(), useTemporalFailures)
 	const expectedClientName = "temporal-go"
 	taskQueue := testcore.RandomizeStr("tq")
-	endpoint := env.createNexusEndpoint(s.T(), testcore.RandomizeStr("endpoint"), taskQueue)
+	ctx, cancel := context.WithCancel(env.Context())
+	defer cancel()
+	endpoint := env.createNexusEndpoint(ctx, s.T(), testcore.RandomizeStr("endpoint"), taskQueue)
 
 	capture := env.StartNamespaceMetricCapture()
-
-	ctx, cancel := context.WithCancel(testcore.NewContext())
-	defer cancel()
 
 	// Start a poller that simulates an SDK worker with a specific client-name.
 	// We build the outgoing metadata from scratch (instead of using NewContext which

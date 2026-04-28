@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	cnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -34,7 +35,7 @@ func newNexusTestEnv(t *testing.T, useTemporalFailures bool, opts ...testcore.Te
 	}
 }
 
-func (env *NexusTestEnv) createNexusEndpoint(t *testing.T, name string, taskQueue string) *nexuspb.Endpoint {
+func (env *NexusTestEnv) createNexusEndpoint(ctx context.Context, t *testing.T, name string, taskQueue string) *nexuspb.Endpoint {
 	resp, err := env.OperatorClient().CreateNexusEndpoint(testcore.NewContext(), &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: name,
@@ -49,20 +50,53 @@ func (env *NexusTestEnv) createNexusEndpoint(t *testing.T, name string, taskQueu
 		},
 	})
 	require.NoError(t, err)
+	env.setNexusEndpointCleanupFn(t, resp.Endpoint.Id, resp.Endpoint.Version)
+	env.probeEndpoint(ctx, t, name)
+	return resp.Endpoint
+}
 
+func (env *NexusTestEnv) createRandomNexusEndpoint(ctx context.Context, t *testing.T) *nexuspb.Endpoint {
+	return env.createNexusEndpoint(ctx, t, testcore.RandomizedNexusEndpoint(t.Name()), "unused")
+}
+
+// createExternalNexusServer creates a mock nexus server that listens via a provided endpoint address.
+func (env *NexusTestEnv) createExternalNexusServer(ctx context.Context, t *testing.T, endpointName string, handler nexustest.Handler) {
+	listenAddr := nexustest.AllocListenAddress()
+	nexustest.NewNexusServer(t, listenAddr, handler)
+	resp, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_External_{
+					External: &nexuspb.EndpointTarget_External{
+						Url: "http://" + listenAddr,
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	env.setNexusEndpointCleanupFn(t, resp.Endpoint.Id, resp.Endpoint.Version)
+	env.probeEndpoint(ctx, t, endpointName)
+}
+
+// setNexusEndpointCleanupFn sets the cleanup fn that deletes the Nexus endpoint after the current test,
+// so the cluster can be safely reused by subsequent tests.
+func (env *NexusTestEnv) setNexusEndpointCleanupFn(t *testing.T, id string, version int64) {
 	t.Cleanup(func() {
-		// Delete the endpoint so the cluster can be safely reused by subsequent tests.
 		_, _ = env.OperatorClient().DeleteNexusEndpoint(testcore.NewContext(), &operatorservice.DeleteNexusEndpointRequest{
-			Id:      resp.Endpoint.Id,
-			Version: resp.Endpoint.Version,
+			Id:      id,
+			Version: version,
 		})
 	})
+}
 
-	// Wait for the endpoint to be visible to StartNexusOperationExecution.
+// probeEndpoint probes the specified endpoint until it's visible to StartNexusOperationExecution.
+func (env *NexusTestEnv) probeEndpoint(ctx context.Context, t *testing.T, endpointName string) {
 	require.Eventually(t, func() bool {
-		_, err := env.FrontendClient().StartNexusOperationExecution(testcore.NewContext(), &workflowservice.StartNexusOperationExecutionRequest{
+		_, err := env.FrontendClient().StartNexusOperationExecution(ctx, &workflowservice.StartNexusOperationExecutionRequest{
 			Namespace: env.Namespace().String(),
-			Endpoint:  name,
+			Endpoint:  endpointName,
 			Service:   "probe",
 			Operation: "probe",
 			RequestId: "probe",
@@ -73,11 +107,6 @@ func (env *NexusTestEnv) createNexusEndpoint(t *testing.T, name string, taskQueu
 		}
 		return true
 	}, 10*time.Second, 100*time.Millisecond, "endpoint should become visible")
-	return resp.Endpoint
-}
-
-func (env *NexusTestEnv) createRandomNexusEndpoint(t *testing.T) *nexuspb.Endpoint {
-	return env.createNexusEndpoint(t, testcore.RandomizedNexusEndpoint(t.Name()), "unused")
 }
 
 // nexusTaskResponse represents a successful response from a nexus task handler.
