@@ -2859,6 +2859,10 @@ Requires service restart to take effect.`,
 		0.90,
 		"History service health check on RPC error ratio",
 	)
+	HealthHistoryInitializationTime = NewGlobalDurationSetting(
+		"history.healthHistoryInitializationTime",
+		60*time.Second,
+		"gRPC health server NOT_SERVING will be suppressed from DeepHealthCheck for this long")
 	SendRawHistoryBetweenInternalServices = NewGlobalBoolSetting(
 		"history.sendRawHistoryBetweenInternalServices",
 		false,

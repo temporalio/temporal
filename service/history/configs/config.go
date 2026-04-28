@@ -408,6 +408,7 @@ type Config struct {
 	HealthPersistenceErrorRatio     dynamicconfig.FloatPropertyFn
 	HealthRPCLatencyFailure         dynamicconfig.FloatPropertyFn
 	HealthRPCErrorRatio             dynamicconfig.FloatPropertyFn
+	HealthHistoryInitializationTime dynamicconfig.DurationPropertyFn
 	BreakdownMetricsByTaskQueue     dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -789,6 +790,7 @@ func NewConfig(
 		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
 		HealthRPCLatencyFailure:         dynamicconfig.HealthRPCLatencyFailure.Get(dc),
 		HealthRPCErrorRatio:             dynamicconfig.HealthRPCErrorRatio.Get(dc),
+		HealthHistoryInitializationTime: dynamicconfig.HealthHistoryInitializationTime.Get(dc),
 
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 
