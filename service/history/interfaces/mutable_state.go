@@ -399,10 +399,10 @@ type (
 		HasRequestID(requestID string) bool
 		SetSuccessorRunID(runID string)
 
-		// time-skipping related methods
+		Now() time.Time // the time of a mutable state may be ahead of the wall-clock time because of time skipping
+
 		AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx context.Context, targetTime time.Time, disabledAfterBound bool) (*historypb.HistoryEvent, error)
 		ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error
-		Now() time.Time // the time of a mutable state may be ahead of the wall-clock time because of time skipping
 	}
 )

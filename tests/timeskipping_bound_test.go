@@ -96,10 +96,10 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_LongUserTimer() {
 	ctx := testcore.NewContext()
 
 	const (
-		maxSkip      = 30 * time.Minute
-		userTimer    = 1 * time.Hour
-		minuteToler  = time.Minute
-		thirtySecond = 30 * time.Second
+		maxSkip     = 30 * time.Minute
+		userTimer   = 1 * time.Hour
+		minuteToler = time.Minute
+		accumTol    = 30 * time.Second
 	)
 
 	cfg := &workflowpb.TimeSkippingConfig{
@@ -137,13 +137,37 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_LongUserTimer() {
 	tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(tsi)
 	s.False(tsi.GetConfig().GetEnabled())
-	s.InDelta(float64(maxSkip), float64(tsi.GetAccumulatedSkippedDuration().AsDuration()), float64(thirtySecond))
+	s.InDelta(float64(maxSkip), float64(tsi.GetAccumulatedSkippedDuration().AsDuration()), float64(accumTol))
 
+	foundTimer := false
 	for _, ti := range ms.State.TimerInfos {
 		if ti.GetTimerId() == "t1" {
-			expiry := ti.GetExpiryTime().AsTime()
-			s.WithinDuration(startTime.Add(userTimer), expiry, minuteToler)
+			foundTimer = true
+			s.WithinDuration(startTime.Add(userTimer), ti.GetExpiryTime().AsTime(), minuteToler)
 		}
+	}
+	s.True(foundTimer, "t1 user timer must be persisted on MS")
+
+	// Load-bearing skip-happened check: regenerated user-timer task's wall-clock fire time
+	// is virtual_expiry - accumulated = startTime + (userTimer - maxSkip). Without skip
+	// it would be startTime + userTimer, so this catches a regression where the
+	// task is not re-emitted after the bound transition.
+	recorder := env.GetTestCluster().GetTaskQueueRecorder()
+	s.NotNil(recorder)
+	recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
+		NamespaceID: env.NamespaceID().String(),
+		WorkflowID:  tv.WorkflowID(),
+		RunID:       runID,
+	})
+	var t1Task *historytasks.UserTimerTask
+	for _, rec := range recorded {
+		if ut, ok := rec.Task.(*historytasks.UserTimerTask); ok {
+			t1Task = ut
+		}
+	}
+	s.NotNil(t1Task, "t1 user-timer task must be recorded in the timer queue")
+	if t1Task != nil {
+		s.WithinDuration(startTime.Add(userTimer-maxSkip), t1Task.VisibilityTimestamp, minuteToler)
 	}
 
 	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
@@ -160,11 +184,11 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_TwoShortUserTimers(
 	ctx := testcore.NewContext()
 
 	const (
-		maxSkip      = time.Hour
-		timer1Dur    = 30 * time.Minute
-		timer2Dur    = 40 * time.Minute
-		minuteToler  = time.Minute
-		thirtySecond = 30 * time.Second
+		maxSkip     = time.Hour
+		timer1Dur   = 30 * time.Minute
+		timer2Dur   = 40 * time.Minute
+		minuteToler = time.Minute
+		accumTol    = 30 * time.Second
 	)
 
 	cfg := &workflowpb.TimeSkippingConfig{
@@ -215,13 +239,13 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_TwoShortUserTimers(
 	s.False(first.GetDisabledAfterBound())
 	s.NotNil(first.GetTargetTime())
 	firstSkip := first.GetTargetTime().AsTime().Sub(transitions[0].GetEventTime().AsTime())
-	s.InDelta(float64(timer1Dur), float64(firstSkip), float64(thirtySecond))
+	s.InDelta(float64(timer1Dur), float64(firstSkip), float64(accumTol))
 
 	second := transitions[1].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
 	s.True(second.GetDisabledAfterBound())
 	s.NotNil(second.GetTargetTime())
 	secondSkip := second.GetTargetTime().AsTime().Sub(transitions[1].GetEventTime().AsTime())
-	s.InDelta(float64(timer1Dur), float64(secondSkip), float64(thirtySecond))
+	s.InDelta(float64(timer1Dur), float64(secondSkip), float64(accumTol))
 
 	monotone := transitions[1].GetEventTime().AsTime().Sub(transitions[0].GetEventTime().AsTime())
 	s.InDelta(float64(timer1Dur), float64(monotone), float64(minuteToler))
@@ -244,7 +268,7 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_TwoShortUserTimers(
 	tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(tsi)
 	s.False(tsi.GetConfig().GetEnabled())
-	s.InDelta(float64(maxSkip), float64(tsi.GetAccumulatedSkippedDuration().AsDuration()), float64(thirtySecond))
+	s.InDelta(float64(maxSkip), float64(tsi.GetAccumulatedSkippedDuration().AsDuration()), float64(accumTol))
 
 	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace:         env.Namespace().String(),
@@ -260,9 +284,9 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_NoUserTimer() {
 	ctx := testcore.NewContext()
 
 	const (
-		maxSkip      = 30 * time.Minute
-		minuteToler  = time.Minute
-		thirtySecond = 30 * time.Second
+		maxSkip     = 30 * time.Minute
+		minuteToler = time.Minute
+		accumTol    = 30 * time.Second
 	)
 
 	cfg := &workflowpb.TimeSkippingConfig{
@@ -296,7 +320,7 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_NoUserTimer() {
 	tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(tsi)
 	s.False(tsi.GetConfig().GetEnabled())
-	s.InDelta(float64(maxSkip), float64(tsi.GetAccumulatedSkippedDuration().AsDuration()), float64(thirtySecond))
+	s.InDelta(float64(maxSkip), float64(tsi.GetAccumulatedSkippedDuration().AsDuration()), float64(accumTol))
 
 	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace:         env.Namespace().String(),
@@ -463,10 +487,10 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_WithActivity() {
 	ctx := testcore.NewContext()
 
 	const (
-		bound        = 30 * time.Minute
-		timer1Dur    = 29*time.Minute + 58*time.Second
-		minuteToler  = time.Minute
-		thirtySecond = 30 * time.Second
+		bound       = 30 * time.Minute
+		timer1Dur   = 29*time.Minute + 58*time.Second
+		minuteToler = time.Minute
+		accumTol    = 30 * time.Second
 	)
 
 	cfg := &workflowpb.TimeSkippingConfig{
@@ -525,7 +549,7 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_WithActivity() {
 	s.False(first.GetDisabledAfterBound())
 	s.NotNil(first.GetTargetTime())
 	firstSkip := first.GetTargetTime().AsTime().Sub(transitions[0].GetEventTime().AsTime())
-	s.InDelta(float64(timer1Dur), float64(firstSkip), float64(thirtySecond))
+	s.InDelta(float64(timer1Dur), float64(firstSkip), float64(accumTol))
 
 	second := transitions[1].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
 	s.True(second.GetDisabledAfterBound())
@@ -564,9 +588,9 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_NoUserTimer() {
 	ctx := testcore.NewContext()
 
 	const (
-		bound        = 30 * time.Minute
-		minuteToler  = time.Minute
-		thirtySecond = 30 * time.Second
+		bound       = 30 * time.Minute
+		minuteToler = time.Minute
+		accumTol    = 30 * time.Second
 	)
 
 	cfg := &workflowpb.TimeSkippingConfig{
@@ -600,7 +624,7 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_NoUserTimer() {
 	tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(tsi)
 	s.False(tsi.GetConfig().GetEnabled())
-	s.InDelta(float64(bound), float64(tsi.GetAccumulatedSkippedDuration().AsDuration()), float64(thirtySecond))
+	s.InDelta(float64(bound), float64(tsi.GetAccumulatedSkippedDuration().AsDuration()), float64(accumTol))
 	bi := tsi.GetCurrentElapsedDurationBound()
 	s.NotNil(bi)
 	s.True(bi.GetHasReached())

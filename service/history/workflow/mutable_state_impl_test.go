@@ -7930,24 +7930,24 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingTransition() {
 		resetMS()
 		t1 := baseTime.Add(10 * time.Hour)
 		addTimer("t1", t1)
-		max := time.Hour
+		maxBound := time.Hour
 		accum := 20 * time.Minute
 		s.mutableState.executionInfo.TimeSkippingInfo.Config.Bound =
-			&workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(max)}
+			&workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(maxBound)}
 		s.mutableState.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(accum)
 
 		tr, err := s.mutableState.calculateTimeSkippingTransition()
 		s.Require().NoError(err)
-		s.Equal(baseTime.Add(max-accum), tr.targetTime)
+		s.Equal(baseTime.Add(maxBound-accum), tr.targetTime)
 		s.True(tr.disabledAfterBound)
 	})
 
 	s.Run("MaxSkipped_AccumEqualMax_DisableNoSkip", func() {
 		resetMS()
-		max := time.Hour
+		maxBound := time.Hour
 		s.mutableState.executionInfo.TimeSkippingInfo.Config.Bound =
-			&workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(max)}
-		s.mutableState.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(max)
+			&workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(maxBound)}
+		s.mutableState.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(maxBound)
 
 		tr, err := s.mutableState.calculateTimeSkippingTransition()
 		s.Require().NoError(err)
@@ -7958,10 +7958,10 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingTransition() {
 
 	s.Run("MaxSkipped_AccumGreaterThanMax_InternalError", func() {
 		resetMS()
-		max := time.Hour
+		maxBound := time.Hour
 		s.mutableState.executionInfo.TimeSkippingInfo.Config.Bound =
-			&workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(max)}
-		s.mutableState.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(2 * max)
+			&workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(maxBound)}
+		s.mutableState.executionInfo.TimeSkippingInfo.AccumulatedSkippedDuration = durationpb.New(2 * maxBound)
 
 		_, err := s.mutableState.calculateTimeSkippingTransition()
 		s.Require().Error(err)

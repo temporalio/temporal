@@ -324,10 +324,10 @@ message TimeSkippingInfo {
   // Current time-skipping configuration applied to the workflow.
   temporal.api.workflow.v1.TimeSkippingConfig config = 1;
 
-  // Total duration that has been skipped over the lifetime of the workflow.
-  google.protobuf.Duration accumulated_skipped_duration = 2;
+  // Total skipped duration for the current workflow execution run, including any
+  ./* inherited skipped duration carried over from a preceding execution that started this run. */google.protobuf.Duration accumulated_skipped_duration = 2;
 
-  // The active bound based on elapsed duration for time skipping.
+  // The current bound based on elapsed duration for time skipping.
   TimeSkippingBoundInfo current_elapsed_duration_bound = 3;
 }
 

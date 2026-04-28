@@ -939,10 +939,6 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		return errNoTimerFired
 	}
 
-	// todo@time-skipping: gate emission on workflow idleness once an exported idle check
-	// (or equivalent in-flight gating) is available — today this fires the disable even
-	// when activities/WTs/child WFs are in flight, which is safe but emits the transition
-	// event mid-flight. Match the user-timer race-handling pattern when that gate lands.
 	_, err = mutableState.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 		ctx, time.Time{}, true)
 	if err != nil {

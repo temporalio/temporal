@@ -1177,9 +1177,9 @@ type TimeSkippingInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Current time-skipping configuration applied to the workflow.
 	Config *v12.TimeSkippingConfig `protobuf:"bytes,1,opt,name=config,proto3" json:"config,omitempty"`
-	// Total duration that has been skipped over the lifetime of the workflow.
+	// Total skipped duration for the current workflow execution run, including any
 	AccumulatedSkippedDuration *durationpb.Duration `protobuf:"bytes,2,opt,name=accumulated_skipped_duration,json=accumulatedSkippedDuration,proto3" json:"accumulated_skipped_duration,omitempty"`
-	// The active bound based on elapsed duration for time skipping.
+	// The current bound based on elapsed duration for time skipping.
 	CurrentElapsedDurationBound *TimeSkippingBoundInfo `protobuf:"bytes,3,opt,name=current_elapsed_duration_bound,json=currentElapsedDurationBound,proto3" json:"current_elapsed_duration_bound,omitempty"`
 	unknownFields               protoimpl.UnknownFields
 	sizeCache                   protoimpl.SizeCache

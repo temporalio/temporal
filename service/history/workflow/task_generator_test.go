@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -1441,6 +1442,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BoundTimer(t *tes
 					Enabled: true,
 					Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
 				},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 				CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
 					TargetTime:    timestamppb.New(boundTarget),
 					SourceEventId: 7,
@@ -1456,6 +1458,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BoundTimer(t *tes
 					Enabled: true,
 					Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
 				},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 				CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
 					TargetTime:    timestamppb.New(boundTarget),
 					SourceEventId: 7,
@@ -1470,6 +1473,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BoundTimer(t *tes
 					Enabled: false,
 					Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
 				},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 				CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
 					TargetTime:    timestamppb.New(boundTarget),
 					SourceEventId: 7,
@@ -1480,7 +1484,8 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BoundTimer(t *tes
 		{
 			name: "no bound info does not emit bound task",
 			tsi: &persistencespb.TimeSkippingInfo{
-				Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+				Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 			},
 		},
 	} {
@@ -1492,8 +1497,8 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BoundTimer(t *tes
 			mutableState := historyi.NewMockMutableState(ctrl)
 			mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 				TimeSkippingInfo: tc.tsi,
-				// AccumulatedSkippedDuration zero so steps (1)+(2) early-return; (3)+(4) still run.
 			}).AnyTimes()
+			mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{}).AnyTimes()
 			mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 			// Step (4) is gated by HadOrHasWorkflowTask: true short-circuits and isolates step (3).
 			mutableState.EXPECT().HadOrHasWorkflowTask().Return(true).AnyTimes()
@@ -1612,14 +1617,15 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer(t *t
 			ctrl := gomock.NewController(t)
 			mutableState := historyi.NewMockMutableState(ctrl)
 			mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-				StartTime:        timestamppb.New(tc.startTime),
-				ExecutionTime:    timestamppb.New(tc.executionTime),
-				CronSchedule:     tc.cronSchedule,
-				Attempt:          tc.attempt,
+				StartTime:     timestamppb.New(tc.startTime),
+				ExecutionTime: timestamppb.New(tc.executionTime),
+				CronSchedule:  tc.cronSchedule,
+				Attempt:       tc.attempt,
 				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
-					// AccumulatedSkippedDuration zero so steps (1)+(2) early-return.
+					AccumulatedSkippedDuration: durationpb.New(time.Hour),
 				},
 			}).AnyTimes()
+			mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{}).AnyTimes()
 			mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 			mutableState.EXPECT().HadOrHasWorkflowTask().Return(tc.hadOrHasWorkflowTask).AnyTimes()
 			if tc.wantBackoffTask != nil {
@@ -1667,14 +1673,17 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer_Star
 	ctrl := gomock.NewController(t)
 	mutableState := historyi.NewMockMutableState(ctrl)
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		StartTime:        timestamppb.New(now),
-		ExecutionTime:    timestamppb.New(now.Add(time.Hour)),
-		Attempt:          1,
-		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{},
+		StartTime:     timestamppb.New(now),
+		ExecutionTime: timestamppb.New(now.Add(time.Hour)),
+		Attempt:       1,
+		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		},
 	}).AnyTimes()
+	mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{}).AnyTimes()
 	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 	mutableState.EXPECT().HadOrHasWorkflowTask().Return(false).AnyTimes()
-	wantErr := fmt.Errorf("boom")
+	wantErr := errors.New("boom")
 	mutableState.EXPECT().GetStartVersion().Return(int64(0), wantErr)
 
 	taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
