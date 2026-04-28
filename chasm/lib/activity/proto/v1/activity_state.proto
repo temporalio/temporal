@@ -113,6 +113,13 @@ message ActivityState {
 
   // Set if the activity was paused.
   ActivityPauseState pause_state = 15;
+
+  // Set when reset was requested while the activity was running.
+  // On the next retry, TransitionRescheduled will reset the attempt count to 1 before incrementing.
+  bool activity_reset = 16;
+
+  // Set alongside activity_reset when heartbeat details should be cleared on the next retry.
+  bool reset_heartbeats = 17;
 }
 
 message ActivityCancelState {

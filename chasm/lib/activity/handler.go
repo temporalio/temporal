@@ -433,7 +433,22 @@ func (h *handler) ResetActivityExecution(ctx context.Context, req *activitypb.Re
 		}
 		return &activitypb.ResetActivityExecutionResponse{}, nil
 	}
-	return nil, serviceerror.NewUnimplemented("ResetActivityExecution for standalone activities is not yet implemented")
+	ref := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  frontendReq.GetActivityId(),
+		RunID:       frontendReq.GetRunId(),
+	})
+
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		ref,
+		(*Activity).handleReset,
+		req,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &activitypb.ResetActivityExecutionResponse{}, nil
 }
 
 func (h *handler) UpdateActivityExecutionOptions(ctx context.Context, req *activitypb.UpdateActivityExecutionOptionsRequest) (*activitypb.UpdateActivityExecutionOptionsResponse, error) {
