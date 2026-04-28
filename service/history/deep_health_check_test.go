@@ -2,7 +2,6 @@ package history
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -47,7 +46,8 @@ func TestHealthCheck(t *testing.T) {
 			enumsspb.HEALTH_STATE_SERVING.String(), check.GetState().String())
 		switch check.CheckType {
 		case health2.CheckTypeGRPCHealth:
-			require.True(t, strings.Contains(check.Message, "NOT_SERVING"))
+			require.Contains(t, check.Message, "NOT_SERVING")
+		default:
 		}
 	}
 	handler.historyHealthSignal.Record(time.Second, context.DeadlineExceeded)
