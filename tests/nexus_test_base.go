@@ -36,7 +36,7 @@ func newNexusTestEnv(t *testing.T, useTemporalFailures bool, opts ...testcore.Te
 }
 
 func (env *NexusTestEnv) createNexusEndpoint(ctx context.Context, t *testing.T, name string, taskQueue string) *nexuspb.Endpoint {
-	resp, err := env.OperatorClient().CreateNexusEndpoint(testcore.NewContext(), &operatorservice.CreateNexusEndpointRequest{
+	resp, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: name,
 			Target: &nexuspb.EndpointTarget{
@@ -50,8 +50,14 @@ func (env *NexusTestEnv) createNexusEndpoint(ctx context.Context, t *testing.T, 
 		},
 	})
 	require.NoError(t, err)
-	env.setNexusEndpointCleanupFn(t, resp.Endpoint.Id, resp.Endpoint.Version)
-	env.probeEndpoint(ctx, t, name)
+	t.Cleanup(func() {
+		_, _ = env.OperatorClient().DeleteNexusEndpoint(ctx, &operatorservice.DeleteNexusEndpointRequest{
+			Id:      resp.Endpoint.Id,
+			Version: resp.Endpoint.Version,
+		})
+	})
+
+	env.ensureNexusEndpoint(ctx, t, name)
 	return resp.Endpoint
 }
 
@@ -76,23 +82,19 @@ func (env *NexusTestEnv) createExternalNexusServer(ctx context.Context, t *testi
 		},
 	})
 	require.NoError(t, err)
-	env.setNexusEndpointCleanupFn(t, resp.Endpoint.Id, resp.Endpoint.Version)
-	env.probeEndpoint(ctx, t, endpointName)
-}
-
-// setNexusEndpointCleanupFn sets the cleanup fn that deletes the Nexus endpoint after the current test,
-// so the cluster can be safely reused by subsequent tests.
-func (env *NexusTestEnv) setNexusEndpointCleanupFn(t *testing.T, id string, version int64) {
 	t.Cleanup(func() {
-		_, _ = env.OperatorClient().DeleteNexusEndpoint(testcore.NewContext(), &operatorservice.DeleteNexusEndpointRequest{
-			Id:      id,
-			Version: version,
+		_, _ = env.OperatorClient().DeleteNexusEndpoint(ctx, &operatorservice.DeleteNexusEndpointRequest{
+			Id:      resp.Endpoint.Id,
+			Version: resp.Endpoint.Version,
 		})
 	})
+
+	env.ensureNexusEndpoint(ctx, t, endpointName)
 }
 
-// probeEndpoint probes the specified endpoint until it's visible to StartNexusOperationExecution.
-func (env *NexusTestEnv) probeEndpoint(ctx context.Context, t *testing.T, endpointName string) {
+// ensureNexusEndpoint probes the specified endpoint until it's visible to StartNexusOperationExecution to ensure tests
+// can use it.
+func (env *NexusTestEnv) ensureNexusEndpoint(ctx context.Context, t *testing.T, endpointName string) {
 	require.Eventually(t, func() bool {
 		_, err := env.FrontendClient().StartNexusOperationExecution(ctx, &workflowservice.StartNexusOperationExecutionRequest{
 			Namespace: env.Namespace().String(),

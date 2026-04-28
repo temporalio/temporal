@@ -270,9 +270,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 
 	testFn := func(s *NexusApiTestSuite, tc testcase, dispatchOnlyByEndpoint bool) {
 		env := newNexusTestEnv(s.T(), useTemporalFailures)
-		ctx, cancel := context.WithCancel(env.Context())
-		defer cancel()
-		endpoint := env.createNexusEndpoint(ctx, s.T(), tc.endpointName, testcore.RandomizeStr("task-queue"))
+		endpoint := env.createNexusEndpoint(env.Context(), s.T(), tc.endpointName, testcore.RandomizeStr("task-queue"))
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
 			dispatchURL = getDispatchByEndpointURL(env.HttpAPIAddress(), endpoint.Id)
@@ -289,7 +287,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 		s.NoError(err)
 		capture := env.StartNamespaceMetricCapture()
 
-		pollerErrCh := env.nexusTaskPoller(ctx, s.T(), endpoint.Spec.Target.GetWorker().TaskQueue, tc.handler)
+		pollerErrCh := env.nexusTaskPoller(env.Context(), s.T(), endpoint.Spec.Target.GetWorker().TaskQueue, tc.handler)
 
 		eventuallyTick := 500 * time.Millisecond
 		header := nexus.Header{"key": "value", "temporal-nexus-failure-support": "true"}
@@ -302,7 +300,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 
 		// Wait until the endpoint is loaded into the registry.
 		s.Eventually(func() bool {
-			result, err = nexusrpc.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{
+			result, err = nexusrpc.StartOperation(env.Context(), client, op, "input", nexus.StartOperationOptions{
 				CallbackURL: "http://localhost/callback",
 				RequestID:   "request-id",
 				Header:      header,
@@ -416,9 +414,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims(useTemporalFailures b
 		})
 		defer env.GetTestCluster().Host().SetOnGetClaims(nil)
 
-		ctx, cancel := context.WithCancel(env.Context())
-		defer cancel()
-		testEndpoint := env.createNexusEndpoint(ctx, s.T(), testcore.RandomizeStr("test-endpoint"), taskQueue)
+		testEndpoint := env.createNexusEndpoint(env.Context(), s.T(), testcore.RandomizeStr("test-endpoint"), taskQueue)
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
 			dispatchURL = getDispatchByEndpointURL(env.HttpAPIAddress(), testEndpoint.Id)
@@ -432,11 +428,11 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims(useTemporalFailures b
 		var pollerErrCh <-chan error
 		if tc.handler != nil {
 			// only set on valid request
-			pollerErrCh = env.nexusTaskPoller(ctx, s.T(), taskQueue, tc.handler)
+			pollerErrCh = env.nexusTaskPoller(env.Context(), s.T(), taskQueue, tc.handler)
 		}
 
 		capture := env.StartGlobalMetricCapture()
-		result, err := nexusrpc.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{
+		result, err := nexusrpc.StartOperation(env.Context(), client, op, "input", nexus.StartOperationOptions{
 			Header: tc.header,
 		})
 		preprocessErrors := capture.Metric("nexus_request_preprocess_errors")
@@ -532,9 +528,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 
 	testFn := func(s *NexusApiTestSuite, tc testcase, dispatchOnlyByEndpoint bool) {
 		env := newNexusTestEnv(s.T(), useTemporalFailures)
-		ctx, cancel := context.WithCancel(env.Context())
-		defer cancel()
-		endpoint := env.createNexusEndpoint(ctx, s.T(), tc.endpointName, testcore.RandomizeStr("task-queue"))
+		endpoint := env.createNexusEndpoint(env.Context(), s.T(), tc.endpointName, testcore.RandomizeStr("task-queue"))
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
 			dispatchURL = getDispatchByEndpointURL(env.HttpAPIAddress(), endpoint.Id)
@@ -551,7 +545,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 		s.NoError(err)
 		capture := env.StartNamespaceMetricCapture()
 
-		pollerErrCh := env.nexusTaskPoller(ctx, s.T(), endpoint.Spec.Target.GetWorker().TaskQueue, tc.handler)
+		pollerErrCh := env.nexusTaskPoller(env.Context(), s.T(), endpoint.Spec.Target.GetWorker().TaskQueue, tc.handler)
 
 		handle, err := client.NewOperationHandle("operation", "token")
 		s.NoError(err)
@@ -565,7 +559,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 
 		// Wait until the endpoint is loaded into the registry.
 		s.Eventually(func() bool {
-			err = handle.Cancel(ctx, nexus.CancelOperationOptions{Header: header})
+			err = handle.Cancel(env.Context(), nexus.CancelOperationOptions{Header: header})
 			var handlerErr *nexus.HandlerError
 			return err == nil || !(errors.As(err, &handlerErr) && handlerErr.Type == nexus.HandlerErrorTypeNotFound)
 		}, 10*time.Second, eventuallyTick)
@@ -614,15 +608,13 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Su
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningDataAPIs, true),
 	)
 
-	ctx, cancel := context.WithCancel(env.Context())
-	defer cancel()
 	taskQueue := testcore.RandomizeStr("task-queue")
-	err := env.SdkClient().UpdateWorkerBuildIdCompatibility(ctx, &sdkclient.UpdateWorkerBuildIdCompatibilityOptions{ //nolint:staticcheck // SA1019 deprecated
+	err := env.SdkClient().UpdateWorkerBuildIdCompatibility(env.Context(), &sdkclient.UpdateWorkerBuildIdCompatibilityOptions{ //nolint:staticcheck // SA1019 deprecated
 		TaskQueue: taskQueue,
 		Operation: &sdkclient.BuildIDOpAddNewIDInNewDefaultSet{BuildID: "old-build-id"},
 	})
 	s.NoError(err)
-	err = env.SdkClient().UpdateWorkerBuildIdCompatibility(ctx, &sdkclient.UpdateWorkerBuildIdCompatibilityOptions{ //nolint:staticcheck // SA1019 deprecated
+	err = env.SdkClient().UpdateWorkerBuildIdCompatibility(env.Context(), &sdkclient.UpdateWorkerBuildIdCompatibilityOptions{ //nolint:staticcheck // SA1019 deprecated
 		TaskQueue: taskQueue,
 		Operation: &sdkclient.BuildIDOpAddNewIDInNewDefaultSet{BuildID: "new-build-id"},
 	})
@@ -632,19 +624,19 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Su
 	client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: u, Service: "test-service"})
 	s.NoError(err)
 	// Versioned poller gets task
-	pollerErrCh1 := env.versionedNexusTaskPoller(ctx, s.T(), taskQueue, "new-build-id", nexusEchoHandler)
+	pollerErrCh1 := env.versionedNexusTaskPoller(env.Context(), s.T(), taskQueue, "new-build-id", nexusEchoHandler)
 
-	result, err := nexusrpc.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
+	result, err := nexusrpc.StartOperation(env.Context(), client, op, "input", nexus.StartOperationOptions{})
 	s.NoError(err)
 	s.Equal("input", result.Successful)
 	s.NoError(<-pollerErrCh1)
 
 	// Unversioned poller doesn't get a task
-	pollerErrCh2 := env.nexusTaskPoller(ctx, s.T(), taskQueue, nexusEchoHandler)
+	pollerErrCh2 := env.nexusTaskPoller(env.Context(), s.T(), taskQueue, nexusEchoHandler)
 	// Versioned poller gets task with wrong build ID
-	pollerErrCh3 := env.versionedNexusTaskPoller(ctx, s.T(), taskQueue, "old-build-id", nexusEchoHandler)
+	pollerErrCh3 := env.versionedNexusTaskPoller(env.Context(), s.T(), taskQueue, "old-build-id", nexusEchoHandler)
 
-	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Second*2)
+	timeoutCtx, timeoutCancel := context.WithTimeout(env.Context(), time.Second*2)
 	defer timeoutCancel()
 	_, err = nexusrpc.StartOperation(timeoutCtx, client, op, "input", nexus.StartOperationOptions{})
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -654,6 +646,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Su
 		}
 	}
 	// Cancel the parent context to unblock the pollers that didn't receive a task.
+	_, cancel := context.WithCancel(env.Context())
 	cancel()
 	s.NoError(<-pollerErrCh2)
 	s.NoError(<-pollerErrCh3)
@@ -666,16 +659,15 @@ func (s *NexusApiTestSuite) TestNexusClientNameMetricPropagation(useTemporalFail
 	env := newNexusTestEnv(s.T(), useTemporalFailures)
 	const expectedClientName = "temporal-go"
 	taskQueue := testcore.RandomizeStr("tq")
-	ctx, cancel := context.WithCancel(env.Context())
-	defer cancel()
-	endpoint := env.createNexusEndpoint(ctx, s.T(), testcore.RandomizeStr("endpoint"), taskQueue)
+
+	endpoint := env.createNexusEndpoint(env.Context(), s.T(), testcore.RandomizeStr("endpoint"), taskQueue)
 
 	capture := env.StartNamespaceMetricCapture()
 
 	// Start a poller that simulates an SDK worker with a specific client-name.
 	// We build the outgoing metadata from scratch (instead of using NewContext which
 	// sets client-name=temporal-server) so the SDK name is the only value.
-	pollerCtx := metadata.NewOutgoingContext(ctx, metadata.Pairs(
+	pollerCtx := metadata.NewOutgoingContext(env.Context(), metadata.Pairs(
 		"client-name", expectedClientName,
 		"client-version", "1.0.0",
 		"supported-server-versions", headers.SupportedServerVersions,
@@ -691,7 +683,7 @@ func (s *NexusApiTestSuite) TestNexusClientNameMetricPropagation(useTemporalFail
 	s.NoError(err)
 
 	s.Eventually(func() bool {
-		_, err = nexusrpc.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
+		_, err = nexusrpc.StartOperation(env.Context(), client, op, "input", nexus.StartOperationOptions{})
 		var handlerErr *nexus.HandlerError
 		return err == nil || (!errors.As(err, &handlerErr) || handlerErr.Type != nexus.HandlerErrorTypeNotFound)
 	}, 10*time.Second, 500*time.Millisecond)
