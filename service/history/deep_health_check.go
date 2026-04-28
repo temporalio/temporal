@@ -45,6 +45,7 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 			}},
 		}, nil
 	}
+
 	checks = append(checks, &healthspb.HealthCheck{
 		CheckType: healthcheck.CheckTypeGRPCHealth,
 		// Convert to SERVING to avoid false positives during initialization
@@ -69,13 +70,16 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 		"persistenceservice error ratio"))
 
 	overallState := enumsspb.HEALTH_STATE_SERVING
+
 	for _, check := range checks {
 		if check.State == enumsspb.HEALTH_STATE_NOT_SERVING {
 			overallState = check.State
 			break
 		}
 	}
+
 	metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(overallState))
+
 	return &historyservice.DeepHealthCheckResponse{
 		State:  overallState,
 		Checks: checks,
@@ -83,7 +87,8 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 }
 
 func suppressStartupErrors(status grpchealthspb.HealthCheckResponse_ServingStatus,
-	dur time.Duration, threshold time.Duration) enumsspb.HealthState {
+	dur time.Duration, threshold time.Duration,
+) enumsspb.HealthState {
 	if dur < threshold {
 		return enumsspb.HEALTH_STATE_SERVING
 	}
