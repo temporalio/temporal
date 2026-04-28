@@ -43,9 +43,9 @@ func (l *TestLibrary) Components() []*RegistrableComponent {
 		NewRegistrableComponent[*TestSubComponent1](testSubComponent1Name),
 		NewRegistrableComponent[*TestSubComponent11](testSubComponent11Name),
 		NewRegistrableComponent[*TestSubComponent2](testSubComponent2Name),
-		NewRegistrableComponent[*TestSkipIfCleanComponent](
-			testSkipIfCleanComponentName,
-			WithSkipPersistenceIfClean(),
+		NewRegistrableComponent[*TestNondeterministicEncodingComponent](
+			testNondeterministicEncodingComponentName,
+			WithNondeterministicEncoding(),
 		),
 	}
 }

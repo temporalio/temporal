@@ -62,7 +62,7 @@ func encodeBlob(m proto.Message, encoding enumspb.EncodingType) (*commonpb.DataB
 			EncodingType: enumspb.ENCODING_TYPE_JSON,
 		}, nil
 	case enumspb.ENCODING_TYPE_PROTO3:
-		data, err := proto.MarshalOptions{Deterministic: true}.Marshal(m)
+		data, err := proto.Marshal(m)
 		if err != nil {
 			return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 		}
