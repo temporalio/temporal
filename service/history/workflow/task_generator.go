@@ -1094,12 +1094,13 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 	// VisibilityTimestamp tracks the new accumulated skip.
 	tsi := r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
 	if tsi.GetConfig().GetEnabled() {
-		if !timeNotSet(tsi.GetBoundTargetTime()) {
+		boundInfo := tsi.GetCurrentElapsedDurationBound()
+		if boundInfo != nil && !boundInfo.GetHasReached() {
 			r.mutableState.AddTasks(&tasks.TimeSkippingTimerTask{
 				// TaskID is set by shard
 				WorkflowKey:         r.mutableState.GetWorkflowKey(),
-				VisibilityTimestamp: tsi.GetBoundTargetTime().AsTime(),
-				EventID:             tsi.GetBoundSourceEventId(),
+				VisibilityTimestamp: boundInfo.GetTargetTime().AsTime(),
+				EventID:             boundInfo.GetSourceEventId(),
 			})
 		}
 	}

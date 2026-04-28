@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -933,17 +934,18 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	}
 
 	// drop the timer task directly when time skipping is disabled
-	// or the bound this timer task is related to is no longer valid.
+	// or the bound this timer task is related to is stale
 	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
 	if tsi == nil || !tsi.GetConfig().GetEnabled() {
 		release(nil)
 		return errNoTimerFired
 	}
-	if tsi.GetBoundTargetTime() == nil {
+	boundInfo := tsi.GetCurrentElapsedDurationBound()
+	if boundInfo == nil || boundInfo.GetTargetTime() == nil || boundInfo.GetSourceEventId() == 0 || boundInfo.GetHasReached() {
 		release(nil)
 		return errNoTimerFired
 	}
-	if tsi.GetBoundSourceEventId() != task.EventID {
+	if boundInfo.GetSourceEventId() != task.EventID {
 		release(nil)
 		return errNoTimerFired
 	}
@@ -953,8 +955,17 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	// we need to force add a time-skipping transitioned event
 	// regardless of whether there is in-flight work
 	// need to make sure there is no race-condition -> refer to how user timer task is executed
-	_, err = mutableState.AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx)
-	return err
+	// _, err = mutableState.AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx)
+	// return err
+
+	// generate time-skipping transitioned event
+	// if this event is triggered by this timer, there is no need to check in-flight work
+	_, err = mutableState.AddWorkflowExecutionTimeSkippingTransitionedEvent(
+		ctx, time.Time{}, true)
+	if err != nil {
+		return err
+	}
+	return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
 }
 
 func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(

@@ -402,7 +402,8 @@ type (
 		SetSuccessorRunID(runID string)
 
 		// time-skipping related methods
-		AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionTimeSkippingTransitionedEvent(
+			ctx context.Context, targetTime time.Time, disabledAfterBound bool) (*historypb.HistoryEvent, error)
 		ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error
 	}
 )

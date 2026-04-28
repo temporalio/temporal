@@ -1088,6 +1088,10 @@ func (b *EventFactory) createHistoryEvent(
 	return historyEvent
 }
 
+// CreateWorkflowExecutionTimeSkippingTransitionedEvent creates a workflow execution time skipping transitioned event.
+// If no time needs to be skipped, the targetTime should be zero time.
+// If the time skipping shouldn't be disabled, triggeredDisable should be false.
+// This method shouldn't be generated when there is no time to skip and no need to disable time skipping.
 func (b *EventFactory) CreateWorkflowExecutionTimeSkippingTransitionedEvent(
 	targetTime time.Time,
 	triggeredDisable bool,
