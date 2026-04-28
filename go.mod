@@ -100,6 +100,7 @@ require (
 	github.com/go-openapi/swag/yamlutils v0.26.0 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect
 	go.opentelemetry.io/collector/featuregate v1.56.0 // indirect
+	pgregory.net/rapid v1.2.0 // indirect
 )
 
 require (

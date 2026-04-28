@@ -238,6 +238,35 @@ func (e *TestEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	return e.cluster.host.injectHook(e.t, hook, scope)
 }
 
+func (e *TestEnv) SetClientUnaryInterceptor(fn grpc.UnaryClientInterceptor) {
+	e.t.Helper()
+	if e.isShared {
+		e.t.Fatal("SetClientUnaryInterceptor cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
+	}
+	e.dedicatedGuard.record("gRPC client interceptor")
+	e.cluster.host.grpcClientInterceptor.SetUnary(fn)
+	e.t.Cleanup(func() {
+		e.cluster.host.grpcClientInterceptor.SetUnary(nil)
+	})
+}
+
+// SetServerUnaryInterceptor installs a server-side unary interceptor that
+// fires on every inbound gRPC call into every Temporal service in this
+// cluster (frontend, history, matching, worker). Combined with
+// SetClientUnaryInterceptor, tests can observe and inject faults on both
+// sides of inter-service calls (e.g. history -> matching).
+func (e *TestEnv) SetServerUnaryInterceptor(fn grpc.UnaryServerInterceptor) {
+	e.t.Helper()
+	if e.isShared {
+		e.t.Fatal("SetServerUnaryInterceptor cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
+	}
+	e.dedicatedGuard.record("gRPC server interceptor")
+	e.cluster.host.grpcClientInterceptor.SetUnaryServer(fn)
+	e.t.Cleanup(func() {
+		e.cluster.host.grpcClientInterceptor.SetUnaryServer(nil)
+	})
+}
+
 func (e *TestEnv) SetOnAuthorize(
 	fn func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error),
 ) {

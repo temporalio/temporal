@@ -107,7 +107,7 @@ func (env *NexusTestEnv) ensureNexusEndpoint(ctx context.Context, t *testing.T, 
 			Endpoint:  endpointName,
 			Service:   "probe",
 			Operation: "probe",
-			RequestId: "probe",
+			RequestId: uuid.NewString(),
 		})
 		if notFound, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			msg := notFound.Error()
