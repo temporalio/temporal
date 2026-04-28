@@ -13,6 +13,8 @@ import (
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/proto"
@@ -366,6 +368,10 @@ func TestTransitionSucceeded(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+
 			ctx := &chasm.MockMutableContext{
 				MockContext: chasm.MockContext{
 					HandleNow: func(chasm.Component) time.Time { return defaultTime },
@@ -374,14 +380,19 @@ func TestTransitionSucceeded(t *testing.T) {
 							&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0,
 						)
 					},
+					HandleMetricsHandler: func() metrics.Handler { return metricsHandler },
 					GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
-						MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
+						MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{
+							IncludeServiceTag:   true,
+							IncludeOperationTag: true,
+						}),
 					}),
 				},
 			}
 
 			operation := newTestOperation()
 			operation.Status = nexusoperationpb.OPERATION_STATUS_STARTED
+			operation.StartedTime = operation.ScheduledTime
 
 			err := TransitionSucceeded.Apply(operation, ctx, EventSucceeded{
 				CompleteTime: tc.completeTime,
@@ -396,6 +407,38 @@ func TestTransitionSucceeded(t *testing.T) {
 			require.NotNil(t, outcome.GetSuccessful())
 			protorequire.ProtoEqual(t, tc.result, outcome.GetSuccessful().GetResult())
 			require.Empty(t, ctx.Tasks)
+
+			snap := capture.Snapshot()
+
+			successCount := snap[NexusOperationSuccessCount.Name()]
+			require.Len(t, successCount, 1)
+			require.Equal(t, int64(1), successCount[0].Value)
+			require.Equal(t, "ns-name", successCount[0].Tags["namespace"])
+			require.Equal(t, "test-endpoint", successCount[0].Tags["nexus_endpoint"])
+			require.Equal(t, "test-service", successCount[0].Tags["nexus_service"])
+			require.Equal(t, "test-operation", successCount[0].Tags["nexus_operation"])
+			require.Equal(t, standaloneOperationWorkflowTypeName, successCount[0].Tags["workflowType"])
+
+			expectedLatency := tc.expectedClosedTime.Sub(operation.ScheduledTime.AsTime())
+
+			stcLatency := snap[NexusOperationScheduleToCloseLatency.Name()]
+			require.Len(t, stcLatency, 1)
+			require.Equal(t, expectedLatency, stcLatency[0].Value)
+			require.Equal(t, "succeeded", stcLatency[0].Tags["outcome"])
+
+			startToCloseLatency := snap[NexusOperationStartToCloseLatency.Name()]
+			require.Len(t, startToCloseLatency, 1)
+			require.Equal(t, expectedLatency, startToCloseLatency[0].Value)
+			require.Equal(t, "succeeded", startToCloseLatency[0].Tags["outcome"])
+
+			// Schedule-to-start is emitted in TransitionStarted, not from the success path
+			// when the operation was already started.
+			require.Empty(t, snap[NexusOperationScheduleToStartLatency.Name()])
+
+			require.Empty(t, snap[NexusOperationFailedCount.Name()])
+			require.Empty(t, snap[NexusOperationCancelCount.Name()])
+			require.Empty(t, snap[NexusOperationTimeoutCount.Name()])
+			require.Empty(t, snap[NexusOperationTerminateCount.Name()])
 		})
 	}
 }
