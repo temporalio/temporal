@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/config"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protoassert"
@@ -87,6 +88,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 	s.handler = newNamespaceHandler(
 		logger,
 		s.mockMetadataMgr,
+		namespace.NewMockRegistry(s.controller),
 		s.mockClusterMetadata,
 		s.mockNamespaceReplicator,
 		s.archivalMetadata,
