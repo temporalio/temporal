@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	healthspb "go.temporal.io/server/api/health/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -369,14 +369,14 @@ func TestDeepHealthCheck(t *testing.T) {
 			actual, err := handler.DeepHealthCheck(t.Context(), startupTime.Add(tc.timeSinceStartup))
 
 			if tc.shouldError && err == nil {
-				assert.Fail(t, "should have errored but didn't")
+				require.Fail(t, "should have errored but didn't")
 			}
 			if err != nil {
-				assert.EqualError(t, err, tc.expectedError)
+				require.EqualError(t, err, tc.expectedError)
 			}
 
-			assert.NoError(t, err)
-			assert.Equal(t, tc.expected, actual)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, actual)
 		})
 	}
 }
