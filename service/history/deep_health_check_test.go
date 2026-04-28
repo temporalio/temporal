@@ -27,8 +27,9 @@ func TestHealthCheck(t *testing.T) {
 			HealthPersistenceLatencyFailure: func() float64 { return 1000 },
 			HealthRPCLatencyFailure:         func() float64 { return 1000 },
 			// This is out of 1
-			HealthPersistenceErrorRatio: func() float64 { return 0.1 },
-			HealthRPCErrorRatio:         func() float64 { return 0.1 },
+			HealthPersistenceErrorRatio:     func() float64 { return 0.1 },
+			HealthRPCErrorRatio:             func() float64 { return 0.1 },
+			HealthHistoryInitializationTime: func() time.Duration { return time.Minute },
 		},
 		historyHealthSignal:     interceptor.NewHealthSignalAggregator(testLogger, func() bool { return true }, time.Second, 100),
 		persistenceHealthSignal: persistence.NewHealthSignalAggregator(true, time.Second, 100, metrics.NoopMetricsHandler, testLogger),
