@@ -64,7 +64,7 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 		h.persistenceHealthSignal.AverageLatency(), h.config.HealthPersistenceLatencyFailure(),
 		"persistenceservice latency"))
 
-	checks = append(checks, errorIfOverThreshold(healthcheck.CheckTypePersistenceLatency,
+	checks = append(checks, errorIfOverThreshold(healthcheck.CheckTypePersistenceErrRatio,
 		h.persistenceHealthSignal.ErrorRatio(), h.config.HealthPersistenceErrorRatio(),
 		"persistenceservice error ratio"))
 
