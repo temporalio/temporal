@@ -350,6 +350,10 @@ const (
 	ActivityPausedScope = "ActivityPaused"
 	// ActivityUnpausedScope tracks UnpauseActivityExecution API calls received by service
 	ActivityUnpausedScope = "ActivityUnpaused"
+	// ActivityResetScope tracks ResetActivityExecution API calls received by service
+	ActivityResetScope = "ActivityReset"
+	// ActivityUpdateOptionsScope tracks UpdateActivityExecutionOptions API calls received by service
+	ActivityUpdateOptionsScope = "ActivityUpdateOptions"
 	// HistoryGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
 	HistoryGetWorkflowExecutionHistoryScope = "GetWorkflowExecutionHistory"
 	// HistoryPollWorkflowExecutionHistoryScope is the metric scope for long poll case of frontend.GetWorkflowExecutionHistory
@@ -926,8 +930,10 @@ var (
 	ActivityCancel                                   = NewCounterDef("activity_cancel", WithDescription("Number of activities that are cancelled."))
 	ActivityTerminate                                = NewCounterDef("activity_terminate", WithDescription("Number of activities that are terminated."))
 	ActivityTaskTimeout                              = NewCounterDef("activity_task_timeout", WithDescription("Number of activity task timeouts (including retries)."))
+	ActivityUpdateOptions                            = NewCounterDef("activity_update_options", WithDescription("Number of activity update options calls."))
 	ActivityPause                                    = NewCounterDef("activity_pause", WithDescription("Number of activity pauses."))
 	ActivityUnpause                                  = NewCounterDef("activity_unpause", WithDescription("Number of activity unpauses."))
+	ActivityReset                                    = NewCounterDef("activity_reset", WithDescription("Number of activity resets."))
 	ActivityTimeout                                  = NewCounterDef("activity_timeout", WithDescription("Number of terminal activity timeouts."))
 	ActivityPayloadSize                              = NewCounterDef("activity_payload_size", WithDescription("Size of activity payloads in bytes."))
 	AckLevelUpdateCounter                            = NewCounterDef("ack_level_update")
@@ -1134,12 +1140,8 @@ var (
 	ExecutionQueueSchedulerTaskLatency    = NewTimerDef("execution_queue_scheduler_task_latency")
 	ExecutionQueueSchedulerQueueWaitTime  = NewTimerDef("execution_queue_scheduler_queue_wait_time")
 
-	PausedActivitiesCounter       = NewCounterDef("paused_activities")
-	ActivityPauseRequests         = NewCounterDef("activity_pause_requests")
-	ActivityUnpauseRequests       = NewCounterDef("activity_unpause_requests")
-	ActivityResetRequests         = NewCounterDef("activity_reset_requests")
-	ActivityUpdateOptionsRequests = NewCounterDef("activity_update_options_requests")
-	ExternalPayloadUploadSize     = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
+	PausedActivitiesCounter   = NewCounterDef("paused_activities")
+	ExternalPayloadUploadSize = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
 
 	// Deadlock detector metrics
 	DDSuspectedDeadlocks                 = NewCounterDef("dd_suspected_deadlocks")

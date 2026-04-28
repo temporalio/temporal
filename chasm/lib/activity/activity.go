@@ -654,6 +654,12 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		}
 	}
 
+	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityUpdateOptionsScope)
+	if err != nil {
+		return nil, err
+	}
+	a.emitOnUpdateOptionsMetrics(metricsHandler)
+
 	return &activitypb.UpdateActivityExecutionOptionsResponse{
 		FrontendResponse: &workflowservice.UpdateActivityExecutionOptionsResponse{
 			ActivityOptions: &apiactivitypb.ActivityOptions{
@@ -884,6 +890,7 @@ func (a *Activity) unpause(
 		&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()})
 	a.emitOnUnpausedMetrics(event.metricsHandler)
 }
+
 func (a *Activity) pause(
 	ctx chasm.MutableContext,
 	event pauseEvent,
@@ -895,6 +902,119 @@ func (a *Activity) pause(
 		RequestId: event.req.GetRequestId(),
 	}
 	a.emitOnPausedMetrics(event.metricsHandler)
+}
+
+func (a *Activity) clearHeartbeat(ctx chasm.MutableContext) {
+	if hb, ok := a.LastHeartbeat.TryGet(ctx); ok {
+		hb.Details = nil
+		hb.RecordedTime = nil
+	}
+}
+
+func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
+	attempt := a.LastAttempt.Get(ctx)
+	attempt.Count = 1
+	attempt.Stamp++
+	attempt.CurrentRetryInterval = nil
+	if event.req.GetResetHeartbeat() {
+		a.clearHeartbeat(ctx)
+	}
+	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{ScheduledTime: event.scheduleTime.Add(timeout)},
+			&activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()},
+		)
+	}
+	ctx.AddTask(
+		a,
+		chasm.TaskAttributes{ScheduledTime: event.scheduleTime},
+		&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()},
+	)
+	a.emitOnResetMetrics(event.handler)
+}
+
+// handleReset handles the activity execution reset.
+// For SCHEDULED/PAUSED activities: immediately re-dispatches at attempt 1.
+// For STARTED/CANCEL_REQUESTED activities: defers the reset to the next retry via the ActivityReset flag.
+func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetActivityExecutionRequest) (*activitypb.ResetActivityExecutionResponse, error) {
+	frontendReq := req.GetFrontendRequest()
+	keepPaused := frontendReq.GetKeepPaused()
+
+	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityResetScope)
+	if err != nil {
+		return nil, err
+	}
+
+	if frontendReq.GetRestoreOriginalOptions() {
+		ogOptions := a.GetOriginalOptions()
+		a.TaskQueue = common.CloneProto(ogOptions.GetTaskQueue())
+		a.ScheduleToCloseTimeout = common.CloneProto(ogOptions.GetScheduleToCloseTimeout())
+		a.ScheduleToStartTimeout = common.CloneProto(ogOptions.GetScheduleToStartTimeout())
+		a.StartToCloseTimeout = common.CloneProto(ogOptions.GetStartToCloseTimeout())
+		a.HeartbeatTimeout = common.CloneProto(ogOptions.GetHeartbeatTimeout())
+		a.RetryPolicy = common.CloneProto(ogOptions.GetRetryPolicy())
+		a.Priority = common.CloneProto(ogOptions.GetPriority())
+	}
+
+	scheduleTime := ctx.Now(a)
+	if jitter := frontendReq.GetJitter().AsDuration(); jitter > 0 {
+		scheduleTime = scheduleTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
+	}
+
+	switch a.Status {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
+		// Activity is running. Defer reset to the next retry so we don't break
+		// the running worker's task token (which encodes the current attempt count).
+		a.ActivityReset = true
+		if frontendReq.GetResetHeartbeat() {
+			a.ResetHeartbeats = true
+		}
+		if !keepPaused {
+			// Clear PauseState now so TransitionRescheduled can dispatch without being
+			// blocked by the validator (which drops dispatch tasks when PauseState != nil).
+			a.PauseState = nil
+		}
+		a.emitOnResetMetrics(metricsHandler)
+		return &activitypb.ResetActivityExecutionResponse{}, nil
+
+	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
+		// A SCHEDULED activity can carry PauseState when a pause was applied concurrently
+		// (e.g. deferred from a STARTED→retry path). In that case the dispatch task emitted
+		// by TransitionReset would be dropped by the validator, leaving the activity stuck.
+		// Treat any non-nil PauseState the same way as the explicit PAUSED status.
+		if a.PauseState != nil {
+			if keepPaused {
+				// Reset counts but keep the activity paused.
+				// No dispatch task — the user must unpause to re-dispatch.
+				attempt := a.LastAttempt.Get(ctx)
+				attempt.Count = 1
+				attempt.Stamp++
+				attempt.CurrentRetryInterval = nil
+				if frontendReq.GetResetHeartbeat() {
+					a.clearHeartbeat(ctx)
+				}
+				a.emitOnResetMetrics(metricsHandler)
+				return &activitypb.ResetActivityExecutionResponse{}, nil
+			}
+			// keepPaused=false: clear pause state so the dispatch task isn't dropped.
+			a.PauseState = nil
+		}
+		if err := TransitionReset.Apply(a, ctx, resetEvent{
+			req:          frontendReq,
+			scheduleTime: scheduleTime,
+			handler:      metricsHandler,
+		}); err != nil {
+			return nil, err
+		}
+		return &activitypb.ResetActivityExecutionResponse{}, nil
+
+	default:
+		// Terminal or unspecified state.
+		return nil, serviceerror.NewFailedPrecondition("activity execution is not running")
+	}
 }
 
 // recordScheduleToStartOrCloseTimeoutFailure records schedule-to-start or schedule-to-close timeouts. Such timeouts are not retried so we
@@ -1060,7 +1180,7 @@ func (a *Activity) RecordHeartbeat(
 	return &historyservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		ActivityPaused:  a.PauseState != nil,
-		// TODO(saa-preview): ActivityReset
+		// ActivityReset is intentionally not reported via heartbeat; reset takes effect on the next retry.
 	}, nil
 }
 
@@ -1479,15 +1599,25 @@ func (a *Activity) emitOnTimedOutMetrics(
 func (a *Activity) emitOnPausedMetrics(
 	handler metrics.Handler,
 ) {
-	metrics.ActivityPauseRequests.With(handler).Record(1)
 	metrics.ActivityPause.With(handler).Record(1)
+}
+
+func (a *Activity) emitOnUpdateOptionsMetrics(
+	handler metrics.Handler,
+) {
+	metrics.ActivityUpdateOptions.With(handler).Record(1)
 }
 
 func (a *Activity) emitOnUnpausedMetrics(
 	handler metrics.Handler,
 ) {
-	metrics.ActivityUnpauseRequests.With(handler).Record(1)
 	metrics.ActivityUnpause.With(handler).Record(1)
+}
+
+func (a *Activity) emitOnResetMetrics(
+	handler metrics.Handler,
+) {
+	metrics.ActivityReset.With(handler).Record(1)
 }
 
 // SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface.
