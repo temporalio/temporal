@@ -1169,6 +1169,45 @@ func (s *nodeSuite) TestApplySnapshot() {
 	s.True(root.currentSA["TemporalDatetime01"].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
 }
 
+func (s *nodeSuite) TestApplySnapshot_EmptySnapshot() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+					},
+				},
+			},
+		},
+		"SubComponent1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
+			},
+		},
+	}
+	root, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+
+	// Apply an empty snapshot to simulate the case where
+	// chasm is disabled in source cluster or chasm tree is empty in
+	// source cluster.
+	err = root.ApplySnapshot(NodesSnapshot{})
+	s.NoError(err)
+
+	// Validate that nodeBase.mutation reflects the applied snapshot.
+	expectedMutation := NodesMutation{
+		UpdatedNodes: map[string]*persistencespb.ChasmNode{},
+		DeletedNodes: map[string]struct{}{
+			"SubComponent1": {}, // NOTE: root component can't be deleted.
+		},
+	}
+	s.Equal(expectedMutation, root.mutation)
+}
+
 func (s *nodeSuite) TestApplyMutation_OutOfOrder() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
