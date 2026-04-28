@@ -19,10 +19,10 @@ type (
 		componentID uint32
 		fqn         string
 
-		ephemeral              bool
-		singleCluster          bool
-		detached               bool
-		skipPersistenceIfClean bool
+		ephemeral                bool
+		singleCluster            bool
+		detached                 bool
+		nondeterministicEncoding bool
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 
@@ -75,13 +75,17 @@ func (rc *RegistrableComponent) IsDetached() bool {
 	return rc.detached
 }
 
-// WithSkipPersistenceIfClean marks a component type so that CHASM skips
-// persistence calls when the serialized data is equal to what was
-// last loaded from storage. The LastUpdateVersionedTransition is also not bumped
-// for such nodes.
-func WithSkipPersistenceIfClean() RegistrableComponentOption {
+// WithNondeterministicEncoding opts this component type out of the skip-if-clean
+// optimization. By default CHASM uses deterministic proto encoding and skips
+// writing a node to UpdatedNodes when its serialized bytes are identical to what
+// was last loaded from storage. Set this option when the component's proto data
+// contains fields whose equality cannot be reliably determined by byte comparison
+// even with deterministic encoding (e.g. floating-point values with NaN/±Inf
+// semantics, or intentional always-changing fields), so that the node is always
+// persisted regardless.
+func WithNondeterministicEncoding() RegistrableComponentOption {
 	return func(rc *RegistrableComponent) {
-		rc.skipPersistenceIfClean = true
+		rc.nondeterministicEncoding = true
 	}
 }
 

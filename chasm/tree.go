@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -760,11 +761,51 @@ func (n *Node) setSerializedNode(
 	return childNode.setSerializedNode(nodePath[1:], encodedPath, serializedNode)
 }
 
-// shouldSkipIfClean returns true when this node's component type has opted in
-// to skip-if-unchanged behavior via WithSkipPersistenceIfClean.
+// shouldSkipIfClean returns true when this node is eligible for the skip-if-clean
+// optimization: CHASM will compare serialized bytes against what was last loaded
+// from storage and skip writing the node to UpdatedNodes if they are identical.
+//
+// This is the default behavior for all component and data nodes. It is disabled
+// only when the component type (or, for data nodes, its parent component) has
+// registered with WithNondeterministicEncoding, indicating that byte comparison
+// is not a reliable equality check for that component's proto data.
 func (n *Node) shouldSkipIfClean() bool {
-	rc, ok := n.registry.componentFor(n.value)
-	return ok && rc.skipPersistenceIfClean
+	// For component nodes check the registration directly.
+	if rc, ok := n.registry.componentFor(n.value); ok {
+		return !rc.nondeterministicEncoding
+	}
+	// For data nodes inherit the setting from the nearest component ancestor.
+	if n.isData() && n.parent != nil {
+		if rc, ok := n.registry.componentFor(n.parent.value); ok {
+			return !rc.nondeterministicEncoding
+		}
+	}
+	// Collection and pointer nodes have no proto data to compare; always skip.
+	return true
+}
+
+// hasDeletedDescendants returns true when one or more nodes within this node's
+// subtree were deleted in the current transaction (e.g. because a collection
+// item was removed). When true the node's structural state has changed and it
+// must be persisted even if its own data bytes are unchanged.
+//
+// DeletedNodes is populated by syncSubComponents before closeTransactionSerializeNodes
+// runs, so it is fully populated when this method is called.
+func (n *Node) hasDeletedDescendants(encodedPath string) bool {
+	if len(n.mutation.DeletedNodes) == 0 {
+		return false
+	}
+	// Root node (empty encoded path): any deletion is by definition within its subtree.
+	if encodedPath == "" {
+		return true
+	}
+	prefix := encodedPath + "/"
+	for deletedPath := range n.mutation.DeletedNodes {
+		if strings.HasPrefix(deletedPath, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // serialize sets or updates serializedValue field of the node n with serialized value.
@@ -785,6 +826,14 @@ func (n *Node) serialize() error {
 }
 
 func (n *Node) serializeComponentNode() error {
+	rc, ok := n.registry.componentFor(n.value)
+	if !ok {
+		return softassert.UnexpectedInternalErr(
+			n.logger,
+			"component type is not registered",
+			fmt.Errorf("%s", reflect.TypeOf(n.value).String()))
+	}
+
 	for field := range n.valueFields() {
 		if field.err != nil {
 			return field.err
@@ -796,22 +845,21 @@ func (n *Node) serializeComponentNode() error {
 
 		var blob *commonpb.DataBlob
 		if !field.val.IsNil() {
-			var err error
-			if blob, err = serialization.ProtoEncode(field.val.Interface().(proto.Message)); err != nil {
-				return err
+			// Always use deterministic encoding so that byte comparison in
+			// closeTransactionSerializeNodes is reliable for proto messages
+			// with map fields. proto.MarshalOptions{Deterministic: true} is
+			// a no-op for messages without map fields, so there is no
+			// performance cost for the common case.
+			data, err := proto.MarshalOptions{Deterministic: true}.Marshal(field.val.Interface().(proto.Message))
+			if err != nil {
+				return serialization.NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 			}
-		}
-
-		rc, ok := n.registry.componentFor(n.value)
-		if !ok {
-			return softassert.UnexpectedInternalErr(
-				n.logger,
-				"component type is not registered",
-				fmt.Errorf("%s", reflect.TypeOf(n.value).String()))
+			blob = &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3, Data: data}
 		}
 
 		n.serializedNode.Data = blob
 		n.serializedNode.GetMetadata().GetComponentAttributes().TypeId = rc.componentID
+
 		n.updateLastUpdateVersionedTransition()
 		n.setValueState(valueStateSynced)
 
@@ -1157,10 +1205,12 @@ func (n *Node) serializeDataNode() error {
 
 	var blob *commonpb.DataBlob
 	if protoValue != nil {
-		var err error
-		if blob, err = serialization.ProtoEncode(protoValue); err != nil {
-			return err
+		// Always use deterministic encoding for the same reason as serializeComponentNode.
+		data, err := proto.MarshalOptions{Deterministic: true}.Marshal(protoValue)
+		if err != nil {
+			return serialization.NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 		}
+		blob = &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3, Data: data}
 	}
 	n.serializedNode.Data = blob
 	n.updateLastUpdateVersionedTransition()
@@ -1694,11 +1744,14 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			continue
 		}
 
-		// For component types that opt in to skip-if-unchanged AND that were loaded
-		// from storage (not brand-new), capture the existing serialized bytes and
-		// metadata before serialize() overwrites them. After serialization we compare
-		// the old and new bytes; if they are identical we revert the metadata mutation
-		// and skip adding this node to UpdatedNodes.
+		// For nodes that are eligible for skip-if-clean AND were loaded from storage
+		// (not brand-new in this transaction), capture the existing serialized bytes
+		// and versioned transition before serialize() overwrites them. After
+		// serialization we compare the old and new bytes; if they are identical we
+		// revert the metadata mutation and skip adding this node to UpdatedNodes.
+		//
+		// Skip is disabled per-component via WithNondeterministicEncoding.
+		// New tasks in this transaction also prevent skipping.
 		//
 		// We capture prevData as a pointer to the existing DataBlob (O(1), no copy).
 		// serialize() replaces node.serializedNode.Data with a freshly allocated blob,
@@ -1707,7 +1760,15 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			prevData                *commonpb.DataBlob
 			prevVersionedTransition *persistencespb.VersionedTransition
 		)
-		skipIfClean := node.shouldSkipIfClean() && node.initialStatePersisted && len(node.newTasks[node.value]) == 0
+		encodedPath, err := node.getEncodedPath()
+		if err != nil {
+			return err
+		}
+
+		skipIfClean := node.shouldSkipIfClean() &&
+			node.initialStatePersisted &&
+			len(node.newTasks[node.value]) == 0 &&
+			!node.hasDeletedDescendants(encodedPath)
 		if skipIfClean {
 			prevData = node.serializedNode.Data
 			cloned, ok := proto.Clone(
@@ -1739,10 +1800,6 @@ func (n *Node) closeTransactionSerializeNodes() error {
 				fmt.Errorf("found at path %s", nodePath))
 		}
 
-		encodedPath, err := node.getEncodedPath()
-		if err != nil {
-			return err
-		}
 		n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
 		// DeletedNodes map is populated when syncing tree structure. However, since we may sync tree structure
 		// multiple times in one transaction, if node at the same path was previously deleted, have structure synced,

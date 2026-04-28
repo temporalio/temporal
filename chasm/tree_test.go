@@ -2723,7 +2723,11 @@ func (s *nodeSuite) TestTerminate() {
 
 	mutations, err = node.CloseTransaction()
 	s.NoError(err)
-	s.Len(mutations.UpdatedNodes, 1)
+	// With skip-if-clean (default), an unchanged node is not written to storage.
+	// The backend state/status checks below verify the terminated state is preserved
+	// from the prior transaction — UpdateWorkflowStateStatus is NOT re-called here
+	// because the backend already reports COMPLETED.
+	s.Empty(mutations.UpdatedNodes)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, s.nodeBackend.LastUpdateWorkflowStatus())
 }

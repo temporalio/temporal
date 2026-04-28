@@ -19,9 +19,10 @@ type (
 
 	protoMessageType = persistencespb.WorkflowExecutionState // Random proto message.
 
-	// TestSkipIfCleanComponent is a minimal component used to test the
-	// WithSkipPersistenceIfClean registration option.
-	TestSkipIfCleanComponent struct {
+	// TestNondeterministicEncodingComponent is a minimal component used to test
+	// the WithNondeterministicEncoding opt-out: it should always be persisted
+	// regardless of whether its data changed.
+	TestNondeterministicEncodingComponent struct {
 		UnimplementedComponent
 		Data *protoMessageType
 	}
@@ -168,18 +169,18 @@ func (tsc2 *TestSubComponent2) LifecycleState(_ Context) LifecycleState {
 	return LifecycleStateRunning
 }
 
-func (c *TestSkipIfCleanComponent) LifecycleState(_ Context) LifecycleState {
+func (c *TestNondeterministicEncodingComponent) LifecycleState(_ Context) LifecycleState {
 	return LifecycleStateRunning
 }
 
-func (c *TestSkipIfCleanComponent) Terminate(
+func (c *TestNondeterministicEncodingComponent) Terminate(
 	_ MutableContext,
 	_ TerminateComponentRequest,
 ) (TerminateComponentResponse, error) {
 	return TerminateComponentResponse{}, nil
 }
 
-func (c *TestSkipIfCleanComponent) ContextMetadata(_ Context) map[string]string {
+func (c *TestNondeterministicEncodingComponent) ContextMetadata(_ Context) map[string]string {
 	return nil
 }
 
