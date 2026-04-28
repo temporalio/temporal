@@ -680,30 +680,33 @@ func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueue
 	return status
 }
 
+// syncMatchResult describes the outcome of a sync match attempt.
+// matched == true means a poller picked up the task.
+// matched == false means the task was not sync-matched — reason indicates why.
 type syncMatchResult struct {
 	matched bool
-	err     error
+	reason  NoMatchReason
 }
 
-func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) syncMatchResult {
+func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchResult, error) {
 	if !task.isForwarded() {
 		// request sent by history service
 		c.liveness.markAlive()
 		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey())).inc(1)
 		if disable, _ := testhooks.Get(c.partitionMgr.engine.testHooks, testhooks.MatchingDisableSyncMatch, c.partitionMgr.ns.ID()); disable {
-			return syncMatchResult{}
+			return syncMatchResult{}, nil
 		}
 	}
 
 	if c.priMatcher != nil {
-		return syncMatchResult(c.priMatcher.Offer(ctx, task))
+		return c.priMatcher.Offer(ctx, task)
 	}
 
 	childCtx, cancel := contextutil.WithDeadlineBuffer(ctx, c.config.SyncMatchWaitDuration(), time.Second)
 	defer cancel()
 
 	matched, err := c.oldMatcher.Offer(childCtx, task)
-	return syncMatchResult{matched: matched, err: err}
+	return syncMatchResult{matched: matched}, err
 }
 
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(

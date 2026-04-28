@@ -359,12 +359,21 @@ func (d *matcherData) EnqueuePollerAndWait(ctxs []context.Context, poller *waiti
 	return poller.waitForMatch()
 }
 
-type immediateMatchResult struct {
-	canSyncMatch bool
-	gotSyncMatch bool
-}
+// NoMatchReason describes why a sync match did not happen.
+type NoMatchReason int
 
-func (d *matcherData) MatchTaskImmediately(task *internalTask) immediateMatchResult {
+const (
+	// No specific reason provided.
+	NoMatchReasonUnspecified NoMatchReason = iota
+	// Sync match was not attempted because the backlog is too deep.
+	NoMatchReasonBacklogged
+	// Sync match was attempted but no poller was available.
+	NoMatchReasonNoPoller
+)
+
+// MatchTaskImmediately attempts a non-blocking sync match. Returns whether the task was matched
+// and, if not, the reason it was not matched.
+func (d *matcherData) MatchTaskImmediately(task *internalTask) syncMatchResult {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -374,7 +383,7 @@ func (d *matcherData) MatchTaskImmediately(task *internalTask) immediateMatchRes
 		// poller to become available. In presence of a backlog the chance of a poller being available when sync match
 		// request comes is almost zero.
 		// This check is mostly effective for the sync match requests that come from child partitions for spooled tasks.
-		return immediateMatchResult{}
+		return syncMatchResult{reason: NoMatchReasonBacklogged}
 	}
 
 	task.initMatch(d)
@@ -382,10 +391,10 @@ func (d *matcherData) MatchTaskImmediately(task *internalTask) immediateMatchRes
 	d.findAndWakeMatches()
 	// don't wait, check if match() picked this one already
 	if task.matchResult != nil {
-		return immediateMatchResult{canSyncMatch: true, gotSyncMatch: true}
+		return syncMatchResult{matched: true}
 	}
 	d.tasks.Remove(task)
-	return immediateMatchResult{canSyncMatch: true}
+	return syncMatchResult{reason: NoMatchReasonNoPoller}
 }
 
 func (d *matcherData) MatchPollerImmediately(poller *waitingPoller) *matchResult {
