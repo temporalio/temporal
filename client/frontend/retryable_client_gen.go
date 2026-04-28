@@ -26,6 +26,21 @@ func (c *retryableClient) CountActivityExecutions(
 	return resp, err
 }
 
+func (c *retryableClient) CountCallbackExecutions(
+	ctx context.Context,
+	request *workflowservice.CountCallbackExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CountCallbackExecutionsResponse, error) {
+	var resp *workflowservice.CountCallbackExecutionsResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CountCallbackExecutions(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CountNexusOperationExecutions(
 	ctx context.Context,
 	request *workflowservice.CountNexusOperationExecutionsRequest,
@@ -140,6 +155,21 @@ func (c *retryableClient) DeleteActivityExecution(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.DeleteActivityExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) DeleteCallbackExecution(
+	ctx context.Context,
+	request *workflowservice.DeleteCallbackExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteCallbackExecutionResponse, error) {
+	var resp *workflowservice.DeleteCallbackExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DeleteCallbackExecution(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -275,6 +305,21 @@ func (c *retryableClient) DescribeBatchOperation(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.DescribeBatchOperation(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) DescribeCallbackExecution(
+	ctx context.Context,
+	request *workflowservice.DescribeCallbackExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeCallbackExecutionResponse, error) {
+	var resp *workflowservice.DescribeCallbackExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DescribeCallbackExecution(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -656,6 +701,21 @@ func (c *retryableClient) ListBatchOperations(
 	return resp, err
 }
 
+func (c *retryableClient) ListCallbackExecutions(
+	ctx context.Context,
+	request *workflowservice.ListCallbackExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListCallbackExecutionsResponse, error) {
+	var resp *workflowservice.ListCallbackExecutionsResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ListCallbackExecutions(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ListClosedWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListClosedWorkflowExecutionsRequest,
@@ -866,6 +926,21 @@ func (c *retryableClient) PauseActivity(
 	return resp, err
 }
 
+func (c *retryableClient) PauseActivityExecution(
+	ctx context.Context,
+	request *workflowservice.PauseActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PauseActivityExecutionResponse, error) {
+	var resp *workflowservice.PauseActivityExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.PauseActivityExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) PauseWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.PauseWorkflowExecutionRequest,
@@ -905,6 +980,21 @@ func (c *retryableClient) PollActivityTaskQueue(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.PollActivityTaskQueue(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) PollCallbackExecution(
+	ctx context.Context,
+	request *workflowservice.PollCallbackExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PollCallbackExecutionResponse, error) {
+	var resp *workflowservice.PollCallbackExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.PollCallbackExecution(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -1100,6 +1190,21 @@ func (c *retryableClient) ResetActivity(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.ResetActivity(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ResetActivityExecution(
+	ctx context.Context,
+	request *workflowservice.ResetActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ResetActivityExecutionResponse, error) {
+	var resp *workflowservice.ResetActivityExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ResetActivityExecution(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -1451,6 +1556,21 @@ func (c *retryableClient) StartBatchOperation(
 	return resp, err
 }
 
+func (c *retryableClient) StartCallbackExecution(
+	ctx context.Context,
+	request *workflowservice.StartCallbackExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.StartCallbackExecutionResponse, error) {
+	var resp *workflowservice.StartCallbackExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.StartCallbackExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) StartNexusOperationExecution(
 	ctx context.Context,
 	request *workflowservice.StartNexusOperationExecutionRequest,
@@ -1505,6 +1625,21 @@ func (c *retryableClient) TerminateActivityExecution(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.TerminateActivityExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) TerminateCallbackExecution(
+	ctx context.Context,
+	request *workflowservice.TerminateCallbackExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.TerminateCallbackExecutionResponse, error) {
+	var resp *workflowservice.TerminateCallbackExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.TerminateCallbackExecution(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -1571,6 +1706,21 @@ func (c *retryableClient) UnpauseActivity(
 	return resp, err
 }
 
+func (c *retryableClient) UnpauseActivityExecution(
+	ctx context.Context,
+	request *workflowservice.UnpauseActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UnpauseActivityExecutionResponse, error) {
+	var resp *workflowservice.UnpauseActivityExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UnpauseActivityExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) UnpauseWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.UnpauseWorkflowExecutionRequest,
@@ -1580,6 +1730,21 @@ func (c *retryableClient) UnpauseWorkflowExecution(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.UnpauseWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) UpdateActivityExecutionOptions(
+	ctx context.Context,
+	request *workflowservice.UpdateActivityExecutionOptionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
+	var resp *workflowservice.UpdateActivityExecutionOptionsResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateActivityExecutionOptions(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

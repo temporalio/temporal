@@ -110,15 +110,17 @@ const (
 )
 
 type (
-	// ActivityHandler is the activity frontend handler, aliased to avoid embedding name collision.
-	ActivityHandler = activity.FrontendHandler
-	// NexusOperationHandler is the nexus operation frontend handler, aliased to avoid embedding name collision.
+	// Aliases for CHASM components to avoid name collisions.
+	ActivityHandler       = activity.FrontendHandler
+	CallbackHandler       = callback.FrontendHandler
 	NexusOperationHandler = chasmnexus.FrontendHandler
 
 	// WorkflowHandler - gRPC handler interface for workflowservice
 	WorkflowHandler struct {
 		workflowservice.UnsafeWorkflowServiceServer
+
 		ActivityHandler
+		CallbackHandler
 		NexusOperationHandler
 
 		status int32
@@ -329,12 +331,14 @@ func NewWorkflowHandler(
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	httpEnabled bool,
 	activityHandler activity.FrontendHandler,
+	callbackHandler callback.FrontendHandler,
 	nexusOperationHandler chasmnexus.FrontendHandler,
 	registry *chasm.Registry,
 	workerDeploymentReadRateLimiter quotas.RequestRateLimiter,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		ActivityHandler:       activityHandler,
+		CallbackHandler:       callbackHandler,
 		NexusOperationHandler: nexusOperationHandler,
 		status:                common.DaemonStatusInitialized,
 		callbackValidator:     callbackValidator,

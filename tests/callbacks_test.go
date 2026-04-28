@@ -124,6 +124,7 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 	s.OverrideDynamicConfig(dynamicconfig.FrontendCallbackURLMaxLength, 50)
 	s.OverrideDynamicConfig(dynamicconfig.FrontendCallbackHeaderMaxSize, 6)
 	s.OverrideDynamicConfig(dynamicconfig.MaxCallbacksPerWorkflow, 2)
+	// TODO(chrsmith): Confirm this is actually enforced somewhere. It isn't on the callback.Config object.
 	s.OverrideDynamicConfig(callback.MaxPerExecution, 2)
 	s.OverrideDynamicConfig(
 		callbacks.AllowedAddresses,

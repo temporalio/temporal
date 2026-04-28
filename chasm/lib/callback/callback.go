@@ -5,6 +5,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -22,6 +23,10 @@ var _ chasm.Component = (*Callback)(nil)
 var _ chasm.StateMachine[callbackspb.CallbackStatus] = (*Callback)(nil)
 
 // Callback represents a callback component in CHASM.
+//
+// Note that there is a separate CHASM component, CallbackExecution,
+// which ...
+// TODO(chrsmith): Explain the distinction between these two CHASM components.
 type Callback struct {
 	chasm.UnimplementedComponent
 
@@ -52,7 +57,11 @@ func (c *Callback) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	switch c.Status {
 	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
 		return chasm.LifecycleStateCompleted
-	case callbackspb.CALLBACK_STATUS_FAILED:
+	case callbackspb.CALLBACK_STATUS_FAILED,
+		callbackspb.CALLBACK_STATUS_TERMINATED:
+		// TODO: Use chasm.LifecycleStateTerminated when it's available (currently commented out
+		// in chasm/component.go:70). For now, LifecycleStateFailed is functionally correct
+		// as IsClosed() returns true for all states >= LifecycleStateCompleted.
 		return chasm.LifecycleStateFailed
 	default:
 		return chasm.LifecycleStateRunning
@@ -65,6 +74,22 @@ func (c *Callback) StateMachineState() callbackspb.CallbackStatus {
 
 func (c *Callback) SetStateMachineState(status callbackspb.CallbackStatus) {
 	c.Status = status
+}
+
+// GetFailure returns the failure for a closed callback. It checks the dedicated Failure field
+// (set by external failures like timeout or terminate) first, then falls back to LastAttemptFailure
+// (set by invocation attempt failures).
+//
+// IMPORTANT: Don't conflate this with `c.Failure`, which is the raw data from the `CallbackState`,
+// and does not take `c.LastFailureAttempt` into account.
+// TODO(chrsmith): Unaddress comment in earlier PR.
+//
+// TODO(chrsmith): Rename to something more meaningful? MostRecentFailure? TerminalFailure?
+func (c *Callback) GetFailure() *failurepb.Failure {
+	if c.Failure != nil {
+		return c.Failure
+	}
+	return c.LastAttemptFailure
 }
 
 func (c *Callback) recordAttempt(ts time.Time) {
@@ -117,11 +142,32 @@ func (c *Callback) saveResult(
 	ctx chasm.MutableContext,
 	input saveResultInput,
 ) (chasm.NoValue, error) {
+	// If the callback was terminated while the invocation was in-flight,
+	// the result is no longer relevant — drop it silently.
+	//
+	// TODO(chrsmith): Unresolved comment.
+	// > Roey: The transitions should already validate that the callback is in a correct state
+	// > 	and the task will fail with a warning in the log (IIRC). It's an edge case that I am
+	// > 	happy to ignore since the error would be benign.
+	// > Quinn: Why would we want benign warning logs in production? Why not just not process it and skip the log?
+	// > Roey: It's rare enough that I think it doesn't matter that much. I'm not sure if there's a log or not in the task processing
+	// > 	stack. It could be useful for debugging to know that we sent out a request but ended up not recording the outcome.
+	if c.LifecycleState(ctx).IsClosed() {
+		return nil, nil
+	}
+
 	switch r := input.result.(type) {
 	case invocationResultOK:
 		err := TransitionSucceeded.Apply(c, ctx, EventSucceeded{Time: ctx.Now(c)})
 		return nil, err
 	case invocationResultRetry:
+		err := TransitionAttemptFailed.Apply(c, ctx, EventAttemptFailed{
+			Time:        ctx.Now(c),
+			Err:         r.err,
+			RetryPolicy: input.retryPolicy,
+		})
+		return nil, err
+	case invocationResultRetryNoCB:
 		err := TransitionAttemptFailed.Apply(c, ctx, EventAttemptFailed{
 			Time:        ctx.Now(c),
 			Err:         r.err,
@@ -160,7 +206,7 @@ func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 		return res, nil
 	}
 
-	// This should not happen as CHASM only supports Nexus callbacks currently
+	// This should not happen as CHASM only supports Nexus callbacks currently.
 	return nil, serviceerror.NewInternal("unsupported CHASM callback type")
 }
 

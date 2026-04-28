@@ -81,6 +81,43 @@ func (this *Callback) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type CallbackExecutionState to the protobuf v3 wire format
+func (val *CallbackExecutionState) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type CallbackExecutionState from the protobuf v3 wire format
+func (val *CallbackExecutionState) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *CallbackExecutionState) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two CallbackExecutionState values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *CallbackExecutionState) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *CallbackExecutionState
+	switch t := that.(type) {
+	case *CallbackExecutionState:
+		that1 = t
+	case CallbackExecutionState:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 var (
 	CallbackStatus_shorthandValue = map[string]int32{
 		"Unspecified": 0,
@@ -89,6 +126,7 @@ var (
 		"BackingOff":  3,
 		"Failed":      4,
 		"Succeeded":   5,
+		"Terminated":  6,
 	}
 )
 

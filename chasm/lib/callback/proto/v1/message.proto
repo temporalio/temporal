@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.callbacks.proto.v1;
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
@@ -33,6 +34,16 @@ message CallbackState {
 
   // Request ID that added the callback.
   string request_id = 9;
+
+  // The time when the callback reached a terminal state.
+  google.protobuf.Timestamp close_time = 10;
+
+  // Failure from an external termination (timeout or terminate), stored separately
+  // from last_attempt_failure so the last invocation attempt's failure is preserved.
+  //
+  // TODO(chrsmith): Unaddressed comment from earlier PR.
+  // > @bergundy: Mentioned above too: put this in a separate data field.
+  temporal.api.failure.v1.Failure failure = 11;
 }
 
 // Status of a callback.
@@ -49,6 +60,8 @@ enum CallbackStatus {
   CALLBACK_STATUS_FAILED = 4;
   // Callback has succeeded.
   CALLBACK_STATUS_SUCCEEDED = 5;
+  // Callback was terminated via TerminateCallbackExecution.
+  CALLBACK_STATUS_TERMINATED = 6;
 }
 
 message Callback {
@@ -59,6 +72,8 @@ message Callback {
     string url = 1;
     // Header to attach to callback request.
     map<string, string> header = 2;
+    // Standard token to use for completion.
+    string token = 3;
   }
 
   reserved 1; // For a generic callback mechanism to be added later.
@@ -68,3 +83,33 @@ message Callback {
 
   repeated temporal.api.common.v1.Link links = 100;
 }
+
+// Persisted state for a standalone CallbackExecution entity.
+// The CallbackExecution is a top-level CHASM entity that owns a child Callback component
+// and implements CompletionSource to provide stored completion data.
+message CallbackExecutionState {
+  // The Nexus completion payload to deliver to the callback URL.
+  // - On success, contains the result Payload.
+  // - On failure, contains the Failure details.
+  oneof completion {
+    // Deliver a successful Nexus operation completion with this result payload.
+    temporal.api.common.v1.Payload success_completion = 1;
+    // Deliver a failed Nexus operation completion with this failure.
+    temporal.api.failure.v1.Failure failure_completion = 2;
+  }
+
+  // The time when the execution was created.
+  google.protobuf.Timestamp create_time = 3;
+
+  // The callback ID (business ID).
+  string callback_id = 4;
+
+  // Schedule-to-close timeout from the start request.
+  google.protobuf.Duration schedule_to_close_timeout = 5;
+
+  // The request ID from the terminate request, used for idempotency.
+  string terminate_request_id = 6;
+}
+// TODO(chrsmith): Unaddressed comment in earlier PR.
+// > @bergundy: All of these should be merged into CallbackState (as mentioned above) and
+// > the completion should be moved to a separate proto message and CHASM data field.

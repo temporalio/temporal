@@ -16,6 +16,14 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// ErrMsgOperationNotStarted is the error message returned when a completion arrives before
+// the operation has started and no operation token is provided. This message is used by the
+// callback invocation layer to detect this specific condition and retry without triggering
+// the circuit breaker.
+//
+// TODO(chrsmith): See comments on earlier PR. Is this really needed? Why not throw a 404?
+const ErrMsgOperationNotStarted = "nexus operation not started yet"
+
 func handleSuccessfulOperationResult(
 	node *hsm.Node,
 	operation Operation,
@@ -134,6 +142,16 @@ func fabricateStartedEventIfMissing(
 	// The operation was already started, ignore.
 	if !TransitionStarted.Possible(operation) {
 		return nil
+	}
+
+	// If the operation hasn't started yet and the completion doesn't include an operation token,
+	// reject with a retryable error. This handles the race where a completion arrives before
+	// the start handler returns with the operation token. The caller will retry and by then
+	// the start handler will have returned and recorded the token.
+	//
+	// TODO(chrsmith): See comment on original GitHub PR, https://github.com/temporalio/temporal/pull/9805/changes#r3106035373
+	if operationToken == "" {
+		return serviceerror.NewUnavailable(ErrMsgOperationNotStarted)
 	}
 
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)

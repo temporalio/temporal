@@ -148,6 +148,19 @@ func (h *invocationTaskHandler) Execute(
 	return invokable.WrapError(result, saveErr)
 }
 
+// invocationResultRetryNoCB marks an invocation as failed with the intent to retry
+// but should NOT trigger the circuit breaker. Used for transient server-side conditions
+// like an operation that hasn't started yet.
+type invocationResultRetryNoCB struct {
+	err error
+}
+
+func (invocationResultRetryNoCB) mustImplementInvocationResult() {}
+
+func (r invocationResultRetryNoCB) error() error {
+	return r.err
+}
+
 type backoffTaskHandler struct {
 	chasm.PureTaskHandlerBase
 }
@@ -179,4 +192,31 @@ func (h *backoffTaskHandler) Validate(
 	task *callbackspb.BackoffTask,
 ) (bool, error) {
 	return callback.Status == callbackspb.CALLBACK_STATUS_BACKING_OFF && callback.Attempt == task.Attempt, nil
+}
+
+// ScheduleToCloseTimeoutTaskHandler handles schedule-to-close timeout for standalone callback executions.
+type ScheduleToCloseTimeoutTaskHandler struct {
+	chasm.PureTaskHandlerBase
+}
+
+func NewScheduleToCloseTimeoutTaskHandler() *ScheduleToCloseTimeoutTaskHandler {
+	return &ScheduleToCloseTimeoutTaskHandler{}
+}
+
+func (h *ScheduleToCloseTimeoutTaskHandler) Validate(
+	_ chasm.Context,
+	callback *Callback,
+	_ chasm.TaskAttributes,
+	_ *callbackspb.ScheduleToCloseTimeoutTask,
+) (bool, error) {
+	return TransitionTimedOut.Possible(callback), nil
+}
+
+func (h *ScheduleToCloseTimeoutTaskHandler) Execute(
+	ctx chasm.MutableContext,
+	callback *Callback,
+	_ chasm.TaskAttributes,
+	_ *callbackspb.ScheduleToCloseTimeoutTask,
+) error {
+	return TransitionTimedOut.Apply(callback, ctx, EventTimedOut{})
 }
