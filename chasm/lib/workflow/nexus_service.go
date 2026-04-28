@@ -21,8 +21,6 @@ type workflowServiceNexusHandler struct {
 }
 
 // signalWithStartWorkflowExecution implements the SignalWithStartWorkflowExecution Nexus operation.
-// It returns the proto response type directly; chasmNexusHandler in service/history/fx.go
-// re-encodes it as json/plain so SDK callers can decode it via standard json.Unmarshal.
 func (h *workflowServiceNexusHandler) signalWithStartWorkflowExecution(
 	ctx context.Context,
 	req *workflowservice.SignalWithStartWorkflowExecutionRequest,

@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payloads"
+	sdkconverter "go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -738,6 +739,117 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSF
 	var signalInputVal string
 	s.NoError(payloads.Decode(signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input, &signalInputVal))
 	s.Equal("signal-input", signalInputVal)
+}
+
+// TestBothWorkflowsVisibleAfterSWSFromWorkflowProtoBinary is identical to
+// TestBothWorkflowsVisibleAfterSWSFromWorkflow but sends the SWS request as a proto binary
+// (binary/protobuf) payload instead of relying on the SDK's default JSON-proto encoding.
+// This exercises the binary/protobuf decode path in nexusOperationProcessorAdapter and
+// verifies that the server accepts and correctly processes such requests — matching what
+// the Python SDK (and other SDKs that prefer proto binary) sends.
+func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSFromWorkflowProtoBinary() {
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	s.T().Cleanup(cancel)
+
+	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
+	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
+	targetWorkflowID := testcore.RandomizeStr(s.T().Name())
+
+	// Start a caller workflow to obtain an initial workflow task.
+	callerRun, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: callerTaskQueue,
+	}, "caller-workflow")
+	s.NoError(err)
+	s.T().Cleanup(func() {
+		_ = s.SdkClient().TerminateWorkflow(ctx, callerRun.GetID(), callerRun.GetRunID(), "test cleanup")
+	})
+
+	// Encode the SWS request as binary/protobuf. PreferProtoDataConverter places
+	// ProtoPayloadConverter first, so proto messages are marshalled to binary/protobuf
+	// rather than the JSON proto encoding that the SDK uses by default.
+	swsReq := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		WorkflowId:   targetWorkflowID,
+		SignalName:   "test-signal",
+		WorkflowType: &commonpb.WorkflowType{Name: "target-workflow"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: targetTaskQueue},
+		Memo:         &commonpb.Memo{Fields: map[string]*commonpb.Payload{"memo-key": {Data: []byte("memo-value")}}},
+	}
+	pls, err := sdkconverter.PreferProtoDataConverter.ToPayloads(swsReq)
+	s.NoError(err)
+	s.Require().Len(pls.Payloads, 1)
+	protoBinaryPayload := pls.Payloads[0]
+	s.Equal("binary/protobuf", string(protoBinaryPayload.Metadata["encoding"]))
+
+	// First poll: respond with a ScheduleNexusOperation command carrying the proto binary input.
+	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: callerTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:  "test",
+	})
+	s.NoError(err)
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  commonnexus.SystemEndpoint,
+						Service:   "WorkflowService",
+						Operation: "SignalWithStartWorkflowExecution",
+						Input:     protoBinaryPayload,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	// Second poll: wait for NexusOperationCompleted or NexusOperationFailed.
+	pollResp, err = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: callerTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:  "test",
+	})
+	s.NoError(err)
+
+	var sswResp workflowservice.SignalWithStartWorkflowExecutionResponse
+	for _, event := range pollResp.History.Events {
+		if attrs := event.GetNexusOperationCompletedEventAttributes(); attrs != nil {
+			s.NoError(sdkconverter.PreferProtoDataConverter.FromPayloads(
+				&commonpb.Payloads{Payloads: []*commonpb.Payload{attrs.Result}},
+				&sswResp,
+			))
+		}
+		if attrs := event.GetNexusOperationFailedEventAttributes(); attrs != nil {
+			s.Fail("expected NexusOperationCompleted but got NexusOperationFailed: " + attrs.Failure.GetMessage())
+		}
+	}
+
+	// The operation must have started a new workflow.
+	s.True(sswResp.Started, "expected Started=true for proto binary encoded SWS request")
+	s.NotEmpty(sswResp.RunId)
+
+	s.T().Cleanup(func() {
+		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, sswResp.RunId, "test cleanup")
+	})
+
+	// Both workflows must be visible.
+	callerDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: callerRun.GetID(), RunId: callerRun.GetRunID()},
+	})
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, callerDesc.WorkflowExecutionInfo.Status)
+
+	targetDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID, RunId: sswResp.RunId},
+	})
+	s.NoError(err)
+	s.Require().NotNil(targetDesc.WorkflowExecutionInfo.Memo)
+	s.Contains(targetDesc.WorkflowExecutionInfo.Memo.Fields, "memo-key")
 }
 
 // TestStartDelay verifies that SWS with WorkflowStartDelay completes successfully from a
