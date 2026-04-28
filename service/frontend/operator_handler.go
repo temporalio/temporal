@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
 	delnserrors "go.temporal.io/server/service/worker/deletenamespace/errors"
+	"go.temporal.io/server/service/worker/deletenamespace/reclaimresources"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
@@ -561,6 +562,14 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 		namespaceDeleteDelay = request.NamespaceDeleteDelay.AsDuration()
 	}
 
+	// If SoftDeleteWindow is not provided, the default window configured in the cluster should be used.
+	var softDeleteWindow time.Duration
+	if request.SoftDeleteWindow == nil {
+		softDeleteWindow = h.config.DeleteNamespaceSoftDeleteWindow()
+	} else {
+		softDeleteWindow = request.SoftDeleteWindow.AsDuration()
+	}
+
 	// Execute workflow.
 	wfParams := deletenamespace.DeleteNamespaceWorkflowParams{
 		Namespace:   namespace.Name(request.GetNamespace()),
@@ -572,6 +581,7 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 			ConcurrentDeleteExecutionsActivities: h.config.DeleteNamespaceConcurrentDeleteExecutionsActivities(),
 		},
 		NamespaceDeleteDelay: namespaceDeleteDelay,
+		SoftDeleteWindow:     softDeleteWindow,
 	}
 
 	sdkClient := h.sdkClientFactory.GetSystemClient()
@@ -806,4 +816,44 @@ func (h *OperatorHandlerImpl) ListNexusEndpoints(
 ) (_ *operatorservice.ListNexusEndpointsResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
 	return h.nexusEndpointClient.List(ctx, request)
+}
+
+func (h *OperatorHandlerImpl) RestoreSoftDeletedNamespace(
+	ctx context.Context,
+	request *operatorservice.RestoreSoftDeletedNamespaceRequest,
+) (_ *operatorservice.RestoreSoftDeletedNamespaceResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetNamespaceId() == "" {
+		return nil, errNamespaceIDNotSet
+	}
+
+	// Look up the current (deleted) namespace name by ID via the registry.
+	ns, err := h.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+	deletedName := ns.Name()
+
+	// The ReclaimResourcesWorkflow ID is deterministic: WorkflowName/deletedName.
+	workflowID := fmt.Sprintf("%s/%s", reclaimresources.WorkflowName, deletedName)
+
+	sdkClient := h.sdkClientFactory.GetSystemClient()
+	handle, err := sdkClient.UpdateWorkflow(ctx, sdkclient.UpdateWorkflowOptions{
+		WorkflowID:   workflowID,
+		UpdateName:   reclaimresources.RestoreNamespaceUpdateName,
+		Args:         []interface{}{struct{}{}},
+		WaitForStage: sdkclient.WorkflowUpdateStageCompleted,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var updateResult struct{}
+	if err = handle.Get(ctx, &updateResult); err != nil {
+		return nil, err
+	}
+	return &operatorservice.RestoreSoftDeletedNamespaceResponse{}, nil
 }

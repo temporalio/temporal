@@ -1110,6 +1110,15 @@ Default is 4. Read once before delete of specified namespace is started.`,
 after all namespace resources (i.e. workflow executions) are deleted.
 Default is 0, means, namespace will be deleted immediately.`,
 	)
+	DeleteNamespaceSoftDeleteWindow = NewGlobalDurationSetting(
+		"frontend.deleteNamespaceSoftDeleteWindow",
+		0*time.Duration(0),
+		`DeleteNamespaceSoftDeleteWindow is the duration for which a deleted namespace can be restored
+before workflow executions are deleted. During this window, the namespace state is DELETED and
+new workflow executions cannot be started, but existing executions are preserved. A restore call
+cancels the deletion and returns the namespace to REGISTERED state.
+Default is 0, meaning no soft delete window: execution deletion begins immediately.`,
+	)
 	ProtectedNamespaces = NewGlobalTypedSetting(
 		"worker.protectedNamespaces",
 		([]string)(nil),

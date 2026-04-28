@@ -2,8 +2,11 @@ package reclaimresources
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -55,6 +58,19 @@ func NewLocalActivities(
 
 		namespaceCacheRefreshInterval: namespaceCacheRefreshInterval,
 	}
+}
+
+// OriginalNameFromDeletedName derives the original namespace name from the deleted form
+// produced by GenerateDeletedNamespaceNameActivity (e.g. "myns-deleted-ABCDE" to "myns").
+// Returns the input unchanged if it does not match the deleted name pattern.
+func OriginalNameFromDeletedName(deletedName namespace.Name, nsID namespace.ID) namespace.Name {
+	for suffixLength := 5; suffixLength <= len(nsID.String()); suffixLength++ {
+		suffix := fmt.Sprintf("-deleted-%s", nsID.String()[:suffixLength])
+		if strings.HasSuffix(deletedName.String(), suffix) {
+			return namespace.Name(strings.TrimSuffix(deletedName.String(), suffix))
+		}
+	}
+	return deletedName
 }
 
 func (a *LocalActivities) IsAdvancedVisibilityActivity(_ context.Context, _ namespace.Name) (bool, error) {
@@ -160,4 +176,79 @@ func (a *LocalActivities) DeleteNamespaceActivity(ctx context.Context, nsID name
 
 func (a *LocalActivities) GetNamespaceCacheRefreshInterval(_ context.Context) (time.Duration, error) {
 	return a.namespaceCacheRefreshInterval(), nil
+}
+
+// RenameNamespaceBackActivity renames the namespace from its deleted form back to originalName
+// while the namespace is still in DELETED state, preserving the state gate against new traffic.
+// Idempotent: does nothing if the namespace is already named originalName or if deletedName == originalName.
+func (a *LocalActivities) RenameNamespaceBackActivity(ctx context.Context, nsID namespace.ID, deletedName namespace.Name, originalName namespace.Name) error {
+	if deletedName == originalName {
+		return nil
+	}
+	ctx = headers.SetCallerName(ctx, deletedName.String())
+
+	logger := log.With(a.logger,
+		tag.WorkflowNamespace(deletedName.String()),
+		tag.WorkflowNamespaceID(nsID.String()))
+
+	ns, err := a.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{ID: nsID.String()})
+	if err != nil {
+		logger.Error("Unable to get namespace details.", tag.Error(err))
+		return err
+	}
+	if namespace.Name(ns.Namespace.Info.Name) == originalName {
+		logger.Info("Namespace already renamed back to original, skipping.")
+		return nil
+	}
+
+	if err = a.metadataManager.RenameNamespace(ctx, &persistence.RenameNamespaceRequest{
+		PreviousName: deletedName.String(),
+		NewName:      originalName.String(),
+	}); err != nil {
+		logger.Error("Unable to rename namespace back to original.", tag.Error(err))
+		return err
+	}
+	logger.Info("Namespace renamed back to original.", tag.WorkflowNamespace(originalName.String()))
+	return nil
+}
+
+// RestoreNamespaceStateActivity sets the namespace state from DELETED back to REGISTERED.
+// It must be called only after RenameNamespaceBackActivity succeeds so that the original
+// name is already in place when traffic is readmitted.
+// Idempotent: does nothing if the namespace is already REGISTERED.
+func (a *LocalActivities) RestoreNamespaceStateActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
+	ctx = headers.SetCallerName(ctx, nsName.String())
+
+	logger := log.With(a.logger,
+		tag.WorkflowNamespace(nsName.String()),
+		tag.WorkflowNamespaceID(nsID.String()))
+
+	metadata, err := a.metadataManager.GetMetadata(ctx)
+	if err != nil {
+		logger.Error("Unable to get cluster metadata.", tag.Error(err))
+		return err
+	}
+
+	ns, err := a.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{ID: nsID.String()})
+	if err != nil {
+		logger.Error("Unable to get namespace details.", tag.Error(err))
+		return err
+	}
+	if ns.Namespace.Info.State != enumspb.NAMESPACE_STATE_DELETED {
+		logger.Info("Namespace is not in deleted state, skipping restore.",
+			tag.NewStringTag("state", ns.Namespace.Info.State.String()))
+		return nil
+	}
+
+	ns.Namespace.Info.State = enumspb.NAMESPACE_STATE_REGISTERED
+	if err = a.metadataManager.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
+		Namespace:           ns.Namespace,
+		IsGlobalNamespace:   ns.IsGlobalNamespace,
+		NotificationVersion: metadata.NotificationVersion,
+	}); err != nil {
+		logger.Error("Unable to update namespace state to Registered.", tag.Error(err))
+		return err
+	}
+	logger.Info("Namespace state restored to Registered.")
+	return nil
 }

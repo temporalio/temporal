@@ -418,3 +418,92 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Protected() {
 	s.ErrorAs(err, &failedPreconditionErr)
 	s.Equal(fmt.Sprintf("namespace %s is protected from deletion", tv.NamespaceName().String()), failedPreconditionErr.Message)
 }
+
+// Test_NamespaceSoftDelete_RestoreWithinWindow verifies that RestoreSoftDeletedNamespace
+// cancels the deletion and returns the namespace to REGISTERED with its original name.
+func (s *namespaceTestSuite) Test_NamespaceSoftDelete_RestoreWithinWindow() {
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(60 * time.Second)
+	defer cancel()
+
+	nsName := "ns_softdelete_restore_" + uuid.NewString()[:8]
+	_, err := s.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        nsName,
+		WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
+		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
+		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
+	})
+	s.NoError(err)
+
+	descResp, err := s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: nsName,
+	})
+	s.NoError(err)
+	nsID := descResp.GetNamespaceInfo().GetId()
+
+	// Kick off deletion with a long soft delete window so the restore call arrives before it expires.
+	delResp, err := s.OperatorClient().DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+		Namespace:            nsName,
+		NamespaceDeleteDelay: durationpb.New(0),
+		SoftDeleteWindow:     durationpb.New(30 * time.Second),
+	})
+	s.NoError(err)
+	s.Contains(delResp.GetDeletedNamespace(), "-deleted-")
+
+	// Namespace should be DELETED now.
+	descResp2, err := s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Id: nsID})
+	s.NoError(err)
+	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
+
+	// Restore within the window.
+	_, err = s.OperatorClient().RestoreSoftDeletedNamespace(ctx, &operatorservice.RestoreSoftDeletedNamespaceRequest{
+		NamespaceId: nsID,
+	})
+	s.NoError(err)
+
+	// After restore the namespace should be REGISTERED with its original name.
+	s.Eventually(func() bool {
+		d, e := s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: nsName})
+		if e != nil {
+			return false
+		}
+		return d.GetNamespaceInfo().GetState() == enumspb.NAMESPACE_STATE_REGISTERED
+	}, 20*time.Second, time.Second, "namespace should be REGISTERED after restore")
+}
+
+// Test_NamespaceSoftDelete_RestoreAfterWindowFails verifies that a restore attempt
+// after the soft delete window has closed returns a FailedPrecondition error.
+func (s *namespaceTestSuite) Test_NamespaceSoftDelete_RestoreAfterWindowFails() {
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(60 * time.Second)
+	defer cancel()
+
+	nsName := "ns_softdelete_expired_" + uuid.NewString()[:8]
+	_, err := s.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        nsName,
+		WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
+		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
+		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
+	})
+	s.NoError(err)
+
+	descResp, err := s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: nsName,
+	})
+	s.NoError(err)
+	nsID := descResp.GetNamespaceInfo().GetId()
+
+	// Use a very short window so it expires before we call restore.
+	_, err = s.OperatorClient().DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+		Namespace:            nsName,
+		NamespaceDeleteDelay: durationpb.New(0),
+		SoftDeleteWindow:     durationpb.New(1 * time.Second),
+	})
+	s.NoError(err)
+
+	// Poll until the soft delete window has expired and the workflow has closed it.
+	s.Require().Eventually(func() bool {
+		_, restoreErr := s.OperatorClient().RestoreSoftDeletedNamespace(ctx, &operatorservice.RestoreSoftDeletedNamespaceRequest{
+			NamespaceId: nsID,
+		})
+		return restoreErr != nil
+	}, 30*time.Second, 500*time.Millisecond, "restore should fail once soft delete window expires")
+}

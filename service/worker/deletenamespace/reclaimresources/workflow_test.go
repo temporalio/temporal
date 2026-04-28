@@ -21,6 +21,101 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+func Test_ReclaimResourcesWorkflow_SoftDelete_Restore(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	var la *LocalActivities
+
+	env.OnActivity(la.GetNamespaceCacheRefreshInterval, mock.Anything).Return(10*time.Second, nil).Once()
+
+	// The restore_namespace Update fires during the soft delete window timer.
+	timerFired := false
+	env.SetOnTimerScheduledListener(func(_ string, _ time.Duration) {
+		if !timerFired {
+			timerFired = true
+			return // let the cache refresh timer expire normally
+		}
+		// Second timer is the soft delete window. Send restore Update.
+		uc := &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				require.Failf(t, "restore update should not be rejected", "%v", err)
+			},
+			OnAccept:   func() {},
+			OnComplete: func(_ any, err error) { require.NoError(t, err) },
+		}
+		env.UpdateWorkflow(RestoreNamespaceUpdateName, "", uc, struct{}{})
+	})
+
+	// nsID[:5] = "names", so deleted name = "ns-deleted-names", original = "ns"
+	// Restore runs as two sequential activities: rename first, then state update.
+	env.OnActivity(la.RenameNamespaceBackActivity,
+		mock.Anything,
+		namespace.ID("namespace-id"),
+		namespace.Name("ns-deleted-names"),
+		namespace.Name("ns"),
+	).Return(nil).Once()
+	env.OnActivity(la.RestoreNamespaceStateActivity,
+		mock.Anything,
+		namespace.ID("namespace-id"),
+		namespace.Name("ns"),
+	).Return(nil).Once()
+
+	env.ExecuteWorkflow(ReclaimResourcesWorkflow, ReclaimResourcesParams{
+		DeleteExecutionsParams: deleteexecutions.DeleteExecutionsParams{
+			Namespace:   "ns-deleted-names",
+			NamespaceID: "namespace-id",
+			Config:      deleteexecutions.DeleteExecutionsConfig{},
+		},
+		SoftDeleteWindow: 5 * time.Minute,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	var result ReclaimResourcesResult
+	require.NoError(t, env.GetWorkflowResult(&result))
+	require.True(t, result.NamespaceRestored)
+	require.False(t, result.NamespaceDeleted)
+}
+
+func Test_ReclaimResourcesWorkflow_SoftDelete_WindowExpires(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	var a *Activities
+	var la *LocalActivities
+
+	env.RegisterWorkflow(deleteexecutions.DeleteExecutionsWorkflow)
+	env.OnWorkflow(deleteexecutions.DeleteExecutionsWorkflow, mock.Anything, mock.Anything).Return(deleteexecutions.DeleteExecutionsResult{
+		SuccessCount: 0, ErrorCount: 0,
+	}, nil).Once()
+
+	env.OnActivity(la.GetNamespaceCacheRefreshInterval, mock.Anything).Return(10*time.Second, nil).Once()
+	env.OnActivity(la.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("ns-deleted-names")).Return(int64(0), nil).Once()
+	env.OnActivity(la.DeleteNamespaceActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("ns-deleted-names")).Return(nil).Once()
+
+	// No restore Update sent. Window should expire and deletion should proceed.
+	_ = a
+
+	env.ExecuteWorkflow(ReclaimResourcesWorkflow, ReclaimResourcesParams{
+		DeleteExecutionsParams: deleteexecutions.DeleteExecutionsParams{
+			Namespace:   "ns-deleted-names",
+			NamespaceID: "namespace-id",
+			Config:      deleteexecutions.DeleteExecutionsConfig{},
+		},
+		SoftDeleteWindow: 5 * time.Minute,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	var result ReclaimResourcesResult
+	require.NoError(t, env.GetWorkflowResult(&result))
+	require.False(t, result.NamespaceRestored)
+	require.True(t, result.NamespaceDeleted)
+}
+
 func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))

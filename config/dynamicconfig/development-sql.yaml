@@ -73,3 +73,7 @@ history.enableChasm:
   - value: true
 activity.enableStandalone:
   - value: true
+
+frontend.deleteNamespaceSoftDeleteWindow:
+- value: "120s"
+  constraints: {}

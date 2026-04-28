@@ -16,7 +16,8 @@ import (
 )
 
 const (
-	WorkflowName = "temporal-sys-reclaim-namespace-resources-workflow"
+	WorkflowName               = "temporal-sys-reclaim-namespace-resources-workflow"
+	RestoreNamespaceUpdateName = "restore_namespace"
 )
 
 type (
@@ -27,12 +28,19 @@ type (
 		// will sleep between workflow execution and namespace deletion.
 		// Default is 0, means, workflow won't sleep.
 		NamespaceDeleteDelay time.Duration
+
+		// SoftDeleteWindow is how long to wait before beginning execution deletion,
+		// during which a restore Update can cancel the deletion.
+		// Default is 0, meaning execution deletion starts immediately after cache refresh.
+		SoftDeleteWindow time.Duration
 	}
 
 	ReclaimResourcesResult struct {
 		DeleteSuccessCount int
 		DeleteErrorCount   int
 		NamespaceDeleted   bool
+		// NamespaceRestored is true when the namespace was restored during the soft delete window.
+		NamespaceRestored bool
 	}
 )
 
@@ -93,6 +101,8 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 	defer func() {
 		if result.NamespaceDeleted {
 			mh.Counter(metrics.ReclaimResourcesNamespaceDeleteSuccessCount.Name()).Inc(1)
+		} else if result.NamespaceRestored {
+			mh.Counter(metrics.ReclaimResourcesNamespaceRestoreSuccessCount.Name()).Inc(1)
 		} else {
 			mh.Counter(metrics.ReclaimResourcesNamespaceDeleteFailureCount.Name()).Inc(1)
 		}
@@ -107,9 +117,13 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 	ctx = workflow.WithTaskQueue(ctx, primitives.DeleteNamespaceActivityTQ)
 
 	var (
-		namespaceDeleteDelay = params.NamespaceDeleteDelay
-		cancelDeleteDelay    workflow.CancelFunc
+		namespaceDeleteDelay   = params.NamespaceDeleteDelay
+		cancelDeleteDelay      workflow.CancelFunc
+		restoreRequested       bool
+		cancelSoftDeleteWindow workflow.CancelFunc
 	)
+
+	// update_namespace_delete_delay: adjust or clear the post-deletion grace period.
 	err := workflow.SetUpdateHandlerWithOptions(ctx, "update_namespace_delete_delay", func(ctx workflow.Context, newNamespaceDeleteDelayStr string) (string, error) {
 		// This must succeed because Update validator already validated the input.
 		namespaceDeleteDelay, _ = time.ParseDuration(newNamespaceDeleteDelayStr)
@@ -151,6 +165,32 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 		return result, err
 	}
 
+	// restore_namespace: cancel the soft delete window and restore the namespace to REGISTERED.
+	// The validator rejects calls that arrive after the window has closed.
+	err = workflow.SetUpdateHandlerWithOptions(ctx, RestoreNamespaceUpdateName,
+		func(_ workflow.Context, _ struct{}) (struct{}, error) {
+			restoreRequested = true
+			if cancelSoftDeleteWindow != nil {
+				cancelSoftDeleteWindow()
+			}
+			return struct{}{}, nil
+		},
+		workflow.UpdateHandlerOptions{
+			Validator: func(_ workflow.Context, _ struct{}) error {
+				// cancelSoftDeleteWindow is set only during the soft delete window sleep.
+				// After the window closes (or if there is no window) it is nil.
+				if cancelSoftDeleteWindow == nil {
+					return errors.NewFailedPrecondition(
+						"namespace soft delete window has passed; namespace cannot be restored", nil)
+				}
+				return nil
+			},
+		},
+	)
+	if err != nil {
+		return result, err
+	}
+
 	var la *LocalActivities
 
 	// TODO: remove version check and 9s const after v1.27 release.
@@ -171,13 +211,48 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 		return result, err
 	}
 
-	// Step 1. Delete workflow executions.
+	// Step 1 (optional). Soft delete window: sleep before starting execution deletion.
+	// During this window a restore_namespace Update can cancel the deletion.
+	if params.SoftDeleteWindow > 0 {
+		var softDeleteWindowCtx workflow.Context
+		softDeleteWindowCtx, cancelSoftDeleteWindow = workflow.WithCancel(ctx)
+		logger.Info("Entering soft delete window. Send 'restore_namespace' update to cancel deletion.",
+			"duration", params.SoftDeleteWindow.String())
+		_ = workflow.Sleep(softDeleteWindowCtx, params.SoftDeleteWindow)
+		cancelSoftDeleteWindow = nil // window is now closed; future restore attempts will be rejected
+
+		if restoreRequested {
+			logger.Info("Restore requested during soft delete window. Restoring namespace.")
+			originalName := OriginalNameFromDeletedName(params.Namespace, params.NamespaceID)
+			ctx1r := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
+
+			// Step 1: rename back while still DELETED. The state gate is preserved until rename succeeds.
+			err = workflow.ExecuteLocalActivity(ctx1r, la.RenameNamespaceBackActivity,
+				params.NamespaceID, params.Namespace, originalName).Get(ctx, nil)
+			if err != nil {
+				return result, err
+			}
+
+			// Step 2: open traffic. Only reached if rename succeeded.
+			err = workflow.ExecuteLocalActivity(ctx1r, la.RestoreNamespaceStateActivity,
+				params.NamespaceID, originalName).Get(ctx, nil)
+			if err != nil {
+				return result, err
+			}
+
+			result.NamespaceRestored = true
+			logger.Info("Namespace restored successfully.", tag.WorkflowNamespace(originalName.String()))
+			return result, nil
+		}
+	}
+
+	// Step 2. Delete workflow executions.
 	result, err = deleteWorkflowExecutions(ctx, logger, params)
 	if err != nil {
 		return result, err
 	}
 
-	// Step 2. Sleep before deleting namespace from a database.
+	// Step 3. Sleep before deleting namespace from a database.
 	for namespaceDeleteDelay > 0 {
 		var cancelableCtx workflow.Context
 		cancelableCtx, cancelDeleteDelay = workflow.WithCancel(ctx)
@@ -189,7 +264,7 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 		_ = workflow.Sleep(cancelableCtx, ndd)
 	}
 
-	// Step 3. Delete namespace from database.
+	// Step 4. Delete namespace from database.
 	ctx5 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	err = workflow.ExecuteLocalActivity(ctx5, la.DeleteNamespaceActivity, params.NamespaceID, params.Namespace).Get(ctx, nil)
 	if err != nil {

@@ -1147,7 +1147,12 @@ func validateStateUpdate(existingNamespace *persistence.GetNamespaceResponse, ns
 		}
 
 	case enumspb.NAMESPACE_STATE_DELETED:
-		return errInvalidNamespaceStateUpdate
+		switch newState {
+		case enumspb.NAMESPACE_STATE_REGISTERED:
+			return nil
+		default:
+			return errInvalidNamespaceStateUpdate
+		}
 	default:
 		return errInvalidNamespaceStateUpdate
 	}

@@ -32,6 +32,11 @@ type (
 		// Default is 0, means, namespace will be deleted immediately.
 		NamespaceDeleteDelay time.Duration
 
+		// SoftDeleteWindow is how long to wait before beginning execution deletion,
+		// during which the namespace can be restored via RestoreSoftDeletedNamespace.
+		// Default is 0, meaning execution deletion starts immediately after cache refresh.
+		SoftDeleteWindow time.Duration
+
 		DeleteExecutionsConfig deleteexecutions.DeleteExecutionsConfig
 	}
 
@@ -181,6 +186,7 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 			Config:      params.DeleteExecutionsConfig,
 		},
 		NamespaceDeleteDelay: params.NamespaceDeleteDelay,
+		SoftDeleteWindow:     params.SoftDeleteWindow,
 	})
 	var reclaimResourcesExecution workflow.Execution
 	if err = reclaimResourcesFuture.GetChildWorkflowExecution().Get(ctx, &reclaimResourcesExecution); err != nil {

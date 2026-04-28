@@ -1305,6 +1305,10 @@ var (
 		"reclaim_resources_namespace_delete_failure",
 		WithDescription("Incremented every time when ReclaimResources workflow completes without deleting a namespace"),
 	)
+	ReclaimResourcesNamespaceRestoreSuccessCount = NewCounterDef(
+		"reclaim_resources_namespace_restore_success",
+		WithDescription("Incremented every time when ReclaimResources workflow restores a namespace to REGISTERED during the soft-delete window"),
+	)
 	ReclaimResourcesDeleteExecutionsSuccessCount = NewCounterDef(
 		"reclaim_resources_delete_executions_success",
 		WithDescription("The number of workflow executions that was successfully deleted when ReclaimResources workflow completes"),

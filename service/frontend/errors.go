@@ -58,6 +58,7 @@ var (
 	errIdentityNotSet                                     = serviceerror.NewInvalidArgument("Identity is not set on request.")
 	errMigrationTargetNotSet                              = serviceerror.NewInvalidArgument("Target is not set on request.")
 	errNamespaceNotSet                                    = serviceerror.NewInvalidArgument("Namespace is not set on request.")
+	errNamespaceIDNotSet                                  = serviceerror.NewInvalidArgument("NamespaceId is not set on request.")
 	errReasonNotSet                                       = serviceerror.NewInvalidArgument("Reason is not set on request.")
 	errBatchOperationNotSet                               = serviceerror.NewInvalidArgument("Batch operation is not set on request.")
 	errCronAndStartDelaySet                               = serviceerror.NewInvalidArgument("CronSchedule and WorkflowStartDelay may not be used together.")
