@@ -3296,17 +3296,6 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(namespace.MinTimeSkippingDuration)},
 	}, s.testNamespace))
 
-	// MaxTargetTime less than 1 minute from now is rejected
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxTargetTime{MaxTargetTime: timestamppb.New(time.Now().Add(halfMinDuration))},
-	}, s.testNamespace), &invalidArgumentErr)
-
-	// MaxTargetTime well beyond 1 minute from now is valid
-	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxTargetTime{MaxTargetTime: timestamppb.New(time.Now().Add(2 * namespace.MinTimeSkippingDuration))},
-	}, s.testNamespace))
 }
 
 // TestExecuteMultiOperation_TimeSkipping_DCDisabled verifies that when the DC gate is off,

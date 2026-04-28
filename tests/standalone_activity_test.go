@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -37,7 +36,6 @@ import (
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -81,6 +79,10 @@ var (
 	}
 	defaultMaxIDLengthLimit = dynamicconfig.MaxIDLengthLimit.Get(
 		dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), log.NewNoopLogger()))()
+	// Safety margin for assertions involving timer tasks. Must exceed TimerProcessorMaxTimeShift to account for timer
+	// queue processing jitter.
+	timerSafetyMargin = dynamicconfig.TimerProcessorMaxTimeShift.Get(
+		dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), log.NewNoopLogger()))() * 3 / 2
 )
 
 type standaloneActivityTestSuite struct {
@@ -101,6 +103,10 @@ func (s *standaloneActivityTestSuite) SetupSuite() {
 	)
 	s.OverrideDynamicConfig(
 		activity.Enabled,
+		true,
+	)
+	s.OverrideDynamicConfig(
+		activity.StartDelayEnabled,
 		true,
 	)
 }
@@ -1320,6 +1326,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus(),
 			"expected Canceled but is %s", info.GetStatus())
 		require.Equal(t, "Test Cancellation", info.GetCanceledReason())
+		require.Equal(t, int64(1), info.GetTotalHeartbeatCount(), "total heartbeat count")
 		require.Greater(t, info.GetExecutionDuration().AsDuration(), time.Duration(0))
 		require.NotNil(t, info.GetCloseTime())
 		protorequire.ProtoEqual(t, details, activityResp.GetOutcome().GetFailure().GetCanceledFailureInfo().GetDetails())
@@ -1405,6 +1412,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus(),
 				"expected Canceled but is %s", info.GetStatus())
 			require.Equal(t, "Test Cancellation", info.GetCanceledReason())
+			require.Equal(t, int64(1), info.GetTotalHeartbeatCount(), "total heartbeat count")
 			protorequire.ProtoEqual(t, details, activityResp.GetOutcome().GetFailure().GetCanceledFailureInfo().GetDetails())
 			require.Equal(t, identity, activityResp.GetOutcome().GetFailure().GetCanceledFailureInfo().GetIdentity())
 		})
@@ -1479,6 +1487,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED, info.GetRunState(),
 			"expected CancelRequested but is %s", info.GetRunState())
 		require.Equal(t, "Test Cancellation", info.GetCanceledReason())
+		require.Equal(t, int64(1), info.GetTotalHeartbeatCount(), "total heartbeat count")
 	})
 
 	t.Run("DifferentRequestIDFails", func(t *testing.T) {
@@ -3036,17 +3045,15 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 			UserMetadata:           defaultUserMetadata,
 		}
 
-		diff := cmp.Diff(expected, respInfo,
-			protocmp.Transform(),
-			// Ignore non-deterministic fields. Validated separately.
-			protocmp.IgnoreFields(&activitypb.ActivityExecutionInfo{},
+		// Ignore non-deterministic fields. Validated separately.
+		protorequire.ProtoEqual(t, expected, respInfo,
+			protorequire.IgnoreFields(
 				"execution_duration",
 				"schedule_time",
 				"state_size_bytes",
 				"state_transition_count",
 			),
 		)
-		require.Empty(t, diff)
 		require.Equal(t, respInfo.GetExecutionDuration().AsDuration(), time.Duration(0)) // Never completed, so expect 0
 		require.Nil(t, describeResp.GetInfo().GetCloseTime())
 		require.Positive(t, respInfo.GetScheduleTime().AsTime().Unix())
@@ -3099,17 +3106,16 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 		Status:                 enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 		TaskQueue:              taskQueue.Name,
 	}
-	diff := cmp.Diff(expected, firstDescribeResp.GetInfo(),
-		protocmp.Transform(),
-		// Ignore non-deterministic fields. Validated separately.
-		protocmp.IgnoreFields(&activitypb.ActivityExecutionInfo{},
+
+	// Ignore non-deterministic fields. Validated separately.
+	protorequire.ProtoEqual(t, expected, firstDescribeResp.GetInfo(),
+		protorequire.IgnoreFields(
 			"execution_duration",
 			"schedule_time",
 			"state_size_bytes",
 			"state_transition_count",
 		),
 	)
-	require.Empty(t, diff)
 	require.Positive(t, firstDescribeResp.GetInfo().GetStateSizeBytes())
 
 	taskQueuePollErr := make(chan error, 1)
@@ -3159,10 +3165,10 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 			Status:                 enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 			TaskQueue:              taskQueue.Name,
 		}
-		diff := cmp.Diff(expected, describeResp.GetInfo(),
-			protocmp.Transform(),
-			// Ignore non-deterministic fields. Validated separately.
-			protocmp.IgnoreFields(&activitypb.ActivityExecutionInfo{},
+
+		// Ignore non-deterministic fields. Validated separately.
+		protorequire.ProtoEqual(t, expected, describeResp.GetInfo(),
+			protorequire.IgnoreFields(
 				"execution_duration",
 				"last_started_time",
 				"schedule_time",
@@ -3170,7 +3176,6 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 				"state_transition_count",
 			),
 		)
-		require.Empty(t, diff)
 		require.Positive(t, describeResp.GetInfo().GetStateSizeBytes())
 
 		protorequire.ProtoEqual(t, defaultInput, describeResp.Input)
@@ -4646,6 +4651,21 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 
 		// Verify: heartbeat details from first attempt are available
 		protorequire.ProtoEqual(t, heartbeatDetails, pollResp2.HeartbeatDetails)
+
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp2.TaskToken,
+			Details:   heartbeatDetails,
+		})
+		require.NoError(t, err)
+
+		desc, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+
+		require.Equal(t, int64(2), desc.GetInfo().GetTotalHeartbeatCount(), "total heartbeat count")
 	})
 
 	t.Run("ActivityTimesOutWithoutHeartbeat", func(t *testing.T) {
@@ -4791,6 +4811,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, pollResp.GetInfo().GetStatus(),
 			"expected status=Completed but is %s", pollResp.GetInfo().GetStatus())
+		require.Equal(t, int64(2), pollResp.GetInfo().GetTotalHeartbeatCount(), "total heartbeat count")
 		protorequire.ProtoEqual(t, defaultResult, pollResp.GetOutcome().GetResult())
 	})
 
@@ -4840,6 +4861,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, descResp.GetInfo().GetStatus(),
 			"activity should still be running but is %s", descResp.GetInfo().GetStatus())
+		require.Equal(t, int64(1), descResp.GetInfo().GetTotalHeartbeatCount(), "total heartbeat count")
 
 		// Complete the activity to confirm it's still operable.
 		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
@@ -4858,6 +4880,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus(),
 			"expected status=Completed but is %s", descResp.GetInfo().GetStatus())
+		require.Equal(t, int64(1), descResp.GetInfo().GetTotalHeartbeatCount(), "total heartbeat count")
 		protorequire.ProtoEqual(t, defaultResult, descResp.GetOutcome().GetResult())
 	})
 
@@ -4916,7 +4939,412 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, pollResp.GetInfo().GetStatus(),
 			"expected status=Completed but is %s", pollResp.GetInfo().GetStatus())
+		require.Equal(t, int64(1), pollResp.GetInfo().GetTotalHeartbeatCount(), "total heartbeat count")
 		protorequire.ProtoEqual(t, defaultResult, pollResp.GetOutcome().GetResult())
+	})
+
+	t.Run("HeartbeatCountIncrementsPerHeartbeat", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+		})
+		require.NoError(t, err)
+
+		pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+
+		const numHeartbeats = 5
+		for i := range numHeartbeats {
+			_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+				Namespace: s.Namespace().String(),
+				TaskToken: pollTaskResp.TaskToken,
+				Details:   heartbeatDetails,
+			})
+			require.NoError(t, err)
+
+			descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.RunId,
+			})
+			require.NoError(t, err)
+			require.Equal(t, int64(i+1), descResp.GetInfo().GetTotalHeartbeatCount(), "total heartbeat count after heartbeat %d", i+1)
+		}
+	})
+}
+
+func (s *standaloneActivityTestSuite) TestStartDelay() {
+	t := s.T()
+
+	t.Run("Dispatch", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		requestID := testcore.RandomizeStr("request-id")
+		startDelay := 3 * time.Second
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			Identity:            s.tv.WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           requestID,
+			StartDelay:          durationpb.New(startDelay),
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, startResp.GetRunId())
+		require.True(t, startResp.Started)
+
+		// Verify activity stays in SCHEDULED state throughout the delay (not dispatched early).
+		require.Never(t, func() bool {
+			describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.GetRunId(),
+			})
+			return err != nil || describeResp.GetInfo().GetRunState() != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
+		}, startDelay-timerSafetyMargin, 100*time.Millisecond,
+			"expected activity to remain in SCHEDULED state during start delay")
+
+		// Poll blocks until the task is dispatched after the delay elapses.
+		pollResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
+		require.NoError(t, err)
+		require.NotEmpty(t, pollResp.GetTaskToken(), "expected task after start delay")
+
+		// CurrentAttemptScheduledTime should be exactly ScheduledTime + StartDelay.
+		// Both values are computed server-side from the same fields, so no tolerance needed.
+		expectedDispatchTime := pollResp.GetScheduledTime().AsTime().Add(startDelay)
+		require.Equal(t, expectedDispatchTime, pollResp.GetCurrentAttemptScheduledTime().AsTime())
+	})
+
+	t.Run("CompleteAfterDelay", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		requestID := testcore.RandomizeStr("request-id")
+		startDelay := 1 * time.Second
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			Identity:            s.tv.WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           requestID,
+			StartDelay:          durationpb.New(startDelay),
+		})
+		require.NoError(t, err)
+
+		// Poll blocks until the task is dispatched after the delay elapses.
+		pollResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
+		require.NoError(t, err)
+		require.NotEmpty(t, pollResp.GetTaskToken())
+
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          startResp.RunId,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+		protorequire.ProtoEqual(t, defaultResult, descResp.GetOutcome().GetResult())
+	})
+
+	t.Run("ScheduleToStartTimeoutExtended", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		requestID := testcore.RandomizeStr("request-id")
+		startDelay := 3 * time.Second
+		scheduleToStartTimeout := 1 * time.Second
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              s.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           s.tv.ActivityType(),
+			Identity:               s.tv.WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout:    durationpb.New(30 * time.Second),
+			ScheduleToStartTimeout: durationpb.New(scheduleToStartTimeout),
+			StartDelay:             durationpb.New(startDelay),
+			RequestId:              requestID,
+		})
+		require.NoError(t, err)
+
+		// Activity should stay running (not timed out) throughout startDelay + most of scheduleToStartTimeout.
+		// The timeout should only fire after startDelay + scheduleToStartTimeout.
+		require.Never(t, func() bool {
+			descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.RunId,
+			})
+			return err != nil || descResp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+		}, startDelay+scheduleToStartTimeout-timerSafetyMargin, 100*time.Millisecond,
+			"activity should not time out before startDelay + scheduleToStartTimeout")
+
+		// Now wait for the ScheduleToStart timeout to actually fire (measured from after delay).
+		require.Eventually(t, func() bool {
+			resp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.RunId,
+			})
+			return err == nil && resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+		}, 10*time.Second, 100*time.Millisecond)
+	})
+
+	t.Run("ScheduleToCloseTimeoutExtended", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		requestID := testcore.RandomizeStr("request-id")
+		startDelay := 3 * time.Second
+		scheduleToCloseTimeout := 1 * time.Second
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              s.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           s.tv.ActivityType(),
+			Identity:               s.tv.WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			ScheduleToCloseTimeout: durationpb.New(scheduleToCloseTimeout),
+			StartDelay:             durationpb.New(startDelay),
+			RequestId:              requestID,
+		})
+		require.NoError(t, err)
+
+		// ExpirationTime should account for start delay: ScheduleTime + StartDelay + ScheduleToCloseTimeout.
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		expectedExpiration := descResp.GetInfo().GetScheduleTime().AsTime().Add(startDelay).Add(scheduleToCloseTimeout)
+		require.Equal(t, expectedExpiration, descResp.GetInfo().GetExpirationTime().AsTime())
+
+		// Activity should stay running (not timed out) throughout startDelay + most of scheduleToCloseTimeout.
+		// The timeout should only fire after startDelay + scheduleToCloseTimeout.
+		require.Never(t, func() bool {
+			descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.RunId,
+			})
+			return err != nil || descResp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+		}, startDelay+scheduleToCloseTimeout-timerSafetyMargin, 100*time.Millisecond,
+			"activity should not time out before startDelay + scheduleToCloseTimeout")
+
+		// Now wait for the ScheduleToClose timeout to actually fire (measured from after delay).
+		require.Eventually(t, func() bool {
+			resp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.RunId,
+			})
+			return err == nil && resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+		}, 10*time.Second, 100*time.Millisecond)
+	})
+
+	t.Run("CancelDuringDelay", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		requestID := testcore.RandomizeStr("request-id")
+		startDelay := 10 * time.Second // Long delay so the activity stays in SCHEDULED state.
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			Identity:            s.tv.WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           requestID,
+			StartDelay:          durationpb.New(startDelay),
+		})
+		require.NoError(t, err)
+
+		// Cancel while still in the delay period (SCHEDULED state). Should immediately cancel.
+		_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			Identity:   defaultIdentity,
+			RequestId:  testcore.RandomizeStr("cancel-request-id"),
+			Reason:     "cancel during delay",
+		})
+		require.NoError(t, err)
+
+		// Activity should be CANCELED immediately, not waiting for the delay to elapse.
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          startResp.RunId,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, descResp.GetInfo().GetStatus())
+	})
+
+	t.Run("TerminateDuringDelay", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		requestID := testcore.RandomizeStr("request-id")
+		startDelay := 10 * time.Second // Long delay so the activity stays in SCHEDULED state.
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			Identity:            s.tv.WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           requestID,
+			StartDelay:          durationpb.New(startDelay),
+		})
+		require.NoError(t, err)
+
+		// Terminate while still in the delay period (SCHEDULED state).
+		_, err = s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			Identity:   defaultIdentity,
+			Reason:     "terminate during delay",
+		})
+		require.NoError(t, err)
+
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          startResp.RunId,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED, descResp.GetInfo().GetStatus())
+	})
+
+	// Validates that the retry deadline accounts for start delay: the effective ScheduleToClose
+	// window is ScheduleTime + StartDelay + ScheduleToClose. ScheduleToClose is set short enough
+	// that without the start delay extension, the retry after attempt 1 fails would be rejected
+	// (fail at ~T+2s, retryInterval 1s, deadline without extension = T+3s). With the extension
+	// the deadline is T+5s, so the server allows the retry and we observe attempt 2.
+	t.Run("RetryWithStartDelay", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		requestID := testcore.RandomizeStr("request-id")
+		startDelay := 2 * time.Second
+		scheduleToCloseTimeout := 3 * time.Second
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              s.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           s.tv.ActivityType(),
+			Identity:               s.tv.WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			ScheduleToCloseTimeout: durationpb.New(scheduleToCloseTimeout),
+			RequestId:              requestID,
+			StartDelay:             durationpb.New(startDelay),
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, startResp.GetRunId())
+
+		// Poll blocks until the task is dispatched after the delay elapses.
+		pollResp1, err := s.pollActivityTaskQueue(ctx, taskQueue)
+		require.NoError(t, err)
+		require.NotEmpty(t, pollResp1.GetTaskToken())
+		require.EqualValues(t, 1, pollResp1.GetAttempt())
+
+		// Fail attempt 1 with a retryable error and short retry delay.
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp1.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+						NonRetryable: false,
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+		failTime := time.Now()
+
+		// Attempt 2 should be scheduled (start delay extended the ScheduleToClose deadline).
+		// It should arrive within the retry backoff interval, NOT re-applying the start delay.
+		pollResp2, err := s.pollActivityTaskQueue(ctx, taskQueue)
+		require.NoError(t, err)
+		require.NotEmpty(t, pollResp2.GetTaskToken(), "expected retry attempt 2 to be dispatched")
+		require.EqualValues(t, 2, pollResp2.GetAttempt())
+		require.Less(t, time.Since(failTime), startDelay,
+			"retry was dispatched after startDelay, suggesting start delay was re-applied")
+
+		// Complete attempt 2.
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp2.TaskToken,
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          startResp.RunId,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+		require.EqualValues(t, 2, descResp.GetInfo().GetAttempt())
+		protorequire.ProtoEqual(t, defaultResult, descResp.GetOutcome().GetResult())
 	})
 }
 
