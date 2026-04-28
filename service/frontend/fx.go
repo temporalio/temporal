@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -100,6 +101,7 @@ var Module = fx.Options(
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
 	fx.Provide(nsreplication.NewNoopDataMerger),
+	fx.Provide(nsreplication.NewDefaultAdmitter),
 	fx.Provide(AuthorizationInterceptorProvider),
 	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
@@ -120,7 +122,9 @@ var Module = fx.Options(
 	fx.Provide(NewServiceProvider),
 	fx.Provide(NexusEndpointClientProvider),
 	fx.Invoke(ServiceLifetimeHooks),
+	fx.Provide(nexusoperationpb.NewNexusOperationServiceLayeredClient),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
+	fx.Provide(chasmnexus.NewFrontendHandler),
 	chasmnexus.Module,
 	activity.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
@@ -542,9 +546,21 @@ func NamespaceRateLimitInterceptorProvider(
 	namespaceRateLimiter := quotas.NewNamespaceRequestRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			return configs.NewRequestToRateLimiter(
-				configs.NewNamespaceRateBurst(req.Caller, namespaceRateFn, serviceConfig.MaxNamespaceBurstRatioPerInstance),
-				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstRatioPerInstance),
-				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance),
+				quotas.NewNamespaceRateBurst(
+					req.Caller,
+					namespaceRateFn,
+					quotas.NamespaceBurstRatioFn(serviceConfig.MaxNamespaceBurstRatioPerInstance),
+				),
+				quotas.NewNamespaceRateBurst(
+					req.Caller,
+					visibilityRateFn,
+					quotas.NamespaceBurstRatioFn(serviceConfig.MaxNamespaceVisibilityBurstRatioPerInstance),
+				),
+				quotas.NewNamespaceRateBurst(
+					req.Caller,
+					namespaceReplicationInducingRateFn,
+					quotas.NamespaceBurstRatioFn(serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance),
+				),
 				serviceConfig.OperatorRPSRatio,
 			)
 		},
@@ -756,6 +772,7 @@ func NamespaceDLQHandlerProvider(
 	clusterMetadata cluster.Metadata,
 	persistenceMetadataManager persistence.MetadataManager,
 	namespaceDataMerger nsreplication.NamespaceDataMerger,
+	namespaceAdmitter nsreplication.NamespaceReplicationAdmitter,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	logger log.SnTaggedLogger,
 ) nsreplication.DLQMessageHandler {
@@ -763,6 +780,7 @@ func NamespaceDLQHandlerProvider(
 		clusterMetadata.GetCurrentClusterName(),
 		persistenceMetadataManager,
 		namespaceDataMerger,
+		namespaceAdmitter,
 		logger,
 	)
 	return nsreplication.NewDLQMessageHandler(
@@ -859,6 +877,7 @@ func HandlerProvider(
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	activityHandler activity.FrontendHandler,
 	callbackValidator *callback.Validator,
+	nexusOperationHandler chasmnexus.FrontendHandler,
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
 ) Handler {
@@ -896,6 +915,7 @@ func HandlerProvider(
 		scheduleSpecBuilder,
 		httpEnabled(cfg, serviceName),
 		activityHandler,
+		nexusOperationHandler,
 		registry,
 		workerDeploymentReadRateLimiter,
 	)

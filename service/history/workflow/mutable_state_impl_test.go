@@ -4131,6 +4131,8 @@ func (s *mutableStateSuite) TestStartChildWorkflowRequestID() {
 		workflowTaskCompletionEventID,
 		attributes,
 		tests.NamespaceID,
+		nil,
+		nil,
 	)
 	createRequestID := fmt.Sprintf("%s:%d:%d", s.mutableState.executionState.RunId, event.GetEventId(), event.GetVersion())
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
@@ -4141,6 +4143,103 @@ func (s *mutableStateSuite) TestStartChildWorkflowRequestID() {
 	)
 	s.NoError(err)
 	s.Equal(createRequestID, ci.CreateRequestId)
+}
+
+// TestAddStartChildWorkflowExecutionInitiatedEvent_TimeSkippingSnapshot verifies that
+// AddStartChildWorkflowExecutionInitiatedEvent snapshots the parent's TimeSkippingInfo
+// into the event attributes at command time. The transfer task that later starts the
+// child reads this snapshot off the event (see transfer_queue_active_task_executor.go),
+// so the snapshot must faithfully represent what the parent workflow observed.
+func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_TimeSkippingSnapshot() {
+	cases := []struct {
+		name              string
+		parentTSI         *persistencespb.TimeSkippingInfo
+		expectNilCfg      bool
+		expectCfg         *workflowpb.TimeSkippingConfig
+		expectInitialSkip *durationpb.Duration
+	}{
+		{
+			name:         "no TimeSkippingInfo on parent → no snapshot on event",
+			parentTSI:    nil,
+			expectNilCfg: true,
+		},
+		{
+			name: "config only, no accumulated skip → config cloned verbatim, no initial skip",
+			parentTSI: &persistencespb.TimeSkippingInfo{
+				Config: &workflowpb.TimeSkippingConfig{Enabled: true},
+			},
+			expectCfg: &workflowpb.TimeSkippingConfig{Enabled: true},
+		},
+		{
+			name: "config + accumulated skip → config cloned, InitialSkippedDuration = parent's accumulated",
+			parentTSI: &persistencespb.TimeSkippingInfo{
+				Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			},
+			expectCfg:         &workflowpb.TimeSkippingConfig{Enabled: true},
+			expectInitialSkip: durationpb.New(time.Hour),
+		},
+		{
+			name: "multi-generation: parent's accumulated (which already includes grandparent's contribution) becomes InitialSkippedDuration",
+			parentTSI: &persistencespb.TimeSkippingInfo{
+				Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
+				AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
+			},
+			expectCfg:         &workflowpb.TimeSkippingConfig{Enabled: true},
+			expectInitialSkip: durationpb.New(2 * time.Hour),
+		},
+		{
+			name: "accumulated skip only, no config (corrupt-ish but handled) → no config snapshot, just InitialSkippedDuration",
+			parentTSI: &persistencespb.TimeSkippingInfo{
+				AccumulatedSkippedDuration: durationpb.New(15 * time.Minute),
+			},
+			expectNilCfg:      true,
+			expectInitialSkip: durationpb.New(15 * time.Minute),
+		},
+	}
+
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+			s.mutableState.executionInfo.TimeSkippingInfo = tc.parentTSI
+
+			event, _, err := s.mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
+				rand.Int63(),
+				&commandpb.StartChildWorkflowExecutionCommandAttributes{
+					WorkflowId:   "child-wf",
+					WorkflowType: &commonpb.WorkflowType{Name: "ChildWF"},
+				},
+				tests.NamespaceID,
+			)
+			s.NoError(err)
+
+			gotAttrs := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+			gotTSC := gotAttrs.GetTimeSkippingConfig()
+			gotInitialSkip := gotAttrs.GetInitialSkippedDuration()
+
+			if tc.expectInitialSkip == nil {
+				s.Nil(gotInitialSkip)
+			} else {
+				s.NotNil(gotInitialSkip)
+				s.Equal(tc.expectInitialSkip.AsDuration(), gotInitialSkip.AsDuration())
+			}
+
+			if tc.expectNilCfg {
+				s.Nil(gotTSC)
+				return
+			}
+			s.NotNil(gotTSC)
+			s.True(proto.Equal(tc.expectCfg, gotTSC),
+				"expected %v, got %v", tc.expectCfg, gotTSC)
+
+			// The snapshot must be a clone — mutating it must not leak back into parent state.
+			if tc.parentTSI.GetConfig() != nil {
+				gotTSC.Enabled = !gotTSC.GetEnabled()
+				s.True(tc.parentTSI.GetConfig().GetEnabled(),
+					"mutation of snapshot leaked into parent's Config")
+			}
+		})
+	}
 }
 
 func (s *mutableStateSuite) TestGetCloseVersion() {
@@ -7380,9 +7479,8 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 // rebuild flows.
 func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_TimeSkippingConfig() {
 	inputConfig := &workflowpb.TimeSkippingConfig{
-		Enabled:            true,
-		DisablePropagation: true,
-		Bound:              &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
 	}
 
 	testCases := []struct {
@@ -7453,9 +7551,8 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSk
 		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
 	}
 	updatedConfig := &workflowpb.TimeSkippingConfig{
-		Enabled:            true,
-		DisablePropagation: true,
-		Bound:              &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
 	}
 
 	testCases := []struct {

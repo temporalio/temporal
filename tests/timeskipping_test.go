@@ -75,16 +75,15 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 		TaskQueue:           tv.TaskQueue(),
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true, DisablePropagation: false, Bound: inputBound},
+		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true, Bound: inputBound},
 	})
 	s.NoError(err)
 
 	ms := s.getMutableState(env, tv.WorkflowID(), resp.RunId)
 	s.True(ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled())
 	s.True(proto.Equal(&workflowpb.TimeSkippingConfig{
-		Enabled:            true,
-		DisablePropagation: false,
-		Bound:              inputBound,
+		Enabled: true,
+		Bound:   inputBound,
 	}, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
 }
 
@@ -109,18 +108,16 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_SignalWithStart_DCEnabled() {
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		SignalName:          tv.SignalName(),
 		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
-			Enabled:            true,
-			DisablePropagation: true,
-			Bound:              inputBound,
+			Enabled: true,
+			Bound:   inputBound,
 		},
 	})
 	s.NoError(err)
 
 	ms := s.getMutableState(env, tv.WorkflowID(), resp.RunId)
 	s.True(proto.Equal(&workflowpb.TimeSkippingConfig{
-		Enabled:            true,
-		DisablePropagation: true,
-		Bound:              inputBound,
+		Enabled: true,
+		Bound:   inputBound,
 	}, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
 }
 
@@ -134,8 +131,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ExecuteMultiOperation_DCEnabled
 	maxSkippedDuration := time.Hour
 
 	inputConfig := &workflowpb.TimeSkippingConfig{
-		Enabled:            true,
-		DisablePropagation: true,
+		Enabled: true,
 		Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
 			MaxSkippedDuration: durationpb.New(maxSkippedDuration),
 		},
@@ -248,9 +244,8 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 
 	// Second update: change bound type, add DisablePropagation.
 	config2 := &workflowpb.TimeSkippingConfig{
-		Enabled:            true,
-		DisablePropagation: true,
-		Bound:              &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(2 * time.Hour)},
 	}
 	updateOptions(config2)
 
@@ -314,9 +309,8 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ResetWithUpdateOptions() {
 
 	// Reset with PostResetOperations that sets TimeSkippingConfig.
 	inputConfig := &workflowpb.TimeSkippingConfig{
-		Enabled:            true,
-		DisablePropagation: true,
-		Bound:              &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
+		Enabled: true,
+		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
 	}
 	resetResp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 env.Namespace().String(),

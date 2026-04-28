@@ -153,6 +153,7 @@ func NewStandaloneActivity(
 			HeartbeatTimeout:       request.GetHeartbeatTimeout(),
 			RetryPolicy:            request.GetRetryPolicy(),
 			Priority:               request.Priority,
+			StartDelay:             request.GetStartDelay(),
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
 		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
@@ -256,11 +257,11 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 }
 
 // attemptScheduleTime returns when the given attempt was scheduled to run:
-// the activity's original schedule time for the first attempt, or
+// the activity's schedule time plus start delay for the first attempt, or
 // calculated from attemptScheduleTimeForRetry on retries.
 func (a *Activity) attemptScheduleTime(attempt *activitypb.ActivityAttemptState) *timestamppb.Timestamp {
 	if attempt.GetCount() == 1 {
-		return a.GetScheduleTime()
+		return timestamppb.New(a.firstDispatchTime())
 	}
 	return attemptScheduleTimeForRetry(attempt)
 }
@@ -663,8 +664,22 @@ func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context, overridingRetryInter
 		return true, retryInterval
 	}
 
-	deadline := a.ScheduleTime.AsTime().Add(scheduleToClose)
+	deadline := a.scheduleToCloseDeadline()
 	return ctx.Now(a).Add(retryInterval).Before(deadline), retryInterval
+}
+
+func (a *Activity) firstDispatchTime() time.Time {
+	return a.ScheduleTime.AsTime().Add(a.GetStartDelay().AsDuration())
+}
+
+// scheduleToCloseDeadline returns the absolute time at which the ScheduleToClose timeout expires,
+// accounting for start delay. Returns zero time if no ScheduleToClose timeout is set.
+func (a *Activity) scheduleToCloseDeadline() time.Time {
+	timeout := a.GetScheduleToCloseTimeout().AsDuration()
+	if timeout == 0 {
+		return time.Time{}
+	}
+	return a.firstDispatchTime().Add(timeout)
 }
 
 func createStartToCloseTimeoutFailure() *failurepb.Failure {
@@ -698,9 +713,11 @@ func (a *Activity) RecordHeartbeat(
 	if err != nil {
 		return nil, err
 	}
+	prevHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{
-		RecordedTime: timestamppb.New(ctx.Now(a)),
-		Details:      input.Request.GetHeartbeatRequest().GetDetails(),
+		RecordedTime:        timestamppb.New(ctx.Now(a)),
+		Details:             input.Request.GetHeartbeatRequest().GetDetails(),
+		TotalHeartbeatCount: prevHeartbeat.GetTotalHeartbeatCount() + 1,
 	})
 	if heartbeatTimeout := a.GetHeartbeatTimeout().AsDuration(); heartbeatTimeout > 0 {
 		ctx.AddTask(
@@ -782,8 +799,8 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 	}
 
 	var expirationTime *timestamppb.Timestamp
-	if timeout := a.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
-		expirationTime = timestamppb.New(a.GetScheduleTime().AsTime().Add(timeout))
+	if deadline := a.scheduleToCloseDeadline(); !deadline.IsZero() {
+		expirationTime = timestamppb.New(deadline)
 	}
 
 	sa := &commonpb.SearchAttributes{
@@ -802,6 +819,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		Header:                  requestData.GetHeader(),
 		HeartbeatDetails:        heartbeat.GetDetails(),
 		HeartbeatTimeout:        a.GetHeartbeatTimeout(),
+		TotalHeartbeatCount:     heartbeat.GetTotalHeartbeatCount(),
 		LastAttemptCompleteTime: attempt.GetCompleteTime(),
 		LastFailure:             attempt.GetLastFailureDetails().GetFailure(),
 		LastHeartbeatTime:       heartbeat.GetRecordedTime(),
