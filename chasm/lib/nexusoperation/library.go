@@ -4,7 +4,6 @@ import (
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/namespace"
 	"google.golang.org/grpc"
 )
 
@@ -23,14 +22,12 @@ type OperationContext struct {
 // Used in the frontend to enable component ref serialization.
 type componentOnlyLibrary struct {
 	chasm.UnimplementedLibrary
-	namespaceRegistry namespace.Registry
-	metricTagConfig   dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
+	metricTagConfig dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
 }
 
-func newComponentOnlyLibrary(namespaceRegistry namespace.Registry, dc *dynamicconfig.Collection) *componentOnlyLibrary {
+func newComponentOnlyLibrary(dc *dynamicconfig.Collection) *componentOnlyLibrary {
 	return &componentOnlyLibrary{
-		namespaceRegistry: namespaceRegistry,
-		metricTagConfig:   MetricTagConfiguration.Get(dc),
+		metricTagConfig: MetricTagConfiguration.Get(dc),
 	}
 }
 
@@ -84,11 +81,10 @@ func newLibrary(
 	operationStartToCloseTimeoutTaskHandler *operationStartToCloseTimeoutTaskHandler,
 	cancellationInvocationTaskHandler *cancellationInvocationTaskHandler,
 	cancellationBackoffTaskHandler *cancellationBackoffTaskHandler,
-	namespaceRegistry namespace.Registry,
 	dc *dynamicconfig.Collection,
 ) *Library {
 	return &Library{
-		componentOnlyLibrary:                       *newComponentOnlyLibrary(namespaceRegistry, dc),
+		componentOnlyLibrary:                       *newComponentOnlyLibrary(dc),
 		handler:                                    handler,
 		operationBackoffTaskHandler:                operationBackoffTaskHandler,
 		operationInvocationTaskHandler:             operationInvocationTaskHandler,

@@ -135,11 +135,8 @@ var TransitionStarted = chasm.NewTransition(
 		// Store the operation token for async completion.
 		o.OperationToken = event.OperationToken
 
-		// Emit schedule-to-start latency on the transition to started.
-		metricsHandler, err := o.enrichMetricsHandler(ctx)
-		if err != nil {
-			return err
-		}
+		// Emit schedule-to-start latency
+		metricsHandler := o.metricsHandler(ctx)
 		NexusOperationScheduleToStartLatency.With(metricsHandler).Record(startTime.Sub(o.GetScheduledTime().AsTime()))
 
 		// Emit a start-to-close timeout task if configured.
@@ -192,11 +189,7 @@ var TransitionSucceeded = chasm.NewTransition(
 			Successful: &nexusoperationpb.OperationOutcome_Successful{Result: event.Result},
 		}
 
-		metricsHandler, err := o.enrichMetricsHandler(ctx)
-		if err != nil {
-			return err
-		}
-		o.emitOnSucceededMetrics(metricsHandler, closeTime)
+		o.emitOnSucceededMetrics(ctx, closeTime)
 		// Terminal state - no tasks to emit.
 		return nil
 	},
@@ -222,13 +215,9 @@ var TransitionFailed = chasm.NewTransition(
 		if event.CompleteTime != nil {
 			closeTime = *event.CompleteTime
 		}
-		metricsHandler, err := o.enrichMetricsHandler(ctx)
-		if err != nil {
-			return err
-		}
 		// Attempts only execute in SCHEDULED, so that status identifies attempt-originated failures.
 		fromAttempt := o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED
-		o.emitOnFailedMetrics(metricsHandler, closeTime)
+		o.emitOnFailedMetrics(ctx, closeTime)
 		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime, fromAttempt)
 	},
 )
@@ -253,12 +242,8 @@ var TransitionCanceled = chasm.NewTransition(
 		if event.CompleteTime != nil {
 			closeTime = *event.CompleteTime
 		}
-		metricsHandler, err := o.enrichMetricsHandler(ctx)
-		if err != nil {
-			return err
-		}
+		o.emitOnCanceledMetrics(ctx, closeTime)
 		// Attempts only execute in SCHEDULED, so that status identifies attempt-originated cancels.
-		o.emitOnCanceledMetrics(metricsHandler, closeTime)
 		fromAttempt := o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED
 		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime, fromAttempt)
 	},
@@ -290,11 +275,7 @@ var TransitionTerminated = chasm.NewTransition(
 				},
 			},
 		}
-		metricsHandler, err := o.enrichMetricsHandler(ctx)
-		if err != nil {
-			return err
-		}
-		o.emitOnTerminatedMetrics(metricsHandler, closeTime)
+		o.emitOnTerminatedMetrics(ctx, closeTime)
 		return o.resolveUnsuccessfully(ctx, failure, closeTime, false)
 	},
 )
@@ -315,12 +296,8 @@ var TransitionTimedOut = chasm.NewTransition(
 	nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
 	func(o *Operation, ctx chasm.MutableContext, event EventTimedOut) error {
 		closeTime := ctx.Now(o)
-		metricsHandler, err := o.enrichMetricsHandler(ctx)
-		if err != nil {
-			return err
-		}
 		timeoutType := event.Failure.GetTimeoutFailureInfo().GetTimeoutType().String()
-		o.emitOnTimedOutMetrics(metricsHandler, closeTime, timeoutType)
+		o.emitOnTimedOutMetrics(ctx, closeTime, timeoutType)
 		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime, event.FromAttempt)
 	},
 )

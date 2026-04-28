@@ -43,18 +43,15 @@ var NexusOperationScheduleToStartLatency = metrics.NewTimerDef(
 )
 var NexusOperationStartToCloseLatency = metrics.NewTimerDef(
 	"nexus_operation_start_to_close_latency",
-	metrics.WithDescription("Duration from Nexus Operation scheduled time to completed time. Only emitted for async operations."),
+	metrics.WithDescription("Duration from Nexus Operation started time to completed time. Only emitted for async operations."),
 )
 
-// NexusMetricTagConfig controls which optional metric tags are included with Nexus operation
-// metrics. Enabling service or operation tags applies to both caller and handler metrics. HeaderTagMappings is
-// not used for caller metrics.
 type NexusMetricTagConfig struct {
-	// Include service name as a metric tag
+	// Include service name as a metric tag. Used for caller and handler metrics.
 	IncludeServiceTag bool
-	// Include operation name as a metric tag
+	// Include operation name as a metric tag. Used for caller and handler metrics.
 	IncludeOperationTag bool
-	// Configuration for mapping request headers to metric tags
+	// Configuration for mapping request headers to metric tags. Only used for handler metrics.
 	HeaderTagMappings []NexusHeaderTagMapping
 }
 

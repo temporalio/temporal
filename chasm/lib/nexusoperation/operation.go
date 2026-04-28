@@ -47,9 +47,10 @@ var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancel
 var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation already completed")
 
 const (
-	// WorkflowTypeTag is a required workflow tag for standalone operations to ensure consistent
-	// metric labeling between workflows and activities.
-	WorkflowTypeTag = "__temporal_standalone_nexus_operation__"
+	// standaloneOperationWorkflowTypeName is the workflow type for tagging standalone operations.
+	// Used as the WorkflowTypeTag in metrics emitted from standalone operations.
+	// Do not change. It is exposed in metrics.
+	standaloneOperationWorkflowTypeName = "__temporal_standalone_nexus_operation__"
 )
 
 // InvocationData contains data needed to invoke a Nexus operation.
@@ -77,7 +78,7 @@ type OperationStore interface {
 	OnNexusOperationCancellationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	// NexusOperationInvocationData loads invocation data (Input, Header, NexusLinks) from the scheduled history event.
 	NexusOperationInvocationData(ctx chasm.Context, operation *Operation) (InvocationData, error)
-	WorkflowTypeTag() string
+	WorkflowTypeName() string
 }
 
 // Operation is a CHASM component that represents a Nexus operation.
@@ -563,14 +564,13 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 	return info
 }
 
-// EnrichMetricsHandler returns a metrics handler enriched with nexus operation tags.
-// Panics if the context value is missing, which indicates a library registration bug.
-func (o *Operation) enrichMetricsHandler(ctx chasm.Context) (metrics.Handler, error) {
+// metricsHandler returns a metrics handler enriched with nexus operation tags.
+func (o *Operation) metricsHandler(ctx chasm.Context) metrics.Handler {
 	namespaceName := ctx.NamespaceEntry().Name().String()
 
-	wftt := WorkflowTypeTag
+	wftt := standaloneOperationWorkflowTypeName
 	if store, ok := o.Store.TryGet(ctx); ok {
-		wftt = store.WorkflowTypeTag()
+		wftt = store.WorkflowTypeName()
 	}
 	tags := []metrics.Tag{
 		metrics.NamespaceTag(namespaceName),
@@ -579,54 +579,63 @@ func (o *Operation) enrichMetricsHandler(ctx chasm.Context) (metrics.Handler, er
 	}
 
 	// nolint:revive // unchecked-type-assertion: intentional panic on missing context value
-	opCtx := ctx.Value(OperationContextKey).(*OperationContext)
-	conf := opCtx.MetricTagConfig()
-	if conf.IncludeServiceTag {
-		tags = append(tags, metrics.NexusServiceTag(o.GetService()))
-	}
-	if conf.IncludeOperationTag {
-		tags = append(tags, metrics.NexusOperationTag(o.GetOperation()))
+	opCtx, ok := ctx.Value(OperationContextKey).(*OperationContext)
+	if !ok {
+		softassert.Fail(ctx.Logger(), "operation context missing")
+	} else {
+		conf := opCtx.MetricTagConfig()
+		if conf.IncludeServiceTag {
+			tags = append(tags, metrics.NexusServiceTag(o.GetService()))
+		}
+		if conf.IncludeOperationTag {
+			tags = append(tags, metrics.NexusOperationTag(o.GetOperation()))
+		}
 	}
 
-	return ctx.MetricsHandler().WithTags(tags...), nil
+	return ctx.MetricsHandler().WithTags(tags...)
 }
 
-func (o *Operation) emitOnSucceededMetrics(handler metrics.Handler, closeTime time.Time) {
+func (o *Operation) emitOnSucceededMetrics(ctx chasm.Context, closeTime time.Time) {
 	outcomeTag := metrics.OutcomeTag(
 		strings.ToLower(nexusoperationpb.OPERATION_STATUS_SUCCEEDED.String()),
 	)
+	handler := o.metricsHandler(ctx)
 	NexusOperationSuccessCount.With(handler).Record(1)
 	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
 }
 
-func (o *Operation) emitOnFailedMetrics(handler metrics.Handler, closeTime time.Time) {
+func (o *Operation) emitOnFailedMetrics(ctx chasm.Context, closeTime time.Time) {
 	outcomeTag := metrics.OutcomeTag(
 		strings.ToLower(nexusoperationpb.OPERATION_STATUS_FAILED.String()),
 	)
+	handler := o.metricsHandler(ctx)
 	NexusOperationFailedCount.With(handler).Record(1)
 	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
 }
 
-func (o *Operation) emitOnCanceledMetrics(handler metrics.Handler, closeTime time.Time) {
+func (o *Operation) emitOnCanceledMetrics(ctx chasm.Context, closeTime time.Time) {
 	outcomeTag := metrics.OutcomeTag(
 		strings.ToLower(nexusoperationpb.OPERATION_STATUS_CANCELED.String()),
 	)
+	handler := o.metricsHandler(ctx)
 	NexusOperationCancelCount.With(handler).Record(1)
 	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
 }
 
-func (o *Operation) emitOnTimedOutMetrics(handler metrics.Handler, closeTime time.Time, timeoutType string) {
+func (o *Operation) emitOnTimedOutMetrics(ctx chasm.Context, closeTime time.Time, timeoutType string) {
 	outcomeTag := metrics.OutcomeTag(
 		strings.ToLower(nexusoperationpb.OPERATION_STATUS_TIMED_OUT.String()),
 	)
+	handler := o.metricsHandler(ctx)
 	NexusOperationTimeoutCount.With(handler).Record(1, metrics.StringTag("timeout_type", timeoutType))
 	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
 }
 
-func (o *Operation) emitOnTerminatedMetrics(handler metrics.Handler, closeTime time.Time) {
+func (o *Operation) emitOnTerminatedMetrics(ctx chasm.Context, closeTime time.Time) {
 	outcomeTag := metrics.OutcomeTag(
 		strings.ToLower(nexusoperationpb.OPERATION_STATUS_TERMINATED.String()),
 	)
+	handler := o.metricsHandler(ctx)
 	NexusOperationTerminateCount.With(handler).Record(1)
 	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
 }
