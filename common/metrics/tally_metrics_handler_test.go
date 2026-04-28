@@ -530,3 +530,154 @@ func TestNormalizeTagsForCaching(t *testing.T) {
 		require.Same(t, &tags[0], &result[0])
 	})
 }
+
+func TestCounter_CacheReturnsSameInstance(t *testing.T) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+
+	c1 := h.Counter("requests")
+	c2 := h.Counter("requests")
+
+	// Verify cache stores an entry.
+	_, ok := h.counterCache.Load("requests")
+	require.True(t, ok)
+
+	// Functional correctness: both references record to the same counter.
+	c1.Record(3)
+	c2.Record(7)
+	snap := scope.Snapshot()
+	require.EqualValues(t, 10, snap.Counters()["test.requests+"].Value())
+}
+
+func TestTimer_CacheReturnsSameInstance(t *testing.T) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+
+	h.Timer("latency")
+	h.Timer("latency")
+
+	_, ok := h.timerCache.Load("latency")
+	require.True(t, ok)
+}
+
+func TestHistogram_CacheReturnsSameInstance(t *testing.T) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+
+	h.Histogram("size", Bytes)
+	h.Histogram("size", Bytes)
+
+	_, ok := h.histogramCache.Load("size\x00" + string(Bytes))
+	require.True(t, ok)
+}
+
+func TestWithTags_ExcludedTagsDedup(t *testing.T) {
+	// WithTags should normalize excluded tags before keying, so different raw
+	// values that map to the same excluded placeholder share a cache entry.
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+
+	// "activityType" has empty allow-list → all values excluded.
+	h1 := h.WithTags(ActivityTypeTag("ActivityA"))
+	h2 := h.WithTags(ActivityTypeTag("ActivityB"))
+	require.Same(t, h1, h2, "excluded tag values should deduplicate to same cached handler")
+}
+
+func TestWithTags_ChildCacheBounded(t *testing.T) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+
+	// Fill child cache to the limit.
+	for i := 0; i < scopeCacheMaxSize; i++ {
+		h.WithTags(OperationTag("op_" + strconv.Itoa(i)))
+	}
+	require.Equal(t, int64(scopeCacheMaxSize), h.childCacheSize.Load())
+
+	// One more should not increase the cache size.
+	h.WithTags(OperationTag("op_overflow"))
+	require.Equal(t, int64(scopeCacheMaxSize), h.childCacheSize.Load(),
+		"childCache should not grow beyond scopeCacheMaxSize")
+}
+
+func TestGauge_CacheReturnsSameInstance(t *testing.T) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+
+	g1 := h.Gauge("connections")
+	g2 := h.Gauge("connections")
+
+	_, ok := h.gaugeCache.Load("connections")
+	require.True(t, ok)
+
+	g1.Record(5)
+	g2.Record(3)
+	snap := scope.Snapshot()
+	require.EqualValues(t, 3, snap.Gauges()["test.connections+"].Value())
+}
+
+func BenchmarkWithTags_CacheHit(b *testing.B) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+	// Warm the cache.
+	h.WithTags(OperationTag("op1"))
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		h.WithTags(OperationTag("op1"))
+	}
+}
+
+func BenchmarkWithTags_ExcludedDedup(b *testing.B) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+	// Warm the cache with one excluded value.
+	h.WithTags(ActivityTypeTag("ActivityA"))
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		// Different raw value but normalizes to same key.
+		h.WithTags(ActivityTypeTag("ActivityB"))
+	}
+}
+
+func BenchmarkCounter_CacheHit(b *testing.B) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+	c := h.Counter("hits")
+	_ = c
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		h.Counter("hits").Record(1, OperationTag("op1"))
+	}
+}
+
+func TestWithTags_CacheHitAllocs(t *testing.T) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+	h.WithTags(OperationTag("op1"))
+
+	allocs := testing.AllocsPerRun(1000, func() {
+		h.WithTags(OperationTag("op1"))
+	})
+	// Cache hit still allocates for normalizeTagsForCaching key computation.
+	// Once we add the unsafe.String optimization, this should be 0.
+	require.LessOrEqual(t, allocs, float64(2),
+		"WithTags cache hit should have minimal allocations")
+}
+
+func TestWithTags_ExcludedDedupAllocs(t *testing.T) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+	h.WithTags(ActivityTypeTag("ActivityA"))
+
+	allocs := testing.AllocsPerRun(1000, func() {
+		h.WithTags(ActivityTypeTag("ActivityB"))
+	})
+	// Should hit the cache since ActivityB normalizes to same key as ActivityA.
+	require.LessOrEqual(t, allocs, float64(2),
+		"excluded tag dedup cache hit should have minimal allocations")
+}

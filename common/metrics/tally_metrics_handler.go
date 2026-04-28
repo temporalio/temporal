@@ -28,9 +28,14 @@ type (
 		scope          tally.Scope
 		perUnitBuckets map[MetricUnit]tally.Buckets
 		excludeTags    excludeTags
-		childCache     sync.Map // tagsCacheKey(tags) -> *tallyMetricsHandler
+		childCache     sync.Map // tagsCacheKey(normalized tags) -> *tallyMetricsHandler
+		childCacheSize atomic.Int64
 		scopeCache     sync.Map // tagsCacheKey(normalized tags) -> tally.Scope
 		scopeCacheSize atomic.Int64
+		counterCache   sync.Map // metric name -> CounterIface
+		gaugeCache     sync.Map // metric name -> GaugeIface
+		timerCache     sync.Map // metric name -> TimerIface
+		histogramCache sync.Map // metric name + unit -> HistogramIface
 	}
 )
 
@@ -74,12 +79,14 @@ func tagsCacheKey(tags []Tag) string {
 
 // WithTags creates a new MetricProvider with provided []Tag
 // Tags are merged with registered Tags from the source MetricsHandler.
-// Handlers are cached by tag combination so repeated calls avoid allocations.
+// Handlers are cached by normalized tag combination so that excluded tags
+// with different raw values share a single cache entry. The cache is bounded
+// to scopeCacheMaxSize entries.
 func (tmh *tallyMetricsHandler) WithTags(tags ...Tag) Handler {
 	if len(tags) == 0 {
 		return tmh
 	}
-	key := tagsCacheKey(tags)
+	key := tagsCacheKey(normalizeTagsForCaching(tags, tmh.excludeTags))
 	if v, ok := tmh.childCache.Load(key); ok {
 		return v.(*tallyMetricsHandler)
 	}
@@ -88,7 +95,13 @@ func (tmh *tallyMetricsHandler) WithTags(tags ...Tag) Handler {
 		perUnitBuckets: tmh.perUnitBuckets,
 		excludeTags:    tmh.excludeTags,
 	}
-	actual, _ := tmh.childCache.LoadOrStore(key, child)
+	if tmh.childCacheSize.Load() >= scopeCacheMaxSize {
+		return child
+	}
+	actual, loaded := tmh.childCache.LoadOrStore(key, child)
+	if !loaded {
+		tmh.childCacheSize.Add(1)
+	}
 	return actual.(*tallyMetricsHandler)
 }
 
@@ -149,30 +162,51 @@ func normalizeTagsForCaching(tags []Tag, excl excludeTags) []Tag {
 
 // Counter obtains a counter for the given name.
 func (tmh *tallyMetricsHandler) Counter(counter string) CounterIface {
-	return CounterFunc(func(i int64, t ...Tag) {
+	if v, ok := tmh.counterCache.Load(counter); ok {
+		return v.(CounterIface)
+	}
+	fn := CounterFunc(func(i int64, t ...Tag) {
 		tmh.cachedTaggedScope(t).Counter(counter).Inc(i)
 	})
+	actual, _ := tmh.counterCache.LoadOrStore(counter, fn)
+	return actual.(CounterIface)
 }
 
 // Gauge obtains a gauge for the given name.
 func (tmh *tallyMetricsHandler) Gauge(gauge string) GaugeIface {
-	return GaugeFunc(func(f float64, t ...Tag) {
+	if v, ok := tmh.gaugeCache.Load(gauge); ok {
+		return v.(GaugeIface)
+	}
+	fn := GaugeFunc(func(f float64, t ...Tag) {
 		tmh.cachedTaggedScope(t).Gauge(gauge).Update(f)
 	})
+	actual, _ := tmh.gaugeCache.LoadOrStore(gauge, fn)
+	return actual.(GaugeIface)
 }
 
 // Timer obtains a timer for the given name.
 func (tmh *tallyMetricsHandler) Timer(timer string) TimerIface {
-	return TimerFunc(func(d time.Duration, t ...Tag) {
+	if v, ok := tmh.timerCache.Load(timer); ok {
+		return v.(TimerIface)
+	}
+	fn := TimerFunc(func(d time.Duration, t ...Tag) {
 		tmh.cachedTaggedScope(t).Timer(timer).Record(d)
 	})
+	actual, _ := tmh.timerCache.LoadOrStore(timer, fn)
+	return actual.(TimerIface)
 }
 
 // Histogram obtains a histogram for the given name.
 func (tmh *tallyMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramIface {
-	return HistogramFunc(func(i int64, t ...Tag) {
+	key := histogram + "\x00" + string(unit)
+	if v, ok := tmh.histogramCache.Load(key); ok {
+		return v.(HistogramIface)
+	}
+	fn := HistogramFunc(func(i int64, t ...Tag) {
 		tmh.cachedTaggedScope(t).Histogram(histogram, tmh.perUnitBuckets[unit]).RecordValue(float64(i))
 	})
+	actual, _ := tmh.histogramCache.LoadOrStore(key, fn)
+	return actual.(HistogramIface)
 }
 
 func (*tallyMetricsHandler) Stop(log.Logger) {}
