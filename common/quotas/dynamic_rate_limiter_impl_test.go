@@ -25,7 +25,7 @@ func TestDynamicRateLimiterRateAndBurstRefreshAfterInterval(t *testing.T) {
 		rateBurst := quotas.NewMutableRateBurst(initialRate, initialBurst)
 		limiter := quotas.NewDynamicRateLimiter(rateBurst, refreshInterval)
 
-		require.Equal(t, initialRate, limiter.Rate())
+		require.InDelta(t, initialRate, limiter.Rate(), 1e-9)
 
 		rateBurst.SetRPS(updatedRate)
 		rateBurst.SetBurst(updatedBurst)
@@ -37,7 +37,7 @@ func TestDynamicRateLimiterRateAndBurstRefreshAfterInterval(t *testing.T) {
 		rateBurst.SetRPS(nextRate)
 		rateBurst.SetBurst(nextBurst)
 
-		require.Equal(t, updatedRate, limiter.Rate())
+		require.InDelta(t, updatedRate, limiter.Rate(), 1e-9)
 	})
 
 	t.Run("burst_refreshes_without_token_operation", func(t *testing.T) {
