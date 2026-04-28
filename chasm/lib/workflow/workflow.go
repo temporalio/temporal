@@ -13,6 +13,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
@@ -25,6 +26,9 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+// Compile-time assertion: *Workflow must implement activity.ActivityStore.
+var _ activity.ActivityStore = (*Workflow)(nil)
 
 type Workflow struct {
 	chasm.UnimplementedComponent
@@ -41,6 +45,9 @@ type Workflow struct {
 
 	// Operations map is used to store the Nexus operations for the workflow, keyed by scheduled event ID.
 	Operations chasm.Map[int64, *nexusoperation.Operation]
+
+	// Activities map stores embedded CHASM activity sub-components, keyed by scheduled event ID.
+	Activities chasm.Map[int64, *activity.Activity]
 }
 
 func NewWorkflow(
@@ -72,6 +79,38 @@ func (w *Workflow) Terminate(
 	_ chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
 	return chasm.TerminateComponentResponse{}, serviceerror.NewInternal("workflow root Terminate should not be called")
+}
+
+// RecordCompleted implements the ActivityStore interface. It is called by embedded Activity
+// sub-components when they reach a terminal state. It applies the activity's terminal mutation
+// (via applyFn) and then schedules a new workflow task so the workflow can react to the completion.
+func (w *Workflow) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error {
+	if err := applyFn(ctx); err != nil {
+		return err
+	}
+	// Schedule a new workflow task so the workflow can observe the completed activity.
+	// Note: if a WFT is already pending (e.g. the forced WFT from RespondWorkflowTaskCompleted),
+	// ScheduleWorkflowTask is a no-op — that pending WFT will see the buffered history events
+	// written by WriteActivityTaskCompletedHistoryEvent and schedule a follow-up WFT automatically.
+	return w.MSPointer.ScheduleWorkflowTask()
+}
+
+// WriteActivityTaskCompletedHistoryEvents implements the ActivityStore interface for
+// workflow-embedded activities. It writes both ActivityTaskStarted and ActivityTaskCompleted
+// history events in the same transaction so the history builder wires event IDs correctly.
+func (w *Workflow) WriteActivityTaskCompletedHistoryEvents(
+	scheduledEventID int64,
+	attempt int32,
+	startRequestID string,
+	startIdentity string,
+	startStamp *commonpb.WorkerVersionStamp,
+	identity string,
+	result *commonpb.Payloads,
+) error {
+	if err := w.MSPointer.WriteActivityTaskStartedHistoryEvent(scheduledEventID, attempt, startRequestID, startIdentity, startStamp); err != nil {
+		return err
+	}
+	return w.MSPointer.WriteActivityTaskCompletedHistoryEvent(scheduledEventID, 0, identity, result)
 }
 
 // AddCompletionCallbacks creates completion callbacks using the CHASM implementation.
@@ -125,6 +164,18 @@ func (w *Workflow) AddCompletionCallbacks(
 		w.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
 	}
 	return nil
+}
+
+// AddEmbeddedActivity adds a CHASM activity sub-component to the workflow, keyed by scheduled event ID.
+func (w *Workflow) AddEmbeddedActivity(
+	ctx chasm.MutableContext,
+	scheduledEventID int64,
+	act *activity.Activity,
+) {
+	if w.Activities == nil {
+		w.Activities = make(chasm.Map[int64, *activity.Activity])
+	}
+	w.Activities[scheduledEventID] = chasm.NewComponentField(ctx, act)
 }
 
 // AddNexusOperation adds a Nexus operation component to the workflow.

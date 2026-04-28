@@ -148,6 +148,21 @@ func (mr *MockMutableStateMockRecorder) AddActivityTaskScheduledEvent(arg0, arg1
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddActivityTaskScheduledEvent", reflect.TypeOf((*MockMutableState)(nil).AddActivityTaskScheduledEvent), arg0, arg1, arg2)
 }
 
+// AddActivityTaskScheduledEventCHASM mocks base method.
+func (m *MockMutableState) AddActivityTaskScheduledEventCHASM(arg0 int64, arg1 *command.ScheduleActivityTaskCommandAttributes) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddActivityTaskScheduledEventCHASM", arg0, arg1)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddActivityTaskScheduledEventCHASM indicates an expected call of AddActivityTaskScheduledEventCHASM.
+func (mr *MockMutableStateMockRecorder) AddActivityTaskScheduledEventCHASM(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddActivityTaskScheduledEventCHASM", reflect.TypeOf((*MockMutableState)(nil).AddActivityTaskScheduledEventCHASM), arg0, arg1)
+}
+
 // AddActivityTaskStartedEvent mocks base method.
 func (m *MockMutableState) AddActivityTaskStartedEvent(arg0 *persistence.ActivityInfo, arg1 int64, arg2, arg3 string, arg4 *common.WorkerVersionStamp, arg5 *deployment.Deployment, arg6 *taskqueue0.BuildIdRedirectInfo, arg7 string) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()

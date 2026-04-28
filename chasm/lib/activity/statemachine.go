@@ -190,6 +190,10 @@ var TransitionCompleted = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 	func(a *Activity, ctx chasm.MutableContext, event completeEvent) error {
+		// Resolve the scheduled event ID before calling RecordCompleted so that
+		// WriteActivityTaskCompletedHistoryEvents has access to it.
+		a.resolveScheduledEventID(ctx)
+
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			req := event.req.GetCompleteRequest()
 
@@ -204,6 +208,23 @@ var TransitionCompleted = chasm.NewTransition(
 			}
 
 			a.emitOnCompletedMetrics(ctx, event.metricsHandler)
+
+			// For workflow-embedded activities, write ActivityTaskStarted + ActivityTaskCompleted
+			// history events in the same transaction so the history builder can wire the event IDs.
+			if a.ScheduledEventID != 0 {
+				startAttempt := a.LastAttempt.Get(ctx)
+				if err := a.StoreOrSelf(ctx).WriteActivityTaskCompletedHistoryEvents(
+					a.ScheduledEventID,
+					startAttempt.GetCount(),
+					startAttempt.GetStartRequestId(),
+					startAttempt.GetLastWorkerIdentity(),
+					nil, // stamp: not needed for hello-world prototype
+					req.GetIdentity(),
+					req.GetResult(),
+				); err != nil {
+					return err
+				}
+			}
 
 			return nil
 		})

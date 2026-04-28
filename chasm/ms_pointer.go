@@ -3,6 +3,7 @@ package chasm
 import (
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -46,4 +47,34 @@ func (m MSPointer) LoadHistoryEvent(ctx Context, token []byte) (*historypb.Histo
 // GetNexusCompletion retrieves the Nexus operation completion data for the given request ID from the underlying mutable state.
 func (m MSPointer) GetNexusCompletion(ctx Context, requestID string) (nexusrpc.CompleteOperationOptions, error) {
 	return m.backend.GetNexusCompletion(ctx.goContext(), requestID)
+}
+
+// ScheduleWorkflowTask schedules a new workflow task if one is not already pending.
+// This is called by embedded activity components when they complete, to resume the workflow.
+func (m MSPointer) ScheduleWorkflowTask() error {
+	return m.backend.ScheduleWorkflowTask()
+}
+
+// WriteActivityTaskStartedHistoryEvent writes an ActivityTaskStarted history event for a
+// workflow-embedded CHASM activity (buffered — the event ID is assigned during flush).
+func (m MSPointer) WriteActivityTaskStartedHistoryEvent(
+	scheduledEventID int64,
+	attempt int32,
+	requestID string,
+	identity string,
+	stamp *commonpb.WorkerVersionStamp,
+) error {
+	return m.backend.WriteActivityTaskStartedHistoryEvent(scheduledEventID, attempt, requestID, identity, stamp)
+}
+
+// WriteActivityTaskCompletedHistoryEvent writes an ActivityTaskCompleted history event for a
+// workflow-embedded CHASM activity. Pass startedEventID=0 when both started and completed events
+// are written in the same transaction — the history builder wires the event ID automatically.
+func (m MSPointer) WriteActivityTaskCompletedHistoryEvent(
+	scheduledEventID int64,
+	startedEventID int64,
+	identity string,
+	result *commonpb.Payloads,
+) error {
+	return m.backend.WriteActivityTaskCompletedHistoryEvent(scheduledEventID, startedEventID, identity, result)
 }

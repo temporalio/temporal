@@ -51,6 +51,9 @@ type (
 		AddActivityTaskCompletedEvent(int64, int64, *workflowservice.RespondActivityTaskCompletedRequest) (*historypb.HistoryEvent, error)
 		AddActivityTaskFailedEvent(int64, int64, *failurepb.Failure, enumspb.RetryState, string, *commonpb.WorkerVersionStamp) (*historypb.HistoryEvent, error)
 		AddActivityTaskScheduledEvent(int64, *commandpb.ScheduleActivityTaskCommandAttributes, bool) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error)
+		// AddActivityTaskScheduledEventCHASM schedules an activity via the CHASM framework.
+		// Returns the scheduled event ID. See mutable_state_impl.go for details.
+		AddActivityTaskScheduledEventCHASM(int64, *commandpb.ScheduleActivityTaskCommandAttributes) (int64, error)
 		AddActivityTaskStartedEvent(
 			*persistencespb.ActivityInfo,
 			int64,

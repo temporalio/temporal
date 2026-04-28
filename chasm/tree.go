@@ -220,6 +220,27 @@ type (
 			requestID string,
 		) (nexusrpc.CompleteOperationOptions, error)
 		EndpointRegistry() EndpointRegistry
+		// ScheduleWorkflowTask schedules a new workflow task if one is not already pending.
+		// This is called by embedded activity components when they complete, to resume the workflow.
+		ScheduleWorkflowTask() error
+		// WriteActivityTaskStartedHistoryEvent writes an ActivityTaskStarted history event for a
+		// workflow-embedded CHASM activity (buffered — the event ID is assigned during flush).
+		WriteActivityTaskStartedHistoryEvent(
+			scheduledEventID int64,
+			attempt int32,
+			requestID string,
+			identity string,
+			stamp *commonpb.WorkerVersionStamp,
+		) error
+		// WriteActivityTaskCompletedHistoryEvent writes an ActivityTaskCompleted history event for a
+		// workflow-embedded CHASM activity. Pass startedEventID=0 when both started and completed
+		// events are written in the same transaction — the history builder wires the IDs automatically.
+		WriteActivityTaskCompletedHistoryEvent(
+			scheduledEventID int64,
+			startedEventID int64,
+			identity string,
+			result *commonpb.Payloads,
+		) error
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.

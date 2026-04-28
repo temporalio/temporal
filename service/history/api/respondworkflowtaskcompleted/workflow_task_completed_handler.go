@@ -542,6 +542,22 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 		eagerStartActivity = false
 	}
 
+	// Branch: use CHASM activity scheduling if CHASM is enabled for this workflow.
+	// CHASM activities live in the chasmTree as sub-components; no legacy ActivityInfo is created.
+	if handler.mutableState.ChasmEnabled() {
+		scheduledEventID, err := handler.mutableState.AddActivityTaskScheduledEventCHASM(
+			handler.workflowTaskCompletedID,
+			attr,
+		)
+		if err != nil {
+			return nil, nil, handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_SCHEDULE_ACTIVITY_DUPLICATE_ID, err)
+		}
+		// TODO(activity-chasm): support eager activity execution for CHASM-scheduled activities.
+		// For now, return a synthetic event with only EventId set (enough for the SDK to correlate).
+		syntheticEvent := &historypb.HistoryEvent{EventId: scheduledEventID}
+		return syntheticEvent, &handleCommandResponse{}, nil
+	}
+
 	event, _, err := handler.mutableState.AddActivityTaskScheduledEvent(
 		handler.workflowTaskCompletedID,
 		attr,

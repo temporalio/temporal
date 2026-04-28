@@ -35,6 +35,8 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	chasmactivity "go.temporal.io/server/chasm/lib/activity"
+	activitypb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
@@ -3294,6 +3296,61 @@ func (ms *MutableStateImpl) AddWorkflowTaskScheduledEvent(
 	return ms.workflowTaskManager.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, workflowTaskType)
 }
 
+// ScheduleWorkflowTask implements chasm.NodeBackend. It schedules a new normal workflow task if
+// one is not already pending, and the workflow is running and not paused. This is called by
+// embedded CHASM activity sub-components when they reach a terminal state.
+func (ms *MutableStateImpl) ScheduleWorkflowTask() error {
+	return ScheduleWorkflowTask(ms)
+}
+
+// WriteActivityTaskStartedHistoryEvent implements chasm.NodeBackend. It writes an
+// ActivityTaskStarted history event for a workflow-embedded CHASM activity.
+// The event is buffered — the real event ID is assigned during FlushBufferToCurrentBatch.
+// Both started and completed events must be written in the same transaction so that
+// the history builder can wire the started event ID into the completed event automatically.
+func (ms *MutableStateImpl) WriteActivityTaskStartedHistoryEvent(
+	scheduledEventID int64,
+	attempt int32,
+	requestID string,
+	identity string,
+	stamp *commonpb.WorkerVersionStamp,
+) error {
+	if err := ms.checkMutability(tag.WorkflowActionActivityTaskStarted); err != nil {
+		return err
+	}
+	ms.hBuilder.AddActivityTaskStartedEvent(
+		scheduledEventID,
+		attempt,
+		requestID,
+		identity,
+		nil, // lastFailure: nil for CHASM path (no legacy retry tracking)
+		stamp,
+		0, // redirectCounter: not used for CHASM activities
+	)
+	return nil
+}
+
+// WriteActivityTaskCompletedHistoryEvent implements chasm.NodeBackend. It writes an
+// ActivityTaskCompleted history event for a workflow-embedded CHASM activity.
+func (ms *MutableStateImpl) WriteActivityTaskCompletedHistoryEvent(
+	scheduledEventID int64,
+	startedEventID int64,
+	identity string,
+	result *commonpb.Payloads,
+) error {
+	if err := ms.checkMutability(tag.WorkflowActionActivityTaskCompleted); err != nil {
+		return err
+	}
+	ms.hBuilder.AddActivityTaskCompletedEvent(
+		scheduledEventID,
+		startedEventID,
+		identity,
+		result,
+		ms.namespaceEntry.Name(),
+	)
+	return nil
+}
+
 // AddWorkflowTaskScheduledEventAsHeartbeat is to record the first WorkflowTaskScheduledEvent during workflow task heartbeat.
 func (ms *MutableStateImpl) AddWorkflowTaskScheduledEventAsHeartbeat(
 	bypassTaskGeneration bool,
@@ -4148,6 +4205,71 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 	}
 
 	return event, ai, err
+}
+
+// AddActivityTaskScheduledEventCHASM schedules an activity via the CHASM framework instead of the
+// legacy ActivityInfo map. It:
+//  1. Writes an ActivityTaskScheduled history event (for workflow history continuity)
+//  2. Creates an Activity sub-component in the CHASM tree parented to the workflow
+//  3. Calls TransitionScheduled to generate ActivityDispatchTask and timeout pure tasks
+//
+// Returns the scheduled event ID. No legacy ActivityInfo entry is created.
+func (ms *MutableStateImpl) AddActivityTaskScheduledEventCHASM(
+	workflowTaskCompletedEventID int64,
+	command *commandpb.ScheduleActivityTaskCommandAttributes,
+) (int64, error) {
+	opTag := tag.WorkflowActionActivityTaskScheduled
+	if err := ms.checkMutability(opTag); err != nil {
+		return 0, err
+	}
+
+	// 1. Write history event — CHASM activities still appear in workflow history.
+	event := ms.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command, ms.namespaceEntry.Name())
+	ms.writeEventToCache(event)
+	scheduledEventID := event.GetEventId()
+
+	// 2. Get/ensure the CHASM workflow component — we need chasmCtx before building the activity.
+	wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return 0, err
+	}
+
+	// 3. Build the Activity sub-component state from the schedule command.
+	// ScheduleTime is set before TransitionScheduled so the timeout deadlines are correct.
+	act := &chasmactivity.Activity{
+		ActivityState: &activitypb.ActivityState{
+			ActivityType:           command.GetActivityType(),
+			TaskQueue:              command.GetTaskQueue(),
+			ScheduleToCloseTimeout: command.GetScheduleToCloseTimeout(),
+			ScheduleToStartTimeout: command.GetScheduleToStartTimeout(),
+			StartToCloseTimeout:    command.GetStartToCloseTimeout(),
+			HeartbeatTimeout:       command.GetHeartbeatTimeout(),
+			RetryPolicy:            command.GetRetryPolicy(),
+			Priority:               command.GetPriority(),
+			ScheduleTime:           timestamppb.New(ms.timeSource.Now()),
+		},
+		LastAttempt: chasm.NewDataField(chasmCtx, &activitypb.ActivityAttemptState{}),
+		Outcome:     chasm.NewDataField(chasmCtx, &activitypb.ActivityOutcome{}),
+		RequestData: chasm.NewDataField(chasmCtx, &activitypb.ActivityRequestData{
+			Input:  command.GetInput(),
+			Header: command.GetHeader(),
+		}),
+	}
+
+	// 4. Set the ScheduledEventID so the activity can write history events later.
+	act.ScheduledEventID = scheduledEventID
+
+	// 5. Call TransitionScheduled first (generates ActivityDispatchTask and timeout pure tasks),
+	// following the same pattern as nexus operations where the transition is applied before
+	// the component is added to the parent's map field.
+	if err := chasmactivity.TransitionScheduled.Apply(act, chasmCtx, nil); err != nil {
+		return 0, err
+	}
+
+	// 6. Add to the workflow's Activities map — this registers it in the CHASM tree.
+	wf.AddEmbeddedActivity(chasmCtx, scheduledEventID, act)
+
+	return scheduledEventID, nil
 }
 
 func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(

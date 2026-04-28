@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -17,6 +18,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
@@ -53,6 +55,22 @@ var _ callback.CompletionSource = (*Activity)(nil)
 type ActivityStore interface {
 	// RecordCompleted applies the provided function to record activity completion
 	RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error
+	// WriteActivityTaskCompletedHistoryEvents writes both an ActivityTaskStarted and an
+	// ActivityTaskCompleted history event for a workflow-embedded CHASM activity in a single
+	// transaction, so that the history builder can wire up the started event ID automatically.
+	// scheduledEventID is the event ID of the corresponding ActivityTaskScheduled event.
+	// attempt, startRequestID, startIdentity, startStamp describe the started attempt.
+	// identity and result describe the completion.
+	// For standalone activities (where Activity itself is the store), this is a no-op.
+	WriteActivityTaskCompletedHistoryEvents(
+		scheduledEventID int64,
+		attempt int32,
+		startRequestID string,
+		startIdentity string,
+		startStamp *commonpb.WorkerVersionStamp,
+		identity string,
+		result *commonpb.Payloads,
+	) error
 }
 
 // Activity component represents an activity execution persistence object and can be either standalone activity or one
@@ -77,6 +95,11 @@ type Activity struct {
 	// Callbacks holds completion callbacks to be invoked when this standalone activity reaches a terminal state. Nil
 	// for workflow-embedded activities as the workflow handles its own callbacks.
 	Callbacks chasm.Map[string, *callback.Callback]
+
+	// ScheduledEventID is the workflow history event ID of the ActivityTaskScheduled event.
+	// Only set for workflow-embedded activities (Store != nil). Not persisted by CHASM — resolved
+	// lazily from the component ref path (the map key in the parent Workflow.Activities map).
+	ScheduledEventID int64
 }
 
 // WithToken wraps a request with its deserialized task token.
@@ -284,6 +307,12 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx ch
 		return err
 	}
 	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
+}
+
+// WriteActivityTaskCompletedHistoryEvents is a no-op for standalone activities.
+// Standalone activities do not write workflow history events.
+func (a *Activity) WriteActivityTaskCompletedHistoryEvents(_ int64, _ int32, _ string, _ string, _ *commonpb.WorkerVersionStamp, _ string, _ *commonpb.Payloads) error {
+	return nil
 }
 
 func (a *Activity) addCompletionCallbacks(
@@ -987,6 +1016,38 @@ func (a *Activity) StoreOrSelf(ctx chasm.Context) ActivityStore {
 		return store
 	}
 	return a
+}
+
+// resolveScheduledEventID populates a.ScheduledEventID from the component ref path if it is 0.
+// For embedded workflow activities the scheduled event ID is the map key in Workflow.Activities,
+// which is encoded as the last segment of the component path in the serialized component ref.
+// This is a no-op for standalone activities (ScheduledEventID stays 0).
+func (a *Activity) resolveScheduledEventID(ctx chasm.Context) {
+	if a.ScheduledEventID != 0 {
+		return // already set (e.g. during the creation transaction)
+	}
+	// Only attempt resolution for embedded activities (Store is set).
+	if _, ok := a.Store.TryGet(ctx); !ok {
+		return
+	}
+	refBytes, err := ctx.Ref(a)
+	if err != nil || len(refBytes) == 0 {
+		return
+	}
+	var pRef persistencespb.ChasmComponentRef
+	if err := pRef.Unmarshal(refBytes); err != nil {
+		return
+	}
+	path := pRef.GetComponentPath()
+	if len(path) == 0 {
+		return
+	}
+	// The last path segment is the string-encoded map key (int64 scheduledEventID).
+	id, err := strconv.ParseInt(path[len(path)-1], 10, 64)
+	if err != nil {
+		return
+	}
+	a.ScheduledEventID = id
 }
 
 // validateActivityTaskToken validates a task token against the current activity state.
