@@ -736,7 +736,7 @@ var (
 		WithDescription("The number of Nexus requests for which pre-processing failed."),
 	)
 	NexusRequestErrors = NewCounterDef(
-		"nexus_request_error_count",
+		"nexus_request_error",
 		WithDescription("The number of Nexus requests that resulted in errors."),
 	)
 	NexusLatency = NewTimerDef(
