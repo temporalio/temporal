@@ -644,7 +644,7 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		}
 	}
 
-	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityPausedScope)
+	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityUpdateOptionsScope)
 	if err != nil {
 		return nil, err
 	}
@@ -924,7 +924,7 @@ func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
 	a.emitOnResetMetrics(event.handler)
 }
 
-// reset the activity execution.
+// handleReset handles the activity execution reset.
 // For SCHEDULED/PAUSED activities: immediately re-dispatches at attempt 1.
 // For STARTED/CANCEL_REQUESTED activities: defers the reset to the next retry via the ActivityReset flag.
 func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetActivityExecutionRequest) (*activitypb.ResetActivityExecutionResponse, error) {
@@ -966,6 +966,7 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 			// blocked by the validator (which drops dispatch tasks when PauseState != nil).
 			a.PauseState = nil
 		}
+		a.emitOnResetMetrics(metricsHandler)
 		return &activitypb.ResetActivityExecutionResponse{}, nil
 
 	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
@@ -1574,25 +1575,25 @@ func (a *Activity) emitOnTimedOutMetrics(
 func (a *Activity) emitOnPausedMetrics(
 	handler metrics.Handler,
 ) {
-	metrics.ActivityPause.With(handler.WithTags(metrics.WorkflowTypeTag(WorkflowTypeTag))).Record(1)
+	metrics.ActivityPause.With(handler).Record(1)
 }
 
 func (a *Activity) emitOnUpdateOptionsMetrics(
 	handler metrics.Handler,
 ) {
-	metrics.ActivityUpdateOptions.With(handler.WithTags(metrics.WorkflowTypeTag(WorkflowTypeTag))).Record(1)
+	metrics.ActivityUpdateOptions.With(handler).Record(1)
 }
 
 func (a *Activity) emitOnUnpausedMetrics(
 	handler metrics.Handler,
 ) {
-	metrics.ActivityUnpause.With(handler.WithTags(metrics.WorkflowTypeTag(WorkflowTypeTag))).Record(1)
+	metrics.ActivityUnpause.With(handler).Record(1)
 }
 
 func (a *Activity) emitOnResetMetrics(
 	handler metrics.Handler,
 ) {
-	metrics.ActivityReset.With(handler.WithTags(metrics.WorkflowTypeTag(WorkflowTypeTag))).Record(1)
+	metrics.ActivityReset.With(handler).Record(1)
 }
 
 // SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface.

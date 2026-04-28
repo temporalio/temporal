@@ -352,6 +352,8 @@ const (
 	ActivityUnpausedScope = "ActivityUnpaused"
 	// ActivityResetScope tracks ResetActivityExecution API calls received by service
 	ActivityResetScope = "ActivityReset"
+	// ActivityUpdateOptionsScope tracks UpdateActivityExecutionOptions API calls received by service
+	ActivityUpdateOptionsScope = "ActivityUpdateOptions"
 	// HistoryGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
 	HistoryGetWorkflowExecutionHistoryScope = "GetWorkflowExecutionHistory"
 	// HistoryPollWorkflowExecutionHistoryScope is the metric scope for long poll case of frontend.GetWorkflowExecutionHistory
