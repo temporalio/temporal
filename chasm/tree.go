@@ -1768,7 +1768,8 @@ func (n *Node) closeTransactionSerializeNodes() error {
 		skipIfClean := node.shouldSkipIfClean() &&
 			node.initialStatePersisted &&
 			len(node.newTasks[node.value]) == 0 &&
-			!node.hasDeletedDescendants(encodedPath)
+			!node.hasDeletedDescendants(encodedPath) &&
+			!node.terminated
 		if skipIfClean {
 			prevData = node.serializedNode.Data
 			cloned, ok := proto.Clone(
