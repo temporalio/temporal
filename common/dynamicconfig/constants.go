@@ -2861,6 +2861,12 @@ first (with fallback to V1), excluding CreateSchedule.`,
 to the CHASM (V2) implementation on active scheduler workflows.`,
 	)
 
+	EnableCHASMSchedulerSentinels = NewNamespaceBoolSetting(
+		"history.enableCHASMSchedulerSentinels",
+		false,
+		`EnableCHASMSchedulerSentinels enables ID-space collision sentinels, and must be enabled and propagated in advance of EnableCHASMSchedulerCreation.`,
+	)
+
 	EnableCHASMCallbacks = NewNamespaceBoolSetting(
 		"history.enableCHASMCallbacks",
 		false,
