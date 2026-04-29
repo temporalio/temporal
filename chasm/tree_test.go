@@ -1668,7 +1668,7 @@ func (s *nodeSuite) TestValidateAccess() {
 			}
 
 			// Validation begins on the target node, checking ancestors only.
-			err = node.validateAccess(ctx)
+			err = node.validateAccess(ctx, false)
 			if tc.valid {
 				s.NoError(err)
 			} else {
@@ -2516,7 +2516,7 @@ func (s *nodeSuite) TestCloseTransaction_PausedStateInvalidatesTasks() {
 		// validateAccess should still succeed — paused does NOT block writes.
 		subNode, ok := root.findNode([]string{"SubComponent1"})
 		s.True(ok)
-		err = subNode.validateAccess(ctx)
+		err = subNode.validateAccess(ctx, false)
 		s.NoError(err, "write access to sub-component of paused parent should be accepted")
 	})
 }
@@ -2649,7 +2649,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	s.Len(rootAttr.SideEffectTasks, 1) // Only one valid side effect task.
 	newSideEffectTask := rootAttr.SideEffectTasks[0]
 	newSideEffectTask.Data = nil // This is tested by TestSerializeTask()
-	s.Equal(&persistencespb.ChasmComponentAttributes_Task{
+	s.ProtoEqual(&persistencespb.ChasmComponentAttributes_Task{
 		TypeId:                    testSideEffectTaskTypeID,
 		ScheduledTime:             timestamppb.New(time.Time{}),
 		VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
@@ -2665,12 +2665,14 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		TypeId:                                 testSideEffectTaskTypeID,
 		Data:                                   chasmTask.Info.GetData(), // This is tested by TestSerializeTask()
 		ArchetypeId:                            testComponentTypeID,
+		TaskVersionedTransition:                &persistencespb.VersionedTransition{TransitionCount: 2},
+		TaskVersionedTransitionOffset:          1,
 	}, chasmTask.Info)
 
 	s.Len(rootAttr.PureTasks, 1) // Only one valid side effect task.
 	newPureTask := rootAttr.PureTasks[0]
 	newPureTask.Data = nil // This is tested by TestSerializeTask()
-	s.Equal(&persistencespb.ChasmComponentAttributes_Task{
+	s.ProtoEqual(&persistencespb.ChasmComponentAttributes_Task{
 		TypeId:                    testPureTaskTypeID,
 		ScheduledTime:             timestamppb.New(s.timeSource.Now()),
 		VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
@@ -2685,7 +2687,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	subComponent2Attr := mutation.UpdatedNodes["SubComponent2"].GetMetadata().GetComponentAttributes()
 	newOutboundSideEffectTask := subComponent2Attr.SideEffectTasks[0]
 	newOutboundSideEffectTask.Data = nil // This is tested by TestSerializeTask()
-	s.Equal(&persistencespb.ChasmComponentAttributes_Task{
+	s.ProtoEqual(&persistencespb.ChasmComponentAttributes_Task{
 		TypeId:                    testOutboundSideEffectTaskTypeID,
 		Destination:               "destination",
 		ScheduledTime:             timestamppb.New(time.Time{}),
@@ -2702,6 +2704,8 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		TypeId:                                 testOutboundSideEffectTaskTypeID,
 		Data:                                   chasmTask.Info.GetData(), // This is tested by TestSerializeTask()
 		ArchetypeId:                            testComponentTypeID,
+		TaskVersionedTransition:                &persistencespb.VersionedTransition{TransitionCount: 2},
+		TaskVersionedTransitionOffset:          3,
 	}, chasmTask.Info)
 }
 

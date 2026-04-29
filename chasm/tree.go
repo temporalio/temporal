@@ -439,7 +439,7 @@ func (n *Node) Component(
 			fmt.Errorf("%s", reflect.TypeOf(node.value).String()))
 	}
 
-	if err := node.validateAccess(validationContext); err != nil {
+	if err := node.validateAccess(validationContext, false); err != nil {
 		return nil, err
 	}
 
@@ -462,7 +462,14 @@ func (n *Node) Component(
 // all of a node's ancestors are still in a running state, and can accept writes. In
 // the case of a newly created node, a detached node, or an OperationIntentObserve
 // intent, the check is skipped.
-func (n *Node) validateAccess(ctx Context) error {
+//
+// When checkPaused is true (used during task validation), the check is extended to
+// also treat a paused lifecycle state as a blocking condition — for both ancestors
+// and the node itself. This collapses the paused-subtree traversal into the same
+// single pass, avoiding a second tree walk.
+// Note: engine mutations on paused components are still accepted (checkPaused=false),
+// per the current requirement.
+func (n *Node) validateAccess(ctx Context, checkPaused bool) error {
 	intent := operationIntentFromContext(ctx.goContext())
 	if intent != OperationIntentProgress {
 		// Read-only operations are always allowed.
@@ -470,20 +477,38 @@ func (n *Node) validateAccess(ctx Context) error {
 	}
 
 	// Detached nodes skip ancestor validation entirely.
-	if n.isDetached() || n.parent == nil {
+	if n.isDetached() {
 		return nil
 	}
 
-	return n.parent.validateAccessHelper(ctx)
+	if n.parent != nil {
+		if err := n.parent.validateAccessHelper(ctx, checkPaused); err != nil {
+			return err
+		}
+	}
+
+	// validateAccessHelper traverses ancestors but never checks n itself.
+	// For task validation we must also check whether n is paused.
+	if checkPaused && n.isComponent() {
+		if err := n.prepareComponentValue(ctx); err != nil {
+			return err
+		}
+		componentValue, _ := n.value.(Component) //nolint:revive // unchecked-type-assertion
+		if componentValue.LifecycleState(ctx).IsPaused() {
+			return errAccessCheckFailed
+		}
+	}
+
+	return nil
 }
 
 // validateAccessHelper is a helper method that validates both the current
 // node's lifecycle state AND its ancestors recursively.
 // Do not call this method directly, call validateAccess instead.
-func (n *Node) validateAccessHelper(ctx Context) error {
+func (n *Node) validateAccessHelper(ctx Context, checkPaused bool) error {
 	// Check ancestors first (if not detached).
 	if !n.isDetached() && n.parent != nil {
-		if err := n.parent.validateAccessHelper(ctx); err != nil {
+		if err := n.parent.validateAccessHelper(ctx, checkPaused); err != nil {
 			return err
 		}
 	}
@@ -499,7 +524,12 @@ func (n *Node) validateAccessHelper(ctx Context) error {
 	}
 	componentValue, _ := n.value.(Component) //nolint:revive // unchecked-type-assertion
 
-	if componentValue.LifecycleState(ctx).IsClosed() {
+	lifecycleState := componentValue.LifecycleState(ctx)
+	if lifecycleState.IsClosed() {
+		return errAccessCheckFailed
+	}
+
+	if checkPaused && lifecycleState.IsPaused() {
 		return errAccessCheckFailed
 	}
 
@@ -1850,21 +1880,13 @@ func (n *Node) validateTask(
 			fmt.Errorf("%s", reflect.TypeOf(taskInstance).Name()))
 	}
 
-	if err := n.validateAccess(validateContext); err != nil {
+	// checkPaused=true: a single ancestor walk invalidates tasks for both
+	// closed ancestors and paused components (self or non-detached ancestor).
+	if err := n.validateAccess(validateContext, true); err != nil {
 		if errors.Is(err, errAccessCheckFailed) {
 			return false, nil
 		}
 		return false, err
-	}
-
-	// Paused components (and their non-detached sub-components) have all tasks invalidated.
-	// Component authors must re-emit tasks when transitioning back to running.
-	paused, err := n.isInPausedSubtree(validateContext)
-	if err != nil {
-		return false, err
-	}
-	if paused {
-		return false, nil
 	}
 
 	defer log.CapturePanic(n.logger, &retErr)
@@ -1876,60 +1898,6 @@ func (n *Node) validateTask(
 		taskInstance,
 		n.registry,
 	)
-}
-
-// isInPausedSubtree returns true if this component node or any non-detached ancestor
-// component is in the paused lifecycle state. Detached nodes do not inherit pause
-// from their ancestors, matching the access-rule boundary semantics.
-func (n *Node) isInPausedSubtree(ctx Context) (bool, error) {
-	if n.isDetached() {
-		// Detached nodes are isolated from ancestor pause state.
-		return false, nil
-	}
-
-	// Check non-detached ancestors first.
-	if n.parent != nil {
-		if paused, err := n.parent.isInPausedSubtreeHelper(ctx); err != nil || paused {
-			return paused, err
-		}
-	}
-
-	// Check this node itself.
-	if !n.isComponent() {
-		return false, nil
-	}
-	if err := n.prepareComponentValue(ctx); err != nil {
-		return false, err
-	}
-	comp, ok := n.value.(Component) //nolint:revive // unchecked-type-assertion
-	if !ok {
-		return false, nil
-	}
-	return comp.LifecycleState(ctx).IsPaused(), nil
-}
-
-// isInPausedSubtreeHelper is the recursive ancestor-traversal helper for isInPausedSubtree.
-// It checks whether this node (if a component) or any of its non-detached ancestors is paused,
-// stopping the traversal at detached-component boundaries.
-func (n *Node) isInPausedSubtreeHelper(ctx Context) (bool, error) {
-	// Traverse ancestors first, stopping at detached boundaries.
-	if !n.isDetached() && n.parent != nil {
-		if paused, err := n.parent.isInPausedSubtreeHelper(ctx); err != nil || paused {
-			return paused, err
-		}
-	}
-
-	if !n.isComponent() {
-		return false, nil
-	}
-	if err := n.prepareComponentValue(ctx); err != nil {
-		return false, err
-	}
-	comp, ok := n.value.(Component) //nolint:revive // unchecked-type-assertion
-	if !ok {
-		return false, nil
-	}
-	return comp.LifecycleState(ctx).IsPaused(), nil
 }
 
 func (n *Node) closeTransactionCleanupInvalidTasks(
@@ -2067,6 +2035,8 @@ func (n *Node) closeTransactionGeneratePhysicalSideEffectTask(
 			TypeId:                                 sideEffectTask.TypeId,
 			Data:                                   sideEffectTask.Data,
 			ArchetypeId:                            archetypeID,
+			TaskVersionedTransition:                sideEffectTask.VersionedTransition,
+			TaskVersionedTransitionOffset:          sideEffectTask.VersionedTransitionOffset,
 		},
 	})
 	sideEffectTask.PhysicalTaskStatus = physicalTaskStatusCreated
@@ -3193,6 +3163,30 @@ func (n *Node) ValidateSideEffectTask(
 		return false, nil
 	}
 
+	// Verify the logical task this physical task was generated from still exists,
+	// and capture it so we can use its Data pointer for the deserialization cache.
+	//
+	// A logical task can be dropped mid-flight (e.g. component paused then unpaused)
+	// without the physical task being cancelled. Checking existence here prevents
+	// stale physical tasks from executing after their logical counterpart is gone.
+	//
+	// TaskVersionedTransition is unset on physical tasks created before this field
+	// was added; skip the check in that case to preserve backward compatibility.
+	var logicalTask *persistencespb.ChasmComponentAttributes_Task
+	if taskInfo.TaskVersionedTransition != nil {
+		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
+		for _, t := range componentAttr.GetSideEffectTasks() {
+			if transitionhistory.Compare(t.VersionedTransition, taskInfo.TaskVersionedTransition) == 0 &&
+				t.VersionedTransitionOffset == taskInfo.TaskVersionedTransitionOffset {
+				logicalTask = t
+				break
+			}
+		}
+		if logicalTask == nil {
+			return false, nil
+		}
+	}
+
 	// Component must be hydrated before the task's validator is called.
 	validateCtx := NewContext(newContextWithOperationIntent(ctx, OperationIntentProgress), n)
 	if err := node.prepareComponentValue(validateCtx); err != nil {
@@ -3210,10 +3204,17 @@ func (n *Node) ValidateSideEffectTask(
 	}()
 
 	if !chasmTask.DeserializedTask.IsValid() {
-		// TODO: Change physical side effect task to reference logical task and
-		// then use deserializeTaskWithCache as well.
 		var err error
-		chasmTask.DeserializedTask, err = deserializeTask(registrableTask, taskInfo.Data)
+		if logicalTask != nil {
+			// Use the logical task's Data pointer so deserialization shares the
+			// node's taskValueCache with closeTransactionCleanupInvalidTasks.
+			// The physical task's taskInfo.Data is a different pointer (freshly
+			// allocated from the physical task row) and would always miss the cache.
+			chasmTask.DeserializedTask, err = node.deserializeTaskWithCache(registrableTask, logicalTask.Data)
+		} else {
+			// Backward compatibility: physical task predates TaskVersionedTransition.
+			chasmTask.DeserializedTask, err = deserializeTask(registrableTask, taskInfo.Data)
+		}
 		if err != nil {
 			return false, err
 		}
