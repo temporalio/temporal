@@ -1348,9 +1348,9 @@ type capturingTaskMatchHook struct {
 }
 
 type capturedTaskMatchDetails struct {
-	TaskQueueName    string
-	TaskQueueType    enumspb.TaskQueueType
-	SyncMatchOutcome hooks.SyncMatchOutcome
+	TaskQueueName     string
+	TaskQueueType     enumspb.TaskQueueType
+	SyncMatchOutcome  hooks.SyncMatchOutcome
 	DeploymentVersion *deploymentpb.WorkerDeploymentVersion
 }
 
@@ -1370,8 +1370,8 @@ func (h *capturingTaskMatchHook) ProcessTaskAdd(ctx context.Context, event *hook
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	details := capturedTaskMatchDetails{
-		TaskQueueName: h.taskQueueName,
-		TaskQueueType: h.taskQueueType,
+		TaskQueueName:    h.taskQueueName,
+		TaskQueueType:    h.taskQueueType,
 		SyncMatchOutcome: event.SyncMatchOutcome,
 	}
 	if event.DeploymentVersion != nil {
