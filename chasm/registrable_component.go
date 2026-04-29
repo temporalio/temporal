@@ -19,10 +19,9 @@ type (
 		componentID uint32
 		fqn         string
 
-		ephemeral                bool
-		singleCluster            bool
-		detached                 bool
-		nondeterministicEncoding bool
+		ephemeral     bool
+		singleCluster bool
+		detached      bool
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 
@@ -73,20 +72,6 @@ func WithDetached() RegistrableComponentOption {
 // IsDetached returns true if the component type is registered as detached.
 func (rc *RegistrableComponent) IsDetached() bool {
 	return rc.detached
-}
-
-// WithNondeterministicEncoding opts this component type out of the skip-if-clean
-// optimization. By default CHASM uses deterministic proto encoding and skips
-// writing a node to UpdatedNodes when its serialized bytes are identical to what
-// was last loaded from storage. Set this option when the component's proto data
-// contains fields whose equality cannot be reliably determined by byte comparison
-// even with deterministic encoding (e.g. floating-point values with NaN/±Inf
-// semantics, or intentional always-changing fields), so that the node is always
-// persisted regardless.
-func WithNondeterministicEncoding() RegistrableComponentOption {
-	return func(rc *RegistrableComponent) {
-		rc.nondeterministicEncoding = true
-	}
 }
 
 // WithBusinessIDAlias allows specifying the business ID alias of the component.
