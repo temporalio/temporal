@@ -110,11 +110,11 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 			)
 		}
 
-		// Don't allow those SA's that are in predefined but not in predefinedWhiteList to be set by a user
+		// Don't allow those SA's that are in predefined but not in predefinedAllowList to be set by a user
 		predefined := sadefs.Predefined()
 		if _, ok := predefined[saFieldName]; ok {
-			predefinedWhiteList := sadefs.PredefinedWhiteList()
-			if _, ok = predefinedWhiteList[saFieldName]; !ok {
+			predefinedAllowList := sadefs.PredefinedAllowList()
+			if _, ok = predefinedAllowList[saFieldName]; !ok {
 				return serviceerror.NewInvalidArgumentf(
 					"%s attribute can't be set in SearchAttributes", saFieldName,
 				)

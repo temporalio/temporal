@@ -1708,8 +1708,8 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 		s.ErrorAs(err, &invalidArgument)
 	})
 
-	// These are currently allowed since they are in the predefinedWhiteList. Once it's confirmed that they are not being used,
-	// we can remove them from the predefinedWhiteList.
+	// These are currently allowed since they are in the predefinedAllowList. Once it's confirmed that they are not being used,
+	// we can remove them from the predefinedAllowList.
 	s.Run(sadefs.BatcherUser, func() {
 		request := makeRequest(sadefs.BatcherUser)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
