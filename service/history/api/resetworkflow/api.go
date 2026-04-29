@@ -30,8 +30,7 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
-	reactivationSignalCache worker_versioning.ReactivationSignalCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	reactivationSignaler api.VersionReactivationSignalerFn,
 ) (_ *historyservice.ResetWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
@@ -77,7 +76,7 @@ func Invoke(
 	}
 
 	// Validate versioning override, if any.
-	err = validatePostResetOperationInputs(ctx, request.GetPostResetOperations(), matchingClient, versionMembershipCache,
+	shouldSkipReactivationPerOp, revisionNumberPerOp, err := validatePostResetOperationInputs(ctx, request.GetPostResetOperations(), matchingClient, versionCache,
 		baseMutableState.GetExecutionInfo().GetTaskQueue(), namespaceID.String())
 	if err != nil {
 		return nil, err
@@ -193,10 +192,10 @@ func Invoke(
 	}
 
 	// Notify version workflow if we're pinning to a potentially drained version via post-reset operations
-	for _, operation := range request.GetPostResetOperations() {
+	for i, operation := range request.GetPostResetOperations() {
 		if updateOpts, ok := operation.GetVariant().(*workflowpb.PostResetOperation_UpdateWorkflowOptions_); ok {
 			api.ReactivateVersionWorkflowIfPinned(ctx, namespaceEntry,
-				updateOpts.UpdateWorkflowOptions.GetWorkflowExecutionOptions().GetVersioningOverride(), reactivationSignalCache, reactivationSignaler, shardContext.GetConfig().EnableVersionReactivationSignals())
+				updateOpts.UpdateWorkflowOptions.GetWorkflowExecutionOptions().GetVersioningOverride(), reactivationSignaler, shardContext.GetConfig().EnableVersionReactivationSignals(), shouldSkipReactivationPerOp[i], revisionNumberPerOp[i])
 		}
 	}
 
@@ -234,22 +233,37 @@ func GetResetReapplyExcludeTypes(
 }
 
 // validatePostResetOperationInputs validates the optional post reset operation inputs.
+// Returns parallel slices (one entry per operation) carrying the reactivation-signal inputs
+// derived from the operation's versioning override:
+//   - shouldSkipReactivationPerOp: whether each operation's pinned version is active or
+//     still draining per matching (true → no need to send a reactivation signal; false
+//     covers drained/inactive, unknown, not-found, and old-matching cases).
+//   - revisionNumberPerOp: the pinned version's revision number per matching's view, used to
+//     compose a stable RequestId on the reactivation signal for receiver-side dedup.
+//
+// Both are only populated for UpdateWorkflowOptions operations; other operation types default
+// to zero values.
 func validatePostResetOperationInputs(ctx context.Context,
 	postResetOperations []*workflowpb.PostResetOperation,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	taskQueue string,
-	namespaceID string) error {
-	for _, operation := range postResetOperations {
+	namespaceID string) ([]bool, []int64, error) {
+	shouldSkipReactivationPerOp := make([]bool, len(postResetOperations))
+	revisionNumberPerOp := make([]int64, len(postResetOperations))
+	for i, operation := range postResetOperations {
 		switch op := operation.GetVariant().(type) {
 		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
 			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
-			if err := worker_versioning.ValidateVersioningOverride(ctx, opts.GetVersioningOverride(), matchingClient, versionMembershipCache, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID); err != nil {
-				return err
+			shouldSkipReactivation, revisionNumber, err := worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, opts.GetVersioningOverride(), matchingClient, versionCache, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID)
+			if err != nil {
+				return nil, nil, err
 			}
+			shouldSkipReactivationPerOp[i] = shouldSkipReactivation
+			revisionNumberPerOp[i] = revisionNumber
 		default:
-			return serviceerror.NewInvalidArgumentf("unsupported post reset operation: %T", op)
+			return nil, nil, serviceerror.NewInvalidArgumentf("unsupported post reset operation: %T", op)
 		}
 	}
-	return nil
+	return shouldSkipReactivationPerOp, revisionNumberPerOp, nil
 }

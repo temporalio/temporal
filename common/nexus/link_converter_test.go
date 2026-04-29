@@ -36,6 +36,26 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 )
 
+func TestConvertLinkNexusOperationToNexusLink(t *testing.T) {
+	input := &commonpb.Link_NexusOperation{
+		Namespace:   "ns",
+		OperationId: "op-id",
+		RunId:       "run-id",
+	}
+
+	output := commonnexus.ConvertLinkNexusOperationToNexusLink(input)
+	require.Equal(t, nexus.Link{
+		URL: &url.URL{
+			Scheme:   "temporal",
+			Path:     "/namespaces/ns/nexus-operations/op-id",
+			RawPath:  "/namespaces/ns/nexus-operations/op-id",
+			RawQuery: "runID=run-id",
+		},
+		Type: "temporal.api.common.v1.Link.NexusOperation",
+	}, output)
+	require.Equal(t, "temporal:///namespaces/ns/nexus-operations/op-id?runID=run-id", output.URL.String())
+}
+
 func TestConvertLinkWorkflowEventToNexusLink(t *testing.T) {
 	type testcase struct {
 		name      string

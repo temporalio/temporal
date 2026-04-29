@@ -81,7 +81,7 @@ type (
 
 		GetReplicationStatus(cluster []string) (map[string]*historyservice.ShardReplicationStatusPerCluster, map[string]*historyservice.HandoverNamespaceInfo, error)
 
-		UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDb bool)
+		UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDB bool)
 
 		AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution *commonpb.WorkflowExecution) (int, error)
 

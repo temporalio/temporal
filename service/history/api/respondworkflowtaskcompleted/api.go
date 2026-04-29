@@ -64,7 +64,7 @@ type (
 		commandHandlerRegistry         *workflow.CommandHandlerRegistry
 		chasmWorkflowRegistry          *chasmworkflow.Registry
 		matchingClient                 matchingservice.MatchingServiceClient
-		versionMembershipCache         worker_versioning.VersionMembershipCache
+		versionCache                   worker_versioning.VersionMembershipAndReactivationStatusCache
 	}
 )
 
@@ -78,7 +78,7 @@ func NewWorkflowTaskCompletedHandler(
 	visibilityManager manager.VisibilityManager,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 ) *WorkflowTaskCompletedHandler {
 	return &WorkflowTaskCompletedHandler{
 		config:                     shardContext.GetConfig(),
@@ -102,7 +102,7 @@ func NewWorkflowTaskCompletedHandler(
 		commandHandlerRegistry:         commandHandlerRegistry,
 		chasmWorkflowRegistry:          chasmWorkflowRegistry,
 		matchingClient:                 matchingClient,
-		versionMembershipCache:         versionMembershipCache,
+		versionCache:                   versionCache,
 	}
 }
 
@@ -410,7 +410,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			handler.commandHandlerRegistry,
 			handler.chasmWorkflowRegistry,
 			handler.matchingClient,
-			handler.versionMembershipCache,
+			handler.versionCache,
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(
@@ -603,6 +603,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
 				nil,
+				0,
 			)
 			if err != nil {
 				return nil, err
@@ -728,6 +729,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			workflowLease.GetContext().UpdateRegistry(ctx),
 			false,
 			nil,
+			0,
 		)
 		if err != nil {
 			return nil, err

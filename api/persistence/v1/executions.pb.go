@@ -1233,8 +1233,12 @@ func (x *TimeSkippingInfo) GetAccumulatedSkippedDuration() *durationpb.Duration 
 type LastNotifiedTargetVersion struct {
 	state             protoimpl.MessageState       `protogen:"open.v1"`
 	DeploymentVersion *v18.WorkerDeploymentVersion `protobuf:"bytes,1,opt,name=deployment_version,json=deploymentVersion,proto3" json:"deployment_version,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Revision number of the task queue routing config at the time the
+	// notification was sent. Carried forward to DeclinedTargetVersionUpgrade
+	// at continue-as-new time.
+	RevisionNumber int64 `protobuf:"varint,2,opt,name=revision_number,json=revisionNumber,proto3" json:"revision_number,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *LastNotifiedTargetVersion) Reset() {
@@ -1272,6 +1276,13 @@ func (x *LastNotifiedTargetVersion) GetDeploymentVersion() *v18.WorkerDeployment
 		return x.DeploymentVersion
 	}
 	return nil
+}
+
+func (x *LastNotifiedTargetVersion) GetRevisionNumber() int64 {
+	if x != nil {
+		return x.RevisionNumber
+	}
+	return 0
 }
 
 type ExecutionStats struct {
@@ -4949,9 +4960,10 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\xb5\x01\n" +
 	"\x10TimeSkippingInfo\x12D\n" +
 	"\x06config\x18\x01 \x01(\v2,.temporal.api.workflow.v1.TimeSkippingConfigR\x06config\x12[\n" +
-	"\x1caccumulated_skipped_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x1aaccumulatedSkippedDuration\"\x7f\n" +
+	"\x1caccumulated_skipped_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x1aaccumulatedSkippedDuration\"\xa8\x01\n" +
 	"\x19LastNotifiedTargetVersion\x12b\n" +
-	"\x12deployment_version\x18\x01 \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x11deploymentVersion\"\x9d\x01\n" +
+	"\x12deployment_version\x18\x01 \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x11deploymentVersion\x12'\n" +
+	"\x0frevision_number\x18\x02 \x01(\x03R\x0erevisionNumber\"\x9d\x01\n" +
 	"\x0eExecutionStats\x12!\n" +
 	"\fhistory_size\x18\x01 \x01(\x03R\vhistorySize\x122\n" +
 	"\x15external_payload_size\x18\x02 \x01(\x03R\x13externalPayloadSize\x124\n" +

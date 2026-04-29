@@ -333,6 +333,10 @@ message TimeSkippingInfo {
 // Used only within server persistence; never flows to the public API.
 message LastNotifiedTargetVersion {
   temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 1;
+  // Revision number of the task queue routing config at the time the
+  // notification was sent. Carried forward to DeclinedTargetVersionUpgrade
+  // at continue-as-new time.
+  int64 revision_number = 2;
 }
 
 message ExecutionStats {

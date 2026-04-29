@@ -38,6 +38,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -208,7 +209,16 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		scheduler.NewSpecBuilder(),
 		true,
 		nil, // Not testing activity handler here
-		nil,
+		nexusoperation.NewFrontendHandler(
+			nil,
+			nil,
+			s.mockResource.GetLogger(),
+			s.mockResource.GetNamespaceRegistry(),
+			nil,
+			s.mockResource.GetSearchAttributesMapperProvider(),
+			nil,
+		),
+		nil, // Not testing CHASM registry here
 		quotas.NoopRequestRateLimiter,
 	)
 }
@@ -3286,17 +3296,6 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(namespace.MinTimeSkippingDuration)},
 	}, s.testNamespace))
 
-	// MaxTargetTime less than 1 minute from now is rejected
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxTargetTime{MaxTargetTime: timestamppb.New(time.Now().Add(halfMinDuration))},
-	}, s.testNamespace), &invalidArgumentErr)
-
-	// MaxTargetTime well beyond 1 minute from now is valid
-	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxTargetTime{MaxTargetTime: timestamppb.New(time.Now().Add(2 * namespace.MinTimeSkippingDuration))},
-	}, s.testNamespace))
 }
 
 // TestExecuteMultiOperation_TimeSkipping_DCDisabled verifies that when the DC gate is off,

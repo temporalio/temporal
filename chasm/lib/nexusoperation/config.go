@@ -13,6 +13,27 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 )
 
+var LongPollTimeout = dynamicconfig.NewNamespaceDurationSetting(
+	"nexusoperation.longPollTimeout",
+	20*time.Second,
+	`Maximum timeout for nexus operation long-poll requests. Actual wait may be shorter to leave
+longPollBuffer before the caller deadline.`,
+)
+
+var LongPollBuffer = dynamicconfig.NewNamespaceDurationSetting(
+	"nexusoperation.longPollBuffer",
+	time.Second,
+	`A buffer used to adjust the nexus operation long-poll timeouts.
+ Specifically, nexus operation long-poll requests are timed out at a time which leaves at least the buffer's duration
+ remaining before the caller's deadline, if permitted by the caller's deadline.`,
+)
+
+var Enabled = dynamicconfig.NewNamespaceBoolSetting(
+	"nexusoperation.enableStandalone",
+	false,
+	`Toggles standalone Nexus operation functionality on the server.`,
+)
+
 var EnableChasmNexus = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.enableChasm",
 	false,
@@ -180,6 +201,13 @@ var UseSystemCallbackURL = dynamicconfig.NewGlobalBoolSetting(
 When true, uses the fixed system callback URL for all worker targets.`,
 )
 
+var MaxReasonLength = dynamicconfig.NewNamespaceIntSetting(
+	"nexusoperation.limit.reasonLength",
+	1000,
+	`Limits the maximum allowed length for a reason string in Nexus operation requests.
+Uses Go's len() function to determine the length.`,
+)
+
 var UseNewFailureWireFormat = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.useNewFailureWireFormat",
 	true,
@@ -188,9 +216,12 @@ Added for safety. Defaults to true. Likely to be removed in future server versio
 )
 
 type Config struct {
+	Enabled                             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasm                         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasmNexus                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NumHistoryShards                    int32
+	LongPollBuffer                      dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	LongPollTimeout                     dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MinRequestTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentOperationsPerWorkflow  dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -203,16 +234,23 @@ type Config struct {
 	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                 dynamicconfig.TypedPropertyFn[*template.Template]
 	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
+	PayloadSizeLimitWarn                dynamicconfig.IntPropertyFnWithNamespaceFilter
 	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
-	RetryPolicy                         dynamicconfig.TypedPropertyFn[backoff.RetryPolicy]
+	VisibilityMaxPageSize               dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxIDLengthLimit                    dynamicconfig.IntPropertyFn
+	MaxReasonLength                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	RetryPolicy                         func() backoff.RetryPolicy
 }
 
 func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Config {
 	return &Config{
+		Enabled:                            Enabled.Get(dc),
 		EnableChasm:                        dynamicconfig.EnableChasm.Get(dc),
 		EnableChasmNexus:                   EnableChasmNexus.Get(dc),
 		NumHistoryShards:                   cfg.NumHistoryShards,
+		LongPollBuffer:                     LongPollBuffer.Get(dc),
+		LongPollTimeout:                    LongPollTimeout.Get(dc),
 		RequestTimeout:                     RequestTimeout.Get(dc),
 		MinRequestTimeout:                  MinRequestTimeout.Get(dc),
 		MaxConcurrentOperationsPerWorkflow: MaxConcurrentOperationsPerWorkflow.Get(dc),
@@ -223,9 +261,13 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		DisallowedOperationHeaders:         DisallowedOperationHeaders.Get(dc),
 		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
+		PayloadSizeLimitWarn:               dynamicconfig.BlobSizeLimitWarn.Get(dc),
 		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
 		UseSystemCallbackURL:               UseSystemCallbackURL.Get(dc),
 		UseNewFailureWireFormat:            UseNewFailureWireFormat.Get(dc),
+		VisibilityMaxPageSize:              dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		MaxIDLengthLimit:                   dynamicconfig.MaxIDLengthLimit.Get(dc),
+		MaxReasonLength:                    MaxReasonLength.Get(dc),
 		RetryPolicy:                        RetryPolicy.Get(dc),
 	}
 }

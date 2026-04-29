@@ -60,8 +60,7 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer *tasktoken.Serializer,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
-	reactivationSignalCache worker_versioning.ReactivationSignalCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	reactivationSignaler api.VersionReactivationSignalerFn,
 	testHooks testhooks.TestHooks,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
@@ -102,8 +101,7 @@ func Invoke(
 			tokenSerializer,
 			startReq,
 			matchingClient,
-			versionMembershipCache,
-			reactivationSignalCache,
+			versionCache,
 			reactivationSignaler,
 			uws.workflowLeaseCallback(ctx),
 		)
