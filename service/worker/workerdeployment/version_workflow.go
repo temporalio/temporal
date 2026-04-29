@@ -293,10 +293,13 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	// there are no pending updates/signals and the state has changed.
 	err := workflow.Await(ctx, func() bool {
 		return (d.deleteVersion && d.asyncPropagationsInProgress == 0) || // version is deleted -> it's ok to drop all signals and updates.
-			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
+			// Normal CaN path: no pending signal or update, but the state is dirty or forceCaN is requested:
 			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
-				// And there is a force CaN or a propagated state change or history got too large
-				(d.forceCAN || (d.stateChanged && d.asyncPropagationsInProgress == 0) || workflow.GetInfo(ctx).GetContinueAsNewSuggested()))
+				(d.forceCAN || (d.stateChanged && d.asyncPropagationsInProgress == 0) || workflow.GetInfo(ctx).GetContinueAsNewSuggested())) ||
+			// Emergency CaN path: history too large — bypass HasPending() but still
+			// wait for in-flight handlers and async propagations to complete.
+			(workflow.GetInfo(ctx).GetContinueAsNewSuggested() &&
+				d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) && d.asyncPropagationsInProgress == 0)
 	})
 	if err != nil {
 		return err
@@ -306,6 +309,9 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		return nil
 	}
 
+	if d.signalHandler.signalSelector.HasPending() {
+		d.logger.Warn("Version CaN with pending signals due to large history")
+	}
 	d.logger.Debug("Version doing continue-as-new")
 	nextArgs := d.WorkerDeploymentVersionWorkflowArgs
 	// Apply override state if provided during force-CaN
