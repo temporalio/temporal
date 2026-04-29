@@ -13,8 +13,7 @@ import (
 type SyncMatchOutcome int
 
 const (
-	// The task was not sync-matched. This is the default for all non-match cases
-	// (e.g. no poller available, backlog too deep, etc.).
+	// The task was not sync-matched.
 	SyncMatchOutcomeNotMatched SyncMatchOutcome = iota
 	// The task was sync-matched successfully.
 	SyncMatchOutcomeSuccess
