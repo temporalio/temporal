@@ -13,8 +13,9 @@ import (
 type SyncMatchOutcome int
 
 const (
-	// The outcome is not specified or not relevant to the hook.
-	SyncMatchOutcomeUnspecified SyncMatchOutcome = iota
+	// The task was not sync-matched. This is the default for all non-match cases
+	// (e.g. no poller available, backlog too deep, etc.).
+	SyncMatchOutcomeNotMatched SyncMatchOutcome = iota
 	// The task was sync-matched successfully.
 	SyncMatchOutcomeSuccess
 	// A poller was available but rate limiting blocked the match.

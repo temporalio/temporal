@@ -489,7 +489,7 @@ func syncMatchOutcomeToHook(outcome syncMatchOutcome) hooks.SyncMatchOutcome {
 	case syncMatchRateLimited:
 		return hooks.SyncMatchOutcomeRateLimited
 	default:
-		return hooks.SyncMatchOutcomeUnspecified
+		return hooks.SyncMatchOutcomeNotMatched
 	}
 }
 
