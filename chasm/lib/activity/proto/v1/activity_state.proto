@@ -120,6 +120,10 @@ message ActivityState {
 
   // Set alongside activity_reset when heartbeat details should be cleared on the next retry.
   bool reset_heartbeats = 17;
+
+  // Delays the first dispatch of the activity. Extends ScheduleToClose and ScheduleToStart
+  // timeouts by this duration. StartToClose and Heartbeat timeouts are unaffected.
+  google.protobuf.Duration start_delay = 18;
 }
 
 message ActivityCancelState {
