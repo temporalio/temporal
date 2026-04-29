@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"strconv"
 	"testing"
@@ -12,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	operatorservice "go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -21,10 +24,12 @@ import (
 	"go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -998,6 +1003,81 @@ func (s *ChasmTestSuite) TestPayloadStore_ApproximateExecutionSize() {
 	})
 	s.NoError(err)
 	s.InDelta(adminDescResp.DatabaseMutableState.Size(), currentApproxSize, sizeDelta)
+}
+
+// TestNamespaceDelete_WithChasmExecutions verifies that running CHASM executions are cleaned
+// up when their namespace is deleted, exercising the DeleteExecution history service API.
+func (s *ChasmTestSuite) TestNamespaceDelete_WithChasmExecutions() {
+	tv := testvars.New(s.T())
+
+	// Register a fresh namespace for this test.
+	namespaceName := "ns-chasm-delete-" + tv.Any().String()[:8]
+	_, err := s.FrontendClient().RegisterNamespace(testcore.NewContext(), &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespaceName,
+		WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
+		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
+		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
+	})
+	s.NoError(err)
+
+	descResp, err := s.FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: namespaceName,
+	})
+	s.NoError(err)
+	nsID := namespace.ID(descResp.GetNamespaceInfo().GetId())
+
+	// Create running CHASM executions in the new namespace.
+	const numExecutions = 3
+	for range numExecutions {
+		_, err = tests.NewPayloadStoreHandler(s.chasmContext, tests.NewPayloadStoreRequest{
+			NamespaceID:      nsID,
+			StoreID:          tv.Any().String(),
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		})
+		s.NoError(err)
+	}
+
+	// Wait for visibility records to appear.
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d'", tests.ArchetypeID)
+	s.EventuallyWithT(
+		func(t *assert.CollectT) {
+			resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: namespaceName,
+				PageSize:  10,
+				Query:     visQuery,
+			})
+			require.NoError(t, err)
+			assert.Len(t, resp.Executions, numExecutions)
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+
+	// Delete the namespace, which should trigger DeleteExecution for all CHASM executions.
+	_, err = s.OperatorClient().DeleteNamespace(testcore.NewContext(), &operatorservice.DeleteNamespaceRequest{
+		Namespace: namespaceName,
+	})
+	s.NoError(err)
+
+	// Verify all CHASM executions are cleaned up from visibility.
+	s.EventuallyWithT(
+		func(t *assert.CollectT) {
+			resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: namespaceName,
+				PageSize:  10,
+				Query:     visQuery,
+			})
+			var notFound *serviceerror.NamespaceNotFound
+			if errors.As(err, &notFound) {
+				return // namespace fully deleted is also acceptable
+			}
+			require.NoError(t, err)
+			assert.Empty(t, resp.Executions)
+		},
+		20*time.Second*debug.TimeoutMultiplier,
+		time.Second,
+	)
 }
 
 // TODO: More tests here...
