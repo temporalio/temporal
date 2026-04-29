@@ -19,14 +19,6 @@ type (
 
 	protoMessageType = persistencespb.WorkflowExecutionState // Random proto message.
 
-	// TestNondeterministicEncodingComponent is a minimal component used to test
-	// the WithNondeterministicEncoding opt-out: it should always be persisted
-	// regardless of whether its data changed.
-	TestNondeterministicEncodingComponent struct {
-		UnimplementedComponent
-		Data *protoMessageType
-	}
-
 	TestComponent struct {
 		UnimplementedComponent
 
@@ -167,21 +159,6 @@ func (tsc11 *TestSubComponent11) LifecycleState(_ Context) LifecycleState {
 
 func (tsc2 *TestSubComponent2) LifecycleState(_ Context) LifecycleState {
 	return LifecycleStateRunning
-}
-
-func (c *TestNondeterministicEncodingComponent) LifecycleState(_ Context) LifecycleState {
-	return LifecycleStateRunning
-}
-
-func (c *TestNondeterministicEncodingComponent) Terminate(
-	_ MutableContext,
-	_ TerminateComponentRequest,
-) (TerminateComponentResponse, error) {
-	return TerminateComponentResponse{}, nil
-}
-
-func (c *TestNondeterministicEncodingComponent) ContextMetadata(_ Context) map[string]string {
-	return nil
 }
 
 func setTestComponentFields(c *TestComponent, backend *MockNodeBackend) {

@@ -761,35 +761,22 @@ func (n *Node) setSerializedNode(
 	return childNode.setSerializedNode(nodePath[1:], encodedPath, serializedNode)
 }
 
-// isSkipIfCleanEligible returns true when this node's type and history make it
-// a candidate for the skip-if-clean optimisation.
+// isSkipIfCleanEligible returns true when this node is a candidate for the
+// skip-if-clean optimisation.
 //
-// Two static preconditions must both hold:
-//  1. Deterministic encoding: byte comparison is a reliable equality check for
-//     this component's proto data. All components qualify unless they opted out
-//     with WithNondeterministicEncoding().
-//  2. Previously persisted: the node has been written to storage at least once.
-//     Brand-new nodes are always written on their first transaction regardless
-//     of their data content.
+// The single precondition is that the node has already been written to storage
+// at least once. Brand-new nodes are always persisted on their first transaction
+// regardless of data content.
+//
+// All CHASM serialization uses proto.MarshalOptions{Deterministic: true}, which
+// sorts map keys before encoding, making byte comparison a reliable equality
+// check for any well-formed proto message. There is therefore no need for a
+// per-component encoding flag.
 //
 // Passing this check does not guarantee skipping; callers must additionally
 // verify there are no per-transaction side effects via hasTransactionSideEffects.
 func (n *Node) isSkipIfCleanEligible() bool {
-	if !n.initialStatePersisted {
-		return false
-	}
-	// Component nodes: check registration directly.
-	if rc, ok := n.registry.componentFor(n.value); ok {
-		return !rc.nondeterministicEncoding
-	}
-	// Data nodes: inherit the encoding setting from the parent component.
-	if n.isData() && n.parent != nil {
-		if rc, ok := n.registry.componentFor(n.parent.value); ok {
-			return !rc.nondeterministicEncoding
-		}
-	}
-	// Collection and pointer nodes carry no proto data; always eligible.
-	return true
+	return n.initialStatePersisted
 }
 
 // hasTransactionSideEffects returns true when the current transaction introduced
