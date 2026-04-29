@@ -87,6 +87,9 @@ func (s *DeploymentVersionSuite) SetupSuite() {
 		dynamicconfig.VersionDrainageStatusRefreshInterval.Key():       testVersionDrainageRefreshInterval,
 		dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Key(): testVersionDrainageVisibilityGracePeriod,
 		dynamicconfig.VersionMembershipCacheTTL.Key():                  testVersionMembershipCacheTTL,
+
+		// Test reactivation cache for all versioning tests.
+		dynamicconfig.EnableVersionReactivationSignals.Key(): true,
 	}))
 }
 
