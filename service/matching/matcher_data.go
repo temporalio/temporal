@@ -359,21 +359,20 @@ func (d *matcherData) EnqueuePollerAndWait(ctxs []context.Context, poller *waiti
 	return poller.waitForMatch()
 }
 
-// NoMatchReason describes why a sync match did not happen.
-type NoMatchReason int
+// SyncMatchOutcome describes the outcome of a sync match attempt.
+type SyncMatchOutcome int
 
 const (
-	// No specific reason provided.
-	NoMatchReasonUnspecified NoMatchReason = iota
+	// The task was sync-matched successfully.
+	SyncMatchSuccess SyncMatchOutcome = iota
 	// Sync match was not attempted because the backlog is too deep.
-	NoMatchReasonBacklogged
+	SyncMatchBacklogged
 	// Sync match was attempted but no poller was available.
-	NoMatchReasonNoPoller
+	SyncMatchNoPoller
 )
 
-// MatchTaskImmediately attempts a non-blocking sync match. Returns whether the task was matched
-// and, if not, the reason it was not matched.
-func (d *matcherData) MatchTaskImmediately(task *internalTask) syncMatchResult {
+// MatchTaskImmediately attempts a non-blocking sync match.
+func (d *matcherData) MatchTaskImmediately(task *internalTask) SyncMatchOutcome {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -383,7 +382,7 @@ func (d *matcherData) MatchTaskImmediately(task *internalTask) syncMatchResult {
 		// poller to become available. In presence of a backlog the chance of a poller being available when sync match
 		// request comes is almost zero.
 		// This check is mostly effective for the sync match requests that come from child partitions for spooled tasks.
-		return syncMatchResult{reason: NoMatchReasonBacklogged}
+		return SyncMatchBacklogged
 	}
 
 	task.initMatch(d)
@@ -391,10 +390,10 @@ func (d *matcherData) MatchTaskImmediately(task *internalTask) syncMatchResult {
 	d.findAndWakeMatches()
 	// don't wait, check if match() picked this one already
 	if task.matchResult != nil {
-		return syncMatchResult{matched: true}
+		return SyncMatchSuccess
 	}
 	d.tasks.Remove(task)
-	return syncMatchResult{reason: NoMatchReasonNoPoller}
+	return SyncMatchNoPoller
 }
 
 func (d *matcherData) MatchPollerImmediately(poller *waitingPoller) *matchResult {
