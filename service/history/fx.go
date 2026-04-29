@@ -67,10 +67,11 @@ var Module = fx.Options(
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
+	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
 	fx.Provide(HealthCheckInterceptorProvider),
-	fx.Provide(MetadataContextInterceptorProvider),
+	fx.Provide(ContextMetadataInterceptorProvider),
 	fx.Provide(chasm.ChasmEngineInterceptorProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 	fx.Provide(HistoryAdditionalInterceptorsProvider),
@@ -89,7 +90,6 @@ var Module = fx.Options(
 	fx.Provide(NewService),
 	fx.Provide(ReplicationProgressCacheProvider),
 	fx.Provide(VersionMembershipCacheProvider),
-	fx.Provide(ReactivationSignalCacheProvider),
 	workerdeployment.ClientModule,
 	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
@@ -120,17 +120,22 @@ func HandlerProvider(args NewHandlerArgs) (*Handler, error) {
 	}
 
 	handler := &Handler{
-		status:                       common.DaemonStatusInitialized,
-		config:                       args.Config,
-		tokenSerializer:              tasktoken.NewSerializer(),
+		status:          common.DaemonStatusInitialized,
+		config:          args.Config,
+		tokenSerializer: tasktoken.NewSerializer(),
+		deepHealthCheckHandler: deepHealthCheckHandler{
+			healthServer:            args.HealthServer,
+			metricsHandler:          args.MetricsHandler,
+			config:                  args.Config,
+			historyHealthSignal:     args.HistoryHealthSignal,
+			persistenceHealthSignal: args.PersistenceHealthSignal,
+			startupTime:             time.Now(),
+		},
 		logger:                       args.Logger,
 		throttledLogger:              args.ThrottledLogger,
 		persistenceExecutionManager:  args.PersistenceExecutionManager,
 		persistenceShardManager:      args.PersistenceShardManager,
 		persistenceVisibilityManager: args.PersistenceVisibilityManager,
-		persistenceHealthSignal:      args.PersistenceHealthSignal,
-		healthServer:                 args.HealthServer,
-		historyHealthSignal:          args.HistoryHealthSignal,
 		historyServiceResolver:       args.HistoryServiceResolver,
 		metricsHandler:               args.MetricsHandler,
 		payloadSerializer:            args.PayloadSerializer,
@@ -248,22 +253,47 @@ func HealthCheckInterceptorProvider(
 	)
 }
 
-func MetadataContextInterceptorProvider() *interceptor.MetadataContextInterceptor {
-	return interceptor.NewMetadataContextInterceptor()
+func ContextMetadataInterceptorProvider(logger log.Logger) *interceptor.ContextMetadataInterceptor {
+	return interceptor.NewContextMetadataInterceptor(true, logger)
 }
 
 func HistoryAdditionalInterceptorsProvider(
 	healthCheckInterceptor *interceptor.HealthCheckInterceptor,
-	metadataContextInterceptor *interceptor.MetadataContextInterceptor,
 	chasmRequestEngineInterceptor *chasm.ChasmEngineInterceptor,
 	chasmRequestVisibilityInterceptor *chasm.ChasmVisibilityInterceptor,
 ) []grpc.UnaryServerInterceptor {
 	return []grpc.UnaryServerInterceptor{
-		metadataContextInterceptor.Intercept,
 		healthCheckInterceptor.UnaryIntercept,
 		chasmRequestEngineInterceptor.Intercept,
 		chasmRequestVisibilityInterceptor.Intercept,
 	}
+}
+
+func NamespaceRateLimitInterceptorProvider(
+	serviceConfig *configs.Config,
+	namespaceRegistry namespace.Registry,
+	metricsHandler metrics.Handler,
+) interceptor.NamespaceRateLimitInterceptor {
+
+	namespaceRateFn := func(namespaceName string) float64 {
+		if namespaceRPS := serviceConfig.NamespaceRPS(namespaceName); namespaceRPS > 0 {
+			return float64(namespaceRPS)
+		}
+		// This fallback to host level rps limit when NamespaceRPS is not configured (i.e. 0)
+		return float64(serviceConfig.RPS())
+	}
+
+	return interceptor.NewNamespaceRateLimitInterceptor(
+		namespaceRegistry,
+		configs.NewNamespaceRateLimiter(
+			namespaceRateFn,
+			serviceConfig.OperatorRPSRatio,
+		),
+		map[string]int{},      // no token overrides
+		map[string]struct{}{}, // no long polls on history service
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // no long poll methods
+		metricsHandler,
+	)
 }
 
 func RateLimitInterceptorProvider(
@@ -408,7 +438,7 @@ func VersionMembershipCacheProvider(
 	lc fx.Lifecycle,
 	serviceConfig *configs.Config,
 	metricsHandler metrics.Handler,
-) worker_versioning.VersionMembershipCache {
+) worker_versioning.VersionMembershipAndReactivationStatusCache {
 	c := commoncache.New(serviceConfig.VersionMembershipCacheMaxSize(), &commoncache.Options{
 		TTL: max(1*time.Second, serviceConfig.VersionMembershipCacheTTL()),
 	})
@@ -418,24 +448,7 @@ func VersionMembershipCacheProvider(
 			return nil
 		},
 	})
-	return worker_versioning.NewVersionMembershipCache(c, metricsHandler)
-}
-
-func ReactivationSignalCacheProvider(
-	lc fx.Lifecycle,
-	serviceConfig *configs.Config,
-	metricsHandler metrics.Handler,
-) worker_versioning.ReactivationSignalCache {
-	c := commoncache.New(serviceConfig.VersionReactivationSignalCacheMaxSize(), &commoncache.Options{
-		TTL: max(1*time.Second, serviceConfig.VersionReactivationSignalCacheTTL()),
-	})
-	lc.Append(fx.Hook{
-		OnStop: func(context.Context) error {
-			c.Stop()
-			return nil
-		},
-	})
-	return worker_versioning.NewReactivationSignalCache(c, metricsHandler)
+	return worker_versioning.NewVersionMembershipAndReactivationStatusCache(c, metricsHandler)
 }
 
 func RoutingInfoCacheProvider(

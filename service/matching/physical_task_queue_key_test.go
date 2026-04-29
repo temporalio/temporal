@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/tqid"
@@ -63,4 +64,11 @@ func TestUnversionedQueueKey(t *testing.T) {
 	a.Equal("", key.Version().VersionSet())
 	a.Equal("", key.Version().BuildId())
 	a.Nil(key.Version().Deployment())
+}
+
+func TestWorkerCommandsPersistenceName(t *testing.T) {
+	tq := tqid.UnsafeTaskQueueFamily("ns", "/temporal-sys/worker-commands/ns/key").TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS)
+	p := tq.WorkerCommandsPartition()
+	key := UnversionedQueueKey(p)
+	require.Equal(t, "/temporal-sys/worker-commands/ns/key", key.PersistenceName())
 }

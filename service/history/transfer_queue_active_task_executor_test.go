@@ -3124,9 +3124,10 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 			WorkflowRunTimeout:       attributes.WorkflowRunTimeout,
 			WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
 			// Use the same request ID to dedupe StartWorkflowExecution calls
-			RequestId:             ci.CreateRequestId,
-			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
-			UserMetadata:          userMetadata,
+			RequestId:                ci.CreateRequestId,
+			WorkflowIdReusePolicy:    attributes.WorkflowIdReusePolicy,
+			WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+			UserMetadata:             userMetadata,
 		},
 		ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
 			NamespaceId:      task.NamespaceID,

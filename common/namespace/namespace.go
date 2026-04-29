@@ -179,14 +179,18 @@ func (ns *Namespace) State() enumspb.NamespaceState {
 	return ns.info.State
 }
 
+func (ns *Namespace) ReplicationResolver() ReplicationResolver {
+	return ns.replicationResolver
+}
+
 func (ns *Namespace) ReplicationState(businessID string) enumspb.ReplicationState {
 	return ns.replicationResolver.ReplicationState(businessID)
 }
 
 // ActiveClusterName observes the name of the cluster that is currently active
-// for this namspace.
-func (ns *Namespace) ActiveClusterName(businessID string) string {
-	return ns.replicationResolver.ActiveClusterName(businessID)
+// for this namespace.
+func (ns *Namespace) ActiveClusterName(routingKey RoutingKey) string {
+	return ns.replicationResolver.ActiveClusterName(routingKey)
 }
 
 // ClusterNames observes the names of the clusters to which this namespace is
@@ -213,7 +217,6 @@ func (ns *Namespace) ConfigVersion() int64 {
 // FailoverVersion return the namespace failover version
 func (ns *Namespace) FailoverVersion(businessID string) int64 {
 	return ns.replicationResolver.FailoverVersion(businessID)
-
 }
 
 // IsGlobalNamespace returns whether the namespace is a global namespace.

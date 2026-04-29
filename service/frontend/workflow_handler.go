@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client/frontend"
@@ -109,10 +110,16 @@ const (
 )
 
 type (
+	// ActivityHandler is the activity frontend handler, aliased to avoid embedding name collision.
+	ActivityHandler = activity.FrontendHandler
+	// NexusOperationHandler is the nexus operation frontend handler, aliased to avoid embedding name collision.
+	NexusOperationHandler = chasmnexus.FrontendHandler
+
 	// WorkflowHandler - gRPC handler interface for workflowservice
 	WorkflowHandler struct {
 		workflowservice.UnsafeWorkflowServiceServer
-		activity.FrontendHandler
+		ActivityHandler
+		NexusOperationHandler
 
 		status int32
 
@@ -322,16 +329,18 @@ func NewWorkflowHandler(
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	httpEnabled bool,
 	activityHandler activity.FrontendHandler,
+	nexusOperationHandler chasmnexus.FrontendHandler,
 	registry *chasm.Registry,
 	workerDeploymentReadRateLimiter quotas.RequestRateLimiter,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
-		FrontendHandler:   activityHandler,
-		status:            common.DaemonStatusInitialized,
-		callbackValidator: callbackValidator,
-		config:            config,
-		tokenSerializer:   tasktoken.NewSerializer(),
-		versionChecker:    headers.NewDefaultVersionChecker(),
+		ActivityHandler:       activityHandler,
+		NexusOperationHandler: nexusOperationHandler,
+		status:                common.DaemonStatusInitialized,
+		callbackValidator:     callbackValidator,
+		config:                config,
+		tokenSerializer:       tasktoken.NewSerializer(),
+		versionChecker:        headers.NewDefaultVersionChecker(),
 		namespaceHandler: newNamespaceHandler(
 			logger,
 			persistenceMetadataManager,
@@ -713,23 +722,15 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 		switch bound := timeSkippingConfig.GetBound().(type) {
 		case *workflowpb.TimeSkippingConfig_MaxSkippedDuration:
 			if bound.MaxSkippedDuration.AsDuration() < namespace.MinTimeSkippingDuration {
-				return serviceerror.NewUnimplementedf(
+				return serviceerror.NewInvalidArgumentf(
 					"Max skipped duration must be at least %s",
 					namespace.MinTimeSkippingDuration,
 				)
 			}
 		case *workflowpb.TimeSkippingConfig_MaxElapsedDuration:
 			if bound.MaxElapsedDuration.AsDuration() < namespace.MinTimeSkippingDuration {
-				return serviceerror.NewUnimplementedf(
+				return serviceerror.NewInvalidArgumentf(
 					"Max elapsed duration must be at least %s",
-					namespace.MinTimeSkippingDuration,
-				)
-			}
-		// todo: need to adapt the timeSource after time-skipping timeSource is implemented
-		case *workflowpb.TimeSkippingConfig_MaxTargetTime:
-			if bound.MaxTargetTime.AsTime().Before(wh.namespaceHandler.timeSource.Now().Add(namespace.MinTimeSkippingDuration)) {
-				return serviceerror.NewUnimplementedf(
-					"Max target time must be at least %s from current time of the workflow",
 					namespace.MinTimeSkippingDuration,
 				)
 			}
@@ -2792,6 +2793,8 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 		return nil, err
 	}
 
+	metrics.VisibilityListWorkflowsQueryLength.With(wh.metricsScope(ctx)).Record(int64(len(request.GetQuery())))
+
 	req := &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   namespaceID,
 		Namespace:     namespaceName,
@@ -3512,29 +3515,11 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 		return nil, err
 	}
 
-	// Validate blob size limit here. In the V1 codepath, this is done automatically
-	// as part of StartWorkflowExecution, but here it must be done separately (to
-	// maintain equal payload size limits between versions).
-	switch action := request.GetSchedule().GetAction().GetAction().(type) {
-	case *schedulepb.ScheduleAction_StartWorkflow:
-		payloadSize := request.GetMemo().Size() + action.StartWorkflow.GetInput().Size()
-		sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
-		sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
-		if err := common.CheckEventBlobSizeLimit(
-			payloadSize,
-			sizeLimitWarn,
-			sizeLimitError,
-			namespaceID.String(),
-			request.ScheduleId,
-			"", // don't have runid yet
-			wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
-			wh.throttledLogger,
-			"CreateSchedule",
-		); err != nil {
-			return nil, err
-		}
-	default:
-		return nil, serviceerror.NewInvalidArgument("Only StartWorkflow action is supported for schedules")
+	if err := wh.validateSchedulePayloadSize(
+		ctx, request.GetNamespace(), request.ScheduleId,
+		request.GetSchedule(), request.GetMemo(), "CreateSchedule",
+	); err != nil {
+		return nil, err
 	}
 
 	// Phase 1: Write sentinel to V1 key space (dummy workflow) to prevent a
@@ -3832,6 +3817,11 @@ func (wh *WorkflowHandler) CreateSchedule(
 
 	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
 		return nil, err
+	}
+
+	if startWorkflow := request.GetSchedule().GetAction().GetStartWorkflow(); startWorkflow != nil {
+		metricsHandler := wh.metricsScope(ctx).WithTags(metrics.HeaderCallsiteTag("CreateSchedule"))
+		metrics.HeaderSize.With(metricsHandler).Record(int64(startWorkflow.GetHeader().Size()))
 	}
 
 	if useChasmScheduler {
@@ -4591,6 +4581,10 @@ func (wh *WorkflowHandler) UpdateSchedule(
 		return nil, errRequestNotSet
 	}
 
+	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
+		return nil, errRequestIDTooLong
+	}
+
 	namespaceName := namespace.Name(request.GetNamespace())
 
 	if err := wh.validateStartWorkflowArgsForSchedule(
@@ -4612,6 +4606,18 @@ func (wh *WorkflowHandler) UpdateSchedule(
 	// the result. V1 uses UpsertSearchAttributes which expects aliased names, and V2
 	// lets CHASM handle all visibility aliasing.
 	if _, err = wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName); err != nil {
+		return nil, err
+	}
+
+	if startWorkflow := request.GetSchedule().GetAction().GetStartWorkflow(); startWorkflow != nil {
+		metricsHandler := wh.metricsScope(ctx).WithTags(metrics.HeaderCallsiteTag("UpdateSchedule"))
+		metrics.HeaderSize.With(metricsHandler).Record(int64(startWorkflow.GetHeader().Size()))
+	}
+
+	if err := wh.validateSchedulePayloadSize(
+		ctx, request.GetNamespace(), request.ScheduleId,
+		request.GetSchedule(), request.GetMemo(), "UpdateSchedule",
+	); err != nil {
 		return nil, err
 	}
 
@@ -4657,20 +4663,11 @@ func (wh *WorkflowHandler) updateScheduleWorkflow(
 	ctx context.Context,
 	request *workflowservice.UpdateScheduleRequest,
 ) (*workflowservice.UpdateScheduleResponse, error) {
-	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
-		return nil, errRequestIDTooLong
-	}
-
 	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
-	}
-
-	if startWorkflow := request.GetSchedule().GetAction().GetStartWorkflow(); startWorkflow != nil {
-		metricsHandler := wh.metricsScope(ctx).WithTags(metrics.HeaderCallsiteTag("UpdateSchedule"))
-		metrics.HeaderSize.With(metricsHandler).Record(int64(startWorkflow.GetHeader().Size()))
 	}
 
 	input := &schedulespb.FullUpdateRequest{
@@ -6723,6 +6720,36 @@ func (wh *WorkflowHandler) validateWorkflowID(
 		return errWorkflowIDTooLong
 	}
 	return nil
+}
+
+// validateSchedulePayloadSize validates the blob size of the schedule's memo
+// and action input. This runs for both CHASM and V1 paths.
+func (wh *WorkflowHandler) validateSchedulePayloadSize(
+	ctx context.Context,
+	namespaceName string,
+	scheduleID string,
+	schedule *schedulepb.Schedule,
+	memo *commonpb.Memo,
+	operation string,
+) error {
+	action := schedule.GetAction().GetStartWorkflow()
+	if action == nil {
+		return serviceerror.NewInvalidArgument("Only StartWorkflow action is supported for schedules")
+	}
+	payloadSize := memo.Size() + action.GetInput().Size()
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceName)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceName)
+	return common.CheckEventBlobSizeLimit(
+		payloadSize,
+		sizeLimitWarn,
+		sizeLimitError,
+		namespaceName,
+		scheduleID,
+		"",
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.throttledLogger,
+		operation,
+	)
 }
 
 func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedulepb.Schedule) error {

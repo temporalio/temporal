@@ -47,7 +47,7 @@ const (
 	MutableStateCacheTypeTagValue                     = "mutablestate"
 	EventsCacheTypeTagValue                           = "events"
 	VersionMembershipCacheTypeTagValue                = "version_membership"
-	VersionReactivationSignalCacheTypeTagValue        = "version_reactivation_signal"
+	ReactivationSignalDedupCacheTypeTagValue          = "reactivation_signal_dedup"
 	RoutingInfoCacheTypeTagValue                      = "routing_info"
 	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
 
@@ -459,8 +459,9 @@ const (
 	VersionMembershipCacheGetScope = "VersionMembershipCacheGet"
 	// VersionMembershipCachePutScope is the scope used by version membership cache
 	VersionMembershipCachePutScope = "VersionMembershipCachePut"
-	// VersionReactivationSignalCacheShouldSendScope is the scope used by version reactivation signal cache
-	VersionReactivationSignalCacheShouldSendScope = "VersionReactivationSignalCacheShouldSend"
+	// ReactivationSignalDedupScope is the scope used by the per-pod reactivation-signal
+	// dedup cache on the worker-deployment client.
+	ReactivationSignalDedupScope = "ReactivationSignalDedup"
 	// RoutingInfoCacheGetScope is the scope used by routing info cache
 	RoutingInfoCacheGetScope = "RoutingInfoCacheGet"
 	// RoutingInfoCachePutScope is the scope used by routing info cache
@@ -756,6 +757,8 @@ var (
 	HostRPSLimit          = NewGaugeDef("host_rps_limit")
 	NamespaceHostRPSLimit = NewGaugeDef("namespace_host_rps_limit")
 	HandoverWaitLatency   = NewTimerDef("handover_wait_latency")
+
+	VisibilityListWorkflowsQueryLength = NewDimensionlessHistogramDef("visibility_list_workflows_query_length")
 
 	// History
 	CacheRequests                                = NewCounterDef("cache_requests")
@@ -1149,6 +1152,9 @@ var (
 	NamespaceRegistryRefreshFailures    = NewCounterDef("namespace_registry_refresh_failures")
 	NamespaceRegistryRefreshLatency     = NewTimerDef("namespace_registry_refresh_latency")
 
+	ExecutionTimeSkippingTransitionedCounter      = NewCounterDef("execution_time_skipping_transitioned_count")
+	ExecutionTimeSkippingTransitionedErrorCounter = NewCounterDef("execution_time_skipping_transitioned_error_count")
+
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
 	MatchingClientInvalidTaskQueueName        = NewCounterDef("invalid_task_queue_name")
@@ -1262,6 +1268,11 @@ var (
 			"Count of worker heartbeats with poller autoscaling enabled. Dimensions: namespace, taskqueue, task_type"),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
+
+	PartitionCacheSize = NewGaugeDef(
+		"partition_cache_size",
+		WithDescription("Size of client-size matching partition cache (# entries)"),
+	)
 
 	// Versioning and Reachability
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")

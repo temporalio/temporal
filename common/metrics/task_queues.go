@@ -60,7 +60,7 @@ func GetPerTaskQueuePartitionIDScope(
 }
 
 // GetPerTaskQueuePartitionTypeScope returns GetPerTaskQueueScope scope plus a "partition" tag which
-// can be "__normal__", "__sticky__", or "_unknown_".
+// can be "__normal__", "__sticky__", "__worker_commands__", or "_unknown_".
 func GetPerTaskQueuePartitionTypeScope(
 	handler Handler,
 	namespaceName string,

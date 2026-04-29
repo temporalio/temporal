@@ -38,6 +38,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -208,7 +209,16 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		scheduler.NewSpecBuilder(),
 		true,
 		nil, // Not testing activity handler here
-		nil,
+		nexusoperation.NewFrontendHandler(
+			nil,
+			nil,
+			s.mockResource.GetLogger(),
+			s.mockResource.GetNamespaceRegistry(),
+			nil,
+			s.mockResource.GetSearchAttributesMapperProvider(),
+			nil,
+		),
+		nil, // Not testing CHASM registry here
 		quotas.NoopRequestRateLimiter,
 	)
 }
@@ -3240,60 +3250,52 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistor
 func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	var unimplementedErr *serviceerror.Unimplemented
 
 	// nil config is valid
-	s.NoError(wh.validateTimeSkippingConfig(nil, s.testNamespace))
+	s.Require().NoError(wh.validateTimeSkippingConfig(nil, s.testNamespace))
 
 	// config with enabled=false but dynamic config disabled returns error
 	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	s.Error(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
 
 	// config with enabled=true but dynamic config disabled returns error
-	s.Error(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
 
 	// config with enabled=false and dynamic config enabled is valid
 	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
+	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
 
 	// config with enabled=true and dynamic config enabled is valid
-	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
 
 	// MaxSkippedDuration below 1 minute is rejected
+	// error type is InvalidArgument
 	halfMinDuration := time.Duration(0.5 * float64(namespace.MinTimeSkippingDuration))
-	s.Error(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
 		Enabled: true,
 		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(halfMinDuration)},
-	}, s.testNamespace))
+	}, s.testNamespace), &invalidArgumentErr)
 
 	// MaxSkippedDuration exactly 1 minute is valid
-	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
 		Enabled: true,
 		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(namespace.MinTimeSkippingDuration)},
 	}, s.testNamespace))
 
 	// MaxElapsedDuration below 1 minute is rejected
-	s.Error(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
 		Enabled: true,
 		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(halfMinDuration)},
-	}, s.testNamespace))
+	}, s.testNamespace), &invalidArgumentErr)
 
 	// MaxElapsedDuration exactly 1 minute is valid
-	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
+	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
 		Enabled: true,
 		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(namespace.MinTimeSkippingDuration)},
 	}, s.testNamespace))
 
-	// MaxTargetTime less than 1 minute from now is rejected
-	s.Error(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxTargetTime{MaxTargetTime: timestamppb.New(time.Now().Add(halfMinDuration))},
-	}, s.testNamespace))
-
-	// MaxTargetTime well beyond 1 minute from now is valid
-	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxTargetTime{MaxTargetTime: timestamppb.New(time.Now().Add(2 * namespace.MinTimeSkippingDuration))},
-	}, s.testNamespace))
 }
 
 // TestExecuteMultiOperation_TimeSkipping_DCDisabled verifies that when the DC gate is off,

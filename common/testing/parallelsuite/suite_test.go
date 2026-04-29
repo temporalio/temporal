@@ -65,22 +65,6 @@ func (s *sealAfterRunSuite) TestAssertionAfterRun() {
 	require.Panics(t, func() { s.T() })
 }
 
-type sealRunAfterAssertSuite struct {
-	Suite[*sealRunAfterAssertSuite]
-}
-
-func (s *sealRunAfterAssertSuite) TestRunAfterAssertion() {
-	// Use an assertion first.
-	s.NotNil(s.T())
-
-	t := s.guardT.T
-
-	// Calling Run after assertions panics.
-	require.Panics(t, func() {
-		s.Run("should-not-run", func(*sealRunAfterAssertSuite) {})
-	})
-}
-
 func TestRun_AcceptsSuite(t *testing.T) {
 	t.Run("no args", func(t *testing.T) {
 		require.NotPanics(t, func() { Run(t, &validSuite{}) })
@@ -150,8 +134,5 @@ func TestApplyTestifyMFilter(t *testing.T) {
 func TestGuardSeal(t *testing.T) {
 	t.Run("assertion after Run", func(t *testing.T) {
 		Run(t, &sealAfterRunSuite{})
-	})
-	t.Run("Run after assertion", func(t *testing.T) {
-		Run(t, &sealRunAfterAssertSuite{})
 	})
 }

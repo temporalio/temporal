@@ -89,6 +89,11 @@ func New(
 	}
 }
 
+func (b *HistoryBuilder) SetTimeSource(timeSource clock.TimeSource) {
+	b.EventStore.timeSource = timeSource
+	b.EventFactory.timeSource = timeSource
+}
+
 func NewImmutable(histories ...[]*historypb.HistoryEvent) *HistoryBuilder {
 	lastHistory := histories[len(histories)-1]
 	lastEvent := lastHistory[len(lastHistory)-1]
@@ -319,6 +324,17 @@ func (b *HistoryBuilder) AddActivityTaskScheduledEvent(
 			metrics.NamespaceTag(ns.String()))
 	}
 
+	return event
+}
+
+func (b *HistoryBuilder) AddWorkflowExecutionTimeSkippingTransitionedEvent(
+	targetTime time.Time,
+	triggeredDisable bool,
+) *historypb.HistoryEvent {
+	event := b.CreateWorkflowExecutionTimeSkippingTransitionedEvent(targetTime, triggeredDisable)
+	event.WorkerMayIgnore = true
+	event, _ = b.add(event)
+	b.metricsHandler.Counter(metrics.ExecutionTimeSkippingTransitionedCounter.Name()).Record(1)
 	return event
 }
 
@@ -754,11 +770,15 @@ func (b *HistoryBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	targetNamespaceID namespace.ID,
+	timeSkippingConfig *workflowpb.TimeSkippingConfig,
+	initialSkippedDuration *durationpb.Duration,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		command,
 		targetNamespaceID,
+		timeSkippingConfig,
+		initialSkippedDuration,
 	)
 	event, _ = b.EventStore.add(event)
 	return event
