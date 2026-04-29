@@ -122,7 +122,7 @@ func (h *frontendHandler) DescribeActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	err := validateDescribeActivityExecutionRequest(
+	err := validateAndNormalizeDescribeActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 	)
@@ -151,7 +151,7 @@ func (h *frontendHandler) PollActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	err := validatePollActivityExecutionRequest(
+	err := validateAndNormalizePollActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 	)
@@ -266,7 +266,7 @@ func (h *frontendHandler) DeleteActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	if err := validateDeleteActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+	if err := validateAndNormalizeDeleteActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 
@@ -301,7 +301,7 @@ func (h *frontendHandler) TerminateActivityExecution(
 		return nil, err
 	}
 
-	if err := validateTerminateActivityExecutionRequest(
+	if err := validateAndNormalizeTerminateActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 		h.config.BlobSizeLimitError,
@@ -334,7 +334,7 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 		return nil, err
 	}
 
-	if err := validateRequestCancelActivityExecutionRequest(
+	if err := validateAndNormalizeRequestCancelActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 		h.config.BlobSizeLimitError,
@@ -438,7 +438,7 @@ func (h *frontendHandler) PauseActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	if err := validatePauseActivityExecutionRequest(
+	if err := validateAndNormalizePauseActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 		h.config.BlobSizeLimitError,
@@ -470,7 +470,7 @@ func (h *frontendHandler) UnpauseActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	if err := validateUnpauseActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+	if err := validateAndNormalizeUnpauseActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 
@@ -497,7 +497,7 @@ func (h *frontendHandler) ResetActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	if err := validateResetActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+	if err := validateAndNormalizeResetActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 

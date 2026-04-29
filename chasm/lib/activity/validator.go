@@ -321,7 +321,7 @@ func validateAndNormalizeStartRequest(
 	return nil
 }
 
-func validateDescribeActivityExecutionRequest(
+func validateAndNormalizeDescribeActivityExecutionRequest(
 	req *workflowservice.DescribeActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
@@ -347,7 +347,7 @@ func validateDescribeActivityExecutionRequest(
 	return nil
 }
 
-func validatePollActivityExecutionRequest(
+func validateAndNormalizePollActivityExecutionRequest(
 	req *workflowservice.PollActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
@@ -367,7 +367,7 @@ func validatePollActivityExecutionRequest(
 	return nil
 }
 
-func validateRequestCancelActivityExecutionRequest(
+func validateAndNormalizeRequestCancelActivityExecutionRequest(
 	req *workflowservice.RequestCancelActivityExecutionRequest,
 	maxIDLengthLimit int,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
@@ -545,7 +545,7 @@ func validateUpdateActivityExecutionOptionsRequest(
 	return nil
 }
 
-func validateDeleteActivityExecutionRequest(
+func validateAndNormalizeDeleteActivityExecutionRequest(
 	req *workflowservice.DeleteActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
@@ -568,7 +568,7 @@ func validateDeleteActivityExecutionRequest(
 	return nil
 }
 
-func validateTerminateActivityExecutionRequest(
+func validateAndNormalizeTerminateActivityExecutionRequest(
 	req *workflowservice.TerminateActivityExecutionRequest,
 	maxIDLengthLimit int,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
@@ -620,7 +620,7 @@ func validateTerminateActivityExecutionRequest(
 	return nil
 }
 
-func validatePauseActivityExecutionRequest(
+func validateAndNormalizePauseActivityExecutionRequest(
 	req *workflowservice.PauseActivityExecutionRequest,
 	maxIDLengthLimit int,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
@@ -657,7 +657,7 @@ func validatePauseActivityExecutionRequest(
 	return nil
 }
 
-func validateResetActivityExecutionRequest(
+func validateAndNormalizeResetActivityExecutionRequest(
 	req *workflowservice.ResetActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
@@ -681,7 +681,7 @@ func validateResetActivityExecutionRequest(
 	return nil
 }
 
-func validateUnpauseActivityExecutionRequest(
+func validateAndNormalizeUnpauseActivityExecutionRequest(
 	req *workflowservice.UnpauseActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
