@@ -914,3 +914,32 @@ func AdminMigrateSchedule(c *cli.Context, clientFactory ClientFactory) error {
 	_, _ = fmt.Fprintf(c.App.Writer, "Successfully initiated migration of schedule %q in namespace %q to %s.\n", scheduleID, ns, targetStr)
 	return nil
 }
+
+func AdminGetClusterConfig(c *cli.Context, clientFactory ClientFactory) error {
+	adminClient := clientFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	keys := c.StringSlice(FlagKey)
+	if len(keys) == 0 {
+		return fmt.Errorf("at least one --%s flag is required", FlagKey)
+	}
+	filteredKeys := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if trimmed := strings.TrimSpace(k); trimmed != "" {
+			filteredKeys = append(filteredKeys, trimmed)
+		}
+	}
+
+	if len(filteredKeys) == 0 {
+		return fmt.Errorf("at least one non-empty --%s value is required", FlagKey)
+	}
+	resp, err := adminClient.GetDynamicConfigurations(ctx, &adminservice.GetDynamicConfigurationsRequest{
+		DynamicConfigKeys: filteredKeys,
+	})
+	if err != nil {
+		return fmt.Errorf("error getting cluster config: %s", err)
+	}
+	prettyPrintJSONObject(c, resp)
+	return nil
+}
