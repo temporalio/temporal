@@ -15,7 +15,7 @@ type SyncMatchOutcome int
 const (
 	// Default zero value; should not be used explicitly.
 	SyncMatchOutcomeUnspecified SyncMatchOutcome = iota
-	// The task was not sync-matched.
+	// The task was not sync-matched. Catch-all for reasons not covered by more specific outcomes.
 	SyncMatchOutcomeNotMatched
 	// The task was sync-matched successfully.
 	SyncMatchOutcomeSuccess
