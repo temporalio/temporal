@@ -280,6 +280,17 @@ func (i *Redirection) handleRedirectAPIInvocation(
 		if targetClusterName == i.currentClusterName {
 			resp, err = handler(ctx, req)
 		} else {
+			// Check if request already has redirection header, indicating multiple redirect hops
+			values := metadata.ValueFromIncomingContext(ctx, DCRedirectionApiHeaderName)
+			if len(values) > 0 && values[0] == "true" {
+				// Emit too-many-redirects metric
+				metricHandler := scope.WithTags(
+					metrics.TargetClusterTag(targetClusterName),
+					metrics.NamespaceTag(namespaceName.String()),
+				)
+				metrics.ClientDuplicatedRedirects.With(metricHandler).Record(1)
+			}
+
 			remoteClient, _, err := i.clientBean.GetRemoteFrontendClient(targetClusterName)
 			if err != nil {
 				return err
