@@ -1941,8 +1941,7 @@ func testSkipsCHASMSentinelWhenDisabled(t *testing.T, newContext contextFactory)
 			},
 		},
 	)
-	var notFoundErr *serviceerror.NotFound
-	s.False(errors.As(createErr, &notFoundErr), "no CHASM sentinel should block CreateSchedule when sentinels are disabled, got: %v", createErr)
+	s.NoError(createErr, "no CHASM sentinel should block CreateSchedule when sentinels are disabled, got: %v", createErr)
 }
 
 func testCreateScheduleAlreadyExists(t *testing.T, newContext contextFactory) {
