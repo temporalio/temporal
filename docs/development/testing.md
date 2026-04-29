@@ -196,3 +196,142 @@ You'll find the code coverage reporting in Codecov: https://app.codecov.io/gh/te
 
 Consider installing the [Codecov Browser Extension](https://docs.codecov.com/docs/the-codecov-browser-extension)
 to see code coverage directly in GitHub PRs.
+
+## Troubleshooting
+
+This section covers common issues you might encounter when running tests and their solutions.
+
+### Build Tag Issues
+
+#### Error: `undefined: testhooks.Get`
+
+**Problem:** Tests using testhooks fail with undefined errors.
+
+**Solution:** Make sure to add the `test_dep` build tag:
+
+```bash
+go test -tags=test_dep ./...
+```
+
+Or in GoLand, add `-tags test_dep` to "Go tool arguments" in your run configuration.
+
+### Port Conflicts
+
+#### Error: `bind: address already in use`
+
+**Problem:** Another instance of Temporal server or tests is running, causing port conflicts.
+
+**Solution:** 
+1. Find and stop the existing process:
+   ```bash
+   lsof -ti:7233 | xargs kill -9
+   lsof -ti:8233 | xargs kill -9
+   ```
+2. Or run tests with different ports using environment variables
+
+### Timeout Issues
+
+#### Error: `test timed out after 30s`
+
+**Problem:** Default test timeout is too short for your environment.
+
+**Solutions:**
+1. Increase test timeout:
+   ```bash
+   export TEMPORAL_TEST_TIMEOUT=120s
+   ```
+2. For debugging, enable debug mode:
+   ```bash
+   export TEMPORAL_DEBUG=1
+   ```
+
+### Database Connection Issues
+
+#### Error: `connection refused` or `no such host`
+
+**Problem:** Tests requiring external dependencies (Cassandra, MySQL, PostgreSQL) cannot connect.
+
+**Solutions:**
+1. Start dependencies with Docker:
+   ```bash
+   make start-dependencies
+   ```
+2. Or use SQLite for unit tests (default, no dependencies needed):
+   ```bash
+   export TEMPORAL_TEST_PERSISTENCE=sqlite
+   ```
+
+### CGO Build Issues
+
+#### Error: `exec: "gcc": executable file not found in $PATH`
+
+**Problem:** CGO is enabled but GCC is not installed.
+
+**Solution:** Disable CGO for faster, more portable builds:
+```bash
+export CGO_ENABLED=0
+```
+
+### Flaky Tests
+
+#### Issue: Tests pass inconsistently
+
+**Common causes and solutions:**
+
+1. **Timing issues**: Tests may be racing against real-time timeouts. Use `testcore.WithTimeout()` to adjust.
+2. **Shared state**: Ensure tests are properly isolated using `testvars` package.
+3. **Resource exhaustion**: Reduce parallelism:
+   ```bash
+   go test -parallel=4 ./...
+   ```
+
+### Log Output Issues
+
+#### Issue: Too much/too little log output
+
+**Solutions:**
+1. Adjust log level:
+   ```bash
+   export TEMPORAL_TEST_LOG_LEVEL=error  # Only show errors
+   ```
+2. Enable JSON format for easier parsing:
+   ```bash
+   export TEMPORAL_TEST_LOG_FORMAT=json
+   ```
+3. Log to file instead of console:
+   ```bash
+   export TEMPORAL_TEST_LOG_FILE=/tmp/temporal-test.log
+   ```
+
+### IDE-Specific Issues
+
+#### GoLand: "could not launch process"
+
+**Solution:** Ensure debug build tags are set:
+```
+-tags disable_grpc_modules,test_dep
+```
+
+#### VS Code: Tests show as "skipped"
+
+**Solution:** Add build tags to your `settings.json`:
+```json
+{
+  "gopls": {
+    "build.buildFlags": ["-tags", "test_dep"]
+  }
+}
+```
+
+### Getting Help
+
+If you encounter issues not covered here:
+
+1. Check the [community forum](https://community.temporal.io) for similar issues
+2. Join the [Temporal Slack](https://t.mp/slack) #development channel
+3. Search existing [GitHub issues](https://github.com/temporalio/temporal/issues)
+4. Create a new issue with:
+   - Your OS and version
+   - Go version (`go version`)
+   - Full error output
+   - Steps to reproduce
