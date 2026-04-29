@@ -302,12 +302,6 @@ func (c *operationContext) enrichNexusOperationMetrics(ctx context.Context, serv
 		tags = append(tags, metrics.StringTag(mapping.TargetTag, requestHeader.Get(mapping.SourceHeader)))
 	}
 
-	// Add caller tags from the context.
-	callerInfo := headers.GetCallerInfo(ctx)
-	tags = append(tags, metrics.NexusCallerTag(callerInfo.CallerName))
-	// Namespace is the only valid caller_type. To be updated when there are more kinds
-	tags = append(tags, metrics.NexusCallerTypeTag("namespace"))
-
 	if len(tags) > 0 {
 		c.metricsHandler = c.metricsHandler.WithTags(tags...)
 	}
