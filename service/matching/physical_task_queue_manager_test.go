@@ -134,9 +134,9 @@ func TestReaderSignaling(t *testing.T) {
 	task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
 		CreateTime: timestamp.TimePtr(time.Now().UTC()),
 	}, nil)
-	sync, err := s.tqMgr.TrySyncMatch(context.TODO(), task)
+	syncResult, err := s.tqMgr.TrySyncMatch(context.TODO(), task)
 	require.NoError(t, err)
-	require.True(t, sync)
+	require.True(t, syncResult.matched)
 	require.Len(t, readerNotifications, 0,
 		"Sync match should not signal taskReader")
 }

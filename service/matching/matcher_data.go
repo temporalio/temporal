@@ -369,6 +369,8 @@ const (
 	NoMatchReasonBacklogged
 	// Sync match was attempted but no poller was available.
 	NoMatchReasonNoPoller
+	// A poller was available but rate limiting blocked the match.
+	NoMatchReasonRateLimited
 )
 
 // MatchTaskImmediately attempts a non-blocking sync match. Returns whether the task was matched
@@ -388,12 +390,15 @@ func (d *matcherData) MatchTaskImmediately(task *internalTask) syncMatchResult {
 
 	task.initMatch(d)
 	d.tasks.Add(task)
-	d.findAndWakeMatches()
+	rateLimited := d.findAndWakeMatches()
 	// don't wait, check if match() picked this one already
 	if task.matchResult != nil {
 		return syncMatchResult{matched: true}
 	}
 	d.tasks.Remove(task)
+	if rateLimited {
+		return syncMatchResult{reason: NoMatchReasonRateLimited}
+	}
 	return syncMatchResult{reason: NoMatchReasonNoPoller}
 }
 
@@ -503,8 +508,8 @@ func (d *matcherData) allowForwarding() (allowForwarding bool) {
 	return delayToForwardingAllowed <= 0
 }
 
-// call with lock held
-func (d *matcherData) findAndWakeMatches() {
+// call with lock held. Returns true if a match was found but blocked by rate limiting.
+func (d *matcherData) findAndWakeMatches() (rateLimited bool) {
 	allowForwarding := d.canForward && d.allowForwarding()
 
 	now := d.timeSource.Now().UnixNano()
@@ -516,14 +521,14 @@ func (d *matcherData) findAndWakeMatches() {
 		if task == nil || poller == nil {
 			// no more current matches, stop rate limit timer if was running
 			d.rateLimitTimer.unset()
-			return
+			return false
 		}
 
 		// check ready time
 		delay := d.rateLimitManager.readyTimeForTask(task).delay(now)
 		d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, delay)
 		if delay > 0 {
-			return // not ready yet, timer will call match later
+			return true // not ready yet, timer will call match later
 		}
 
 		// ready to signal match

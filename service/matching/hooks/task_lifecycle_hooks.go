@@ -9,6 +9,16 @@ import (
 	"go.temporal.io/server/common/tqid"
 )
 
+// NoMatchReason describes why a task was not sync-matched.
+type NoMatchReason int
+
+const (
+	// No specific reason provided.
+	NoMatchReasonUnspecified NoMatchReason = iota
+	// A poller was available but rate limiting blocked the match.
+	NoMatchReasonRateLimited
+)
+
 type (
 	// TaskQueuePartition is a simplified version of tqid.Partition that removes details
 	// the hooks should not concern themselves with
@@ -26,6 +36,7 @@ type (
 	TaskAddHookDetails struct {
 		DeploymentVersion *deploymentpb.WorkerDeploymentVersion
 		IsSyncMatch       bool
+		NoMatchReason     NoMatchReason
 	}
 
 	TaskHookFactory interface {

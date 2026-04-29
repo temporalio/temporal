@@ -439,15 +439,18 @@ reredirectTask:
 		return "", false, err
 	}
 
+	var result syncMatchResult
 	if isActive {
-		var result syncMatchResult
 		result, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
 		syncMatched = result.matched
+		// TODO: TrySyncMatch returns matched=true with a start error (e.g. busy workflow),
+		// but the task is not actually dispatched. It should return matched=false with an
+		// appropriate NoMatchReason so callers don't have to re-check errors.
 		if syncMatched && !pm.shouldBacklogSyncMatchTaskOnError(err) {
 			// Only fire hooks for non-forwarded tasks. Forwarded tasks already had hooks fired
 			// on the child partition that originally received the task.
 			if params.forwardInfo == nil {
-				pm.processTaskAddHooks(ctx, targetVersion, syncMatched)
+				pm.processTaskAddHooks(ctx, targetVersion, syncMatched, result.reason)
 			}
 
 			// Build ID is not returned for sync match. The returned build ID is used by History to update
@@ -476,17 +479,27 @@ reredirectTask:
 
 	err = spoolQueue.SpoolTask(params.taskInfo)
 	if err == nil {
-		pm.processTaskAddHooks(ctx, targetVersion, false)
+		pm.processTaskAddHooks(ctx, targetVersion, false, result.reason)
 	}
 
 	return assignedBuildId, false, err
 }
 
-func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context, targetVersion *deploymentspb.WorkerDeploymentVersion, syncMatched bool) {
+func noMatchReasonToHook(reason NoMatchReason) hooks.NoMatchReason {
+	switch reason {
+	case NoMatchReasonRateLimited:
+		return hooks.NoMatchReasonRateLimited
+	default:
+		return hooks.NoMatchReasonUnspecified
+	}
+}
+
+func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context, targetVersion *deploymentspb.WorkerDeploymentVersion, syncMatched bool, reason NoMatchReason) {
 	for _, l := range pm.taskHooks {
 		l.ProcessTaskAdd(ctx, &hooks.TaskAddHookDetails{
 			DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(targetVersion),
 			IsSyncMatch:       syncMatched,
+			NoMatchReason:     noMatchReasonToHook(reason),
 		})
 	}
 }
