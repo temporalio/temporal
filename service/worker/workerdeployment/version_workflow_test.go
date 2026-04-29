@@ -35,7 +35,7 @@ type VersionWorkflowSuite struct {
 
 func TestVersionWorkflowSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &VersionWorkflowSuite{workflowVersion: VersionDataRevisionNumber})
+	suite.Run(t, &VersionWorkflowSuite{workflowVersion: TqRegistrationPropagationTracking})
 }
 
 func (s *VersionWorkflowSuite) SetupTest() {
@@ -1539,7 +1539,8 @@ func (s *VersionWorkflowSuite) Test_SyncState_SignalsPropagationComplete_WithCor
 }
 
 // Test_RegisterWorker_DoesNotSignalPropagationComplete tests that worker registration
-// doesn't signal the deployment workflow about propagation completion
+// doesn't signal the deployment workflow about propagation completion via PropagationCompleteSignal.
+// It does, however, signal via TqRegistrationPropagationCompleteSignal when the version is current or ramping.
 func (s *VersionWorkflowSuite) Test_RegisterWorker_DoesNotSignalPropagationComplete() {
 	tv := testvars.New(s.T())
 	now := timestamppb.New(time.Now())
@@ -1559,8 +1560,12 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_DoesNotSignalPropagationCompl
 	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		s.Fail("Should not signal propagation complete for worker registration")
-	}).Maybe()
+		signalName := args.Get(3).(string)
+		if signalName == PropagationCompleteSignal {
+			s.Fail("Should not signal PropagationCompleteSignal for worker registration")
+		}
+		// TqRegistrationPropagationCompleteSignal is expected when version is current
+	}).Return(nil).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
 		routingConfig := &deploymentpb.RoutingConfig{
@@ -1604,6 +1609,85 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_DoesNotSignalPropagationCompl
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_RegisterWorker_SignalsTqRegistrationPropagationComplete tests that worker registration
+// in a current version signals TqRegistrationPropagationCompleteSignal to the deployment workflow.
+func (s *VersionWorkflowSuite) Test_RegisterWorker_SignalsTqRegistrationPropagationComplete() {
+	s.skipBeforeVersion(TqRegistrationPropagationTracking)
+
+	tv := testvars.New(s.T())
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	newTaskQueueName := tv.TaskQueue().Name + "_new"
+
+	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
+		&deploymentspb.SyncDeploymentVersionUserDataResponse{
+			TaskQueueMaxVersions: map[string]int64{newTaskQueueName: 1},
+		}, nil,
+	).Maybe()
+
+	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	signalSent := false
+	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		signalName := args.Get(3).(string)
+		s.Equal(TqRegistrationPropagationCompleteSignal, signalName,
+			"should signal TqRegistrationPropagationCompleteSignal, not PropagationCompleteSignal")
+		signalSent = true
+	}).Return(nil).Maybe()
+
+	s.env.RegisterDelayedCallback(func() {
+		routingConfig := &deploymentpb.RoutingConfig{
+			//nolint:staticcheck // SA1019: worker versioning v0.31
+			CurrentVersion:            tv.DeploymentVersionString(),
+			CurrentVersionChangedTime: timestamppb.Now(),
+			RevisionNumber:            5,
+			CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+		}
+
+		registerArgs := &deploymentspb.RegisterWorkerInVersionArgs{
+			TaskQueueName: newTaskQueueName,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			MaxTaskQueues: 100,
+			Version:       tv.DeploymentVersionString(),
+			RoutingConfig: routingConfig,
+		}
+
+		s.env.UpdateWorkflow(RegisterWorkerInDeploymentVersion, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("register should not be rejected", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(result any, err error) {
+				s.Require().NoError(err)
+			},
+		}, registerArgs)
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			TaskQueueFamilies:         map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{},
+			RevisionNumber:            0,
+			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
+			StartedDeploymentWorkflow: true,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(signalSent, "TqRegistrationPropagationCompleteSignal should have been sent")
 }
 
 // Test_BatchTaskQueuesForSync_SingleBatch tests batching when task queues fit in one batch

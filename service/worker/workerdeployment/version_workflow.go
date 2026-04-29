@@ -707,7 +707,12 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	}
 
 	if _, ok := d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)]; ok {
-		// already registered, returning success so it is idempotent
+		// already registered, returning success so it is idempotent.
+		// Signal the deployment workflow to decrement its counter if it was tracking this registration.
+		if args.GetRoutingConfig() != nil && d.hasMinVersion(TqRegistrationPropagationTracking) &&
+			isVersionCurrentOrRamping(args.GetRoutingConfig(), d.VersionState.GetVersion().GetBuildId(), d.VersionState.GetVersion().GetDeploymentName()) {
+			d.signalTqRegistrationPropagationComplete(ctx)
+		}
 		return nil
 	}
 
@@ -1429,11 +1434,8 @@ func (d *VersionWorkflowRunner) hasMinVersion(version DeploymentWorkflowVersion)
 
 // syncRegisteredTaskQueueAsync syncs the routing config and version data to the new task queue.
 // This method does not increment version data revision number.
-// Note: task queue registration does not affect WorkerDeploymentInfo.RoutingConfigUpdateState hence we do not signal
-// the deployment workflow about propagation completion.
-// TODO: Set RoutingConfigUpdateState to IN_PROGRESS when the version is already ramping or current? It's OK to do it
-// later because it's not possible normally and user has to pass IgnoreMissingTaskQueues or AllowNoPollers for it to
-// happen, or the task queue needs to be a task queue that is added in this version.
+// If the version is current or ramping, it signals the deployment workflow upon completion so that
+// RoutingConfigUpdateState transitions back to COMPLETED.
 func (d *VersionWorkflowRunner) syncRegisteredTaskQueueAsync(ctx workflow.Context, args *deploymentspb.RegisterWorkerInVersionArgs) {
 	startTime := workflow.Now(ctx)
 
@@ -1447,6 +1449,10 @@ func (d *VersionWorkflowRunner) syncRegisteredTaskQueueAsync(ctx workflow.Contex
 		{Name: args.GetTaskQueueName(), Types: []enumspb.TaskQueueType{args.GetTaskQueueType()}},
 	}
 
+	// Determine if we need to signal the deployment workflow about propagation completion.
+	shouldSignalDeployment := args.GetRoutingConfig() != nil && d.hasMinVersion(TqRegistrationPropagationTracking) &&
+		isVersionCurrentOrRamping(args.GetRoutingConfig(), d.VersionState.GetVersion().GetBuildId(), d.VersionState.GetVersion().GetDeploymentName())
+
 	// This must be done in the main goroutine otherwise the wf may CaN before getting to it.
 	d.asyncPropagationsInProgress++
 
@@ -1456,8 +1462,30 @@ func (d *VersionWorkflowRunner) syncRegisteredTaskQueueAsync(ctx workflow.Contex
 		// the task queue partition initiating the registration itself is responsible to block until it sees the version in user data.
 		d.executePropagationBatch(gCtx, batch, args.GetRoutingConfig(), versionData)
 
+		// Signal deployment workflow that TQ registration propagation completed, so that
+		// RoutingConfigUpdateState can transition back to COMPLETED.
+		if shouldSignalDeployment {
+			d.signalTqRegistrationPropagationComplete(gCtx)
+		}
+
 		d.metrics.Timer(metrics.VersioningDataPropagationLatency.Name()).Record(workflow.Now(ctx).Sub(startTime))
 		// Decrement counter when propagation completes
 		d.asyncPropagationsInProgress--
 	})
+}
+
+// signalTqRegistrationPropagationComplete sends a signal to the deployment workflow when a
+// task queue registration propagation has completed for a current or ramping version.
+func (d *VersionWorkflowRunner) signalTqRegistrationPropagationComplete(ctx workflow.Context) {
+	err := workflow.SignalExternalWorkflow(
+		ctx,
+		GenerateDeploymentWorkflowID(d.VersionState.Version.DeploymentName),
+		"",
+		TqRegistrationPropagationCompleteSignal,
+		nil,
+	).Get(ctx, nil)
+
+	if err != nil {
+		d.logger.Error("could not signal TQ registration propagation completion", "error", err)
+	}
 }

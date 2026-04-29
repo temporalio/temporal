@@ -678,8 +678,12 @@ type WorkerDeploymentLocalState struct {
 	PropagatingRevisions map[string]*PropagatingRevisions `protobuf:"bytes,8,rep,name=propagating_revisions,json=propagatingRevisions,proto3" json:"propagating_revisions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Request ID used to create this worker deployment.
 	CreateRequestId string `protobuf:"bytes,9,opt,name=create_request_id,json=createRequestId,proto3" json:"create_request_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Tracks the number of in-flight task queue registration propagations for versions
+	// that are current or ramping. Used with propagating_revisions to derive
+	// RoutingConfigUpdateState.
+	PendingTqRegistrationPropagations int32 `protobuf:"varint,10,opt,name=pending_tq_registration_propagations,json=pendingTqRegistrationPropagations,proto3" json:"pending_tq_registration_propagations,omitempty"`
+	unknownFields                     protoimpl.UnknownFields
+	sizeCache                         protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentLocalState) Reset() {
@@ -773,6 +777,13 @@ func (x *WorkerDeploymentLocalState) GetCreateRequestId() string {
 		return x.CreateRequestId
 	}
 	return ""
+}
+
+func (x *WorkerDeploymentLocalState) GetPendingTqRegistrationPropagations() int32 {
+	if x != nil {
+		return x.PendingTqRegistrationPropagations
+	}
+	return 0
 }
 
 // Tracks revision numbers that are currently propagating for a specific build ID
@@ -4081,7 +4092,7 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x0enamespace_name\x18\x01 \x01(\tR\rnamespaceName\x12!\n" +
 	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12'\n" +
 	"\x0fdeployment_name\x18\x03 \x01(\tR\x0edeploymentName\x12S\n" +
-	"\x05state\x18\x04 \x01(\v2=.temporal.server.api.deployment.v1.WorkerDeploymentLocalStateR\x05state\"\x82\a\n" +
+	"\x05state\x18\x04 \x01(\v2=.temporal.server.api.deployment.v1.WorkerDeploymentLocalStateR\x05state\"\xd3\a\n" +
 	"\x1aWorkerDeploymentLocalState\x12;\n" +
 	"\vcreate_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12P\n" +
@@ -4092,7 +4103,9 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x0fsync_batch_size\x18\x06 \x01(\x05R\rsyncBatchSize\x12)\n" +
 	"\x10manager_identity\x18\a \x01(\tR\x0fmanagerIdentity\x12\x8c\x01\n" +
 	"\x15propagating_revisions\x18\b \x03(\v2W.temporal.server.api.deployment.v1.WorkerDeploymentLocalState.PropagatingRevisionsEntryR\x14propagatingRevisions\x12*\n" +
-	"\x11create_request_id\x18\t \x01(\tR\x0fcreateRequestId\x1a~\n" +
+	"\x11create_request_id\x18\t \x01(\tR\x0fcreateRequestId\x12O\n" +
+	"$pending_tq_registration_propagations\x18\n" +
+	" \x01(\x05R!pendingTqRegistrationPropagations\x1a~\n" +
 	"\rVersionsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12W\n" +
 	"\x05value\x18\x02 \x01(\v2A.temporal.server.api.deployment.v1.WorkerDeploymentVersionSummaryR\x05value:\x028\x01\x1a\x80\x01\n" +

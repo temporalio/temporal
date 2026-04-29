@@ -1777,7 +1777,7 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 	workerDeploymentInfo.RoutingConfig = state.RoutingConfig
 	workerDeploymentInfo.LastModifierIdentity = state.LastModifierIdentity
 	workerDeploymentInfo.ManagerIdentity = state.ManagerIdentity
-	if len(state.PropagatingRevisions) > 0 {
+	if len(state.PropagatingRevisions) > 0 || state.PendingTqRegistrationPropagations > 0 {
 		workerDeploymentInfo.RoutingConfigUpdateState = enumspb.ROUTING_CONFIG_UPDATE_STATE_IN_PROGRESS
 	} else {
 		workerDeploymentInfo.RoutingConfigUpdateState = enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
