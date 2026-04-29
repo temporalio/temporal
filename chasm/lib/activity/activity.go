@@ -583,12 +583,12 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	// Add a new ScheduleToCloseTimeoutTask at the (possibly updated) deadline.
 	// Increment the stamp so the previous task is invalidated by the Validate check.
 	if timeout := a.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
-		a.Stamp++
+		a.ScheduleToCloseStamp++
 		deadline := a.GetScheduleTime().AsTime().Add(timeout)
 		ctx.AddTask(
 			a,
 			chasm.TaskAttributes{ScheduledTime: deadline},
-			&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetStamp()},
+			&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetScheduleToCloseStamp()},
 		)
 	}
 

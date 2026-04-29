@@ -62,13 +62,13 @@ var TransitionScheduled = chasm.NewTransition(
 		}
 
 		if timeout := a.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
-			a.Stamp++
+			a.ScheduleToCloseStamp++
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
 					ScheduledTime: startDelayEnd.Add(timeout),
 				},
-				&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetStamp()})
+				&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetScheduleToCloseStamp()})
 		}
 
 		dispatchAttrs := chasm.TaskAttributes{}
