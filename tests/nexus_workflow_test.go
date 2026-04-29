@@ -78,7 +78,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 	env := s.newTestEnv(chasmEnabled)
 	ctx := env.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	firstCancelSeen := false
 	h := nexustest.Handler{
@@ -97,7 +96,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 			return nil
 		},
 	}
-	env.createExternalNexusServer(ctx, s.T(), endpointName, h)
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue:           taskQueue,
@@ -279,7 +278,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion(chasmEnabled b
 	env := s.newTestEnv(chasmEnabled)
 	ctx := env.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	handlerLink := &commonpb.Link_WorkflowEvent{
 		Namespace:  "handler-ns",
@@ -299,7 +297,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion(chasmEnabled b
 			return &nexus.HandlerStartOperationResultSync[any]{Value: "result"}, nil
 		},
 	}
-	env.createExternalNexusServer(ctx, s.T(), endpointName, h)
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
@@ -393,7 +391,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion_LargePayload(c
 	env := s.newTestEnv(chasmEnabled)
 	ctx := env.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
@@ -402,7 +399,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion_LargePayload(c
 			return &nexus.HandlerStartOperationResultSync[any]{Value: strings.Repeat("a", (2*1024*1024)-10)}, nil
 		},
 	}
-	env.createExternalNexusServer(ctx, s.T(), endpointName, h)
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
@@ -482,7 +479,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	env := s.newTestEnv(chasmEnabled)
 	ctx := env.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	testClusterInfo, err := env.FrontendClient().GetClusterInfo(ctx, &workflowservice.GetClusterInfoRequest{})
 	s.NoError(err)
@@ -571,7 +567,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 			}, nil
 		},
 	}
-	env.createExternalNexusServer(ctx, s.T(), endpointName, h)
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
 
 	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: env.Namespace().String(),
@@ -1164,7 +1160,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure(chasmEnabled boo
 	env := s.newTestEnv(chasmEnabled)
 	ctx := env.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	var callbackToken, publicCallbackURL string
 
@@ -1175,7 +1170,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure(chasmEnabled boo
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
 	}
-	env.createExternalNexusServer(ctx, s.T(), endpointName, h)
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
@@ -1739,7 +1734,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 	env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
 	ctx := env.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	canStartCh := make(chan struct{})
 	cancelSentCh := make(chan struct{})
@@ -1758,7 +1752,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 			return nil
 		},
 	}
-	env.createExternalNexusServer(ctx, s.T(), endpointName, h)
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
@@ -1861,7 +1855,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset(cha
 	env := s.newTestEnv(chasmEnabled)
 	ctx := env.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	var callbackToken, publicCallbackUrl string
 
@@ -1872,7 +1865,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset(cha
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
 	}
-	env.createExternalNexusServer(ctx, s.T(), endpointName, h)
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
@@ -2535,7 +2528,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 	env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
 	ctx := env.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
@@ -2551,7 +2543,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 			}
 		},
 	}
-	env.createExternalNexusServer(ctx, s.T(), endpointName, h)
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
 
 	w := worker.New(
 		env.SdkClient(),
@@ -2989,7 +2981,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationStartToCloseTimeout(chasmEnab
 	env := s.newTestEnv(chasmEnabled)
 	ctx := env.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	// Handler that starts quickly (returns async) but never completes
 	h := nexustest.Handler{
@@ -2998,7 +2989,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationStartToCloseTimeout(chasmEnab
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-op-token"}, nil
 		},
 	}
-	env.createExternalNexusServer(ctx, s.T(), endpointName, h)
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,

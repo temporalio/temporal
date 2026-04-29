@@ -50,8 +50,10 @@ func (env *NexusTestEnv) createNexusEndpoint(ctx context.Context, t *testing.T, 
 		},
 	})
 	require.NoError(t, err)
+
+	// Using a fresh context here in case 'ctx' is tied to a test's lifetime which could cancel this deletion request.
 	t.Cleanup(func() {
-		_, _ = env.OperatorClient().DeleteNexusEndpoint(ctx, &operatorservice.DeleteNexusEndpointRequest{
+		_, _ = env.OperatorClient().DeleteNexusEndpoint(testcore.NewContext(), &operatorservice.DeleteNexusEndpointRequest{
 			Id:      resp.Endpoint.Id,
 			Version: resp.Endpoint.Version,
 		})
@@ -65,8 +67,9 @@ func (env *NexusTestEnv) createRandomNexusEndpoint(ctx context.Context, t *testi
 	return env.createNexusEndpoint(ctx, t, testcore.RandomizedNexusEndpoint(t.Name()), "unused")
 }
 
-// createExternalNexusServer creates a mock nexus server that listens via a provided endpoint address.
-func (env *NexusTestEnv) createExternalNexusServer(ctx context.Context, t *testing.T, endpointName string, handler nexustest.Handler) {
+// createRandomExternalNexusServer creates a mock nexus server that listens via a randomized endpointName and return this name to the caller.
+func (env *NexusTestEnv) createRandomExternalNexusServer(ctx context.Context, t *testing.T, handler nexustest.Handler) string {
+	endpointName := testcore.RandomizedNexusEndpoint(t.Name())
 	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(t, listenAddr, handler)
 	resp, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
@@ -82,14 +85,16 @@ func (env *NexusTestEnv) createExternalNexusServer(ctx context.Context, t *testi
 		},
 	})
 	require.NoError(t, err)
+	// Using a fresh context here in case 'ctx' is tied to a test's lifetime which could cancel this deletion request.
 	t.Cleanup(func() {
-		_, _ = env.OperatorClient().DeleteNexusEndpoint(ctx, &operatorservice.DeleteNexusEndpointRequest{
+		_, _ = env.OperatorClient().DeleteNexusEndpoint(testcore.NewContext(), &operatorservice.DeleteNexusEndpointRequest{
 			Id:      resp.Endpoint.Id,
 			Version: resp.Endpoint.Version,
 		})
 	})
 
 	env.ensureNexusEndpoint(ctx, t, endpointName)
+	return endpointName
 }
 
 // ensureNexusEndpoint probes the specified endpoint until it's visible to StartNexusOperationExecution to ensure tests

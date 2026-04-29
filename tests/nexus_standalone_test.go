@@ -877,7 +877,6 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 
 	s.Run("RequestCancel_ForwardsOriginalNexusHeaders", func(s *NexusStandaloneTestSuite) {
 		env := s.newTestEnv()
-		endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 		taskHeaderCh := make(chan string, 1)
 		handler := nexustest.Handler{
 			OnStartOperation: func(
@@ -894,7 +893,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 				return nil
 			},
 		}
-		env.createExternalNexusServer(env.Context(), s.T(), endpointName, handler)
+		endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), handler)
 
 		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
@@ -2096,7 +2095,6 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 
 func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken() {
 	env := s.newTestEnv()
-	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 	handlerLink := &commonpb.Link_WorkflowEvent{
 		Namespace:  env.Namespace().String(),
 		WorkflowId: "handler-workflow",
@@ -2131,7 +2129,7 @@ func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresTransitionFieldsInC
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-operation-token"}, nil
 		},
 	}
-	env.createExternalNexusServer(env.Context(), s.T(), endpointName, handler)
+	endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), handler)
 
 	startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 		OperationId: "test-op",

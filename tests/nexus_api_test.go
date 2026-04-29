@@ -607,14 +607,16 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Su
 		// UpdateWorkerBuildIdCompatibility is the v0.1 (Version Set-based) API gated by DataAPIs.
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningDataAPIs, true),
 	)
+	ctx, cancel := context.WithCancel(env.Context())
+	defer cancel()
 
 	taskQueue := testcore.RandomizeStr("task-queue")
-	err := env.SdkClient().UpdateWorkerBuildIdCompatibility(env.Context(), &sdkclient.UpdateWorkerBuildIdCompatibilityOptions{ //nolint:staticcheck // SA1019 deprecated
+	err := env.SdkClient().UpdateWorkerBuildIdCompatibility(ctx, &sdkclient.UpdateWorkerBuildIdCompatibilityOptions{ //nolint:staticcheck // SA1019 deprecated
 		TaskQueue: taskQueue,
 		Operation: &sdkclient.BuildIDOpAddNewIDInNewDefaultSet{BuildID: "old-build-id"},
 	})
 	s.NoError(err)
-	err = env.SdkClient().UpdateWorkerBuildIdCompatibility(env.Context(), &sdkclient.UpdateWorkerBuildIdCompatibilityOptions{ //nolint:staticcheck // SA1019 deprecated
+	err = env.SdkClient().UpdateWorkerBuildIdCompatibility(ctx, &sdkclient.UpdateWorkerBuildIdCompatibilityOptions{ //nolint:staticcheck // SA1019 deprecated
 		TaskQueue: taskQueue,
 		Operation: &sdkclient.BuildIDOpAddNewIDInNewDefaultSet{BuildID: "new-build-id"},
 	})
@@ -624,19 +626,19 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Su
 	client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: u, Service: "test-service"})
 	s.NoError(err)
 	// Versioned poller gets task
-	pollerErrCh1 := env.versionedNexusTaskPoller(env.Context(), s.T(), taskQueue, "new-build-id", nexusEchoHandler)
+	pollerErrCh1 := env.versionedNexusTaskPoller(ctx, s.T(), taskQueue, "new-build-id", nexusEchoHandler)
 
-	result, err := nexusrpc.StartOperation(env.Context(), client, op, "input", nexus.StartOperationOptions{})
+	result, err := nexusrpc.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
 	s.NoError(err)
 	s.Equal("input", result.Successful)
 	s.NoError(<-pollerErrCh1)
 
 	// Unversioned poller doesn't get a task
-	pollerErrCh2 := env.nexusTaskPoller(env.Context(), s.T(), taskQueue, nexusEchoHandler)
+	pollerErrCh2 := env.nexusTaskPoller(ctx, s.T(), taskQueue, nexusEchoHandler)
 	// Versioned poller gets task with wrong build ID
-	pollerErrCh3 := env.versionedNexusTaskPoller(env.Context(), s.T(), taskQueue, "old-build-id", nexusEchoHandler)
+	pollerErrCh3 := env.versionedNexusTaskPoller(ctx, s.T(), taskQueue, "old-build-id", nexusEchoHandler)
 
-	timeoutCtx, timeoutCancel := context.WithTimeout(env.Context(), time.Second*2)
+	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Second*2)
 	defer timeoutCancel()
 	_, err = nexusrpc.StartOperation(timeoutCtx, client, op, "input", nexus.StartOperationOptions{})
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -646,7 +648,6 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Su
 		}
 	}
 	// Cancel the parent context to unblock the pollers that didn't receive a task.
-	_, cancel := context.WithCancel(env.Context())
 	cancel()
 	s.NoError(<-pollerErrCh2)
 	s.NoError(<-pollerErrCh3)
