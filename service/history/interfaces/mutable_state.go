@@ -46,7 +46,14 @@ type (
 		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 
 		AddActivityTaskCancelRequestedEvent(int64, int64, string) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error)
+		// AddActivityTaskCancelRequestedEventCHASM handles RequestCancelActivity for CHASM-managed activities.
+		// Returns (cancelReqEvent, wasNotStarted, error). Caller must write ActivityTaskCanceled when wasNotStarted.
+		AddActivityTaskCancelRequestedEventCHASM(workflowTaskCompletedEventID int64, scheduledEventID int64, identity string) (*historypb.HistoryEvent, bool, error)
 		AddActivityTaskCanceledEvent(int64, int64, int64, *commonpb.Payloads, string) (*historypb.HistoryEvent, error)
+		// AddActivityTaskCanceledEventCHASM writes an ActivityTaskCanceled history event for a
+		// CHASM-managed activity, bypassing the legacy ActivityInfo lookup.
+		// TODO(david.porter): Will not merge — prototype only.
+		AddActivityTaskCanceledEventCHASM(scheduledEventID int64, latestCancelRequestedEventID int64, details *commonpb.Payloads, identity string) (*historypb.HistoryEvent, error)
 		AddWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error
 		AddActivityTaskCompletedEvent(int64, int64, *workflowservice.RespondActivityTaskCompletedRequest) (*historypb.HistoryEvent, error)
 		AddActivityTaskFailedEvent(int64, int64, *failurepb.Failure, enumspb.RetryState, string, *commonpb.WorkerVersionStamp) (*historypb.HistoryEvent, error)

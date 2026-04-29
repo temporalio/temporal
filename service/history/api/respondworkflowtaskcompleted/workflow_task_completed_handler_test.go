@@ -551,6 +551,7 @@ func TestHandleCommandRequestCancelActivity_WorkerCommands(t *testing.T) {
 	t.Run("collects commands for activities with clock, skips those without", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		ms := historyi.NewMockMutableState(ctrl)
+		ms.EXPECT().ChasmEnabled().Return(false).AnyTimes()
 
 		// Activity 1: started with clock (post-deploy) — should produce a cancel command.
 		ai1 := &persistencespb.ActivityInfo{
@@ -622,6 +623,7 @@ func TestHandleCommandRequestCancelActivity_WorkerCommands(t *testing.T) {
 	t.Run("started activity without control queue does not collect worker command", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		ms := historyi.NewMockMutableState(ctrl)
+		ms.EXPECT().ChasmEnabled().Return(false).AnyTimes()
 
 		ai := &persistencespb.ActivityInfo{
 			ScheduledEventId:       scheduledEventID,

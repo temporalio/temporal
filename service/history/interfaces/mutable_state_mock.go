@@ -87,6 +87,22 @@ func (mr *MockMutableStateMockRecorder) AddActivityTaskCancelRequestedEvent(arg0
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddActivityTaskCancelRequestedEvent", reflect.TypeOf((*MockMutableState)(nil).AddActivityTaskCancelRequestedEvent), arg0, arg1, arg2)
 }
 
+// AddActivityTaskCancelRequestedEventCHASM mocks base method.
+func (m *MockMutableState) AddActivityTaskCancelRequestedEventCHASM(workflowTaskCompletedEventID int64, scheduledEventID int64, identity string) (*history.HistoryEvent, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddActivityTaskCancelRequestedEventCHASM", workflowTaskCompletedEventID, scheduledEventID, identity)
+	ret0, _ := ret[0].(*history.HistoryEvent)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// AddActivityTaskCancelRequestedEventCHASM indicates an expected call of AddActivityTaskCancelRequestedEventCHASM.
+func (mr *MockMutableStateMockRecorder) AddActivityTaskCancelRequestedEventCHASM(workflowTaskCompletedEventID, scheduledEventID, identity any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddActivityTaskCancelRequestedEventCHASM", reflect.TypeOf((*MockMutableState)(nil).AddActivityTaskCancelRequestedEventCHASM), workflowTaskCompletedEventID, scheduledEventID, identity)
+}
+
 // AddActivityTaskCanceledEvent mocks base method.
 func (m *MockMutableState) AddActivityTaskCanceledEvent(arg0, arg1, arg2 int64, arg3 *common.Payloads, arg4 string) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
@@ -100,6 +116,21 @@ func (m *MockMutableState) AddActivityTaskCanceledEvent(arg0, arg1, arg2 int64, 
 func (mr *MockMutableStateMockRecorder) AddActivityTaskCanceledEvent(arg0, arg1, arg2, arg3, arg4 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddActivityTaskCanceledEvent", reflect.TypeOf((*MockMutableState)(nil).AddActivityTaskCanceledEvent), arg0, arg1, arg2, arg3, arg4)
+}
+
+// AddActivityTaskCanceledEventCHASM mocks base method.
+func (m *MockMutableState) AddActivityTaskCanceledEventCHASM(scheduledEventID int64, latestCancelRequestedEventID int64, details *common.Payloads, identity string) (*history.HistoryEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddActivityTaskCanceledEventCHASM", scheduledEventID, latestCancelRequestedEventID, details, identity)
+	ret0, _ := ret[0].(*history.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddActivityTaskCanceledEventCHASM indicates an expected call of AddActivityTaskCanceledEventCHASM.
+func (mr *MockMutableStateMockRecorder) AddActivityTaskCanceledEventCHASM(scheduledEventID, latestCancelRequestedEventID, details, identity any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddActivityTaskCanceledEventCHASM", reflect.TypeOf((*MockMutableState)(nil).AddActivityTaskCanceledEventCHASM), scheduledEventID, latestCancelRequestedEventID, details, identity)
 }
 
 // AddActivityTaskCompletedEvent mocks base method.

@@ -4214,6 +4214,14 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 //  3. Calls TransitionScheduled to generate ActivityDispatchTask and timeout pure tasks
 //
 // Returns the scheduled event ID. No legacy ActivityInfo entry is created.
+//
+// TODO(david.porter): Will not merge — prototype only. Missing before production:
+//   - Duplicate activity ID rejection (currently no dedup check against CHASM tree)
+//   - Schedule-to-start / schedule-to-close / heartbeat timeout task wiring into mutable state
+//   - Retry policy enforcement on TransitionFailed / TransitionTimedOut
+//   - RequestCancelActivity routing through CHASM instead of legacy ActivityInfo lookup
+//   - RespondActivityTaskFailed / RespondActivityTaskTimedOut CHASM branches
+//   - Cross-cluster replication of the CHASM activity sub-tree
 func (ms *MutableStateImpl) AddActivityTaskScheduledEventCHASM(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.ScheduleActivityTaskCommandAttributes,
@@ -4223,6 +4231,12 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEventCHASM(
 		return 0, err
 	}
 
+	ms.logger.Debug("[CHASM prototype] AddActivityTaskScheduledEventCHASM: scheduling activity via CHASM framework",
+		tag.WorkflowNamespaceID(ms.GetWorkflowKey().NamespaceID),
+		tag.WorkflowID(ms.GetWorkflowKey().WorkflowID),
+		tag.WorkflowRunID(ms.GetWorkflowKey().RunID),
+		tag.ActivityID(command.GetActivityId()),
+	)
 	// 1. Write history event — CHASM activities still appear in workflow history.
 	event := ms.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command, ms.namespaceEntry.Name())
 	ms.writeEventToCache(event)
@@ -4709,6 +4723,77 @@ func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 	}
 
 	return actCancelReqEvent, ai, nil
+}
+
+// AddActivityTaskCancelRequestedEventCHASM handles RequestCancelActivity for CHASM-managed activities.
+// It looks up the activity in the CHASM tree by scheduledEventID, writes the history event, and
+// applies the appropriate cancel transitions. Returns (event, wasNotStarted, error).
+//
+// TODO(david.porter): Will not merge — prototype only. Does not handle the WorkerControlTaskQueue
+// (cancellation via Nexus worker control tasks) or cross-cluster replication.
+func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEventCHASM(
+	workflowTaskCompletedEventID int64,
+	scheduledEventID int64,
+	identity string,
+) (*historypb.HistoryEvent, bool, error) {
+	opTag := tag.WorkflowActionActivityTaskCancelRequested
+	if err := ms.checkMutability(opTag); err != nil {
+		return nil, false, err
+	}
+
+	wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return nil, false, err
+	}
+
+	actField, ok := wf.Activities[scheduledEventID]
+	if !ok {
+		return nil, false, ms.createCallerError(opTag, fmt.Sprintf("CHASM activity not found for ScheduledEventID: %d", scheduledEventID))
+	}
+	act := actField.Get(chasmCtx)
+
+	actCancelReqEvent := ms.hBuilder.AddActivityTaskCancelRequestedEvent(workflowTaskCompletedEventID, scheduledEventID)
+
+	wasNotStarted, err := act.RequestCancelFromWorkflowTask(chasmCtx, identity)
+	if err != nil {
+		return nil, false, err
+	}
+
+	// Caller is responsible for writing ActivityTaskCanceled when wasNotStarted is true,
+	// following the same pattern as the legacy AddActivityTaskCancelRequestedEvent path.
+	return actCancelReqEvent, wasNotStarted, nil
+}
+
+// AddActivityTaskCanceledEventCHASM writes an ActivityTaskCanceled history event for a
+// CHASM-managed activity without requiring the activity to be present in the legacy
+// ActivityInfo map. Used when wasNotStarted=true from AddActivityTaskCancelRequestedEventCHASM.
+//
+// TODO(david.porter): Will not merge — prototype only.
+func (ms *MutableStateImpl) AddActivityTaskCanceledEventCHASM(
+	scheduledEventID int64,
+	latestCancelRequestedEventID int64,
+	details *commonpb.Payloads,
+	identity string,
+) (*historypb.HistoryEvent, error) {
+	opTag := tag.WorkflowActionActivityTaskCanceled
+	if err := ms.checkMutability(opTag); err != nil {
+		return nil, err
+	}
+
+	// Write the history event directly without the legacy ActivityInfo lookup.
+	event := ms.hBuilder.AddActivityTaskCanceledEvent(
+		scheduledEventID,
+		common.EmptyEventID, // not started
+		latestCancelRequestedEventID,
+		details,
+		identity,
+	)
+
+	// DeleteActivity is a no-op for CHASM activities (no legacy ActivityInfo entry),
+	// but it cleans up any stale timer/sync entries if they exist.
+	_ = ms.DeleteActivity(scheduledEventID)
+
+	return event, nil
 }
 
 func (ms *MutableStateImpl) AddWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error {

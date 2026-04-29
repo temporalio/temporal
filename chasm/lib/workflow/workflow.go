@@ -84,6 +84,12 @@ func (w *Workflow) Terminate(
 // RecordCompleted implements the ActivityStore interface. It is called by embedded Activity
 // sub-components when they reach a terminal state. It applies the activity's terminal mutation
 // (via applyFn) and then schedules a new workflow task so the workflow can react to the completion.
+//
+// TODO(david.porter): Will not merge — prototype only. ScheduleWorkflowTask is a no-op when a
+// WFT is already pending (common case: the forced WFT from RespondWorkflowTaskCompleted fires
+// before the activity completes). In that case we rely on the pending WFT picking up the buffered
+// history events written by WriteActivityTaskCompletedHistoryEvent. This needs an explicit
+// "buffer flush triggers follow-up WFT" mechanism for the case where no WFT is pending.
 func (w *Workflow) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error {
 	if err := applyFn(ctx); err != nil {
 		return err

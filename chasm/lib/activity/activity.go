@@ -99,6 +99,11 @@ type Activity struct {
 	// ScheduledEventID is the workflow history event ID of the ActivityTaskScheduled event.
 	// Only set for workflow-embedded activities (Store != nil). Not persisted by CHASM — resolved
 	// lazily from the component ref path (the map key in the parent Workflow.Activities map).
+	//
+	// TODO(david.porter): Will not merge — keying activities by history event ID leaks history
+	// concepts into the CHASM tree. The long-term design should use a stable, history-agnostic
+	// activity ID (e.g. the SDK-provided activityId string) as the map key, with event IDs only
+	// written at history-emit time.
 	ScheduledEventID int64
 }
 
@@ -193,13 +198,6 @@ func NewStandaloneActivity(
 	return activity, nil
 }
 
-func NewEmbeddedActivity(
-	ctx chasm.MutableContext,
-	state *activitypb.ActivityState,
-	parent ActivityStore,
-) {
-}
-
 func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID string) (*matchingservice.AddActivityTaskRequest, error) {
 	// Get latest component ref and unmarshal into proto ref
 	componentRef, err := ctx.Ref(a)
@@ -209,14 +207,28 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 
 	// Note: No need to set the vector clock here, as the components track version conflicts for read/write
 	// TODO: Need to fill in VersionDirective once we decide how to handle versioning for standalone activities
-	return &matchingservice.AddActivityTaskRequest{
+	req := &matchingservice.AddActivityTaskRequest{
 		NamespaceId:            namespaceID,
 		ScheduleToStartTimeout: a.ScheduleToStartTimeout,
 		TaskQueue:              a.GetTaskQueue(),
 		Priority:               a.GetPriority(),
 		ComponentRef:           componentRef,
 		Stamp:                  a.LastAttempt.Get(ctx).GetStamp(),
-	}, nil
+	}
+
+	// For workflow-embedded activities, set Execution and ScheduledEventId so matching can
+	// build the activity poll response for workers and route RecordActivityTaskStarted correctly.
+	if _, ok := a.Store.TryGet(ctx); ok {
+		a.resolveScheduledEventID(ctx)
+		execKey := ctx.ExecutionKey()
+		req.Execution = &commonpb.WorkflowExecution{
+			WorkflowId: execKey.BusinessID,
+			RunId:      execKey.RunID,
+		}
+		req.ScheduledEventId = a.ScheduledEventID
+	}
+
+	return req, nil
 }
 
 // HandleStarted updates the activity on recording activity task started and populates the response.
@@ -311,6 +323,7 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx ch
 
 // WriteActivityTaskCompletedHistoryEvents is a no-op for standalone activities.
 // Standalone activities do not write workflow history events.
+// >>> todo (david.porter) Rename this
 func (a *Activity) WriteActivityTaskCompletedHistoryEvents(_ int64, _ int32, _ string, _ string, _ *commonpb.WorkerVersionStamp, _ string, _ *commonpb.Payloads) error {
 	return nil
 }
@@ -1048,6 +1061,41 @@ func (a *Activity) resolveScheduledEventID(ctx chasm.Context) {
 		return
 	}
 	a.ScheduledEventID = id
+}
+
+// RequestCancelFromWorkflowTask handles a RequestCancelActivity WFT command for this embedded activity.
+// It applies TransitionCancelRequested (and TransitionCanceled if not yet started) so the CHASM
+// tree reflects the cancellation without touching legacy ActivityInfo.
+// Returns wasNotStarted=true when the activity was immediately canceled (no worker to notify).
+//
+// TODO(david.porter): Will not merge — prototype only. Does not emit metrics for the cancel event.
+// >> question, how are metrics handled
+func (a *Activity) RequestCancelFromWorkflowTask(ctx chasm.MutableContext, identity string) (wasNotStarted bool, err error) {
+	if a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		return false, nil // idempotent: already in cancel-requested state
+	}
+
+	wasNotStarted = a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
+
+	if err := TransitionCancelRequested.Apply(a, ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		Identity: identity,
+	}); err != nil {
+		return false, err
+	}
+
+	if wasNotStarted {
+		if err := TransitionCanceled.Apply(a, ctx, cancelEvent{
+			fromStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			// TODO(david.porter): Will not merge — prototype only.
+			// Use a no-op handler here since this path doesn't have access to a real
+			// metrics.Handler. Metrics are not emitted for this cancel path.
+			handler: metrics.NoopMetricsHandler,
+		}); err != nil {
+			return wasNotStarted, err
+		}
+	}
+
+	return wasNotStarted, nil
 }
 
 // validateActivityTaskToken validates a task token against the current activity state.
