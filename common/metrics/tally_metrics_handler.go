@@ -4,6 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/uber-go/tally/v4"
 	"go.temporal.io/server/common/log"
@@ -55,6 +56,20 @@ func NewTallyMetricsHandler(cfg ClientConfig, scope tally.Scope) *tallyMetricsHa
 	}
 }
 
+// appendCacheKey appends a compact cache key for the given tags to buf and
+// returns the extended buffer.
+func appendCacheKey(buf []byte, tags []Tag) []byte {
+	for i, t := range tags {
+		if i > 0 {
+			buf = append(buf, 0)
+		}
+		buf = append(buf, t.Key...)
+		buf = append(buf, 0)
+		buf = append(buf, t.Value...)
+	}
+	return buf
+}
+
 // tagsCacheKey builds a compact string key from a tag slice for use as a
 // sync.Map lookup key.
 func tagsCacheKey(tags []Tag) string {
@@ -66,15 +81,19 @@ func tagsCacheKey(tags []Tag) string {
 		size += len(tags[i].Key) + 1 + len(tags[i].Value)
 	}
 	b := make([]byte, 0, size)
-	for i, t := range tags {
-		if i > 0 {
-			b = append(b, 0)
-		}
-		b = append(b, t.Key...)
-		b = append(b, 0)
-		b = append(b, t.Value...)
-	}
+	b = appendCacheKey(b, tags)
 	return string(b)
+}
+
+// tempString creates a temporary string from a byte slice without allocation.
+// The returned string is only valid as long as the byte slice is not modified.
+// This is safe for use as a sync.Map lookup key because Load does not retain
+// the key after returning.
+func tempString(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	return unsafe.String(unsafe.SliceData(b), len(b))
 }
 
 // WithTags creates a new MetricProvider with provided []Tag
@@ -86,9 +105,11 @@ func (tmh *tallyMetricsHandler) WithTags(tags ...Tag) Handler {
 	if len(tags) == 0 {
 		return tmh
 	}
-	key := tagsCacheKey(normalizeTagsForCaching(tags, tmh.excludeTags))
-	if v, ok := tmh.childCache.Load(key); ok {
-		return v.(*tallyMetricsHandler)
+	normalized := normalizeTagsForCaching(tags, tmh.excludeTags)
+	var scratch [128]byte
+	buf := appendCacheKey(scratch[:0], normalized)
+	if v, ok := tmh.childCache.Load(tempString(buf)); ok {
+		return v.(*tallyMetricsHandler) //nolint:revive // type guaranteed by cache
 	}
 	child := &tallyMetricsHandler{
 		scope:          tmh.scope.Tagged(tagsToMap(tags, tmh.excludeTags)),
@@ -98,11 +119,12 @@ func (tmh *tallyMetricsHandler) WithTags(tags ...Tag) Handler {
 	if tmh.childCacheSize.Load() >= scopeCacheMaxSize {
 		return child
 	}
+	key := string(buf)
 	actual, loaded := tmh.childCache.LoadOrStore(key, child)
 	if !loaded {
 		tmh.childCacheSize.Add(1)
 	}
-	return actual.(*tallyMetricsHandler)
+	return actual.(*tallyMetricsHandler) //nolint:revive // type guaranteed by cache
 }
 
 // cachedTaggedScope returns a tally.Scope tagged with the given tags, caching
@@ -116,19 +138,22 @@ func (tmh *tallyMetricsHandler) cachedTaggedScope(tags []Tag) tally.Scope {
 	if len(tags) == 0 {
 		return tmh.scope
 	}
-	key := tagsCacheKey(normalizeTagsForCaching(tags, tmh.excludeTags))
-	if v, ok := tmh.scopeCache.Load(key); ok {
-		return v.(tally.Scope)
+	normalized := normalizeTagsForCaching(tags, tmh.excludeTags)
+	var scratch [128]byte
+	buf := appendCacheKey(scratch[:0], normalized)
+	if v, ok := tmh.scopeCache.Load(tempString(buf)); ok {
+		return v.(tally.Scope) //nolint:revive // type guaranteed by cache
 	}
 	scope := tmh.scope.Tagged(tagsToMap(tags, tmh.excludeTags))
 	if tmh.scopeCacheSize.Load() >= scopeCacheMaxSize {
 		return scope
 	}
+	key := string(buf)
 	actual, loaded := tmh.scopeCache.LoadOrStore(key, scope)
 	if !loaded {
 		tmh.scopeCacheSize.Add(1)
 	}
-	return actual.(tally.Scope)
+	return actual.(tally.Scope) //nolint:revive // type guaranteed by cache
 }
 
 // normalizeTagsForCaching applies excludeTags substitution to produce
@@ -163,50 +188,50 @@ func normalizeTagsForCaching(tags []Tag, excl excludeTags) []Tag {
 // Counter obtains a counter for the given name.
 func (tmh *tallyMetricsHandler) Counter(counter string) CounterIface {
 	if v, ok := tmh.counterCache.Load(counter); ok {
-		return v.(CounterIface)
+		return v.(CounterIface) //nolint:revive // type guaranteed by cache
 	}
 	fn := CounterFunc(func(i int64, t ...Tag) {
 		tmh.cachedTaggedScope(t).Counter(counter).Inc(i)
 	})
 	actual, _ := tmh.counterCache.LoadOrStore(counter, fn)
-	return actual.(CounterIface)
+	return actual.(CounterIface) //nolint:revive // type guaranteed by cache
 }
 
 // Gauge obtains a gauge for the given name.
 func (tmh *tallyMetricsHandler) Gauge(gauge string) GaugeIface {
 	if v, ok := tmh.gaugeCache.Load(gauge); ok {
-		return v.(GaugeIface)
+		return v.(GaugeIface) //nolint:revive // type guaranteed by cache
 	}
 	fn := GaugeFunc(func(f float64, t ...Tag) {
 		tmh.cachedTaggedScope(t).Gauge(gauge).Update(f)
 	})
 	actual, _ := tmh.gaugeCache.LoadOrStore(gauge, fn)
-	return actual.(GaugeIface)
+	return actual.(GaugeIface) //nolint:revive // type guaranteed by cache
 }
 
 // Timer obtains a timer for the given name.
 func (tmh *tallyMetricsHandler) Timer(timer string) TimerIface {
 	if v, ok := tmh.timerCache.Load(timer); ok {
-		return v.(TimerIface)
+		return v.(TimerIface) //nolint:revive // type guaranteed by cache
 	}
 	fn := TimerFunc(func(d time.Duration, t ...Tag) {
 		tmh.cachedTaggedScope(t).Timer(timer).Record(d)
 	})
 	actual, _ := tmh.timerCache.LoadOrStore(timer, fn)
-	return actual.(TimerIface)
+	return actual.(TimerIface) //nolint:revive // type guaranteed by cache
 }
 
 // Histogram obtains a histogram for the given name.
 func (tmh *tallyMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramIface {
 	key := histogram + "\x00" + string(unit)
 	if v, ok := tmh.histogramCache.Load(key); ok {
-		return v.(HistogramIface)
+		return v.(HistogramIface) //nolint:revive // type guaranteed by cache
 	}
 	fn := HistogramFunc(func(i int64, t ...Tag) {
 		tmh.cachedTaggedScope(t).Histogram(histogram, tmh.perUnitBuckets[unit]).RecordValue(float64(i))
 	})
 	actual, _ := tmh.histogramCache.LoadOrStore(key, fn)
-	return actual.(HistogramIface)
+	return actual.(HistogramIface) //nolint:revive // type guaranteed by cache
 }
 
 func (*tallyMetricsHandler) Stop(log.Logger) {}

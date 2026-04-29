@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally/v4"
 )
@@ -37,41 +36,41 @@ func TestTallyScope(t *testing.T) {
 	snap := scope.Snapshot()
 	counters, gauges, timers, histograms := snap.Counters(), snap.Gauges(), snap.Timers(), snap.Histograms()
 
-	assert.EqualValues(t, 8, counters["test.hits+"].Value())
-	assert.EqualValues(t, map[string]string{}, counters["test.hits+"].Tags())
+	require.EqualValues(t, 8, counters["test.hits+"].Value())
+	require.Equal(t, map[string]string{}, counters["test.hits+"].Tags())
 
-	assert.EqualValues(t, 11, counters["test.hits-tagged+taskqueue=__sticky__"].Value())
-	assert.EqualValues(t, map[string]string{"taskqueue": "__sticky__"}, counters["test.hits-tagged+taskqueue=__sticky__"].Tags())
+	require.EqualValues(t, 11, counters["test.hits-tagged+taskqueue=__sticky__"].Value())
+	require.Equal(t, map[string]string{"taskqueue": "__sticky__"}, counters["test.hits-tagged+taskqueue=__sticky__"].Tags())
 
-	assert.EqualValues(t, 14, counters["test.hits-tagged-excluded+taskqueue="+tagExcludedValue].Value())
-	assert.EqualValues(t, map[string]string{"taskqueue": tagExcludedValue}, counters["test.hits-tagged-excluded+taskqueue="+tagExcludedValue].Tags())
+	require.EqualValues(t, 14, counters["test.hits-tagged-excluded+taskqueue="+tagExcludedValue].Value())
+	require.Equal(t, map[string]string{"taskqueue": tagExcludedValue}, counters["test.hits-tagged-excluded+taskqueue="+tagExcludedValue].Tags())
 
-	assert.EqualValues(t, float64(-100), gauges["test.temp+location=Mare Imbrium"].Value())
-	assert.EqualValues(t, map[string]string{
+	require.InDelta(t, float64(-100), gauges["test.temp+location=Mare Imbrium"].Value(), 0.1)
+	require.Equal(t, map[string]string{
 		"location": "Mare Imbrium",
 	}, gauges["test.temp+location=Mare Imbrium"].Tags())
 
-	assert.EqualValues(t, []time.Duration{
+	require.Equal(t, []time.Duration{
 		1248 * time.Millisecond,
 		5255 * time.Millisecond,
 	}, timers["test.latency+"].Values())
-	assert.EqualValues(t, map[string]string{}, timers["test.latency+"].Tags())
+	require.Equal(t, map[string]string{}, timers["test.latency+"].Tags())
 
-	assert.EqualValues(t, map[float64]int64{
+	require.Equal(t, map[float64]int64{
 		1024:            0,
 		2048:            0,
 		math.MaxFloat64: 1,
 	}, histograms["test.transmission+"].Values())
-	assert.EqualValues(t, map[time.Duration]int64(nil), histograms["test.transmission+"].Durations())
-	assert.EqualValues(t, map[string]string{}, histograms["test.transmission+"].Tags())
+	require.Equal(t, map[time.Duration]int64(nil), histograms["test.transmission+"].Durations())
+	require.Equal(t, map[string]string{}, histograms["test.transmission+"].Tags())
 
 	newTaggedHandler := mp.WithTags(NamespaceTag(uuid.NewString()))
 	recordTallyMetrics(newTaggedHandler)
 	snap = scope.Snapshot()
 	counters = snap.Counters()
 
-	assert.EqualValues(t, 11, counters["test.hits-tagged+taskqueue=__sticky__"].Value())
-	assert.EqualValues(t, map[string]string{"taskqueue": "__sticky__"}, counters["test.hits-tagged+taskqueue=__sticky__"].Tags())
+	require.EqualValues(t, 11, counters["test.hits-tagged+taskqueue=__sticky__"].Value())
+	require.Equal(t, map[string]string{"taskqueue": "__sticky__"}, counters["test.hits-tagged+taskqueue=__sticky__"].Tags())
 }
 
 func recordTallyMetrics(h Handler) {
@@ -138,8 +137,8 @@ func TestWithTags_CachedHandlerRecordsMetricsCorrectly(t *testing.T) {
 	snap := scope.Snapshot()
 	c := snap.Counters()["test.requests+env=prod"]
 	require.NotNil(t, c)
-	assert.EqualValues(t, 8, c.Value())
-	assert.EqualValues(t, map[string]string{"env": "prod"}, c.Tags())
+	require.EqualValues(t, 8, c.Value())
+	require.Equal(t, map[string]string{"env": "prod"}, c.Tags())
 }
 
 func TestWithTags_MultipleTagsCacheCorrectly(t *testing.T) {
@@ -156,7 +155,7 @@ func TestWithTags_MultipleTagsCacheCorrectly(t *testing.T) {
 	snap := scope.Snapshot()
 	c := snap.Counters()["test.hits+env=staging,operation=op1"]
 	require.NotNil(t, c)
-	assert.EqualValues(t, 3, c.Value())
+	require.EqualValues(t, 3, c.Value())
 }
 
 func TestWithTags_TagOrderMatters(t *testing.T) {
@@ -175,7 +174,7 @@ func TestWithTags_TagOrderMatters(t *testing.T) {
 	snap := scope.Snapshot()
 	c := snap.Counters()["test.c+a=1,b=2"]
 	require.NotNil(t, c)
-	assert.EqualValues(t, 2, c.Value())
+	require.EqualValues(t, 2, c.Value())
 }
 
 func TestWithTags_ChildCachesAreIndependent(t *testing.T) {
@@ -206,7 +205,7 @@ func TestWithTags_ExcludeTagsStillApply(t *testing.T) {
 	snap := scope.Snapshot()
 	c := snap.Counters()["test.hits+activityType="+tagExcludedValue]
 	require.NotNil(t, c, "excluded tag value should be sanitized")
-	assert.EqualValues(t, 1, c.Value())
+	require.EqualValues(t, 1, c.Value())
 }
 
 func TestWithTags_ConcurrentAccess(t *testing.T) {
@@ -241,7 +240,7 @@ func TestWithTags_ConcurrentAccess(t *testing.T) {
 	snap := scope.Snapshot()
 	c := snap.Counters()["test.concurrent_count+operation=concurrent_op"]
 	require.NotNil(t, c)
-	assert.EqualValues(t, int64(goroutines*iterations), c.Value())
+	require.Equal(t, int64(goroutines*iterations), c.Value())
 }
 
 func TestTagsCacheKey(t *testing.T) {
@@ -318,11 +317,11 @@ func TestScopeCache_CounterWithInlineTags(t *testing.T) {
 	snap := scope.Snapshot()
 	ok := snap.Counters()["test.requests+status=ok"]
 	require.NotNil(t, ok)
-	assert.EqualValues(t, 3, ok.Value())
+	require.EqualValues(t, 3, ok.Value())
 
 	errC := snap.Counters()["test.requests+status=err"]
 	require.NotNil(t, errC)
-	assert.EqualValues(t, 5, errC.Value())
+	require.EqualValues(t, 5, errC.Value())
 }
 
 func TestScopeCache_GaugeWithInlineTags(t *testing.T) {
@@ -336,7 +335,7 @@ func TestScopeCache_GaugeWithInlineTags(t *testing.T) {
 	snap := scope.Snapshot()
 	gauge := snap.Gauges()["test.temp+location=cpu"]
 	require.NotNil(t, gauge)
-	assert.EqualValues(t, 99.0, gauge.Value())
+	require.InDelta(t, 99.0, gauge.Value(), 0.1)
 }
 
 func TestScopeCache_TimerWithInlineTags(t *testing.T) {
@@ -350,7 +349,7 @@ func TestScopeCache_TimerWithInlineTags(t *testing.T) {
 	snap := scope.Snapshot()
 	timer := snap.Timers()["test.latency+op=read"]
 	require.NotNil(t, timer)
-	assert.Equal(t, []time.Duration{100 * time.Millisecond, 200 * time.Millisecond}, timer.Values())
+	require.Equal(t, []time.Duration{100 * time.Millisecond, 200 * time.Millisecond}, timer.Values())
 }
 
 func TestScopeCache_HistogramWithInlineTags(t *testing.T) {
@@ -364,7 +363,7 @@ func TestScopeCache_HistogramWithInlineTags(t *testing.T) {
 	snap := scope.Snapshot()
 	histo := snap.Histograms()["test.size+type=payload"]
 	require.NotNil(t, histo)
-	assert.EqualValues(t, map[float64]int64{
+	require.Equal(t, map[float64]int64{
 		1024:            1,
 		2048:            0,
 		math.MaxFloat64: 1,
@@ -380,7 +379,7 @@ func TestScopeCache_NoTagsUsesBaseScope(t *testing.T) {
 	snap := scope.Snapshot()
 	c := snap.Counters()["test.hits+"]
 	require.NotNil(t, c)
-	assert.EqualValues(t, 7, c.Value())
+	require.EqualValues(t, 7, c.Value())
 }
 
 func TestScopeCache_ExcludeTagsApply(t *testing.T) {
@@ -392,7 +391,7 @@ func TestScopeCache_ExcludeTagsApply(t *testing.T) {
 	snap := scope.Snapshot()
 	c := snap.Counters()["test.hits+activityType="+tagExcludedValue]
 	require.NotNil(t, c, "excluded tag value should be sanitized via scope cache")
-	assert.EqualValues(t, 1, c.Value())
+	require.EqualValues(t, 1, c.Value())
 }
 
 func TestScopeCache_IndependentPerHandler(t *testing.T) {
@@ -408,11 +407,11 @@ func TestScopeCache_IndependentPerHandler(t *testing.T) {
 	snap := scope.Snapshot()
 	c1 := snap.Counters()["test.hits+env=prod,operation=op1"]
 	require.NotNil(t, c1)
-	assert.EqualValues(t, 1, c1.Value())
+	require.EqualValues(t, 1, c1.Value())
 
 	c2 := snap.Counters()["test.hits+env=prod,operation=op2"]
 	require.NotNil(t, c2)
-	assert.EqualValues(t, 2, c2.Value())
+	require.EqualValues(t, 2, c2.Value())
 }
 
 func TestScopeCache_ConcurrentRecordWithTags(t *testing.T) {
@@ -437,7 +436,7 @@ func TestScopeCache_ConcurrentRecordWithTags(t *testing.T) {
 	snap := scope.Snapshot()
 	c := snap.Counters()["test.concurrent+shard=0"]
 	require.NotNil(t, c)
-	assert.EqualValues(t, int64(goroutines*iterations), c.Value())
+	require.Equal(t, int64(goroutines*iterations), c.Value())
 }
 
 func TestScopeCache_ExcludedTagsMergeInCache(t *testing.T) {
@@ -453,7 +452,7 @@ func TestScopeCache_ExcludedTagsMergeInCache(t *testing.T) {
 	snap := scope.Snapshot()
 	c := snap.Counters()["test.hits+activityType="+tagExcludedValue]
 	require.NotNil(t, c)
-	assert.EqualValues(t, 7, c.Value(), "all excluded tag values should map to the same counter")
+	require.EqualValues(t, 7, c.Value(), "all excluded tag values should map to the same counter")
 
 	// Verify only one cache entry was created, not three.
 	require.Equal(t, int64(1), h.scopeCacheSize.Load(),
@@ -478,14 +477,14 @@ func TestScopeCache_BoundedSize(t *testing.T) {
 	snap := scope.Snapshot()
 	c := snap.Counters()["test.c+id=overflow"]
 	require.NotNil(t, c, "metrics should work even when scope cache is full")
-	assert.EqualValues(t, 1, c.Value())
+	require.EqualValues(t, 1, c.Value())
 
 	// Existing cached entries should still be served from cache.
 	h.Counter("c").Record(1, StringTag("id", "0"))
 	snap = scope.Snapshot()
 	c0 := snap.Counters()["test.c+id=0"]
 	require.NotNil(t, c0)
-	assert.EqualValues(t, 2, c0.Value())
+	require.EqualValues(t, 2, c0.Value())
 }
 
 func TestNormalizeTagsForCaching(t *testing.T) {
@@ -612,7 +611,7 @@ func TestGauge_CacheReturnsSameInstance(t *testing.T) {
 	g1.Record(5)
 	g2.Record(3)
 	snap := scope.Snapshot()
-	require.EqualValues(t, 3, snap.Gauges()["test.connections+"].Value())
+	require.InDelta(t, 3, snap.Gauges()["test.connections+"].Value(), 0.1)
 }
 
 func BenchmarkWithTags_CacheHit(b *testing.B) {
@@ -663,10 +662,8 @@ func TestWithTags_CacheHitAllocs(t *testing.T) {
 	allocs := testing.AllocsPerRun(1000, func() {
 		h.WithTags(OperationTag("op1"))
 	})
-	// Cache hit still allocates for normalizeTagsForCaching key computation.
-	// Once we add the unsafe.String optimization, this should be 0.
-	require.LessOrEqual(t, allocs, float64(2),
-		"WithTags cache hit should have minimal allocations")
+	require.InDelta(t, float64(0), allocs, 0.1,
+		"WithTags cache hit should be allocation-free")
 }
 
 func TestWithTags_ExcludedDedupAllocs(t *testing.T) {
@@ -677,7 +674,8 @@ func TestWithTags_ExcludedDedupAllocs(t *testing.T) {
 	allocs := testing.AllocsPerRun(1000, func() {
 		h.WithTags(ActivityTypeTag("ActivityB"))
 	})
-	// Should hit the cache since ActivityB normalizes to same key as ActivityA.
-	require.LessOrEqual(t, allocs, float64(2),
-		"excluded tag dedup cache hit should have minimal allocations")
+	// 1 alloc for the normalizeTagsForCaching []Tag slice (substitution needed).
+	// The key string itself is allocation-free on cache hit via unsafe.String.
+	require.LessOrEqual(t, allocs, float64(1),
+		"excluded tag dedup cache hit should only allocate for normalization")
 }
