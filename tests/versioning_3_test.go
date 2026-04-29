@@ -3634,7 +3634,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 }
 
 func (s *Versioning3Suite) waitForDeploymentDataPropagationQueryWorkerDeployment(tv *testvars.TestVars) {
-	if s.deploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
+	if s.deploymentWorkflowVersion >= workerdeployment.AsyncSetCurrentAndRamping {
 		s.Eventually(func() bool {
 			resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
 				Namespace:      s.Namespace().String(),

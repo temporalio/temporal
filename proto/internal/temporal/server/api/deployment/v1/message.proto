@@ -612,3 +612,10 @@ message ForceCANVersionSignalArgs {
   // when performing continue-as-new.
   VersionLocalState override_state = 1;
 }
+
+// Signal input for demoting a version workflow (fire-and-forget from deployment workflow).
+// Carries the full routing config so the version workflow can determine its new status
+// and propagate to task queues.
+message DemoteVersionSignalArgs {
+  temporal.api.deployment.v1.RoutingConfig routing_config = 1;
+}

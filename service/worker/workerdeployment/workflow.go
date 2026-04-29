@@ -1033,9 +1033,20 @@ func (d *WorkflowRunner) setRamp(
 
 	// tell previous ramping version, if present, that it's no longer ramping
 	if prevRampingVersion != "" && prevRampingVersion != newRampingVersion {
-		err := d.unsetPreviousRamp(ctx, routingUpdateTime, routingConfigToSync, prevRampingVersion, asyncMode)
-		if err != nil {
-			return err
+		if workflow.GetVersion(ctx, "commit-routing-first", workflow.DefaultVersion, 0) >= 0 {
+			// Commit routing config before demoting prev ramp to avoid partial state on failure.
+			d.State.RoutingConfig = pendingRoutingConfig
+			// Signal the prev ramp version workflow to demote. Unversioned ramp has no version
+			// workflow and is already handled by the new ramp version's sync (step 1).
+			if !d.rampingVersionStringUnversioned(prevRampingVersion) {
+				d.signalDemoteVersion(ctx, prevRampingVersion, pendingRoutingConfig)
+			}
+			d.setDrainageStatus(prevRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, routingUpdateTime)
+		} else {
+			err := d.unsetPreviousRamp(ctx, routingUpdateTime, routingConfigToSync, prevRampingVersion, asyncMode)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -1393,50 +1404,61 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		// do is tell the previous current version that it is not current. Then, the task queues in the
 		// previous current version will have no current version and will become unversioned implicitly.
 
-		// TODO (Shivam): remove the empty string check once canary stops flaking out
-		if prevCurrentVersion != worker_versioning.UnversionedVersionId && prevCurrentVersion != "" {
-			// Tell previous current that it's no longer current
-			prevUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-				RoutingUpdateTime: updateTime,
-				CurrentSinceTime:  nil, // remove current
-				RampingSinceTime:  nil, // no change, the prev current was not ramping
-				RampPercentage:    0,   // no change, the prev current was not ramping
-				RoutingConfig:     routingConfigToSync,
-			}
-			if _, err := d.syncVersion(ctx, prevCurrentVersion, prevUpdateArgs); err != nil {
-				return nil, err
-			}
-			if !asyncMode {
-				// Set summary drainage status immediately to draining.
-				// We know prevCurrentVersion cannot have been ramping, so it must now be draining
+		if workflow.GetVersion(ctx, "commit-routing-first", workflow.DefaultVersion, 0) >= 0 {
+			// Commit routing config before demoting old version to avoid partial state on step 2 failure.
+			d.State.RoutingConfig = pendingRoutingConfig
+
+			// Fire-and-forget signal to prev version (replaces blocking sync activity)
+			// TODO (Shivam): remove the empty string check once canary stops flaking out
+			if prevCurrentVersion != worker_versioning.UnversionedVersionId && prevCurrentVersion != "" {
+				d.signalDemoteVersion(ctx, prevCurrentVersion, pendingRoutingConfig)
 				d.setDrainageStatus(prevCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, updateTime)
 			}
-		}
-
-		//nolint:staticcheck // deprecated stuff will be cleaned
-		if newCurrentVersion == worker_versioning.UnversionedVersionId && d.State.RoutingConfig.RampingVersion == worker_versioning.UnversionedVersionId &&
-			// this step is not needed in async mode because the task queues got full routing info (including removed ramp) through the previous version.
-			!asyncMode {
-			// If the new current is unversioned, and it was previously ramping, we need to tell
-			// all the task queues with unversioned ramp that they no longer have unversioned ramp.
-			// The task queues with unversioned ramp are the task queues of the previous current version.
-			// TODO (Carly): Should we ban people from changing the task queues in the current version while they have an unversioned ramp?
-			unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-				RoutingUpdateTime: updateTime,
-				RampingSinceTime:  nil, // remove ramp
-				RampPercentage:    0,   // remove ramp
+		} else {
+			// TODO (Shivam): remove the empty string check once canary stops flaking out
+			if prevCurrentVersion != worker_versioning.UnversionedVersionId && prevCurrentVersion != "" {
+				// Tell previous current that it's no longer current
+				prevUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+					RoutingUpdateTime: updateTime,
+					CurrentSinceTime:  nil, // remove current
+					RampingSinceTime:  nil, // no change, the prev current was not ramping
+					RampPercentage:    0,   // no change, the prev current was not ramping
+					RoutingConfig:     routingConfigToSync,
+				}
+				if _, err := d.syncVersion(ctx, prevCurrentVersion, prevUpdateArgs); err != nil {
+					return nil, err
+				}
+				if !asyncMode {
+					// Set summary drainage status immediately to draining.
+					// We know prevCurrentVersion cannot have been ramping, so it must now be draining
+					d.setDrainageStatus(prevCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, updateTime)
+				}
 			}
-			if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
-				return nil, err
+
+			//nolint:staticcheck // deprecated stuff will be cleaned
+			if newCurrentVersion == worker_versioning.UnversionedVersionId && d.State.RoutingConfig.RampingVersion == worker_versioning.UnversionedVersionId &&
+				// this step is not needed in async mode because the task queues got full routing info (including removed ramp) through the previous version.
+				!asyncMode {
+				// If the new current is unversioned, and it was previously ramping, we need to tell
+				// all the task queues with unversioned ramp that they no longer have unversioned ramp.
+				// The task queues with unversioned ramp are the task queues of the previous current version.
+				// TODO (Carly): Should we ban people from changing the task queues in the current version while they have an unversioned ramp?
+				unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+					RoutingUpdateTime: updateTime,
+					RampingSinceTime:  nil, // remove ramp
+					RampPercentage:    0,   // remove ramp
+				}
+				if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
+					return nil, err
+				}
 			}
+
+			// If the previous current version was unversioned, there is nothing in the task queues
+			// to remove, because they were implicitly unversioned. We don't have to remove any
+			// unversioned ramps, because current and ramping cannot both be unversioned.
+
+			d.State.RoutingConfig = pendingRoutingConfig
 		}
-
-		// If the previous current version was unversioned, there is nothing in the task queues
-		// to remove, because they were implicitly unversioned. We don't have to remove any
-		// unversioned ramps, because current and ramping cannot both be unversioned.
-
-		// update local state - use pendingRoutingConfig (initialized for both sync and async modes)
-		d.State.RoutingConfig = pendingRoutingConfig
 	}
 
 	d.State.ConflictToken, _ = updateTime.AsTime().MarshalBinary()
@@ -1544,6 +1566,40 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 		d.handlePropagationComplete(&deploymentspb.PropagationCompletionInfo{RevisionNumber: revisionNumber, BuildId: bld})
 	}
 	return res.VersionState, err
+}
+
+// signalDemoteVersion sends a signal to a version workflow to demote it with the given
+// routing config. The version workflow will determine its new status, propagate to task
+// queues, and sync its summary back to the deployment workflow.
+func (d *WorkflowRunner) signalDemoteVersion(ctx workflow.Context, version string, routingConfig *deploymentpb.RoutingConfig) {
+	v := worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(version)
+	bld := v.GetBuildId()
+	revisionNumber := routingConfig.GetRevisionNumber()
+	if revisionNumber > 0 {
+		// Track revision number until the version workflow signals PropagationComplete.
+		// Without this, RoutingConfigUpdateState never transitions to COMPLETED.
+		if len(d.State.PropagatingRevisions) == 0 {
+			d.State.PropagatingRevisions = make(map[string]*deploymentspb.PropagatingRevisions)
+		}
+		revs, ok := d.State.PropagatingRevisions[bld]
+		if !ok {
+			revs = &deploymentspb.PropagatingRevisions{}
+			d.State.PropagatingRevisions[bld] = revs
+		}
+		revs.RevisionNumbers = append(revs.RevisionNumbers, revisionNumber)
+	}
+
+	wfID := GenerateVersionWorkflowID(v.GetDeploymentName(), bld)
+	err := workflow.SignalExternalWorkflow(ctx, wfID, "", DemoteVersionSignalName, &deploymentspb.DemoteVersionSignalArgs{
+		RoutingConfig: routingConfig,
+	}).Get(ctx, nil)
+	if err != nil {
+		d.logger.Error("failed to signal demote version", "version", version, "error", err)
+		// Signal delivery failed — untrack the revision so we don't block forever.
+		if revisionNumber > 0 {
+			d.handlePropagationComplete(&deploymentspb.PropagationCompletionInfo{RevisionNumber: revisionNumber, BuildId: bld})
+		}
+	}
 }
 
 // syncUnversionedRamp should not be called in async mode
