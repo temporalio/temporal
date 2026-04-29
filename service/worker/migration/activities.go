@@ -126,6 +126,7 @@ type (
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		generateMigrationTaskViaFrontend dynamicconfig.BoolPropertyFn
 		enableHistoryRateLimiter         dynamicconfig.BoolPropertyFn
+		dryRunMode                       dynamicconfig.BoolPropertyFn
 		workflowVerifier                 WorkflowVerifier
 		chasmRegistry                    *chasm.Registry
 	}
@@ -172,6 +173,11 @@ func (r verifyResult) isVerified() bool {
 // Using a different task queue and a dedicated worker for migration can solve the issue but requires
 // changing all existing tooling around namespace migration to start workflows & activities on the new task queue.
 // Another approach is to use separate workers for workflow tasks and activities and keep existing tooling unchanged.
+
+// IsDryRunMode returns whether the cell is in dry-run mode.
+func (a *activities) IsDryRunMode(_ context.Context) (bool, error) {
+	return a.dryRunMode(), nil
+}
 
 // GetMetadata returns history shard count and namespaceID for requested namespace.
 func (a *activities) GetMetadata(_ context.Context, request MetadataRequest) (*MetadataResponse, error) {

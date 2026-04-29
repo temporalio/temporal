@@ -134,6 +134,10 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 		}, nil
 	})
 
+	if dryRun, _ := isDryRunMode(ctx); dryRun {
+		return nil
+	}
+
 	if err := validateAndSetForceReplicationParams(ctx, &params); err != nil {
 		return err
 	}
@@ -216,6 +220,10 @@ func ForceReplicationWorkflowV2(ctx workflow.Context, params ForceReplicationPar
 			PageTokenForRestart:                startPageToken,
 		}, nil
 	})
+
+	if dryRun, _ := isDryRunMode(ctx); dryRun {
+		return nil
+	}
 
 	if err := validateAndSetForceReplicationParams(ctx, &params); err != nil {
 		return err
@@ -335,6 +343,18 @@ func ForceTaskQueueUserDataReplicationWorkflow(ctx workflow.Context, params Task
 	}
 	err = workflow.SignalExternalWorkflow(ctx, workflow.GetInfo(ctx).ParentWorkflowExecution.ID, "", taskQueueUserDataReplicationDoneSignalType, errStr).Get(ctx, nil)
 	return err
+}
+
+func isDryRunMode(ctx workflow.Context) (bool, error) {
+	lao := workflow.LocalActivityOptions{
+		StartToCloseTimeout: 5 * time.Second,
+	}
+	var a *activities
+	var dryRun bool
+	err := workflow.ExecuteLocalActivity(
+		workflow.WithLocalActivityOptions(ctx, lao), a.IsDryRunMode,
+	).Get(ctx, &dryRun)
+	return dryRun, err
 }
 
 func validateAndSetForceReplicationParams(ctx workflow.Context, params *ForceReplicationParams) error {
