@@ -171,6 +171,11 @@ message PartitionScaleInfo {
   int32 read = 1;
   int32 write = 2;
 
+  // version identifies a specific version of the scale state, which changes when the target
+  // number of partitions (i.e. the write count) changes. It may not change for other changes
+  // to scale state/info. This is used by the scale manager to know that a partition is
+  // operating with the latest scale info, to avoid ABA problems, i.e. to differentiate from a
+  // previous version whose read and write counts happen to be the same numbers.
   sfixed64 version = 10;
 }
 
