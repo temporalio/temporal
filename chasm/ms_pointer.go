@@ -5,6 +5,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 )
@@ -77,4 +78,29 @@ func (m MSPointer) WriteActivityTaskCompletedHistoryEvent(
 	result *commonpb.Payloads,
 ) error {
 	return m.backend.WriteActivityTaskCompletedHistoryEvent(scheduledEventID, startedEventID, identity, result)
+}
+
+// WriteActivityTaskFailedHistoryEvent writes an ActivityTaskFailed history event for a
+// workflow-embedded CHASM activity. Pass startedEventID=0 when both started and failed events
+// are written in the same transaction — the history builder wires the event ID automatically.
+func (m MSPointer) WriteActivityTaskFailedHistoryEvent(
+	scheduledEventID int64,
+	startedEventID int64,
+	failure *failurepb.Failure,
+	retryState enumspb.RetryState,
+	identity string,
+) error {
+	return m.backend.WriteActivityTaskFailedHistoryEvent(scheduledEventID, startedEventID, failure, retryState, identity)
+}
+
+// WriteActivityTaskTimedOutHistoryEvent writes an ActivityTaskTimedOut history event for a
+// workflow-embedded CHASM activity. Pass startedEventID=0 when both started and timed-out events
+// are written in the same transaction — the history builder wires the event ID automatically.
+func (m MSPointer) WriteActivityTaskTimedOutHistoryEvent(
+	scheduledEventID int64,
+	startedEventID int64,
+	timeoutFailure *failurepb.Failure,
+	retryState enumspb.RetryState,
+) error {
+	return m.backend.WriteActivityTaskTimedOutHistoryEvent(scheduledEventID, startedEventID, timeoutFailure, retryState)
 }

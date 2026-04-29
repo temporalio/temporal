@@ -94,6 +94,14 @@ message ActivityState {
   // Amount of time to wait before dispatching the activity task to the task queue for the first time. If the activity
   // has a retry policy, retry attempts will not have start delay applied.
   google.protobuf.Duration start_delay = 13;
+
+  // SDK-provided activity ID. For workflow-embedded activities, this is the map key in the parent
+  // Workflow.Activities map. Empty for standalone activities.
+  string activity_id = 14;
+
+  // History event ID of the ActivityTaskScheduled event.
+  // For workflow-embedded activities only; 0 for standalone activities.
+  int64 scheduled_event_id = 15;
 }
 
 message ActivityCancelState {

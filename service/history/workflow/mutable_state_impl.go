@@ -119,6 +119,10 @@ var (
 	ErrMissingSignalInitiatedEvent = serviceerror.NewInternal("unable to get signal initiated event")
 	// ErrPinnedWorkflowCannotTransition indicates attempt to start a transition on a pinned workflow
 	ErrPinnedWorkflowCannotTransition = serviceerror.NewInternal("unable to start transition on pinned workflows")
+	// ErrCHASMActivityNotFound is returned by AddActivityTaskCancelRequestedEventCHASM when the
+	// activity at scheduledEventID is not present in the CHASM tree (e.g., it was scheduled via the
+	// legacy ActivityInfo path). Callers should fall back to AddActivityTaskCancelRequestedEvent.
+	ErrCHASMActivityNotFound = errors.New("CHASM activity not found in chasmTree; was scheduled via legacy path")
 
 	timeZeroUTC = time.Unix(0, 0).UTC()
 )
@@ -166,8 +170,9 @@ type (
 		currentVersion int64
 		// Running approximate total size of mutable state fields (except buffered events) when written to DB in bytes.
 		// Buffered events are added to this value when calling GetApproximatePersistedSize.
-		approximateSize int
-		chasmNodeSizes  map[string]int // chasm node path -> key + node size in bytes
+		approximateSize  int
+		chasmNodeSizes   map[string]int // chasm node path -> key + node size in bytes
+		chasmPendingSize int            // size of CHASM data added since last CloseTransaction, included in GetApproximatePersistedSize
 		// Total number of tomestones tracked in mutable state
 		totalTombstones int
 		// Buffer events from DB
@@ -2239,6 +2244,40 @@ func (ms *MutableStateImpl) GetPendingActivityInfos() map[int64]*persistencespb.
 	return ms.pendingActivityInfoIDs
 }
 
+// GetCHASMActivityComponentRefByActivityID implements historyi.MutableState. It searches the CHASM
+// activities map for an activity with the given activity ID string and returns its serialized
+// component ref. Returns (nil, false) if no CHASM activity with that ID exists.
+func (ms *MutableStateImpl) GetCHASMActivityComponentRefByActivityID(activityID string) ([]byte, bool) {
+	if !ms.ChasmEnabled() {
+		return nil, false
+	}
+	wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return nil, false
+	}
+	actField, ok := wf.Activities[activityID]
+	if !ok {
+		return nil, false
+	}
+	act := actField.Get(chasmCtx)
+	refBytes, err := chasmCtx.Ref(act)
+	if err != nil || len(refBytes) == 0 {
+		return nil, false
+	}
+	return refBytes, true
+}
+
+func (ms *MutableStateImpl) GetNumCHASMPendingActivities() int {
+	if !ms.ChasmEnabled() {
+		return 0
+	}
+	wf, _, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return 0
+	}
+	return len(wf.Activities)
+}
+
 func (ms *MutableStateImpl) GetPendingTimerInfos() map[string]*persistencespb.TimerInfo {
 	return ms.pendingTimerInfoIDs
 }
@@ -2418,9 +2457,9 @@ func (ms *MutableStateImpl) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
 func (ms *MutableStateImpl) GetApproximatePersistedSize() int {
 	// include buffered events in the size if they will not be flushed
 	if ms.BufferSizeAcceptable() && ms.HasStartedWorkflowTask() {
-		return ms.approximateSize + ms.hBuilder.SizeInBytesOfBufferedEvents()
+		return ms.approximateSize + ms.chasmPendingSize + ms.hBuilder.SizeInBytesOfBufferedEvents()
 	}
-	return ms.approximateSize
+	return ms.approximateSize + ms.chasmPendingSize
 }
 
 func (ms *MutableStateImpl) AddSignalRequested(
@@ -3351,6 +3390,53 @@ func (ms *MutableStateImpl) WriteActivityTaskCompletedHistoryEvent(
 	return nil
 }
 
+// WriteActivityTaskFailedHistoryEvent implements chasm.NodeBackend. It writes an
+// ActivityTaskFailed history event for a workflow-embedded CHASM activity.
+// Pass startedEventID=0 when both started and failed events are written in the same
+// transaction — the history builder wires the started event ID automatically.
+func (ms *MutableStateImpl) WriteActivityTaskFailedHistoryEvent(
+	scheduledEventID int64,
+	startedEventID int64,
+	failureProto *failurepb.Failure,
+	retryState enumspb.RetryState,
+	identity string,
+) error {
+	if err := ms.checkMutability(tag.WorkflowActionActivityTaskFailed); err != nil {
+		return err
+	}
+	ms.hBuilder.AddActivityTaskFailedEvent(
+		scheduledEventID,
+		startedEventID,
+		failureProto,
+		retryState,
+		identity,
+		ms.namespaceEntry.Name(),
+	)
+	return nil
+}
+
+// WriteActivityTaskTimedOutHistoryEvent implements chasm.NodeBackend. It writes an
+// ActivityTaskTimedOut history event for a workflow-embedded CHASM activity.
+// Pass startedEventID=0 when both started and timed-out events are written in the same
+// transaction — the history builder wires the started event ID automatically.
+func (ms *MutableStateImpl) WriteActivityTaskTimedOutHistoryEvent(
+	scheduledEventID int64,
+	startedEventID int64,
+	timeoutFailure *failurepb.Failure,
+	retryState enumspb.RetryState,
+) error {
+	if err := ms.checkMutability(tag.WorkflowActionActivityTaskTimedOut); err != nil {
+		return err
+	}
+	ms.hBuilder.AddActivityTaskTimedOutEvent(
+		scheduledEventID,
+		startedEventID,
+		timeoutFailure,
+		retryState,
+	)
+	return nil
+}
+
 // AddWorkflowTaskScheduledEventAsHeartbeat is to record the first WorkflowTaskScheduledEvent during workflow task heartbeat.
 func (ms *MutableStateImpl) AddWorkflowTaskScheduledEventAsHeartbeat(
 	bypassTaskGeneration bool,
@@ -4261,6 +4347,8 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEventCHASM(
 			RetryPolicy:            command.GetRetryPolicy(),
 			Priority:               command.GetPriority(),
 			ScheduleTime:           timestamppb.New(ms.timeSource.Now()),
+			ActivityId:             command.GetActivityId(),
+			ScheduledEventId:       scheduledEventID,
 		},
 		LastAttempt: chasm.NewDataField(chasmCtx, &activitypb.ActivityAttemptState{}),
 		Outcome:     chasm.NewDataField(chasmCtx, &activitypb.ActivityOutcome{}),
@@ -4270,18 +4358,19 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEventCHASM(
 		}),
 	}
 
-	// 4. Set the ScheduledEventID so the activity can write history events later.
-	act.ScheduledEventID = scheduledEventID
-
-	// 5. Call TransitionScheduled first (generates ActivityDispatchTask and timeout pure tasks),
+	// 4. Call TransitionScheduled first (generates ActivityDispatchTask and timeout pure tasks),
 	// following the same pattern as nexus operations where the transition is applied before
 	// the component is added to the parent's map field.
 	if err := chasmactivity.TransitionScheduled.Apply(act, chasmCtx, nil); err != nil {
 		return 0, err
 	}
 
-	// 6. Add to the workflow's Activities map — this registers it in the CHASM tree.
-	wf.AddEmbeddedActivity(chasmCtx, scheduledEventID, act)
+	// 5. Add to the workflow's Activities map — this registers it in the CHASM tree, keyed by activity ID.
+	wf.AddEmbeddedActivity(chasmCtx, command.GetActivityId(), act)
+
+	// Accumulate the size of this CHASM activity so GetApproximatePersistedSize includes it
+	// before CloseTransaction serializes it into approximateSize.
+	ms.chasmPendingSize += command.GetInput().Size() + command.GetHeader().Size() + act.Size()
 
 	return scheduledEventID, nil
 }
@@ -4746,11 +4835,13 @@ func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEventCHASM(
 		return nil, false, err
 	}
 
-	actField, ok := wf.Activities[scheduledEventID]
-	if !ok {
-		return nil, false, ms.createCallerError(opTag, fmt.Sprintf("CHASM activity not found for ScheduledEventID: %d", scheduledEventID))
+	act := wf.FindActivityByScheduledEventID(chasmCtx, scheduledEventID)
+	if act == nil {
+		// Return ErrCHASMActivityNotFound so the caller can fall back to the legacy
+		// AddActivityTaskCancelRequestedEvent path (backwards-compat guard for executions
+		// that scheduled the activity before EnableCHASMActivityPrototype was enabled).
+		return nil, false, ErrCHASMActivityNotFound
 	}
-	act := actField.Get(chasmCtx)
 
 	actCancelReqEvent := ms.hBuilder.AddActivityTaskCancelRequestedEvent(workflowTaskCompletedEventID, scheduledEventID)
 
@@ -4794,6 +4885,35 @@ func (ms *MutableStateImpl) AddActivityTaskCanceledEventCHASM(
 	_ = ms.DeleteActivity(scheduledEventID)
 
 	return event, nil
+}
+
+// RespondCHASMActivityCompletedByID implements historyi.MutableState. It force-completes a
+// CHASM-managed workflow-embedded activity identified by its activity ID string.
+// Returns (false, nil) if no CHASM activity with that ID is found (caller should try legacy path).
+// TODO(david.porter): Will not merge — prototype only.
+func (ms *MutableStateImpl) RespondCHASMActivityCompletedByID(activityID string, result *commonpb.Payloads, identity string) (bool, error) {
+	if !ms.ChasmEnabled() {
+		return false, nil
+	}
+	wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return false, err
+	}
+	actField, ok := wf.Activities[activityID]
+	if !ok {
+		return false, nil
+	}
+	act := actField.Get(chasmCtx)
+	metricsHandler := ms.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope))
+	// Build a minimal RespondActivityTaskCompletedRequest for the transition.
+	req := &historyservice.RespondActivityTaskCompletedRequest{
+		NamespaceId: ms.GetNamespaceEntry().ID().String(),
+		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
+			Result:   result,
+			Identity: identity,
+		},
+	}
+	return true, chasmactivity.TransitionCompleted.Apply(act, chasmCtx, chasmactivity.NewCompleteEvent(req, metricsHandler))
 }
 
 func (ms *MutableStateImpl) AddWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error {
@@ -7576,6 +7696,8 @@ func (ms *MutableStateImpl) closeTransaction(
 		ms.approximateSize += newSize - ms.chasmNodeSizes[nodePath]
 		ms.chasmNodeSizes[nodePath] = newSize
 	}
+	// CHASM node sizes are now in approximateSize; clear the pre-estimated pending size.
+	ms.chasmPendingSize = 0
 
 	if isStateDirty {
 		if err := ms.closeTransactionUpdateTransitionHistory(

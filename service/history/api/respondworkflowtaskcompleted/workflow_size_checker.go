@@ -159,7 +159,7 @@ func (c *workflowSizeChecker) checkIfNumChildWorkflowsExceedsLimit() error {
 
 func (c *workflowSizeChecker) checkIfNumPendingActivitiesExceedsLimit() error {
 	return c.checkCountConstraint(
-		len(c.mutableState.GetPendingActivityInfos()),
+		len(c.mutableState.GetPendingActivityInfos())+c.mutableState.GetNumCHASMPendingActivities(),
 		c.numPendingActivitiesLimit,
 		metrics.TooManyPendingActivities.Name(),
 		PendingActivitiesDescription,

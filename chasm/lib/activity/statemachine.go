@@ -182,19 +182,23 @@ type completeEvent struct {
 	metricsHandler metrics.Handler
 }
 
+// NewCompleteEvent constructs a completeEvent for use with TransitionCompleted.Apply.
+// This is exported so that external callers (e.g. mutable_state_impl.go) can apply the transition
+// directly without going through the HandleCompleted method (which requires an engine context).
+func NewCompleteEvent(req *historyservice.RespondActivityTaskCompletedRequest, metricsHandler metrics.Handler) completeEvent {
+	return completeEvent{req: req, metricsHandler: metricsHandler}
+}
+
 // TransitionCompleted transitions to Completed status.
 var TransitionCompleted = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, // for force-complete (CompleteActivityByID)
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 	func(a *Activity, ctx chasm.MutableContext, event completeEvent) error {
-		// Resolve the scheduled event ID before calling RecordCompleted so that
-		// WriteActivityTaskCompletedHistoryEvents has access to it.
-		a.resolveScheduledEventID(ctx)
-
-		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+		return a.StoreOrSelf(ctx).RecordCompleted(ctx, a.ActivityState.GetActivityId(), func(ctx chasm.MutableContext) error {
 			req := event.req.GetCompleteRequest()
 
 			attempt := a.LastAttempt.Get(ctx)
@@ -211,10 +215,10 @@ var TransitionCompleted = chasm.NewTransition(
 
 			// For workflow-embedded activities, write ActivityTaskStarted + ActivityTaskCompleted
 			// history events in the same transaction so the history builder can wire the event IDs.
-			if a.ScheduledEventID != 0 {
+			if a.ActivityState.GetScheduledEventId() != 0 {
 				startAttempt := a.LastAttempt.Get(ctx)
 				if err := a.StoreOrSelf(ctx).WriteActivityTaskCompletedHistoryEvents(
-					a.ScheduledEventID,
+					a.ActivityState.GetScheduledEventId(),
 					startAttempt.GetCount(),
 					startAttempt.GetStartRequestId(),
 					startAttempt.GetLastWorkerIdentity(),
@@ -244,7 +248,7 @@ var TransitionFailed = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
 	func(a *Activity, ctx chasm.MutableContext, event failedEvent) error {
-		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+		return a.StoreOrSelf(ctx).RecordCompleted(ctx, a.ActivityState.GetActivityId(), func(ctx chasm.MutableContext) error {
 			req := event.req.GetFailedRequest()
 
 			if details := req.GetLastHeartbeatDetails(); details != nil {
@@ -260,6 +264,24 @@ var TransitionFailed = chasm.NewTransition(
 			}
 
 			a.emitOnFailedMetrics(ctx, event.metricsHandler)
+
+			// For workflow-embedded activities, write ActivityTaskStarted + ActivityTaskFailed
+			// history events in the same transaction so the history builder can wire event IDs.
+			if a.ActivityState.GetScheduledEventId() != 0 {
+				startAttempt := a.LastAttempt.Get(ctx)
+				if err := a.StoreOrSelf(ctx).WriteActivityTaskFailedHistoryEvents(
+					a.ActivityState.GetScheduledEventId(),
+					startAttempt.GetCount(),
+					startAttempt.GetStartRequestId(),
+					startAttempt.GetLastWorkerIdentity(),
+					nil, // stamp: not needed for prototype
+					req.GetFailure(),
+					enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
+					req.GetIdentity(),
+				); err != nil {
+					return err
+				}
+			}
 
 			return nil
 		})
@@ -281,7 +303,7 @@ var TransitionTerminated = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
 	func(a *Activity, ctx chasm.MutableContext, event terminateEvent) error {
-		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+		return a.StoreOrSelf(ctx).RecordCompleted(ctx, a.ActivityState.GetActivityId(), func(ctx chasm.MutableContext) error {
 			a.TerminateState = &activitypb.ActivityTerminateState{
 				RequestId: event.request.RequestID,
 			}
@@ -340,7 +362,7 @@ var TransitionCanceled = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
 	func(a *Activity, ctx chasm.MutableContext, event cancelEvent) error {
-		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+		return a.StoreOrSelf(ctx).RecordCompleted(ctx, a.ActivityState.GetActivityId(), func(ctx chasm.MutableContext) error {
 			outcome := a.Outcome.Get(ctx)
 			failure := &failurepb.Failure{
 				Message: "Activity canceled",
@@ -381,18 +403,29 @@ var TransitionTimedOut = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, event timeoutEvent) error {
 		timeoutType := event.timeoutType
 
-		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			var err error
+		return a.StoreOrSelf(ctx).RecordCompleted(ctx, a.ActivityState.GetActivityId(), func(ctx chasm.MutableContext) error {
+			var (
+				err             error
+				timeoutFailure  *failurepb.Failure
+				needsStartedEvt bool
+			)
 			switch timeoutType {
 			case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 				enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
 				err = a.recordScheduleToStartOrCloseTimeoutFailure(ctx, timeoutType)
+				// Activity was never started — no ActivityTaskStarted event needed.
+				timeoutFailure = a.Outcome.Get(ctx).GetFailed().GetFailure()
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-				failure := createStartToCloseTimeoutFailure()
-				err = a.recordFailedAttempt(ctx, 0, failure, ctx.Now(a), true)
+				timeoutFailure = createStartToCloseTimeoutFailure()
+				err = a.recordFailedAttempt(ctx, 0, timeoutFailure, ctx.Now(a), true)
+				// Activity was started but no ActivityTaskStarted event in history yet
+				// (it's written alongside the outcome event).
+				needsStartedEvt = true
 			case enumspb.TIMEOUT_TYPE_HEARTBEAT:
-				failure := createHeartbeatTimeoutFailure()
-				err = a.recordFailedAttempt(ctx, 0, failure, ctx.Now(a), true)
+				timeoutFailure = createHeartbeatTimeoutFailure()
+				err = a.recordFailedAttempt(ctx, 0, timeoutFailure, ctx.Now(a), true)
+				// Activity was started but no ActivityTaskStarted event in history yet.
+				needsStartedEvt = true
 			default:
 				err = fmt.Errorf("unhandled activity timeout: %v", timeoutType)
 			}
@@ -401,6 +434,23 @@ var TransitionTimedOut = chasm.NewTransition(
 			}
 
 			a.emitOnTimedOutMetrics(ctx, event.metricsHandler, timeoutType, event.fromStatus)
+
+			// For workflow-embedded activities, write history events in the same transaction.
+			if a.ActivityState.GetScheduledEventId() != 0 && timeoutFailure != nil {
+				startAttempt := a.LastAttempt.Get(ctx)
+				if err := a.StoreOrSelf(ctx).WriteActivityTaskTimedOutHistoryEvents(
+					a.ActivityState.GetScheduledEventId(),
+					startAttempt.GetCount(),
+					startAttempt.GetStartRequestId(),
+					startAttempt.GetLastWorkerIdentity(),
+					nil, // stamp: not needed for prototype
+					needsStartedEvt,
+					timeoutFailure,
+					enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
+				); err != nil {
+					return err
+				}
+			}
 
 			return nil
 		})

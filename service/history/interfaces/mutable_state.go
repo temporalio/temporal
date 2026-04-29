@@ -54,6 +54,11 @@ type (
 		// CHASM-managed activity, bypassing the legacy ActivityInfo lookup.
 		// TODO(david.porter): Will not merge — prototype only.
 		AddActivityTaskCanceledEventCHASM(scheduledEventID int64, latestCancelRequestedEventID int64, details *commonpb.Payloads, identity string) (*historypb.HistoryEvent, error)
+		// RespondCHASMActivityCompletedByID force-completes a CHASM-managed workflow-embedded activity
+		// identified by its activity ID string. Used for CompleteActivityByID on CHASM activities.
+		// Returns (false, nil) if no CHASM activity with that ID is found (caller should try legacy path).
+		// TODO(david.porter): Will not merge — prototype only.
+		RespondCHASMActivityCompletedByID(activityID string, result *commonpb.Payloads, identity string) (bool, error)
 		AddWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error
 		AddActivityTaskCompletedEvent(int64, int64, *workflowservice.RespondActivityTaskCompletedRequest) (*historypb.HistoryEvent, error)
 		AddActivityTaskFailedEvent(int64, int64, *failurepb.Failure, enumspb.RetryState, string, *commonpb.WorkerVersionStamp) (*historypb.HistoryEvent, error)
@@ -191,6 +196,11 @@ type (
 		GetNextEventID() int64
 		GetLastCompletedWorkflowTaskStartedEventId() int64
 		GetPendingActivityInfos() map[int64]*persistencespb.ActivityInfo
+		GetNumCHASMPendingActivities() int
+		// GetCHASMActivityComponentRefByActivityID returns the serialized component ref for a
+		// CHASM-managed workflow-embedded activity with the given activity ID string.
+		// Returns (nil, false) if no CHASM activity with that ID exists.
+		GetCHASMActivityComponentRefByActivityID(activityID string) ([]byte, bool)
 		GetPendingTimerInfos() map[string]*persistencespb.TimerInfo
 		GetPendingChildExecutionInfos() map[int64]*persistencespb.ChildExecutionInfo
 		GetPendingChildIds() map[int64]struct{}

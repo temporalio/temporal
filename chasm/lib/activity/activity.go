@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strconv"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -15,10 +14,11 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
@@ -53,8 +53,10 @@ var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
 var _ callback.CompletionSource = (*Activity)(nil)
 
 type ActivityStore interface {
-	// RecordCompleted applies the provided function to record activity completion
-	RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error
+	// RecordCompleted applies the provided function to record activity completion.
+	// activityID is passed so the workflow-embedded store can remove the activity
+	// from its Activities map (empty for standalone activities).
+	RecordCompleted(ctx chasm.MutableContext, activityID string, applyFn func(ctx chasm.MutableContext) error) error
 	// WriteActivityTaskCompletedHistoryEvents writes both an ActivityTaskStarted and an
 	// ActivityTaskCompleted history event for a workflow-embedded CHASM activity in a single
 	// transaction, so that the history builder can wire up the started event ID automatically.
@@ -70,6 +72,33 @@ type ActivityStore interface {
 		startStamp *commonpb.WorkerVersionStamp,
 		identity string,
 		result *commonpb.Payloads,
+	) error
+	// WriteActivityTaskFailedHistoryEvents writes both an ActivityTaskStarted and an
+	// ActivityTaskFailed history event for a workflow-embedded CHASM activity in a single
+	// transaction. For standalone activities, this is a no-op.
+	WriteActivityTaskFailedHistoryEvents(
+		scheduledEventID int64,
+		attempt int32,
+		startRequestID string,
+		startIdentity string,
+		startStamp *commonpb.WorkerVersionStamp,
+		failure *failurepb.Failure,
+		retryState enumspb.RetryState,
+		identity string,
+	) error
+	// WriteActivityTaskTimedOutHistoryEvents writes an ActivityTaskTimedOut history event (and
+	// optionally an ActivityTaskStarted event) for a workflow-embedded CHASM activity.
+	// needsStartedEvent should be true when the activity was never started (schedule-to-start /
+	// schedule-to-close timeouts on the first-and-only attempt). For standalone activities this is a no-op.
+	WriteActivityTaskTimedOutHistoryEvents(
+		scheduledEventID int64,
+		attempt int32,
+		startRequestID string,
+		startIdentity string,
+		startStamp *commonpb.WorkerVersionStamp,
+		needsStartedEvent bool,
+		timeoutFailure *failurepb.Failure,
+		retryState enumspb.RetryState,
 	) error
 }
 
@@ -95,16 +124,6 @@ type Activity struct {
 	// Callbacks holds completion callbacks to be invoked when this standalone activity reaches a terminal state. Nil
 	// for workflow-embedded activities as the workflow handles its own callbacks.
 	Callbacks chasm.Map[string, *callback.Callback]
-
-	// ScheduledEventID is the workflow history event ID of the ActivityTaskScheduled event.
-	// Only set for workflow-embedded activities (Store != nil). Not persisted by CHASM — resolved
-	// lazily from the component ref path (the map key in the parent Workflow.Activities map).
-	//
-	// TODO(david.porter): Will not merge — keying activities by history event ID leaks history
-	// concepts into the CHASM tree. The long-term design should use a stable, history-agnostic
-	// activity ID (e.g. the SDK-provided activityId string) as the map key, with event IDs only
-	// written at history-emit time.
-	ScheduledEventID int64
 }
 
 // WithToken wraps a request with its deserialized task token.
@@ -219,13 +238,12 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 	// For workflow-embedded activities, set Execution and ScheduledEventId so matching can
 	// build the activity poll response for workers and route RecordActivityTaskStarted correctly.
 	if _, ok := a.Store.TryGet(ctx); ok {
-		a.resolveScheduledEventID(ctx)
 		execKey := ctx.ExecutionKey()
 		req.Execution = &commonpb.WorkflowExecution{
 			WorkflowId: execKey.BusinessID,
 			RunId:      execKey.RunID,
 		}
-		req.ScheduledEventId = a.ScheduledEventID
+		req.ScheduledEventId = a.ActivityState.GetScheduledEventId()
 	}
 
 	return req, nil
@@ -262,6 +280,13 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 	requestData := a.RequestData.Get(ctx)
 	attempt := a.LastAttempt.Get(ctx)
 
+	// For workflow-embedded activities, ActivityId is the SDK-provided activity ID string.
+	// For standalone activities, fall back to the execution key's BusinessID.
+	activityID := a.ActivityState.GetActivityId()
+	if activityID == "" {
+		activityID = key.BusinessID
+	}
+
 	return &historyservice.RecordActivityTaskStartedResponse{
 		StartedTime:                 attempt.GetStartedTime(),
 		Attempt:                     attempt.GetCount(),
@@ -276,7 +301,7 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 			EventTime: a.GetScheduleTime(),
 			Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
 				ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
-					ActivityId:             key.BusinessID,
+					ActivityId:             activityID,
 					ActivityType:           a.GetActivityType(),
 					Input:                  requestData.GetInput(),
 					Header:                 requestData.GetHeader(),
@@ -314,7 +339,7 @@ func attemptScheduleTimeForRetry(attempt *activitypb.ActivityAttemptState) *time
 
 // RecordCompleted applies the provided function to record activity completion.
 // For standalone activities, it also triggers any registered completion callbacks.
-func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error {
+func (a *Activity) RecordCompleted(ctx chasm.MutableContext, _ string, applyFn func(ctx chasm.MutableContext) error) error {
 	if err := applyFn(ctx); err != nil {
 		return err
 	}
@@ -325,6 +350,16 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx ch
 // Standalone activities do not write workflow history events.
 // >>> todo (david.porter) Rename this
 func (a *Activity) WriteActivityTaskCompletedHistoryEvents(_ int64, _ int32, _ string, _ string, _ *commonpb.WorkerVersionStamp, _ string, _ *commonpb.Payloads) error {
+	return nil
+}
+
+// WriteActivityTaskFailedHistoryEvents is a no-op for standalone activities.
+func (a *Activity) WriteActivityTaskFailedHistoryEvents(_ int64, _ int32, _ string, _ string, _ *commonpb.WorkerVersionStamp, _ *failurepb.Failure, _ enumspb.RetryState, _ string) error {
+	return nil
+}
+
+// WriteActivityTaskTimedOutHistoryEvents is a no-op for standalone activities.
+func (a *Activity) WriteActivityTaskTimedOutHistoryEvents(_ int64, _ int32, _ string, _ string, _ *commonpb.WorkerVersionStamp, _ bool, _ *failurepb.Failure, _ enumspb.RetryState) error {
 	return nil
 }
 
@@ -761,6 +796,10 @@ func (a *Activity) RecordHeartbeat(
 		Details:             input.Request.GetHeartbeatRequest().GetDetails(),
 		TotalHeartbeatCount: prevHeartbeat.GetTotalHeartbeatCount() + 1,
 	})
+	// Update last worker identity on the current attempt so it is reflected in pending activity info.
+	if identity := input.Request.GetHeartbeatRequest().GetIdentity(); identity != "" {
+		a.LastAttempt.Get(ctx).LastWorkerIdentity = identity
+	}
 	if heartbeatTimeout := a.GetHeartbeatTimeout().AsDuration(); heartbeatTimeout > 0 {
 		ctx.AddTask(
 			a,
@@ -802,7 +841,7 @@ func InternalStatusToAPIStatus(status activitypb.ActivityExecutionStatus) enumsp
 	}
 }
 
-func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb.PendingActivityState {
+func InternalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb.PendingActivityState {
 	switch status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
 		return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
@@ -825,7 +864,7 @@ func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb
 func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.ActivityExecutionInfo {
 	// TODO(saa-preview): support pause states
 	status := InternalStatusToAPIStatus(a.GetStatus())
-	runState := internalStatusToRunState(a.GetStatus())
+	runState := InternalStatusToRunState(a.GetStatus())
 
 	requestData := a.RequestData.Get(ctx)
 	attempt := a.LastAttempt.Get(ctx)
@@ -885,6 +924,50 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 	}
 
 	return info
+}
+
+// BuildPendingActivityInfo converts this Activity to a PendingActivityInfo proto for
+// DescribeWorkflowExecution. Returns nil if the activity is in a terminal state.
+func (a *Activity) BuildPendingActivityInfo(ctx chasm.Context) *workflowpb.PendingActivityInfo {
+	runState := InternalStatusToRunState(a.GetStatus())
+	if runState == enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED {
+		return nil // terminal state, not pending
+	}
+
+	attempt := a.LastAttempt.Get(ctx)
+	heartbeat, _ := a.LastHeartbeat.TryGet(ctx)
+
+	var expirationTime *timestamppb.Timestamp
+	if deadline := a.scheduleToCloseDeadline(); !deadline.IsZero() {
+		expirationTime = timestamppb.New(deadline)
+	}
+
+	// For workflow-embedded activities, ActivityId is the SDK-provided activity ID string.
+	// For standalone activities, this will be empty (standalone activities don't use BuildPendingActivityInfo).
+	activityID := a.ActivityState.GetActivityId()
+
+	return &workflowpb.PendingActivityInfo{
+		ActivityId:         activityID,
+		ActivityType:       a.GetActivityType(),
+		State:              runState,
+		HeartbeatDetails:   heartbeat.GetDetails(),
+		LastHeartbeatTime:  heartbeat.GetRecordedTime(),
+		LastStartedTime:    attempt.GetStartedTime(),
+		Attempt:            attempt.GetCount() + 1, // attempt is 0-indexed internally, API is 1-indexed
+		MaximumAttempts:    a.GetRetryPolicy().GetMaximumAttempts(),
+		ScheduledTime:      a.GetScheduleTime(),
+		ExpirationTime:     expirationTime,
+		LastFailure:        attempt.GetLastFailureDetails().GetFailure(),
+		LastWorkerIdentity: attempt.GetLastWorkerIdentity(),
+		ActivityOptions: &apiactivitypb.ActivityOptions{
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: a.GetTaskQueue().GetName()},
+			ScheduleToCloseTimeout: a.GetScheduleToCloseTimeout(),
+			ScheduleToStartTimeout: a.GetScheduleToStartTimeout(),
+			StartToCloseTimeout:    a.GetStartToCloseTimeout(),
+			HeartbeatTimeout:       a.GetHeartbeatTimeout(),
+			RetryPolicy:            a.GetRetryPolicy(),
+		},
+	}
 }
 
 func (a *Activity) buildDescribeActivityExecutionResponse(
@@ -1029,38 +1112,6 @@ func (a *Activity) StoreOrSelf(ctx chasm.Context) ActivityStore {
 		return store
 	}
 	return a
-}
-
-// resolveScheduledEventID populates a.ScheduledEventID from the component ref path if it is 0.
-// For embedded workflow activities the scheduled event ID is the map key in Workflow.Activities,
-// which is encoded as the last segment of the component path in the serialized component ref.
-// This is a no-op for standalone activities (ScheduledEventID stays 0).
-func (a *Activity) resolveScheduledEventID(ctx chasm.Context) {
-	if a.ScheduledEventID != 0 {
-		return // already set (e.g. during the creation transaction)
-	}
-	// Only attempt resolution for embedded activities (Store is set).
-	if _, ok := a.Store.TryGet(ctx); !ok {
-		return
-	}
-	refBytes, err := ctx.Ref(a)
-	if err != nil || len(refBytes) == 0 {
-		return
-	}
-	var pRef persistencespb.ChasmComponentRef
-	if err := pRef.Unmarshal(refBytes); err != nil {
-		return
-	}
-	path := pRef.GetComponentPath()
-	if len(path) == 0 {
-		return
-	}
-	// The last path segment is the string-encoded map key (int64 scheduledEventID).
-	id, err := strconv.ParseInt(path[len(path)-1], 10, 64)
-	if err != nil {
-		return
-	}
-	a.ScheduledEventID = id
 }
 
 // RequestCancelFromWorkflowTask handles a RequestCancelActivity WFT command for this embedded activity.

@@ -209,6 +209,32 @@ func Invoke(
 		result.PendingActivities = append(result.PendingActivities, p)
 	}
 
+	if mutableState.ChasmEnabled() {
+		wf, chasmCtx, err := mutableState.ChasmWorkflowComponentReadOnly(ctx)
+		if err != nil {
+			shard.GetLogger().Error(
+				"failed to load CHASM activity data while building describe response",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		}
+		chasmActivities, err := wf.BuildPendingActivityInfos(chasmCtx)
+		if err != nil {
+			shard.GetLogger().Error(
+				"failed to build CHASM activity info while building describe response",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		}
+		result.PendingActivities = append(result.PendingActivities, chasmActivities...)
+	}
+
 	for _, ch := range mutableState.GetPendingChildExecutionInfos() {
 		p := &workflowpb.PendingChildExecutionInfo{
 			WorkflowId:        ch.StartedWorkflowId,

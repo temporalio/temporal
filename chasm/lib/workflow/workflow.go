@@ -46,8 +46,8 @@ type Workflow struct {
 	// Operations map is used to store the Nexus operations for the workflow, keyed by scheduled event ID.
 	Operations chasm.Map[int64, *nexusoperation.Operation]
 
-	// Activities map stores embedded CHASM activity sub-components, keyed by scheduled event ID.
-	Activities chasm.Map[int64, *activity.Activity]
+	// Activities map stores embedded CHASM activity sub-components, keyed by SDK-provided activity ID.
+	Activities chasm.Map[string, *activity.Activity]
 }
 
 func NewWorkflow(
@@ -90,15 +90,20 @@ func (w *Workflow) Terminate(
 // before the activity completes). In that case we rely on the pending WFT picking up the buffered
 // history events written by WriteActivityTaskCompletedHistoryEvent. This needs an explicit
 // "buffer flush triggers follow-up WFT" mechanism for the case where no WFT is pending.
-func (w *Workflow) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error {
+func (w *Workflow) RecordCompleted(ctx chasm.MutableContext, activityID string, applyFn func(ctx chasm.MutableContext) error) error {
 	if err := applyFn(ctx); err != nil {
 		return err
+	}
+	// Remove the completed activity from the map so it is cleaned up from the CHASM tree and
+	// excluded from pending-activity counts (GetNumCHASMPendingActivities).
+	if activityID != "" {
+		delete(w.Activities, activityID)
 	}
 	// Schedule a new workflow task so the workflow can observe the completed activity.
 	// Note: if a WFT is already pending (e.g. the forced WFT from RespondWorkflowTaskCompleted),
 	// ScheduleWorkflowTask is a no-op — that pending WFT will see the buffered history events
 	// written by WriteActivityTaskCompletedHistoryEvent and schedule a follow-up WFT automatically.
-	return w.MSPointer.ScheduleWorkflowTask()
+	return w.ScheduleWorkflowTask()
 }
 
 // WriteActivityTaskCompletedHistoryEvents implements the ActivityStore interface for
@@ -113,10 +118,50 @@ func (w *Workflow) WriteActivityTaskCompletedHistoryEvents(
 	identity string,
 	result *commonpb.Payloads,
 ) error {
-	if err := w.MSPointer.WriteActivityTaskStartedHistoryEvent(scheduledEventID, attempt, startRequestID, startIdentity, startStamp); err != nil {
+	if err := w.WriteActivityTaskStartedHistoryEvent(scheduledEventID, attempt, startRequestID, startIdentity, startStamp); err != nil {
 		return err
 	}
-	return w.MSPointer.WriteActivityTaskCompletedHistoryEvent(scheduledEventID, 0, identity, result)
+	return w.WriteActivityTaskCompletedHistoryEvent(scheduledEventID, 0, identity, result)
+}
+
+// WriteActivityTaskFailedHistoryEvents implements the ActivityStore interface for
+// workflow-embedded activities. It writes ActivityTaskStarted + ActivityTaskFailed
+// history events in a single transaction (pass startedEventID=0 to auto-wire).
+func (w *Workflow) WriteActivityTaskFailedHistoryEvents(
+	scheduledEventID int64,
+	attempt int32,
+	startRequestID string,
+	startIdentity string,
+	startStamp *commonpb.WorkerVersionStamp,
+	failure *failurepb.Failure,
+	retryState enumspb.RetryState,
+	identity string,
+) error {
+	if err := w.WriteActivityTaskStartedHistoryEvent(scheduledEventID, attempt, startRequestID, startIdentity, startStamp); err != nil {
+		return err
+	}
+	return w.WriteActivityTaskFailedHistoryEvent(scheduledEventID, 0, failure, retryState, identity)
+}
+
+// WriteActivityTaskTimedOutHistoryEvents implements the ActivityStore interface for
+// workflow-embedded activities. It writes ActivityTaskTimedOut (and optionally
+// ActivityTaskStarted) history events in a single transaction.
+func (w *Workflow) WriteActivityTaskTimedOutHistoryEvents(
+	scheduledEventID int64,
+	attempt int32,
+	startRequestID string,
+	startIdentity string,
+	startStamp *commonpb.WorkerVersionStamp,
+	needsStartedEvent bool,
+	timeoutFailure *failurepb.Failure,
+	retryState enumspb.RetryState,
+) error {
+	if needsStartedEvent {
+		if err := w.WriteActivityTaskStartedHistoryEvent(scheduledEventID, attempt, startRequestID, startIdentity, startStamp); err != nil {
+			return err
+		}
+	}
+	return w.WriteActivityTaskTimedOutHistoryEvent(scheduledEventID, 0, timeoutFailure, retryState)
 }
 
 // AddCompletionCallbacks creates completion callbacks using the CHASM implementation.
@@ -172,16 +217,16 @@ func (w *Workflow) AddCompletionCallbacks(
 	return nil
 }
 
-// AddEmbeddedActivity adds a CHASM activity sub-component to the workflow, keyed by scheduled event ID.
+// AddEmbeddedActivity adds a CHASM activity sub-component to the workflow, keyed by SDK-provided activity ID.
 func (w *Workflow) AddEmbeddedActivity(
 	ctx chasm.MutableContext,
-	scheduledEventID int64,
+	activityID string,
 	act *activity.Activity,
 ) {
 	if w.Activities == nil {
-		w.Activities = make(chasm.Map[int64, *activity.Activity])
+		w.Activities = make(chasm.Map[string, *activity.Activity])
 	}
-	w.Activities[scheduledEventID] = chasm.NewComponentField(ctx, act)
+	w.Activities[activityID] = chasm.NewComponentField(ctx, act)
 }
 
 // AddNexusOperation adds a Nexus operation component to the workflow.
@@ -564,4 +609,30 @@ func (w *Workflow) BuildPendingNexusOperationInfos(
 		result = append(result, info)
 	}
 	return result, nil
+}
+
+// BuildPendingActivityInfos reads CHASM-embedded activities and converts them to API format
+// for DescribeWorkflowExecution. Only non-terminal activities are included.
+func (w *Workflow) BuildPendingActivityInfos(ctx chasm.Context) ([]*workflowpb.PendingActivityInfo, error) {
+	var result []*workflowpb.PendingActivityInfo
+	for _, field := range w.Activities {
+		act := field.Get(ctx)
+		info := act.BuildPendingActivityInfo(ctx)
+		if info != nil {
+			result = append(result, info)
+		}
+	}
+	return result, nil
+}
+
+// FindActivityByScheduledEventID finds an embedded activity by its scheduled history event ID.
+// Returns nil if not found.
+func (w *Workflow) FindActivityByScheduledEventID(ctx chasm.Context, scheduledEventID int64) *activity.Activity {
+	for _, field := range w.Activities {
+		act := field.Get(ctx)
+		if act.ActivityState.GetScheduledEventId() == scheduledEventID {
+			return act
+		}
+	}
+	return nil
 }

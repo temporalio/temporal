@@ -13,6 +13,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -240,6 +241,25 @@ type (
 			startedEventID int64,
 			identity string,
 			result *commonpb.Payloads,
+		) error
+		// WriteActivityTaskFailedHistoryEvent writes an ActivityTaskFailed history event for a
+		// workflow-embedded CHASM activity. Pass startedEventID=0 when both started and failed
+		// events are written in the same transaction — the history builder wires the IDs automatically.
+		WriteActivityTaskFailedHistoryEvent(
+			scheduledEventID int64,
+			startedEventID int64,
+			failure *failurepb.Failure,
+			retryState enumspb.RetryState,
+			identity string,
+		) error
+		// WriteActivityTaskTimedOutHistoryEvent writes an ActivityTaskTimedOut history event for a
+		// workflow-embedded CHASM activity. Pass startedEventID=0 when both started and timed-out
+		// events are written in the same transaction — the history builder wires the IDs automatically.
+		WriteActivityTaskTimedOutHistoryEvent(
+			scheduledEventID int64,
+			startedEventID int64,
+			timeoutFailure *failurepb.Failure,
+			retryState enumspb.RetryState,
 		) error
 	}
 

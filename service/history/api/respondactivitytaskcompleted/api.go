@@ -65,6 +65,25 @@ func Invoke(
 			isCompletedByID := false
 			if scheduledEventID == common.EmptyEventID { // client call CompleteActivityById, so get scheduledEventID by activityID
 				isCompletedByID = true
+
+				// Check if this is a CHASM-managed activity; if so, route to the CHASM path.
+				completed, chasmErr := mutableState.RespondCHASMActivityCompletedByID(
+					token.GetActivityId(),
+					req.GetCompleteRequest().GetResult(),
+					req.GetCompleteRequest().GetIdentity(),
+				)
+				if chasmErr != nil {
+					return nil, chasmErr
+				}
+				if completed {
+					taskQueue = "unknown" // not available on CHASM path
+					versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
+					return &api.UpdateWorkflowAction{
+						Noop:               false,
+						CreateWorkflowTask: true,
+					}, nil
+				}
+
 				scheduledEventID, err0 = api.GetActivityScheduledEventID(token.GetActivityId(), mutableState)
 				if err0 != nil {
 					return nil, err0

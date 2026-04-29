@@ -88,7 +88,7 @@ func (mr *MockMutableStateMockRecorder) AddActivityTaskCancelRequestedEvent(arg0
 }
 
 // AddActivityTaskCancelRequestedEventCHASM mocks base method.
-func (m *MockMutableState) AddActivityTaskCancelRequestedEventCHASM(workflowTaskCompletedEventID int64, scheduledEventID int64, identity string) (*history.HistoryEvent, bool, error) {
+func (m *MockMutableState) AddActivityTaskCancelRequestedEventCHASM(workflowTaskCompletedEventID, scheduledEventID int64, identity string) (*history.HistoryEvent, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddActivityTaskCancelRequestedEventCHASM", workflowTaskCompletedEventID, scheduledEventID, identity)
 	ret0, _ := ret[0].(*history.HistoryEvent)
@@ -119,7 +119,7 @@ func (mr *MockMutableStateMockRecorder) AddActivityTaskCanceledEvent(arg0, arg1,
 }
 
 // AddActivityTaskCanceledEventCHASM mocks base method.
-func (m *MockMutableState) AddActivityTaskCanceledEventCHASM(scheduledEventID int64, latestCancelRequestedEventID int64, details *common.Payloads, identity string) (*history.HistoryEvent, error) {
+func (m *MockMutableState) AddActivityTaskCanceledEventCHASM(scheduledEventID, latestCancelRequestedEventID int64, details *common.Payloads, identity string) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddActivityTaskCanceledEventCHASM", scheduledEventID, latestCancelRequestedEventID, details, identity)
 	ret0, _ := ret[0].(*history.HistoryEvent)
@@ -2152,6 +2152,21 @@ func (mr *MockMutableStateMockRecorder) GetBaseWorkflowInfo() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaseWorkflowInfo", reflect.TypeOf((*MockMutableState)(nil).GetBaseWorkflowInfo))
 }
 
+// GetCHASMActivityComponentRefByActivityID mocks base method.
+func (m *MockMutableState) GetCHASMActivityComponentRefByActivityID(activityID string) ([]byte, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCHASMActivityComponentRefByActivityID", activityID)
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// GetCHASMActivityComponentRefByActivityID indicates an expected call of GetCHASMActivityComponentRefByActivityID.
+func (mr *MockMutableStateMockRecorder) GetCHASMActivityComponentRefByActivityID(activityID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCHASMActivityComponentRefByActivityID", reflect.TypeOf((*MockMutableState)(nil).GetCHASMActivityComponentRefByActivityID), activityID)
+}
+
 // GetChildExecutionInfo mocks base method.
 func (m *MockMutableState) GetChildExecutionInfo(arg0 int64) (*persistence.ChildExecutionInfo, bool) {
 	m.ctrl.T.Helper()
@@ -2509,6 +2524,20 @@ func (m *MockMutableState) GetNextEventID() int64 {
 func (mr *MockMutableStateMockRecorder) GetNextEventID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNextEventID", reflect.TypeOf((*MockMutableState)(nil).GetNextEventID))
+}
+
+// GetNumCHASMPendingActivities mocks base method.
+func (m *MockMutableState) GetNumCHASMPendingActivities() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNumCHASMPendingActivities")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// GetNumCHASMPendingActivities indicates an expected call of GetNumCHASMPendingActivities.
+func (mr *MockMutableStateMockRecorder) GetNumCHASMPendingActivities() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNumCHASMPendingActivities", reflect.TypeOf((*MockMutableState)(nil).GetNumCHASMPendingActivities))
 }
 
 // GetPendingActivityInfos mocks base method.
@@ -3471,6 +3500,21 @@ func (m *MockMutableState) RemoveSpeculativeWorkflowTaskTimeoutTask() {
 func (mr *MockMutableStateMockRecorder) RemoveSpeculativeWorkflowTaskTimeoutTask() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveSpeculativeWorkflowTaskTimeoutTask", reflect.TypeOf((*MockMutableState)(nil).RemoveSpeculativeWorkflowTaskTimeoutTask))
+}
+
+// RespondCHASMActivityCompletedByID mocks base method.
+func (m *MockMutableState) RespondCHASMActivityCompletedByID(activityID string, result *common.Payloads, identity string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RespondCHASMActivityCompletedByID", activityID, result, identity)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RespondCHASMActivityCompletedByID indicates an expected call of RespondCHASMActivityCompletedByID.
+func (mr *MockMutableStateMockRecorder) RespondCHASMActivityCompletedByID(activityID, result, identity any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondCHASMActivityCompletedByID", reflect.TypeOf((*MockMutableState)(nil).RespondCHASMActivityCompletedByID), activityID, result, identity)
 }
 
 // RetryActivity mocks base method.
