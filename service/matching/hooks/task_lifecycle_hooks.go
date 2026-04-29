@@ -37,6 +37,7 @@ type (
 	}
 	TaskAddHookDetails struct {
 		DeploymentVersion *deploymentpb.WorkerDeploymentVersion
+		IsSyncMatch       bool // Deprecated: use SyncMatchOutcome instead.
 		SyncMatchOutcome  SyncMatchOutcome
 	}
 
