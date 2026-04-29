@@ -189,7 +189,7 @@ func (s *MatcherDataSuite) TestMatchTaskImmediately() {
 	t := s.newSyncTask(nil)
 
 	// no match yet
-	s.Equal(SyncMatchNoPoller, s.md.MatchTaskImmediately(t))
+	s.Equal(syncMatchNoPoller, s.md.MatchTaskImmediately(t))
 
 	// poll in a goroutine
 	ch := make(chan *matchResult, 1)
@@ -202,7 +202,7 @@ func (s *MatcherDataSuite) TestMatchTaskImmediately() {
 	s.waitForPollers(1)
 
 	// should match this time
-	s.Equal(SyncMatchSuccess, s.md.MatchTaskImmediately(t))
+	s.Equal(syncMatchSuccess, s.md.MatchTaskImmediately(t))
 
 	// check match
 	pres := <-ch
@@ -215,7 +215,7 @@ func (s *MatcherDataSuite) TestMatchTaskImmediatelyDisabledBacklog() {
 	s.md.EnqueueTaskNoWait(s.newBacklogTask(123, 10*time.Minute, nil))
 
 	t := s.newSyncTask(nil)
-	s.Equal(SyncMatchBacklogged, s.md.MatchTaskImmediately(t))
+	s.Equal(syncMatchBacklogged, s.md.MatchTaskImmediately(t))
 }
 
 func (s *MatcherDataSuite) TestQuery() {

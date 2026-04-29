@@ -29,6 +29,18 @@ const (
 	priorityBacklogPollForwarder
 )
 
+// syncMatchOutcome describes the outcome of a sync match attempt.
+type syncMatchOutcome int
+
+const (
+	// The task was sync-matched successfully.
+	syncMatchSuccess syncMatchOutcome = iota
+	// Sync match was not attempted because the backlog is too deep.
+	syncMatchBacklogged
+	// Sync match was attempted but no poller was available.
+	syncMatchNoPoller
+)
+
 type taskForwarderType int32
 
 const (
@@ -359,20 +371,8 @@ func (d *matcherData) EnqueuePollerAndWait(ctxs []context.Context, poller *waiti
 	return poller.waitForMatch()
 }
 
-// SyncMatchOutcome describes the outcome of a sync match attempt.
-type SyncMatchOutcome int
-
-const (
-	// The task was sync-matched successfully.
-	SyncMatchSuccess SyncMatchOutcome = iota
-	// Sync match was not attempted because the backlog is too deep.
-	SyncMatchBacklogged
-	// Sync match was attempted but no poller was available.
-	SyncMatchNoPoller
-)
-
 // MatchTaskImmediately attempts a non-blocking sync match.
-func (d *matcherData) MatchTaskImmediately(task *internalTask) SyncMatchOutcome {
+func (d *matcherData) MatchTaskImmediately(task *internalTask) syncMatchOutcome {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -382,7 +382,7 @@ func (d *matcherData) MatchTaskImmediately(task *internalTask) SyncMatchOutcome 
 		// poller to become available. In presence of a backlog the chance of a poller being available when sync match
 		// request comes is almost zero.
 		// This check is mostly effective for the sync match requests that come from child partitions for spooled tasks.
-		return SyncMatchBacklogged
+		return syncMatchBacklogged
 	}
 
 	task.initMatch(d)
@@ -390,10 +390,10 @@ func (d *matcherData) MatchTaskImmediately(task *internalTask) SyncMatchOutcome 
 	d.findAndWakeMatches()
 	// don't wait, check if match() picked this one already
 	if task.matchResult != nil {
-		return SyncMatchSuccess
+		return syncMatchSuccess
 	}
 	d.tasks.Remove(task)
-	return SyncMatchNoPoller
+	return syncMatchNoPoller
 }
 
 func (d *matcherData) MatchPollerImmediately(poller *waitingPoller) *matchResult {

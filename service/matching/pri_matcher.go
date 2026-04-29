@@ -381,19 +381,19 @@ func (tm *priTaskMatcher) forwardPolls(
 //   - context deadline is exceeded
 //   - task is matched and consumer returns error in response channel
 
-func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (SyncMatchOutcome, error) {
-	finish := func() (SyncMatchOutcome, error) {
+func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMatchOutcome, error) {
+	finish := func() (syncMatchOutcome, error) {
 		res, ok := task.getResponse()
 		if !softassert.That(tm.logger, ok, "expected a sync match task") {
-			return SyncMatchNoPoller, nil
+			return syncMatchNoPoller, nil
 		}
 		if res.forwarded {
 			if res.forwardErr == nil {
 				// task was remotely sync matched on the parent partition
 				tm.emitDispatchLatency(task, true)
-				return SyncMatchSuccess, nil
+				return syncMatchSuccess, nil
 			}
-			return SyncMatchNoPoller, nil // forward error, give up here
+			return syncMatchNoPoller, nil // forward error, give up here
 		}
 		// TODO(pri): can we just always do this on the parent and simplify this to:
 		// if res.startErr == nil { tm.emitDispatchLatency(task, task.isForwarded) }
@@ -401,17 +401,17 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (SyncMa
 		if res.startErr == nil && !task.isForwarded() {
 			tm.emitDispatchLatency(task, false)
 		}
-		return SyncMatchSuccess, res.startErr
+		return syncMatchSuccess, res.startErr
 	}
 
 	// Fast path if we have a waiting poller (or forwarder).
 	// Forwarding happens here if we match with the task forwarding poller.
 	task.forwardCtx = ctx
 	outcome := tm.data.MatchTaskImmediately(task)
-	if outcome == SyncMatchSuccess {
+	if outcome == syncMatchSuccess {
 		return finish()
 	}
-	if outcome == SyncMatchBacklogged {
+	if outcome == syncMatchBacklogged {
 		return outcome, nil
 	}
 
@@ -425,10 +425,10 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (SyncMa
 
 	res := tm.data.EnqueueTaskAndWait([]context.Context{ctx, tm.tqCtx}, task)
 	if res.ctxErr != nil {
-		return SyncMatchNoPoller, res.ctxErr
+		return syncMatchNoPoller, res.ctxErr
 	}
 	if !softassert.That(tm.logger, res.poller != nil, "expeced poller from match") {
-		return SyncMatchNoPoller, nil
+		return syncMatchNoPoller, nil
 	}
 
 	return finish()

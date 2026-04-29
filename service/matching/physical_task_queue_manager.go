@@ -680,13 +680,13 @@ func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueue
 	return status
 }
 
-func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (SyncMatchOutcome, error) {
+func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, error) {
 	if !task.isForwarded() {
 		// request sent by history service
 		c.liveness.markAlive()
 		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey())).inc(1)
 		if disable, _ := testhooks.Get(c.partitionMgr.engine.testHooks, testhooks.MatchingDisableSyncMatch, c.partitionMgr.ns.ID()); disable {
-			return SyncMatchNoPoller, nil
+			return syncMatchNoPoller, nil
 		}
 	}
 
@@ -699,9 +699,9 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 
 	matched, err := c.oldMatcher.Offer(childCtx, task)
 	if matched {
-		return SyncMatchSuccess, err
+		return syncMatchSuccess, err
 	}
-	return SyncMatchNoPoller, err
+	return syncMatchNoPoller, err
 }
 
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
