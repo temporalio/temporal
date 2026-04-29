@@ -12,10 +12,10 @@ import (
 type Config struct {
 	NumberOfShards int32
 
-	EnableReplicationStream                        dynamicconfig.BoolPropertyFn
-	EnableCloseInboundReplicationStreamOnShutdown  dynamicconfig.BoolPropertyFn
-	EnableSeparateReplicationEnableFlag            dynamicconfig.BoolPropertyFn
-	HistoryReplicationDLQV2             dynamicconfig.BoolPropertyFn
+	EnableReplicationStream                       dynamicconfig.BoolPropertyFn
+	EnableCloseInboundReplicationStreamOnShutdown dynamicconfig.BoolPropertyFn
+	EnableSeparateReplicationEnableFlag           dynamicconfig.BoolPropertyFn
+	HistoryReplicationDLQV2                       dynamicconfig.BoolPropertyFn
 
 	RPS                                         dynamicconfig.IntPropertyFn
 	NamespaceRPS                                dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -440,7 +440,7 @@ func NewConfig(
 		EnableReplicationStream:                       dynamicconfig.EnableReplicationStream.Get(dc),
 		EnableCloseInboundReplicationStreamOnShutdown: dynamicconfig.EnableCloseInboundReplicationStreamOnShutdown.Get(dc),
 		EnableSeparateReplicationEnableFlag:           dynamicconfig.EnableSeparateReplicationEnableFlag.Get(dc),
-		HistoryReplicationDLQV2:             dynamicconfig.EnableHistoryReplicationDLQV2.Get(dc),
+		HistoryReplicationDLQV2:                       dynamicconfig.EnableHistoryReplicationDLQV2.Get(dc),
 
 		RPS:                                  dynamicconfig.HistoryRPS.Get(dc),
 		NamespaceRPS:                         dynamicconfig.HistoryNamespaceRPS.Get(dc),
