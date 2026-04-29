@@ -320,34 +320,38 @@ func (pm *taskQueuePartitionManagerImpl) checkPartitionCounts(ctx context.Contex
 	}
 	id := normal.PartitionId()
 
-	// userDataManager must be initialized here already
+	// userDataManager must be initialized here already so we can just ask it for scale info
 	scaleInfo := pm.userDataManager.PartitionScale()
 
-	clientPC, parseErr := matching.ParsePartitionCountsFromIncomingContext(ctx)
-	if parseErr != nil {
-		pm.throttledLogger.Info("partition count header parse error", tag.Error(parseErr))
-		// do not return here! we always need to call validatePartitionCounts
-	}
-	difference := pm.config.PartitionScaleDifference()
-	return validatePartitionCounts(id, scaleInfo, clientPC, forWrite, difference)
-}
-
-// validatePartitionCounts checks whether a partition should accept an RPC based on
-// the current scale info and the client's idea of partition counts. It returns nil if
-// the RPC should be accepted, or an error if it should be rejected.
-func validatePartitionCounts(
-	partitionID int,
-	scaleInfo *taskqueuespb.PartitionScaleInfo,
-	clientPC matching.PartitionCounts,
-	forWrite bool,
-	difference dynamicconfig.PartitionScaleDifference,
-) error {
 	if scaleInfo.GetRead() <= 0 || scaleInfo.GetWrite() <= 0 || scaleInfo.Write > scaleInfo.Read {
 		return nil // missing or invalid scale info
 	}
 
-	// handle cases where we can't accept the rpc at all: any call for invalid,
-	// write calls for draining
+	// always validate partition id based on read/write counts and scale info
+	if err := validatePartitionCounts(id, scaleInfo, forWrite); err != nil {
+		return err
+	}
+
+	// if client has sent its idea of counts, also validate difference
+	clientPC, err := matching.ParsePartitionCountsFromIncomingContext(ctx)
+	if err != nil {
+		pm.throttledLogger.Info("partition count header parse error", tag.Error(err))
+		return nil // just log and skip the check
+	} else if !clientPC.Valid() {
+		return nil // client didn't send anything or invalid, skip check
+	}
+	difference := pm.config.PartitionScaleDifference()
+	return validatePartitionCountDifference(scaleInfo, forWrite, clientPC, difference)
+}
+
+// validatePartitionCounts checks whether a partition should accept an RPC based on the current
+// scale info. It returns nil if the RPC should be accepted, or an error if it should be
+// rejected. scaleInfo must be valid (positive values).
+func validatePartitionCounts(
+	partitionID int,
+	scaleInfo *taskqueuespb.PartitionScaleInfo,
+	forWrite bool,
+) error {
 	switch {
 	case partitionID < 0:
 		return serviceerror.NewInternal("negative partition id")
@@ -355,15 +359,20 @@ func validatePartitionCounts(
 		return errPartitionInvalid
 	case partitionID >= int(scaleInfo.Write) && forWrite:
 		return errPartitionDraining
-	}
-
-	// if client did not send any/valid counts, don't reject (as long as partition is valid).
-	// this handles cases where the server is upgraded before the client.
-	if !clientPC.Valid() {
+	default:
 		return nil
 	}
+}
 
-	// check what the client thought the counts were
+// validatePartitionCountDifference checks whether a partition should accept an RPC based on
+// the client's idea of partition counts. It returns nil if the RPC should be accepted, or an
+// error if it should be rejected. scaleInfo and clientPC must both be valid.
+func validatePartitionCountDifference(
+	scaleInfo *taskqueuespb.PartitionScaleInfo,
+	forWrite bool,
+	clientPC matching.PartitionCounts,
+	difference dynamicconfig.PartitionScaleDifference,
+) error {
 	var delta int32
 	var ratio float32
 	if forWrite {
