@@ -3524,19 +3524,21 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 
 	// Phase 1: Write sentinel to V1 key space (dummy workflow) to prevent a
 	// concurrent V1 CreateSchedule from succeeding for the same schedule ID.
-	if err := wh.writeSchedulerWorkflowSentinel(ctx, namespaceID.String(), request); err != nil {
-		var alreadyStartedErr *serviceerror.WorkflowExecutionAlreadyStarted
-		if !errors.As(err, &alreadyStartedErr) {
-			return nil, err
-		}
-		// V1 key is occupied. Check if it's a sentinel (proceed) or real scheduler (fail).
-		isReal, checkErr := wh.isRealSchedulerInV1KeySpace(ctx, namespaceID.String(), request.Namespace, request.ScheduleId)
-		if checkErr != nil {
-			return nil, checkErr
-		}
-		if isReal {
-			return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
-				fmt.Sprintf("schedule %q is already registered", request.ScheduleId), "", "")
+	if wh.scheduleSentinelsEnabled(request.Namespace) {
+		if err := wh.writeSchedulerWorkflowSentinel(ctx, namespaceID.String(), request); err != nil {
+			var alreadyStartedErr *serviceerror.WorkflowExecutionAlreadyStarted
+			if !errors.As(err, &alreadyStartedErr) {
+				return nil, err
+			}
+			// V1 key is occupied. Check if it's a sentinel (proceed) or real scheduler (fail).
+			isReal, checkErr := wh.isRealSchedulerInV1KeySpace(ctx, namespaceID.String(), request.Namespace, request.ScheduleId)
+			if checkErr != nil {
+				return nil, checkErr
+			}
+			if isReal {
+				return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
+					fmt.Sprintf("schedule %q is already registered", request.ScheduleId), "", "")
+			}
 		}
 	}
 
@@ -3579,12 +3581,7 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 
 	// Phase 1: Write sentinel to CHASM key space to prevent a concurrent CHASM
 	// CreateSchedule from succeeding for the same schedule ID.
-	//
-	// We gate on EnableCHASM because the point of the sentinel is to account for a
-	// case where the fleet has an inconsistent view of dynamic config. EnableCHASM
-	// will be true well in advance of us enabling scheduler creation across the entire
-	// fleet, so it is stable for usage here.
-	if wh.config.EnableChasm(namespaceName.String()) {
+	if wh.scheduleSentinelsEnabled(request.Namespace) {
 		if err := wh.writeSchedulerCHASMSentinel(ctx, namespaceID.String(), namespaceName.String(), request.ScheduleId); err != nil {
 			// Translate AlreadyExists (from CHASM handler) to
 			// WorkflowExecutionAlreadyStarted for SDK compatibility.
@@ -3844,6 +3841,10 @@ func (wh *WorkflowHandler) chasmSchedulerCreationEnabled(ctx context.Context, na
 func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceName string) bool {
 	return wh.chasmSchedulerCreationEnabled(ctx, namespaceName) ||
 		wh.config.EnableCHASMSchedulerRouting(namespaceName)
+}
+
+func (wh *WorkflowHandler) scheduleSentinelsEnabled(namespaceName string) bool {
+	return wh.config.EnableChasm(namespaceName) && wh.config.EnableCHASMSchedulerSentinels(namespaceName)
 }
 
 // isSchedulerErrorLegacyRoutable returns true if the error from the CHASM scheduler
