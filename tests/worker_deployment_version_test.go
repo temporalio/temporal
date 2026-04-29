@@ -87,6 +87,9 @@ func (s *DeploymentVersionSuite) SetupSuite() {
 		dynamicconfig.VersionDrainageStatusRefreshInterval.Key():       testVersionDrainageRefreshInterval,
 		dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Key(): testVersionDrainageVisibilityGracePeriod,
 		dynamicconfig.VersionMembershipCacheTTL.Key():                  testVersionMembershipCacheTTL,
+
+		// Test reactivation cache for all versioning tests.
+		dynamicconfig.EnableVersionReactivationSignals.Key(): true,
 	}))
 }
 
@@ -2212,8 +2215,6 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_ReactivateVe
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	s.OverrideDynamicConfig(dynamicconfig.EnableVersionReactivationSignals, true)
-
 	// Use shorter, explicit deployment series names to avoid truncation issues
 	// Include workflow version in deployment name to avoid conflicts in parallel tests
 	deploymentName := fmt.Sprintf("test-reactivate-wfv%d", s.workflowVersion)
@@ -2336,8 +2337,6 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	s.OverrideDynamicConfig(dynamicconfig.EnableVersionReactivationSignals, true)
-
 	deploymentName := fmt.Sprintf("test-start-reactivate-wfv%d", s.workflowVersion)
 	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-start-task-queue")
 
@@ -2421,8 +2420,6 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnPinned_WithConflictPolicy() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-
-	s.OverrideDynamicConfig(dynamicconfig.EnableVersionReactivationSignals, true)
 
 	deploymentName := fmt.Sprintf("test-start-conflict-reactivate-wfv%d", s.workflowVersion)
 	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-conflict-task-queue")
@@ -2538,8 +2535,6 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_Reactivate
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	s.OverrideDynamicConfig(dynamicconfig.EnableVersionReactivationSignals, true)
-
 	deploymentName := fmt.Sprintf("test-sws-reactivate-wfv%d", s.workflowVersion)
 	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-sws-task-queue")
 
@@ -2629,8 +2624,6 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_Reactivate
 func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnPinned() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-
-	s.OverrideDynamicConfig(dynamicconfig.EnableVersionReactivationSignals, true)
 
 	// Use shorter, explicit deployment series names to avoid truncation issues
 	// Include workflow version in deployment name to avoid conflicts in parallel tests
