@@ -447,7 +447,7 @@ reredirectTask:
 			// Only fire hooks for non-forwarded tasks. Forwarded tasks already had hooks fired
 			// on the child partition that originally received the task.
 			if params.forwardInfo == nil {
-				pm.processTaskAddHooks(ctx, targetVersion, syncMatched, outcome)
+				pm.processTaskAddHooks(ctx, targetVersion, outcome)
 			}
 
 			// Build ID is not returned for sync match. The returned build ID is used by History to update
@@ -476,27 +476,28 @@ reredirectTask:
 
 	err = spoolQueue.SpoolTask(params.taskInfo)
 	if err == nil {
-		pm.processTaskAddHooks(ctx, targetVersion, false, outcome)
+		pm.processTaskAddHooks(ctx, targetVersion, outcome)
 	}
 
 	return assignedBuildId, false, err
 }
 
-func noMatchReasonToHook(outcome syncMatchOutcome) hooks.NoMatchReason {
+func syncMatchOutcomeToHook(outcome syncMatchOutcome) hooks.SyncMatchOutcome {
 	switch outcome {
+	case syncMatchSuccess:
+		return hooks.SyncMatchOutcomeSuccess
 	case syncMatchRateLimited:
-		return hooks.NoMatchReasonRateLimited
+		return hooks.SyncMatchOutcomeRateLimited
 	default:
-		return hooks.NoMatchReasonUnspecified
+		return hooks.SyncMatchOutcomeUnspecified
 	}
 }
 
-func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context, targetVersion *deploymentspb.WorkerDeploymentVersion, syncMatched bool, outcome syncMatchOutcome) {
+func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context, targetVersion *deploymentspb.WorkerDeploymentVersion, outcome syncMatchOutcome) {
 	for _, l := range pm.taskHooks {
 		l.ProcessTaskAdd(ctx, &hooks.TaskAddHookDetails{
 			DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(targetVersion),
-			IsSyncMatch:       syncMatched,
-			NoMatchReason:     noMatchReasonToHook(outcome),
+			SyncMatchOutcome:  syncMatchOutcomeToHook(outcome),
 		})
 	}
 }

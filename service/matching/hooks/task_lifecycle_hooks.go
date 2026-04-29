@@ -9,14 +9,16 @@ import (
 	"go.temporal.io/server/common/tqid"
 )
 
-// NoMatchReason describes why a task was not sync-matched.
-type NoMatchReason int
+// SyncMatchOutcome describes the outcome of a sync match attempt from the hook's perspective.
+type SyncMatchOutcome int
 
 const (
-	// No specific reason provided.
-	NoMatchReasonUnspecified NoMatchReason = iota
+	// The outcome is not specified or not relevant to the hook.
+	SyncMatchOutcomeUnspecified SyncMatchOutcome = iota
+	// The task was sync-matched successfully.
+	SyncMatchOutcomeSuccess
 	// A poller was available but rate limiting blocked the match.
-	NoMatchReasonRateLimited
+	SyncMatchOutcomeRateLimited
 )
 
 type (
@@ -35,8 +37,7 @@ type (
 	}
 	TaskAddHookDetails struct {
 		DeploymentVersion *deploymentpb.WorkerDeploymentVersion
-		IsSyncMatch       bool
-		NoMatchReason     NoMatchReason
+		SyncMatchOutcome  SyncMatchOutcome
 	}
 
 	TaskHookFactory interface {

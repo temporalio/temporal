@@ -1348,10 +1348,9 @@ type capturingTaskMatchHook struct {
 }
 
 type capturedTaskMatchDetails struct {
-	TaskQueueName     string
-	TaskQueueType     enumspb.TaskQueueType
-	IsSyncMatch       bool
-	NoMatchReason     hooks.NoMatchReason
+	TaskQueueName    string
+	TaskQueueType    enumspb.TaskQueueType
+	SyncMatchOutcome hooks.SyncMatchOutcome
 	DeploymentVersion *deploymentpb.WorkerDeploymentVersion
 }
 
@@ -1373,8 +1372,7 @@ func (h *capturingTaskMatchHook) ProcessTaskAdd(ctx context.Context, event *hook
 	details := capturedTaskMatchDetails{
 		TaskQueueName: h.taskQueueName,
 		TaskQueueType: h.taskQueueType,
-		IsSyncMatch:   event.IsSyncMatch,
-		NoMatchReason: event.NoMatchReason,
+		SyncMatchOutcome: event.SyncMatchOutcome,
 	}
 	if event.DeploymentVersion != nil {
 		details.DeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
@@ -1612,7 +1610,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookSyncMatch() {
 	s.Require().Len(calls, 1)
 	s.Equal(taskQueueName, calls[0].TaskQueueName)
 	s.Equal(enumspb.TASK_QUEUE_TYPE_WORKFLOW, calls[0].TaskQueueType)
-	s.True(calls[0].IsSyncMatch)
+	s.Equal(hooks.SyncMatchOutcomeSuccess, calls[0].SyncMatchOutcome)
 	s.Nil(calls[0].DeploymentVersion)
 }
 
@@ -1636,7 +1634,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookNoSyncMatch() {
 	s.Require().Len(calls, 1)
 	s.Equal(taskQueueName, calls[0].TaskQueueName)
 	s.Equal(enumspb.TASK_QUEUE_TYPE_WORKFLOW, calls[0].TaskQueueType)
-	s.False(calls[0].IsSyncMatch)
+	s.Equal(hooks.SyncMatchOutcomeUnspecified, calls[0].SyncMatchOutcome)
 }
 
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedSyncMatch_HooksNotInvoked() {
@@ -1771,8 +1769,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_RateLimited() {
 
 	calls := hook.getCalls()
 	s.Require().Len(calls, 1)
-	s.False(calls[0].IsSyncMatch)
-	s.Equal(hooks.NoMatchReasonRateLimited, calls[0].NoMatchReason)
+	s.Equal(hooks.SyncMatchOutcomeRateLimited, calls[0].SyncMatchOutcome)
 }
 
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_NotRateLimited() {
@@ -1794,8 +1791,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_NotRateLimited() {
 
 	calls := hook.getCalls()
 	s.Require().Len(calls, 1)
-	s.False(calls[0].IsSyncMatch)
-	s.Equal(hooks.NoMatchReasonUnspecified, calls[0].NoMatchReason)
+	s.Equal(hooks.SyncMatchOutcomeUnspecified, calls[0].SyncMatchOutcome)
 }
 
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_MultipleHooksInvoked() {
@@ -1815,8 +1811,8 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_MultipleHooksInvoked() {
 
 	s.Len(hook1.getCalls(), 1)
 	s.Len(hook2.getCalls(), 1)
-	s.False(hook1.getCalls()[0].IsSyncMatch)
-	s.False(hook2.getCalls()[0].IsSyncMatch)
+	s.Equal(hooks.SyncMatchOutcomeUnspecified, hook1.getCalls()[0].SyncMatchOutcome)
+	s.Equal(hooks.SyncMatchOutcomeUnspecified, hook2.getCalls()[0].SyncMatchOutcome)
 }
 
 type mockUserDataManager struct {
