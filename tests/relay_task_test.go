@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -16,16 +15,8 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-type RelayTaskTestSuite struct {
-	testcore.FunctionalTestBase
-}
-
-func TestRelayTaskTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(RelayTaskTestSuite))
-}
-
-func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
+func TestRelayWorkflowTaskTimeout(t *testing.T) {
+	s := testcore.NewEnv(t)
 	id := "functional-relay-workflow-task-timeout-test"
 	wt := "functional-relay-workflow-task-timeout-test-type"
 	tl := "functional-relay-workflow-task-timeout-test-taskqueue"
