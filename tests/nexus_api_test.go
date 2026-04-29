@@ -326,7 +326,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 		s.Contains(latency[0].Tags, "nexus_endpoint")
 
 		// Verify error counter is emitted for error outcomes and absent for success.
-		errorRequests := capture.Metric("nexus_request_error")
+		errorRequests := capture.Metric("nexus_request_errors")
 		if tc.outcome == "sync_success" || tc.outcome == "async_success" {
 			s.Empty(errorRequests)
 		} else {
@@ -594,7 +594,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 		s.Contains(latency[0].Tags, "nexus_endpoint")
 
 		// Verify error counter is emitted for error outcomes and absent for success.
-		errorRequests := capture.Metric("nexus_request_error")
+		errorRequests := capture.Metric("nexus_request_errors")
 		if tc.outcome == "success" {
 			s.Empty(errorRequests)
 		} else {
