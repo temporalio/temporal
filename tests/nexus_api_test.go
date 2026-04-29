@@ -315,22 +315,14 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 
 		requests := capture.Metric("nexus_requests")
 		s.Len(requests, 1)
-		s.Subset(requests[0].Tags, map[string]string{
-			"namespace": env.Namespace().String(),
-			"method":    "StartNexusOperation",
-			"outcome":   tc.outcome,
-		})
+		s.Subset(requests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "method": "StartNexusOperation", "outcome": tc.outcome})
 		s.Contains(requests[0].Tags, "nexus_endpoint")
 		s.Equal(int64(1), requests[0].Value)
 		s.Equal(metrics.MetricUnit(""), requests[0].Unit)
 
 		latency := capture.Metric("nexus_latency")
 		s.Len(latency, 1)
-		s.Subset(latency[0].Tags, map[string]string{
-			"namespace": env.Namespace().String(),
-			"method":    "StartNexusOperation",
-			"outcome":   tc.outcome,
-		})
+		s.Subset(latency[0].Tags, map[string]string{"namespace": env.Namespace().String(), "method": "StartNexusOperation", "outcome": tc.outcome})
 		s.Contains(latency[0].Tags, "nexus_endpoint")
 
 		// Verify error counter is emitted for error outcomes and absent for success.
@@ -591,22 +583,14 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 
 		requests := capture.Metric("nexus_requests")
 		s.Len(requests, 1)
-		s.Subset(requests[0].Tags, map[string]string{
-			"namespace": env.Namespace().String(),
-			"method":    "CancelNexusOperation",
-			"outcome":   tc.outcome,
-		})
+		s.Subset(requests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "method": "CancelNexusOperation", "outcome": tc.outcome})
 		s.Contains(requests[0].Tags, "nexus_endpoint")
 		s.Equal(int64(1), requests[0].Value)
 		s.Equal(metrics.MetricUnit(""), requests[0].Unit)
 
 		latency := capture.Metric("nexus_latency")
 		s.Len(latency, 1)
-		s.Subset(latency[0].Tags, map[string]string{
-			"namespace": env.Namespace().String(),
-			"method":    "CancelNexusOperation",
-			"outcome":   tc.outcome,
-		})
+		s.Subset(latency[0].Tags, map[string]string{"namespace": env.Namespace().String(), "method": "CancelNexusOperation", "outcome": tc.outcome})
 		s.Contains(latency[0].Tags, "nexus_endpoint")
 
 		// Verify error counter is emitted for error outcomes and absent for success.
