@@ -159,6 +159,9 @@ message EphemeralData {
     repeated ByVersion version = 2;
   }
   repeated ByPartition partition = 1;
+
+  // Current state of dynamic partition scaling
+  PartitionScaleInfo scale = 2;
 }
 
 message VersionedEphemeralData {

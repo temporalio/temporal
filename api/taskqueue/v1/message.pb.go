@@ -742,8 +742,10 @@ func (x *TaskForwardInfo) GetDispatchVersionSet() string {
 // task queue family (all queues with the same name, across types), ephemeral data applies only to
 // one type at a time.
 type EphemeralData struct {
-	state         protoimpl.MessageState       `protogen:"open.v1"`
-	Partition     []*EphemeralData_ByPartition `protobuf:"bytes,1,rep,name=partition,proto3" json:"partition,omitempty"`
+	state     protoimpl.MessageState       `protogen:"open.v1"`
+	Partition []*EphemeralData_ByPartition `protobuf:"bytes,1,rep,name=partition,proto3" json:"partition,omitempty"`
+	// Current state of dynamic partition scaling
+	Scale         *PartitionScaleInfo `protobuf:"bytes,2,opt,name=scale,proto3" json:"scale,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -781,6 +783,13 @@ func (*EphemeralData) Descriptor() ([]byte, []int) {
 func (x *EphemeralData) GetPartition() []*EphemeralData_ByPartition {
 	if x != nil {
 		return x.Partition
+	}
+	return nil
+}
+
+func (x *EphemeralData) GetScale() *PartitionScaleInfo {
+	if x != nil {
+		return x.Scale
 	}
 	return nil
 }
@@ -839,10 +848,15 @@ func (x *VersionedEphemeralData) GetVersion() int64 {
 
 // PartitionScaleInfo is propagated among task queue partitions in ephemeral data.
 type PartitionScaleInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Read          int32                  `protobuf:"varint,1,opt,name=read,proto3" json:"read,omitempty"`
-	Write         int32                  `protobuf:"varint,2,opt,name=write,proto3" json:"write,omitempty"`
-	Version       int64                  `protobuf:"fixed64,10,opt,name=version,proto3" json:"version,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Read  int32                  `protobuf:"varint,1,opt,name=read,proto3" json:"read,omitempty"`
+	Write int32                  `protobuf:"varint,2,opt,name=write,proto3" json:"write,omitempty"`
+	// version identifies a specific version of the scale state, which changes when the target
+	// number of partitions (i.e. the write count) changes. It may not change for other changes
+	// to scale state/info. This is used by the scale manager to know that a partition is
+	// operating with the latest scale info, to avoid ABA problems, i.e. to differentiate from a
+	// previous version whose read and write counts happen to be the same numbers.
+	Version       int64 `protobuf:"fixed64,10,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1123,9 +1137,10 @@ const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"createTime\x12Z\n" +
 	"\rredirect_info\x18\x03 \x01(\v25.temporal.server.api.taskqueue.v1.BuildIdRedirectInfoR\fredirectInfo\x12*\n" +
 	"\x11dispatch_build_id\x18\x04 \x01(\tR\x0fdispatchBuildId\x120\n" +
-	"\x14dispatch_version_set\x18\x05 \x01(\tR\x12dispatchVersionSet\"\x89\x03\n" +
+	"\x14dispatch_version_set\x18\x05 \x01(\tR\x12dispatchVersionSet\"\xd5\x03\n" +
 	"\rEphemeralData\x12Y\n" +
-	"\tpartition\x18\x01 \x03(\v2;.temporal.server.api.taskqueue.v1.EphemeralData.ByPartitionR\tpartition\x1a\x99\x01\n" +
+	"\tpartition\x18\x01 \x03(\v2;.temporal.server.api.taskqueue.v1.EphemeralData.ByPartitionR\tpartition\x12J\n" +
+	"\x05scale\x18\x02 \x01(\v24.temporal.server.api.taskqueue.v1.PartitionScaleInfoR\x05scale\x1a\x99\x01\n" +
 	"\tByVersion\x12T\n" +
 	"\aversion\x18\x01 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x126\n" +
 	"\x17backlog_priority_levels\x18\x02 \x01(\x03R\x15backlogPriorityLevels\x1a\x80\x01\n" +
@@ -1203,15 +1218,16 @@ var file_temporal_server_api_taskqueue_v1_message_proto_depIdxs = []int32{
 	24, // 15: temporal.server.api.taskqueue.v1.TaskForwardInfo.create_time:type_name -> google.protobuf.Timestamp
 	6,  // 16: temporal.server.api.taskqueue.v1.TaskForwardInfo.redirect_info:type_name -> temporal.server.api.taskqueue.v1.BuildIdRedirectInfo
 	14, // 17: temporal.server.api.taskqueue.v1.EphemeralData.partition:type_name -> temporal.server.api.taskqueue.v1.EphemeralData.ByPartition
-	8,  // 18: temporal.server.api.taskqueue.v1.VersionedEphemeralData.data:type_name -> temporal.server.api.taskqueue.v1.EphemeralData
-	21, // 19: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKeyEntry.value:type_name -> temporal.api.taskqueue.v1.TaskQueueStats
-	18, // 20: temporal.server.api.taskqueue.v1.EphemeralData.ByVersion.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	13, // 21: temporal.server.api.taskqueue.v1.EphemeralData.ByPartition.version:type_name -> temporal.server.api.taskqueue.v1.EphemeralData.ByVersion
-	22, // [22:22] is the sub-list for method output_type
-	22, // [22:22] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	10, // 18: temporal.server.api.taskqueue.v1.EphemeralData.scale:type_name -> temporal.server.api.taskqueue.v1.PartitionScaleInfo
+	8,  // 19: temporal.server.api.taskqueue.v1.VersionedEphemeralData.data:type_name -> temporal.server.api.taskqueue.v1.EphemeralData
+	21, // 20: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKeyEntry.value:type_name -> temporal.api.taskqueue.v1.TaskQueueStats
+	18, // 21: temporal.server.api.taskqueue.v1.EphemeralData.ByVersion.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	13, // 22: temporal.server.api.taskqueue.v1.EphemeralData.ByPartition.version:type_name -> temporal.server.api.taskqueue.v1.EphemeralData.ByVersion
+	23, // [23:23] is the sub-list for method output_type
+	23, // [23:23] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_taskqueue_v1_message_proto_init() }
