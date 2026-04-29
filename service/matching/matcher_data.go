@@ -29,6 +29,20 @@ const (
 	priorityBacklogPollForwarder
 )
 
+// syncMatchOutcome describes the outcome of a sync match attempt.
+type syncMatchOutcome int
+
+const (
+	// The task was sync-matched successfully.
+	syncMatchSuccess syncMatchOutcome = iota
+	// Sync match was not attempted because the backlog is too deep.
+	syncMatchBacklogged
+	// Sync match was attempted but no poller was available.
+	syncMatchNoPoller
+	// A poller was available but rate limiting blocked the match.
+	syncMatchRateLimited
+)
+
 type taskForwarderType int32
 
 const (
@@ -359,23 +373,8 @@ func (d *matcherData) EnqueuePollerAndWait(ctxs []context.Context, poller *waiti
 	return poller.waitForMatch()
 }
 
-// NoMatchReason describes why a sync match did not happen.
-type NoMatchReason int
-
-const (
-	// No specific reason provided.
-	NoMatchReasonUnspecified NoMatchReason = iota
-	// Sync match was not attempted because the backlog is too deep.
-	NoMatchReasonBacklogged
-	// Sync match was attempted but no poller was available.
-	NoMatchReasonNoPoller
-	// A poller was available but rate limiting blocked the match.
-	NoMatchReasonRateLimited
-)
-
-// MatchTaskImmediately attempts a non-blocking sync match. Returns whether the task was matched
-// and, if not, the reason it was not matched.
-func (d *matcherData) MatchTaskImmediately(task *internalTask) syncMatchResult {
+// MatchTaskImmediately attempts a non-blocking sync match.
+func (d *matcherData) MatchTaskImmediately(task *internalTask) syncMatchOutcome {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -385,7 +384,7 @@ func (d *matcherData) MatchTaskImmediately(task *internalTask) syncMatchResult {
 		// poller to become available. In presence of a backlog the chance of a poller being available when sync match
 		// request comes is almost zero.
 		// This check is mostly effective for the sync match requests that come from child partitions for spooled tasks.
-		return syncMatchResult{reason: NoMatchReasonBacklogged}
+		return syncMatchBacklogged
 	}
 
 	task.initMatch(d)
@@ -393,13 +392,13 @@ func (d *matcherData) MatchTaskImmediately(task *internalTask) syncMatchResult {
 	rateLimited := d.findAndWakeMatches()
 	// don't wait, check if match() picked this one already
 	if task.matchResult != nil {
-		return syncMatchResult{matched: true}
+		return syncMatchSuccess
 	}
 	d.tasks.Remove(task)
 	if rateLimited {
-		return syncMatchResult{reason: NoMatchReasonRateLimited}
+		return syncMatchRateLimited
 	}
-	return syncMatchResult{reason: NoMatchReasonNoPoller}
+	return syncMatchNoPoller
 }
 
 func (d *matcherData) MatchPollerImmediately(poller *waitingPoller) *matchResult {

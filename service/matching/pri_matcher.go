@@ -381,19 +381,19 @@ func (tm *priTaskMatcher) forwardPolls(
 //   - context deadline is exceeded
 //   - task is matched and consumer returns error in response channel
 
-func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMatchResult, error) {
-	finish := func() (syncMatchResult, error) {
+func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMatchOutcome, error) {
+	finish := func() (syncMatchOutcome, error) {
 		res, ok := task.getResponse()
 		if !softassert.That(tm.logger, ok, "expected a sync match task") {
-			return syncMatchResult{}, nil
+			return syncMatchNoPoller, nil
 		}
 		if res.forwarded {
 			if res.forwardErr == nil {
 				// task was remotely sync matched on the parent partition
 				tm.emitDispatchLatency(task, true)
-				return syncMatchResult{matched: true}, nil
+				return syncMatchSuccess, nil
 			}
-			return syncMatchResult{}, nil // forward error, give up here
+			return syncMatchNoPoller, nil // forward error, give up here
 		}
 		// TODO(pri): can we just always do this on the parent and simplify this to:
 		// if res.startErr == nil { tm.emitDispatchLatency(task, task.isForwarded) }
@@ -401,18 +401,20 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMa
 		if res.startErr == nil && !task.isForwarded() {
 			tm.emitDispatchLatency(task, false)
 		}
-		return syncMatchResult{matched: true}, res.startErr
+		// TODO: when startErr is non-nil (e.g. busy workflow), the task was not actually
+		// dispatched. This should return a failure outcome instead of syncMatchSuccess.
+		return syncMatchSuccess, res.startErr
 	}
 
 	// Fast path if we have a waiting poller (or forwarder).
 	// Forwarding happens here if we match with the task forwarding poller.
 	task.forwardCtx = ctx
-	immediateResult := tm.data.MatchTaskImmediately(task)
-	if immediateResult.matched {
+	outcome := tm.data.MatchTaskImmediately(task)
+	if outcome == syncMatchSuccess {
 		return finish()
 	}
-	if immediateResult.reason == NoMatchReasonBacklogged {
-		return immediateResult, nil
+	if outcome == syncMatchBacklogged {
+		return outcome, nil
 	}
 
 	// We only block if we are the root and the task is forwarded from a backlog.
@@ -420,15 +422,15 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMa
 	if tm.isForwardingAllowed() ||
 		task.source != enumsspb.TASK_SOURCE_DB_BACKLOG ||
 		!task.isForwarded() {
-		return immediateResult, nil
+		return outcome, nil
 	}
 
 	res := tm.data.EnqueueTaskAndWait([]context.Context{ctx, tm.tqCtx}, task)
 	if res.ctxErr != nil {
-		return syncMatchResult{}, res.ctxErr
+		return syncMatchNoPoller, res.ctxErr
 	}
 	if !softassert.That(tm.logger, res.poller != nil, "expeced poller from match") {
-		return syncMatchResult{}, nil
+		return syncMatchNoPoller, nil
 	}
 
 	return finish()
