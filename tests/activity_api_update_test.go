@@ -111,7 +111,7 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 			t.Parallel()
 
 			t.Run("TestActivityUpdateApi_ChangeRetryInterval", func(t *testing.T) {
-				s := testcore.NewEnv(t, testcore.WithSdkWorker())
+				s := testcore.NewEnv(t)
 
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
@@ -188,7 +188,7 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 			})
 
 			t.Run("TestActivityUpdateApi_ChangeScheduleToClose", func(t *testing.T) {
-				s := testcore.NewEnv(t, testcore.WithSdkWorker())
+				s := testcore.NewEnv(t)
 
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
@@ -263,7 +263,7 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 				// initial values are chosen in such a way that activity will fail due to schedule to close timeout
 				// we change schedule to close to a longer value and retry policy to a shorter value
 				// after that activity should succeed
-				s := testcore.NewEnv(t, testcore.WithSdkWorker())
+				s := testcore.NewEnv(t)
 
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
@@ -341,7 +341,7 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 				// 3. reset activity options to default, verify that retry policy is reset to default
 				// 4. update activity options again, this time change schedule to close timeout and retry policy initial interval
 				// 5. let activity finish, verify that it finished with updated options
-				s := testcore.NewEnv(t, testcore.WithSdkWorker())
+				s := testcore.NewEnv(t)
 
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
@@ -465,7 +465,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 	t.Parallel()
 
 	t.Run("ChangeRetryInterval", func(t *testing.T) {
-		s := testcore.NewEnv(t, testcore.WithSdkWorker())
+		s := testcore.NewEnv(t)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -533,7 +533,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 	})
 
 	t.Run("ChangeScheduleToClose", func(t *testing.T) {
-		s := testcore.NewEnv(t, testcore.WithSdkWorker())
+		s := testcore.NewEnv(t)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -596,7 +596,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 	})
 
 	t.Run("ChangeScheduleToCloseAndRetry", func(t *testing.T) {
-		s := testcore.NewEnv(t, testcore.WithSdkWorker())
+		s := testcore.NewEnv(t)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -657,7 +657,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 	})
 
 	t.Run("ResetDefaultOptions", func(t *testing.T) {
-		s := testcore.NewEnv(t, testcore.WithSdkWorker())
+		s := testcore.NewEnv(t)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
