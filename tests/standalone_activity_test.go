@@ -7150,8 +7150,8 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 				ActivityId: activityID,
 				RunId:      runID,
 			})
-			assert.NoError(c, dErr)
-			assert.Equal(c, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, dr.GetInfo().GetStatus())
+			require.NoError(c, dErr)
+			require.Equal(c, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, dr.GetInfo().GetStatus())
 		}, 10*time.Second, 200*time.Millisecond)
 	})
 
