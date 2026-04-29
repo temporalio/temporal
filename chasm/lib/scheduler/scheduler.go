@@ -636,7 +636,6 @@ func (s *Scheduler) Describe(
 	}, nil
 }
 
-
 // ListMatchingTimes returns the upcoming times that the schedule will trigger
 // within the given time range.
 func (s *Scheduler) ListMatchingTimes(
