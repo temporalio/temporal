@@ -663,10 +663,8 @@ func TestWithTags_CacheHitAllocs(t *testing.T) {
 	allocs := testing.AllocsPerRun(1000, func() {
 		h.WithTags(OperationTag("op1"))
 	})
-	// Cache hit still allocates for normalizeTagsForCaching key computation.
-	// Once we add the unsafe.String optimization, this should be 0.
-	require.LessOrEqual(t, allocs, float64(2),
-		"WithTags cache hit should have minimal allocations")
+	require.Equal(t, float64(0), allocs,
+		"WithTags cache hit should be allocation-free")
 }
 
 func TestWithTags_ExcludedDedupAllocs(t *testing.T) {
@@ -677,7 +675,8 @@ func TestWithTags_ExcludedDedupAllocs(t *testing.T) {
 	allocs := testing.AllocsPerRun(1000, func() {
 		h.WithTags(ActivityTypeTag("ActivityB"))
 	})
-	// Should hit the cache since ActivityB normalizes to same key as ActivityA.
-	require.LessOrEqual(t, allocs, float64(2),
-		"excluded tag dedup cache hit should have minimal allocations")
+	// 1 alloc for the normalizeTagsForCaching []Tag slice (substitution needed).
+	// The key string itself is allocation-free on cache hit via unsafe.String.
+	require.LessOrEqual(t, allocs, float64(1),
+		"excluded tag dedup cache hit should only allocate for normalization")
 }

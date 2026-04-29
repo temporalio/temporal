@@ -4,6 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/uber-go/tally/v4"
 	"go.temporal.io/server/common/log"
@@ -55,6 +56,20 @@ func NewTallyMetricsHandler(cfg ClientConfig, scope tally.Scope) *tallyMetricsHa
 	}
 }
 
+// appendCacheKey appends a compact cache key for the given tags to buf and
+// returns the extended buffer.
+func appendCacheKey(buf []byte, tags []Tag) []byte {
+	for i, t := range tags {
+		if i > 0 {
+			buf = append(buf, 0)
+		}
+		buf = append(buf, t.Key...)
+		buf = append(buf, 0)
+		buf = append(buf, t.Value...)
+	}
+	return buf
+}
+
 // tagsCacheKey builds a compact string key from a tag slice for use as a
 // sync.Map lookup key.
 func tagsCacheKey(tags []Tag) string {
@@ -66,15 +81,19 @@ func tagsCacheKey(tags []Tag) string {
 		size += len(tags[i].Key) + 1 + len(tags[i].Value)
 	}
 	b := make([]byte, 0, size)
-	for i, t := range tags {
-		if i > 0 {
-			b = append(b, 0)
-		}
-		b = append(b, t.Key...)
-		b = append(b, 0)
-		b = append(b, t.Value...)
-	}
+	b = appendCacheKey(b, tags)
 	return string(b)
+}
+
+// tempString creates a temporary string from a byte slice without allocation.
+// The returned string is only valid as long as the byte slice is not modified.
+// This is safe for use as a sync.Map lookup key because Load does not retain
+// the key after returning.
+func tempString(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	return unsafe.String(unsafe.SliceData(b), len(b))
 }
 
 // WithTags creates a new MetricProvider with provided []Tag
@@ -86,8 +105,10 @@ func (tmh *tallyMetricsHandler) WithTags(tags ...Tag) Handler {
 	if len(tags) == 0 {
 		return tmh
 	}
-	key := tagsCacheKey(normalizeTagsForCaching(tags, tmh.excludeTags))
-	if v, ok := tmh.childCache.Load(key); ok {
+	normalized := normalizeTagsForCaching(tags, tmh.excludeTags)
+	var scratch [128]byte
+	buf := appendCacheKey(scratch[:0], normalized)
+	if v, ok := tmh.childCache.Load(tempString(buf)); ok {
 		return v.(*tallyMetricsHandler)
 	}
 	child := &tallyMetricsHandler{
@@ -98,6 +119,7 @@ func (tmh *tallyMetricsHandler) WithTags(tags ...Tag) Handler {
 	if tmh.childCacheSize.Load() >= scopeCacheMaxSize {
 		return child
 	}
+	key := string(buf)
 	actual, loaded := tmh.childCache.LoadOrStore(key, child)
 	if !loaded {
 		tmh.childCacheSize.Add(1)
@@ -116,14 +138,17 @@ func (tmh *tallyMetricsHandler) cachedTaggedScope(tags []Tag) tally.Scope {
 	if len(tags) == 0 {
 		return tmh.scope
 	}
-	key := tagsCacheKey(normalizeTagsForCaching(tags, tmh.excludeTags))
-	if v, ok := tmh.scopeCache.Load(key); ok {
+	normalized := normalizeTagsForCaching(tags, tmh.excludeTags)
+	var scratch [128]byte
+	buf := appendCacheKey(scratch[:0], normalized)
+	if v, ok := tmh.scopeCache.Load(tempString(buf)); ok {
 		return v.(tally.Scope)
 	}
 	scope := tmh.scope.Tagged(tagsToMap(tags, tmh.excludeTags))
 	if tmh.scopeCacheSize.Load() >= scopeCacheMaxSize {
 		return scope
 	}
+	key := string(buf)
 	actual, loaded := tmh.scopeCache.LoadOrStore(key, scope)
 	if !loaded {
 		tmh.scopeCacheSize.Add(1)
