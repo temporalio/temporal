@@ -21,8 +21,6 @@ const (
 	nexusEndpointTagName           = "nexus_endpoint"
 	nexusServiceTagName            = "nexus_service"
 	nexusOperationTagName          = "nexus_operation"
-	nexusCallerTagName             = "nexus_caller"
-	nexusCallerTypeTagName         = "nexus_caller_type"
 	outcomeTagName                 = "outcome"
 	versionedTagName               = "versioned"
 	resourceExhaustedTag           = "resource_exhausted_cause"

@@ -395,20 +395,6 @@ func NexusOperationTag(value string) Tag {
 	return Tag{Key: nexusOperationTagName, Value: value}
 }
 
-func NexusCallerTag(value string) Tag {
-	if len(value) == 0 {
-		value = unknownValue
-	}
-	return Tag{Key: nexusCallerTagName, Value: value}
-}
-
-func NexusCallerTypeTag(value string) Tag {
-	if len(value) == 0 {
-		value = unknownValue
-	}
-	return Tag{Key: nexusCallerTypeTagName, Value: value}
-}
-
 // HttpStatusTag returns a new httpStatusTag.
 func HttpStatusTag(value int) Tag {
 	return Tag{Key: httpStatusTagName, Value: strconv.Itoa(value)}

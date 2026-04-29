@@ -285,7 +285,7 @@ func (c *operationContext) shouldForwardRequest(ctx context.Context, header nexu
 }
 
 // enrichNexusOperationMetrics enhances metrics with additional Nexus operation context based on configuration.
-func (c *operationContext) enrichNexusOperationMetrics(ctx context.Context, service, operation string, requestHeader nexus.Header) {
+func (c *operationContext) enrichNexusOperationMetrics(service, operation string, requestHeader nexus.Header) {
 	conf := c.metricTagConfig()
 
 	var tags []metrics.Tag
@@ -395,7 +395,7 @@ func (h *nexusHandler) StartOperation(
 		return nil, err
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
-	oc.enrichNexusOperationMetrics(ctx, service, operation, options.Header)
+	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	var links []*nexuspb.Link
@@ -633,7 +633,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		return err
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
-	oc.enrichNexusOperationMetrics(ctx, service, operation, options.Header)
+	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	request := oc.matchingRequest(&nexuspb.Request{
