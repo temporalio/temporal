@@ -51,7 +51,12 @@ func (s *NexusStandaloneTestSuite) newTestEnv(opts ...testcore.TestOption) *Nexu
 func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 	s.Run("StartAndDescribe", func(s *NexusStandaloneTestSuite) {
 		env := s.newTestEnv()
-		endpointName := env.createRandomNexusEndpoint(env.Context(), s.T()).GetSpec().GetName()
+		// Ensure operation reaches STARTED on the first dispatch attempt.
+		endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), nexustest.Handler{
+			OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+				return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-operation-token"}, nil
+			},
+		})
 
 		testInput := payload.EncodeString("test-input")
 		testHeader := map[string]string{"test-key": "test-value"}
@@ -79,6 +84,15 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 		s.NoError(err)
 		s.True(startResp.GetStarted())
 
+		// Ensure the operation is in a stable STARTED state.
+		_, err = env.FrontendClient().PollNexusOperationExecution(env.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
+		})
+		s.NoError(err)
+
 		for _, tc := range []struct {
 			name  string
 			runID string
@@ -103,7 +117,7 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 					Service:                "test-service",
 					Operation:              "test-operation",
 					Status:                 enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING,
-					State:                  enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED,
+					State:                  enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED,
 					ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
 					ScheduleToStartTimeout: durationpb.New(testScheduleToStartTimeout),
 					StartToCloseTimeout:    durationpb.New(testStartToCloseTimeout),
@@ -111,18 +125,14 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 					UserMetadata:           testUserMetadata,
 					SearchAttributes:       testSearchAttributes,
 					Attempt:                1,
-					StateTransitionCount:   1,
-					// Dynamic fields copied from actual response for comparison.
-					RequestId:         info.GetRequestId(),
-					ScheduleTime:      info.GetScheduleTime(),
-					ExpirationTime:    info.GetExpirationTime(),
-					ExecutionDuration: info.GetExecutionDuration(),
-				}, info)
+				}, info, protorequire.IgnoreFields("state_transition_count", "operation_token", "last_attempt_complete_time", "request_id", "schedule_time", "expiration_time", "execution_duration"))
 				s.NotEmpty(descResp.GetLongPollToken())
 				s.NotEmpty(info.GetRequestId())
 				s.NotNil(info.GetScheduleTime())
 				s.NotNil(info.GetExpirationTime())
 				s.NotNil(info.GetExecutionDuration())
+				s.NotEmpty(info.GetOperationToken())
+				s.NotNil(info.GetLastAttemptCompleteTime())
 			})
 		}
 
@@ -302,11 +312,24 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 
 	s.Run("LongPollTimeoutReturnsEmptyResponse", func(s *NexusStandaloneTestSuite) {
 		env := s.newTestEnv()
-		endpointName := env.createRandomNexusEndpoint(env.Context(), s.T()).GetSpec().GetName()
+		endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), nexustest.Handler{
+			OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+				return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-operation-token"}, nil
+			},
+		})
 
 		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
 			Endpoint:    endpointName,
+		})
+		s.NoError(err)
+
+		// Ensure the operation is in a stable STARTED state.
+		_, err = env.FrontendClient().PollNexusOperationExecution(env.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
 		})
 		s.NoError(err)
 
@@ -791,7 +814,14 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 	s.Run("RequestCancel", func(s *NexusStandaloneTestSuite) {
 		env := s.newTestEnv()
-		endpointName := env.createRandomNexusEndpoint(env.Context(), s.T()).GetSpec().GetName()
+		endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), nexustest.Handler{
+			OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+				return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-operation-token"}, nil
+			},
+			OnCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+				return nil
+			},
+		})
 
 		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
@@ -799,6 +829,15 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 		})
 		s.NoError(err)
 		s.True(startResp.GetStarted())
+
+		// Ensure the operation is in a stable STARTED state.
+		_, err = env.FrontendClient().PollNexusOperationExecution(env.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
+		})
+		s.NoError(err)
 
 		_, err = env.FrontendClient().RequestCancelNexusOperationExecution(env.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
 			Namespace:   env.Namespace().String(),
@@ -821,18 +860,13 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 			Service:                "test-service",
 			Operation:              "test-operation",
 			Status:                 enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING,
-			State:                  enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED,
+			State:                  enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED,
 			ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
 			NexusHeader:            map[string]string{},
 			SearchAttributes:       &commonpb.SearchAttributes{},
 			Attempt:                1,
 			StateTransitionCount:   descResp.GetInfo().GetStateTransitionCount(),
-			// Dynamic fields copied from actual response for comparison.
-			RequestId:         descResp.GetInfo().GetRequestId(),
-			ScheduleTime:      descResp.GetInfo().GetScheduleTime(),
-			ExpirationTime:    descResp.GetInfo().GetExpirationTime(),
-			ExecutionDuration: descResp.GetInfo().GetExecutionDuration(),
-		}, descResp.GetInfo())
+		}, descResp.GetInfo(), protorequire.IgnoreFields("operation_token", "last_attempt_complete_time", "request_id", "schedule_time", "expiration_time", "execution_duration"))
 		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING, descResp.GetInfo().GetStatus())
 	})
 
@@ -1156,9 +1190,7 @@ func (s *NexusStandaloneTestSuite) TestListStandaloneNexusOperation() {
 			Status:               enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING,
 			StateTransitionCount: op.GetStateTransitionCount(),
 			SearchAttributes:     op.GetSearchAttributes(),
-			// Dynamic fields copied from actual response for comparison.
-			ScheduleTime: op.GetScheduleTime(),
-		}, op)
+		}, op, protorequire.IgnoreFields("schedule_time"))
 		s.NotNil(op.GetScheduleTime())
 	})
 
