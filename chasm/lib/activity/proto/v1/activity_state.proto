@@ -113,7 +113,7 @@ message ActivityState {
   // Incremented each time a new ScheduleToCloseTimeoutTask is scheduled (at activity creation
   // and on each options update that re-schedules the task). Unlike attempt.stamp, this counter
   // is NOT incremented on retries, because schedule-to-close spans the full activity lifetime.
-  int32 stamp = 15;
+  int32 schedule_to_close_stamp = 15;
 
   // Set if the activity was paused.
   ActivityPauseState pause_state = 16;
