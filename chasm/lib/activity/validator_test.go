@@ -646,7 +646,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 		req := &workflowservice.DeleteActivityExecutionRequest{
 			ActivityId: defaultActivityID,
 		}
-		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		require.NoError(t, err)
 	})
 
@@ -655,7 +655,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 			ActivityId: defaultActivityID,
 			RunId:      "f47ac10b-58cc-4372-a567-0e02b2c3d479",
 		}
-		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		require.NoError(t, err)
 	})
 
@@ -663,7 +663,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 		req := &workflowservice.DeleteActivityExecutionRequest{
 			ActivityId: "",
 		}
-		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 	})
@@ -672,7 +672,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 		req := &workflowservice.DeleteActivityExecutionRequest{
 			ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)),
 		}
-		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 	})
@@ -682,7 +682,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 			ActivityId: defaultActivityID,
 			RunId:      "not-a-valid-uuid",
 		}
-		err := validateDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 	})
@@ -719,7 +719,7 @@ func TestValidatePauseActivityExecutionRequest(t *testing.T) {
 			Identity:   "test-identity",
 			Reason:     "test-reason",
 		}
-		err := validatePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
+		err := validateAndNormalizePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
 		require.NoError(t, err)
 	})
 
@@ -729,7 +729,7 @@ func TestValidatePauseActivityExecutionRequest(t *testing.T) {
 			RunId:      "f47ac10b-58cc-4372-a567-0e02b2c3d479",
 			Identity:   "test-identity",
 		}
-		err := validatePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
+		err := validateAndNormalizePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
 		require.NoError(t, err)
 	})
 
@@ -738,7 +738,7 @@ func TestValidatePauseActivityExecutionRequest(t *testing.T) {
 			ActivityId: "",
 			Identity:   "test-identity",
 		}
-		err := validatePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
+		err := validateAndNormalizePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "activity ID is required", invalidArgErr.Message)
@@ -749,7 +749,7 @@ func TestValidatePauseActivityExecutionRequest(t *testing.T) {
 			ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)),
 			Identity:   "test-identity",
 		}
-		err := validatePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
+		err := validateAndNormalizePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, fmt.Sprintf("activity ID exceeds length limit. Length=%d Limit=%d",
@@ -761,7 +761,7 @@ func TestValidatePauseActivityExecutionRequest(t *testing.T) {
 			ActivityId: defaultActivityID,
 			Identity:   string(make([]byte, defaultMaxIDLengthLimit+1)),
 		}
-		err := validatePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
+		err := validateAndNormalizePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, fmt.Sprintf("identity exceeds length limit. Length=%d Limit=%d",
@@ -774,7 +774,7 @@ func TestValidatePauseActivityExecutionRequest(t *testing.T) {
 			Identity:   "test-identity",
 			Reason:     string(make([]byte, defaultBlobSizeLimitError("default")+1)),
 		}
-		err := validatePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
+		err := validateAndNormalizePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "reason exceeds length limit", invalidArgErr.Message)
@@ -786,7 +786,7 @@ func TestValidatePauseActivityExecutionRequest(t *testing.T) {
 			RunId:      "not-a-valid-uuid",
 			Identity:   "test-identity",
 		}
-		err := validatePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
+		err := validateAndNormalizePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "invalid run id: must be a valid UUID", invalidArgErr.Message)
@@ -799,7 +799,7 @@ func TestValidateUnpauseActivityExecutionRequest(t *testing.T) {
 			ActivityId: defaultActivityID,
 			Identity:   "test-identity",
 		}
-		err := validateUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		require.NoError(t, err)
 	})
 
@@ -809,7 +809,7 @@ func TestValidateUnpauseActivityExecutionRequest(t *testing.T) {
 			RunId:      "f47ac10b-58cc-4372-a567-0e02b2c3d479",
 			Identity:   "test-identity",
 		}
-		err := validateUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		require.NoError(t, err)
 	})
 
@@ -818,7 +818,7 @@ func TestValidateUnpauseActivityExecutionRequest(t *testing.T) {
 			ActivityId: "",
 			Identity:   "test-identity",
 		}
-		err := validateUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "activity ID is required", invalidArgErr.Message)
@@ -829,7 +829,7 @@ func TestValidateUnpauseActivityExecutionRequest(t *testing.T) {
 			ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)),
 			Identity:   "test-identity",
 		}
-		err := validateUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, fmt.Sprintf("activity ID exceeds length limit. Length=%d Limit=%d",
@@ -841,7 +841,7 @@ func TestValidateUnpauseActivityExecutionRequest(t *testing.T) {
 			ActivityId: defaultActivityID,
 			Identity:   string(make([]byte, defaultMaxIDLengthLimit+1)),
 		}
-		err := validateUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, fmt.Sprintf("identity exceeds length limit. Length=%d Limit=%d",
@@ -854,7 +854,7 @@ func TestValidateUnpauseActivityExecutionRequest(t *testing.T) {
 			RunId:      "not-a-valid-uuid",
 			Identity:   "test-identity",
 		}
-		err := validateUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "invalid run id: must be a valid UUID", invalidArgErr.Message)
@@ -867,7 +867,7 @@ func TestValidateResetActivityExecutionRequest(t *testing.T) {
 			ActivityId: defaultActivityID,
 			Identity:   "test-identity",
 		}
-		err := validateResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		require.NoError(t, err)
 	})
 
@@ -877,7 +877,7 @@ func TestValidateResetActivityExecutionRequest(t *testing.T) {
 			RunId:      "f47ac10b-58cc-4372-a567-0e02b2c3d479",
 			Identity:   "test-identity",
 		}
-		err := validateResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		require.NoError(t, err)
 	})
 
@@ -886,7 +886,7 @@ func TestValidateResetActivityExecutionRequest(t *testing.T) {
 			ActivityId: "",
 			Identity:   "test-identity",
 		}
-		err := validateResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "activity ID is required", invalidArgErr.Message)
@@ -897,7 +897,7 @@ func TestValidateResetActivityExecutionRequest(t *testing.T) {
 			ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)),
 			Identity:   "test-identity",
 		}
-		err := validateResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, fmt.Sprintf("activity ID exceeds length limit. Length=%d Limit=%d",
@@ -909,7 +909,7 @@ func TestValidateResetActivityExecutionRequest(t *testing.T) {
 			ActivityId: defaultActivityID,
 			Identity:   string(make([]byte, defaultMaxIDLengthLimit+1)),
 		}
-		err := validateResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, fmt.Sprintf("identity exceeds length limit. Length=%d Limit=%d",
@@ -922,7 +922,7 @@ func TestValidateResetActivityExecutionRequest(t *testing.T) {
 			RunId:      "not-a-valid-uuid",
 			Identity:   "test-identity",
 		}
-		err := validateResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "invalid run id: must be a valid UUID", invalidArgErr.Message)
