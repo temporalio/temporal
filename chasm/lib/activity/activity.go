@@ -172,6 +172,7 @@ func NewStandaloneActivity(
 			HeartbeatTimeout:       request.GetHeartbeatTimeout(),
 			RetryPolicy:            request.GetRetryPolicy(),
 			Priority:               request.GetPriority(),
+			StartDelay:             request.GetStartDelay(),
 			OriginalOptions: &apiactivitypb.ActivityOptions{
 				TaskQueue:              request.GetTaskQueue(),
 				ScheduleToCloseTimeout: request.GetScheduleToCloseTimeout(),
