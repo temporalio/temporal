@@ -102,28 +102,28 @@ message ActivityState {
   // Set if the activity was terminated
   ActivityTerminateState terminate_state = 12;
 
+  // Delays the first dispatch of the activity. Extends ScheduleToClose and ScheduleToStart
+  // timeouts by this duration. StartToClose and Heartbeat timeouts are unaffected.
+  google.protobuf.Duration start_delay = 13;
+
   // Options for the first scheduled attempt to support `restore_original`
-  temporal.api.activity.v1.ActivityOptions original_options = 13;
+  temporal.api.activity.v1.ActivityOptions original_options = 14;
 
   // An incremental version number used to validate ScheduleToCloseTimeoutTask tasks.
   // Incremented each time a new ScheduleToCloseTimeoutTask is scheduled (at activity creation
   // and on each options update that re-schedules the task). Unlike attempt.stamp, this counter
   // is NOT incremented on retries, because schedule-to-close spans the full activity lifetime.
-  int32 stamp = 14;
+  int32 stamp = 15;
 
   // Set if the activity was paused.
-  ActivityPauseState pause_state = 15;
+  ActivityPauseState pause_state = 16;
 
   // Set when reset was requested while the activity was running.
   // On the next retry, TransitionRescheduled will reset the attempt count to 1 before incrementing.
-  bool activity_reset = 16;
+  bool activity_reset = 17;
 
   // Set alongside activity_reset when heartbeat details should be cleared on the next retry.
-  bool reset_heartbeats = 17;
-
-  // Delays the first dispatch of the activity. Extends ScheduleToClose and ScheduleToStart
-  // timeouts by this duration. StartToClose and Heartbeat timeouts are unaffected.
-  google.protobuf.Duration start_delay = 18;
+  bool reset_heartbeats = 18;
 }
 
 message ActivityCancelState {
