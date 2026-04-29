@@ -48,12 +48,12 @@ import (
 )
 
 type ActivityApiResetClientTestSuite struct {
-	testcore.FunctionalTestBase
-	tv                     *testvars.TestVars
-	initialRetryInterval   time.Duration
-	scheduleToCloseTimeout time.Duration
-	startToCloseTimeout    time.Duration
-	activityRetryPolicy    *temporal.RetryPolicy
+	testcore.FunctionalTestBase //nolint:forbidigo
+	tv                          *testvars.TestVars
+	initialRetryInterval        time.Duration
+	scheduleToCloseTimeout      time.Duration
+	startToCloseTimeout         time.Duration
+	activityRetryPolicy         *temporal.RetryPolicy
 
 	// apiName selects which reset API variant to exercise ("legacy-api" or "execution-api").
 	// Set before suite.Run; used by SetupTest to initialise resetFn.

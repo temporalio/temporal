@@ -120,7 +120,7 @@ func validateAndNormalizeActivityAttributes(
 		return serviceerror.NewInvalidArgumentf("invalid priorities: %v", err)
 	}
 
-	return normalizeAndValidateTimeouts(activityID,
+	return validateAndNormalizeTimeouts(activityID,
 		activityType,
 		runTimeout,
 		options)
@@ -147,7 +147,7 @@ func validateActivityRetryPolicy(
 	return retrypolicy.Validate(retryPolicy)
 }
 
-func normalizeAndValidateTimeouts(
+func validateAndNormalizeTimeouts(
 	activityID string,
 	activityType string,
 	runTimeout *durationpb.Duration,
@@ -215,7 +215,7 @@ func normalizeAndValidateTimeouts(
 	return nil
 }
 
-func normalizeAndValidateIDPolicy(req *workflowservice.StartActivityExecutionRequest) error {
+func validateAndNormalizeIDPolicy(req *workflowservice.StartActivityExecutionRequest) error {
 	if req.GetIdReusePolicy() == enumspb.ACTIVITY_ID_REUSE_POLICY_UNSPECIFIED {
 		req.IdReusePolicy = enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
@@ -297,7 +297,7 @@ func validateAndNormalizeStartRequest(
 			len(req.GetIdentity()), maxIDLengthLimit)
 	}
 
-	if err := normalizeAndValidateIDPolicy(req); err != nil {
+	if err := validateAndNormalizeIDPolicy(req); err != nil {
 		return err
 	}
 
