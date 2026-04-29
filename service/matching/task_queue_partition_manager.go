@@ -488,6 +488,8 @@ func syncMatchOutcomeToHook(outcome syncMatchOutcome) hooks.SyncMatchOutcome {
 		return hooks.SyncMatchOutcomeSuccess
 	case syncMatchRateLimited:
 		return hooks.SyncMatchOutcomeRateLimited
+	case syncMatchUnspecified:
+		return hooks.SyncMatchOutcomeUnspecified
 	default:
 		return hooks.SyncMatchOutcomeNotMatched
 	}
