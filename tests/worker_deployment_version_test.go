@@ -4333,6 +4333,52 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_MultipleVersi
 	}, 10*time.Second, 500*time.Millisecond)
 }
 
+// TestCreateWorkerDeploymentVersion_InvalidComputeConfig_ReturnsPromptly verifies that
+// creating a version with invalid compute config returns an InvalidArgument error promptly,
+// even when the deployment workflow is busy (e.g., processing a recently polled version).
+// This is a regression test for a bug where the activity error was retryable, causing the
+// deployment workflow to stay busy and the client to time out with "too many requests".
+func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_InvalidComputeConfig_ReturnsPromptly() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	// Create a version via polling, which auto-creates the deployment and keeps
+	// the deployment workflow active with lazy-creation processing.
+	s.startVersionWorkflow(ctx, tv)
+
+	// Immediately attempt to create another version on the same deployment with
+	// invalid compute config. This should return an InvalidArgument error
+	// promptly (not time out with "too many requests").
+	tv2 := tv.WithBuildIDNumber(2)
+	invalidProvider := computeprovider.TestInvokeComputeProviderInvalidComputeProvider()
+	start := time.Now()
+	_, err := s.FrontendClient().CreateWorkerDeploymentVersion(ctx, &workflowservice.CreateWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: tv.DeploymentSeries(),
+			BuildId:        tv2.BuildID(),
+		},
+		RequestId: tv2.Any().String(),
+		ComputeConfig: &computepb.ComputeConfig{
+			ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
+				"sg1": {Provider: invalidProvider},
+			},
+		},
+	})
+	elapsed := time.Since(start)
+
+	s.Error(err)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.Contains(invalidArg.Message, "illegal_field found in config")
+	// The error should return well before the deployment client's 1-minute
+	// retry timeout. If it takes longer than 30 seconds, the activity error
+	// is likely still retryable (the bug we're testing for).
+	s.Less(elapsed, 30*time.Second, "create-version with invalid compute config should fail promptly, not time out")
+}
+
 func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_InvalidScalingGroups() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
