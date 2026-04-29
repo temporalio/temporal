@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.14",
+  "MinCompatibleVersion": "1.0",
+  "Description": "Add new start_time column",
+  "SchemaUpdateCqlFiles": [
+    "add_current_executions_start_time.sql"
+  ]
+}
