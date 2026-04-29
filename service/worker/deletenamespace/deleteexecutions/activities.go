@@ -8,7 +8,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/activity"
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -196,18 +195,11 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 				WorkflowExecution: execution.Execution,
 			})
 		} else {
-			// NOTE: ForceDeleteWorkflowExecution is NOT design as a API to be consumed programmatically,
-			// and only performs best effort deletion on execution histories.
-			// It works for CHASM now as CHASM executions don't have any history events, so as long as this API,
-			// returns nil error, it means we have successfully deleted the mutable state and visibility records.
-			_, err = a.historyClient.ForceDeleteWorkflowExecution(ctx, &historyservice.ForceDeleteWorkflowExecutionRequest{
+			_, err = a.historyClient.DeleteExecution(ctx, &historyservice.DeleteExecutionRequest{
 				NamespaceId: params.NamespaceID.String(),
+				Execution:   execution.Execution,
 				ArchetypeId: archetypeID,
-				Request: &adminservice.DeleteWorkflowExecutionRequest{
-					// Namespace and Archetype fields are not required since we are calling history
-					// service directly.
-					Execution: execution.Execution,
-				},
+				Reason:      "Namespace delete",
 			})
 		}
 

@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
+	"go.temporal.io/server/service/history/api/deleteexecution"
 	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
 	"go.temporal.io/server/service/history/api/getdlqtasks"
 	"go.temporal.io/server/service/history/api/listqueues"
@@ -2017,6 +2018,17 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 		h.persistenceVisibilityManager,
 		h.logger,
 	)
+}
+
+func (h *Handler) DeleteExecution(
+	ctx context.Context,
+	request *historyservice.DeleteExecutionRequest,
+) (*historyservice.DeleteExecutionResponse, error) {
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
+		return nil, err
+	}
+	return deleteexecution.Invoke(ctx, h.chasmEngine, request)
 }
 
 func (h *Handler) GetDLQTasks(
