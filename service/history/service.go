@@ -145,13 +145,19 @@ func (s *Service) Stop() {
 		time.Sleep(s.config.ShutdownDrainDuration())
 	}
 
-	// Stop handler components (replication stream monitor, shard controller, etc.) so that
-	// inbound replication stream senders are signaled to stop before we wait for gRPC handlers
-	// to return. Without this, stream sender goroutines block indefinitely on Wait() and the
-	// gRPC server falls back to forceful Stop() after the drain timeout, causing unclean H2
-	// connection teardowns on the peer.
-	s.logger.Info("ShutdownHandler: Initiating handler shutdown")
-	s.handler.Stop()
+	// When enabled, stop handler components (including the replication stream monitor) before
+	// waiting for gRPC handlers to return. This signals inbound stream senders on the peer to
+	// stop, allowing their handler goroutines to unblock and return cleanly before GracefulStop.
+	// Without this, those goroutines block indefinitely and the gRPC server falls back to a
+	// forceful Stop(), causing unclean H2 teardowns on the peer.
+	// Guarded by feature flag so the ordering change can be reverted if needed.
+	if s.config.EnableCloseInboundReplicationStreamOnShutdown() {
+		s.logger.Info("ShutdownHandler: Initiating handler shutdown")
+		s.handler.Stop()
+	} else {
+		s.logger.Info("ShutdownHandler: Initiating shardController shutdown")
+		s.handler.controller.Stop()
+	}
 
 	// All grpc handlers should be cancelled now. Give them a little time to return.
 	t := time.AfterFunc(2*time.Second, func() {
@@ -160,6 +166,9 @@ func (s *Service) Stop() {
 	})
 	s.server.GracefulStop()
 	t.Stop()
+	if !s.config.EnableCloseInboundReplicationStreamOnShutdown() {
+		s.handler.Stop()
+	}
 	s.visibilityManager.Close()
 
 	s.logger.Info("history stopped")
