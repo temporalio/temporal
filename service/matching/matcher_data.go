@@ -33,8 +33,10 @@ const (
 type syncMatchOutcome int
 
 const (
+	// Default zero value; should not be used explicitly.
+	syncMatchUnspecified syncMatchOutcome = iota
 	// The task was sync-matched successfully.
-	syncMatchSuccess syncMatchOutcome = iota
+	syncMatchSuccess
 	// Sync match was not attempted because the backlog is too deep.
 	syncMatchBacklogged
 	// Sync match was attempted but no poller was available.
