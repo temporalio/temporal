@@ -76,7 +76,7 @@ func TestActivityApiResetClientTestSuite(t *testing.T) {
 }
 
 func (s *ActivityApiResetClientTestSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
+	s.FunctionalTestBase.SetupTest() //nolint:forbidigo
 
 	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(s.Namespace())
 
