@@ -761,41 +761,70 @@ func (n *Node) setSerializedNode(
 	return childNode.setSerializedNode(nodePath[1:], encodedPath, serializedNode)
 }
 
-// shouldSkipIfClean returns true when this node is eligible for the skip-if-clean
-// optimization: CHASM will compare serialized bytes against what was last loaded
-// from storage and skip writing the node to UpdatedNodes if they are identical.
+// isSkipIfCleanEligible returns true when this node's type and history make it
+// a candidate for the skip-if-clean optimisation.
 //
-// This is the default behavior for all component and data nodes. It is disabled
-// only when the component type (or, for data nodes, its parent component) has
-// registered with WithNondeterministicEncoding, indicating that byte comparison
-// is not a reliable equality check for that component's proto data.
-func (n *Node) shouldSkipIfClean() bool {
-	// For component nodes check the registration directly.
+// Two static preconditions must both hold:
+//  1. Deterministic encoding: byte comparison is a reliable equality check for
+//     this component's proto data. All components qualify unless they opted out
+//     with WithNondeterministicEncoding().
+//  2. Previously persisted: the node has been written to storage at least once.
+//     Brand-new nodes are always written on their first transaction regardless
+//     of their data content.
+//
+// Passing this check does not guarantee skipping; callers must additionally
+// verify there are no per-transaction side effects via hasTransactionSideEffects.
+func (n *Node) isSkipIfCleanEligible() bool {
+	if !n.initialStatePersisted {
+		return false
+	}
+	// Component nodes: check registration directly.
 	if rc, ok := n.registry.componentFor(n.value); ok {
 		return !rc.nondeterministicEncoding
 	}
-	// For data nodes inherit the setting from the nearest component ancestor.
+	// Data nodes: inherit the encoding setting from the parent component.
 	if n.isData() && n.parent != nil {
 		if rc, ok := n.registry.componentFor(n.parent.value); ok {
 			return !rc.nondeterministicEncoding
 		}
 	}
-	// Collection and pointer nodes have no proto data to compare; always skip.
+	// Collection and pointer nodes carry no proto data; always eligible.
 	return true
 }
 
-// hasDeletedDescendants returns true when one or more nodes within this node's
-// subtree were deleted in the current transaction (e.g. because a collection
-// item was removed). When true the node's structural state has changed and it
-// must be persisted even if its own data bytes are unchanged.
+// hasTransactionSideEffects returns true when the current transaction introduced
+// observable effects on this node that must be recorded in storage regardless of
+// whether the node's data bytes changed.
 //
-// DeletedNodes is populated by syncSubComponents before closeTransactionSerializeNodes
-// runs, so it is fully populated when this method is called.
+// Three categories of side effects are checked:
+//   - New tasks: tasks scheduled on this node require their versioned transition
+//     to be bumped and stored.
+//   - Deleted descendants: a structural change in the subtree (e.g. a collection
+//     item removed) must be reflected in this node's persisted metadata.
+//   - Lifecycle termination: the root component was force-terminated, which
+//     changes its last-update versioned transition even when no data field changed.
+//
+// Note: DeletedNodes is fully populated by syncSubComponents before
+// closeTransactionSerializeNodes runs, so this check is reliable.
+func (n *Node) hasTransactionSideEffects(encodedPath string) bool {
+	if len(n.newTasks[n.value]) > 0 {
+		return true
+	}
+	if n.terminated {
+		return true
+	}
+	return n.hasDeletedDescendants(encodedPath)
+}
+
+// hasDeletedDescendants returns true when at least one node within this node's
+// subtree was deleted in the current transaction (e.g. a collection item was
+// removed). The check is done against the mutation's DeletedNodes map, which is
+// populated by syncSubComponents before closeTransactionSerializeNodes runs.
 func (n *Node) hasDeletedDescendants(encodedPath string) bool {
 	if len(n.mutation.DeletedNodes) == 0 {
 		return false
 	}
-	// Root node (empty encoded path): any deletion is by definition within its subtree.
+	// Root node (empty encoded path): any deletion is within its subtree.
 	if encodedPath == "" {
 		return true
 	}
@@ -1744,18 +1773,13 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			continue
 		}
 
-		// For nodes that are eligible for skip-if-clean AND were loaded from storage
-		// (not brand-new in this transaction), capture the existing serialized bytes
-		// and versioned transition before serialize() overwrites them. After
-		// serialization we compare the old and new bytes; if they are identical we
-		// revert the metadata mutation and skip adding this node to UpdatedNodes.
+		// Capture the pre-serialization state when this node is eligible for the
+		// skip-if-clean optimisation and the transaction has no side effects that
+		// force a write (new tasks, structural deletions, lifecycle termination).
 		//
-		// Skip is disabled per-component via WithNondeterministicEncoding.
-		// New tasks in this transaction also prevent skipping.
-		//
-		// We capture prevData as a pointer to the existing DataBlob (O(1), no copy).
-		// serialize() replaces node.serializedNode.Data with a freshly allocated blob,
-		// so prevData keeps the original reference intact.
+		// We store prevData as a pointer to the existing DataBlob (O(1), no copy).
+		// serialize() replaces node.serializedNode.Data with a freshly allocated
+		// blob, so prevData keeps the original reference intact for comparison.
 		var (
 			prevData                *commonpb.DataBlob
 			prevVersionedTransition *persistencespb.VersionedTransition
@@ -1765,11 +1789,7 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			return err
 		}
 
-		skipIfClean := node.shouldSkipIfClean() &&
-			node.initialStatePersisted &&
-			len(node.newTasks[node.value]) == 0 &&
-			!node.hasDeletedDescendants(encodedPath) &&
-			!node.terminated
+		skipIfClean := node.isSkipIfCleanEligible() && !node.hasTransactionSideEffects(encodedPath)
 		if skipIfClean {
 			prevData = node.serializedNode.Data
 			cloned, ok := proto.Clone(
