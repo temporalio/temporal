@@ -700,7 +700,7 @@ func (a *Activity) mergeActivityOptions(
 	// Re-normalize timeouts after the update so that relationships like
 	// start_to_close <= schedule_to_close and heartbeat <= start_to_close are preserved.
 	// This mirrors adjustActivityOptions for workflow-embedded activities.
-	if err := normalizeAndValidateTimeouts(req.GetActivityId(), a.GetActivityType().GetName(), durationpb.New(0), ao); err != nil {
+	if err := validateAndNormalizeTimeouts(req.GetActivityId(), a.GetActivityType().GetName(), durationpb.New(0), ao); err != nil {
 		return err
 	}
 
