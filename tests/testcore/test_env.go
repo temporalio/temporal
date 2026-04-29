@@ -14,7 +14,6 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -44,7 +43,8 @@ type Env interface {
 	T() *testing.T
 	Namespace() namespace.Name
 	NamespaceID() namespace.ID
-	FrontendClient() workflowservice.WorkflowServiceClient
+	FrontendClient() FrontendClient
+	ExperimentalFrontend() FrontendClients
 	AdminClient() adminservice.AdminServiceClient
 	GetTestCluster() *TestCluster
 	CloseShard(namespaceID string, workflowID string)

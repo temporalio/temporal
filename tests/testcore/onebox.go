@@ -79,12 +79,14 @@ type (
 		chasmVisibilityMgr        chasm.VisibilityManager
 
 		// These are routing/load balancing clients but do not do retries:
-		adminClient     adminservice.AdminServiceClient
-		frontendClient  workflowservice.WorkflowServiceClient
-		operatorClient  operatorservice.OperatorServiceClient
-		historyClient   historyservice.HistoryServiceClient
-		matchingClient  matchingservice.MatchingServiceClient
-		schedulerClient schedulerpb.SchedulerServiceClient
+		adminClient          adminservice.AdminServiceClient
+		experimentalFrontend FrontendClients
+		frontendClient       FrontendClient
+		frontendConn         *grpc.ClientConn
+		operatorClient       operatorservice.OperatorServiceClient
+		historyClient        historyservice.HistoryServiceClient
+		matchingClient       matchingservice.MatchingServiceClient
+		schedulerClient      schedulerpb.SchedulerServiceClient
 
 		dcClient                         *dynamicconfig.MemoryClient
 		testHooks                        testhooks.TestHooks
@@ -270,6 +272,9 @@ func (c *TemporalImpl) Stop() error {
 	for _, app := range c.fxApps {
 		errs = append(errs, app.Stop(ctx))
 	}
+	if c.frontendConn != nil {
+		errs = append(errs, c.frontendConn.Close())
+	}
 
 	return multierr.Combine(errs...)
 }
@@ -309,8 +314,12 @@ func (c *TemporalImpl) OperatorClient() operatorservice.OperatorServiceClient {
 	return c.operatorClient
 }
 
-func (c *TemporalImpl) FrontendClient() workflowservice.WorkflowServiceClient {
+func (c *TemporalImpl) FrontendClient() FrontendClient {
 	return c.frontendClient
+}
+
+func (c *TemporalImpl) ExperimentalFrontend() FrontendClients {
+	return c.experimentalFrontend
 }
 
 func (c *TemporalImpl) HistoryClient() historyservice.HistoryServiceClient {
@@ -446,6 +455,12 @@ func (c *TemporalImpl) startFrontend() {
 
 	// This connection/clients uses membership to find frontends and load-balance among them.
 	connection := rpcFactory.CreateLocalFrontendGRPCConnection()
+	c.frontendConn = connection
+	c.experimentalFrontend = FrontendClients{
+		workflow: connection,
+		admin:    connection,
+		operator: connection,
+	}
 	c.frontendClient = workflowservice.NewWorkflowServiceClient(connection)
 	c.adminClient = adminservice.NewAdminServiceClient(connection)
 	c.operatorClient = operatorservice.NewOperatorServiceClient(connection)

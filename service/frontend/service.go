@@ -6,9 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/api/operatorservice/v1"
-	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm/lib/activity"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -20,6 +17,7 @@ import (
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
+	"go.temporal.io/server/service/frontend/services"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -235,6 +233,10 @@ type Config struct {
 	HTTPAllowedHosts   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	AllowedExperiments dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 
+	// APIVariant selects which frontend API variant the
+	// frontend exposes at startup. See service/frontend/services/.
+	APIVariant dynamicconfig.StringPropertyFn
+
 	// CHASM archetypes
 	Activity *activity.Config
 }
@@ -404,6 +406,8 @@ func NewConfig(
 		HTTPAllowedHosts:   dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
 		AllowedExperiments: dynamicconfig.FrontendAllowedExperiments.Get(dc),
 
+		APIVariant: dynamicconfig.FrontendAPIVariant.Get(dc),
+
 		Activity: activity.ConfigProvider(dc),
 	}
 }
@@ -460,13 +464,19 @@ func NewService(
 }
 
 // Start starts the service
+
 func (s *Service) Start() {
 	s.logger.Info("frontend starting")
 
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
-	workflowservice.RegisterWorkflowServiceServer(s.server, s.handler)
-	adminservice.RegisterAdminServiceServer(s.server, s.adminHandler)
-	operatorservice.RegisterOperatorServiceServer(s.server, s.operatorHandler)
+	services.Register(services.Registration{
+		Server:   s.server,
+		Workflow: s.handler,
+		Admin:    s.adminHandler,
+		Operator: s.operatorHandler,
+		Variant:  s.config.APIVariant(),
+		Logger:   s.logger,
+	})
 
 	reflection.Register(s.server)
 

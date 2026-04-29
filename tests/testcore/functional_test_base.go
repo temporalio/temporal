@@ -191,8 +191,12 @@ func (s *FunctionalTestBase) GetTestClusterConfig() *TestClusterConfig {
 	return s.testClusterConfig
 }
 
-func (s *FunctionalTestBase) FrontendClient() workflowservice.WorkflowServiceClient {
+func (s *FunctionalTestBase) FrontendClient() FrontendClient {
 	return s.testCluster.FrontendClient()
+}
+
+func (s *FunctionalTestBase) ExperimentalFrontend() FrontendClients {
+	return s.testCluster.ExperimentalFrontend()
 }
 
 func (s *FunctionalTestBase) AdminClient() adminservice.AdminServiceClient {
