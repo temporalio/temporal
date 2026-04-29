@@ -431,6 +431,7 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 
 		// this should never happen
 		r.logger.Error("Queue reader rate limiter burst size is smaller than required token count")
+		return
 	}
 
 	r.Lock()

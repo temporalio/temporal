@@ -442,7 +442,11 @@ reredirectTask:
 	if isActive {
 		syncMatched, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
 		if syncMatched && !pm.shouldBacklogSyncMatchTaskOnError(err) {
-			pm.processTaskAddHooks(ctx, targetVersion, syncMatched)
+			// Only fire hooks for non-forwarded tasks. Forwarded tasks already had hooks fired
+			// on the child partition that originally received the task.
+			if params.forwardInfo == nil {
+				pm.processTaskAddHooks(ctx, targetVersion, syncMatched)
+			}
 
 			// Build ID is not returned for sync match. The returned build ID is used by History to update
 			// mutable state (and visibility) when the first workflow task is spooled.
