@@ -612,9 +612,10 @@ func (h *Handler) ListWorkers(
 	nsID := namespace.ID(request.GetNamespaceId())
 	listRequest := request.GetListRequest()
 	resp, err := h.workersRegistry.ListWorkers(nsID, workers.ListWorkersParams{
-		Query:         listRequest.GetQuery(),
-		PageSize:      int(listRequest.GetPageSize()),
-		NextPageToken: listRequest.GetNextPageToken(),
+		Query:                listRequest.GetQuery(),
+		PageSize:             int(listRequest.GetPageSize()),
+		NextPageToken:        listRequest.GetNextPageToken(),
+		IncludeSystemWorkers: listRequest.GetIncludeSystemWorkers(),
 	})
 	if err != nil {
 		return nil, err

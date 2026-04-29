@@ -13,6 +13,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workerpb "go.temporal.io/api/worker/v1"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -380,6 +381,16 @@ func (m *registryImpl) ListWorkers(nsID namespace.ID, params ListWorkersParams) 
 		predicate = func(heartbeat *workerpb.WorkerHeartbeat) bool {
 			result, err := queryEngine.EvaluateWorker(heartbeat)
 			return err == nil && result
+		}
+	}
+
+	if !params.IncludeSystemWorkers {
+		basePredicate := predicate
+		predicate = func(hb *workerpb.WorkerHeartbeat) bool {
+			if primitives.IsInternalTaskQueue(hb.GetTaskQueue()) {
+				return false
+			}
+			return basePredicate(hb)
 		}
 	}
 

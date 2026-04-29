@@ -2,6 +2,7 @@ package primitives
 
 import (
 	"fmt"
+	"strings"
 
 	"go.temporal.io/api/serviceerror"
 )
@@ -16,6 +17,13 @@ const (
 	DeleteNamespaceActivityTQ     = "temporal-sys-delete-namespace-activity-tq"
 	DLQActivityTQ                 = "temporal-sys-dlq-activity-tq"
 )
+
+const internalTaskQueuePrefix = "temporal-sys-"
+
+// IsInternalTaskQueue returns true if the task queue name belongs to an internal system task queue.
+func IsInternalTaskQueue(taskQueue string) bool {
+	return strings.HasPrefix(taskQueue, internalTaskQueuePrefix)
+}
 
 func IsInternalPerNsTaskQueue(taskQueue string) bool {
 	return taskQueue == PerNSWorkerTaskQueue
