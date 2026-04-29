@@ -92,6 +92,9 @@ func (s *DeploymentVersionSuite) SetupSuite() {
 
 		// Large TTL for deduplication test. Must be set at suite level for cache initialization to work.
 		dynamicconfig.VersionReactivationSignalCacheTTL.Key(): testLongVersionReactivationCacheTTL,
+
+		// Test reactivation cache for all versioning tests.
+		dynamicconfig.EnableVersionReactivationSignals.Key(): true,
 	}))
 }
 
