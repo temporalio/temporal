@@ -328,8 +328,8 @@ func (pm *taskQueuePartitionManagerImpl) checkPartitionCounts(ctx context.Contex
 		pm.throttledLogger.Info("partition count header parse error", tag.Error(parseErr))
 		// do not return here! we always need to call validatePartitionCounts
 	}
-	settings := pm.config.PartitionScaleManagerSettings()
-	return validatePartitionCounts(id, scaleInfo, clientPC, forWrite, settings.AllowedDelta, settings.AllowedRatio)
+	difference := pm.config.PartitionScaleDifference()
+	return validatePartitionCounts(id, scaleInfo, clientPC, forWrite, difference)
 }
 
 // validatePartitionCounts checks whether a partition should accept an RPC based on
@@ -340,8 +340,7 @@ func validatePartitionCounts(
 	scaleInfo *taskqueuespb.PartitionScaleInfo,
 	clientPC matching.PartitionCounts,
 	forWrite bool,
-	allowedDelta int32,
-	allowedRatio float32,
+	difference dynamicconfig.PartitionScaleDifference,
 ) error {
 	if scaleInfo.GetRead() <= 0 || scaleInfo.GetWrite() <= 0 || scaleInfo.Write > scaleInfo.Read {
 		return nil // missing or invalid scale info
@@ -374,8 +373,8 @@ func validatePartitionCounts(
 		delta = clientPC.Read - scaleInfo.Read
 		ratio = float32(clientPC.Read) / float32(scaleInfo.Read)
 	}
-	effectiveRatio := max(1.001, allowedRatio)
-	if delta >= -allowedDelta && delta <= allowedDelta ||
+	effectiveRatio := max(1.001, difference.AllowedRatio)
+	if delta >= -difference.AllowedDelta && delta <= difference.AllowedDelta ||
 		ratio >= 1/effectiveRatio && ratio <= effectiveRatio {
 		return nil
 	}

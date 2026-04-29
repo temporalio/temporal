@@ -1475,13 +1475,13 @@ default as namespace cardinality can be high and this requires a metrics collect
 		false,
 		`MatchingAutoEnableV2 automatically enables fairness when a fairness or priority key is seen`,
 	)
-	MatchingPartitionScaleManager = NewTaskQueueTypedSetting(
-		"matching.partitionScaleManager",
-		PartitionScaleManagerSettings{
+	MatchingPartitionScaleDifference = NewTaskQueueTypedSetting(
+		"matching.partitionScaleDifference",
+		PartitionScaleDifference{
 			AllowedDelta: 1,
 			AllowedRatio: 1.5,
 		},
-		`Settings for partition scale manager.`,
+		`How far off client partition scale values have to be to reject RPCs.`,
 	)
 
 	// Worker registry settings

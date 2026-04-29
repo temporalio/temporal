@@ -130,8 +130,8 @@ type (
 		PollerScalingWaitTime           dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PollerScalingDecisionsPerSecond dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 
-		FairnessCounter               dynamicconfig.TypedPropertyFnWithTaskQueueFilter[counter.CounterParams]
-		PartitionScaleManagerSettings dynamicconfig.TypedPropertyFnWithTaskQueueFilter[dynamicconfig.PartitionScaleManagerSettings]
+		FairnessCounter          dynamicconfig.TypedPropertyFnWithTaskQueueFilter[counter.CounterParams]
+		PartitionScaleDifference dynamicconfig.TypedPropertyFnWithTaskQueueFilter[dynamicconfig.PartitionScaleDifference]
 
 		LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
@@ -217,8 +217,8 @@ type (
 		PollerScalingWaitTime           func() time.Duration
 		PollerScalingDecisionsPerSecond func() float64
 
-		FairnessCounter               func() counter.CounterParams
-		PartitionScaleManagerSettings func() dynamicconfig.PartitionScaleManagerSettings
+		FairnessCounter          func() counter.CounterParams
+		PartitionScaleDifference func() dynamicconfig.PartitionScaleDifference
 
 		loadCause loadCause
 	}
@@ -361,8 +361,8 @@ func NewConfig(
 		PollerScalingWaitTime:           dynamicconfig.MatchingPollerScalingWaitTime.Get(dc),
 		PollerScalingDecisionsPerSecond: dynamicconfig.MatchingPollerScalingDecisionsPerSecond.Get(dc),
 
-		FairnessCounter:               dynamicconfig.MatchingFairnessCounter.Get(dc),
-		PartitionScaleManagerSettings: dynamicconfig.MatchingPartitionScaleManager.Get(dc),
+		FairnessCounter:          dynamicconfig.MatchingFairnessCounter.Get(dc),
+		PartitionScaleDifference: dynamicconfig.MatchingPartitionScaleDifference.Get(dc),
 
 		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 	}
@@ -525,8 +525,8 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		FairnessCounter: func() counter.CounterParams {
 			return config.FairnessCounter(ns.String(), taskQueueName, taskType)
 		},
-		PartitionScaleManagerSettings: func() dynamicconfig.PartitionScaleManagerSettings {
-			return config.PartitionScaleManagerSettings(ns.String(), taskQueueName, taskType)
+		PartitionScaleDifference: func() dynamicconfig.PartitionScaleDifference {
+			return config.PartitionScaleDifference(ns.String(), taskQueueName, taskType)
 		},
 		MaxVersionsInTaskQueue: func() int { return config.MaxVersionsInTaskQueue(ns.String()) },
 	}
