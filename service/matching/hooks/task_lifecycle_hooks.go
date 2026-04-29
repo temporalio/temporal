@@ -13,8 +13,10 @@ import (
 type SyncMatchOutcome int
 
 const (
+	// Default zero value; should not be used explicitly.
+	SyncMatchOutcomeUnspecified SyncMatchOutcome = iota
 	// The task was not sync-matched.
-	SyncMatchOutcomeNotMatched SyncMatchOutcome = iota
+	SyncMatchOutcomeNotMatched
 	// The task was sync-matched successfully.
 	SyncMatchOutcomeSuccess
 	// A poller was available but rate limiting blocked the match.
