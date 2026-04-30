@@ -2385,7 +2385,7 @@ func (s *nodeSuite) TestCloseTransaction_PausedStateInvalidatesTasks() {
 		s.NoError(err)
 		tc.(*TestComponent).Pause(mutableContext)
 
-		// Task-specific validators must NOT be called — paused state short-circuits them.
+		// Task-specific validators must NOT be called - paused state short-circuits them.
 		// (no EXPECT calls on mock handlers)
 
 		mutation, err := root.CloseTransaction()
@@ -2432,7 +2432,7 @@ func (s *nodeSuite) TestCloseTransaction_PausedStateInvalidatesTasks() {
 		nextTransitionCount := int64(2)
 		s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTransitionCount }
 
-		// Pause the root — its non-detached sub-component's tasks should also be invalidated.
+		// Pause the root - its non-detached sub-component's tasks should also be invalidated.
 		mutableContext := NewMutableContext(context.Background(), root)
 		tc, err := root.Component(mutableContext, ComponentRef{})
 		s.NoError(err)
@@ -2513,7 +2513,7 @@ func (s *nodeSuite) TestCloseTransaction_PausedStateInvalidatesTasks() {
 		s.NoError(err)
 		root.value.(*TestComponent).Pause(NewMutableContext(context.Background(), root))
 
-		// validateAccess should still succeed — paused does NOT block writes.
+		// validateAccess should still succeed - paused does NOT block writes.
 		subNode, ok := root.findNode([]string{"SubComponent1"})
 		s.True(ok)
 		err = subNode.validateAccess(ctx, false)

@@ -464,7 +464,7 @@ func (n *Node) Component(
 // intent, the check is skipped.
 //
 // When checkPaused is true (used during task validation), the check is extended to
-// also treat a paused lifecycle state as a blocking condition — for both ancestors
+// also treat a paused lifecycle state as a blocking condition - for both ancestors
 // and the node itself. This collapses the paused-subtree traversal into the same
 // single pass, avoiding a second tree walk.
 // Note: engine mutations on paused components are still accepted (checkPaused=false),
