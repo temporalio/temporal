@@ -30,9 +30,9 @@ fi
 
 # Snapshot config.
 readonly SNAPSHOT_DIR="${SNAPSHOT_DIR:-.testoutput/memory}"
-# Sample every second so short OOM ramps still leave history, but print less
+# Sample every five seconds so short OOM ramps still leave history, but print less
 # often to keep CI logs readable.
-readonly SNAPSHOT_INTERVAL_SECONDS="${SNAPSHOT_INTERVAL_SECONDS:-1}"
+readonly SNAPSHOT_INTERVAL_SECONDS="${SNAPSHOT_INTERVAL_SECONDS:-5}"
 readonly SNAPSHOT_PRINT_INTERVAL_SECONDS="${SNAPSHOT_PRINT_INTERVAL_SECONDS:-30}"
 readonly SNAPSHOT_FILE="${SNAPSHOT_FILE:-$SNAPSHOT_DIR/memory-snapshot.txt}"
 readonly SNAPSHOT_HISTORY_FILE="${SNAPSHOT_HISTORY_FILE:-$SNAPSHOT_DIR/memory-history.txt}"
