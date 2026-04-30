@@ -14,10 +14,10 @@ const (
 )
 
 var (
-	testComponentFQN     = FullyQualifiedName(testLibraryName, testComponentName)
-	testSubComponent1FQN = FullyQualifiedName(testLibraryName, testSubComponent1Name)
+	testComponentFQN      = FullyQualifiedName(testLibraryName, testComponentName)
+	testSubComponent1FQN  = FullyQualifiedName(testLibraryName, testSubComponent1Name)
 	testSubComponent11FQN = FullyQualifiedName(testLibraryName, testSubComponent11Name)
-	testSubComponent2FQN = FullyQualifiedName(testLibraryName, testSubComponent2Name)
+	testSubComponent2FQN  = FullyQualifiedName(testLibraryName, testSubComponent2Name)
 
 	testSideEffectTaskFQN            = FullyQualifiedName(testLibraryName, testSideEffectTaskName)
 	testDiscardableSideEffectTaskFQN = FullyQualifiedName(testLibraryName, testDiscardableSideEffectTaskName)
@@ -26,7 +26,7 @@ var (
 )
 
 var (
-	testComponentTypeID    = GenerateTypeID(testComponentFQN)
+	testComponentTypeID      = GenerateTypeID(testComponentFQN)
 	testSubComponent1TypeID  = GenerateTypeID(testSubComponent1FQN)
 	testSubComponent11TypeID = GenerateTypeID(testSubComponent11FQN)
 	testSubComponent2TypeID  = GenerateTypeID(testSubComponent2FQN)
