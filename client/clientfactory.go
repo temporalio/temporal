@@ -29,9 +29,9 @@ type (
 	Factory interface {
 		NewHistoryClientWithTimeout(timeout time.Duration) (historyservice.HistoryServiceClient, error)
 		NewMatchingClientWithTimeout(namespaceIDToName NamespaceIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matchingservice.MatchingServiceClient, error)
-		NewRemoteFrontendClientWithTimeout(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient)
+		NewRemoteFrontendClientWithTimeout(clusterName, rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient)
 		NewLocalFrontendClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient, error)
-		NewRemoteAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) adminservice.AdminServiceClient
+		NewRemoteAdminClientWithTimeout(clusterName, rpcAddress string, timeout time.Duration, largeTimeout time.Duration) adminservice.AdminServiceClient
 		NewLocalAdminClientWithTimeout(timeout time.Duration, largeTimeout time.Duration) (adminservice.AdminServiceClient, error)
 	}
 
@@ -151,11 +151,12 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 }
 
 func (cf *rpcClientFactory) NewRemoteFrontendClientWithTimeout(
+	clusterName string,
 	rpcAddress string,
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 ) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient) {
-	connection := cf.rpcFactory.CreateRemoteFrontendGRPCConnection(rpcAddress)
+	connection := cf.rpcFactory.CreateRemoteFrontendGRPCConnection(clusterName, rpcAddress)
 	client := workflowservice.NewWorkflowServiceClient(connection)
 	return connection, cf.newFrontendClient(client, timeout, longPollTimeout)
 }
@@ -170,11 +171,12 @@ func (cf *rpcClientFactory) NewLocalFrontendClientWithTimeout(
 }
 
 func (cf *rpcClientFactory) NewRemoteAdminClientWithTimeout(
+	clusterName string,
 	rpcAddress string,
 	timeout time.Duration,
 	largeTimeout time.Duration,
 ) adminservice.AdminServiceClient {
-	connection := cf.rpcFactory.CreateRemoteFrontendGRPCConnection(rpcAddress)
+	connection := cf.rpcFactory.CreateRemoteFrontendGRPCConnection(clusterName, rpcAddress)
 	client := adminservice.NewAdminServiceClient(connection)
 	return cf.newAdminClient(client, timeout, largeTimeout)
 }

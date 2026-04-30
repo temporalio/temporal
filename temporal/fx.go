@@ -287,6 +287,9 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 			TokenFiles: so.config.Global.RemoteClusterAuth,
 		}
 	}
+	if so.config.Global.RequireRemoteClusterAuth && remoteClusterTokenProvider == nil {
+		return serverOptionsProvider{}, errors.New("global.requireRemoteClusterAuth is true but no TokenProvider is configured: set global.remoteClusterAuth or use WithRemoteClusterTokenProvider")
+	}
 
 	return serverOptionsProvider{
 		ServerOptions:              so,
