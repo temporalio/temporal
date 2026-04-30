@@ -25,7 +25,8 @@ env:
   TEMPORAL_VERSION_CHECK_DISABLED: 1
   TEMPORAL_AWAIT_ATTEMPT_TIMEOUT: 15s
   MAX_TEST_ATTEMPTS: 3
-  SHARD_COUNT: 3 # NOTE: must match shard count in optimize-test-sharding.yml
+  SHARD_COUNT: 4 # NOTE: must match shard count in optimize-test-sharding.yml
+  RUNNER_ARM: ubuntu-24.04-arm
 
 jobs:
   test-setup:
@@ -100,14 +101,7 @@ jobs:
 
       - name: Configure runners
         id: configure_runners
-        run: |
-          # Use 8-core runners for temporalio org, standard runners for forks
-          if [[ "${{ github.repository_owner }}" == "temporalio" ]]; then
-            runner_arm="ubuntu-24.04-arm64-8-cores"
-          else
-            runner_arm="ubuntu-24.04-arm"
-          fi
-          echo "runner_arm=$runner_arm" >> "$GITHUB_OUTPUT"
+        run: echo "runner_arm=$RUNNER_ARM" >> "$GITHUB_OUTPUT"
 
       # Primary DBs always get full tests, extended DBs get smoke tests (1 job) in abridged PRs.
       - name: Build job matrix
