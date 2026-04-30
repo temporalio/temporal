@@ -8153,3 +8153,115 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping_Bound() {
 		s.InDelta(float64(time.Hour), float64(got), float64(time.Millisecond))
 	})
 }
+
+// TestApplyIncomingTimeSkippingInfo_PreservesLocalRegenStatus verifies the
+// merge contract: TimeSkipTaskRegenEntry.TaskRegenStatus is per-cluster local
+// state. For details the receiver already has (matched by SourceEventId), the
+// local status is preserved; new details are reset to None so the local
+// refresh can regenerate timer tasks.
+func TestApplyIncomingTimeSkippingInfo_PreservesLocalRegenStatus(t *testing.T) {
+	t.Parallel()
+
+	ms := &MutableStateImpl{}
+
+	for _, tc := range []struct {
+		name         string
+		current      *persistencespb.TimeSkippingInfo
+		incoming     *persistencespb.TimeSkippingInfo
+		wantStatuses map[int64]int32 // SourceEventId -> expected TaskRegenStatus
+	}{
+		{
+			name:    "current nil",
+			current: nil,
+			incoming: &persistencespb.TimeSkippingInfo{
+				TaskRegenEntries: []*persistencespb.TimeSkipTaskRegenEntry{
+					{SourceEventId: 5, TaskRegenStatus: TimeSkippingTaskRegenStatusRegenerated},
+					{SourceEventId: 9, TaskRegenStatus: TimeSkippingTaskRegenStatusRegenerated},
+				},
+			},
+			wantStatuses: map[int64]int32{
+				5: TimeSkippingTaskRegenStatusNone,
+				9: TimeSkippingTaskRegenStatusNone,
+			},
+		},
+		{
+			name: "matching by SourceEventId preserves local status; new entry resets to None",
+			current: &persistencespb.TimeSkippingInfo{
+				TaskRegenEntries: []*persistencespb.TimeSkipTaskRegenEntry{
+					{SourceEventId: 5, TaskRegenStatus: TimeSkippingTaskRegenStatusRegenerated},
+					{SourceEventId: 9, TaskRegenStatus: TimeSkippingTaskRegenStatusNone},
+				},
+			},
+			incoming: &persistencespb.TimeSkippingInfo{
+				TaskRegenEntries: []*persistencespb.TimeSkipTaskRegenEntry{
+					// Wire always carries Regenerated (sender marked before sending).
+					{SourceEventId: 5, TaskRegenStatus: TimeSkippingTaskRegenStatusRegenerated},
+					{SourceEventId: 9, TaskRegenStatus: TimeSkippingTaskRegenStatusRegenerated},
+					{SourceEventId: 13, TaskRegenStatus: TimeSkippingTaskRegenStatusRegenerated},
+				},
+			},
+			wantStatuses: map[int64]int32{
+				5:  TimeSkippingTaskRegenStatusRegenerated, // local kept
+				9:  TimeSkippingTaskRegenStatusNone,        // local kept
+				13: TimeSkippingTaskRegenStatusNone,        // new -> None
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			current := &persistencespb.WorkflowExecutionInfo{TimeSkippingInfo: tc.current}
+			incoming := &persistencespb.WorkflowExecutionInfo{TimeSkippingInfo: tc.incoming}
+
+			ms.applyIncomingTimeSkippingInfo(current, incoming)
+
+			if tc.wantStatuses == nil {
+				require.Nil(t, current.TimeSkippingInfo)
+				return
+			}
+			require.NotNil(t, current.TimeSkippingInfo)
+			require.Len(t, current.TimeSkippingInfo.TaskRegenEntries, len(tc.wantStatuses))
+			for _, d := range current.TimeSkippingInfo.TaskRegenEntries {
+				want, ok := tc.wantStatuses[d.GetSourceEventId()]
+				require.True(t, ok, "unexpected detail SourceEventId=%d in result", d.GetSourceEventId())
+				require.Equal(t, want, d.GetTaskRegenStatus(),
+					"detail SourceEventId=%d: expected status %d, got %d",
+					d.GetSourceEventId(), want, d.GetTaskRegenStatus())
+			}
+		})
+	}
+}
+
+// TestApplyIncomingTimeSkippingInfo_ClonesToBreakAliasing verifies the merge
+// clones the incoming TimeSkippingInfo so subsequent local mutations
+// (e.g. flipping TaskRegenStatus during PartialRefresh) cannot leak back into
+// the wire message.
+func TestApplyIncomingTimeSkippingInfo_ClonesToBreakAliasing(t *testing.T) {
+	t.Parallel()
+
+	ms := &MutableStateImpl{}
+
+	incoming := &persistencespb.WorkflowExecutionInfo{
+		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+			TaskRegenEntries: []*persistencespb.TimeSkipTaskRegenEntry{
+				{SourceEventId: 5, TaskRegenStatus: TimeSkippingTaskRegenStatusRegenerated},
+			},
+		},
+	}
+	current := &persistencespb.WorkflowExecutionInfo{}
+
+	ms.applyIncomingTimeSkippingInfo(current, incoming)
+
+	require.NotSame(t, current.TimeSkippingInfo, incoming.TimeSkippingInfo,
+		"current.TimeSkippingInfo must be a cloned copy, not aliased to incoming")
+	require.NotSame(t, current.TimeSkippingInfo.TaskRegenEntries[0],
+		incoming.TimeSkippingInfo.TaskRegenEntries[0],
+		"detail must also be cloned")
+
+	// Mutate local; incoming must not change.
+	current.TimeSkippingInfo.TaskRegenEntries[0].TaskRegenStatus = TimeSkippingTaskRegenStatusRegenerated
+	require.Equal(t, TimeSkippingTaskRegenStatusRegenerated,
+		incoming.TimeSkippingInfo.TaskRegenEntries[0].GetTaskRegenStatus(),
+		"sanity: incoming was already Regenerated; this assertion is a regression guard if the wire value were ever mutated")
+}

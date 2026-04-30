@@ -1031,17 +1031,38 @@ func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.St
 	return true
 }
 
+// TimeSkippingTaskRegenStatus tracks per-cluster status for time-skipping timer-task regeneration
+// on each TimeSkipTaskRegenEntry. Mirrors TimerInfo.TaskStatus's idempotency role for user timers
+// (see CreateNextUserTimer in timer_sequence.go) — the value is local to each cluster, not
+// replicated, and gates re-emission of timer tasks on this cluster.
+const (
+	TimeSkippingTaskRegenStatusNone        int32 = 0
+	TimeSkippingTaskRegenStatusRegenerated int32 = 1
+)
+
 // RegenerateTimerTasksForTimeSkipping regenerates the timer tasks for time skipping.
-// This function is not idempotent, but when called twice, logically the timerTasks regenerated will have the same contents,
-// and the only difference is the TaskID.
-// TODO@time-skipping: currently not safe to call in replication context
+// Idempotent via TimeSkippingInfo.TaskRegenEntries: only emits when at least one detail's
+// TaskRegenStatus is None, then marks all unmarked details as Regenerated. Safe to call in
+// replication context — mirrors the TimerInfo.TaskStatus pattern in CreateNextUserTimer.
 func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 
-	if r.mutableState.GetExecutionInfo().TimeSkippingInfo == nil {
+	tsi := r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	if tsi == nil {
 		return nil
 	}
-	accumulatedSkippedDuration := r.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration()
+	accumulatedSkippedDuration := tsi.GetAccumulatedSkippedDuration().AsDuration()
 	if accumulatedSkippedDuration <= 0 {
+		return nil
+	}
+
+	hasUnmarked := false
+	for _, d := range tsi.GetTaskRegenEntries() {
+		if d.GetTaskRegenStatus() == TimeSkippingTaskRegenStatusNone {
+			hasUnmarked = true
+			break
+		}
+	}
+	if !hasUnmarked {
 		return nil
 	}
 
@@ -1087,7 +1108,6 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 
 	// (3) elapsed-duration bound timer — regenerate when configured so its real-time
 	// VisibilityTimestamp tracks the new accumulated skip.
-	tsi := r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
 	if tsi.GetConfig().GetEnabled() {
 		boundInfo := tsi.GetCurrentElapsedDurationBound()
 		if boundInfo != nil && !boundInfo.GetHasReached() {
@@ -1128,6 +1148,12 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 				Version:             startVersion,
 				WorkflowBackoffType: backOffType,
 			})
+		}
+	}
+
+	for _, d := range tsi.GetTaskRegenEntries() {
+		if d.GetTaskRegenStatus() == TimeSkippingTaskRegenStatusNone {
+			d.TaskRegenStatus = TimeSkippingTaskRegenStatusRegenerated
 		}
 	}
 	return nil

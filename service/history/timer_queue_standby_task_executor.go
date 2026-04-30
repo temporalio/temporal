@@ -110,9 +110,7 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 	case *tasks.ChasmTask:
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
 	case *tasks.TimeSkippingTimerTask:
-		// todo@time-skipping: replication. The disable-after-bound transition is emitted
-		// on the active side and will replicate; standby drops the local task.
-		err = nil
+		err = t.executeTimeSkippingTimerTask(ctx, task)
 	default:
 		err = queueserrors.NewUnprocessableTaskError("unknown task type")
 	}
@@ -235,16 +233,31 @@ func (t *timerQueueStandbyTaskExecutor) discardChasmTask(
 	)
 }
 
+// executeTimeSkippingTimerTask is a deliberate no-op on the standby side. The
+// disable-after-bound transition is emitted on the active cluster as a regular
+// history event and replicates through the normal path; the bound flag is
+// advisory on standby (it doesn't drive any local progress), so there's nothing
+// for the verifier to gain by checking it.
+func (t *timerQueueStandbyTaskExecutor) executeTimeSkippingTimerTask(
+	_ context.Context,
+	_ *tasks.TimeSkippingTimerTask,
+) error {
+	return nil
+}
+
 func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 	ctx context.Context,
 	timerTask *tasks.UserTimerTask,
 ) error {
-	referenceTime := t.Now()
 	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
 		if !mutableState.IsWorkflowExecutionRunning() {
 			// workflow already finished, no need to process the timer
 			return nil, nil
 		}
+
+		// Use mutableState.Now() as reference time as the mutable state may use virtual time
+		// which can skip duration and be before the wall clock time.
+		referenceTime := mutableState.Now()
 
 		timerSequence := t.getTimerSequence(mutableState)
 		timerSequenceIDs := timerSequence.LoadAndSortUserTimers()
@@ -299,12 +312,13 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 	//
 	// the overall solution is to attempt to generate a new activity timer task whenever the
 	// task passed in is safe to be throw away.
-	referenceTime := t.Now()
 	actionFn := func(ctx context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
 		if !mutableState.IsWorkflowExecutionRunning() {
 			// workflow already finished, no need to process the timer
 			return nil, nil
 		}
+
+		referenceTime := mutableState.Now()
 
 		timerSequence := t.getTimerSequence(mutableState)
 		updateMutableState := false
@@ -778,6 +792,12 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 	)
 }
 
+// getCurrentTime returns the shard's wall-clock view of "now" for t.clusterName.
+// Must stay wall-clock: it gates standby task-retry timing against VisibilityTime
+// (also wall-clock); mutableState.Now() is virtual time and would force-discard
+// time-skipping workflows. actionFn closures compare against virtual timestamps,
+// so they use mutableState.Now() instead.
+//
 // TODO: deprecate this function and always use t.Now()
 // Only test code sets t.clusterName to be non-current cluster name
 // and advance the time by setting calling shardContext.SetCurrentTime.

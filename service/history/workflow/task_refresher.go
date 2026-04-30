@@ -163,6 +163,13 @@ func (r *TaskRefresherImpl) PartialRefresh(
 		return err
 	}
 
+	if err := r.refreshTasksForTimeSkipping(
+		mutableState,
+		taskGenerator,
+	); err != nil {
+		return err
+	}
+
 	if err := r.refreshTasksForChildWorkflow(
 		mutableState,
 		taskGenerator,
@@ -439,8 +446,6 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 		return nil
 	}
 
-	// if mutableState.ExecutionInfo.TimeSkippingInfo changed,
-	// we need to
 	pendingTimerInfos := mutableState.GetPendingTimerInfos()
 	for _, timerInfo := range pendingTimerInfos {
 
@@ -463,6 +468,23 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 
 	_, err := NewTimerSequence(mutableState).CreateNextUserTimer()
 	return err
+}
+
+// refreshTasksForTimeSkipping re-emits time-skipping-affected timer tasks
+// (user timers + run/execution timeouts + bound + start-delay) for any
+// TimeSkipTaskRegenEntry still flagged TaskRegenStatusNone on this cluster.
+// Idempotent via the entry's TaskRegenStatus, so this pass is a no-op on
+// workflows whose entries are already marked Regenerated locally.
+func (r *TaskRefresherImpl) refreshTasksForTimeSkipping(
+	mutableState historyi.MutableState,
+	taskGenerator TaskGenerator,
+) error {
+
+	executionState := mutableState.GetExecutionState()
+	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+		return nil
+	}
+	return taskGenerator.RegenerateTimerTasksForTimeSkipping()
 }
 
 func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
