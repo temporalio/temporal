@@ -15,7 +15,10 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 )
 
+var ErrSystemNexusOperationsDisabled = serviceerror.NewUnimplemented("System Nexus operations are disabled")
+
 type workflowServiceNexusHandler struct {
+	config            Config
 	namespaceRegistry namespace.Registry
 	historyHandler    historyservice.HistoryServiceServer
 }
@@ -26,6 +29,9 @@ func (h *workflowServiceNexusHandler) signalWithStartWorkflowExecution(
 	req *workflowservice.SignalWithStartWorkflowExecutionRequest,
 	options nexus.StartOperationOptions,
 ) (*workflowservice.SignalWithStartWorkflowExecutionResponse, error) {
+	if !h.config.enableSystemNexusOperations(req.GetNamespace()) {
+		return nil, ErrSystemNexusOperationsDisabled
+	}
 	nsID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgumentf("Invalid namespace %q: %v", req.GetNamespace(), err)
@@ -74,6 +80,9 @@ type SignalWithStartOperationProcessor struct {
 }
 
 func (o SignalWithStartOperationProcessor) ProcessInput(ctx chasm.NexusOperationProcessorContext, request *workflowservice.SignalWithStartWorkflowExecutionRequest) (*chasm.NexusOperationProcessorResult, error) {
+	if !o.validator.config.enableSystemNexusOperations(ctx.Namespace.Name().String()) {
+		return nil, ErrSystemNexusOperationsDisabled
+	}
 	if request == nil {
 		return nil, serviceerror.NewInvalidArgument("Request is empty")
 	}

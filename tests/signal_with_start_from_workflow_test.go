@@ -69,7 +69,8 @@ func TestSignalWithStartFromWorkflowTestSuite(t *testing.T) {
 func (s *SignalWithStartFromWorkflowTestSuite) SetupSuite() {
 	s.SetupSuiteWithCluster(
 		testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
-			dynamicconfig.EnableChasm.Key(): true,
+			dynamicconfig.EnableChasm.Key():                 true,
+			dynamicconfig.EnableSystemNexusOperations.Key(): true,
 		}),
 	)
 }

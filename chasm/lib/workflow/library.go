@@ -30,6 +30,7 @@ func newLibrary(
 		saMapperProvider: saMapperProvider,
 		saValidator:      saValidator,
 		workflowServiceNexusHandler: &workflowServiceNexusHandler{
+			config:            config,
 			namespaceRegistry: namespaceRegistry,
 		},
 	}

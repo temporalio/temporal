@@ -10,6 +10,7 @@ type Config struct {
 	defaultWorkflowRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 	maxLinksPerRequest           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	linkMaxSize                  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	enableSystemNexusOperations  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 func NewConfig(dc *dynamicconfig.Collection) Config {
@@ -18,5 +19,6 @@ func NewConfig(dc *dynamicconfig.Collection) Config {
 		defaultWorkflowRetrySettings: dynamicconfig.DefaultWorkflowRetryPolicy.Get(dc),
 		maxLinksPerRequest:           dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
 		linkMaxSize:                  dynamicconfig.FrontendLinkMaxSize.Get(dc),
+		enableSystemNexusOperations:  dynamicconfig.EnableSystemNexusOperations.Get(dc),
 	}
 }

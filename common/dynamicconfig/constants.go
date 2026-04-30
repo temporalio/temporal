@@ -2915,6 +2915,12 @@ to the CHASM (V2) implementation on active scheduler workflows.`,
 instead of the previous HSM backed implementation.`,
 	)
 
+	EnableSystemNexusOperations = NewNamespaceBoolSetting(
+		"history.enableSystemNexusOperations",
+		false,
+		`Controls whether system nexus operations are enabled.`,
+	)
+
 	VersionMembershipCacheTTL = NewGlobalDurationSetting(
 		"history.versionMembershipCacheTTL",
 		1*time.Second,
