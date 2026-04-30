@@ -148,6 +148,7 @@ jobs:
               test_timeout: 35m
               github_timeout: 40
               sharded: true
+              reuse_schema: true
             smoke:
               cmd: make functional-test-coverage
               test_timeout: 5m
@@ -533,6 +534,15 @@ jobs:
           # shellcheck disable=SC2046
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up --wait $(docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} ps --services)
 
+      - name: Install schema
+        if: ${{ matrix.reuse_schema }}
+        run: |
+          case "${{ matrix.persistence_driver }}" in
+            cassandra)    make install-schema-functional-cassandra ;;
+            mysql8)       make install-schema-functional-mysql8 ;;
+            postgres12*)  make install-schema-functional-postgresql12 ;;
+          esac
+
       - name: Run functional test
         timeout-minutes: ${{ matrix.github_timeout }}
         run: ./develop/github/monitor_test.sh ${{ matrix.cmd }}
@@ -543,6 +553,7 @@ jobs:
           TEMPORAL_TEST_LOG_FILE: ${{ github.workspace }}/.testoutput/debug.log
           TEMPORAL_TEST_LOG_LEVEL: info
           GOMEMLIMIT: 5GiB
+          TEMPORAL_REUSE_SCHEMA: ${{ matrix.reuse_schema && 'true' || '' }}
 
       - name: Dump container logs
         if: ${{ failure() && toJson(matrix.containers) != '[]' }}
