@@ -15,6 +15,8 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+var _ NodeBackend = (*MockNodeBackend)(nil)
+
 // MockNodeBackend is a lightweight manual mock for the NodeBackend interface.
 // Methods may be stubbed by assigning the corresponding Handle fields. Update call history is recorded in the struct
 // fields (thread-safe).
@@ -32,6 +34,7 @@ type MockNodeBackend struct {
 	HandleGetNexusCompletion          func(ctx context.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
 	HandleAddHistoryEvent             func(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 	HandleLoadHistoryEvent            func(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
+	HandleGenerateEventLoadToken      func(event *historypb.HistoryEvent) ([]byte, error)
 	HandleHasAnyBufferedEvent         func(filter func(*historypb.HistoryEvent) bool) bool
 	HandleGetNamespaceEntry           func() *namespace.Namespace
 	HandleEndpointRegistry            func() EndpointRegistry
@@ -191,6 +194,13 @@ func (m *MockNodeBackend) AddHistoryEvent(t enumspb.EventType, setAttributes fun
 		return m.HandleAddHistoryEvent(t, setAttributes)
 	}
 	return nil
+}
+
+func (m *MockNodeBackend) GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
+	if m.HandleGenerateEventLoadToken != nil {
+		return m.HandleGenerateEventLoadToken(event)
+	}
+	return []byte("test token"), nil
 }
 
 func (m *MockNodeBackend) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
