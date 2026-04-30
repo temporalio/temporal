@@ -587,6 +587,27 @@ func TestRegistryImpl_ListWorkersExcludesSystemWorkers(t *testing.T) {
 		}
 		require.ElementsMatch(t, []string{"user-worker-1", "user-worker-2", "sys-worker-1"}, workerKeys)
 	})
+
+	t.Run("pagination excludes system workers from page counts", func(t *testing.T) {
+		// Page size 1 should paginate over only the 2 user workers, not the system worker.
+		var allKeys []string
+		var nextToken []byte
+		for i := 0; i < 3; i++ { // at most 3 iterations to avoid infinite loop
+			resp, err := r.ListWorkers("ns1", ListWorkersParams{
+				PageSize:      1,
+				NextPageToken: nextToken,
+			})
+			require.NoError(t, err)
+			for _, w := range resp.Workers {
+				allKeys = append(allKeys, w.WorkerInstanceKey)
+			}
+			nextToken = resp.NextPageToken
+			if nextToken == nil {
+				break
+			}
+		}
+		require.ElementsMatch(t, []string{"user-worker-1", "user-worker-2"}, allKeys)
+	})
 }
 
 func TestRegistryImpl_RecordStorageDriverMetric(t *testing.T) {
