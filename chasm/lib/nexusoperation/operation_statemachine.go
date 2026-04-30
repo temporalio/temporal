@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/softassert"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -56,6 +57,7 @@ var transitionAttemptFailed = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{nexusoperationpb.OPERATION_STATUS_SCHEDULED},
 	nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
 	func(o *Operation, ctx chasm.MutableContext, event EventAttemptFailed) error {
+		softassert.That(ctx.Logger(), event.Failure != nil, "attempt failed transition called with nil failure")
 		currentTime := ctx.Now(o)
 
 		// Record the attempt
@@ -89,6 +91,7 @@ var transitionRescheduled = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{nexusoperationpb.OPERATION_STATUS_BACKING_OFF},
 	nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 	func(o *Operation, ctx chasm.MutableContext, event EventRescheduled) error {
+		softassert.That(ctx.Logger(), o.NextAttemptScheduleTime != nil, "rescheduled transition called with nil next attempt schedule time")
 		o.Attempt++
 		// Clear the next attempt schedule time
 		o.NextAttemptScheduleTime = nil
@@ -146,6 +149,9 @@ var TransitionStarted = chasm.NewTransition(
 		// If cancellation was already requested, schedule sending the cancellation request now that we have
 		// an operation token.
 		cancellation, ok := o.Cancellation.TryGet(ctx)
+		// Cancellation can only be scheduled after the operation reaches STARTED; if it already exists here
+		// it must be in UNSPECIFIED state (requested while the operation was still SCHEDULED/BACKING_OFF).
+		softassert.That(ctx.Logger(), !ok || cancellation.StateMachineState() == nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED, "cancellation exists in unexpected state when operation transitions to started")
 		if ok && cancellation.StateMachineState() == nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED {
 			return TransitionCancellationScheduled.Apply(cancellation, ctx, EventCancellationScheduled{
 				Destination: o.GetEndpoint(),
