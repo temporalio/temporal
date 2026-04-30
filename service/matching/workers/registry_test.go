@@ -557,11 +557,12 @@ func TestRegistryImpl_ListWorkersInvalidPageToken(t *testing.T) {
 func TestRegistryImpl_ListWorkersExcludesSystemWorkers(t *testing.T) {
 	r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 
-	// Add workers on a user task queue and a system (internal) task queue.
+	// Add workers on a user task queue and internal system task queues (both prefix styles).
 	r.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{
 		{WorkerInstanceKey: "user-worker-1", TaskQueue: "my-queue"},
 		{WorkerInstanceKey: "user-worker-2", TaskQueue: "my-queue"},
 		{WorkerInstanceKey: "sys-worker-1", TaskQueue: "temporal-sys-per-ns-tq"},
+		{WorkerInstanceKey: "sys-worker-2", TaskQueue: "/temporal-sys/worker-commands/ns1/some-key"},
 	})
 
 	t.Run("excludes system workers by default", func(t *testing.T) {
@@ -579,13 +580,13 @@ func TestRegistryImpl_ListWorkersExcludesSystemWorkers(t *testing.T) {
 	t.Run("includes system workers when requested", func(t *testing.T) {
 		resp, err := r.ListWorkers("ns1", ListWorkersParams{IncludeSystemWorkers: true})
 		require.NoError(t, err)
-		require.Len(t, resp.Workers, 3, "should return all workers including system")
+		require.Len(t, resp.Workers, 4, "should return all workers including system")
 
 		workerKeys := make([]string, len(resp.Workers))
 		for i, w := range resp.Workers {
 			workerKeys[i] = w.WorkerInstanceKey
 		}
-		require.ElementsMatch(t, []string{"user-worker-1", "user-worker-2", "sys-worker-1"}, workerKeys)
+		require.ElementsMatch(t, []string{"user-worker-1", "user-worker-2", "sys-worker-1", "sys-worker-2"}, workerKeys)
 	})
 }
 

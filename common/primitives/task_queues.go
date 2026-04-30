@@ -18,11 +18,11 @@ const (
 	DLQActivityTQ                 = "temporal-sys-dlq-activity-tq"
 )
 
-const internalTaskQueuePrefix = "temporal-sys-"
-
 // IsInternalTaskQueue returns true if the task queue name belongs to an internal system task queue.
+// This covers both the older "temporal-sys-*" style (e.g. temporal-sys-per-ns-tq) and the newer
+// path-style "/temporal-sys/*" queues (e.g. /temporal-sys/worker-commands/...).
 func IsInternalTaskQueue(taskQueue string) bool {
-	return strings.HasPrefix(taskQueue, internalTaskQueuePrefix)
+	return strings.HasPrefix(taskQueue, "temporal-sys-") || strings.HasPrefix(taskQueue, "/temporal-sys/")
 }
 
 func IsInternalPerNsTaskQueue(taskQueue string) bool {
