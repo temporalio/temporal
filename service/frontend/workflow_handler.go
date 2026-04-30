@@ -344,6 +344,7 @@ func NewWorkflowHandler(
 		namespaceHandler: newNamespaceHandler(
 			logger,
 			persistenceMetadataManager,
+			namespaceRegistry,
 			clusterMetadata,
 			nsreplication.NewReplicator(namespaceReplicationQueue, logger),
 			archivalMetadata,

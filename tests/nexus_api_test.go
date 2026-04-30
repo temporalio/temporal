@@ -325,6 +325,20 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 		s.Subset(latency[0].Tags, map[string]string{"namespace": env.Namespace().String(), "method": "StartNexusOperation", "outcome": tc.outcome})
 		s.Contains(latency[0].Tags, "nexus_endpoint")
 
+		// Verify error counter is emitted for error outcomes and absent for success.
+		errorRequests := capture.Metric("nexus_request_errors")
+		if tc.outcome == "sync_success" || tc.outcome == "async_success" {
+			s.Empty(errorRequests)
+		} else {
+			s.Len(errorRequests, 1)
+			s.Subset(errorRequests[0].Tags, map[string]string{
+				"namespace": env.Namespace().String(),
+				"method":    "StartNexusOperation",
+				"outcome":   tc.outcome,
+			})
+			s.Equal(int64(1), errorRequests[0].Value)
+		}
+
 		// Ensure that StartOperation request is tracked as part of normal service telemetry metrics
 		s.Condition(func() bool {
 			for _, m := range capture.Metric("service_requests") {
@@ -578,6 +592,20 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 		s.Len(latency, 1)
 		s.Subset(latency[0].Tags, map[string]string{"namespace": env.Namespace().String(), "method": "CancelNexusOperation", "outcome": tc.outcome})
 		s.Contains(latency[0].Tags, "nexus_endpoint")
+
+		// Verify error counter is emitted for error outcomes and absent for success.
+		errorRequests := capture.Metric("nexus_request_errors")
+		if tc.outcome == "success" {
+			s.Empty(errorRequests)
+		} else {
+			s.Len(errorRequests, 1)
+			s.Subset(errorRequests[0].Tags, map[string]string{
+				"namespace": env.Namespace().String(),
+				"method":    "CancelNexusOperation",
+				"outcome":   tc.outcome,
+			})
+			s.Equal(int64(1), errorRequests[0].Value)
+		}
 
 		// Ensure that CancelOperation request is tracked as part of normal service telemetry metrics
 		s.Condition(func() bool {

@@ -136,7 +136,7 @@ PINNED_DEPENDENCIES := \
 TEST_OUTPUT_ROOT        := ./.testoutput
 NEW_COVER_PROFILE       = $(TEST_OUTPUT_ROOT)/coverage.$(shell xxd -p -l 16 /dev/urandom).out   # generates a new filename each time it's substituted
 NEW_REPORT              = $(TEST_OUTPUT_ROOT)/junit.$(shell xxd -p -l 16 /dev/urandom).xml   # generates a new filename each time it's substituted
-COVERPKG_FLAG 		    = -coverpkg=$(shell go list ./... | paste -sd "," -)
+COVERPKG_FLAG 		    = -coverpkg=./...
 
 # DB
 SQL_USER ?= temporal
