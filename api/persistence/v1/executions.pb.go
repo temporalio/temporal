@@ -1170,11 +1170,17 @@ type TimeSkippingInfo struct {
 	// Current time-skipping configuration applied to the workflow.
 	Config *v13.TimeSkippingConfig `protobuf:"bytes,1,opt,name=config,proto3" json:"config,omitempty"`
 	// Total skipped duration for the current workflow execution run, including any
+	// inherited skipped duration carried over from a preceding execution that started this run.
 	AccumulatedSkippedDuration *durationpb.Duration `protobuf:"bytes,2,opt,name=accumulated_skipped_duration,json=accumulatedSkippedDuration,proto3" json:"accumulated_skipped_duration,omitempty"`
 	// The current fast-forward info for time skipping.
 	FastForwardInfo *FastForwardInfo `protobuf:"bytes,4,opt,name=fast_forward_info,json=fastForwardInfo,proto3" json:"fast_forward_info,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Task regeneration status is used to track the status of the task regeneration.
+	// 0: Not set
+	// 1: Need to regenerate tasks
+	// 2: All tasks regenerated
+	TaskRegenerationStatus int32 `protobuf:"varint,5,opt,name=task_regeneration_status,json=taskRegenerationStatus,proto3" json:"task_regeneration_status,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *TimeSkippingInfo) Reset() {
@@ -1226,6 +1232,13 @@ func (x *TimeSkippingInfo) GetFastForwardInfo() *FastForwardInfo {
 		return x.FastForwardInfo
 	}
 	return nil
+}
+
+func (x *TimeSkippingInfo) GetTaskRegenerationStatus() int32 {
+	if x != nil {
+		return x.TaskRegenerationStatus
+	}
+	return 0
 }
 
 type FastForwardInfo struct {
@@ -5040,11 +5053,12 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"&ChildrenInitializedPostResetPointEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12H\n" +
 	"\x05value\x18\x02 \x01(\v22.temporal.server.api.persistence.v1.ResetChildInfoR\x05value:\x028\x01B\x1c\n" +
-	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\bp\x10qJ\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\xba\x02\n" +
+	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\bp\x10qJ\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\xf4\x02\n" +
 	"\x10TimeSkippingInfo\x12B\n" +
 	"\x06config\x18\x01 \x01(\v2*.temporal.api.common.v1.TimeSkippingConfigR\x06config\x12[\n" +
 	"\x1caccumulated_skipped_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x1aaccumulatedSkippedDuration\x12_\n" +
-	"\x11fast_forward_info\x18\x04 \x01(\v23.temporal.server.api.persistence.v1.FastForwardInfoR\x0ffastForwardInfoJ\x04\b\x03\x10\x04R\x1ecurrent_elapsed_duration_bound\"\x97\x01\n" +
+	"\x11fast_forward_info\x18\x04 \x01(\v23.temporal.server.api.persistence.v1.FastForwardInfoR\x0ffastForwardInfo\x128\n" +
+	"\x18task_regeneration_status\x18\x05 \x01(\x05R\x16taskRegenerationStatusJ\x04\b\x03\x10\x04R\x1ecurrent_elapsed_duration_bound\"\x97\x01\n" +
 	"\x0fFastForwardInfo\x12;\n" +
 	"\vtarget_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"targetTime\x12\x1f\n" +
