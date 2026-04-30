@@ -47,16 +47,17 @@ const (
 
 // TestCluster allows executing cassandra operations in testing.
 type TestCluster struct {
-	keyspace       string
-	schemaDir      string
-	session        commongocql.Session
-	cfg            config.Cassandra
-	faultInjection *config.FaultInjection
-	logger         log.Logger
+	keyspace        string
+	schemaDir       string
+	session         commongocql.Session
+	cfg             config.Cassandra
+	faultInjection  *config.FaultInjection
+	skipSchemaSetup bool
+	logger          log.Logger
 }
 
 // NewTestCluster returns a new cassandra test cluster
-func NewTestCluster(keyspace, username, password, host string, port int, schemaDir string, faultInjection *config.FaultInjection, logger log.Logger) *TestCluster {
+func NewTestCluster(keyspace, username, password, host string, port int, schemaDir string, faultInjection *config.FaultInjection, skipSchemaSetup bool, logger log.Logger) *TestCluster {
 	var result TestCluster
 	result.logger = logger
 	result.keyspace = keyspace
@@ -80,6 +81,7 @@ func NewTestCluster(keyspace, username, password, host string, port int, schemaD
 		Keyspace:       keyspace,
 	}
 	result.faultInjection = faultInjection
+	result.skipSchemaSetup = skipSchemaSetup
 	return &result
 }
 
@@ -102,6 +104,10 @@ func (s *TestCluster) DatabaseName() string {
 
 // SetupTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) SetupTestDatabase() {
+	if s.skipSchemaSetup {
+		s.CreateSession(s.DatabaseName())
+		return
+	}
 	s.CreateSession("system")
 	s.CreateDatabase()
 	s.CreateSession(s.DatabaseName())
@@ -118,7 +124,9 @@ func (s *TestCluster) SetupTestDatabase() {
 
 // TearDownTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) TearDownTestDatabase() {
-	s.DropDatabase()
+	if !s.skipSchemaSetup {
+		s.DropDatabase()
+	}
 	s.session.Close()
 }
 
