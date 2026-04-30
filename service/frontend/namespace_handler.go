@@ -38,6 +38,7 @@ type (
 	namespaceHandler struct {
 		logger                 log.Logger
 		metadataMgr            persistence.MetadataManager
+		namespaceRegistry      namespace.Registry
 		clusterMetadata        cluster.Metadata
 		namespaceReplicator    nsreplication.Replicator
 		namespaceAttrValidator *nsmanager.Validator
@@ -66,6 +67,7 @@ var (
 func newNamespaceHandler(
 	logger log.Logger,
 	metadataMgr persistence.MetadataManager,
+	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
 	namespaceReplicator nsreplication.Replicator,
 	archivalMetadata archiver.ArchivalMetadata,
@@ -76,6 +78,7 @@ func newNamespaceHandler(
 	return &namespaceHandler{
 		logger:                 logger,
 		metadataMgr:            metadataMgr,
+		namespaceRegistry:      namespaceRegistry,
 		clusterMetadata:        clusterMetadata,
 		namespaceReplicator:    namespaceReplicator,
 		namespaceAttrValidator: nsmanager.NewValidator(clusterMetadata),
@@ -317,6 +320,10 @@ func (d *namespaceHandler) DescribeNamespace(
 	describeRequest *workflowservice.DescribeNamespaceRequest,
 ) (*workflowservice.DescribeNamespaceResponse, error) {
 
+	if describeRequest.GetWeakConsistency() {
+		return d.describeNamespaceFromRegistry(describeRequest)
+	}
+
 	// TODO, we should migrate the non global namespace to new table, see #773
 	req := &persistence.GetNamespaceRequest{
 		Name: describeRequest.GetNamespace(),
@@ -333,6 +340,35 @@ func (d *namespaceHandler) DescribeNamespace(
 	}
 	response.NamespaceInfo, response.Config, response.ReplicationConfig, response.FailoverHistory =
 		d.createResponse(resp.Namespace.Info, resp.Namespace.Config, resp.Namespace.ReplicationConfig)
+	return response, nil
+}
+
+// describeNamespaceFromRegistry serves DescribeNamespace from the in-memory namespace registry. The response may be stale,
+// and may return NamespaceNotFound for namespaces created within the registry's refresh window.
+func (d *namespaceHandler) describeNamespaceFromRegistry(request *workflowservice.DescribeNamespaceRequest) (*workflowservice.DescribeNamespaceResponse, error) {
+	opts := namespace.GetNamespaceOptions{DisableReadthrough: true}
+	var ns *namespace.Namespace
+	var err error
+	switch {
+	case request.GetId() != "" && request.GetNamespace() != "":
+		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed. Both ID and Name specified in request.")
+	case request.GetId() != "":
+		ns, err = d.namespaceRegistry.GetNamespaceByIDWithOptions(namespace.ID(request.GetId()), opts)
+	case request.GetNamespace() != "":
+		ns, err = d.namespaceRegistry.GetNamespaceWithOptions(namespace.Name(request.GetNamespace()), opts)
+	default:
+		return nil, errNamespaceNotSet
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	response := &workflowservice.DescribeNamespaceResponse{
+		IsGlobalNamespace: ns.IsGlobalNamespace(),
+		FailoverVersion:   ns.FailoverVersion(namespace.EmptyBusinessID),
+	}
+	response.NamespaceInfo, response.Config, response.ReplicationConfig, response.FailoverHistory =
+		d.createResponse(ns.Info(), ns.Config(), ns.ReplicationConfig())
 	return response, nil
 }
 

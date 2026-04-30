@@ -1606,6 +1606,91 @@ func (s *WorkflowHandlerSuite) TestDescribeNamespace_Success_ArchivalEnabled() {
 	s.Equal(testVisibilityArchivalURI, result.Config.GetVisibilityArchivalUri())
 }
 
+func (s *WorkflowHandlerSuite) TestDescribeNamespace_WeakConsistency_ByName() {
+	ns := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: testNamespaceID, Name: "test-namespace"},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		cluster.TestCurrentClusterName,
+	)
+	s.mockNamespaceCache.EXPECT().
+		GetNamespaceWithOptions(namespace.Name("test-namespace"), namespace.GetNamespaceOptions{DisableReadthrough: true}).
+		Return(ns, nil)
+
+	wh := s.getWorkflowHandler(s.newConfig())
+	result, err := wh.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Namespace:       "test-namespace",
+		WeakConsistency: true,
+	})
+
+	s.NoError(err)
+	s.NotNil(result)
+	s.Equal("test-namespace", result.NamespaceInfo.Name)
+	s.Equal(testNamespaceID, result.NamespaceInfo.Id)
+}
+
+func (s *WorkflowHandlerSuite) TestDescribeNamespace_WeakConsistency_ByID() {
+	ns := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: testNamespaceID, Name: "test-namespace"},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		cluster.TestCurrentClusterName,
+	)
+	s.mockNamespaceCache.EXPECT().
+		GetNamespaceByIDWithOptions(namespace.ID(testNamespaceID), namespace.GetNamespaceOptions{DisableReadthrough: true}).
+		Return(ns, nil)
+
+	wh := s.getWorkflowHandler(s.newConfig())
+	result, err := wh.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Id:              testNamespaceID,
+		WeakConsistency: true,
+	})
+
+	s.NoError(err)
+	s.NotNil(result)
+	s.Equal(testNamespaceID, result.NamespaceInfo.Id)
+}
+
+func (s *WorkflowHandlerSuite) TestDescribeNamespace_WeakConsistency_CacheMiss() {
+	notFound := serviceerror.NewNamespaceNotFound("missing")
+	s.mockNamespaceCache.EXPECT().
+		GetNamespaceWithOptions(namespace.Name("missing"), namespace.GetNamespaceOptions{DisableReadthrough: true}).
+		Return(nil, notFound)
+
+	wh := s.getWorkflowHandler(s.newConfig())
+	result, err := wh.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Namespace:       "missing",
+		WeakConsistency: true,
+	})
+
+	s.Error(err)
+	s.Nil(result)
+	var nsNotFound *serviceerror.NamespaceNotFound
+	s.ErrorAs(err, &nsNotFound)
+}
+
+func (s *WorkflowHandlerSuite) TestDescribeNamespace_WeakConsistency_NameAndIDNotSet() {
+	wh := s.getWorkflowHandler(s.newConfig())
+	result, err := wh.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		WeakConsistency: true,
+	})
+
+	s.Equal(errNamespaceNotSet, err)
+	s.Nil(result)
+}
+
+func (s *WorkflowHandlerSuite) TestDescribeNamespace_WeakConsistency_BothNameAndIDSet() {
+	wh := s.getWorkflowHandler(s.newConfig())
+	result, err := wh.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Namespace:       "test-namespace",
+		Id:              testNamespaceID,
+		WeakConsistency: true,
+	})
+
+	s.Error(err)
+	s.Nil(result)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+}
+
 func (s *WorkflowHandlerSuite) TestUpdateNamespace_Failure_UpdateExistingArchivalURI() {
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: int64(0),
