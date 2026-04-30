@@ -149,6 +149,7 @@ jobs:
               test_timeout: 35m
               github_timeout: 40
               sharded: true
+              reuse_schema: true
             smoke:
               cmd: make functional-test-coverage
               test_timeout: 5m
@@ -422,6 +423,15 @@ jobs:
           compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: ${{ env.CONTAINERS }}
 
+      - name: Install schema
+        if: ${{ matrix.reuse_schema }}
+        run: |
+          case "${{ matrix.persistence_driver }}" in
+            cassandra)    make install-schema-functional-cassandra ;;
+            mysql8)       make install-schema-functional-mysql8 ;;
+            postgres12*)  make install-schema-functional-postgresql12 ;;
+          esac
+
       - name: Run functional test
         timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
         run: |
@@ -435,6 +445,7 @@ jobs:
           TEMPORAL_TEST_LOG_LEVEL: info
           TEMPORAL_TEST_CLUSTER_EVENTS_FILE: ${{ github.workspace }}/.testoutput/test-cluster-events.jsonl
           GOMEMLIMIT: 5GiB
+          TEMPORAL_REUSE_SCHEMA: ${{ matrix.reuse_schema && 'true' || '' }}
 
       - name: Dump container logs
         if: ${{ failure() && toJson(matrix.containers) != '[]' }}
