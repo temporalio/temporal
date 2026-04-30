@@ -46,7 +46,6 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sony/gobreaker v1.0.0
 	github.com/stretchr/testify v1.11.1
-	github.com/temporalio/api-go/experimental/example v0.0.0-20260425232424-a2b5448c4e70
 	github.com/temporalio/ringpop-go v0.0.0-20250130211428-b97329e994f7
 	github.com/temporalio/sqlparser v0.0.0-20231115171017-f4060bcfa6cb
 	github.com/temporalio/tchannel-go v1.22.1-0.20260129151045-8706a1ab5f61
@@ -64,7 +63,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.43.0
 	go.opentelemetry.io/otel/sdk/metric v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
-	go.temporal.io/api v1.62.12-0.20260424184119-9015efabce8d
+	go.temporal.io/api v1.62.12-0.20260424184119-9015efabce8d // replaced below with local path
 	go.temporal.io/auto-scaled-workers v0.0.0-20260407181057-edd947d743d2
 	go.temporal.io/sdk v1.41.1
 	go.uber.org/fx v1.24.0
@@ -232,3 +231,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+replace go.temporal.io/api => /Users/stephan/Workspace/random/experimental-apis/api-go
