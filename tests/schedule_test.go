@@ -1176,29 +1176,25 @@ func testUpdateScheduleFarFutureSpec(t *testing.T, newContext contextFactory) {
 	})
 	s.NoError(err)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(c *assert.CollectT) {
 		descResp, err := s.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
-		if err != nil {
-			return false
-		}
+		require.NoError(c, err)
+		require.NotNil(c, descResp)
+
 		cals := descResp.GetSchedule().GetSpec().GetStructuredCalendar()
-		if len(cals) != 1 || len(cals[0].Year) == 0 {
-			return false
-		}
-		if cals[0].Year[0].Start != int32(startYear) || cals[0].Year[0].End != int32(endYear) {
-			return false
-		}
+		require.Len(c, cals, 1)
+		require.NotEmpty(c, cals[0].Year)
+		require.Equal(c, int32(startYear), cals[0].Year[0].Start)
+		require.Equal(c, int32(endYear), cals[0].Year[0].End)
+
 		futureTimes := descResp.GetInfo().GetFutureActionTimes()
-		if len(futureTimes) == 0 {
-			return false
-		}
+		require.NotEmpty(c, futureTimes)
 		for _, ts := range futureTimes {
-			s.LessOrEqual(ts.AsTime().Year(), scheduler.MaxCalendarYear)
+			require.LessOrEqual(c, ts.AsTime().Year(), scheduler.MaxCalendarYear)
 		}
-		return true
 	}, 10*time.Second, 500*time.Millisecond, "expected describe to reflect updated far-future spec")
 }
 

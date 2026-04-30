@@ -34,8 +34,9 @@ const (
 	// years beyond this limit, but actual calculation will stop here. Future server versions
 	// can safely increase this limit.
 	MaxCalendarYear = 2100
-	// maxSpecYear is the largest year allowed in a schedule spec. This is set to a very
-	// large value to effectively remove the restriction while still preventing absurd values.
+	// maxSpecYear is the largest year allowed in a schedule spec.
+	// Set to a large value to permit far-future schedule definitions
+	// while preventing unreasonably large year values that are likely input mistakes.
 	maxSpecYear = 9999
 
 	// max length of one calendar comment field
