@@ -1531,6 +1531,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
 	// Else this should be a validation error.
 	var componentRef []byte
+	var attempt int32 = 1
 	if workflowID == "" {
 		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
 			return nil, errWorkflowIDNotSet
@@ -1546,6 +1547,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		if err != nil {
 			return nil, err
 		}
+		attempt = activity.ByIDTokenAttempt
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1555,7 +1557,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		common.EmptyEventID,
 		activityID,
 		"",
-		1,
+		attempt,
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
@@ -1726,6 +1728,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
 	// Else this should be a validation error.
 	var componentRef []byte
+	var attempt int32 = 1
 	if workflowID == "" {
 		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
 			return nil, errWorkflowIDNotSet
@@ -1741,6 +1744,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		if err != nil {
 			return nil, err
 		}
+		attempt = activity.ByIDTokenAttempt
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1750,7 +1754,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		common.EmptyEventID,
 		activityID,
 		"",
-		1,
+		attempt,
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
@@ -1934,6 +1938,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
 	// Else this should be a validation error.
 	var componentRef []byte
+	var attempt int32 = 1
 	if workflowID == "" {
 		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
 			return nil, errWorkflowIDNotSet
@@ -1949,6 +1954,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		if err != nil {
 			return nil, err
 		}
+		attempt = activity.ByIDTokenAttempt
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1958,7 +1964,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		common.EmptyEventID,
 		activityID,
 		"",
-		1,
+		attempt,
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
@@ -2134,6 +2140,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
 	// Else this should be a validation error.
 	var componentRef []byte
+	var attempt int32 = 1
 	if workflowID == "" {
 		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
 			return nil, errWorkflowIDNotSet
@@ -2149,6 +2156,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		if err != nil {
 			return nil, err
 		}
+		attempt = activity.ByIDTokenAttempt
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -2158,7 +2166,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		common.EmptyEventID,
 		activityID,
 		"",
-		1,
+		attempt,
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
