@@ -63,7 +63,7 @@ func TestFairnessPriorityFn_MultipleCallers(t *testing.T) {
 	//   namespaceC has no configured share -> fairness skipped.
 	nsRPS := map[string]int{
 		"namespaceA": 100,
-		"namespaceB":  50,
+		"namespaceB": 50,
 	}
 	priorityFn, priorities := makeTestPriorityFn(t,
 		true,  // fairness enabled
