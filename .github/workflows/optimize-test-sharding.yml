@@ -42,7 +42,7 @@ jobs:
         run: |
           # NOTE: shard count must match shards in run-tests.yml
           go run ./cmd/tools/optimize-test-sharding \
-            -shards 4 \
+            -shards 5 \
             -workflow run-tests.yml \
             -artifact-pattern 'junit-xml--*shard*--functional-test' \
             -file "${{ env.SALT_FILE }}" \

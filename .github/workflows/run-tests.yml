@@ -25,7 +25,7 @@ env:
   TEMPORAL_VERSION_CHECK_DISABLED: 1
   TEMPORAL_AWAIT_ATTEMPT_TIMEOUT: 15s
   MAX_TEST_ATTEMPTS: 3
-  SHARD_COUNT: 4 # NOTE: must match shard count in optimize-test-sharding.yml
+  SHARD_COUNT: 5 # NOTE: must match shard count in optimize-test-sharding.yml
   RUNNER_ARM: ubuntu-24.04-arm
 
 jobs:
