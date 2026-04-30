@@ -106,6 +106,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 	s.Equal(map[string]struct{}{
 		"DescribeTaskQueue":                  {},
 		"DescribeWorkflowExecution":          {},
+		"GetWorkflowExecutionResult":         {},
 		"GetWorkflowExecutionHistory":        {},
 		"GetWorkflowExecutionHistoryReverse": {},
 		"ListArchivedWorkflowExecutions":     {},

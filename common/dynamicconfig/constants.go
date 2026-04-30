@@ -1054,6 +1054,12 @@ so forwarding by endpoint ID will not work out of the box.`,
 to allow waiting on the "Accepted" lifecycle stage.`,
 	)
 
+	FrontendEnableGetWorkflowExecutionResult = NewNamespaceBoolSetting(
+		"frontend.enableGetWorkflowExecutionResult",
+		false,
+		`FrontendEnableGetWorkflowExecutionResult enables GetWorkflowExecutionResult API in the frontend`,
+	)
+
 	FrontendEnableWorkerVersioningDataAPIs = NewNamespaceBoolSetting(
 		"frontend.workerVersioningDataAPIs",
 		false,
@@ -2974,6 +2980,12 @@ instead of the previous HSM backed implementation.`,
 		"history.externalPayloadsEnabled",
 		true,
 		`ExternalPayloadsEnabled controls whether external payload features are enabled for a namespace.`,
+	)
+
+	GetWorkflowExecutionResultMaxCANChainDepth = NewGlobalIntSetting(
+		"history.GetWorkflowExecutionResultMaxCANChainDepth",
+		100,
+		`Max number of CAN chain depth to follow when getting a workflow execution result. This prevents infinitely following CAN chain to protect server resources`,
 	)
 
 	// keys for worker

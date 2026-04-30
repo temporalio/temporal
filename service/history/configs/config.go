@@ -427,6 +427,8 @@ type Config struct {
 	EnableVersionReactivationSignals     dynamicconfig.BoolPropertyFn
 	RoutingInfoCacheTTL                  dynamicconfig.DurationPropertyFn
 	RoutingInfoCacheMaxSize              dynamicconfig.IntPropertyFn
+
+	GetWorkflowExecutionResultMaxCANChainDepth dynamicconfig.IntPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -809,6 +811,8 @@ func NewConfig(
 		EnableVersionReactivationSignals:     dynamicconfig.EnableVersionReactivationSignals.Get(dc),
 		RoutingInfoCacheTTL:                  dynamicconfig.RoutingInfoCacheTTL.Get(dc),
 		RoutingInfoCacheMaxSize:              dynamicconfig.RoutingInfoCacheMaxSize.Get(dc),
+
+		GetWorkflowExecutionResultMaxCANChainDepth: dynamicconfig.GetWorkflowExecutionResultMaxCANChainDepth.Get(dc),
 	}
 
 	return cfg

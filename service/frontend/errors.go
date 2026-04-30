@@ -133,4 +133,6 @@ var (
 	errWorkerVersioningWorkflowAPIsNotAllowed = serviceerror.NewPermissionDenied("Worker versioning in workflow progress APIs is disabled on this namespace.", "")
 
 	errListHistoryTasksNotAllowed = serviceerror.NewPermissionDenied("ListHistoryTasks feature is disabled on this cluster.", "")
+
+	errGetWorkflowExecutionResultAPINotAllowed = serviceerror.NewPermissionDenied("GetWorkflowExecutionResult operation is disabled on this namespace.", "")
 )

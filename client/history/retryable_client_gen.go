@@ -401,6 +401,21 @@ func (c *retryableClient) GetWorkflowExecutionRawHistoryV2(
 	return resp, err
 }
 
+func (c *retryableClient) GetWorkflowExecutionResult(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionResultRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.GetWorkflowExecutionResultResponse, error) {
+	var resp *historyservice.GetWorkflowExecutionResultResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetWorkflowExecutionResult(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ImportWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.ImportWorkflowExecutionRequest,

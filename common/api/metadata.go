@@ -74,6 +74,7 @@ var (
 		"UpdateNamespace":                              {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone},
 		"DeprecateNamespace":                           {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone},
 		"StartWorkflowExecution":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
+		"GetWorkflowExecutionResult":                   {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
 		"GetWorkflowExecutionHistory":                  {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingCapable},
 		"GetWorkflowExecutionHistoryReverse":           {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
 		"PollWorkflowTaskQueue":                        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingAlways},

@@ -927,6 +927,34 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *histor
 	return resp, nil
 }
 
+func (h *Handler) GetWorkflowExecutionResult(ctx context.Context, request *historyservice.GetWorkflowExecutionResultRequest) (*historyservice.GetWorkflowExecutionResultResponse, error) {
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
+		return nil, h.convertError(err)
+	}
+
+	workflowExecution := request.Request.Execution
+	workflowID := workflowExecution.GetWorkflowId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	resp, err := engine.GetWorkflowExecutionResult(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return resp, nil
+}
+
 // RequestCancelWorkflowExecution - requests cancellation of a workflow
 func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *historyservice.RequestCancelWorkflowExecutionRequest) (*historyservice.RequestCancelWorkflowExecutionResponse, error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())

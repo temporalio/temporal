@@ -7393,3 +7393,52 @@ func (wh *WorkflowHandler) UnpauseActivityExecution(context.Context, *workflowse
 func (wh *WorkflowHandler) UpdateActivityExecutionOptions(context.Context, *workflowservice.UpdateActivityExecutionOptionsRequest) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
 	return nil, serviceerror.NewUnimplemented("UpdateActivityExecutionOptions not implemented")
 }
+
+func (wh *WorkflowHandler) GetWorkflowExecutionResult(ctx context.Context, request *workflowservice.GetWorkflowExecutionResultRequest) (_ *workflowservice.GetWorkflowExecutionResultResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableGetWorkflowExecutionResult(request.GetNamespace()) {
+		return nil, errGetWorkflowExecutionResultAPINotAllowed
+	}
+
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := validateRequestId(&request.RequestId, wh.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+
+	if err := wh.callbackValidator.Validate(string(namespaceName), request.GetCallbacks()); err != nil {
+		return nil, err
+	}
+
+	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCallbacks())
+	allLinks := make([]*commonpb.Link, 0, len(request.GetLinks())+len(request.GetCallbacks()))
+	allLinks = append(allLinks, request.GetLinks()...)
+	for _, cb := range request.GetCallbacks() {
+		allLinks = append(allLinks, cb.GetLinks()...)
+	}
+	if err := wh.validateLinks(namespaceName, allLinks); err != nil {
+		return nil, err
+	}
+
+	if err := validateExecution(request.Execution); err != nil {
+		return nil, err
+	}
+
+	resp, err := wh.historyClient.GetWorkflowExecutionResult(ctx, &historyservice.GetWorkflowExecutionResultRequest{
+		NamespaceId: namespaceID.String(),
+		Request:     request,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetResponse(), nil
+}

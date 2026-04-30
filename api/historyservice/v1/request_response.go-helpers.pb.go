@@ -2077,6 +2077,80 @@ func (this *DescribeWorkflowExecutionResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type GetWorkflowExecutionResultRequest to the protobuf v3 wire format
+func (val *GetWorkflowExecutionResultRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type GetWorkflowExecutionResultRequest from the protobuf v3 wire format
+func (val *GetWorkflowExecutionResultRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *GetWorkflowExecutionResultRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two GetWorkflowExecutionResultRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *GetWorkflowExecutionResultRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *GetWorkflowExecutionResultRequest
+	switch t := that.(type) {
+	case *GetWorkflowExecutionResultRequest:
+		that1 = t
+	case GetWorkflowExecutionResultRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type GetWorkflowExecutionResultResponse to the protobuf v3 wire format
+func (val *GetWorkflowExecutionResultResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type GetWorkflowExecutionResultResponse from the protobuf v3 wire format
+func (val *GetWorkflowExecutionResultResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *GetWorkflowExecutionResultResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two GetWorkflowExecutionResultResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *GetWorkflowExecutionResultResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *GetWorkflowExecutionResultResponse
+	switch t := that.(type) {
+	case *GetWorkflowExecutionResultResponse:
+		that1 = t
+	case GetWorkflowExecutionResultResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type ReplicateEventsV2Request to the protobuf v3 wire format
 func (val *ReplicateEventsV2Request) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
