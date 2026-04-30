@@ -4,6 +4,7 @@ package temporal.server.chasm.lib.activity.proto.v1;
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
+import "temporal/api/activity/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
@@ -40,6 +41,16 @@ enum ActivityExecutionStatus {
   // Additionally, after all retries are exhausted for start-to-close or heartbeat timeouts, the activity will also
   // transition to timed out status.
   ACTIVITY_EXECUTION_STATUS_TIMED_OUT = 8;
+  // The activity has been paused while in the SCHEDULED state. No worker will be dispatched until
+  // the activity is unpaused. The activity's pause_state field is populated with the identity,
+  // reason, and time of the pause request.
+  //
+  // Note: pausing a STARTED activity does not transition to this status. Instead, the pause is
+  // delivered as a flag (pause_state is set, status stays STARTED) and the worker is notified
+  // via ActivityPaused=true on its next heartbeat. The external run state in that case is
+  // PAUSE_REQUESTED. If the worker fails and retries while the flag is set, the retry lands in
+  // SCHEDULED with pause_state still populated and the dispatch task is blocked until unpause.
+  ACTIVITY_EXECUTION_STATUS_PAUSED = 9;
 }
 
 message ActivityState {
@@ -91,9 +102,28 @@ message ActivityState {
   // Set if the activity was terminated
   ActivityTerminateState terminate_state = 12;
 
-  // Amount of time to wait before dispatching the activity task to the task queue for the first time. If the activity
-  // has a retry policy, retry attempts will not have start delay applied.
+  // Delays the first dispatch of the activity. Extends ScheduleToClose and ScheduleToStart
+  // timeouts by this duration. StartToClose and Heartbeat timeouts are unaffected.
   google.protobuf.Duration start_delay = 13;
+
+  // Options for the first scheduled attempt to support `restore_original`
+  temporal.api.activity.v1.ActivityOptions original_options = 14;
+
+  // An incremental version number used to validate ScheduleToCloseTimeoutTask tasks.
+  // Incremented each time a new ScheduleToCloseTimeoutTask is scheduled (at activity creation
+  // and on each options update that re-schedules the task). Unlike attempt.stamp, this counter
+  // is NOT incremented on retries, because schedule-to-close spans the full activity lifetime.
+  int32 schedule_to_close_stamp = 15;
+
+  // Set if the activity was paused.
+  ActivityPauseState pause_state = 16;
+
+  // Set when reset was requested while the activity was running.
+  // On the next retry, TransitionRescheduled will reset the attempt count to 1 before incrementing.
+  bool activity_reset = 17;
+
+  // Set alongside activity_reset when heartbeat details should be cleared on the next retry.
+  bool reset_heartbeats = 18;
 }
 
 message ActivityCancelState {
@@ -105,6 +135,13 @@ message ActivityCancelState {
 
 message ActivityTerminateState {
   string request_id = 1;
+}
+
+message ActivityPauseState {
+  google.protobuf.Timestamp pause_time = 1;
+  string identity = 2;
+  string reason = 3;
+  string request_id = 4;
 }
 
 message ActivityAttemptState {
@@ -140,10 +177,13 @@ message ActivityAttemptState {
   // will not reset it.
   LastFailureDetails last_failure_details = 5;
 
-  // An incremental version number used to validate tasks.
-  // Initially this only verifies that a task belong to the current attempt.
-  // Later on this stamp will be used to also invalidate tasks when the activity is paused, reset, or has its options
-  // updated.
+  // An incremental version number used to validate attempt-scoped tasks
+  // (ActivityDispatchTask, ScheduleToStartTimeoutTask, StartToCloseTimeoutTask, HeartbeatTimeoutTask).
+  // Incremented on each new attempt and on options updates, so that in-flight tasks from the
+  // previous attempt or pre-update state are discarded.
+  // Note: ScheduleToCloseTimeoutTask uses a separate ActivityState.schedule_to_close_stamp because
+  // it spans the full activity lifetime and must not be invalidated on retry.
+  // TODO: also invalidate on pause and reset when those are supported.
   int32 stamp = 6;
 
   string last_worker_identity = 7;

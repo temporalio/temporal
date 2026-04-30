@@ -31,6 +31,10 @@ type FrontendHandler interface {
 	ListActivityExecutions(context.Context, *workflowservice.ListActivityExecutionsRequest) (*workflowservice.ListActivityExecutionsResponse, error)
 	RequestCancelActivityExecution(context.Context, *workflowservice.RequestCancelActivityExecutionRequest) (*workflowservice.RequestCancelActivityExecutionResponse, error)
 	TerminateActivityExecution(context.Context, *workflowservice.TerminateActivityExecutionRequest) (*workflowservice.TerminateActivityExecutionResponse, error)
+	PauseActivityExecution(context.Context, *workflowservice.PauseActivityExecutionRequest) (*workflowservice.PauseActivityExecutionResponse, error)
+	UnpauseActivityExecution(context.Context, *workflowservice.UnpauseActivityExecutionRequest) (*workflowservice.UnpauseActivityExecutionResponse, error)
+	ResetActivityExecution(context.Context, *workflowservice.ResetActivityExecutionRequest) (*workflowservice.ResetActivityExecutionResponse, error)
+	UpdateActivityExecutionOptions(context.Context, *workflowservice.UpdateActivityExecutionOptionsRequest) (*workflowservice.UpdateActivityExecutionOptionsResponse, error)
 	IsStandaloneActivityEnabled(namespaceName string) bool
 }
 
@@ -118,7 +122,7 @@ func (h *frontendHandler) DescribeActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	err := validateDescribeActivityExecutionRequest(
+	err := validateAndNormalizeDescribeActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 	)
@@ -147,7 +151,7 @@ func (h *frontendHandler) PollActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	err := validatePollActivityExecutionRequest(
+	err := validateAndNormalizePollActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 	)
@@ -262,7 +266,7 @@ func (h *frontendHandler) DeleteActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	if err := validateAndNormalizeDeleteRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+	if err := validateAndNormalizeDeleteActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 
@@ -297,7 +301,7 @@ func (h *frontendHandler) TerminateActivityExecution(
 		return nil, err
 	}
 
-	if err := validateAndNormalizeTerminateRequest(
+	if err := validateAndNormalizeTerminateActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 		h.config.BlobSizeLimitError,
@@ -330,7 +334,7 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 		return nil, err
 	}
 
-	if err := validateAndNormalizeCancelRequest(
+	if err := validateAndNormalizeRequestCancelActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 		h.config.BlobSizeLimitError,
@@ -426,8 +430,127 @@ func activityOptionsFromStartRequest(req *workflowservice.StartActivityExecution
 	}
 }
 
-// applyActivityOptionsToStartRequest copies normalized values from ActivityOptions
-// back to the StartActivityExecutionRequest.
+func (h *frontendHandler) PauseActivityExecution(
+	ctx context.Context,
+	req *workflowservice.PauseActivityExecutionRequest,
+) (*workflowservice.PauseActivityExecutionResponse, error) {
+	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityDisabled
+	}
+
+	if err := validateAndNormalizePauseActivityExecutionRequest(
+		req,
+		h.config.MaxIDLengthLimit(),
+		h.config.BlobSizeLimitError,
+		h.config.BlobSizeLimitWarn,
+		h.logger); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.PauseActivityExecution(ctx, &activitypb.PauseActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.PauseActivityExecutionResponse{}, nil
+}
+
+func (h *frontendHandler) UnpauseActivityExecution(
+	ctx context.Context,
+	req *workflowservice.UnpauseActivityExecutionRequest,
+) (*workflowservice.UnpauseActivityExecutionResponse, error) {
+	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityDisabled
+	}
+
+	if err := validateAndNormalizeUnpauseActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.UnpauseActivityExecution(ctx, &activitypb.UnpauseActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.UnpauseActivityExecutionResponse{}, nil
+}
+
+func (h *frontendHandler) ResetActivityExecution(
+	ctx context.Context,
+	req *workflowservice.ResetActivityExecutionRequest,
+) (*workflowservice.ResetActivityExecutionResponse, error) {
+	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityDisabled
+	}
+
+	if err := validateAndNormalizeResetActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.ResetActivityExecution(ctx, &activitypb.ResetActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.ResetActivityExecutionResponse{}, nil
+}
+
+func (h *frontendHandler) UpdateActivityExecutionOptions(
+	ctx context.Context,
+	req *workflowservice.UpdateActivityExecutionOptionsRequest,
+) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
+	// Standalone path requires the feature to be enabled. Workflow path (workflow_id != "")
+	// is always permitted and routes to the history service.
+	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityDisabled
+	}
+
+	if err := validateUpdateActivityExecutionOptionsRequest(
+		req,
+		h.config.MaxIDLengthLimit(),
+	); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := h.client.UpdateActivityExecutionOptions(ctx, &activitypb.UpdateActivityExecutionOptionsRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.UpdateActivityExecutionOptionsResponse{
+		ActivityOptions: resp.GetFrontendResponse().GetActivityOptions(),
+	}, nil
+}
+
+// applyActivityOptionsToStartRequest copies normalized values from ActivityOptions back to the StartActivityExecutionRequest.
 func applyActivityOptionsToStartRequest(opts *apiactivitypb.ActivityOptions, req *workflowservice.StartActivityExecutionRequest) {
 	req.TaskQueue = opts.TaskQueue
 	req.ScheduleToCloseTimeout = opts.ScheduleToCloseTimeout
