@@ -196,3 +196,17 @@ You'll find the code coverage reporting in Codecov: https://app.codecov.io/gh/te
 
 Consider installing the [Codecov Browser Extension](https://docs.codecov.com/docs/the-codecov-browser-extension)
 to see code coverage directly in GitHub PRs.
+
+## Mutation testing
+
+Use [cmd/tools/mutationtest](../../cmd/tools/mutationtest) to initiate a mutation-testing run.
+
+Use `make mutation-test` to run it:
+
+```bash
+make mutation-test \
+  MUTATION_SOURCE_FILES='chasm/lib/nexusoperation' \
+  MUTATION_SOURCE_EXCLUDE_FILES='chasm/lib/nexusoperation/gen fx.go' \
+  MUTATION_TEST_FILES='chasm/lib/nexusoperation service/frontend/nexus_* tests/nexus_*' \
+  MUTATION_SHARD_LEVEL=4
+```
