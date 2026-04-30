@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client/frontend"
@@ -109,14 +110,20 @@ const (
 )
 
 type (
+	// ActivityHandler is the activity frontend handler, aliased to avoid embedding name collision.
+	ActivityHandler = activity.FrontendHandler
+	// NexusOperationHandler is the nexus operation frontend handler, aliased to avoid embedding name collision.
+	NexusOperationHandler = chasmnexus.FrontendHandler
+
 	// WorkflowHandler - gRPC handler interface for workflowservice
 	WorkflowHandler struct {
 		workflowservice.UnsafeWorkflowServiceServer
-		activity.FrontendHandler
+		ActivityHandler
+		NexusOperationHandler
 
 		status int32
 
-		callbackValidator               *callback.Validator
+		callbackValidator               callback.Validator
 		tokenSerializer                 *tasktoken.Serializer
 		config                          *Config
 		versionChecker                  headers.VersionChecker
@@ -295,7 +302,7 @@ func (wh *WorkflowHandler) ValidateWorkerDeploymentVersionComputeConfig(
 
 // NewWorkflowHandler creates a gRPC handler for workflowservice
 func NewWorkflowHandler(
-	callbackValidator *callback.Validator,
+	callbackValidator callback.Validator,
 	config *Config,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
@@ -322,16 +329,18 @@ func NewWorkflowHandler(
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	httpEnabled bool,
 	activityHandler activity.FrontendHandler,
+	nexusOperationHandler chasmnexus.FrontendHandler,
 	registry *chasm.Registry,
 	workerDeploymentReadRateLimiter quotas.RequestRateLimiter,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
-		FrontendHandler:   activityHandler,
-		status:            common.DaemonStatusInitialized,
-		callbackValidator: callbackValidator,
-		config:            config,
-		tokenSerializer:   tasktoken.NewSerializer(),
-		versionChecker:    headers.NewDefaultVersionChecker(),
+		ActivityHandler:       activityHandler,
+		NexusOperationHandler: nexusOperationHandler,
+		status:                common.DaemonStatusInitialized,
+		callbackValidator:     callbackValidator,
+		config:                config,
+		tokenSerializer:       tasktoken.NewSerializer(),
+		versionChecker:        headers.NewDefaultVersionChecker(),
 		namespaceHandler: newNamespaceHandler(
 			logger,
 			persistenceMetadataManager,
@@ -722,14 +731,6 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 			if bound.MaxElapsedDuration.AsDuration() < namespace.MinTimeSkippingDuration {
 				return serviceerror.NewInvalidArgumentf(
 					"Max elapsed duration must be at least %s",
-					namespace.MinTimeSkippingDuration,
-				)
-			}
-		// todo: need to adapt the timeSource after time-skipping timeSource is implemented
-		case *workflowpb.TimeSkippingConfig_MaxTargetTime:
-			if bound.MaxTargetTime.AsTime().Before(wh.namespaceHandler.timeSource.Now().Add(namespace.MinTimeSkippingDuration)) {
-				return serviceerror.NewInvalidArgumentf(
-					"Max target time must be at least %s from current time of the workflow",
 					namespace.MinTimeSkippingDuration,
 				)
 			}
@@ -2792,6 +2793,8 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 		return nil, err
 	}
 
+	metrics.VisibilityListWorkflowsQueryLength.With(wh.metricsScope(ctx)).Record(int64(len(request.GetQuery())))
+
 	req := &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   namespaceID,
 		Namespace:     namespaceName,
@@ -3521,19 +3524,21 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 
 	// Phase 1: Write sentinel to V1 key space (dummy workflow) to prevent a
 	// concurrent V1 CreateSchedule from succeeding for the same schedule ID.
-	if err := wh.writeSchedulerWorkflowSentinel(ctx, namespaceID.String(), request); err != nil {
-		var alreadyStartedErr *serviceerror.WorkflowExecutionAlreadyStarted
-		if !errors.As(err, &alreadyStartedErr) {
-			return nil, err
-		}
-		// V1 key is occupied. Check if it's a sentinel (proceed) or real scheduler (fail).
-		isReal, checkErr := wh.isRealSchedulerInV1KeySpace(ctx, namespaceID.String(), request.Namespace, request.ScheduleId)
-		if checkErr != nil {
-			return nil, checkErr
-		}
-		if isReal {
-			return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
-				fmt.Sprintf("schedule %q is already registered", request.ScheduleId), "", "")
+	if wh.scheduleSentinelsEnabled(request.Namespace) {
+		if err := wh.writeSchedulerWorkflowSentinel(ctx, namespaceID.String(), request); err != nil {
+			var alreadyStartedErr *serviceerror.WorkflowExecutionAlreadyStarted
+			if !errors.As(err, &alreadyStartedErr) {
+				return nil, err
+			}
+			// V1 key is occupied. Check if it's a sentinel (proceed) or real scheduler (fail).
+			isReal, checkErr := wh.isRealSchedulerInV1KeySpace(ctx, namespaceID.String(), request.Namespace, request.ScheduleId)
+			if checkErr != nil {
+				return nil, checkErr
+			}
+			if isReal {
+				return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
+					fmt.Sprintf("schedule %q is already registered", request.ScheduleId), "", "")
+			}
 		}
 	}
 
@@ -3576,12 +3581,7 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 
 	// Phase 1: Write sentinel to CHASM key space to prevent a concurrent CHASM
 	// CreateSchedule from succeeding for the same schedule ID.
-	//
-	// We gate on EnableCHASM because the point of the sentinel is to account for a
-	// case where the fleet has an inconsistent view of dynamic config. EnableCHASM
-	// will be true well in advance of us enabling scheduler creation across the entire
-	// fleet, so it is stable for usage here.
-	if wh.config.EnableChasm(namespaceName.String()) {
+	if wh.scheduleSentinelsEnabled(request.Namespace) {
 		if err := wh.writeSchedulerCHASMSentinel(ctx, namespaceID.String(), namespaceName.String(), request.ScheduleId); err != nil {
 			// Translate AlreadyExists (from CHASM handler) to
 			// WorkflowExecutionAlreadyStarted for SDK compatibility.
@@ -3841,6 +3841,10 @@ func (wh *WorkflowHandler) chasmSchedulerCreationEnabled(ctx context.Context, na
 func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceName string) bool {
 	return wh.chasmSchedulerCreationEnabled(ctx, namespaceName) ||
 		wh.config.EnableCHASMSchedulerRouting(namespaceName)
+}
+
+func (wh *WorkflowHandler) scheduleSentinelsEnabled(namespaceName string) bool {
+	return wh.config.EnableChasm(namespaceName) && wh.config.EnableCHASMSchedulerSentinels(namespaceName)
 }
 
 // isSchedulerErrorLegacyRoutable returns true if the error from the CHASM scheduler

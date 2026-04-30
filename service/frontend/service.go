@@ -171,6 +171,9 @@ type Config struct {
 	EnableCHASMSchedulerCreation dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Enable CHASM-first routing for schedule RPCs other than CreateSchedule
 	EnableCHASMSchedulerRouting dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	// Enables ID-space collision sentinels, and must be enabled and propagated in
+	// advance of EnableCHASMSchedulerCreation.
+	EnableCHASMSchedulerSentinels dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Enable deployment RPCs
 	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -212,9 +215,8 @@ type Config struct {
 	MaskInternalErrorDetails dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Health check
-	HistoryHostErrorPercentage      dynamicconfig.FloatPropertyFn
-	HistoryHostSelfErrorProportion  dynamicconfig.FloatPropertyFn
-	HistoryHostFailureTimeThreshold dynamicconfig.DurationPropertyFn
+	HistoryHostErrorPercentage     dynamicconfig.FloatPropertyFn
+	HistoryHostSelfErrorProportion dynamicconfig.FloatPropertyFn
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -347,10 +349,11 @@ func NewConfig(
 
 		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 
-		EnableSchedules:              dynamicconfig.FrontendEnableSchedules.Get(dc),
-		EnableChasm:                  dynamicconfig.EnableChasm.Get(dc),
-		EnableCHASMSchedulerCreation: dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
-		EnableCHASMSchedulerRouting:  dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
+		EnableSchedules:               dynamicconfig.FrontendEnableSchedules.Get(dc),
+		EnableChasm:                   dynamicconfig.EnableChasm.Get(dc),
+		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
+		EnableCHASMSchedulerRouting:   dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
+		EnableCHASMSchedulerSentinels: dynamicconfig.EnableCHASMSchedulerSentinels.Get(dc),
 
 		// [cleanup-wv-pre-release]
 		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),
@@ -387,7 +390,6 @@ func NewConfig(
 
 		HistoryHostErrorPercentage:        dynamicconfig.HistoryHostErrorPercentage.Get(dc),
 		HistoryHostSelfErrorProportion:    dynamicconfig.HistoryHostSelfErrorProportion.Get(dc),
-		HistoryHostFailureTimeThreshold:   dynamicconfig.HistoryHostFailureTimeThreshold.Get(dc),
 		LogAllReqErrors:                   dynamicconfig.LogAllReqErrors.Get(dc),
 		EnableEagerWorkflowStart:          dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 		WorkflowRulesAPIsEnabled:          dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),

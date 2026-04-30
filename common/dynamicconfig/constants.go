@@ -739,7 +739,7 @@ be 1 or higher.`,
 	FrontendGlobalNamespaceRPS = NewNamespaceIntSetting(
 		"frontend.globalNamespaceRPS",
 		0,
-		`FrontendGlobalNamespaceRPS is workflow namespace rate limit per second for the whole cluster.
+		`FrontendGlobalNamespaceRPS is namespace rate limit per second for the whole cluster.
 The limit is evenly distributed among available frontend service instances.
 If this is set, it overwrites per instance limit "frontend.namespaceRPS".`,
 	)
@@ -807,12 +807,7 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 	HistoryHostSelfErrorProportion = NewGlobalFloatSetting(
 		"frontend.historyHostSelfErrorProportion",
 		0.05,
-		`HistoryHostSelfErrorProportion is the proportion of hosts that have marked themselves as not ready -- this could be due to waiting to acquire all shards on startup, or an internal health check failure`,
-	)
-	HistoryHostFailureTimeThreshold = NewGlobalDurationSetting(
-		"frontend.historyHostFailureTimeThreshold",
-		10*time.Second,
-		`HistoryHostFailureTimeThreshold is the length of time a host must have failed before it is considered unhealthy`,
+		`HistoryHostStartingProportion is the proportion of hosts that have marked themselves as not ready -- this could due to waiting to acquire all shards on startup, or an internal health check failure`,
 	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
@@ -1455,6 +1450,11 @@ second per poller by one physical queue manager`,
 		60*time.Second,
 		`Timeout for forwarded backlog task (requires new matcher)`,
 	)
+	MatchingForwardPollRetryMaxInterval = NewTaskQueueDurationSetting(
+		"matching.forwardPollRetryMaxInterval",
+		10*time.Second,
+		`Max backoff interval when retrying a rate-limited ForwardPoll from a child partition`,
+	)
 	MatchingFairnessCounter = NewTaskQueueTypedSetting(
 		"matching.fairnessCounter",
 		counter.DefaultCounterParams,
@@ -1562,6 +1562,12 @@ execution is deleted. When enabled, workflow deletions on the active cluster wil
 		"history.rps",
 		3000,
 		`HistoryRPS is request rate per second for each history host`,
+	)
+	HistoryNamespaceRPS = NewNamespaceIntSetting(
+		"history.namespaceRPS",
+		0,
+		`HistoryNamespaceRPS is namespace rate limit per second for each history host. 
+If value less or equal to 0, will fall back to HistoryRPS`,
 	)
 	HistoryPersistenceMaxQPS = NewGlobalIntSetting(
 		"history.persistenceMaxQPS",
@@ -2853,6 +2859,10 @@ Requires service restart to take effect.`,
 		0.90,
 		"History service health check on RPC error ratio",
 	)
+	HealthHistoryInitializationTime = NewGlobalDurationSetting(
+		"history.healthHistoryInitializationTime",
+		60*time.Second,
+		"gRPC health server NOT_SERVING will be suppressed from DeepHealthCheck for this long")
 	SendRawHistoryBetweenInternalServices = NewGlobalBoolSetting(
 		"history.sendRawHistoryBetweenInternalServices",
 		false,
@@ -2871,7 +2881,7 @@ Requires service restart to take effect.`,
 
 	EnableChasm = NewNamespaceBoolSetting(
 		"history.enableChasm",
-		false,
+		true,
 		"Use real chasm tree implementation instead of the noop one",
 	)
 
@@ -2902,6 +2912,12 @@ first (with fallback to V1), excluding CreateSchedule.`,
 to the CHASM (V2) implementation on active scheduler workflows.`,
 	)
 
+	EnableCHASMSchedulerSentinels = NewNamespaceBoolSetting(
+		"history.enableCHASMSchedulerSentinels",
+		false,
+		`EnableCHASMSchedulerSentinels enables ID-space collision sentinels, and must be enabled and propagated in advance of EnableCHASMSchedulerCreation.`,
+	)
+
 	EnableCHASMCallbacks = NewNamespaceBoolSetting(
 		"history.enableCHASMCallbacks",
 		false,
@@ -2921,22 +2937,17 @@ instead of the previous HSM backed implementation.`,
 		`Maximum number of entries in the version membership cache.`,
 	)
 
-	VersionReactivationSignalCacheTTL = NewGlobalDurationSetting(
-		"history.versionReactivationSignalCacheTTL",
-		10*time.Second,
-		`TTL for caching drainage reactivation signals to version workflows. These signals are sent from the history service to update the version workflow's 
-		draining status to DRAINING from DRAINED/INACTIVE states.`,
-	)
-
-	VersionReactivationSignalCacheMaxSize = NewGlobalIntSetting(
-		"history.versionReactivationSignalCacheMaxSize",
+	ReactivationSignalDedupCacheMaxSize = NewGlobalIntSetting(
+		"worker.reactivationSignalDedupCacheMaxSize",
 		10000,
-		`Maximum number of entries in the version reactivation signal cache.`,
+		`Maximum number of entries in the per-pod reactivation-signal dedup cache on the
+		worker deployment client. Each entry tracks the highest revision signaled for one
+		target version workflow.`,
 	)
 
 	EnableVersionReactivationSignals = NewGlobalBoolSetting(
 		"history.enableVersionReactivationSignals",
-		true,
+		false,
 		`EnableVersionReactivationSignals controls whether reactivation signals are sent to version workflows
 		when workflows are pinned to a potentially DRAINED/INACTIVE version. Set to false to disable signals
 		globally if load becomes problematic.`,

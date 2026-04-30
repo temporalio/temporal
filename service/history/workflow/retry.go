@@ -303,6 +303,10 @@ func SetupNewWorkflowForRetryOrCron(
 		VersioningOverride:       pinnedOverride,
 	}
 
+	// Retry and Cron inherit the TimeSkippingConfig snapshot from the previous
+	// run's WorkflowExecutionStarted event verbatim.
+	createRequest.TimeSkippingConfig = startAttr.GetTimeSkippingConfig()
+
 	attempt := int32(1)
 	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		attempt = previousExecutionInfo.Attempt + 1
@@ -336,6 +340,9 @@ func SetupNewWorkflowForRetryOrCron(
 		InheritedAutoUpgradeInfo: inheritedAutoUpgradeInfo,
 		// For retries, pass through the declined value from the started event directly.
 		DeclinedTargetVersionUpgrade: startAttr.GetDeclinedTargetVersionUpgrade(),
+		// Retry and Cron inherit InitialSkippedDuration from the previous run's
+		// WorkflowExecutionStarted event verbatim — same semantics as TimeSkippingConfig above.
+		InitialSkippedDuration: startAttr.GetInitialSkippedDuration(),
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {
