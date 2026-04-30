@@ -3286,7 +3286,7 @@ func (n *Node) invokeSideEffectTaskFn(
 
 	ref := ComponentRef{
 		ExecutionKey:          executionKey,
-		archetypeID:           n.ArchetypeID(),
+		archetypeID:           ArchetypeID(taskInfo.GetArchetypeId()),
 		executionLastUpdateVT: taskInfo.ComponentLastUpdateVersionedTransition,
 		componentPath:         taskInfo.Path,
 		componentInitialVT:    taskInfo.ComponentInitialVersionedTransition,
