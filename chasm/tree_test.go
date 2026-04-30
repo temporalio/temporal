@@ -3238,6 +3238,16 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 				},
 			},
 		},
+		"SubComponent1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testSubComponent1TypeID,
+					},
+				},
+			},
+		},
 	}
 
 	taskInfo := &persistencespb.ChasmTaskInfo{
@@ -3247,7 +3257,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 		ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 			TransitionCount: 1,
 		},
-		Path:        rootPath,
+		Path:        []string{"SubComponent1"},
 		TypeId:      testSideEffectTaskTypeID,
 		ArchetypeId: testComponentTypeID,
 		Data: &commonpb.DataBlob{
@@ -3310,12 +3320,14 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 			).DoAndReturn(
 			func(_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestSideEffectTask) error {
 				s.NotNil(ref.validationFn)
+				s.Equal(taskInfo.GetArchetypeId(), uint32(ref.archetypeID))
 
 				// Accessing the Component should trigger the validationFn.
-				_, err := root.Component(chasmContext, ref)
+				component, err := root.Component(chasmContext, ref)
 				if err != nil {
 					return err
 				}
+				s.IsType(&TestSubComponent1{}, component)
 				return result
 			}).Times(1)
 	}
@@ -3354,83 +3366,6 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	s.False(chasmTask.DeserializedTask.IsValid())
 }
 
-func (s *nodeSuite) TestExecuteSideEffectTask_UsesTaskArchetypeID() {
-	persistenceNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testComponentTypeID,
-					},
-				},
-			},
-		},
-	}
-
-	taskInfo := &persistencespb.ChasmTaskInfo{
-		ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
-			TransitionCount: 1,
-		},
-		ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-			TransitionCount: 1,
-		},
-		Path:        rootPath,
-		TypeId:      testSideEffectTaskTypeID,
-		ArchetypeId: WorkflowArchetypeID,
-		Data: &commonpb.DataBlob{
-			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		},
-	}
-	workflowKey := definition.NewWorkflowKey(
-		primitives.NewUUID().String(),
-		primitives.NewUUID().String(),
-		primitives.NewUUID().String(),
-	)
-	chasmTask := &tasks.ChasmTask{
-		WorkflowKey:         workflowKey,
-		VisibilityTimestamp: s.timeSource.Now(),
-		TaskID:              123,
-		Category:            tasks.CategoryOutbound,
-		Destination:         "destination",
-		Info:                taskInfo,
-	}
-	executionKey := ExecutionKey{
-		NamespaceID: chasmTask.NamespaceID,
-		BusinessID:  chasmTask.WorkflowID,
-		RunID:       chasmTask.RunID,
-	}
-
-	root, err := s.newTestTree(persistenceNodes)
-	s.NoError(err)
-
-	mockEngine := NewMockEngine(s.controller)
-	ctx := NewEngineContext(context.Background(), mockEngine)
-
-	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
-		Execute(
-			gomock.Any(),
-			gomock.Any(),
-			gomock.Eq(TaskAttributes{
-				chasmTask.GetVisibilityTime(),
-				chasmTask.Destination,
-			}),
-			gomock.Any(),
-		).DoAndReturn(
-		func(_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestSideEffectTask) error {
-			s.Equal(taskInfo.GetArchetypeId(), uint32(ref.archetypeID))
-			return nil
-		}).Times(1)
-
-	err = root.ExecuteSideEffectTask(
-		ctx,
-		executionKey,
-		chasmTask,
-		func(_ NodeBackend, _ Context, _ Component) error { return nil },
-	)
-	s.NoError(err)
-}
-
 func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 	setup := func() (*Node, *tasks.ChasmTask, ExecutionKey, context.Context, Context) {
 		persistenceNodes := map[string]*persistencespb.ChasmNode{
@@ -3440,6 +3375,16 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
 							TypeId: testComponentTypeID,
+						},
+					},
+				},
+			},
+			"SubComponent1": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testSubComponent1TypeID,
 						},
 					},
 				},
@@ -3468,7 +3413,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 				ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 					TransitionCount: 1,
 				},
-				Path:        rootPath,
+				Path:        []string{"SubComponent1"},
 				TypeId:      testDiscardableSideEffectTaskTypeID,
 				ArchetypeId: testComponentTypeID,
 				Data: &commonpb.DataBlob{
@@ -3508,8 +3453,13 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
 			s.NotNil(ref.validationFn)
-			_, err := root.Component(chasmContext, ref)
-			return err
+			s.Equal(chasmTask.Info.GetArchetypeId(), uint32(ref.archetypeID))
+			component, err := root.Component(chasmContext, ref)
+			if err != nil {
+				return err
+			}
+			s.IsType(&TestSubComponent1{}, component)
+			return nil
 		}).Times(1)
 
 		err := root.ExecuteSideEffectDiscardTask(ctx, executionKey, chasmTask, dummyValidationFn)
@@ -3587,82 +3537,6 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 		s.ErrorIs(err, discardErr)
 		s.True(validationFnCalled)
 	})
-}
-
-func (s *nodeSuite) TestExecuteSideEffectDiscardTask_UsesTaskArchetypeID() {
-	persistenceNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testComponentTypeID,
-					},
-				},
-			},
-		},
-	}
-
-	root, err := s.newTestTree(persistenceNodes)
-	s.NoError(err)
-
-	workflowKey := definition.NewWorkflowKey(
-		primitives.NewUUID().String(),
-		primitives.NewUUID().String(),
-		primitives.NewUUID().String(),
-	)
-	chasmTask := &tasks.ChasmTask{
-		WorkflowKey:         workflowKey,
-		VisibilityTimestamp: s.timeSource.Now(),
-		TaskID:              123,
-		Category:            tasks.CategoryOutbound,
-		Destination:         "destination",
-		Info: &persistencespb.ChasmTaskInfo{
-			ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
-				TransitionCount: 1,
-			},
-			ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-				TransitionCount: 1,
-			},
-			Path:        rootPath,
-			TypeId:      testDiscardableSideEffectTaskTypeID,
-			ArchetypeId: WorkflowArchetypeID,
-			Data: &commonpb.DataBlob{
-				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-			},
-		},
-	}
-	executionKey := ExecutionKey{
-		NamespaceID: chasmTask.NamespaceID,
-		BusinessID:  chasmTask.WorkflowID,
-		RunID:       chasmTask.RunID,
-	}
-
-	mockEngine := NewMockEngine(s.controller)
-	ctx := NewEngineContext(context.Background(), mockEngine)
-
-	s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Discard(
-		gomock.Any(),
-		gomock.Any(),
-		gomock.Eq(TaskAttributes{
-			chasmTask.GetVisibilityTime(),
-			chasmTask.Destination,
-		}),
-		gomock.Any(),
-	).DoAndReturn(func(
-		_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
-	) error {
-		s.Equal(chasmTask.Info.GetArchetypeId(), uint32(ref.archetypeID))
-		return nil
-	}).Times(1)
-
-	err = root.ExecuteSideEffectDiscardTask(
-		ctx,
-		executionKey,
-		chasmTask,
-		func(_ NodeBackend, _ Context, _ Component) error { return nil },
-	)
-	s.NoError(err)
 }
 
 func (s *nodeSuite) TestValidateSideEffectTask() {
