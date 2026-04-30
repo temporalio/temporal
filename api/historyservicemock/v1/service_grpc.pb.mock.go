@@ -563,6 +563,26 @@ func (mr *MockHistoryServiceClientMockRecorder) GetWorkflowExecutionRawHistoryV2
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionRawHistoryV2", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetWorkflowExecutionRawHistoryV2), varargs...)
 }
 
+// GetWorkflowExecutionResult mocks base method.
+func (m *MockHistoryServiceClient) GetWorkflowExecutionResult(ctx context.Context, in *historyservice.GetWorkflowExecutionResultRequest, opts ...grpc.CallOption) (*historyservice.GetWorkflowExecutionResultResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetWorkflowExecutionResult", varargs...)
+	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionResultResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowExecutionResult indicates an expected call of GetWorkflowExecutionResult.
+func (mr *MockHistoryServiceClientMockRecorder) GetWorkflowExecutionResult(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionResult", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetWorkflowExecutionResult), varargs...)
+}
+
 // ImportWorkflowExecution mocks base method.
 func (m *MockHistoryServiceClient) ImportWorkflowExecution(ctx context.Context, in *historyservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ImportWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -2113,6 +2133,21 @@ func (m *MockHistoryServiceServer) GetWorkflowExecutionRawHistoryV2(arg0 context
 func (mr *MockHistoryServiceServerMockRecorder) GetWorkflowExecutionRawHistoryV2(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionRawHistoryV2", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetWorkflowExecutionRawHistoryV2), arg0, arg1)
+}
+
+// GetWorkflowExecutionResult mocks base method.
+func (m *MockHistoryServiceServer) GetWorkflowExecutionResult(arg0 context.Context, arg1 *historyservice.GetWorkflowExecutionResultRequest) (*historyservice.GetWorkflowExecutionResultResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowExecutionResult", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionResultResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowExecutionResult indicates an expected call of GetWorkflowExecutionResult.
+func (mr *MockHistoryServiceServerMockRecorder) GetWorkflowExecutionResult(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionResult", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetWorkflowExecutionResult), arg0, arg1)
 }
 
 // ImportWorkflowExecution mocks base method.
