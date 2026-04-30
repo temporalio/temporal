@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -412,6 +413,127 @@ func newTestFrontendHandler(
 		},
 		logger: log.NewNoopLogger(),
 	}
+}
+
+// TestRequestIDGeneratedWhenMissing verifies that the server generates a non-empty UUID request ID
+// for every standalone activity API that carries a request_id field, when the client omits it.
+// This prevents "" == "" false-positive idempotency matches in the state machine.
+func TestRequestIDGeneratedWhenMissing(t *testing.T) {
+	maxIDLengthLimit := defaultMaxIDLengthLimit
+	blobLimit := defaultBlobSizeLimitError
+	logger := log.NewNoopLogger()
+
+	t.Run("StartActivityExecution", func(t *testing.T) {
+		h := &frontendHandler{
+			config: &Config{
+				BlobSizeLimitError:         blobLimit,
+				BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
+				MaxIDLengthLimit:           func() int { return maxIDLengthLimit },
+				DefaultActivityRetryPolicy: dynamicconfig.GetTypedPropertyFnFilteredByNamespace(getDefaultRetrySettings("")),
+			},
+			logger: logger,
+		}
+		req := &workflowservice.StartActivityExecutionRequest{
+			ActivityId:          defaultActivityID,
+			ActivityType:        &commonpb.ActivityType{Name: defaultActivityType},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+			StartToCloseTimeout: durationpb.New(10 * time.Second),
+			RetryPolicy:         &commonpb.RetryPolicy{},
+		}
+		_, err := h.validateAndPopulateStartRequest(req, namespace.ID(defaultNamespaceID))
+		require.NoError(t, err)
+		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
+		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
+	})
+
+	t.Run("RequestCancelActivityExecution", func(t *testing.T) {
+		req := &workflowservice.RequestCancelActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+		}
+		err := validateAndNormalizeRequestCancelActivityExecutionRequest(req, maxIDLengthLimit, blobLimit, blobLimit, logger)
+		require.NoError(t, err)
+		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
+		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
+	})
+
+	t.Run("TerminateActivityExecution", func(t *testing.T) {
+		req := &workflowservice.TerminateActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+		}
+		err := validateAndNormalizeTerminateActivityExecutionRequest(req, maxIDLengthLimit, blobLimit, blobLimit, logger)
+		require.NoError(t, err)
+		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
+		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
+	})
+
+	t.Run("PauseActivityExecution", func(t *testing.T) {
+		req := &workflowservice.PauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+		}
+		err := validateAndNormalizePauseActivityExecutionRequest(req, maxIDLengthLimit, blobLimit, blobLimit, logger)
+		require.NoError(t, err)
+		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
+		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
+	})
+}
+
+func validateUUID(s string) error {
+	_, err := uuid.Parse(s)
+	return err
+}
+
+// TestRequestIDTooLong verifies that every standalone activity API enforces the request ID
+// length limit when the client supplies a value that exceeds it.
+func TestRequestIDTooLong(t *testing.T) {
+	maxIDLengthLimit := defaultMaxIDLengthLimit
+	blobLimit := defaultBlobSizeLimitError
+	logger := log.NewNoopLogger()
+	tooLong := string(make([]byte, maxIDLengthLimit+1))
+
+	t.Run("StartActivityExecution", func(t *testing.T) {
+		h := newTestFrontendHandler(blobLimit, defaultBlobSizeLimitWarn, maxIDLengthLimit)
+		req := &workflowservice.StartActivityExecutionRequest{
+			ActivityId:          defaultActivityID,
+			ActivityType:        &commonpb.ActivityType{Name: defaultActivityType},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+			StartToCloseTimeout: durationpb.New(10 * time.Second),
+			RetryPolicy:         &commonpb.RetryPolicy{},
+			RequestId:           tooLong,
+		}
+		err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
+
+	t.Run("RequestCancelActivityExecution", func(t *testing.T) {
+		req := &workflowservice.RequestCancelActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RequestId:  tooLong,
+		}
+		err := validateAndNormalizeRequestCancelActivityExecutionRequest(req, maxIDLengthLimit, blobLimit, blobLimit, logger)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
+
+	t.Run("TerminateActivityExecution", func(t *testing.T) {
+		req := &workflowservice.TerminateActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RequestId:  tooLong,
+		}
+		err := validateAndNormalizeTerminateActivityExecutionRequest(req, maxIDLengthLimit, blobLimit, blobLimit, logger)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
+
+	t.Run("PauseActivityExecution", func(t *testing.T) {
+		req := &workflowservice.PauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RequestId:  tooLong,
+		}
+		err := validateAndNormalizePauseActivityExecutionRequest(req, maxIDLengthLimit, blobLimit, blobLimit, logger)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
 }
 
 func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
