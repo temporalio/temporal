@@ -9,7 +9,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
-	chasmnexusworkflow "go.temporal.io/server/chasm/lib/nexusoperation/workflow"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	commoncache "go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -99,7 +99,7 @@ var Module = fx.Options(
 	fx.Invoke(hsmnexusworkflow.RegisterCommandHandlers),
 	activity.HistoryModule,
 	chasmnexus.Module,
-	chasmnexusworkflow.Module,
+	chasmworkflow.Module,
 )
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
@@ -120,17 +120,22 @@ func HandlerProvider(args NewHandlerArgs) (*Handler, error) {
 	}
 
 	handler := &Handler{
-		status:                       common.DaemonStatusInitialized,
-		config:                       args.Config,
-		tokenSerializer:              tasktoken.NewSerializer(),
+		status:          common.DaemonStatusInitialized,
+		config:          args.Config,
+		tokenSerializer: tasktoken.NewSerializer(),
+		deepHealthCheckHandler: deepHealthCheckHandler{
+			healthServer:            args.HealthServer,
+			metricsHandler:          args.MetricsHandler,
+			config:                  args.Config,
+			historyHealthSignal:     args.HistoryHealthSignal,
+			persistenceHealthSignal: args.PersistenceHealthSignal,
+			startupTime:             time.Now(),
+		},
 		logger:                       args.Logger,
 		throttledLogger:              args.ThrottledLogger,
 		persistenceExecutionManager:  args.PersistenceExecutionManager,
 		persistenceShardManager:      args.PersistenceShardManager,
 		persistenceVisibilityManager: args.PersistenceVisibilityManager,
-		persistenceHealthSignal:      args.PersistenceHealthSignal,
-		healthServer:                 args.HealthServer,
-		historyHealthSignal:          args.HistoryHealthSignal,
 		historyServiceResolver:       args.HistoryServiceResolver,
 		metricsHandler:               args.MetricsHandler,
 		payloadSerializer:            args.PayloadSerializer,

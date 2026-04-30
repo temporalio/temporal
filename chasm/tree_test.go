@@ -1183,6 +1183,45 @@ func (s *nodeSuite) TestApplySnapshot() {
 	s.True(root.currentSA["TemporalDatetime01"].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
 }
 
+func (s *nodeSuite) TestApplySnapshot_EmptySnapshot() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+					},
+				},
+			},
+		},
+		"SubComponent1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
+			},
+		},
+	}
+	root, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+
+	// Apply an empty snapshot to simulate the case where
+	// chasm is disabled in source cluster or chasm tree is empty in
+	// source cluster.
+	err = root.ApplySnapshot(NodesSnapshot{})
+	s.NoError(err)
+
+	// Validate that nodeBase.mutation reflects the applied snapshot.
+	expectedMutation := NodesMutation{
+		UpdatedNodes: map[string]*persistencespb.ChasmNode{},
+		DeletedNodes: map[string]struct{}{
+			"SubComponent1": {}, // NOTE: root component can't be deleted.
+		},
+	}
+	s.Equal(expectedMutation, root.mutation)
+}
+
 func (s *nodeSuite) TestApplyMutation_OutOfOrder() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
@@ -3199,6 +3238,16 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 				},
 			},
 		},
+		"SubComponent1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testSubComponent1TypeID,
+					},
+				},
+			},
+		},
 	}
 
 	taskInfo := &persistencespb.ChasmTaskInfo{
@@ -3208,8 +3257,9 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 		ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 			TransitionCount: 1,
 		},
-		Path:   rootPath,
-		TypeId: testSideEffectTaskTypeID,
+		Path:        []string{"SubComponent1"},
+		TypeId:      testSideEffectTaskTypeID,
+		ArchetypeId: testComponentTypeID,
 		Data: &commonpb.DataBlob{
 			Data:         nil,
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
@@ -3270,12 +3320,14 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 			).DoAndReturn(
 			func(_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestSideEffectTask) error {
 				s.NotNil(ref.validationFn)
+				s.Equal(taskInfo.GetArchetypeId(), uint32(ref.archetypeID))
 
 				// Accessing the Component should trigger the validationFn.
-				_, err := root.Component(chasmContext, ref)
+				component, err := root.Component(chasmContext, ref)
 				if err != nil {
 					return err
 				}
+				s.IsType(&TestSubComponent1{}, component)
 				return result
 			}).Times(1)
 	}
@@ -3327,6 +3379,16 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 					},
 				},
 			},
+			"SubComponent1": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testSubComponent1TypeID,
+						},
+					},
+				},
+			},
 		}
 
 		root, err := s.newTestTree(persistenceNodes)
@@ -3351,8 +3413,9 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 				ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 					TransitionCount: 1,
 				},
-				Path:   rootPath,
-				TypeId: testDiscardableSideEffectTaskTypeID,
+				Path:        []string{"SubComponent1"},
+				TypeId:      testDiscardableSideEffectTaskTypeID,
+				ArchetypeId: testComponentTypeID,
 				Data: &commonpb.DataBlob{
 					Data:         nil,
 					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
@@ -3390,8 +3453,13 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
 			s.NotNil(ref.validationFn)
-			_, err := root.Component(chasmContext, ref)
-			return err
+			s.Equal(chasmTask.Info.GetArchetypeId(), uint32(ref.archetypeID))
+			component, err := root.Component(chasmContext, ref)
+			if err != nil {
+				return err
+			}
+			s.IsType(&TestSubComponent1{}, component)
+			return nil
 		}).Times(1)
 
 		err := root.ExecuteSideEffectDiscardTask(ctx, executionKey, chasmTask, dummyValidationFn)

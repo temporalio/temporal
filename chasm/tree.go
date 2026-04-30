@@ -2324,6 +2324,28 @@ func (n *Node) applyDeletions(
 			continue
 		}
 
+		if node == n.root() {
+			// Root node can never be deleted
+			// This can happen when:
+			// 1. CHASM framework is disabled in source cluster and sends an
+			// empty snapshot to the standby cluster. If the standby cluster
+			// has a non-empty chasm tree, the root node will be marked for
+			// deletion and we will lose archetype information for the execution,
+			// and hit other undefined issues when root is deleted.
+			// Disabled CHASM framework itself is already an undefined situation
+			// for non-workflow chasm executions, and we are ok with not deleting
+			// the root node.
+			//
+			// 2. CHASM is enabled but the execution is a workflow which doesn't
+			// have any chasm nodes. In this case, again an empty snapshot will be sent to
+			// standby cluster.
+			// In this case, we can actually choose to delete the root itself because empty
+			// chasm tree is assume to be a Workflow. However, given chasm workflow component's
+			// state is an empty proto, skipping deletion is fine as well. All other child nodes
+			// will still be deleted.
+			continue
+		}
+
 		if err := node.delete(isSystemUpdates); err != nil {
 			return err
 		}
@@ -3264,7 +3286,7 @@ func (n *Node) invokeSideEffectTaskFn(
 
 	ref := ComponentRef{
 		ExecutionKey:          executionKey,
-		archetypeID:           n.ArchetypeID(),
+		archetypeID:           ArchetypeID(taskInfo.GetArchetypeId()),
 		executionLastUpdateVT: taskInfo.ComponentLastUpdateVersionedTransition,
 		componentPath:         taskInfo.Path,
 		componentInitialVT:    taskInfo.ComponentInitialVersionedTransition,
