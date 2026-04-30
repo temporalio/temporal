@@ -10,8 +10,8 @@ services:
       - "9042:9042"
     environment:
       CASSANDRA_LISTEN_ADDRESS: 127.0.0.1
-      MAX_HEAP_SIZE: "2G"
-      HEAP_NEWSIZE: "200M"
+      MAX_HEAP_SIZE: "1G"
+      HEAP_NEWSIZE: "100M"
       # Increase native transport threads for handling more concurrent connections
       JVM_EXTRA_OPTS: "-Dcassandra.native_transport_max_threads=512"
     healthcheck:
@@ -55,7 +55,7 @@ services:
       - cluster.routing.allocation.disk.watermark.high=256mb
       - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - discovery.type=single-node
-      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
     healthcheck:
       !!merge <<: *healthcheck-defaults
       test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
@@ -71,7 +71,7 @@ services:
       - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
     healthcheck:
       !!merge <<: *healthcheck-defaults
       test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
@@ -87,7 +87,7 @@ services:
       - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - discovery.type=single-node
       - DISABLE_SECURITY_PLUGIN=true
-      - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
     healthcheck:
       !!merge <<: *healthcheck-defaults
       test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
@@ -103,7 +103,7 @@ services:
       - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - discovery.type=single-node
       - DISABLE_SECURITY_PLUGIN=true
-      - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
     healthcheck:
       !!merge <<: *healthcheck-defaults
       test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
