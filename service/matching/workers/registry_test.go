@@ -589,24 +589,19 @@ func TestRegistryImpl_ListWorkersExcludesSystemWorkers(t *testing.T) {
 	})
 
 	t.Run("pagination excludes system workers from page counts", func(t *testing.T) {
-		// Page size 1 should paginate over only the 2 user workers, not the system worker.
-		var allKeys []string
-		var nextToken []byte
-		for i := 0; i < 3; i++ { // at most 3 iterations to avoid infinite loop
-			resp, err := r.ListWorkers("ns1", ListWorkersParams{
-				PageSize:      1,
-				NextPageToken: nextToken,
-			})
-			require.NoError(t, err)
-			for _, w := range resp.Workers {
-				allKeys = append(allKeys, w.WorkerInstanceKey)
-			}
-			nextToken = resp.NextPageToken
-			if nextToken == nil {
-				break
-			}
-		}
-		require.ElementsMatch(t, []string{"user-worker-1", "user-worker-2"}, allKeys)
+		// Page 1 (sorted: "user-worker-1" comes first)
+		resp1, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 1})
+		require.NoError(t, err)
+		require.Len(t, resp1.Workers, 1)
+		require.Equal(t, "user-worker-1", resp1.Workers[0].WorkerInstanceKey)
+		require.NotNil(t, resp1.NextPageToken)
+
+		// Page 2
+		resp2, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 1, NextPageToken: resp1.NextPageToken})
+		require.NoError(t, err)
+		require.Len(t, resp2.Workers, 1)
+		require.Equal(t, "user-worker-2", resp2.Workers[0].WorkerInstanceKey)
+		require.Nil(t, resp2.NextPageToken)
 	})
 }
 
