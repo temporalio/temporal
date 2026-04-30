@@ -24,12 +24,6 @@ type CertProviderFactory func(
 	refreshInterval time.Duration,
 	logger log.Logger) CertProvider
 
-type remoteClusterPattern struct {
-	pattern      string
-	groupTLS     config.GroupTLS
-	certProvider CertProvider
-}
-
 type localStoreTlsProvider struct {
 	sync.RWMutex
 
@@ -40,7 +34,6 @@ type localStoreTlsProvider struct {
 	frontendCertProvider            CertProvider
 	workerCertProvider              CertProvider
 	remoteClusterClientCertProvider map[string]CertProvider
-	remoteClusterPatterns           []remoteClusterPattern
 	frontendPerHostCertProviderMap  *localStorePerHostCertProviderMap
 
 	cachedInternodeServerConfig     *tls.Config
@@ -71,28 +64,9 @@ func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, metricsHandler metrics.
 	}
 
 	remoteClusterClientCertProvider := make(map[string]CertProvider)
-	var remoteClusterPatterns []remoteClusterPattern
 	for key, groupTLS := range tlsConfig.RemoteClusters {
-		cp := certProviderFactory(&groupTLS, nil, nil, tlsConfig.RefreshInterval, logger)
-		if strings.Contains(key, "*") {
-			remoteClusterPatterns = append(remoteClusterPatterns, remoteClusterPattern{
-				pattern:      key,
-				groupTLS:     groupTLS,
-				certProvider: cp,
-			})
-		} else {
-			remoteClusterClientCertProvider[key] = cp
-		}
+		remoteClusterClientCertProvider[key] = certProviderFactory(&groupTLS, nil, nil, tlsConfig.RefreshInterval, logger)
 	}
-	// Sort wildcard matching slice so that more-specific matches are earlier
-	sort.Slice(remoteClusterPatterns, func(i, j int) bool {
-		li := len(remoteClusterPatterns[i].pattern) - strings.Count(remoteClusterPatterns[i].pattern, "*")
-		lj := len(remoteClusterPatterns[j].pattern) - strings.Count(remoteClusterPatterns[j].pattern, "*")
-		if li != lj {
-			return li > lj
-		}
-		return remoteClusterPatterns[i].pattern < remoteClusterPatterns[j].pattern
-	})
 
 	provider := &localStoreTlsProvider{
 		internodeCertProvider:       internodeProvider,
@@ -102,7 +76,6 @@ func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, metricsHandler metrics.
 		frontendPerHostCertProviderMap: newLocalStorePerHostCertProviderMap(
 			tlsConfig.Frontend.PerHostOverrides, certProviderFactory, tlsConfig.RefreshInterval, logger),
 		remoteClusterClientCertProvider: remoteClusterClientCertProvider,
-		remoteClusterPatterns:           remoteClusterPatterns,
 		RWMutex:                         sync.RWMutex{},
 		settings:                        tlsConfig,
 		metricsHandler:                  metricsHandler,
@@ -169,37 +142,23 @@ func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 }
 
 func (s *localStoreTlsProvider) GetRemoteClusterClientConfig(hostname string) (*tls.Config, error) {
-	if groupTLS, ok := s.settings.RemoteClusters[hostname]; ok && !strings.Contains(hostname, "*") {
-		return s.getOrCreateRemoteClusterClientConfig(
-			hostname,
-			func() (*tls.Config, error) {
-				return newClientTLSConfig(
-					s.remoteClusterClientCertProvider[hostname],
-					groupTLS.Client.ServerName,
-					groupTLS.Server.RequireClientAuth,
-					false,
-					!groupTLS.Client.DisableHostVerification)
-			},
-			groupTLS.IsClientEnabled(),
-		)
+	key, ok := matchRemoteClusterKey(hostname, s.settings.RemoteClusters)
+	if !ok {
+		return nil, nil
 	}
-
-	if match := matchRemoteClusterPattern(hostname, s.remoteClusterPatterns); match != nil {
-		return s.getOrCreateRemoteClusterClientConfig(
-			hostname,
-			func() (*tls.Config, error) {
-				return newClientTLSConfig(
-					match.certProvider,
-					match.groupTLS.Client.ServerName,
-					match.groupTLS.Server.RequireClientAuth,
-					false,
-					!match.groupTLS.Client.DisableHostVerification)
-			},
-			match.groupTLS.IsClientEnabled(),
-		)
-	}
-
-	return nil, nil
+	groupTLS := s.settings.RemoteClusters[key]
+	return s.getOrCreateRemoteClusterClientConfig(
+		hostname,
+		func() (*tls.Config, error) {
+			return newClientTLSConfig(
+				s.remoteClusterClientCertProvider[key],
+				groupTLS.Client.ServerName,
+				groupTLS.Server.RequireClientAuth,
+				false,
+				!groupTLS.Client.DisableHostVerification)
+		},
+		groupTLS.IsClientEnabled(),
+	)
 }
 
 func (s *localStoreTlsProvider) GetFrontendServerConfig() (*tls.Config, error) {
@@ -520,11 +479,29 @@ func isSystemWorker(tls *config.RootTLS) bool {
 		tls.SystemWorker.Client.ForceTLS
 }
 
-func matchRemoteClusterPattern(hostname string, patterns []remoteClusterPattern) *remoteClusterPattern {
-	for i := range patterns {
-		if matched, err := path.Match(patterns[i].pattern, hostname); err == nil && matched {
-			return &patterns[i]
+// matchRemoteClusterKey checks exact matches, then finds the match with the most non-wildcard characters
+func matchRemoteClusterKey[V any](hostname string, m map[string]V) (string, bool) {
+	if _, ok := m[hostname]; ok && !strings.Contains(hostname, "*") {
+		return hostname, true
+	}
+	var wildcards []string
+	for k := range m {
+		if strings.Contains(k, "*") {
+			wildcards = append(wildcards, k)
 		}
 	}
-	return nil
+	sort.Slice(wildcards, func(i, j int) bool {
+		li := len(wildcards[i]) - strings.Count(wildcards[i], "*")
+		lj := len(wildcards[j]) - strings.Count(wildcards[j], "*")
+		if li != lj {
+			return li > lj
+		}
+		return wildcards[i] < wildcards[j]
+	})
+	for _, k := range wildcards {
+		if matched, err := path.Match(k, hostname); err == nil && matched {
+			return k, true
+		}
+	}
+	return "", false
 }

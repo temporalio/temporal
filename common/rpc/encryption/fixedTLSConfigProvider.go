@@ -2,9 +2,6 @@ package encryption
 
 import (
 	"crypto/tls"
-	"path"
-	"sort"
-	"strings"
 	"time"
 )
 
@@ -44,27 +41,8 @@ func (f *FixedTLSConfigProvider) GetFrontendClientConfig() (*tls.Config, error) 
 
 // GetRemoteClusterClientConfig implements [TLSConfigProvider.GetRemoteClusterClientConfig].
 func (f *FixedTLSConfigProvider) GetRemoteClusterClientConfig(hostname string) (*tls.Config, error) {
-	if cfg, ok := f.RemoteClusterClientConfigs[hostname]; ok {
-		return cfg, nil
-	}
-	var wildcardKeys []string
-	for key := range f.RemoteClusterClientConfigs {
-		if strings.Contains(key, "*") {
-			wildcardKeys = append(wildcardKeys, key)
-		}
-	}
-	sort.Slice(wildcardKeys, func(i, j int) bool {
-		li := len(wildcardKeys[i]) - strings.Count(wildcardKeys[i], "*")
-		lj := len(wildcardKeys[j]) - strings.Count(wildcardKeys[j], "*")
-		if li != lj {
-			return li > lj
-		}
-		return wildcardKeys[i] < wildcardKeys[j]
-	})
-	for _, key := range wildcardKeys {
-		if matched, err := path.Match(key, hostname); err == nil && matched {
-			return f.RemoteClusterClientConfigs[key], nil
-		}
+	if key, ok := matchRemoteClusterKey(hostname, f.RemoteClusterClientConfigs); ok {
+		return f.RemoteClusterClientConfigs[key], nil
 	}
 	return nil, nil
 }
