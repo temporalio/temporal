@@ -1572,23 +1572,15 @@ If value less or equal to 0, will fall back to HistoryRPS`,
 	EnableHistoryNamespaceFairness = NewGlobalBoolSetting(
 		"history.enableNamespaceFairness",
 		false,
-		`EnableHistoryNamespaceFairness turns on per-namespace fair-share demotion in
-the history host RPS rate limiter. When the host hits its RPS limit, requests
-from namespaces exceeding their fair share (computed from scaleFactor and the
-namespace's frontend cluster-wide RPS budget) are demoted to lower priorities
-so that in-share namespaces are throttled last. When the host is not at
-capacity, demoted requests still pass via the priority limiter's
-consume-from-lower semantics, so this only takes effect under contention.`,
+		`EnableHistoryNamespaceFairness turns on per-namespace fair-share demotion in the history host RPS rate limiter.
+When the host hits its RPS limit, requests from namespaces exceeding their fair share (computed from scaleFactor and the namespace's
+frontend cluster-wide RPS budget) are demoted to lower priorities`,
 	)
 	HistoryNamespaceFairShareMultiplier = NewGlobalFloatSetting(
 		"history.namespaceFairShareMultiplier",
 		1.0,
-		`HistoryNamespaceFairShareMultiplier scales the per-namespace fair share used
-by the history host RPS rate limiter. share(ns) = scaleFactor *
-FrontendGlobalNamespaceRPS(ns) * HistoryNamespaceFairShareMultiplier. Default
-1.0 keeps the strict per-host share. Set >1 to allow more headroom above the
-strict share before a namespace is considered over-share; set <1 to be
-stricter. Only meaningful when EnableHistoryNamespaceFairness is true.`,
+		`HistoryNamespaceFairShareMultiplier scales the per-namespace fair share used by the history host RPS rate limiter.
+share(ns) = scaleFactor * FrontendGlobalNamespaceRPS(ns) * HistoryNamespaceFairShareMultiplier`,
 	)
 	HistoryPersistenceMaxQPS = NewGlobalIntSetting(
 		"history.persistenceMaxQPS",
