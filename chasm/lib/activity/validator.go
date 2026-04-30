@@ -278,49 +278,6 @@ func validateAndNormalizeSearchAttributes(
 	return saValidator.ValidateSize(saToValidate, namespaceName)
 }
 
-func validateAndNormalizeStartRequest(
-	req *workflowservice.StartActivityExecutionRequest,
-	maxIDLengthLimit int,
-	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	logger log.Logger,
-	saMapperProvider searchattribute.MapperProvider,
-	saValidator *searchattribute.Validator,
-) error {
-	if len(req.GetRequestId()) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
-			len(req.GetRequestId()), maxIDLengthLimit)
-	}
-
-	if len(req.GetIdentity()) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
-			len(req.GetIdentity()), maxIDLengthLimit)
-	}
-
-	if err := validateAndNormalizeIDPolicy(req); err != nil {
-		return err
-	}
-
-	if err := validateBlobSize(
-		req.GetActivityId(),
-		"StartActivityExecution",
-		blobSizeLimitError,
-		blobSizeLimitWarn,
-		req.Input.Size(),
-		logger,
-		req.GetNamespace()); err != nil {
-		return serviceerror.NewInvalidArgument("input exceeds length limit")
-	}
-
-	if req.GetSearchAttributes() != nil {
-		if err := validateAndNormalizeSearchAttributes(req, saMapperProvider, saValidator); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func validateAndNormalizeDescribeActivityExecutionRequest(
 	req *workflowservice.DescribeActivityExecutionRequest,
 	maxIDLengthLimit int,
@@ -364,6 +321,49 @@ func validateAndNormalizePollActivityExecutionRequest(
 			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
 		}
 	}
+	return nil
+}
+
+func validateAndNormalizeStartRequest(
+	req *workflowservice.StartActivityExecutionRequest,
+	maxIDLengthLimit int,
+	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	logger log.Logger,
+	saMapperProvider searchattribute.MapperProvider,
+	saValidator *searchattribute.Validator,
+) error {
+	if len(req.GetRequestId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRequestId()), maxIDLengthLimit)
+	}
+
+	if len(req.GetIdentity()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
+	}
+
+	if err := validateAndNormalizeIDPolicy(req); err != nil {
+		return err
+	}
+
+	if err := validateBlobSize(
+		req.GetActivityId(),
+		"StartActivityExecution",
+		blobSizeLimitError,
+		blobSizeLimitWarn,
+		req.Input.Size(),
+		logger,
+		req.GetNamespace()); err != nil {
+		return serviceerror.NewInvalidArgument("input exceeds length limit")
+	}
+
+	if req.GetSearchAttributes() != nil {
+		if err := validateAndNormalizeSearchAttributes(req, saMapperProvider, saValidator); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -627,6 +627,13 @@ func validateAndNormalizePauseActivityExecutionRequest(
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 ) error {
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	}
+	if len(req.GetRequestId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRequestId()), maxIDLengthLimit)
+	}
 	if req.GetActivityId() == "" {
 		return serviceerror.NewInvalidArgument("activity ID is required")
 	}
