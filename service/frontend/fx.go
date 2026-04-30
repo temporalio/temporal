@@ -293,6 +293,7 @@ func GrpcServerOptionsProvider(
 		slowRequestLoggerInterceptor.Intercept,
 		chasmRequestVisibilityInterceptor.Intercept,
 		contextMetadataInterceptor.Intercept,
+		interceptor.NewExperimentalGuardInterceptor(serviceConfig.APIVariant, logger).UnaryIntercept,
 	}
 	if len(customInterceptors) > 0 {
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
