@@ -123,7 +123,7 @@ type (
 
 		status int32
 
-		callbackValidator               *callback.Validator
+		callbackValidator               callback.Validator
 		tokenSerializer                 *tasktoken.Serializer
 		config                          *Config
 		versionChecker                  headers.VersionChecker
@@ -302,7 +302,7 @@ func (wh *WorkflowHandler) ValidateWorkerDeploymentVersionComputeConfig(
 
 // NewWorkflowHandler creates a gRPC handler for workflowservice
 func NewWorkflowHandler(
-	callbackValidator *callback.Validator,
+	callbackValidator callback.Validator,
 	config *Config,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
@@ -545,7 +545,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	var err error
-	if request, err = wh.prepareStartWorkflowRequest(request); err != nil {
+	if request, err = wh.prepareStartWorkflowRequest(ctx, request); err != nil {
 		return nil, err
 	}
 
@@ -603,6 +603,7 @@ func (wh *WorkflowHandler) convertToStartWorkflowExecutionResponse(
 
 // Validates the request and sets default values where they are missing.
 func (wh *WorkflowHandler) prepareStartWorkflowRequest(
+	ctx context.Context,
 	request *workflowservice.StartWorkflowExecutionRequest,
 ) (*workflowservice.StartWorkflowExecutionRequest, error) {
 	if request == nil {
@@ -680,7 +681,7 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	}
 
 	if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
-		if err := wh.callbackValidator.Validate(namespaceName.String(), cbs); err != nil {
+		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs); err != nil {
 			return nil, err
 		}
 	}
@@ -791,7 +792,7 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 		return nil, errMultiOpNotStartAndUpdate
 	}
 
-	historyReq, err := wh.convertToHistoryMultiOperationRequest(namespaceID, request)
+	historyReq, err := wh.convertToHistoryMultiOperationRequest(ctx, namespaceID, request)
 	if err != nil {
 		return nil, err
 	}
@@ -815,6 +816,7 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 }
 
 func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	request *workflowservice.ExecuteMultiOperationRequest,
 ) (*historyservice.ExecuteMultiOperationRequest, error) {
@@ -825,7 +827,7 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
 	errs := make([]error, len(request.Operations))
 
 	for i, op := range request.Operations {
-		convertedOp, opWorkflowID, err := wh.convertToHistoryMultiOperationItem(namespaceID, namespace.Name(request.Namespace), op)
+		convertedOp, opWorkflowID, err := wh.convertToHistoryMultiOperationItem(ctx, namespaceID, namespace.Name(request.Namespace), op)
 		if err != nil {
 			hasError = true
 		} else {
@@ -856,6 +858,7 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
 }
 
 func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	namespaceName namespace.Name,
 	op *workflowservice.ExecuteMultiOperationRequest_Operation,
@@ -868,7 +871,7 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
 			return nil, "", errMultiOpNamespaceMismatch
 		}
 		var err error
-		if startReq, err = wh.prepareStartWorkflowRequest(startReq); err != nil {
+		if startReq, err = wh.prepareStartWorkflowRequest(ctx, startReq); err != nil {
 			return nil, "", err
 		}
 		if len(startReq.CronSchedule) > 0 {
