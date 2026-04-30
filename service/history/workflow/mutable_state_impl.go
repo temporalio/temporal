@@ -9514,24 +9514,24 @@ func logError(
 	logger.Error(msg, tags...)
 }
 
-func (ms *MutableStateImpl) shiftWorkflowInitialTime(initialSkippedDuration *durationpb.Duration) {
+func (ms *MutableStateImpl) shiftWorkflowTimes(initialSkippedDuration *durationpb.Duration) {
 	if initialSkippedDuration == nil || initialSkippedDuration.AsDuration() == 0 {
 		return
 	}
 	accum := initialSkippedDuration.AsDuration()
-	if ms.executionState.StartTime != nil {
+	if !timeNotSet(ms.executionState.StartTime) {
 		ms.executionState.StartTime = timestamppb.New(ms.executionState.StartTime.AsTime().Add(accum))
 	}
-	if ms.executionInfo.StartTime != nil {
+	if !timeNotSet(ms.executionInfo.StartTime) {
 		ms.executionInfo.StartTime = timestamppb.New(ms.executionInfo.StartTime.AsTime().Add(accum))
 	}
-	if ms.executionInfo.ExecutionTime != nil {
+	if !timeNotSet(ms.executionInfo.ExecutionTime) {
 		ms.executionInfo.ExecutionTime = timestamppb.New(ms.executionInfo.ExecutionTime.AsTime().Add(accum))
 	}
-	if ms.executionInfo.WorkflowRunExpirationTime != nil {
+	if !timeNotSet(ms.executionInfo.WorkflowRunExpirationTime) {
 		ms.executionInfo.WorkflowRunExpirationTime = timestamppb.New(ms.executionInfo.WorkflowRunExpirationTime.AsTime().Add(accum))
 	}
-	if ms.executionInfo.WorkflowExecutionExpirationTime != nil {
+	if !timeNotSet(ms.executionInfo.WorkflowExecutionExpirationTime) {
 		ms.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(ms.executionInfo.WorkflowExecutionExpirationTime.AsTime().Add(accum))
 	}
 }
@@ -9546,9 +9546,7 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 		AccumulatedSkippedDuration: initialSkippedDuration,
 	}
 	ms.wrapTimeSourceWithTimeSkipping()
-
-	ms.shiftWorkflowInitialTime(initialSkippedDuration)
-
+	ms.shiftWorkflowTimes(initialSkippedDuration)
 	ms.applyTimeSkippingBound(currentEventID)
 	ms.timeSkippingInfoUpdated = true
 }
