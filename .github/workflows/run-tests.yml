@@ -542,6 +542,7 @@ jobs:
           TEST_ARGS: "${{ matrix.test_args }}"
           TEMPORAL_TEST_LOG_FILE: ${{ github.workspace }}/.testoutput/debug.log
           TEMPORAL_TEST_LOG_LEVEL: info
+          GOMEMLIMIT: 5GiB
 
       - name: Dump container logs
         if: ${{ failure() && toJson(matrix.containers) != '[]' }}
