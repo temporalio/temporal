@@ -229,6 +229,39 @@ func TestParseGoTestJSONOutputUsesLeafFailures(t *testing.T) {
 		(&junitReport{Testsuites: junit.CreateFromReport(report, "localhost")}).collectTestCaseFailureRefs())
 }
 
+func TestParseGoTestJSONOutputUsesAncestorOutputForFailedLeaf(t *testing.T) {
+	t.Parallel()
+
+	output := strings.Join([]string{
+		`{"Time":"2026-05-01T18:22:00Z","Action":"start","Package":"go.temporal.io/server/fake"}`,
+		`{"Time":"2026-05-01T18:22:01Z","Action":"run","Package":"go.temporal.io/server/fake","Test":"TestSuite"}`,
+		`{"Time":"2026-05-01T18:22:01Z","Action":"run","Package":"go.temporal.io/server/fake","Test":"TestSuite/TestCase"}`,
+		`{"Time":"2026-05-01T18:22:01Z","Action":"run","Package":"go.temporal.io/server/fake","Test":"TestSuite/TestCase/Leaf"}`,
+		`{"Time":"2026-05-01T18:22:02Z","Action":"output","Package":"go.temporal.io/server/fake","Test":"TestSuite/TestCase","Output":"    fake_test.go:12: failed\\n"}`,
+		`{"Time":"2026-05-01T18:22:02Z","Action":"output","Package":"go.temporal.io/server/fake","Test":"TestSuite/TestCase","Output":"        Error Trace:\\tfake_test.go:12\\n"}`,
+		`{"Time":"2026-05-01T18:22:03Z","Action":"fail","Package":"go.temporal.io/server/fake","Test":"TestSuite/TestCase/Leaf","Elapsed":1}`,
+		`{"Time":"2026-05-01T18:22:03Z","Action":"fail","Package":"go.temporal.io/server/fake","Test":"TestSuite/TestCase","Elapsed":2}`,
+		`{"Time":"2026-05-01T18:22:03Z","Action":"fail","Package":"go.temporal.io/server/fake","Test":"TestSuite","Elapsed":3}`,
+		`{"Time":"2026-05-01T18:22:04Z","Action":"fail","Package":"go.temporal.io/server/fake","Elapsed":4}`,
+	}, "\n")
+
+	report, isJSON, err := parseGoTestOutput(output)
+	require.NoError(t, err)
+	require.True(t, isJSON)
+
+	results := extractResults(report)
+	require.Len(t, results.failures, 1)
+	require.Equal(t, "TestSuite/TestCase/Leaf", results.failures[0].Name)
+	require.Contains(t, results.failures[0].ErrorTrace, "Error Trace:")
+
+	testsuites := junit.CreateFromReport(report, "localhost")
+	require.Len(t, testsuites.Suites, 1)
+	require.Len(t, testsuites.Suites[0].Testcases, 1)
+	failure := testsuites.Suites[0].Testcases[0].Failure
+	require.NotNil(t, failure)
+	require.Contains(t, failure.Data, "fake_test.go:12")
+}
+
 func requireReportEquals(t *testing.T, goldenFile, actualFile string) {
 	t.Helper()
 

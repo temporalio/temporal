@@ -557,6 +557,9 @@ func (p *goTestJSONPackage) reportPackage() gtr.Package {
 			continue
 		}
 		test := *p.tests[name]
+		if test.Result == gtr.Fail && len(test.Output) == 0 {
+			test.Output = p.ancestorOutput(name)
+		}
 		if test.Result == gtr.Fail {
 			hasFailure = true
 		}
@@ -570,6 +573,32 @@ func (p *goTestJSONPackage) reportPackage() gtr.Package {
 		}
 	}
 	return pkg
+}
+
+func (p *goTestJSONPackage) ancestorOutput(name string) []string {
+	var output []string
+	for _, ancestor := range ancestorNames(name) {
+		test := p.tests[ancestor]
+		if test == nil {
+			continue
+		}
+		output = append(output, test.Output...)
+	}
+	return output
+}
+
+func ancestorNames(name string) []string {
+	var names []string
+	for {
+		idx := strings.LastIndexByte(name, '/')
+		if idx < 0 {
+			break
+		}
+		name = name[:idx]
+		names = append(names, name)
+	}
+	slices.Reverse(names)
+	return names
 }
 
 func appendOutputLines(lines []string, output string) []string {
