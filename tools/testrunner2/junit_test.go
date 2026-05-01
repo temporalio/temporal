@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/jstemmer/go-junit-report/v2/junit"
@@ -177,6 +178,55 @@ func TestAppendAlertsSuite(t *testing.T) {
 	j.path = out.Name()
 	require.NoError(t, j.write())
 	requireReportEquals(t, "testdata/alerts_output.junit.xml", out.Name())
+}
+
+func TestParseGoTestJSONOutputIgnoresNestedGoTestOutput(t *testing.T) {
+	t.Parallel()
+
+	output := strings.Join([]string{
+		`{"Time":"2026-05-01T18:22:00Z","Action":"start","Package":"go.temporal.io/server/tools/testrunner2"}`,
+		`{"Time":"2026-05-01T18:22:01Z","Action":"run","Package":"go.temporal.io/server/tools/testrunner2","Test":"TestIntegration/passing_tests"}`,
+		`{"Time":"2026-05-01T18:22:02Z","Action":"output","Package":"go.temporal.io/server/tools/testrunner2","Test":"TestIntegration/passing_tests","Output":"=== RUN   TestAlwaysFails\n"}`,
+		`{"Time":"2026-05-01T18:22:02Z","Action":"output","Package":"go.temporal.io/server/tools/testrunner2","Test":"TestIntegration/passing_tests","Output":"--- FAIL: TestAlwaysFails (0.00s)\n"}`,
+		`{"Time":"2026-05-01T18:22:02Z","Action":"output","Package":"go.temporal.io/server/tools/testrunner2","Test":"TestIntegration/passing_tests","Output":"FAIL\tgo.temporal.io/server/tools/testrunner2/testpkg/failing\t0.004s\n"}`,
+		`{"Time":"2026-05-01T18:22:03Z","Action":"pass","Package":"go.temporal.io/server/tools/testrunner2","Test":"TestIntegration/passing_tests","Elapsed":1}`,
+		`{"Time":"2026-05-01T18:22:04Z","Action":"pass","Package":"go.temporal.io/server/tools/testrunner2","Elapsed":2}`,
+	}, "\n")
+
+	report, isJSON, err := parseGoTestOutput(output)
+	require.NoError(t, err)
+	require.True(t, isJSON)
+
+	results := extractResults(report)
+	require.Empty(t, results.failures)
+	require.Equal(t, []string{"TestIntegration/passing_tests"}, results.passes)
+	require.Len(t, report.Packages, 1)
+	require.Equal(t, "go.temporal.io/server/tools/testrunner2", report.Packages[0].Name)
+}
+
+func TestParseGoTestJSONOutputUsesLeafFailures(t *testing.T) {
+	t.Parallel()
+
+	output := strings.Join([]string{
+		`{"Time":"2026-05-01T18:22:00Z","Action":"start","Package":"go.temporal.io/server/fake"}`,
+		`{"Time":"2026-05-01T18:22:01Z","Action":"run","Package":"go.temporal.io/server/fake","Test":"TestSuite"}`,
+		`{"Time":"2026-05-01T18:22:01Z","Action":"run","Package":"go.temporal.io/server/fake","Test":"TestSuite/TestCase"}`,
+		`{"Time":"2026-05-01T18:22:02Z","Action":"output","Package":"go.temporal.io/server/fake","Test":"TestSuite/TestCase","Output":"    fake_test.go:12: failed\n"}`,
+		`{"Time":"2026-05-01T18:22:03Z","Action":"fail","Package":"go.temporal.io/server/fake","Test":"TestSuite/TestCase","Elapsed":1}`,
+		`{"Time":"2026-05-01T18:22:03Z","Action":"fail","Package":"go.temporal.io/server/fake","Test":"TestSuite","Elapsed":2}`,
+		`{"Time":"2026-05-01T18:22:04Z","Action":"fail","Package":"go.temporal.io/server/fake","Elapsed":3}`,
+	}, "\n")
+
+	report, isJSON, err := parseGoTestOutput(output)
+	require.NoError(t, err)
+	require.True(t, isJSON)
+
+	results := extractResults(report)
+	require.Len(t, results.failures, 1)
+	require.Equal(t, "TestSuite/TestCase", results.failures[0].Name)
+	require.Contains(t, results.failures[0].ErrorTrace, "fake_test.go:12")
+	require.Equal(t, []testFailureRef{{pkg: "go.temporal.io/server/fake", name: "TestSuite/TestCase"}},
+		(&junitReport{Testsuites: junit.CreateFromReport(report, "localhost")}).collectTestCaseFailureRefs())
 }
 
 func requireReportEquals(t *testing.T, goldenFile, actualFile string) {

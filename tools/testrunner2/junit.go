@@ -1,6 +1,8 @@
 package testrunner2
 
 import (
+	"bufio"
+	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -9,6 +11,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/jstemmer/go-junit-report/v2/gtr"
 	"github.com/jstemmer/go-junit-report/v2/junit"
@@ -430,13 +433,155 @@ func parseGoTestOutput(output string) (gtr.Report, bool, error) {
 	// we only care about TestSuite/TestMethod). This works correctly with
 	// -test.v=test2json which emits --- PASS/FAIL lines as subtests complete.
 	if strings.HasPrefix(strings.TrimSpace(output), "{") {
-		parser := gotest.NewJSONParser(gotest.SetSubtestMode(gotest.ExcludeParents))
-		report, err := parser.Parse(strings.NewReader(output))
+		report, err := parseGoTestJSONOutput(output)
 		return report, true, err
 	}
 	parser := gotest.NewParser(gotest.SetSubtestMode(gotest.ExcludeParents))
 	report, err := parser.Parse(strings.NewReader(output))
 	return report, false, err
+}
+
+type goTestJSONEvent struct {
+	Time    time.Time `json:"Time"`
+	Action  string    `json:"Action"`
+	Package string    `json:"Package"`
+	Test    string    `json:"Test"`
+	Elapsed float64   `json:"Elapsed"`
+	Output  string    `json:"Output"`
+}
+
+type goTestJSONPackage struct {
+	pkg           gtr.Package
+	testOrder     []string
+	tests         map[string]*gtr.Test
+	packageFailed bool
+}
+
+func parseGoTestJSONOutput(output string) (gtr.Report, error) {
+	packages := make(map[string]*goTestJSONPackage)
+	var packageOrder []string
+	reader := bufio.NewReader(strings.NewReader(output))
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil && line == "" {
+			break
+		}
+		line = strings.TrimSpace(line)
+		if line != "" {
+			var ev goTestJSONEvent
+			if err := json.Unmarshal([]byte(line), &ev); err != nil {
+				return gtr.Report{}, err
+			}
+			if ev.Package != "" {
+				state := packages[ev.Package]
+				if state == nil {
+					state = &goTestJSONPackage{
+						pkg:   gtr.Package{Name: ev.Package},
+						tests: make(map[string]*gtr.Test),
+					}
+					packages[ev.Package] = state
+					packageOrder = append(packageOrder, ev.Package)
+				}
+				state.apply(ev)
+			}
+		}
+		if err != nil {
+			break
+		}
+	}
+
+	report := gtr.Report{Packages: make([]gtr.Package, 0, len(packageOrder))}
+	for _, name := range packageOrder {
+		report.Packages = append(report.Packages, packages[name].reportPackage())
+	}
+	return report, nil
+}
+
+func (p *goTestJSONPackage) apply(ev goTestJSONEvent) {
+	if p.pkg.Timestamp.IsZero() && !ev.Time.IsZero() {
+		p.pkg.Timestamp = ev.Time
+	}
+	if ev.Test == "" {
+		if ev.Output != "" {
+			p.pkg.Output = appendOutputLines(p.pkg.Output, ev.Output)
+		}
+		switch ev.Action {
+		case "pass", "fail", "skip":
+			p.pkg.Duration = secondsDuration(ev.Elapsed)
+			if ev.Action == "fail" {
+				p.packageFailed = true
+			}
+		default:
+		}
+		return
+	}
+
+	test := p.test(ev.Test)
+	if ev.Output != "" {
+		test.Output = appendOutputLines(test.Output, ev.Output)
+	}
+	switch ev.Action {
+	case "pass":
+		test.Result = gtr.Pass
+		test.Duration = secondsDuration(ev.Elapsed)
+	case "fail":
+		test.Result = gtr.Fail
+		test.Duration = secondsDuration(ev.Elapsed)
+	case "skip":
+		test.Result = gtr.Skip
+		test.Duration = secondsDuration(ev.Elapsed)
+	default:
+	}
+}
+
+func (p *goTestJSONPackage) test(name string) *gtr.Test {
+	if test := p.tests[name]; test != nil {
+		return test
+	}
+	test := gtr.NewTest(len(p.testOrder), name)
+	p.tests[name] = &test
+	p.testOrder = append(p.testOrder, name)
+	return &test
+}
+
+func (p *goTestJSONPackage) reportPackage() gtr.Package {
+	pkg := p.pkg
+	leafNames := filterParentNames(p.testOrder)
+	leafSet := make(map[string]struct{}, len(leafNames))
+	for _, name := range leafNames {
+		leafSet[name] = struct{}{}
+	}
+	hasFailure := false
+	for _, name := range p.testOrder {
+		if _, ok := leafSet[name]; !ok {
+			continue
+		}
+		test := *p.tests[name]
+		if test.Result == gtr.Fail {
+			hasFailure = true
+		}
+		pkg.Tests = append(pkg.Tests, test)
+	}
+	if p.packageFailed && !hasFailure {
+		pkg.RunError = gtr.Error{
+			Name:   pkg.Name,
+			Cause:  "go test failed",
+			Output: pkg.Output,
+		}
+	}
+	return pkg
+}
+
+func appendOutputLines(lines []string, output string) []string {
+	output = strings.TrimSuffix(output, "\n")
+	if output == "" {
+		return lines
+	}
+	return append(lines, strings.Split(output, "\n")...)
+}
+
+func secondsDuration(seconds float64) time.Duration {
+	return time.Duration(seconds * float64(time.Second))
 }
 
 // extractResults returns failed and passed tests from a gtr.Report.
