@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	cnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -34,8 +35,8 @@ func newNexusTestEnv(t *testing.T, useTemporalFailures bool, opts ...testcore.Te
 	}
 }
 
-func (env *NexusTestEnv) createNexusEndpoint(t *testing.T, name string, taskQueue string) *nexuspb.Endpoint {
-	resp, err := env.OperatorClient().CreateNexusEndpoint(testcore.NewContext(), &operatorservice.CreateNexusEndpointRequest{
+func (env *NexusTestEnv) createNexusEndpoint(ctx context.Context, t *testing.T, name string, taskQueue string) *nexuspb.Endpoint {
+	resp, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: name,
 			Target: &nexuspb.EndpointTarget{
@@ -50,19 +51,60 @@ func (env *NexusTestEnv) createNexusEndpoint(t *testing.T, name string, taskQueu
 	})
 	require.NoError(t, err)
 
+	// Using a fresh context here in case 'ctx' is tied to a test's lifetime which could cancel this deletion request.
 	t.Cleanup(func() {
-		// Delete the endpoint so the cluster can be safely reused by subsequent tests.
 		_, _ = env.OperatorClient().DeleteNexusEndpoint(testcore.NewContext(), &operatorservice.DeleteNexusEndpointRequest{
 			Id:      resp.Endpoint.Id,
 			Version: resp.Endpoint.Version,
 		})
 	})
 
-	// Wait for the endpoint to be visible to StartNexusOperationExecution.
+	env.ensureNexusEndpoint(ctx, t, name)
+	return resp.Endpoint
+}
+
+func (env *NexusTestEnv) createRandomNexusEndpoint(ctx context.Context, t *testing.T) *nexuspb.Endpoint {
+	return env.createNexusEndpoint(ctx, t, testcore.RandomizedNexusEndpoint(t.Name()), "unused")
+}
+
+// createRandomExternalNexusServer creates a mock nexus server that listens via a randomized endpointName and return this name to the caller.
+func (env *NexusTestEnv) createRandomExternalNexusServer(ctx context.Context, t *testing.T, handler nexustest.Handler) string {
+	endpointName := testcore.RandomizedNexusEndpoint(t.Name())
+	listenAddr := nexustest.AllocListenAddress()
+	nexustest.NewNexusServer(t, listenAddr, handler)
+	resp, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_External_{
+					External: &nexuspb.EndpointTarget_External{
+						Url: "http://" + listenAddr,
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Using a fresh context here in case 'ctx' is tied to a test's lifetime which could cancel this deletion request.
+	t.Cleanup(func() {
+		_, _ = env.OperatorClient().DeleteNexusEndpoint(testcore.NewContext(), &operatorservice.DeleteNexusEndpointRequest{
+			Id:      resp.Endpoint.Id,
+			Version: resp.Endpoint.Version,
+		})
+	})
+
+	env.ensureNexusEndpoint(ctx, t, endpointName)
+	return endpointName
+}
+
+// ensureNexusEndpoint probes the specified endpoint until it's visible to StartNexusOperationExecution to ensure tests
+// can use it.
+func (env *NexusTestEnv) ensureNexusEndpoint(ctx context.Context, t *testing.T, endpointName string) {
 	require.Eventually(t, func() bool {
-		_, err := env.FrontendClient().StartNexusOperationExecution(testcore.NewContext(), &workflowservice.StartNexusOperationExecutionRequest{
+		_, err := env.FrontendClient().StartNexusOperationExecution(ctx, &workflowservice.StartNexusOperationExecutionRequest{
 			Namespace: env.Namespace().String(),
-			Endpoint:  name,
+			Endpoint:  endpointName,
 			Service:   "probe",
 			Operation: "probe",
 			RequestId: "probe",
@@ -73,11 +115,6 @@ func (env *NexusTestEnv) createNexusEndpoint(t *testing.T, name string, taskQueu
 		}
 		return true
 	}, 10*time.Second, 100*time.Millisecond, "endpoint should become visible")
-	return resp.Endpoint
-}
-
-func (env *NexusTestEnv) createRandomNexusEndpoint(t *testing.T) *nexuspb.Endpoint {
-	return env.createNexusEndpoint(t, testcore.RandomizedNexusEndpoint(t.Name()), "unused")
 }
 
 // nexusTaskResponse represents a successful response from a nexus task handler.

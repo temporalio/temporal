@@ -1539,6 +1539,11 @@ Don't change this on a live cluster without using the gradual change mechanism.
 		true,
 		`EnableReplicationStream turn on replication stream`,
 	)
+	EnableCloseInboundReplicationStreamOnShutdown = NewGlobalBoolSetting(
+		"history.enableCloseInboundReplicationStreamOnShutdown",
+		true,
+		`EnableCloseInboundReplicationStreamOnShutdown closes inbound replication streams on shutdown, signaling the remote sender to stop. Disable if this causes unexpected issues during rolling restarts.`,
+	)
 	EnableSeparateReplicationEnableFlag = NewGlobalBoolSetting(
 		"history.enableSeparateReplicationEnableFlag",
 		false,
@@ -2925,6 +2930,12 @@ first (with fallback to V1), excluding CreateSchedule.`,
 		false,
 		`EnableCHASMSchedulerMigration controls whether existing V1 schedules are automatically migrated
 to the CHASM (V2) implementation on active scheduler workflows.`,
+	)
+
+	EnableCHASMSchedulerSentinels = NewNamespaceBoolSetting(
+		"history.enableCHASMSchedulerSentinels",
+		false,
+		`EnableCHASMSchedulerSentinels enables ID-space collision sentinels, and must be enabled and propagated in advance of EnableCHASMSchedulerCreation.`,
 	)
 
 	EnableCHASMCallbacks = NewNamespaceBoolSetting(
