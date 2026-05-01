@@ -64,6 +64,7 @@ var Module = fx.Options(
 	ChasmEngineModule,
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
+	fx.Provide(ServiceErrorInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
@@ -193,6 +194,14 @@ func ConfigProvider(
 	return configs.NewConfig(
 		dc,
 		persistenceConfig.NumHistoryShards,
+	)
+}
+
+func ServiceErrorInterceptorProvider(
+	dc *dynamicconfig.Collection,
+) *interceptor.ServiceErrorInterceptor {
+	return interceptor.NewServiceErrorInterceptor(
+		dynamicconfig.MaxServiceErrorMessageLength.Get(dc),
 	)
 }
 
