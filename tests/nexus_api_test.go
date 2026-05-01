@@ -410,7 +410,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims(useTemporalFailures b
 	testFn := func(s *NexusApiTestSuite, tc testcase, dispatchOnlyByEndpoint bool) {
 		// This still needs a dedicated cluster because of SetOnAuthorize/SetOnGetClaims.
 		env := newNexusTestEnv(s.T(), useTemporalFailures, testcore.WithDedicatedCluster())
-		env.GetTestCluster().Host().SetOnAuthorize(func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
+		env.SetOnAuthorize(func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
 			if ct.APIName == configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName && (c == nil || c.Subject != "test") {
 				return authorization.Result{Decision: authorization.DecisionDeny}, nil
 			}
@@ -419,14 +419,12 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims(useTemporalFailures b
 			}
 			return authorization.Result{Decision: authorization.DecisionAllow}, nil
 		})
-		defer env.GetTestCluster().Host().SetOnAuthorize(nil)
-		env.GetTestCluster().Host().SetOnGetClaims(func(ai *authorization.AuthInfo) (*authorization.Claims, error) {
+		env.SetOnGetClaims(func(ai *authorization.AuthInfo) (*authorization.Claims, error) {
 			if ai.AuthToken != "Bearer test" {
 				return nil, errors.New("invalid auth token")
 			}
 			return &authorization.Claims{Subject: "test"}, nil
 		})
-		defer env.GetTestCluster().Host().SetOnGetClaims(nil)
 
 		testEndpoint := env.createNexusEndpoint(env.Context(), s.T(), testcore.RandomizeStr("test-endpoint"), taskQueue)
 		var dispatchURL string
@@ -630,7 +628,6 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 
 func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_SupportsVersioning(useTemporalFailures bool) {
 	env := newNexusTestEnv(s.T(), useTemporalFailures,
-		testcore.WithDedicatedCluster(),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs, true),
 		// UpdateWorkerBuildIdCompatibility is the v0.1 (Version Set-based) API gated by DataAPIs.
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningDataAPIs, true),

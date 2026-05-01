@@ -20,6 +20,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -235,6 +236,32 @@ func (e *TestEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 		e.t.Fatalf("InjectHook: unknown scope %v", hook.Scope())
 	}
 	return e.cluster.host.injectHook(e.t, hook, scope)
+}
+
+func (e *TestEnv) SetOnAuthorize(
+	fn func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error),
+) {
+	e.t.Helper()
+	if e.isShared {
+		e.t.Fatal("SetOnAuthorize cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
+	}
+	e.dedicatedGuard.record("authorization callback")
+	e.cluster.host.SetOnAuthorize(fn)
+	e.t.Cleanup(func() {
+		e.cluster.host.SetOnAuthorize(nil)
+	})
+}
+
+func (e *TestEnv) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
+	e.t.Helper()
+	if e.isShared {
+		e.t.Fatal("SetOnGetClaims cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
+	}
+	e.dedicatedGuard.record("authorization callback")
+	e.cluster.host.SetOnGetClaims(fn)
+	e.t.Cleanup(func() {
+		e.cluster.host.SetOnGetClaims(nil)
+	})
 }
 
 func (e *TestEnv) TaskPoller() *taskpoller.TaskPoller {
