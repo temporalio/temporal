@@ -95,78 +95,6 @@ func TestCompileTest(t *testing.T) {
 	})
 }
 
-func TestRunDirectGoTest(t *testing.T) {
-	t.Parallel()
-
-	t.Run("basic args", func(t *testing.T) {
-		t.Parallel()
-		var captured []string
-		runDirectGoTest(context.Background(), mockExec(&captured), runDirectGoTestInput{
-			pkgs:   []string{"./pkg/a", "./pkg/b"},
-			output: io.Discard,
-		}, nil)
-
-		argsStr := strings.Join(captured, " ")
-		require.Contains(t, argsStr, "test -v")
-		require.Contains(t, argsStr, "./pkg/a ./pkg/b")
-	})
-
-	t.Run("run filter", func(t *testing.T) {
-		t.Parallel()
-		var captured []string
-		runDirectGoTest(context.Background(), mockExec(&captured), runDirectGoTestInput{
-			pkgs:      []string{"./pkg/a"},
-			runFilter: "^TestFoo$",
-			output:    io.Discard,
-		}, nil)
-
-		argsStr := strings.Join(captured, " ")
-		require.Contains(t, argsStr, "-run ^TestFoo$")
-	})
-
-	t.Run("race and tags", func(t *testing.T) {
-		t.Parallel()
-		var captured []string
-		runDirectGoTest(context.Background(), mockExec(&captured), runDirectGoTestInput{
-			pkgs:      []string{"./pkg/a"},
-			race:      true,
-			buildTags: "integration",
-			output:    io.Discard,
-		}, nil)
-
-		argsStr := strings.Join(captured, " ")
-		require.Contains(t, argsStr, "-race")
-		require.Contains(t, argsStr, "-tags=integration")
-	})
-
-	t.Run("extra args", func(t *testing.T) {
-		t.Parallel()
-		var captured []string
-		runDirectGoTest(context.Background(), mockExec(&captured), runDirectGoTestInput{
-			pkgs:      []string{"./pkg/a"},
-			extraArgs: []string{"-shuffle=on", "-count=1"},
-			output:    io.Discard,
-		}, nil)
-
-		argsStr := strings.Join(captured, " ")
-		require.Contains(t, argsStr, "-shuffle=on")
-		require.Contains(t, argsStr, "-count=1")
-	})
-
-	t.Run("no timeout or skip args", func(t *testing.T) {
-		t.Parallel()
-		var captured []string
-		runDirectGoTest(context.Background(), mockExec(&captured), runDirectGoTestInput{
-			pkgs:   []string{"./pkg/a"},
-			output: io.Discard,
-		}, nil)
-
-		argsStr := strings.Join(captured, " ")
-		require.NotContains(t, argsStr, "-timeout")
-		require.NotContains(t, argsStr, "-skip")
-	})
-}
-
 func TestExecuteTest(t *testing.T) {
 	t.Parallel()
 
@@ -184,6 +112,31 @@ func TestExecuteTest(t *testing.T) {
 		require.Contains(t, argsStr, "-test.coverprofile=cover.out")
 		require.NotContains(t, argsStr, "-test.timeout")
 		require.NotContains(t, argsStr, "-test.skip")
+	})
+
+	t.Run("whole package omits run filter", func(t *testing.T) {
+		t.Parallel()
+		var captured []string
+		executeTest(context.Background(), mockExec(&captured), executeTestInput{
+			binary: "/tmp/foo.test",
+			output: io.Discard,
+		}, nil)
+
+		argsStr := strings.Join(captured, " ")
+		require.NotContains(t, argsStr, "-test.run")
+	})
+
+	t.Run("raw run pattern", func(t *testing.T) {
+		t.Parallel()
+		var captured []string
+		executeTest(context.Background(), mockExec(&captured), executeTestInput{
+			binary:     "/tmp/foo.test",
+			runPattern: "TestFoo|ExampleFoo",
+			output:     io.Discard,
+		}, nil)
+
+		argsStr := strings.Join(captured, " ")
+		require.Contains(t, argsStr, "-test.run TestFoo|ExampleFoo")
 	})
 
 	t.Run("extra args", func(t *testing.T) {
