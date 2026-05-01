@@ -86,6 +86,8 @@ type runner struct {
 	config
 	console        *consoleWriter
 	directRetrySeq atomic.Int64 // unique suffix for direct-mode retry file names
+	retryLabelMu   sync.Mutex
+	retryLabelSeq  map[int]int
 
 	// Result collection (thread-safe via mu)
 	mu           sync.Mutex
@@ -129,6 +131,22 @@ func (r *runner) resetProgress() {
 	r.progressTotal = 0
 	r.progressCompleted = 0
 	r.progressSlots = make(map[string]*progressSlot)
+}
+
+func (r *runner) resetRetryAttemptLabels() {
+	r.retryLabelMu.Lock()
+	defer r.retryLabelMu.Unlock()
+	r.retryLabelSeq = nil
+}
+
+func (r *runner) nextRetryAttemptLabel(attempt int) string {
+	r.retryLabelMu.Lock()
+	defer r.retryLabelMu.Unlock()
+	if r.retryLabelSeq == nil {
+		r.retryLabelSeq = make(map[int]int)
+	}
+	r.retryLabelSeq[attempt]++
+	return fmt.Sprintf("%d.%d", attempt, r.retryLabelSeq[attempt])
 }
 
 func (r *runner) addProgressTotal(n int64) {
@@ -254,6 +272,7 @@ func (r *runner) runWithScheduler(ctx context.Context, parallelism int, items []
 	r.alerts = nil
 	r.errors = nil
 	r.resetProgress()
+	r.resetRetryAttemptLabels()
 	if initialTotal > 0 {
 		r.addProgressTotal(initialTotal)
 	}
@@ -286,8 +305,9 @@ type execConfig struct {
 	startProcess func(ctx context.Context, output io.Writer) commandResult
 
 	// Display
-	label   string
-	attempt int
+	label        string
+	attempt      int
+	attemptLabel string
 
 	// Log paths
 	logPath   string
@@ -299,6 +319,13 @@ type execConfig struct {
 
 	// Progress key for the top-level work represented by this execution.
 	progressKey string
+}
+
+func (cfg execConfig) displayAttempt() string {
+	if cfg.attemptLabel != "" {
+		return cfg.attemptLabel
+	}
+	return fmt.Sprintf("%d", cfg.attempt)
 }
 
 func (r *runner) newExecItem(cfg execConfig) *queueItem {
@@ -352,17 +379,22 @@ func (r *runner) newExecItem(cfg execConfig) *queueItem {
 			numTests, numFailedTests, failureKind := r.collectJUnitResult(cfg, result, detectedAlerts)
 
 			// 6. Console output
-			completed, total, progressDone := r.finishProgress(cfg.progressKey)
-			writeConsoleResult(r, cfg, result, numTests, numFailedTests,
-				failureKind, detectedAlerts, results, start, completed, total, progressDone)
-
 			failed := result.exitCode != 0 || numFailedTests > 0 || numTests == 0
-			if !failed {
+			if failed {
+				writeConsoleResult(r, cfg, result, numTests, numFailedTests,
+					failureKind, detectedAlerts, results, start, 0, 0, false)
+			} else {
+				completed, total, progressDone := r.finishProgress(cfg.progressKey)
+				writeConsoleResult(r, cfg, result, numTests, numFailedTests,
+					failureKind, detectedAlerts, results, start, completed, total, progressDone)
 				_ = os.Remove(cfg.logPath)
 			}
 
 			// 7. Post-exit crash recovery: retry any test still in running map
 			r.emitCrashRecoveryRetries(cfg, failed, numTests, emittedRetries, stream, emit)
+			if failed {
+				r.finishProgress(cfg.progressKey)
+			}
 		},
 	}
 }
@@ -537,8 +569,8 @@ func writeConsoleResult(r *runner, cfg execConfig, result commandResult,
 	if failureKind != "" {
 		totalStr = "?"
 	}
-	header := fmt.Sprintf("%s%s %s %s (attempt=%d, passed=%d/%s%s, runtime=%v)",
-		logPrefix, time.Now().Format("15:04:05"), status, cfg.label, cfg.attempt,
+	header := fmt.Sprintf("%s%s %s %s (attempt=%s, passed=%d/%s%s, runtime=%v)",
+		logPrefix, time.Now().Format("15:04:05"), status, cfg.label, cfg.displayAttempt(),
 		passedTests, totalStr, failureInfo, time.Since(start).Round(time.Second))
 
 	var body strings.Builder

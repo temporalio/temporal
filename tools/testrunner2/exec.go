@@ -181,10 +181,10 @@ func executeTest(ctx context.Context, execFn execFunc, req executeTestInput, onC
 }
 
 // execLogger returns an onCommand callback that logs the command to the console.
-func (r *runner) execLogger(desc string, attempt int) func(string) {
+func (r *runner) execLogger(desc string, attemptLabel string) func(string) {
 	return func(command string) {
 		r.console.WriteGrouped(
-			fmt.Sprintf("%s%s 🚀 %s (attempt %d)", logPrefix, time.Now().Format("15:04:05"), desc, attempt),
+			fmt.Sprintf("%s%s 🚀 %s (attempt %s)", logPrefix, time.Now().Format("15:04:05"), desc, attemptLabel),
 			"$ "+command+"\n",
 		)
 	}
@@ -193,8 +193,12 @@ func (r *runner) execLogger(desc string, attempt int) func(string) {
 // --- compiled mode (compile + run per test) ---
 
 // compiledExecConfig creates an execConfig for running a precompiled test binary.
-func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt int) execConfig {
+func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt int, attemptLabel string) execConfig {
 	desc := unit.label
+	displayAttempt := attemptLabel
+	if displayAttempt == "" {
+		displayAttempt = fmt.Sprintf("%d", attempt)
+	}
 	coverProfile := fmt.Sprintf("%s_run_%d%s",
 		strings.TrimSuffix(r.coverProfilePath, codeCoverageExtension),
 		attempt,
@@ -206,7 +210,7 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 	logPath, _ := filepath.Abs(buildLogFilename(r.logDir, desc, attempt))
 
 	retry := r.buildRetryHandler(
-		func(failedNames, skipNames []string, attempt int) *queueItem {
+		func(failedNames, skipNames []string, attempt int, attemptLabel string) *queueItem {
 			var failedTests []testCase
 			for _, name := range failedNames {
 				failedTests = append(failedTests, testCase{name: name, attempts: attempt})
@@ -217,7 +221,7 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 				skipTests: skipNames,
 				label:     unit.label,
 			}
-			return r.newExecItem(r.compiledExecConfig(wu, binaryPath, attempt))
+			return r.newExecItem(r.compiledExecConfig(wu, binaryPath, attempt, attemptLabel))
 		},
 	)
 
@@ -232,12 +236,13 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 				extraArgs:    r.testBinaryArgs,
 				env:          append(r.env, fmt.Sprintf("TEMPORAL_TEST_ATTEMPT=%d", attempt)),
 				output:       output,
-			}, r.execLogger(desc, attempt))
+			}, r.execLogger(desc, displayAttempt))
 		},
-		label:     desc,
-		attempt:   attempt,
-		logPath:   logPath,
-		junitPath: junitPath,
+		label:        desc,
+		attempt:      attempt,
+		attemptLabel: displayAttempt,
+		logPath:      logPath,
+		junitPath:    junitPath,
 		logHeader: &logFileHeader{
 			Package: unit.pkg,
 			Attempt: attempt,
@@ -349,7 +354,7 @@ func (r *runner) newCompileItem(pkg string, binaryPath string, baseArgs []string
 
 			var items []*queueItem
 			for _, unit := range units {
-				items = append(items, r.newExecItem(r.compiledExecConfig(unit, binaryPath, 1)))
+				items = append(items, r.newExecItem(r.compiledExecConfig(unit, binaryPath, 1, "")))
 			}
 			emit(items...)
 		},
@@ -372,7 +377,7 @@ func (r *runner) runDirectMode(ctx context.Context, testDirs []string, baseArgs 
 	pkgs := normalizePkgPaths(testDirs)
 	r.log("test packages: %v", pkgs)
 
-	items := []*queueItem{r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, 1, r.runFilter, ""))}
+	items := []*queueItem{r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, 1, "", r.runFilter, ""))}
 	return r.runWithScheduler(ctx, max(2, r.parallelism), items, 1)
 }
 
@@ -390,8 +395,12 @@ func normalizePkgPaths(dirs []string) []string {
 }
 
 // directExecConfig creates an execConfig for running go test directly.
-func (r *runner) directExecConfig(pkgs []string, race bool, extraArgs []string, attempt int, runFilter, skipFilter string) execConfig {
+func (r *runner) directExecConfig(pkgs []string, race bool, extraArgs []string, attempt int, attemptLabel, runFilter, skipFilter string) execConfig {
 	desc := "all"
+	displayAttempt := attemptLabel
+	if displayAttempt == "" {
+		displayAttempt = fmt.Sprintf("%d", attempt)
+	}
 
 	// When there's a run filter, this is a retry for specific tests. Multiple
 	// retries at the same attempt number (from stream retries) need unique file
@@ -401,10 +410,10 @@ func (r *runner) directExecConfig(pkgs []string, race bool, extraArgs []string, 
 		fileSuffix = fmt.Sprintf("_%d", r.directRetrySeq.Add(1))
 	}
 
-	retry := r.buildRetryHandler(func(failedNames, skipNames []string, attempt int) *queueItem {
+	retry := r.buildRetryHandler(func(failedNames, skipNames []string, attempt int, attemptLabel string) *queueItem {
 		runF := buildTestFilterPattern(failedNames)
 		skipF := buildTestFilterPattern(skipNames)
-		return r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, attempt, runF, skipF))
+		return r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, attempt, attemptLabel, runF, skipF))
 	})
 
 	return execConfig{
@@ -419,13 +428,14 @@ func (r *runner) directExecConfig(pkgs []string, race bool, extraArgs []string, 
 				runFilter:    runFilter,
 				skipFilter:   skipFilter,
 				extraArgs:    extraArgs,
-			}, r.execLogger(desc, attempt))
+			}, r.execLogger(desc, displayAttempt))
 		},
-		label:       desc,
-		attempt:     attempt,
-		logPath:     filepath.Join(r.logDir, fmt.Sprintf("all_mode_attempt_%d%s.log", attempt, fileSuffix)),
-		junitPath:   filepath.Join(r.logDir, fmt.Sprintf("junit_all_attempt_%d%s.xml", attempt, fileSuffix)),
-		retry:       retry,
-		progressKey: desc,
+		label:        desc,
+		attempt:      attempt,
+		attemptLabel: displayAttempt,
+		logPath:      filepath.Join(r.logDir, fmt.Sprintf("all_mode_attempt_%d%s.log", attempt, fileSuffix)),
+		junitPath:    filepath.Join(r.logDir, fmt.Sprintf("junit_all_attempt_%d%s.xml", attempt, fileSuffix)),
+		retry:        retry,
+		progressKey:  desc,
 	}
 }

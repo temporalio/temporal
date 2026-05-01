@@ -177,7 +177,7 @@ func TestIntegration(t *testing.T) {
 				printed("--- TestFlaky"),                     // failed test name shown in body
 				printed("intentional first-attempt failure"), // failure details shown in body
 				printed("$", ".test", "-test.run ^TestFlaky$"),
-				printed("✅ [2/2]", "TestFlaky", "attempt=2", "passed=1/1"),
+				printed("✅ [2/2]", "TestFlaky", "attempt=2.1", "passed=1/1"),
 				printed("test run completed"),
 			)
 			assertLogFiles(t, res,
@@ -262,12 +262,13 @@ func TestIntegration(t *testing.T) {
 			printed("$", ".test",
 				"-test.run ^TestDeepSuite$/^GroupA$/^Fail$",
 				"-test.skip ^TestDeepSuite$/^GroupA$/^Pass$"),
-			printed("✅", "TestDeepSuite", "attempt=2", "passed=3/3"),
+			printed("✅", "TestDeepSuite", "attempt=2.1", "passed=3/3"),
+			notPrintedLine("✅ [", "TestDeepSuite", "attempt=2.1"),
 			// Second retry: GroupB/Fail, skipping GroupB/Pass
 			printed("$", ".test",
 				"-test.run ^TestDeepSuite$/^GroupB$/^Fail$",
 				"-test.skip ^TestDeepSuite$/^GroupB$/^Pass$"),
-			printed("✅", "TestDeepSuite", "attempt=2", "passed=3/3"),
+			printed("✅ [1/1]", "TestDeepSuite", "attempt=2.2", "passed=3/3"),
 			notPrinted("[2/1]"),
 			printed("test run completed"),
 		)
@@ -830,6 +831,7 @@ type consoleOpt func(*consoleExpect)
 type consoleExpect struct {
 	containGroups  [][]string
 	notContainStrs []string
+	notLineGroups  [][]string
 }
 
 // printed asserts that a line exists containing all given substrings.
@@ -843,6 +845,12 @@ func printed(strs ...string) consoleOpt {
 func notPrinted(str string) consoleOpt {
 	return func(e *consoleExpect) {
 		e.notContainStrs = append(e.notContainStrs, str)
+	}
+}
+
+func notPrintedLine(strs ...string) consoleOpt {
+	return func(e *consoleExpect) {
+		e.notLineGroups = append(e.notLineGroups, strs)
 	}
 }
 
@@ -872,6 +880,13 @@ func assertConsole(t require.TestingT, res integResult, opts ...consoleOpt) {
 	}
 	for _, notWant := range expect.notContainStrs {
 		require.NotContains(t, res.console, notWant, "console should not contain %q", notWant)
+	}
+	for _, group := range expect.notLineGroups {
+		for _, line := range lines {
+			require.False(t, lineContainsAll(line, group),
+				"console should not contain one line with all of %v\nline: %s\nconsole output:\n%s",
+				group, line, res.console)
+		}
 	}
 }
 
