@@ -2690,11 +2690,6 @@ that task will be sent to DLQ.`,
 		false,
 		`EnableReplicationNamespaceIsolation enables per-namespace isolation for the replication LOW priority lane`,
 	)
-	ReplicationNamespaceThrottleThreshold = NewGlobalIntSetting(
-		"history.ReplicationNamespaceThrottleThreshold",
-		100,
-		`ReplicationNamespaceThrottleThreshold is the number of LOW-priority tasks from a namespace per ack window that triggers namespace isolation`,
-	)
 	ReplicationStreamSenderHighPriorityQPS = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderHighPriorityQPS",
 		100,

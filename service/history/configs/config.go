@@ -305,7 +305,6 @@ type Config struct {
 	EnableReplicationTaskTieredProcessing               dynamicconfig.BoolPropertyFn
 	EnableReplicationReaderGroup                        dynamicconfig.BoolPropertyFn
 	EnableReplicationNamespaceIsolation                 dynamicconfig.BoolPropertyFn
-	ReplicationNamespaceThrottleThreshold               dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderHighPriorityQPS              dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLowPriorityQPS               dynamicconfig.IntPropertyFn
 	ReplicationStreamEventLoopRetryMaxAttempts          dynamicconfig.IntPropertyFn
@@ -615,7 +614,6 @@ func NewConfig(
 		EnableReplicationTaskTieredProcessing:               dynamicconfig.EnableReplicationTaskTieredProcessing.Get(dc),
 		EnableReplicationReaderGroup:                        dynamicconfig.EnableReplicationReaderGroup.Get(dc),
 		EnableReplicationNamespaceIsolation:                 dynamicconfig.EnableReplicationNamespaceIsolation.Get(dc),
-		ReplicationNamespaceThrottleThreshold:               dynamicconfig.ReplicationNamespaceThrottleThreshold.Get(dc),
 		ReplicationStreamSenderHighPriorityQPS:              dynamicconfig.ReplicationStreamSenderHighPriorityQPS.Get(dc),
 		ReplicationStreamSenderLowPriorityQPS:               dynamicconfig.ReplicationStreamSenderLowPriorityQPS.Get(dc),
 		ReplicationStreamEventLoopRetryMaxAttempts:          dynamicconfig.ReplicationStreamEventLoopRetryMaxAttempts.Get(dc),
