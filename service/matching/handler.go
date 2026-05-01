@@ -596,12 +596,13 @@ func (h *Handler) ListNexusEndpoints(ctx context.Context, request *matchingservi
 
 // RecordWorkerHeartbeat receive heartbeat request from the worker.
 func (h *Handler) RecordWorkerHeartbeat(
-	_ context.Context, request *matchingservice.RecordWorkerHeartbeatRequest,
+	ctx context.Context, request *matchingservice.RecordWorkerHeartbeatRequest,
 ) (*matchingservice.RecordWorkerHeartbeatResponse, error) {
 	nsID := namespace.ID(request.GetNamespaceId())
 	nsName := h.namespaceName(nsID)
+	principal := headers.GetPrincipal(ctx)
 
-	h.workersRegistry.RecordWorkerHeartbeats(nsID, nsName, request.GetHeartbeartRequest().GetWorkerHeartbeat())
+	h.workersRegistry.RecordWorkerHeartbeats(nsID, nsName, principal, request.GetHeartbeartRequest().GetWorkerHeartbeat())
 	return &matchingservice.RecordWorkerHeartbeatResponse{}, nil
 }
 

@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workerpb "go.temporal.io/api/worker/v1"
@@ -82,7 +83,7 @@ func newBucket() *bucket {
 // upsertHeartbeats inserts or refreshes a WorkerHeartbeat under the given namespace.
 // Returns the count of added and removed entries separately.
 // Workers with WORKER_STATUS_SHUTDOWN are immediately removed from the registry.
-func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) (added int64, removed int64) {
+func (b *bucket) upsertHeartbeats(nsID namespace.ID, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) (added int64, removed int64) {
 	now := time.Now()
 
 	b.mu.Lock()
@@ -107,7 +108,7 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.Work
 			continue
 		}
 
-		isSystemWorker := primitives.IsInternalTaskQueue(hb.GetTaskQueue())
+		isSystemWorker := isSystemPrincipal(principal, hb.GetTaskQueue())
 
 		// Normal upsert
 		if e, exists := mp[key]; exists {
@@ -257,9 +258,9 @@ func (m *registryImpl) getBucket(nsID namespace.ID) *bucket {
 
 // upsertHeartbeat records or refreshes a WorkerHeartbeat under the given namespace.
 // New entries increment the global counter.
-func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) {
+func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) {
 	b := m.getBucket(nsID)
-	added, removed := b.upsertHeartbeats(nsID, heartbeats)
+	added, removed := b.upsertHeartbeats(nsID, principal, heartbeats)
 	m.total.Add(added - removed)
 	if added > 0 {
 		metrics.WorkerRegistryWorkersAdded.With(m.metricsHandler).Record(added)
@@ -375,8 +376,8 @@ func (m *registryImpl) Stop() {
 	close(m.quit)
 }
 
-func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespace.Name, workerHeartbeat []*workerpb.WorkerHeartbeat) {
-	m.upsertHeartbeats(nsID, workerHeartbeat)
+func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespace.Name, principal *commonpb.Principal, workerHeartbeat []*workerpb.WorkerHeartbeat) {
+	m.upsertHeartbeats(nsID, principal, workerHeartbeat)
 	m.metricsEmitter.emit(nsID, nsName, workerHeartbeat)
 }
 
@@ -476,4 +477,15 @@ func (m *registryImpl) DescribeWorker(nsID namespace.ID, workerInstanceKey strin
 		return nil, serviceerror.NewNotFoundf("namespace not found: %s", nsID.String())
 	}
 	return b.getWorkerHeartbeat(nsID, workerInstanceKey)
+}
+
+// isSystemPrincipal determines if a worker is a system worker.
+// If a principal is available, it checks whether the principal type indicates
+// an internal server identity. Otherwise, it falls back to checking the task
+// queue name prefix.
+func isSystemPrincipal(principal *commonpb.Principal, taskQueue string) bool {
+	if principal != nil {
+		return principal.GetType() == "temporal"
+	}
+	return primitives.IsInternalTaskQueue(taskQueue)
 }
