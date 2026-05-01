@@ -26,6 +26,22 @@ var (
 	//        doesn't allow parallel execution of tests in the same suite anyway. If one day, it is allowed,
 	//        unique namespaces with overrides per namespace should be used for tests that require overrides.
 	defaultDynamicConfigOverrides = map[dynamicconfig.Key]any{
+		// Reduce history processor worker pools: default is 512/shard which creates thousands of
+		// goroutines across shards. Tests don't need production throughput.
+		dynamicconfig.TimerProcessorSchedulerWorkerCount.Key():                  8,
+		dynamicconfig.MemoryTimerProcessorSchedulerWorkerCount.Key():            4,
+		dynamicconfig.TransferProcessorSchedulerWorkerCount.Key():               8,
+		dynamicconfig.VisibilityProcessorSchedulerWorkerCount.Key():             8,
+		dynamicconfig.ArchivalProcessorSchedulerWorkerCount.Key():               4,
+		dynamicconfig.ReplicationProcessorSchedulerWorkerCount.Key():            4,
+		dynamicconfig.ReplicationLowPriorityProcessorSchedulerWorkerCount.Key(): 4,
+
+		// Reduce matching task queue partitions and fanout: default is 4 partitions each with
+		// their own goroutine tree. Tests create many task queues, so this compounds quickly.
+		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 1,
+		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  1,
+		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key(): 3,
+
 		dynamicconfig.FrontendRPS.Key():                                         3000,
 		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Key():        50,
 		dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Key(): 1,
