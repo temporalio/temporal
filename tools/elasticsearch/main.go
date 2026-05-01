@@ -9,15 +9,17 @@ import (
 )
 
 const (
-	CLIOptVisibilityIndex = "index"
-	CLIOptAWSCredentials  = "aws-credentials"
-	CLIOptAWSToken        = "aws-session-token"
-	CLIOptFailSilently    = "fail"
+	CLIOptVisibilityIndex     = "index"
+	CLIOptAWSCredentials      = "aws-credentials"
+	CLIOptAWSToken            = "aws-session-token"
+	CLIOptFailSilently        = "fail"
+	CLIOptSkipClusterSettings = "skip-cluster-settings"
 
-	CLIFlagVisibilityIndex = CLIOptVisibilityIndex + ", i"
-	CLIFlagAWSToken        = CLIOptAWSToken
-	CLIFlagAWSCredentials  = CLIOptAWSCredentials + ", aws"
-	CLIFlagFailSilently    = CLIOptFailSilently
+	CLIFlagVisibilityIndex     = CLIOptVisibilityIndex + ", i"
+	CLIFlagAWSToken            = CLIOptAWSToken
+	CLIFlagAWSCredentials      = CLIOptAWSCredentials + ", aws"
+	CLIFlagFailSilently        = CLIOptFailSilently
+	CLIFlagSkipClusterSettings = CLIOptSkipClusterSettings
 )
 
 // RunTool runs the temporal-elasticsearch-tool command line tool
@@ -126,6 +128,10 @@ func BuildCLIOptions() *cli.App {
 				cli.BoolFlag{
 					Name:  CLIFlagFailSilently,
 					Usage: "fail silently on HTTP errors",
+				},
+				cli.BoolFlag{
+					Name:  CLIFlagSkipClusterSettings,
+					Usage: "skip setting up cluster settings",
 				},
 			},
 			Action: func(c *cli.Context) error {
