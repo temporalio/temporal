@@ -229,6 +229,19 @@ func TestIsSystemPrincipal(t *testing.T) {
 		require.Len(t, list, 1)
 	})
 
+	t.Run("principal with type temporal but non-internal name is not system worker", func(t *testing.T) {
+		m := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
+		defer m.Stop()
+
+		principal := &commonpb.Principal{Type: "temporal", Name: "other"}
+		m.upsertHeartbeats("ns", principal, []*workerpb.WorkerHeartbeat{
+			{WorkerInstanceKey: "worker", TaskQueue: "any-queue"},
+		})
+
+		list := m.filterWorkers("ns", false /*includeSystemWorkers*/, alwaysTrue)
+		require.Len(t, list, 1, "worker with non-internal name should not be excluded")
+	})
+
 	t.Run("principal with non-temporal type is not system worker", func(t *testing.T) {
 		m := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 		defer m.Stop()
