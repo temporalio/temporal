@@ -47,7 +47,7 @@ const (
 	MutableStateCacheTypeTagValue                     = "mutablestate"
 	EventsCacheTypeTagValue                           = "events"
 	VersionMembershipCacheTypeTagValue                = "version_membership"
-	VersionReactivationSignalCacheTypeTagValue        = "version_reactivation_signal"
+	ReactivationSignalDedupCacheTypeTagValue          = "reactivation_signal_dedup"
 	RoutingInfoCacheTypeTagValue                      = "routing_info"
 	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
 
@@ -73,16 +73,13 @@ const (
 
 // Matching Client Operations
 const (
-	// MatchingClientPollWorkflowTaskQueueScope tracks RPC calls to matching service
 	MatchingClientPollWorkflowTaskQueueScope = "MatchingClientPollWorkflowTaskQueue"
-	// MatchingClientPollActivityTaskQueueScope tracks RPC calls to matching service
 	MatchingClientPollActivityTaskQueueScope = "MatchingClientPollActivityTaskQueue"
-	// MatchingClientAddActivityTaskScope tracks RPC calls to matching service
-	MatchingClientAddActivityTaskScope = "MatchingClientAddActivityTask"
-	// MatchingClientAddWorkflowTaskScope tracks RPC calls to matching service
-	MatchingClientAddWorkflowTaskScope = "MatchingClientAddWorkflowTask"
-	// MatchingClientQueryWorkflowScope tracks RPC calls to matching service
-	MatchingClientQueryWorkflowScope = "MatchingClientQueryWorkflow"
+	MatchingClientPollNexusTaskQueueScope    = "MatchingClientPollNexusTaskQueue"
+	MatchingClientAddActivityTaskScope       = "MatchingClientAddActivityTask"
+	MatchingClientAddWorkflowTaskScope       = "MatchingClientAddWorkflowTask"
+	MatchingClientQueryWorkflowScope         = "MatchingClientQueryWorkflow"
+	MatchingClientDispatchNexusTaskScope     = "MatchingDispatchNexusTask"
 )
 
 // Worker
@@ -462,8 +459,9 @@ const (
 	VersionMembershipCacheGetScope = "VersionMembershipCacheGet"
 	// VersionMembershipCachePutScope is the scope used by version membership cache
 	VersionMembershipCachePutScope = "VersionMembershipCachePut"
-	// VersionReactivationSignalCacheShouldSendScope is the scope used by version reactivation signal cache
-	VersionReactivationSignalCacheShouldSendScope = "VersionReactivationSignalCacheShouldSend"
+	// ReactivationSignalDedupScope is the scope used by the per-pod reactivation-signal
+	// dedup cache on the worker-deployment client.
+	ReactivationSignalDedupScope = "ReactivationSignalDedup"
 	// RoutingInfoCacheGetScope is the scope used by routing info cache
 	RoutingInfoCacheGetScope = "RoutingInfoCacheGet"
 	// RoutingInfoCachePutScope is the scope used by routing info cache
@@ -596,6 +594,7 @@ const (
 	TaskTypeTimerActiveTaskDeleteHistoryEvent             = "TimerActiveTaskDeleteHistoryEvent"
 	TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout = "TimerActiveTaskSpeculativeWorkflowTaskTimeout"
 	TaskTypeTimerActiveTaskChasmPureTask                  = "TimerActiveTaskChasmPureTask"
+	TaskTypeTimerActiveTaskTimeSkippingTimer              = "TimerActiveTaskTimeSkippingTimer"
 	TaskTypeTimerStandbyTaskActivityTimeout               = "TimerStandbyTaskActivityTimeout"
 	TaskTypeTimerStandbyTaskWorkflowTaskTimeout           = "TimerStandbyTaskWorkflowTaskTimeout"
 	TaskTypeTimerStandbyTaskUserTimer                     = "TimerStandbyTaskUserTimer"
@@ -605,6 +604,7 @@ const (
 	TaskTypeTimerStandbyTaskWorkflowBackoffTimer          = "TimerStandbyTaskWorkflowBackoffTimer"
 	TaskTypeTimerStandbyTaskDeleteHistoryEvent            = "TimerStandbyTaskDeleteHistoryEvent"
 	TaskTypeTimerStandbyTaskChasmPureTask                 = "TimerStandbyTaskChasmPureTask"
+	TaskTypeTimerStandbyTaskTimeSkippingTimer             = "TimerStandbyTaskTimeSkippingTimer"
 )
 
 // Schedule action types
@@ -735,6 +735,10 @@ var (
 		"nexus_request_preprocess_errors",
 		WithDescription("The number of Nexus requests for which pre-processing failed."),
 	)
+	NexusRequestErrors = NewCounterDef(
+		"nexus_request_errors",
+		WithDescription("The number of Nexus requests that resulted in errors."),
+	)
 	NexusLatency = NewTimerDef(
 		"nexus_latency",
 		WithDescription("Latency of Nexus requests."),
@@ -751,9 +755,16 @@ var (
 		"nexus_completion_request_preprocess_errors",
 		WithDescription("The number of Nexus completion requests for which pre-processing failed."),
 	)
+	WorkerCommandsSent = NewCounterDef(
+		"worker_commands_sent",
+		WithDescription("The number of worker command dispatches, tagged by outcome (e.g. success, no_poller, rpc_error)."),
+	)
+
 	HostRPSLimit          = NewGaugeDef("host_rps_limit")
 	NamespaceHostRPSLimit = NewGaugeDef("namespace_host_rps_limit")
 	HandoverWaitLatency   = NewTimerDef("handover_wait_latency")
+
+	VisibilityListWorkflowsQueryLength = NewDimensionlessHistogramDef("visibility_list_workflows_query_length")
 
 	// History
 	CacheRequests                                = NewCounterDef("cache_requests")
@@ -929,6 +940,7 @@ var (
 	WorkflowExecutionUpdateRegistrySize              = NewBytesHistogramDef("workflow_update_registry_size")
 	WorkflowExecutionUpdateRegistrySizeLimited       = NewCounterDef("workflow_update_registry_size_limited")
 	WorkflowExecutionUpdateRequestRateLimited        = NewCounterDef("workflow_update_request_rate_limited")
+	BusinessIDReuseRateLimited                       = NewCounterDef("business_id_reuse_rate_limited")
 	WorkflowExecutionUpdateTooMany                   = NewCounterDef("workflow_update_request_too_many")
 	WorkflowExecutionUpdateAborted                   = NewCounterDef("workflow_update_aborted")
 	WorkflowExecutionUpdateSentToWorker              = NewCounterDef("workflow_update_sent_to_worker")
@@ -1146,6 +1158,9 @@ var (
 	NamespaceRegistryRefreshFailures    = NewCounterDef("namespace_registry_refresh_failures")
 	NamespaceRegistryRefreshLatency     = NewTimerDef("namespace_registry_refresh_latency")
 
+	ExecutionTimeSkippingTransitionedCounter      = NewCounterDef("execution_time_skipping_transitioned_count")
+	ExecutionTimeSkippingTransitionedErrorCounter = NewCounterDef("execution_time_skipping_transitioned_error_count")
+
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
 	MatchingClientInvalidTaskQueueName        = NewCounterDef("invalid_task_queue_name")
@@ -1169,6 +1184,7 @@ var (
 	BufferThrottlePerTaskQueueCounter                 = NewCounterDef("buffer_throttle_count")
 	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired")
 	ForwardedPerTaskQueueCounter                      = NewCounterDef("forwarded_per_tl")
+	PriorityBacklogForwardedPerTaskQueueCounter       = NewCounterDef("priority_backlog_forwarded")
 	ForwardTaskErrorsPerTaskQueue                     = NewCounterDef("forward_task_errors")
 	LocalToLocalMatchPerTaskQueueCounter              = NewCounterDef("local_to_local_matches")
 	LocalToRemoteMatchPerTaskQueueCounter             = NewCounterDef("local_to_remote_matches")
@@ -1258,6 +1274,11 @@ var (
 			"Count of worker heartbeats with poller autoscaling enabled. Dimensions: namespace, taskqueue, task_type"),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
+
+	PartitionCacheSize = NewGaugeDef(
+		"partition_cache_size",
+		WithDescription("Size of client-size matching partition cache (# entries)"),
+	)
 
 	// Versioning and Reachability
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")

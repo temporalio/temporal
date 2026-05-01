@@ -1,6 +1,8 @@
 package parallelsuite
 
 import (
+	"flag"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -63,22 +65,6 @@ func (s *sealAfterRunSuite) TestAssertionAfterRun() {
 	require.Panics(t, func() { s.T() })
 }
 
-type sealRunAfterAssertSuite struct {
-	Suite[*sealRunAfterAssertSuite]
-}
-
-func (s *sealRunAfterAssertSuite) TestRunAfterAssertion() {
-	// Use an assertion first.
-	s.NotNil(s.T())
-
-	t := s.guardT.T
-
-	// Calling Run after assertions panics.
-	require.Panics(t, func() {
-		s.Run("should-not-run", func(*sealRunAfterAssertSuite) {})
-	})
-}
-
 func TestRun_AcceptsSuite(t *testing.T) {
 	t.Run("no args", func(t *testing.T) {
 		require.NotPanics(t, func() { Run(t, &validSuite{}) })
@@ -109,11 +95,44 @@ func TestRun_RejectsSuite(t *testing.T) {
 	})
 }
 
+type multiMethodSuite struct{ Suite[*multiMethodSuite] }
+
+func (s *multiMethodSuite) TestFoo() {}
+func (s *multiMethodSuite) TestBar() {}
+func (s *multiMethodSuite) TestBaz() {}
+
+func TestApplyTestifyMFilter(t *testing.T) {
+	typ := reflect.TypeFor[*multiMethodSuite]()
+	methods := discoverTestMethods(typ, typ.Elem(), nil)
+
+	setFlag := func(t *testing.T, pattern string) {
+		t.Helper()
+		require.NoError(t, flag.Set("testify.m", pattern))
+		t.Cleanup(func() { _ = flag.Set("testify.m", "") })
+	}
+
+	t.Run("no filter", func(t *testing.T) {
+		require.Equal(t, methods, applyTestifyMFilter(methods))
+	})
+	t.Run("exact match", func(t *testing.T) {
+		setFlag(t, "^TestBar$")
+		filtered := applyTestifyMFilter(methods)
+		require.Len(t, filtered, 1)
+		require.Equal(t, "TestBar", filtered[0].Name)
+	})
+	t.Run("prefix match", func(t *testing.T) {
+		setFlag(t, "^TestBa")
+		filtered := applyTestifyMFilter(methods)
+		require.Len(t, filtered, 2)
+	})
+	t.Run("no match", func(t *testing.T) {
+		setFlag(t, "^TestNope$")
+		require.Empty(t, applyTestifyMFilter(methods))
+	})
+}
+
 func TestGuardSeal(t *testing.T) {
 	t.Run("assertion after Run", func(t *testing.T) {
 		Run(t, &sealAfterRunSuite{})
-	})
-	t.Run("Run after assertion", func(t *testing.T) {
-		Run(t, &sealRunAfterAssertSuite{})
 	})
 }

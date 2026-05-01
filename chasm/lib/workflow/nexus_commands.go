@@ -1,0 +1,297 @@
+package workflow
+
+import (
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+
+	"github.com/google/uuid"
+	"github.com/nexus-rpc/sdk-go/nexus"
+	commandpb "go.temporal.io/api/command/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
+	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/protobuf/types/known/durationpb"
+)
+
+type nexusCommandHandler struct {
+	config         *nexusoperation.Config
+	nexusProcessor *chasm.NexusEndpointProcessor
+}
+
+//nolint:revive // cognitive-complexity: this is a direct port of the HSM command handler
+func (ch *nexusCommandHandler) handleScheduleCommand(
+	ctx chasm.MutableContext,
+	wf *Workflow,
+	validator Validator,
+	cmd *commandpb.Command,
+	opts CommandHandlerOptions,
+) error {
+	ns := ctx.NamespaceEntry()
+	nsName := ns.Name().String()
+
+	if !ch.config.EnableChasmNexus(nsName) {
+		return ErrCommandNotSupported
+	}
+
+	attrs := cmd.GetScheduleNexusOperationCommandAttributes()
+	if attrs == nil {
+		return FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: "empty ScheduleNexusOperationCommandAttributes",
+		}
+	}
+
+	requestID := uuid.NewString()
+	var endpointID string
+	// Skip endpoint registry lookup for __temporal_system endpoint
+	if attrs.Endpoint == commonnexus.SystemEndpoint {
+		if len(attrs.NexusHeader) > 0 {
+			return FailWorkflowTaskError{
+				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+				Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.NexusHeader must be empty when using %s endpoint", commonnexus.SystemEndpoint),
+			}
+		}
+		// Run ProcessInput for validation.
+		_, err := ch.nexusProcessor.ProcessInput(chasm.NexusOperationProcessorContext{
+			Namespace: ns,
+			RequestID: requestID,
+			// Links are not needed for validation.
+		}, attrs.Service, attrs.Operation, attrs.Input)
+		if err != nil {
+			var handlerErr *nexus.HandlerError
+			if errors.As(err, &handlerErr) {
+				//nolint:exhaustive
+				switch handlerErr.Type {
+				case nexus.HandlerErrorTypeNotFound, nexus.HandlerErrorTypeBadRequest:
+					return FailWorkflowTaskError{
+						Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+						Message: handlerErr.Message,
+					}
+				}
+			}
+			return err
+		}
+	} else {
+		endpoint, err := ctx.EndpointByName(attrs.Endpoint)
+		if err != nil {
+			if errors.As(err, new(*serviceerror.NotFound)) {
+				return FailWorkflowTaskError{
+					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+					Message: fmt.Sprintf("endpoint %q not found", attrs.Endpoint),
+				}
+			}
+			if errors.As(err, new(*serviceerror.PermissionDenied)) {
+				return FailWorkflowTaskError{
+					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+					Message: fmt.Sprintf("caller namespace %q unauthorized for %q", ns.Name(), attrs.Endpoint),
+				}
+			}
+			return err
+		}
+		endpointID = endpoint.Id
+	}
+
+	if len(attrs.Service) > ch.config.MaxServiceNameLength(nsName) {
+		return FailWorkflowTaskError{
+			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf(
+				"ScheduleNexusOperationCommandAttributes.Service exceeds length limit of %d",
+				ch.config.MaxServiceNameLength(nsName),
+			),
+		}
+	}
+
+	if len(attrs.Operation) > ch.config.MaxOperationNameLength(nsName) {
+		return FailWorkflowTaskError{
+			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf(
+				"ScheduleNexusOperationCommandAttributes.Operation exceeds length limit of %d",
+				ch.config.MaxOperationNameLength(nsName),
+			),
+		}
+	}
+
+	if err := timestamp.ValidateAndCapProtoDuration(attrs.ScheduleToCloseTimeout); err != nil {
+		return FailWorkflowTaskError{
+			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf(
+				"ScheduleNexusOperationCommandAttributes.ScheduleToCloseTimeout is invalid: %v", err),
+		}
+	}
+
+	if err := timestamp.ValidateAndCapProtoDuration(attrs.ScheduleToStartTimeout); err != nil {
+		return FailWorkflowTaskError{
+			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf(
+				"ScheduleNexusOperationCommandAttributes.ScheduleToStartTimeout is invalid: %v", err),
+		}
+	}
+
+	if err := timestamp.ValidateAndCapProtoDuration(attrs.StartToCloseTimeout); err != nil {
+		return FailWorkflowTaskError{
+			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf(
+				"ScheduleNexusOperationCommandAttributes.StartToCloseTimeout is invalid: %v", err),
+		}
+	}
+
+	if !validator.IsValidPayloadSize(attrs.Input.Size()) {
+		return FailWorkflowTaskError{
+			Cause:             enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message:           "ScheduleNexusOperationCommandAttributes.Input exceeds size limit",
+			TerminateWorkflow: true,
+		}
+	}
+
+	headerLength := 0
+	lowerCaseHeader := make(map[string]string, len(attrs.NexusHeader))
+	for k, v := range attrs.NexusHeader {
+		lowerK := strings.ToLower(k)
+		lowerCaseHeader[lowerK] = v
+		headerLength += len(lowerK) + len(v)
+		if slices.Contains(ch.config.DisallowedOperationHeaders(), lowerK) {
+			return FailWorkflowTaskError{
+				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+				Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.NexusHeader contains a disallowed header key: %q", k),
+			}
+		}
+	}
+
+	if headerLength > ch.config.MaxOperationHeaderSize(nsName) {
+		return FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: "ScheduleNexusOperationCommandAttributes.NexusHeader exceeds size limit",
+		}
+	}
+
+	maxPendingOperations := ch.config.MaxConcurrentOperationsPerWorkflow(nsName)
+	if wf.pendingNexusOperationCount() >= maxPendingOperations {
+		return FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_NEXUS_OPERATIONS_LIMIT_EXCEEDED,
+			Message: fmt.Sprintf("workflow has reached the pending nexus operation limit of %d for this namespace", maxPendingOperations),
+		}
+	}
+
+	// Trim timeout to workflow run timeout.
+	runTimeout := wf.WorkflowRunTimeout()
+	opTimeout := attrs.ScheduleToCloseTimeout.AsDuration()
+	if runTimeout > 0 && (opTimeout == 0 || opTimeout > runTimeout) {
+		attrs.ScheduleToCloseTimeout = durationpb.New(runTimeout)
+		opTimeout = runTimeout
+	}
+
+	// Trim timeout to max allowed timeout.
+	if maxTimeout := ch.config.MaxOperationScheduleToCloseTimeout(nsName); maxTimeout > 0 && opTimeout > maxTimeout {
+		attrs.ScheduleToCloseTimeout = durationpb.New(maxTimeout)
+	}
+
+	// Trim secondary timeouts to the primary timeout.
+	scheduleToCloseTimeout := attrs.ScheduleToCloseTimeout.AsDuration()
+	scheduleToStartTimeout := attrs.ScheduleToStartTimeout.AsDuration()
+	startToCloseTimeout := attrs.StartToCloseTimeout.AsDuration()
+
+	if scheduleToCloseTimeout > 0 {
+		if scheduleToStartTimeout > scheduleToCloseTimeout {
+			attrs.ScheduleToStartTimeout = attrs.ScheduleToCloseTimeout
+		}
+		if startToCloseTimeout > scheduleToCloseTimeout {
+			attrs.StartToCloseTimeout = attrs.ScheduleToCloseTimeout
+		}
+	}
+
+	_, err := addAndApplyHistoryEvent[ScheduledEventDefinition](wf, ctx, func(he *historypb.HistoryEvent) {
+		he.Attributes = &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
+				Endpoint:                     attrs.Endpoint,
+				EndpointId:                   endpointID,
+				Service:                      attrs.Service,
+				Operation:                    attrs.Operation,
+				Input:                        attrs.Input,
+				ScheduleToCloseTimeout:       attrs.ScheduleToCloseTimeout,
+				ScheduleToStartTimeout:       attrs.ScheduleToStartTimeout,
+				StartToCloseTimeout:          attrs.StartToCloseTimeout,
+				NexusHeader:                  lowerCaseHeader,
+				RequestId:                    requestID,
+				WorkflowTaskCompletedEventId: opts.WorkflowTaskCompletedEventID,
+			},
+		}
+		he.UserMetadata = cmd.UserMetadata
+	})
+	return err
+}
+
+func (ch *nexusCommandHandler) handleCancelCommand(
+	ctx chasm.MutableContext,
+	wf *Workflow,
+	validator Validator,
+	cmd *commandpb.Command,
+	opts CommandHandlerOptions,
+) error {
+	nsName := ctx.NamespaceEntry().Name().String()
+	if !ch.config.EnableChasmNexus(nsName) {
+		return ErrCommandNotSupported
+	}
+
+	attrs := cmd.GetRequestCancelNexusOperationCommandAttributes()
+	if attrs == nil {
+		return FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+			Message: "empty CancelNexusOperationCommandAttributes",
+		}
+	}
+
+	_, operationFound := wf.Operations[attrs.ScheduledEventId]
+	hasBufferedEvent := func() bool {
+		return wf.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId))
+	}
+
+	if !operationFound && !hasBufferedEvent() {
+		return FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID of %d", attrs.ScheduledEventId),
+		}
+	}
+
+	// Always create the event even if there's a buffered completion to avoid breaking replay in the SDK.
+	// The event will be applied before the completion since buffered events are reordered and put at the end of the
+	// batch, after command events from the workflow task.
+	_, err := addAndApplyHistoryEvent[CancelRequestedEventDefinition](wf, ctx, func(he *historypb.HistoryEvent) {
+		he.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
+			NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
+				ScheduledEventId:             attrs.ScheduledEventId,
+				WorkflowTaskCompletedEventId: opts.WorkflowTaskCompletedEventID,
+			},
+		}
+		he.UserMetadata = cmd.UserMetadata
+	})
+	if errors.Is(err, nexusoperation.ErrCancellationAlreadyRequested) {
+		return FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf("cancelation was already requested for an operation with scheduled event ID %d", attrs.ScheduledEventId),
+		}
+	}
+	return err
+}
+
+func makeNexusOperationTerminalEventFilter(scheduledEventID int64) func(event *historypb.HistoryEvent) bool {
+	return func(event *historypb.HistoryEvent) bool {
+		switch event.EventType {
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED:
+			return event.GetNexusOperationCompletedEventAttributes().GetScheduledEventId() == scheduledEventID
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED:
+			return event.GetNexusOperationFailedEventAttributes().GetScheduledEventId() == scheduledEventID
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED:
+			return event.GetNexusOperationCanceledEventAttributes().GetScheduledEventId() == scheduledEventID
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT:
+			return event.GetNexusOperationTimedOutEventAttributes().GetScheduledEventId() == scheduledEventID
+		default:
+			return false
+		}
+	}
+}

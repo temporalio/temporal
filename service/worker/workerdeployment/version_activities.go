@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -198,16 +199,17 @@ func (a *VersionActivities) GetVersionDrainageStatus(ctx context.Context, versio
 	}, nil
 }
 
-func (a *VersionActivities) UpdateWorkerControllerInstance(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) error {
+func (a *VersionActivities) UpdateWorkerControllerInstance(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) (*computepb.ComputeConfigSummary, error) {
 	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
-	if err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups()); err != nil {
+	resp, err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups())
+	if err != nil {
 		var invalidArgs *serviceerror.InvalidArgument
 		if errors.As(err, &invalidArgs) {
-			return temporal.NewApplicationError(err.Error(), errInvalidComputeConfig)
+			return nil, temporal.NewNonRetryableApplicationError(err.Error(), errInvalidComputeConfig, nil)
 		}
-		return err
+		return nil, err
 	}
-	return nil
+	return wciSpecToComputeConfigSummary(resp.Spec), nil
 }
 
 func (a *VersionActivities) DeleteWorkerControllerInstance(ctx context.Context, input *deploymentspb.DeleteWorkerControllerInstanceInput) error {

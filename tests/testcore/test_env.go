@@ -25,7 +25,6 @@ import (
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/components/nexusoperations"
 	"google.golang.org/grpc"
 )
 
@@ -183,12 +182,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		ctx:                setupTestTimeoutWithContext(t, options.timeout),
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 	}
-
-	// Set Nexus callback URL now that we have the cluster's HTTP address. Note that we set
-	// a default for the global config here so callers that rely on this can still use a shared cluster.
-	env.FunctionalTestBase.OverrideDynamicConfig(
-		nexusoperations.CallbackURLTemplate,
-		"http://"+env.HttpAPIAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
 	// For shared clusters, apply all dynamic config settings as overrides.
 	if !options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
@@ -349,7 +342,50 @@ func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, va
 			}}
 		}
 	}
-	return e.cluster.host.overrideDynamicConfig(e.t, setting.Key(), value)
+	return e.cluster.host.overrideDynamicConfigForTest(e.t, setting.Key(), value)
+}
+
+// StartGlobalMetricCapture starts a cluster-global metrics capture for this test and automatically stops it during cleanup.
+// Metric capture is cluster-global, so it is only safe on dedicated clusters.
+// Misuse detection is best-effort and only applies to queried metrics that produced recordings.
+func (e *TestEnv) StartGlobalMetricCapture() *GlobalMetricCapture {
+	if e.isShared {
+		e.t.Fatal("StartGlobalMetricCapture cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
+	}
+
+	handler := e.cluster.host.CaptureMetricsHandler()
+	if handler == nil {
+		e.t.Fatal("StartGlobalMetricCapture is unavailable because metrics capture is not enabled on this cluster")
+	}
+
+	capture := handler.StartCapture()
+	globalCapture := newGlobalMetricCapture(capture)
+	e.t.Cleanup(func() {
+		defer handler.StopCapture(capture)
+		globalCapture.checkForNamespaceCaptureMisuse()
+	})
+	return globalCapture
+}
+
+// StartNamespaceMetricCapture starts a metrics capture scoped to this test's namespace.
+// Namespace captures are safe on shared clusters because reads are restricted to
+// per-metric namespace-filtered iteration and reject non-namespaced metrics.
+func (e *TestEnv) StartNamespaceMetricCapture() *NamespaceMetricCapture {
+	return e.StartNamespaceMetricCaptureFor(e.Namespace().String())
+}
+
+// StartNamespaceMetricCaptureFor starts a metrics capture scoped to the provided namespace.
+func (e *TestEnv) StartNamespaceMetricCaptureFor(namespaceName string) *NamespaceMetricCapture {
+	handler := e.cluster.host.CaptureMetricsHandler()
+	if handler == nil {
+		e.t.Fatal("StartNamespaceMetricCapture is unavailable because metrics capture is not enabled on this cluster")
+	}
+
+	capture := handler.StartCapture()
+	e.t.Cleanup(func() {
+		handler.StopCapture(capture)
+	})
+	return newNamespaceMetricCapture(capture, namespaceName)
 }
 
 func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {

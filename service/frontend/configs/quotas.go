@@ -1,7 +1,6 @@
 package configs
 
 import (
-	"math"
 	"time"
 
 	"go.temporal.io/server/common/dynamicconfig"
@@ -9,11 +8,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/quotas/calculator"
-)
-
-const (
-	// OperatorPriority is used to give precedence to calls coming from web UI or tctl
-	OperatorPriority = 0
 )
 
 const (
@@ -41,20 +35,26 @@ var (
 	// long-running. The QueryWorkflow and UpdateWorkflowExecution methods are long-running because
 	// they both block until a background WFT is complete.
 	ExecutionAPICountLimitOverride = map[string]int{
+		// These methods here are long-running because they block until there is a task available.
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":       1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":       1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate": 1,
-		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":               1,
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution":     1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusOperationExecution": 1,
 
 		// Long-running if activity outcome is not already available
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution": 1,
-		// Long-running if certain request parameters are set
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory": 1,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution":   1,
 
-		// potentially long-running, depending on the operations
+		// These methods are long-running because they block until a background WFT is complete.
+		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":           1,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution": 1,
+
+		// These methods are blocking only if WaitNewEvent/LongPollToken are set, otherwise they are not.
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeNexusOperationExecution": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory":     1,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution":       1,
+
+		// Potentially long-running, depending on the operations.
 		"/temporal.api.workflowservice.v1.WorkflowService/ExecuteMultiOperation": 1,
 
 		// Dispatching a Nexus task is a potentially long running RPC, it's classified in the same bucket as QueryWorkflow.
@@ -92,6 +92,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/CreateSchedule":                   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartBatchOperation":              1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartActivityExecution":           1,
+		"/temporal.api.workflowservice.v1.WorkflowService/StartNexusOperationExecution":     1,
 		DispatchNexusTaskByNamespaceAndTaskQueueAPIName:                                     1,
 		DispatchNexusTaskByEndpointAPIName:                                                  1,
 
@@ -141,6 +142,9 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelActivityExecution":             2,
 		"/temporal.api.workflowservice.v1.WorkflowService/TerminateActivityExecution":                 2,
 		"/temporal.api.workflowservice.v1.WorkflowService/DeleteActivityExecution":                    2,
+		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelNexusOperationExecution":       2,
+		"/temporal.api.workflowservice.v1.WorkflowService/TerminateNexusOperationExecution":           2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteNexusOperationExecution":              2,
 		"/temporal.api.workflowservice.v1.WorkflowService/PauseWorkflowExecution":                     2,
 		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseWorkflowExecution":                   2,
 
@@ -159,6 +163,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/GetCurrentDeployment":                         3, // [cleanup-wv-pre-release]
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeploymentVersion":              3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":                     3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeNexusOperationExecution":              3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ValidateWorkerDeploymentVersionComputeConfig": 3,
 
 		// P3: Progress APIs for reporting cancellations and failures.
@@ -171,6 +176,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskFailed":          3,
 
 		// P4: Poll APIs and other low priority APIs
+		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusOperationExecution":        4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution":              4, // TODO(saa-preview): should it be 4 or 3?
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":              4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":              4,
@@ -207,6 +213,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorker":                 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/CountActivityExecutions":        1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListActivityExecutions":         1,
+		"/temporal.api.workflowservice.v1.WorkflowService/CountNexusOperationExecutions":  1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListNexusOperationExecutions":   1,
 
 		// APIs that rely on visibility
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":         1,
@@ -255,62 +263,6 @@ var (
 	}
 )
 
-type (
-	NamespaceRateBurstImpl struct {
-		namespaceName string
-		rateFn        quotas.NamespaceRateFn
-		burstFn       dynamicconfig.IntPropertyFnWithNamespaceFilter
-	}
-
-	operatorRateBurstImpl struct {
-		operatorRateRatio dynamicconfig.FloatPropertyFn
-		baseRateBurstFn   quotas.RateBurst
-	}
-)
-
-var _ quotas.RateBurst = (*NamespaceRateBurstImpl)(nil)
-var _ quotas.RateBurst = (*operatorRateBurstImpl)(nil)
-
-func NewNamespaceRateBurst(
-	namespaceName string,
-	rateFn quotas.NamespaceRateFn,
-	burstRatioFn dynamicconfig.FloatPropertyFnWithNamespaceFilter,
-) *NamespaceRateBurstImpl {
-	return &NamespaceRateBurstImpl{
-		namespaceName: namespaceName,
-		rateFn:        rateFn,
-		burstFn: func(namespace string) int {
-			return max(1, int(math.Ceil(rateFn(namespace)*burstRatioFn(namespace))))
-		},
-	}
-}
-
-func (c *NamespaceRateBurstImpl) Rate() float64 {
-	return c.rateFn(c.namespaceName)
-}
-
-func (c *NamespaceRateBurstImpl) Burst() int {
-	return c.burstFn(c.namespaceName)
-}
-
-func newOperatorRateBurst(
-	baseRateBurstFn quotas.RateBurst,
-	operatorRateRatio dynamicconfig.FloatPropertyFn,
-) *operatorRateBurstImpl {
-	return &operatorRateBurstImpl{
-		operatorRateRatio: operatorRateRatio,
-		baseRateBurstFn:   baseRateBurstFn,
-	}
-}
-
-func (c *operatorRateBurstImpl) Rate() float64 {
-	return c.operatorRateRatio() * c.baseRateBurstFn.Rate()
-}
-
-func (c *operatorRateBurstImpl) Burst() int {
-	return c.baseRateBurstFn.Burst()
-}
-
 func NewRequestToRateLimiter(
 	executionRateBurstFn quotas.RateBurst,
 	visibilityRateBurstFn quotas.RateBurst,
@@ -340,69 +292,60 @@ func NewExecutionPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RequestRateLimiter)
-	for priority := range ExecutionAPIPrioritiesOrdered {
-		if priority == OperatorPriority {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(newOperatorRateBurst(rateBurstFn, operatorRPSRatio), time.Minute))
-		} else {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
-		}
-	}
-	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
-		if req.CallerType == headers.CallerTypeOperator {
-			return OperatorPriority
-		}
-		if priority, ok := APIToPriority[req.API]; ok {
-			return priority
-		}
-		return ExecutionAPIPrioritiesOrdered[len(ExecutionAPIPrioritiesOrdered)-1]
-	}, rateLimiters)
+	return quotas.NewPriorityRateLimiterHelper(
+		rateBurstFn,
+		operatorRPSRatio,
+		func(req quotas.Request) int {
+			if req.CallerType == headers.CallerTypeOperator {
+				return quotas.OperatorPriority
+			}
+			if priority, ok := APIToPriority[req.API]; ok {
+				return priority
+			}
+			return ExecutionAPIPrioritiesOrdered[len(ExecutionAPIPrioritiesOrdered)-1]
+		},
+		ExecutionAPIPrioritiesOrdered,
+	)
 }
 
 func NewVisibilityPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RequestRateLimiter)
-	for priority := range VisibilityAPIPrioritiesOrdered {
-		if priority == OperatorPriority {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(newOperatorRateBurst(rateBurstFn, operatorRPSRatio), time.Minute))
-		} else {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
-		}
-	}
-	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
-		if req.CallerType == headers.CallerTypeOperator {
-			return OperatorPriority
-		}
-		if priority, ok := VisibilityAPIToPriority[req.API]; ok {
-			return priority
-		}
-		return VisibilityAPIPrioritiesOrdered[len(VisibilityAPIPrioritiesOrdered)-1]
-	}, rateLimiters)
+	return quotas.NewPriorityRateLimiterHelper(
+		rateBurstFn,
+		operatorRPSRatio,
+		func(req quotas.Request) int {
+			if req.CallerType == headers.CallerTypeOperator {
+				return quotas.OperatorPriority
+			}
+			if priority, ok := VisibilityAPIToPriority[req.API]; ok {
+				return priority
+			}
+			return VisibilityAPIPrioritiesOrdered[len(VisibilityAPIPrioritiesOrdered)-1]
+		},
+		VisibilityAPIPrioritiesOrdered,
+	)
 }
 
 func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RequestRateLimiter)
-	for priority := range NamespaceReplicationInducingAPIPrioritiesOrdered {
-		if priority == OperatorPriority {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(newOperatorRateBurst(rateBurstFn, operatorRPSRatio), time.Minute))
-		} else {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
-		}
-	}
-	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
-		if req.CallerType == headers.CallerTypeOperator {
-			return OperatorPriority
-		}
-		if priority, ok := NamespaceReplicationInducingAPIToPriority[req.API]; ok {
-			return priority
-		}
-		return NamespaceReplicationInducingAPIPrioritiesOrdered[len(NamespaceReplicationInducingAPIPrioritiesOrdered)-1]
-	}, rateLimiters)
+	return quotas.NewPriorityRateLimiterHelper(
+		rateBurstFn,
+		operatorRPSRatio,
+		func(req quotas.Request) int {
+			if req.CallerType == headers.CallerTypeOperator {
+				return quotas.OperatorPriority
+			}
+			if priority, ok := NamespaceReplicationInducingAPIToPriority[req.API]; ok {
+				return priority
+			}
+			return NamespaceReplicationInducingAPIPrioritiesOrdered[len(NamespaceReplicationInducingAPIPrioritiesOrdered)-1]
+		},
+		NamespaceReplicationInducingAPIPrioritiesOrdered,
+	)
 }
 
 // NewGlobalNamespaceRateLimiter creates a namespace-aware rate limiter that uses

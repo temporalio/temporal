@@ -17,13 +17,14 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/softassert"
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
 type ExecutableDeleteExecutionTask struct {
 	ProcessToolBox
 
-	definition.WorkflowKey
+	chasm.ComponentRef
 	ExecutableTask
 }
 
@@ -38,11 +39,26 @@ func NewExecutableDeleteExecutionTask(
 	sourceShardKey ClusterShardKey,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableDeleteExecutionTask {
-	task := replicationTask.GetHistoryTaskAttributes()
+	rawInfo := replicationTask.GetRawTaskInfo()
+
+	// ArchetypeID should never be unspecified. Default to WorkflowArchetypeID.
+	archetypeID := chasm.WorkflowArchetypeID
+	if rawInfo != nil && rawInfo.ArchetypeId != chasm.UnspecifiedArchetypeID {
+		archetypeID = rawInfo.ArchetypeId
+	} else {
+		softassert.That(processToolBox.Logger, false, "delete execution replication task has unspecified archetype ID")
+	}
 
 	return &ExecutableDeleteExecutionTask{
 		ProcessToolBox: processToolBox,
-		WorkflowKey:    definition.NewWorkflowKey(task.NamespaceId, task.WorkflowId, task.RunId),
+		ComponentRef: chasm.NewComponentRefByArchetypeID(
+			chasm.ExecutionKey{
+				NamespaceID: rawInfo.GetNamespaceId(),
+				BusinessID:  rawInfo.GetWorkflowId(),
+				RunID:       rawInfo.GetRunId(),
+			},
+			archetypeID,
+		),
 		ExecutableTask: NewExecutableTask(
 			processToolBox,
 			taskID,
@@ -57,7 +73,7 @@ func NewExecutableDeleteExecutionTask(
 }
 
 func (e *ExecutableDeleteExecutionTask) QueueID() any {
-	return e.WorkflowKey
+	return definition.NewWorkflowKey(e.NamespaceID, e.BusinessID, e.RunID)
 }
 
 func (e *ExecutableDeleteExecutionTask) Execute() error {
@@ -70,13 +86,13 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 	namespaceName, apply, err := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
 		callerInfo,
-	), e.NamespaceID, e.WorkflowID)
+	), e.NamespaceID, e.BusinessID)
 	if err != nil {
 		return err
 	} else if !apply {
 		e.Logger.Warn("Skipping the replication task",
 			tag.WorkflowNamespaceID(e.NamespaceID),
-			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowID(e.BusinessID),
 			tag.WorkflowRunID(e.RunID),
 			tag.TaskID(e.TaskID()),
 		)
@@ -88,17 +104,25 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 		return nil
 	}
 
-	// Only process workflow archetype deletion for now.
-	if e.archetypeID() != chasm.WorkflowArchetypeID {
-		return nil
-	}
-
 	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
 
+	archetypeID, err := e.ArchetypeID(e.ChasmRegistry)
+	if err != nil {
+		return err
+	}
+	switch archetypeID {
+	case chasm.WorkflowArchetypeID:
+		return e.deleteWorkflowExecution(ctx)
+	default:
+		return e.deleteChasmExecution(ctx)
+	}
+}
+
+func (e *ExecutableDeleteExecutionTask) deleteWorkflowExecution(ctx context.Context) error {
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.NamespaceID),
-		e.WorkflowID,
+		e.BusinessID,
 	)
 	if err != nil {
 		return err
@@ -111,18 +135,15 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 	_, err = engine.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
 		NamespaceId: e.NamespaceID,
 		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: e.WorkflowID,
+			WorkflowId: e.BusinessID,
 			RunId:      e.RunID,
 		},
 	})
 	return err
 }
 
-func (e *ExecutableDeleteExecutionTask) archetypeID() uint32 {
-	if rawInfo := e.ReplicationTask().GetRawTaskInfo(); rawInfo != nil {
-		return rawInfo.ArchetypeId
-	}
-	return chasm.UnspecifiedArchetypeID
+func (e *ExecutableDeleteExecutionTask) deleteChasmExecution(ctx context.Context) error {
+	return e.ChasmEngine.DeleteExecution(ctx, e.ComponentRef, chasm.DeleteExecutionRequest{})
 }
 
 func (e *ExecutableDeleteExecutionTask) HandleErr(err error) error {
@@ -138,7 +159,7 @@ func (e *ExecutableDeleteExecutionTask) HandleErr(err error) error {
 	default:
 		e.Logger.Error("delete execution replication task encountered error",
 			tag.WorkflowNamespaceID(e.NamespaceID),
-			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowID(e.BusinessID),
 			tag.WorkflowRunID(e.RunID),
 			tag.TaskID(e.TaskID()),
 			tag.Error(err),
@@ -151,7 +172,7 @@ func (e *ExecutableDeleteExecutionTask) MarkPoisonPill() error {
 	if e.ReplicationTask().GetRawTaskInfo() == nil {
 		e.ReplicationTask().RawTaskInfo = &persistencespb.ReplicationTaskInfo{
 			NamespaceId: e.NamespaceID,
-			WorkflowId:  e.WorkflowID,
+			WorkflowId:  e.BusinessID,
 			RunId:       e.RunID,
 			TaskId:      e.TaskID(),
 			TaskType:    enumsspb.TASK_TYPE_REPLICATION_DELETE_EXECUTION,

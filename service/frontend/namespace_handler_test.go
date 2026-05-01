@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/config"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protoassert"
@@ -87,6 +88,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 	s.handler = newNamespaceHandler(
 		logger,
 		s.mockMetadataMgr,
+		namespace.NewMockRegistry(s.controller),
 		s.mockClusterMetadata,
 		s.mockNamespaceReplicator,
 		s.archivalMetadata,
@@ -387,6 +389,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.False(resp.NamespaceInfo.Capabilities.WorkflowPause)
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivities)
 	s.False(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
+	s.False(resp.NamespaceInfo.Capabilities.WorkerCommands)
 	s.True(resp.NamespaceInfo.Capabilities.PollerAutoscaling)
 	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.MemoSizeLimitError)
@@ -402,6 +405,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.config.BlobSizeLimitError = dc.GetIntPropertyFnFilteredByNamespace(1024)
 	s.config.MemoSizeLimitError = dc.GetIntPropertyFnFilteredByNamespace(512)
 	s.config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.WorkerCommandsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 
 	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns",
@@ -415,6 +419,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.WorkflowPause)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivities)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
+	s.True(resp.NamespaceInfo.Capabilities.WorkerCommands)
 	s.Equal(int64(1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(512), resp.NamespaceInfo.Limits.MemoSizeLimitError)
 }
@@ -1954,4 +1959,59 @@ func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
 
 func (s *namespaceHandlerCommonSuite) getRandomNamespace() string {
 	return "namespace" + uuid.NewString()
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpsertCustomSearchAttributesAliases() {
+	tests := []struct {
+		name        string
+		current     map[string]string
+		upsert      map[string]string
+		expected    map[string]string
+		expectedErr error
+	}{
+		{
+			name:     "add to empty",
+			current:  map[string]string{},
+			upsert:   map[string]string{"Keyword01": "MyAttr"},
+			expected: map[string]string{"Keyword01": "MyAttr"},
+		},
+		{
+			name:     "add to existing",
+			current:  map[string]string{"Keyword01": "MyAttr"},
+			upsert:   map[string]string{"Keyword02": "OtherAttr"},
+			expected: map[string]string{"Keyword01": "MyAttr", "Keyword02": "OtherAttr"},
+		},
+		{
+			name:        "field already allocated",
+			current:     map[string]string{"Keyword01": "MyAttr"},
+			upsert:      map[string]string{"Keyword01": "NewAttr"},
+			expectedErr: errCustomSearchAttributeFieldAlreadyAllocated,
+		},
+		{
+			// Race condition: a concurrent request already claimed the same alias for a
+			// different field. The alias already exists so we skip it — idempotent success.
+			name:     "alias already in use by a different field is skipped",
+			current:  map[string]string{"Keyword01": "RaceTestAttr"},
+			upsert:   map[string]string{"Keyword03": "RaceTestAttr"},
+			expected: map[string]string{"Keyword01": "RaceTestAttr"},
+		},
+		{
+			name:     "delete existing",
+			current:  map[string]string{"Keyword01": "MyAttr"},
+			upsert:   map[string]string{"Keyword01": ""},
+			expected: map[string]string{},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			result, err := s.handler.upsertCustomSearchAttributesAliases(tc.current, tc.upsert)
+			if tc.expectedErr != nil {
+				s.Equal(tc.expectedErr, err)
+			} else {
+				s.Require().NoError(err)
+				s.Equal(tc.expected, result)
+			}
+		})
+	}
 }
