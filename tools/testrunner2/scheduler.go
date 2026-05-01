@@ -7,7 +7,8 @@ import (
 
 // queueItem represents a unit of work.
 type queueItem struct {
-	run func(ctx context.Context, emit func(...*queueItem))
+	run       func(ctx context.Context, emit func(...*queueItem))
+	onEnqueue func()
 }
 
 type scheduler struct {
@@ -32,7 +33,7 @@ func (s *scheduler) run(ctx context.Context, items []*queueItem) {
 		return
 	}
 
-	s.queue = items
+	s.enqueue(items...)
 
 	var wg sync.WaitGroup
 	for range s.parallelism {
@@ -84,6 +85,11 @@ func (s *scheduler) dequeue(ctx context.Context) *queueItem {
 func (s *scheduler) enqueue(items ...*queueItem) {
 	if len(items) == 0 {
 		return
+	}
+	for _, item := range items {
+		if item.onEnqueue != nil {
+			item.onEnqueue()
+		}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
