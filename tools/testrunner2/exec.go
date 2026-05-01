@@ -159,7 +159,6 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt, r
 				binary:       binaryPath,
 				pkgDir:       unit.pkg,
 				tests:        unit.runTests,
-				runPattern:   unit.runPattern,
 				skipPattern:  unit.skipPattern(),
 				coverProfile: coverProfile,
 				extraArgs:    r.testBinaryArgs,
@@ -239,22 +238,12 @@ func (r *runner) newCompileItem(pkg string, binaryPath string, baseArgs []string
 				return
 			}
 
-			var units []workUnit
-			if r.groupBy == GroupByPackage {
-				unit, ok := buildPackageWorkUnit(pkg, r.runFilter, r.totalShards, r.shardIndex)
-				if !ok {
-					r.log("no tests matched filter/shard for %s", pkg)
-					return
-				}
-				units = []workUnit{unit}
-			} else {
-				testNames, err := listTestsFromBinary(ctx, r.exec, binaryPath)
-				if err != nil {
-					r.addError(fmt.Errorf("failed to list tests from %s: %w", binaryPath, err))
-					return
-				}
-				units = buildWorkUnits(pkg, testNames, r.runFilter, r.totalShards, r.shardIndex)
+			testNames, err := listTestsFromBinary(ctx, r.exec, binaryPath)
+			if err != nil {
+				r.addError(fmt.Errorf("failed to list tests from %s: %w", binaryPath, err))
+				return
 			}
+			units := buildWorkUnits(pkg, testNames, r.runFilter, r.totalShards, r.shardIndex)
 
 			if len(units) == 0 {
 				r.log("no tests matched filter/shard for %s", pkg)
@@ -263,18 +252,14 @@ func (r *runner) newCompileItem(pkg string, binaryPath string, baseArgs []string
 
 			r.tracker.addRoots(len(units))
 
-			if r.groupBy == GroupByPackage {
-				r.log("scheduled package %s", pkg)
-			} else {
-				r.log("discovered %d tests for %s", len(units), pkg)
+			r.log("discovered %d tests for %s", len(units), pkg)
 
-				var testList strings.Builder
-				for _, u := range units {
-					testList.WriteString("\n  ")
-					testList.WriteString(u.displayName)
-				}
-				r.log("tests for %s:%s", pkg, testList.String())
+			var testList strings.Builder
+			for _, u := range units {
+				testList.WriteString("\n  ")
+				testList.WriteString(u.displayName)
 			}
+			r.log("tests for %s:%s", pkg, testList.String())
 
 			var items []*queueItem
 			for _, unit := range units {
