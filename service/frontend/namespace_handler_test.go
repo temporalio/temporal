@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/config"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protoassert"
@@ -87,6 +88,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 	s.handler = newNamespaceHandler(
 		logger,
 		s.mockMetadataMgr,
+		namespace.NewMockRegistry(s.controller),
 		s.mockClusterMetadata,
 		s.mockNamespaceReplicator,
 		s.archivalMetadata,
@@ -1957,4 +1959,59 @@ func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
 
 func (s *namespaceHandlerCommonSuite) getRandomNamespace() string {
 	return "namespace" + uuid.NewString()
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpsertCustomSearchAttributesAliases() {
+	tests := []struct {
+		name        string
+		current     map[string]string
+		upsert      map[string]string
+		expected    map[string]string
+		expectedErr error
+	}{
+		{
+			name:     "add to empty",
+			current:  map[string]string{},
+			upsert:   map[string]string{"Keyword01": "MyAttr"},
+			expected: map[string]string{"Keyword01": "MyAttr"},
+		},
+		{
+			name:     "add to existing",
+			current:  map[string]string{"Keyword01": "MyAttr"},
+			upsert:   map[string]string{"Keyword02": "OtherAttr"},
+			expected: map[string]string{"Keyword01": "MyAttr", "Keyword02": "OtherAttr"},
+		},
+		{
+			name:        "field already allocated",
+			current:     map[string]string{"Keyword01": "MyAttr"},
+			upsert:      map[string]string{"Keyword01": "NewAttr"},
+			expectedErr: errCustomSearchAttributeFieldAlreadyAllocated,
+		},
+		{
+			// Race condition: a concurrent request already claimed the same alias for a
+			// different field. The alias already exists so we skip it — idempotent success.
+			name:     "alias already in use by a different field is skipped",
+			current:  map[string]string{"Keyword01": "RaceTestAttr"},
+			upsert:   map[string]string{"Keyword03": "RaceTestAttr"},
+			expected: map[string]string{"Keyword01": "RaceTestAttr"},
+		},
+		{
+			name:     "delete existing",
+			current:  map[string]string{"Keyword01": "MyAttr"},
+			upsert:   map[string]string{"Keyword01": ""},
+			expected: map[string]string{},
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			result, err := s.handler.upsertCustomSearchAttributesAliases(tc.current, tc.upsert)
+			if tc.expectedErr != nil {
+				s.Equal(tc.expectedErr, err)
+			} else {
+				s.Require().NoError(err)
+				s.Equal(tc.expected, result)
+			}
+		})
+	}
 }

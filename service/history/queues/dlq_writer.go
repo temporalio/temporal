@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -21,6 +22,7 @@ type (
 		metricsHandler    metrics.Handler
 		logger            log.SnTaggedLogger
 		namespaceRegistry namespace.Registry
+		chasmRegistry     *chasm.Registry
 		enqueueMutex      sync.Map // map[persistence.QueueKey]*sync.Mutex for per-queue locking
 	}
 	// QueueWriter is a subset of persistence.HistoryTaskQueueManager.
@@ -47,12 +49,14 @@ func NewDLQWriter(
 	h metrics.Handler,
 	l log.SnTaggedLogger,
 	r namespace.Registry,
+	cr *chasm.Registry,
 ) *DLQWriter {
 	return &DLQWriter{
 		dlqWriter:         w,
 		metricsHandler:    h,
 		logger:            l,
 		namespaceRegistry: r,
+		chasmRegistry:     cr,
 	}
 }
 
@@ -97,34 +101,43 @@ func (q *DLQWriter) WriteTaskToDLQ(
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrSendTaskToDLQ, err)
 	}
-	// "passive" means the namespace is in standby mode and only replicates data
-	namespaceState := metrics.PassiveNamespaceStateTagValue
-	if isNamespaceActive {
-		namespaceState = metrics.ActiveNamespaceStateTagValue
-	}
-	metrics.DLQWrites.With(q.metricsHandler).Record(
-		1,
-		metrics.TaskCategoryTag(task.GetCategory().Name()),
-		metrics.NamespaceStateTag(namespaceState),
-	)
+
+	nsMetricTag := metrics.NamespaceUnknownTag()
+	var nsLogTag tag.Tag
 	ns, err := q.namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
-	var namespaceTag tag.Tag
 	if err != nil {
 		q.logger.Warn("Failed to get namespace name while trying to write a task to DLQ",
 			tag.WorkflowNamespace(task.GetNamespaceID()),
 			tag.Error(err),
 		)
-		namespaceTag = tag.WorkflowNamespaceID(task.GetNamespaceID())
+		nsLogTag = tag.WorkflowNamespaceID(task.GetNamespaceID())
 	} else {
-		namespaceTag = tag.WorkflowNamespace(string(ns.Name()))
+		nsMetricTag = metrics.NamespaceTag(ns.Name().String())
+		nsLogTag = tag.WorkflowNamespace(ns.Name().String())
 	}
+
+	// "passive" means the namespace is in standby mode and only replicates data
+	namespaceState := metrics.PassiveNamespaceStateTagValue
+	if isNamespaceActive {
+		namespaceState = metrics.ActiveNamespaceStateTagValue
+	}
+	taskType := GetTaskTypeTagValue(task, isNamespaceActive, q.chasmRegistry)
+	metrics.DLQWrites.With(q.metricsHandler).Record(
+		1,
+		metrics.TaskCategoryTag(task.GetCategory().Name()),
+		metrics.NamespaceStateTag(namespaceState),
+		nsMetricTag,
+		metrics.TaskTypeTag(taskType),
+		metrics.OperationTag(taskType),
+		getArchetypeTag(task, q.chasmRegistry),
+	)
 	q.logger.Warn("Task enqueued to DLQ",
 		tag.DLQMessageID(resp.Metadata.ID),
 		tag.SourceCluster(sourceCluster),
 		tag.TargetCluster(targetCluster),
 		tag.TaskType(task.GetType()),
 		tag.String("task-category", task.GetCategory().Name()),
-		namespaceTag,
+		nsLogTag,
 	)
 	return nil
 }

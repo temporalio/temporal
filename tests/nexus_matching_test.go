@@ -15,31 +15,39 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/tests/testcore"
 )
 
-func TestDispatchNexusTaskWithMatchingBehaviors(t *testing.T) {
-	t.Parallel()
-	runWithMatchingBehaviors(t, nil, func(s *testcore.TestEnv, b testcore.MatchingBehavior) {
-		dispatchAndCompleteNexusTask(t, s, b.ForceTaskForward, b.ForcePollForward)
+type NexusMatchingTestSuite struct {
+	parallelsuite.Suite[*NexusMatchingTestSuite]
+}
+
+func TestNexusMatchingTestSuite(t *testing.T) {
+	parallelsuite.Run(t, &NexusMatchingTestSuite{})
+}
+
+func (s *NexusMatchingTestSuite) TestDispatchNexusTaskWithMatchingBehaviors() {
+	runWithMatchingBehaviors(s.T(), nil, func(env *testcore.TestEnv, b testcore.MatchingBehavior) {
+		dispatchAndCompleteNexusTask(s.T(), env, b.ForceTaskForward, b.ForcePollForward)
 	})
 }
 
-func TestDispatchNexusTaskOnNonRootPartitionNoForwarding(t *testing.T) {
+func (s *NexusMatchingTestSuite) TestDispatchNexusTaskOnNonRootPartitionNoForwarding() {
 	// Both poll and task go to partition 1 with no forwarding. This verifies that
 	// non-root partitions work correctly even when no forwarding is involved.
-	s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+	env := testcore.NewEnv(s.T())
 
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingForwarderMaxOutstandingTasks, 0) // disable forwarding
-	s.OverrideDynamicConfig(dynamicconfig.MatchingForwarderMaxOutstandingPolls, 0) // disable forwarding
-	s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 1))
-	s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 1))
-	s.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, false))
+	env.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
+	env.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
+	env.OverrideDynamicConfig(dynamicconfig.MatchingForwarderMaxOutstandingTasks, 0) // disable forwarding
+	env.OverrideDynamicConfig(dynamicconfig.MatchingForwarderMaxOutstandingPolls, 0) // disable forwarding
+	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 1))
+	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 1))
+	env.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, false))
 
-	dispatchAndCompleteNexusTask(t, s, false, false)
+	dispatchAndCompleteNexusTask(s.T(), env, false, false)
 }
 
 func dispatchAndCompleteNexusTask(t *testing.T, s *testcore.TestEnv, expectTaskForwarded, expectPollForwarded bool) {

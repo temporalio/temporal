@@ -108,6 +108,10 @@ func (m *mockStoreComponent) OnNexusOperationCancellationFailed(ctx chasm.Mutabl
 	return TransitionCancellationFailed.Apply(cancellation, ctx, EventCancellationFailed{Failure: cause})
 }
 
+func (m *mockStoreComponent) WorkflowTypeName() string {
+	return ""
+}
+
 // mockStoreLibrary registers the mockStoreComponent so the CHASM tree can work with it.
 type mockStoreLibrary struct {
 	chasm.UnimplementedLibrary
