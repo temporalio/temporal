@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -485,7 +486,17 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 		// can be completed through the public Nexus task APIs.
 
 		s.Run("ScheduleToStartTimeout", func(s *NexusStandaloneTestSuite) {
-			env := s.newTestEnv()
+			env := s.newTestEnv(testcore.WithDedicatedCluster())
+
+			// When a standalone operation fails from scheduled, we'll never
+			// set the Outcome variant. Add a testlogger fail here to make sure we don't
+			// trip the softassert when building our outcome response. This will fail if
+			// Outcome is created eagerly.
+			tl, ok := env.Logger.(*testlogger.TestLogger)
+			s.True(ok)
+			prev := tl.FailOnError(true)
+			defer tl.FailOnError(prev)
+
 			taskQueue := testcore.RandomizedNexusEndpoint(s.T().Name())
 			endpointName := env.createNexusEndpoint(env.Context(), s.T(), testcore.RandomizedNexusEndpoint(s.T().Name()), taskQueue).GetSpec().GetName()
 
