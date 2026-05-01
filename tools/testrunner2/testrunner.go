@@ -10,7 +10,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -85,26 +84,14 @@ func (cw *consoleWriter) WriteGrouped(header, body string) {
 type runner struct {
 	config
 	console        *consoleWriter
-	directRetrySeq atomic.Int64 // unique suffix for direct-mode retry file names
-	retryLabelMu   sync.Mutex
-	retryLabelSeq  map[int]int
+	retryOrdinalMu sync.Mutex
+	retryOrdinals  map[int]int
+	tracker        workTracker
 
-	// Result collection (thread-safe via mu)
 	mu           sync.Mutex
 	junitReports []*junitReport
 	alerts       []alert
 	errors       []error
-
-	// Progress tracking
-	progressMu        sync.Mutex
-	progressTotal     int
-	progressCompleted int
-	progressSlots     map[string]*progressSlot
-}
-
-type progressSlot struct {
-	pending   int
-	completed bool
 }
 
 func (r *runner) addReport(jr *junitReport) {
@@ -125,80 +112,20 @@ func (r *runner) addError(err error) {
 	r.errors = append(r.errors, err)
 }
 
-func (r *runner) resetProgress() {
-	r.progressMu.Lock()
-	defer r.progressMu.Unlock()
-	r.progressTotal = 0
-	r.progressCompleted = 0
-	r.progressSlots = make(map[string]*progressSlot)
+func (r *runner) resetRetryOrdinals() {
+	r.retryOrdinalMu.Lock()
+	defer r.retryOrdinalMu.Unlock()
+	r.retryOrdinals = nil
 }
 
-func (r *runner) resetRetryAttemptLabels() {
-	r.retryLabelMu.Lock()
-	defer r.retryLabelMu.Unlock()
-	r.retryLabelSeq = nil
-}
-
-func (r *runner) nextRetryAttemptLabel(attempt int) string {
-	r.retryLabelMu.Lock()
-	defer r.retryLabelMu.Unlock()
-	if r.retryLabelSeq == nil {
-		r.retryLabelSeq = make(map[int]int)
+func (r *runner) nextRetryOrdinal(attempt int) int {
+	r.retryOrdinalMu.Lock()
+	defer r.retryOrdinalMu.Unlock()
+	if r.retryOrdinals == nil {
+		r.retryOrdinals = make(map[int]int)
 	}
-	r.retryLabelSeq[attempt]++
-	return fmt.Sprintf("%d.%d", attempt, r.retryLabelSeq[attempt])
-}
-
-func (r *runner) addProgressTotal(n int64) {
-	r.progressMu.Lock()
-	defer r.progressMu.Unlock()
-	r.progressTotal += int(n)
-}
-
-func (r *runner) beginProgress(key string) {
-	if key == "" {
-		return
-	}
-	r.progressMu.Lock()
-	defer r.progressMu.Unlock()
-	if r.progressSlots == nil {
-		r.progressSlots = make(map[string]*progressSlot)
-	}
-	slot := r.progressSlots[key]
-	if slot == nil {
-		slot = &progressSlot{}
-		r.progressSlots[key] = slot
-	}
-	if slot.completed {
-		// Crash recovery retries are emitted after the failed attempt is reported.
-		// Reopen the slot so the retry can complete the original work unit.
-		slot.completed = false
-		if r.progressCompleted > 0 {
-			r.progressCompleted--
-		}
-	}
-	slot.pending++
-}
-
-func (r *runner) finishProgress(key string) (completed, total int, slotCompleted bool) {
-	if key == "" {
-		return 0, 0, false
-	}
-	r.progressMu.Lock()
-	defer r.progressMu.Unlock()
-	slot := r.progressSlots[key]
-	if slot == nil {
-		return r.progressCompleted, r.progressTotal, false
-	}
-	if slot.pending > 0 {
-		slot.pending--
-	}
-	if !slot.completed && slot.pending == 0 {
-		slot.completed = true
-		r.progressCompleted++
-		return r.progressCompleted, r.progressTotal, true
-	}
-	return r.progressCompleted, r.progressTotal, false
+	r.retryOrdinals[attempt]++
+	return r.retryOrdinals[attempt]
 }
 
 func newRunner(cfg config) *runner {
@@ -210,26 +137,22 @@ func newRunner(cfg config) *runner {
 }
 
 func (r *runner) runTests(ctx context.Context, args []string) error {
-	// Apply overall timeout if set
 	if r.timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, r.timeout)
 		defer cancel()
 	}
 
-	// Parse args to extract test directories and base args
 	testDirs, baseArgs, testBinaryArgs := parseTestArgs(args)
 	if len(testDirs) == 0 {
 		return errors.New("no test directories specified")
 	}
 	r.testBinaryArgs = testBinaryArgs
 
-	// "none" mode runs go test directly without precompilation
 	if r.groupBy == GroupByNone {
 		return r.runDirectMode(ctx, testDirs, baseArgs)
 	}
 
-	// Discover packages that contain test files
 	pkgs, err := findTestPackages(testDirs)
 	if err != nil {
 		return err
@@ -244,20 +167,17 @@ func (r *runner) runTests(ctx context.Context, args []string) error {
 
 	r.log("test packages: %v", pkgs)
 
-	// Create log directory
 	if err := os.MkdirAll(r.logDir, 0755); err != nil {
 		return fmt.Errorf("failed to create log directory: %w", err)
 	}
 	r.log("log directory: %s", r.logDir)
 
-	// Create temp directory for binaries
 	binDir, err := os.MkdirTemp("", "testrunner-bin-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(binDir) }()
 
-	// Create compile items for each package
 	items := r.createCompileItems(pkgs, binDir, baseArgs)
 
 	r.log("starting scheduler with parallelism=%d", r.parallelism)
@@ -271,16 +191,15 @@ func (r *runner) runWithScheduler(ctx context.Context, parallelism int, items []
 	r.junitReports = nil
 	r.alerts = nil
 	r.errors = nil
-	r.resetProgress()
-	r.resetRetryAttemptLabels()
+	r.tracker.reset()
+	r.resetRetryOrdinals()
 	if initialTotal > 0 {
-		r.addProgressTotal(initialTotal)
+		r.tracker.addRoots(int(initialTotal))
 	}
 
 	sched := newScheduler(parallelism)
 	sched.run(ctx, items)
 
-	// Convert alerts to a junit report
 	if len(r.alerts) > 0 {
 		alertsReport := &junitReport{}
 		alertsReport.appendAlerts(r.alerts)
@@ -297,46 +216,50 @@ func (r *runner) runWithScheduler(ctx context.Context, parallelism int, items []
 	return nil
 }
 
-// --- execConfig and newExecItem: unified test execution ---
+type retryMode int
 
-// execConfig configures a single test execution item.
+const (
+	retryCompiled retryMode = iota
+	retryDirect
+)
+
 type execConfig struct {
-	// startProcess starts the test process, writing output to the writer.
-	startProcess func(ctx context.Context, output io.Writer) commandResult
+	startProcess func(ctx context.Context, output io.Writer) int
 
-	// Display
-	label        string
+	unit         workUnit
 	attempt      int
-	attemptLabel string
+	retryOrdinal int
 
-	// Log paths
 	logPath   string
 	junitPath string
-	logHeader *logFileHeader // optional, compiled mode only
+	logHeader *logFileHeader
 
-	// Retry callback for failures.
-	retry retryHandler
-
-	// Progress key for the top-level work represented by this execution.
-	progressKey string
+	retryMode          retryMode
+	compiledBinaryPath string
+	directPkgs         []string
+	directRace         bool
+	directExtraArgs    []string
 }
 
 func (cfg execConfig) displayAttempt() string {
-	if cfg.attemptLabel != "" {
-		return cfg.attemptLabel
+	return displayAttempt(cfg.attempt, cfg.retryOrdinal)
+}
+
+func displayAttempt(attempt, retryOrdinal int) string {
+	if retryOrdinal > 0 {
+		return fmt.Sprintf("%d.%d", attempt, retryOrdinal)
 	}
-	return fmt.Sprintf("%d", cfg.attempt)
+	return fmt.Sprintf("%d", attempt)
 }
 
 func (r *runner) newExecItem(cfg execConfig) *queueItem {
 	return &queueItem{
 		onEnqueue: func() {
-			r.beginProgress(cfg.progressKey)
+			r.tracker.beginAttempt(cfg.unit.rootName)
 		},
 		run: func(ctx context.Context, emit func(...*queueItem)) {
 			start := time.Now()
 
-			// 1. Set up log capture
 			lc, err := newLogCapture(logCaptureConfig{
 				LogPath: cfg.logPath,
 				Header:  cfg.logHeader,
@@ -350,7 +273,6 @@ func (r *runner) newExecItem(cfg execConfig) *queueItem {
 				lc, _ = newLogCapture(logCaptureConfig{})
 			}
 
-			// 2. Set up event stream with unified stream retry handler
 			testCtx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
@@ -367,33 +289,27 @@ func (r *runner) newExecItem(cfg execConfig) *queueItem {
 			})
 			defer stream.Close()
 
-			// 3. Start process and collect results
-			result := cfg.startProcess(testCtx, stream)
+			exitCode := cfg.startProcess(testCtx, stream)
 			_ = lc.Close()
 
-			// 4. Parse results and alerts from disk
 			results := newJUnitReport(cfg.logPath, cfg.junitPath)
 			detectedAlerts := r.collectAlertsFromFile(cfg.logPath, stream)
+			numTests, numFailedTests, failureKind := r.collectJUnitResult(cfg, exitCode, detectedAlerts)
 
-			// 5. Read JUnit report and classify outcome
-			numTests, numFailedTests, failureKind := r.collectJUnitResult(cfg, result, detectedAlerts)
-
-			// 6. Console output
-			failed := result.exitCode != 0 || numFailedTests > 0 || numTests == 0
+			failed := exitCode != 0 || numFailedTests > 0 || numTests == 0
 			if failed {
-				writeConsoleResult(r, cfg, result, numTests, numFailedTests,
+				writeConsoleResult(r, cfg, exitCode, numTests, numFailedTests,
 					failureKind, detectedAlerts, results, start, 0, 0, false)
 			} else {
-				completed, total, progressDone := r.finishProgress(cfg.progressKey)
-				writeConsoleResult(r, cfg, result, numTests, numFailedTests,
-					failureKind, detectedAlerts, results, start, completed, total, progressDone)
+				progress := r.tracker.finishAttempt(cfg.unit.rootName, true)
+				writeConsoleResult(r, cfg, exitCode, numTests, numFailedTests,
+					failureKind, detectedAlerts, results, start, progress.completed, progress.total, progress.done)
 				_ = os.Remove(cfg.logPath)
 			}
 
-			// 7. Post-exit crash recovery: retry any test still in running map
 			r.emitCrashRecoveryRetries(cfg, failed, numTests, emittedRetries, stream, emit)
 			if failed {
-				r.finishProgress(cfg.progressKey)
+				r.tracker.finishAttempt(cfg.unit.rootName, false)
 			}
 		},
 	}
@@ -415,10 +331,9 @@ func (r *runner) streamRetryHandler(cfg execConfig, emittedRetries, children map
 		if ev.Action != actionFail && ev.Action != actionStuck {
 			return
 		}
-		// For actionFail, skip parent tests — the child failure will trigger
-		// the retry. For actionStuck, the stuck detector already filters to
-		// leaf tests (no running children), so a stuck parent means all
-		// children completed and the parent itself is hanging.
+		// Parent failures are retried through their failing leaf children. Stuck
+		// events are already emitted only for leaf tests, or for a parent whose
+		// children completed before teardown got stuck.
 		if ev.Action == actionFail && children[ev.Test] {
 			return
 		}
@@ -427,9 +342,36 @@ func (r *runner) streamRetryHandler(cfg execConfig, emittedRetries, children map
 		}
 		emittedRetries[ev.Test] = true
 		skipNames := passedSiblings(ev.Test, passed)
-		if items := cfg.retry.forFailures([]string{ev.Test}, skipNames, cfg.attempt); len(items) > 0 {
-			emit(items...)
+		r.scheduleRetry(cfg, []string{ev.Test}, skipNames, emit)
+	}
+}
+
+func (r *runner) scheduleRetry(cfg execConfig, failedNames, skipNames []string, emit func(...*queueItem)) {
+	nextAttempt := cfg.attempt + 1
+	retryOrdinal := r.nextRetryOrdinal(nextAttempt)
+	r.log("🔄 scheduling retry: %s (attempt %s)", buildTestFilterPattern(failedNames), displayAttempt(nextAttempt, retryOrdinal))
+
+	switch cfg.retryMode {
+	case retryCompiled:
+		unit := workUnit{
+			pkg:         cfg.unit.pkg,
+			rootName:    cfg.unit.rootName,
+			displayName: cfg.unit.displayName,
+			runTests:    failedNames,
+			skipTests:   skipNames,
 		}
+		emit(r.newExecItem(r.compiledExecConfig(unit, cfg.compiledBinaryPath, nextAttempt, retryOrdinal)))
+	case retryDirect:
+		emit(r.newExecItem(r.directExecConfig(
+			cfg.directPkgs,
+			cfg.directRace,
+			cfg.directExtraArgs,
+			nextAttempt,
+			retryOrdinal,
+			buildTestFilterPattern(failedNames),
+			buildTestFilterPattern(skipNames),
+		)))
+	default:
 	}
 }
 
@@ -462,7 +404,7 @@ func (r *runner) collectAlertsFromFile(logPath string, stream *testEventStream) 
 }
 
 // collectJUnitResult reads the JUnit report file and classifies the test outcome.
-func (r *runner) collectJUnitResult(cfg execConfig, result commandResult, detectedAlerts alerts) (numTests, numFailed int, failureKind string) {
+func (r *runner) collectJUnitResult(cfg execConfig, exitCode int, detectedAlerts alerts) (numTests, numFailed int, failureKind string) {
 	failureKind = classifyAlerts(detectedAlerts)
 
 	jr := &junitReport{path: cfg.junitPath, attempt: cfg.attempt}
@@ -481,7 +423,7 @@ func (r *runner) collectJUnitResult(cfg execConfig, result commandResult, detect
 		failureKind = "crash"
 		r.addAlerts([]alert{{
 			Kind:    failureKindCrash,
-			Summary: fmt.Sprintf("Process exited without junit report (exit code: %d)", result.exitCode),
+			Summary: fmt.Sprintf("Process exited without junit report (exit code: %d)", exitCode),
 		}})
 	}
 	return
@@ -497,12 +439,11 @@ func (r *runner) emitCrashRecoveryRetries(cfg execConfig, failed bool, numTests 
 	}
 	if cfg.attempt >= r.maxAttempts {
 		if len(emittedRetries) == 0 {
-			r.addError(fmt.Errorf("%s failed on attempt %d", cfg.label, cfg.attempt))
+			r.addError(fmt.Errorf("%s failed on attempt %d", cfg.unit.displayName, cfg.attempt))
 		}
 		return
 	}
 
-	// Check for tests that started but never finished (crash recovery)
 	stillRunning := stream.RunningTests()
 	var unretried []string
 	for _, name := range stillRunning {
@@ -511,15 +452,12 @@ func (r *runner) emitCrashRecoveryRetries(cfg execConfig, failed bool, numTests 
 		}
 	}
 	if len(unretried) > 0 {
-		if items := cfg.retry.forFailures(unretried, nil, cfg.attempt); len(items) > 0 {
-			emit(items...)
-		}
+		r.scheduleRetry(cfg, unretried, nil, emit)
 		return
 	}
 
-	// If failed but no retries were emitted (no tests in running, no stream retries)
 	if len(emittedRetries) == 0 {
-		r.addError(fmt.Errorf("%s failed on attempt %d", cfg.label, cfg.attempt))
+		r.addError(fmt.Errorf("%s failed on attempt %d", cfg.unit.displayName, cfg.attempt))
 	}
 }
 
@@ -533,9 +471,7 @@ func (r *runner) finalizeReport(reports []*junitReport) error {
 		return err
 	}
 
-	// Print test count summary for CI visibility. Comparing these numbers
-	// across runs helps detect if tests are being accidentally skipped.
-	r.log("test counts: total=%d passed=%d failed=%d errors=%d skipped=%d",
+	r.log("attempt counts: total=%d passed=%d failed=%d errors=%d skipped=%d",
 		mergedReport.Tests,
 		mergedReport.Tests-mergedReport.Failures-mergedReport.Errors,
 		mergedReport.Failures,
@@ -545,12 +481,11 @@ func (r *runner) finalizeReport(reports []*junitReport) error {
 	return errors.Join(mergedReport.reportingErrs...)
 }
 
-// writeConsoleResult formats and prints the test result to the console.
-func writeConsoleResult(r *runner, cfg execConfig, result commandResult,
+func writeConsoleResult(r *runner, cfg execConfig, exitCode int,
 	numTests, numFailed int, failureKind string, detectedAlerts alerts,
 	results testResults, start time.Time, progressCompleted, progressTotal int, progressDone bool) {
 
-	failed := result.exitCode != 0 || numFailed > 0 || numTests == 0
+	failed := exitCode != 0 || numFailed > 0 || numTests == 0
 	status := "❌️"
 	if !failed {
 		if progressDone && progressTotal > 0 {
@@ -570,12 +505,11 @@ func writeConsoleResult(r *runner, cfg execConfig, result commandResult,
 		totalStr = "?"
 	}
 	header := fmt.Sprintf("%s%s %s %s (attempt=%s, passed=%d/%s%s, runtime=%v)",
-		logPrefix, time.Now().Format("15:04:05"), status, cfg.label, cfg.displayAttempt(),
+		logPrefix, time.Now().Format("15:04:05"), status, cfg.unit.displayName, cfg.displayAttempt(),
 		passedTests, totalStr, failureInfo, time.Since(start).Round(time.Second))
 
 	var body strings.Builder
 
-	// Append alerts if test failed
 	if failed && len(detectedAlerts) > 0 {
 		for _, a := range detectedAlerts.dedupe() {
 			if testName := primaryTestName(a.Tests); testName != "" {
@@ -586,7 +520,6 @@ func writeConsoleResult(r *runner, cfg execConfig, result commandResult,
 		}
 	}
 
-	// Append test failure details
 	if failed && len(results.failures) > 0 {
 		for _, f := range results.failures {
 			fmt.Fprintf(&body, "\n--- %s\n", f.Name)
