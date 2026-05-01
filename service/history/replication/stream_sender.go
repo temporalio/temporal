@@ -60,6 +60,8 @@ type (
 		shutdownChan            channel.ShutdownOnce
 		config                  *configs.Config
 		isTieredStackEnabled    bool
+		readerGroup             *ReplicationReaderGroup
+		nsIsolation             *namespaceIsolationManager
 		flowController          SenderFlowController
 		sendLock                sync.Mutex
 		ssRateLimiter           ServerSchedulerRateLimiter
@@ -101,6 +103,8 @@ func NewStreamSender(
 		shutdownChan:            channel.NewShutdownOnce(),
 		config:                  config,
 		isTieredStackEnabled:    config.EnableReplicationTaskTieredProcessing(),
+		readerGroup:             newReaderGroupIfEnabled(config, shardContext, clientShardKey),
+		nsIsolation:             newNsIsolationIfEnabled(config),
 		flowController:          NewSenderFlowController(config, logger),
 		ssRateLimiter:           ssRateLimiter,
 	}
@@ -184,6 +188,12 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 		if s.isTieredStackEnabled != s.config.EnableReplicationTaskTieredProcessing() {
 			return NewStreamError("StreamSender detected tiered stack change, restart the stream", nil)
 		}
+		if (s.readerGroup != nil) != s.config.EnableReplicationReaderGroup() {
+			return NewStreamError("StreamSender detected reader group config change, restart the stream", nil)
+		}
+		if (s.nsIsolation != nil) != s.config.EnableReplicationNamespaceIsolation() {
+			return NewStreamError("StreamSender detected namespace isolation config change, restart the stream", nil)
+		}
 
 		req, err := s.server.Recv()
 		if err != nil {
@@ -244,6 +254,29 @@ func (s *StreamSenderImpl) sendEventLoop(priority enumsspb.TaskPriority) (retErr
 func (s *StreamSenderImpl) recvSyncReplicationState(
 	attr *replicationspb.SyncReplicationState,
 ) error {
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	if s.isTieredStackEnabled {
+		s.flowController.RefreshReceiverFlowControlInfo(attr)
+	}
+	if s.nsIsolation != nil && s.isTieredStackEnabled {
+		s.syncNamespaceIsolation(attr.GetThrottledNamespaceIds())
+	}
+
+	if s.readerGroup != nil {
+		readerState, err := s.readerGroup.BuildReaderState(attr)
+		if err != nil {
+			return err
+		}
+		if err := s.shardContext.UpdateReplicationQueueReaderState(readerID, readerState); err != nil {
+			return err
+		}
+		taskID, ts := s.readerGroup.FailoverWatermark(attr)
+		return s.shardContext.UpdateRemoteReaderInfo(readerID, taskID, ts)
+	}
+
 	var readerState *persistencespb.QueueReaderState
 	switch s.isTieredStackEnabled {
 	case true:
@@ -327,14 +360,6 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 	inclusiveLowWatermark := attr.GetInclusiveLowWatermark()
 	inclusiveLowWatermarkTime := attr.GetInclusiveLowWatermarkTime()
 
-	readerID := shard.ReplicationReaderIDFromClusterShardID(
-		int64(s.clientShardKey.ClusterID),
-		s.clientShardKey.ShardID,
-	)
-	if s.isTieredStackEnabled {
-		s.flowController.RefreshReceiverFlowControlInfo(attr)
-	}
-
 	if err := s.shardContext.UpdateReplicationQueueReaderState(
 		readerID,
 		readerState,
@@ -360,33 +385,35 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 }
 
 func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, error) {
-	readerID := shard.ReplicationReaderIDFromClusterShardID(
-		int64(s.clientShardKey.ClusterID),
-		s.clientShardKey.ShardID,
-	)
-
 	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 
 	var catchupBeginInclusiveWatermark int64
-	queueState, ok := s.shardContext.GetQueueState(
-		tasks.CategoryReplication,
-	)
-	if !ok {
-		s.logger.Debug("StreamSender queueState not found")
-		catchupBeginInclusiveWatermark = catchupEndExclusiveWatermark
+	if s.readerGroup != nil {
+		catchupBeginInclusiveWatermark = s.readerGroup.CatchupBeginWatermark(catchupEndExclusiveWatermark, priority)
 	} else {
-		readerState, ok := queueState.ReaderStates[readerID]
+		readerID := shard.ReplicationReaderIDFromClusterShardID(
+			int64(s.clientShardKey.ClusterID),
+			s.clientShardKey.ShardID,
+		)
+		queueState, ok := s.shardContext.GetQueueState(tasks.CategoryReplication)
 		if !ok {
-			s.logger.Debug(fmt.Sprintf("StreamSender readerState not found, readerID %v", readerID))
+			s.logger.Debug("StreamSender queueState not found")
 			catchupBeginInclusiveWatermark = catchupEndExclusiveWatermark
 		} else {
-			catchupBeginInclusiveWatermark = s.getSendCatchupBeginInclusiveWatermark(readerState, priority)
+			readerState, ok := queueState.ReaderStates[readerID]
+			if !ok {
+				s.logger.Debug(fmt.Sprintf("StreamSender readerState not found, readerID %v", readerID))
+				catchupBeginInclusiveWatermark = catchupEndExclusiveWatermark
+			} else {
+				catchupBeginInclusiveWatermark = s.getSendCatchupBeginInclusiveWatermark(readerState, priority)
+			}
 		}
 	}
 	if err := s.sendTasks(
 		priority,
 		catchupBeginInclusiveWatermark,
 		catchupEndExclusiveWatermark,
+		s.defaultLowNsFilter(priority),
 	); err != nil {
 		return 0, err
 	}
@@ -427,16 +454,21 @@ func (s *StreamSenderImpl) sendLive(
 ) error {
 	syncStatusTimer := time.NewTimer(s.config.ReplicationStreamSendEmptyTaskDuration())
 	defer syncStatusTimer.Stop()
+	nsFilter := s.defaultLowNsFilter(priority)
 	sendTasks := func() error {
 		endExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 		if err := s.sendTasks(
 			priority,
 			beginInclusiveWatermark,
 			endExclusiveWatermark,
+			nsFilter,
 		); err != nil {
 			return err
 		}
 		beginInclusiveWatermark = endExclusiveWatermark
+		if s.nsIsolation != nil && priority == enumsspb.TASK_PRIORITY_LOW {
+			s.nsIsolation.UpdateDefaultLowCursor(endExclusiveWatermark)
+		}
 		if !syncStatusTimer.Stop() {
 			select {
 			case <-syncStatusTimer.C:
@@ -467,6 +499,7 @@ func (s *StreamSenderImpl) sendTasks(
 	priority enumsspb.TaskPriority,
 	beginInclusiveWatermark int64,
 	endExclusiveWatermark int64,
+	nsFilter func(namespaceID string) bool,
 ) error {
 	if beginInclusiveWatermark > endExclusiveWatermark {
 		err := serviceerror.NewInternalf("StreamWorkflowReplication encountered invalid task range [%v, %v)",
@@ -531,6 +564,9 @@ Loop:
 		}
 		if priority != enumsspb.TASK_PRIORITY_UNSPECIFIED && // case: skip priority check. When priority is unspecified, send all tasks
 			priority != s.getTaskPriority(item) { // case: skip task with different priority than this loop
+			continue Loop
+		}
+		if nsFilter != nil && !nsFilter(item.GetNamespaceID()) {
 			continue Loop
 		}
 		if !s.shouldProcessTask(item) {
@@ -729,6 +765,118 @@ func (s *StreamSenderImpl) getTaskTargetCluster(task tasks.Task) []string {
 		return t.TargetClusters
 	default:
 		return nil
+	}
+}
+
+func newReaderGroupIfEnabled(
+	config *configs.Config,
+	shardContext historyi.ShardContext,
+	clientShardKey ClusterShardKey,
+) *ReplicationReaderGroup {
+	if !config.EnableReplicationReaderGroup() {
+		return nil
+	}
+	return NewReplicationReaderGroup(shardContext, clientShardKey, config.EnableReplicationTaskTieredProcessing())
+}
+
+func newNsIsolationIfEnabled(config *configs.Config) *namespaceIsolationManager {
+	if !config.EnableReplicationNamespaceIsolation() {
+		return nil
+	}
+	return newNamespaceIsolationManager()
+}
+
+// defaultLowNsFilter returns a namespace filter for the default LOW reader that excludes
+// namespaces with active dedicated readers. Returns nil when isolation is disabled or
+// for non-LOW priorities.
+func (s *StreamSenderImpl) defaultLowNsFilter(priority enumsspb.TaskPriority) func(string) bool {
+	if s.nsIsolation == nil || priority != enumsspb.TASK_PRIORITY_LOW {
+		return nil
+	}
+	return func(nsID string) bool { return !s.nsIsolation.IsDefaultLowExcluded(nsID) }
+}
+
+// syncNamespaceIsolation reconciles the sender's namespace reader state against the
+// set of throttled namespace IDs received from the receiver's ack.
+func (s *StreamSenderImpl) syncNamespaceIsolation(throttledNamespaceIDs []string) {
+	start, drain := s.nsIsolation.Sync(throttledNamespaceIDs)
+	for _, ns := range drain {
+		s.nsIsolation.BeginDrain(ns)
+	}
+	for _, ns := range start {
+		ctx, startCursor, ok := s.nsIsolation.ThrottleNamespace(s.server.Context(), ns)
+		if !ok {
+			continue
+		}
+		nsID := ns
+		go func() {
+			err := s.sendNamespaceEventLoop(ctx, nsID, startCursor)
+			s.nsIsolation.Remove(nsID)
+			if err != nil && ctx.Err() == nil {
+				s.Stop()
+			}
+		}()
+	}
+}
+
+// sendNamespaceEventLoop runs the dedicated LOW reader for a single throttled namespace.
+// It sends tasks for namespaceID starting at startCursor until the namespace is drained
+// to the recorded cursor, then exits.
+func (s *StreamSenderImpl) sendNamespaceEventLoop(ctx context.Context, namespaceID string, startCursor int64) error {
+	newTaskNotificationChan, subscriberID := s.historyEngine.SubscribeReplicationNotification(s.clientClusterName)
+	defer s.historyEngine.UnsubscribeReplicationNotification(subscriberID)
+
+	timer := time.NewTimer(s.config.ReplicationStreamSendEmptyTaskDuration())
+	defer timer.Stop()
+
+	cursor := startCursor
+	nsFilter := func(nsID string) bool { return nsID == namespaceID }
+
+	for {
+		drainAt, draining := s.nsIsolation.DrainTarget(namespaceID)
+
+		var end int64
+		if draining {
+			// Drain to the further of drainAt and the current default LOW cursor, so tasks
+			// that default LOW scanned (with this namespace excluded) are not left unsent.
+			defaultLow := s.nsIsolation.DefaultLowCursor()
+			if defaultLow > drainAt {
+				end = defaultLow
+			} else {
+				end = drainAt
+			}
+			if cursor >= end {
+				return nil
+			}
+		} else {
+			end = s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
+		}
+
+		if err := s.sendTasks(enumsspb.TASK_PRIORITY_LOW, cursor, end, nsFilter); err != nil {
+			return err
+		}
+		cursor = end
+
+		if draining && cursor >= s.nsIsolation.DefaultLowCursor() {
+			return nil
+		}
+
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+		timer.Reset(s.config.ReplicationStreamSendEmptyTaskDuration())
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-s.shutdownChan.Channel():
+			return nil
+		case <-newTaskNotificationChan:
+		case <-timer.C:
+		}
 	}
 }
 

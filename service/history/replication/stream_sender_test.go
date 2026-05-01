@@ -709,6 +709,7 @@ func (s *streamSenderSuite) TestSendTasks_Noop() {
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -738,6 +739,7 @@ func (s *streamSenderSuite) TestSendTasks_WithoutTasks() {
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -830,6 +832,7 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -908,6 +911,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 		enumsspb.TASK_PRIORITY_HIGH,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -1003,6 +1007,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 		enumsspb.TASK_PRIORITY_LOW,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -1035,6 +1040,7 @@ func (s *streamSenderSuite) TestSendEventLoop_StreamSendError_ShouldReturnStream
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
 	)
 	s.Error(err, "rpc error")
 	s.IsType(&StreamError{}, err)

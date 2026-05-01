@@ -424,8 +424,10 @@ type SyncReplicationState struct {
 	InclusiveLowWatermarkTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=inclusive_low_watermark_time,json=inclusiveLowWatermarkTime,proto3" json:"inclusive_low_watermark_time,omitempty"`
 	HighPriorityState         *ReplicationState      `protobuf:"bytes,3,opt,name=high_priority_state,json=highPriorityState,proto3" json:"high_priority_state,omitempty"`
 	LowPriorityState          *ReplicationState      `protobuf:"bytes,4,opt,name=low_priority_state,json=lowPriorityState,proto3" json:"low_priority_state,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	// namespace IDs currently being throttled on the receiver's LOW lane
+	ThrottledNamespaceIds []string `protobuf:"bytes,5,rep,name=throttled_namespace_ids,json=throttledNamespaceIds,proto3" json:"throttled_namespace_ids,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *SyncReplicationState) Reset() {
@@ -482,6 +484,13 @@ func (x *SyncReplicationState) GetHighPriorityState() *ReplicationState {
 func (x *SyncReplicationState) GetLowPriorityState() *ReplicationState {
 	if x != nil {
 		return x.LowPriorityState
+	}
+	return nil
+}
+
+func (x *SyncReplicationState) GetThrottledNamespaceIds() []string {
+	if x != nil {
+		return x.ThrottledNamespaceIds
 	}
 	return nil
 }
@@ -2146,12 +2155,13 @@ const file_temporal_server_api_replication_v1_message_proto_rawDesc = "" +
 	"\x1elast_processed_visibility_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x1blastProcessedVisibilityTime\"N\n" +
 	"\x0fSyncShardStatus\x12;\n" +
 	"\vstatus_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"statusTime\"\xf5\x02\n" +
+	"statusTime\"\xad\x03\n" +
 	"\x14SyncReplicationState\x126\n" +
 	"\x17inclusive_low_watermark\x18\x01 \x01(\x03R\x15inclusiveLowWatermark\x12[\n" +
 	"\x1cinclusive_low_watermark_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x19inclusiveLowWatermarkTime\x12d\n" +
 	"\x13high_priority_state\x18\x03 \x01(\v24.temporal.server.api.replication.v1.ReplicationStateR\x11highPriorityState\x12b\n" +
-	"\x12low_priority_state\x18\x04 \x01(\v24.temporal.server.api.replication.v1.ReplicationStateR\x10lowPriorityState\"\x96\x02\n" +
+	"\x12low_priority_state\x18\x04 \x01(\v24.temporal.server.api.replication.v1.ReplicationStateR\x10lowPriorityState\x126\n" +
+	"\x17throttled_namespace_ids\x18\x05 \x03(\tR\x15throttledNamespaceIds\"\x96\x02\n" +
 	"\x10ReplicationState\x126\n" +
 	"\x17inclusive_low_watermark\x18\x01 \x01(\x03R\x15inclusiveLowWatermark\x12[\n" +
 	"\x1cinclusive_low_watermark_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x19inclusiveLowWatermarkTime\x12m\n" +

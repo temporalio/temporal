@@ -283,6 +283,10 @@ func (r *StreamReceiverImpl) ackMessage(
 		return 0, NewStreamError("InclusiveLowWaterMark is not set", serviceerror.NewInternal("Invalid inclusive low watermark"))
 	}
 
+	var throttledNamespaceIDs []string
+	if receiverMode == ReceiverModeTieredStack {
+		throttledNamespaceIDs = r.NamespaceThrottler.ThrottledNamespaceIDs()
+	}
 	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
 			SyncReplicationState: &replicationspb.SyncReplicationState{
@@ -290,6 +294,7 @@ func (r *StreamReceiverImpl) ackMessage(
 				InclusiveLowWatermarkTime: timestamppb.New(inclusiveLowWaterMarkTime),
 				HighPriorityState:         highPriorityWatermark,
 				LowPriorityState:          lowPriorityWatermark,
+				ThrottledNamespaceIds:     throttledNamespaceIDs,
 			},
 		},
 	}); err != nil {
@@ -357,6 +362,14 @@ func (r *StreamReceiverImpl) processMessages(
 		if err != nil {
 			// Todo: Change to write Tasks to DLQ. As resend task will not help here
 			return NewStreamError("ReplicationTask wrong priority", err)
+		}
+
+		if priority == enumsspb.TASK_PRIORITY_LOW {
+			for _, task := range convertedTasks {
+				if nsID := task.ReplicationTask().GetRawTaskInfo().GetNamespaceId(); nsID != "" {
+					r.NamespaceThrottler.RecordTask(nsID)
+				}
+			}
 		}
 
 		submissionThreshold := r.Config.ReplicationReceiverSlowSubmissionLatencyThreshold()
