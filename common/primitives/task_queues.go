@@ -3,6 +3,7 @@ package primitives
 import (
 	"fmt"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 )
 
@@ -16,6 +17,12 @@ const (
 	DeleteNamespaceActivityTQ     = "temporal-sys-delete-namespace-activity-tq"
 	DLQActivityTQ                 = "temporal-sys-dlq-activity-tq"
 )
+
+// IsInternalTaskQueueKind returns true if the task queue kind identifies a
+// server-internal task queue (e.g. worker commands queues).
+func IsInternalTaskQueueKind(kind enumspb.TaskQueueKind) bool {
+	return kind == enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS
+}
 
 func IsInternalPerNsTaskQueue(taskQueue string) bool {
 	return taskQueue == PerNSWorkerTaskQueue

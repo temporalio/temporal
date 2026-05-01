@@ -178,7 +178,7 @@ func TestNexusHandlersEmitClientNameMetric(t *testing.T) {
 			"should not have client_name tag when header is absent, got: %v", snap)
 	})
 
-	t.Run("is_internal for /temporal-sys/ task queue", func(t *testing.T) {
+	t.Run("is_internal for worker commands task queue kind", func(t *testing.T) {
 		captureHandler := metricstest.NewCaptureHandler()
 		capture := captureHandler.StartCapture()
 		defer captureHandler.StopCapture(capture)
@@ -187,7 +187,7 @@ func TestNexusHandlersEmitClientNameMetric(t *testing.T) {
 		ctx := ctxWithClientName(t, expectedClientName)
 		internalTQ := &taskqueuepb.TaskQueue{
 			Name: "/temporal-sys/worker-commands/ns/grouping-key",
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
 		}
 
 		_, err := h.PollNexusTaskQueue(ctx, &matchingservice.PollNexusTaskQueueRequest{
@@ -201,7 +201,7 @@ func TestNexusHandlersEmitClientNameMetric(t *testing.T) {
 		snap := capture.Snapshot()
 		require.NotEmpty(t, snap[nexusTaskRequestsMetric])
 		require.True(t, findMetricWithTag(snap, nexusTaskRequestsMetric, "is_internal", "true"),
-			"should have is_internal=true for /temporal-sys/ task queue, got: %v", snap)
+			"should have is_internal=true for worker commands task queue kind, got: %v", snap)
 	})
 }
 
