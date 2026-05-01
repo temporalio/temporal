@@ -61,6 +61,9 @@ type (
 		SchemaDir         string `yaml:"-"`
 		FaultInjection    *config.FaultInjection
 		Logger            log.Logger `yaml:"-"`
+		// SkipSchemaSetup skips database creation, schema loading, and teardown.
+		// Use when the database and schema are pre-created externally (e.g. in CI).
+		SkipSchemaSetup bool `yaml:"-"`
 	}
 )
 
@@ -131,7 +134,7 @@ func NewTestClusterForCassandra(options *TestBaseOptions, logger log.Logger) *ca
 	if options.DBName == "" {
 		options.DBName = "test_" + GenerateRandomDBName(3)
 	}
-	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, options.FaultInjection, logger)
+	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, options.FaultInjection, options.SkipSchemaSetup, logger)
 	return testCluster
 }
 
@@ -166,7 +169,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) *TestBase {
 			panic(fmt.Sprintf("unknown sql store driver: %v", options.SQLDBPluginName))
 		}
 	}
-	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.ConnectAttributes, options.SchemaDir, options.FaultInjection, logger)
+	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.ConnectAttributes, options.SchemaDir, options.FaultInjection, options.SkipSchemaSetup, logger)
 	return NewTestBaseForCluster(testCluster, logger)
 }
 
