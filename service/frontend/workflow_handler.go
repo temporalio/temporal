@@ -110,15 +110,17 @@ const (
 )
 
 type (
-	// ActivityHandler is the activity frontend handler, aliased to avoid embedding name collision.
-	ActivityHandler = activity.FrontendHandler
-	// NexusOperationHandler is the nexus operation frontend handler, aliased to avoid embedding name collision.
+	// Aliases for CHASM components to avoid name collisions.
+	ActivityHandler       = activity.FrontendHandler
+	CallbackHandler       = callback.FrontendHandler
 	NexusOperationHandler = chasmnexus.FrontendHandler
 
 	// WorkflowHandler - gRPC handler interface for workflowservice
 	WorkflowHandler struct {
 		workflowservice.UnsafeWorkflowServiceServer
+
 		ActivityHandler
+		CallbackHandler
 		NexusOperationHandler
 
 		status int32
@@ -157,6 +159,25 @@ type (
 		workerDeploymentReadRateLimiter quotas.RequestRateLimiter
 	}
 )
+
+// HACK: DO NOT SUBMIT: The api repo contains service endpoints not yet implemented in the
+// temporal repo. Stubbing out. But these should be merged by somebody else.
+// See https://github.com/temporalio/api/pull/743.
+func (wh *WorkflowHandler) PauseActivityExecution(_ context.Context, _ *workflowservice.PauseActivityExecutionRequest) (*workflowservice.PauseActivityExecutionResponse, error) {
+	panic("not implemented")
+}
+
+func (wh *WorkflowHandler) UnpauseActivityExecution(_ context.Context, _ *workflowservice.UnpauseActivityExecutionRequest) (*workflowservice.UnpauseActivityExecutionResponse, error) {
+	panic("not implemented")
+}
+
+func (wh *WorkflowHandler) ResetActivityExecution(_ context.Context, _ *workflowservice.ResetActivityExecutionRequest) (*workflowservice.ResetActivityExecutionResponse, error) {
+	panic("not implemented")
+}
+
+func (wh *WorkflowHandler) UpdateActivityExecutionOptions(_ context.Context, _ *workflowservice.UpdateActivityExecutionOptionsRequest) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
+	panic("not implemented")
+}
 
 func (wh *WorkflowHandler) CreateWorkerDeploymentVersion(
 	ctx context.Context,
@@ -329,12 +350,14 @@ func NewWorkflowHandler(
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	httpEnabled bool,
 	activityHandler activity.FrontendHandler,
+	callbackHandler callback.FrontendHandler,
 	nexusOperationHandler chasmnexus.FrontendHandler,
 	registry *chasm.Registry,
 	workerDeploymentReadRateLimiter quotas.RequestRateLimiter,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		ActivityHandler:       activityHandler,
+		CallbackHandler:       callbackHandler,
 		NexusOperationHandler: nexusOperationHandler,
 		status:                common.DaemonStatusInitialized,
 		callbackValidator:     callbackValidator,

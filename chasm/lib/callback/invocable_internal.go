@@ -33,8 +33,8 @@ func logInternalError(logger log.Logger, internalMsg string, internalErr error) 
 	return fmt.Errorf("internal error, reference-id: %v", referenceID)
 }
 
-// invocableInternal is an invocable that delivers the Nexus operation completion data to History for cross-shard
-// callbacks.
+// invocableInternal is an invocable that delivers the Nexus operation completion data to History
+// for cross-shard callbacks.
 type invocableInternal struct {
 	callback   *callbackspb.Callback_Nexus
 	attempt    int32
@@ -43,7 +43,7 @@ type invocableInternal struct {
 }
 
 func (c invocableInternal) WrapError(result invocationResult, err error) error {
-	// Return the invocation result error if present
+	// Return the invocation result error if present.
 	if resultErr := result.error(); resultErr != nil {
 		return resultErr
 	}
@@ -58,13 +58,20 @@ func (c invocableInternal) Invoke(
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
-	header := nexus.Header(c.callback.GetHeader())
-	if header == nil {
-		header = nexus.Header{}
+	// Get the token from the dedicated Token field, falling back to the header for backward compatibility.
+	encodedRef := c.callback.GetToken()
+	if encodedRef == "" {
+		header := nexus.Header(c.callback.GetHeader())
+		if header != nil {
+			// TODO(chrsmith): https://github.com/temporalio/temporal/pull/9805/changes#r3105939013
+			// > Roey: I would ideally want to make the callback token header something generic that we can put in
+			// > the Nexus SPEC.md. I was hoping we would do that as part of this change. It's just a bit tricky
+			// > since you'll have to send both headers for a while for compatibility but on the handler side, we
+			// > can remove the duplication if we can read from the new header.
+			// ^-- updating the documentation that the Nexus RFC to refer to the token.
+			encodedRef = header.Get(commonnexus.CallbackTokenHeader)
+		}
 	}
-
-	// Get back the base64-encoded ComponentRef from the header.
-	encodedRef := header.Get(commonnexus.CallbackTokenHeader)
 	if encodedRef == "" {
 		return invocationResultFail{logInternalError(h.logger, "callback missing token", nil)}
 	}
@@ -74,7 +81,7 @@ func (c invocableInternal) Invoke(
 		return invocationResultFail{logInternalError(h.logger, "failed to decode CHASM ComponentRef", err)}
 	}
 
-	// Validate that the bytes are a valid ChasmComponentRef
+	// Validate that the bytes are a valid ChasmComponentRef.
 	ref := &persistencespb.ChasmComponentRef{}
 	err = proto.Unmarshal(decodedRef, ref)
 	if err != nil {
@@ -107,7 +114,7 @@ func isRetryableRPCResponse(err error) bool {
 	} else {
 		st, ok = status.FromError(err)
 		if !ok {
-			// Not a gRPC induced error
+			// Not a gRPC induced error.
 			return false
 		}
 	}
@@ -129,13 +136,13 @@ func isRetryableRPCResponse(err error) bool {
 func (c invocableInternal) getHistoryRequest(
 	refBytes []byte,
 ) (*historyservice.CompleteNexusOperationChasmRequest, error) {
-	var req *historyservice.CompleteNexusOperationChasmRequest
 
 	completion := &tokenspb.NexusOperationCompletion{
 		ComponentRef: refBytes,
 		RequestId:    c.requestID,
 	}
 
+	// Success case.
 	if c.completion.Error == nil {
 		var payload *commonpb.Payload
 		if c.completion.Result != nil {
@@ -146,35 +153,34 @@ func (c invocableInternal) getHistoryRequest(
 			}
 		}
 
-		req = &historyservice.CompleteNexusOperationChasmRequest{
+		return &historyservice.CompleteNexusOperationChasmRequest{
 			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Success{
 				Success: payload,
 			},
 			CloseTime:  timestamppb.New(c.completion.CloseTime),
 			Completion: completion,
-		}
-	} else {
-		failure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(c.completion.Error)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert error to failure: %w", err)
-		}
-		// Unwrap the operation error, the handler on the other side is expecting to receive the underlying cause.
-		if failure.Cause != nil {
-			failure = *failure.Cause
-		}
-		apiFailure, err := commonnexus.NexusFailureToTemporalFailure(failure)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert failure type: %w", err)
-		}
-
-		req = &historyservice.CompleteNexusOperationChasmRequest{
-			Completion: completion,
-			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Failure{
-				Failure: apiFailure,
-			},
-			CloseTime: timestamppb.New(c.completion.CloseTime),
-		}
+		}, nil
 	}
 
-	return req, nil
+	// Failure case.
+	failure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(c.completion.Error)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert error to failure: %w", err)
+	}
+	// Unwrap the operation error, the handler on the other side is expecting to receive the underlying cause.
+	if failure.Cause != nil {
+		failure = *failure.Cause
+	}
+	apiFailure, err := commonnexus.NexusFailureToTemporalFailure(failure)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert failure type: %w", err)
+	}
+
+	return &historyservice.CompleteNexusOperationChasmRequest{
+		Completion: completion,
+		Outcome: &historyservice.CompleteNexusOperationChasmRequest_Failure{
+			Failure: apiFailure,
+		},
+		CloseTime: timestamppb.New(c.completion.CloseTime),
+	}, nil
 }

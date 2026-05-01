@@ -235,7 +235,7 @@ If you need to make changes to the gRPC / protobuf definitions while also workin
           go.temporal.io/sdk => ../sdk-go
       )
       ```
-   2. Build & fix errors: `make proto && make bins`
+   2. Build & fix errors: `make proto && make go-generate && make bins`
 
 ## License headers
 

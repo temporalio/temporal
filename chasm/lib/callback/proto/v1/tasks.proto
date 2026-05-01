@@ -13,3 +13,6 @@ message BackoffTask {
   // The attempt number for this invocation.
   int32 attempt = 1;
 }
+
+// Fired when the callback execution's schedule-to-close timeout expires.
+message ScheduleToCloseTimeoutTask {}

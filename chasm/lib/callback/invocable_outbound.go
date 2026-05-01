@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http/httptrace"
+	"strings"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -15,6 +16,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/components/nexusoperations"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 )
@@ -32,6 +34,8 @@ func (n invocableOutbound) WrapError(result invocationResult, err error) error {
 	if retry, ok := result.(invocationResultRetry); ok {
 		return queueserrors.NewDestinationDownError(retry.err.Error(), err)
 	}
+	// invocationResultRetryNoCB is intentionally NOT wrapped as DestinationDownError
+	// to avoid triggering the circuit breaker for transient server-side conditions.
 	return err
 }
 
@@ -68,6 +72,12 @@ func (n invocableOutbound) Invoke(
 	startTime := time.Now()
 
 	n.completion.Header = n.callback.Header
+	if n.callback.GetToken() != "" {
+		if n.completion.Header == nil {
+			n.completion.Header = nexus.Header{}
+		}
+		n.completion.Header.Set(commonnexus.CallbackTokenHeader, n.callback.GetToken())
+	}
 	err := client.CompleteOperation(ctx, n.callback.Url, n.completion)
 
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
@@ -80,6 +90,14 @@ func (n invocableOutbound) Invoke(
 		retryable := isRetryableCallError(err)
 		h.logger.Error("Callback request failed", tag.Error(err), tag.Bool("retryable", retryable))
 		if retryable {
+			// Check if this is a transient "operation not started yet" error.
+			// This should not trigger the circuit breaker since the destination
+			// is reachable — the operation just hasn't been started by its handler yet.
+			//
+			// TODO(chrsmith): Unresolved comment. "Instead of creating a new `NoCB` result, you can put this functionality in `WrapError` above."
+			if isOperationNotStartedError(err) {
+				return invocationResultRetryNoCB{err}
+			}
 			return invocationResultRetry{err}
 		}
 		return invocationResultFail{err}
@@ -93,6 +111,20 @@ func isRetryableCallError(err error) bool {
 		return handlerError.Retryable()
 	}
 	return true
+}
+
+// isOperationNotStartedError detects the specific "operation not started yet" error
+// returned when a completion arrives before the Nexus start handler has returned.
+func isOperationNotStartedError(err error) bool {
+	var handlerError *nexus.HandlerError
+	// TODO(chrsmith): https://github.com/temporalio/temporal/pull/9805/changes#r3106006542
+	// > @bergundy: At minimum we should verify the handler error type here. Please also use errors.AsType.
+	// > We should also put a TODO to only do this special case when calling into the "system",
+	// > I believe retryable worker callbacks should always trip the circuit breaker.
+	if errors.As(err, &handlerError) {
+		return strings.Contains(handlerError.Message, nexusoperations.ErrMsgOperationNotStarted)
+	}
+	return false
 }
 
 func outcomeTag(callCtx context.Context, callErr error) string {

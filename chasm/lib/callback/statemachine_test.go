@@ -30,6 +30,8 @@ func TestValidTransitions(t *testing.T) {
 
 	// AttemptFailed
 	mctx := &chasm.MockMutableContext{}
+	mctx.HandleNow = func(chasm.Component) time.Time { return currentTime }
+
 	err := TransitionAttemptFailed.Apply(callback, mctx, EventAttemptFailed{
 		Time:        currentTime,
 		Err:         errors.New("test"),
@@ -52,6 +54,8 @@ func TestValidTransitions(t *testing.T) {
 
 	// Rescheduled
 	mctx = &chasm.MockMutableContext{}
+	mctx.HandleNow = func(chasm.Component) time.Time { return currentTime }
+
 	err = TransitionRescheduled.Apply(callback, mctx, EventRescheduled{})
 	require.NoError(t, err)
 
@@ -76,6 +80,8 @@ func TestValidTransitions(t *testing.T) {
 	// Succeeded
 	currentTime = currentTime.Add(time.Second)
 	mctx = &chasm.MockMutableContext{}
+	mctx.HandleNow = func(chasm.Component) time.Time { return currentTime }
+
 	err = TransitionSucceeded.Apply(callback, mctx, EventSucceeded{Time: currentTime})
 	require.NoError(t, err)
 
@@ -96,6 +102,8 @@ func TestValidTransitions(t *testing.T) {
 
 	// failed
 	mctx = &chasm.MockMutableContext{}
+	mctx.HandleNow = func(chasm.Component) time.Time { return currentTime }
+
 	err = TransitionFailed.Apply(callback, mctx, EventFailed{Time: currentTime, Err: errors.New("failed")})
 	require.NoError(t, err)
 
@@ -109,4 +117,89 @@ func TestValidTransitions(t *testing.T) {
 
 	// Assert task is not generated, failed is terminal
 	require.Empty(t, mctx.Tasks)
+}
+
+func TestTerminatedTransition(t *testing.T) {
+	callback := &Callback{
+		CallbackState: &callbackspb.CallbackState{
+			Callback: &callbackspb.Callback{
+				Variant: &callbackspb.Callback_Nexus_{
+					Nexus: &callbackspb.Callback_Nexus{
+						Url: "http://address:666/path",
+					},
+				},
+			},
+		},
+	}
+
+	// TODO(chrsmith): Redundant to test all of these.
+	for _, src := range []callbackspb.CallbackStatus{
+		callbackspb.CALLBACK_STATUS_STANDBY,
+		callbackspb.CALLBACK_STATUS_SCHEDULED,
+		callbackspb.CALLBACK_STATUS_BACKING_OFF,
+	} {
+		t.Run("from_"+src.String(), func(t *testing.T) {
+			cb := &Callback{CallbackState: proto.Clone(callback.CallbackState).(*callbackspb.CallbackState)}
+			cb.SetStateMachineState(src)
+			mctx := &chasm.MockMutableContext{}
+			err := TransitionTerminated.Apply(cb, mctx, EventTerminated{})
+			require.NoError(t, err)
+			require.Equal(t, callbackspb.CALLBACK_STATUS_TERMINATED, cb.StateMachineState())
+			// TODO(chrsmith): Unresolved comment: https://github.com/temporalio/temporal/pull/9805/changes#r3106029253
+			// > Check the rest of the fields are set and that no tasks are emitted.
+		})
+	}
+}
+
+// TODO(chrsmith): Unresolved comment: https://github.com/temporalio/temporal/pull/9805/changes#r3106029987
+// > I would put this in component_test.go since it test a method of the component.
+// > But as mentioned before, youc an fold that into invocationResultRetry.
+func TestSaveResult_RetryNoCB(t *testing.T) {
+	// invocationResultRetryNoCB should transition to BACKING_OFF just like
+	// invocationResultRetry, but without triggering the circuit breaker
+	// (circuit breaker is handled in WrapError, not saveResult).
+	cb := &Callback{
+		CallbackState: &callbackspb.CallbackState{
+			Callback: &callbackspb.Callback{
+				Variant: &callbackspb.Callback_Nexus_{
+					Nexus: &callbackspb.Callback_Nexus{
+						Url: "http://address:666/path",
+					},
+				},
+			},
+			Status: callbackspb.CALLBACK_STATUS_SCHEDULED,
+		},
+	}
+	mctx := &chasm.MockMutableContext{}
+	_, err := cb.saveResult(mctx, saveResultInput{
+		result:      invocationResultRetryNoCB{err: errors.New("operation not started")},
+		retryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
+	})
+	require.NoError(t, err)
+	require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.StateMachineState())
+	require.Equal(t, int32(1), cb.Attempt)
+	require.Equal(t, "operation not started", cb.LastAttemptFailure.Message)
+	require.False(t, cb.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
+	require.NotNil(t, cb.NextAttemptScheduleTime)
+
+	// Assert backoff task is generated
+	require.Len(t, mctx.Tasks, 1)
+	require.IsType(t, &callbackspb.BackoffTask{}, mctx.Tasks[0].Payload)
+}
+
+func TestSaveResult_TerminatedWhileInFlight(t *testing.T) {
+	// If the callback was terminated while an invocation was in-flight,
+	// saveResult should drop the result silently.
+	cb := &Callback{
+		CallbackState: &callbackspb.CallbackState{
+			Status: callbackspb.CALLBACK_STATUS_TERMINATED,
+		},
+	}
+	mctx := &chasm.MockMutableContext{}
+	_, err := cb.saveResult(mctx, saveResultInput{
+		result:      invocationResultOK{},
+		retryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
+	})
+	require.NoError(t, err)
+	require.Equal(t, callbackspb.CALLBACK_STATUS_TERMINATED, cb.StateMachineState())
 }
