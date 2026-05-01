@@ -3451,7 +3451,6 @@ func (s *Versioning3Suite) TestSyncDeploymentUserDataWithRoutingConfig_Update() 
 func (s *Versioning3Suite) setCurrentDeployment(env *testcore.TestEnv, tv *testvars.TestVars) {
 	ctx, cancel := context.WithTimeout(env.Context(), 60*time.Second)
 	defer cancel()
-
 	failedPrecondition := serviceerror.NewFailedPreconditionf(workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error()
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -3518,7 +3517,10 @@ func (s *Versioning3Suite) pollUntilRegistered(env *testcore.TestEnv, tv *testva
 					break
 				}
 			}
-			require.True(t, found)
+			if !found {
+				require.True(t, found)
+				return
+			}
 		}
 	}, 30*time.Second, 100*time.Millisecond)
 	cancel()
@@ -3527,7 +3529,6 @@ func (s *Versioning3Suite) pollUntilRegistered(env *testcore.TestEnv, tv *testva
 func (s *Versioning3Suite) unsetCurrentDeployment(env *testcore.TestEnv, tv *testvars.TestVars) {
 	ctx, cancel := context.WithTimeout(env.Context(), 60*time.Second)
 	defer cancel()
-
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:      env.Namespace().String(),
