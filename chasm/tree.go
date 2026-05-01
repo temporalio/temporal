@@ -442,7 +442,7 @@ func (n *Node) Component(
 			fmt.Errorf("%s", reflect.TypeOf(node.value).String()))
 	}
 
-	if err := node.validateAccess(validationContext); err != nil {
+	if err := node.validateAccess(validationContext, false); err != nil {
 		return nil, err
 	}
 
@@ -465,7 +465,14 @@ func (n *Node) Component(
 // all of a node's ancestors are still in a running state, and can accept writes. In
 // the case of a newly created node, a detached node, or an OperationIntentObserve
 // intent, the check is skipped.
-func (n *Node) validateAccess(ctx Context) error {
+//
+// When checkPaused is true (used during task validation), the check is extended to
+// also treat a paused lifecycle state as a blocking condition - for both ancestors
+// and the node itself. This collapses the paused-subtree traversal into the same
+// single pass, avoiding a second tree walk.
+// Note: engine mutations on paused components are still accepted (checkPaused=false),
+// per the current requirement.
+func (n *Node) validateAccess(ctx Context, checkPaused bool) error {
 	intent := operationIntentFromContext(ctx.goContext())
 	if intent != OperationIntentProgress {
 		// Read-only operations are always allowed.
@@ -473,20 +480,38 @@ func (n *Node) validateAccess(ctx Context) error {
 	}
 
 	// Detached nodes skip ancestor validation entirely.
-	if n.isDetached() || n.parent == nil {
+	if n.isDetached() {
 		return nil
 	}
 
-	return n.parent.validateAccessHelper(ctx)
+	if n.parent != nil {
+		if err := n.parent.validateAccessHelper(ctx, checkPaused); err != nil {
+			return err
+		}
+	}
+
+	// validateAccessHelper traverses ancestors but never checks n itself.
+	// For task validation we must also check whether n is paused.
+	if checkPaused && n.isComponent() {
+		if err := n.prepareComponentValue(ctx); err != nil {
+			return err
+		}
+		componentValue, _ := n.value.(Component) //nolint:revive // unchecked-type-assertion
+		if componentValue.LifecycleState(ctx).IsPaused() {
+			return errAccessCheckFailed
+		}
+	}
+
+	return nil
 }
 
 // validateAccessHelper is a helper method that validates both the current
 // node's lifecycle state AND its ancestors recursively.
 // Do not call this method directly, call validateAccess instead.
-func (n *Node) validateAccessHelper(ctx Context) error {
+func (n *Node) validateAccessHelper(ctx Context, checkPaused bool) error {
 	// Check ancestors first (if not detached).
 	if !n.isDetached() && n.parent != nil {
-		if err := n.parent.validateAccessHelper(ctx); err != nil {
+		if err := n.parent.validateAccessHelper(ctx, checkPaused); err != nil {
 			return err
 		}
 	}
@@ -502,7 +527,12 @@ func (n *Node) validateAccessHelper(ctx Context) error {
 	}
 	componentValue, _ := n.value.(Component) //nolint:revive // unchecked-type-assertion
 
-	if componentValue.LifecycleState(ctx).IsClosed() {
+	lifecycleState := componentValue.LifecycleState(ctx)
+	if lifecycleState.IsClosed() {
+		return errAccessCheckFailed
+	}
+
+	if checkPaused && lifecycleState.IsPaused() {
 		return errAccessCheckFailed
 	}
 
@@ -1556,7 +1586,8 @@ func (n *Node) closeTransactionHandleRootLifecycleChange(
 	var newState enumsspb.WorkflowExecutionState
 	var newStatus enumspb.WorkflowExecutionStatus
 	switch lifecycleState {
-	case LifecycleStateRunning:
+	case LifecycleStateRunning, LifecycleStatePaused:
+		// Paused is an OPEN state; the execution remains RUNNING from the persistence perspective.
 		newState = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 		newStatus = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	case LifecycleStateCompleted:
@@ -1852,7 +1883,9 @@ func (n *Node) validateTask(
 			fmt.Errorf("%s", reflect.TypeOf(taskInstance).Name()))
 	}
 
-	if err := n.validateAccess(validateContext); err != nil {
+	// checkPaused=true: a single ancestor walk invalidates tasks for both
+	// closed ancestors and paused components (self or non-detached ancestor).
+	if err := n.validateAccess(validateContext, true); err != nil {
 		if errors.Is(err, errAccessCheckFailed) {
 			return false, nil
 		}
@@ -2005,6 +2038,8 @@ func (n *Node) closeTransactionGeneratePhysicalSideEffectTask(
 			TypeId:                                 sideEffectTask.TypeId,
 			Data:                                   sideEffectTask.Data,
 			ArchetypeId:                            archetypeID,
+			TaskVersionedTransition:                sideEffectTask.VersionedTransition,
+			TaskVersionedTransitionOffset:          sideEffectTask.VersionedTransitionOffset,
 		},
 	})
 	sideEffectTask.PhysicalTaskStatus = physicalTaskStatusCreated
@@ -2324,6 +2359,28 @@ func (n *Node) applyDeletions(
 			// - If the mutations passed in include changes
 			// older than the current state of the tree.
 			// - We are already applied the deletion on a parent node.
+			continue
+		}
+
+		if node == n.root() {
+			// Root node can never be deleted
+			// This can happen when:
+			// 1. CHASM framework is disabled in source cluster and sends an
+			// empty snapshot to the standby cluster. If the standby cluster
+			// has a non-empty chasm tree, the root node will be marked for
+			// deletion and we will lose archetype information for the execution,
+			// and hit other undefined issues when root is deleted.
+			// Disabled CHASM framework itself is already an undefined situation
+			// for non-workflow chasm executions, and we are ok with not deleting
+			// the root node.
+			//
+			// 2. CHASM is enabled but the execution is a workflow which doesn't
+			// have any chasm nodes. In this case, again an empty snapshot will be sent to
+			// standby cluster.
+			// In this case, we can actually choose to delete the root itself because empty
+			// chasm tree is assume to be a Workflow. However, given chasm workflow component's
+			// state is an empty proto, skipping deletion is fine as well. All other child nodes
+			// will still be deleted.
 			continue
 		}
 
@@ -3131,6 +3188,30 @@ func (n *Node) ValidateSideEffectTask(
 		return false, nil
 	}
 
+	// Verify the logical task this physical task was generated from still exists,
+	// and capture it so we can use its Data pointer for the deserialization cache.
+	//
+	// A logical task can be dropped mid-flight (e.g. component paused then unpaused)
+	// without the physical task being cancelled. Checking existence here prevents
+	// stale physical tasks from executing after their logical counterpart is gone.
+	//
+	// TaskVersionedTransition is unset on physical tasks created before this field
+	// was added; skip the check in that case to preserve backward compatibility.
+	var logicalTask *persistencespb.ChasmComponentAttributes_Task
+	if taskInfo.TaskVersionedTransition != nil {
+		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
+		for _, t := range componentAttr.GetSideEffectTasks() {
+			if transitionhistory.Compare(t.VersionedTransition, taskInfo.TaskVersionedTransition) == 0 &&
+				t.VersionedTransitionOffset == taskInfo.TaskVersionedTransitionOffset {
+				logicalTask = t
+				break
+			}
+		}
+		if logicalTask == nil {
+			return false, nil
+		}
+	}
+
 	// Component must be hydrated before the task's validator is called.
 	validateCtx := NewContext(newContextWithOperationIntent(ctx, OperationIntentProgress), n)
 	if err := node.prepareComponentValue(validateCtx); err != nil {
@@ -3148,10 +3229,17 @@ func (n *Node) ValidateSideEffectTask(
 	}()
 
 	if !chasmTask.DeserializedTask.IsValid() {
-		// TODO: Change physical side effect task to reference logical task and
-		// then use deserializeTaskWithCache as well.
 		var err error
-		chasmTask.DeserializedTask, err = deserializeTask(registrableTask, taskInfo.Data)
+		if logicalTask != nil {
+			// Use the logical task's Data pointer so deserialization shares the
+			// node's taskValueCache with closeTransactionCleanupInvalidTasks.
+			// The physical task's taskInfo.Data is a different pointer (freshly
+			// allocated from the physical task row) and would always miss the cache.
+			chasmTask.DeserializedTask, err = node.deserializeTaskWithCache(registrableTask, logicalTask.Data)
+		} else {
+			// Backward compatibility: physical task predates TaskVersionedTransition.
+			chasmTask.DeserializedTask, err = deserializeTask(registrableTask, taskInfo.Data)
+		}
 		if err != nil {
 			return false, err
 		}
@@ -3267,7 +3355,7 @@ func (n *Node) invokeSideEffectTaskFn(
 
 	ref := ComponentRef{
 		ExecutionKey:          executionKey,
-		archetypeID:           n.ArchetypeID(),
+		archetypeID:           ArchetypeID(taskInfo.GetArchetypeId()),
 		executionLastUpdateVT: taskInfo.ComponentLastUpdateVersionedTransition,
 		componentPath:         taskInfo.Path,
 		componentInitialVT:    taskInfo.ComponentInitialVersionedTransition,

@@ -71,6 +71,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
+	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -516,6 +517,193 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ThreeGenerations() {
 	s.NotNil(pInitAttrs.GetTimeSkippingConfig())
 	s.approxDuration(3*time.Hour, pInitAttrs.GetInitialSkippedDuration().AsDuration(),
 		"P's initiated event for C carries P's full accumulated at command time (3h = G's 1h + P's pt1 2h)")
+}
+
+// TestTSPInChildWf_AdmissionTimestampsShifted verifies the time-shift block inside
+// initTimeSkippingInfo (mutable_state_impl.go): when a child workflow boots with a
+// non-zero PropagatedSkippedDuration, the boot-time admission timestamps on the
+// child's MS are shifted forward by accum so they live in the virtual frame, while
+// the WorkflowRunTimeoutTask's VisibilityTimestamp stays in the wall frame.
+//
+// Scenario:
+//   - Parent TSC enabled. Parent runs StartTimer(t1, 1h) → idle → server skips 1h.
+//     Parent's AccumulatedSkippedDuration ≈ 1h.
+//   - Parent issues StartChildWorkflow with WorkflowRunTimeout=2h. The child's
+//     initiated event carries InitialSkippedDuration=1h. On the child MS,
+//     applyTimeSkippingConfig seeds AccumulatedSkippedDuration=1h, and
+//     initTimeSkippingInfo shifts admission timestamps forward by accum=1h.
+//
+// Boot-time assertions (virtual frame):
+//   - executionState.StartTime ≈ wallChildBoot + 1h
+//   - executionInfo.StartTime ≈ wallChildBoot + 1h
+//   - executionInfo.ExecutionTime ≈ wallChildBoot + 1h (no first-WT delay)
+//   - executionInfo.WorkflowRunExpirationTime ≈ wallChildBoot + 1h + 2h
+//   - executionInfo.WorkflowExecutionExpirationTime: zero when ExecutionTimeout is
+//     unset on the child; otherwise shifted by the same formula.
+//
+// Wall-clock assertion (the load-bearing one): the child's WorkflowRunTimeoutTask
+// must fire at wallChildBoot + 2h — i.e., virtual_expiration − accum — so a
+// workflow that "should" run for 2h of virtual wall time still runs for 2h of real
+// wall time, not less.
+func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_AdmissionTimestampsShifted() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := testcore.NewContext()
+
+	parentWFType := tv.WorkflowType()
+	childWFType := &commonpb.WorkflowType{Name: parentWFType.Name + "-child"}
+	parentWFID := tv.WorkflowID()
+	childWFID := parentWFID + "-child"
+
+	parentStart, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          parentWFID,
+		WorkflowType:        parentWFType,
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.NoError(err)
+	parentRunID := parentStart.RunId
+
+	ns := env.Namespace().String()
+	tq := tv.TaskQueue()
+
+	// Bracket wallChildBoot tight around the parent WFT that issues the child command.
+	// The child is admitted shortly after the response; with a 1-minute tolerance this
+	// is a safe lower bound on the child's real-clock boot moment.
+	var wallChildBoot time.Time
+
+	parentStarted, parentKickedOff := false, false
+	parentHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		fired := firedTimers(task)
+		switch {
+		case !parentStarted:
+			parentStarted = true
+			return cmdsResponse(timerCmd("t1", time.Hour)), nil
+		case fired["t1"] && !parentKickedOff:
+			parentKickedOff = true
+			wallChildBoot = time.Now()
+			childStartCmd := &commandpb.Command{
+				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
+					StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
+						Namespace:           ns,
+						WorkflowId:          childWFID,
+						WorkflowType:        childWFType,
+						TaskQueue:           tq,
+						WorkflowRunTimeout:  durationpb.New(2 * time.Hour),
+						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+						ParentClosePolicy:   enumspb.PARENT_CLOSE_POLICY_ABANDON,
+					},
+				},
+			}
+			return cmdsResponse(childStartCmd), nil
+		default:
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+		}
+	}
+
+	childDone := false
+	childHandler := func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		if !childDone {
+			childDone = true
+			return cmdsResponse(completeCmd()), nil
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+
+	dispatch := typeDispatch(map[string]wftHandler{
+		parentWFType.Name: parentHandler,
+		childWFType.Name:  childHandler,
+	})
+
+	// Drive the parent until the child is started and completed; then we read the
+	// child's MS to check boot-time admission timestamps. The parent itself is
+	// terminated below so we don't have to wait for its 24h run timeout.
+	for i := 0; i < 30 && !childDone; i++ {
+		_, pollErr := env.TaskPoller().PollAndHandleWorkflowTask(tv, dispatch)
+		if pollErr != nil {
+			s.T().Logf("iter %d: poll error (likely timeout): %v", i, pollErr)
+		}
+	}
+	s.True(childDone, "child workflow should have been driven to completion")
+	s.False(wallChildBoot.IsZero(), "wallChildBoot should have been captured")
+
+	parentMS := s.getMutableState(env, parentWFID, parentRunID)
+	parentTSI := parentMS.State.ExecutionInfo.GetTimeSkippingInfo()
+	s.NotNil(parentTSI)
+	s.approxDuration(time.Hour, parentTSI.GetAccumulatedSkippedDuration().AsDuration(),
+		"parent should have accumulated ~1h of skip from t1 before issuing the child command")
+
+	childMS := s.getMutableStateByID(ctx, env, childWFID)
+	childRunID := childMS.State.ExecutionState.RunId
+	childTSI := childMS.State.ExecutionInfo.GetTimeSkippingInfo()
+	s.NotNil(childTSI)
+	s.True(childTSI.GetConfig().GetEnabled(), "child should have TSC enabled propagated from parent")
+
+	const accum = time.Hour
+	const runTimeout = 2 * time.Hour
+	const tol = time.Minute
+
+	expectedStart := wallChildBoot.Add(accum)
+	s.WithinDuration(expectedStart, childMS.State.ExecutionState.StartTime.AsTime(), tol,
+		"executionState.StartTime should be shifted forward by accum (1h) into the virtual frame")
+	s.NotNil(childMS.State.ExecutionInfo.StartTime)
+	s.WithinDuration(expectedStart, childMS.State.ExecutionInfo.StartTime.AsTime(), tol,
+		"executionInfo.StartTime should be shifted forward by accum (1h) into the virtual frame")
+	s.NotNil(childMS.State.ExecutionInfo.ExecutionTime)
+	s.WithinDuration(expectedStart, childMS.State.ExecutionInfo.ExecutionTime.AsTime(), tol,
+		"executionInfo.ExecutionTime equals StartTime (no first-WT delay) and is shifted by accum")
+	s.NotNil(childMS.State.ExecutionInfo.WorkflowRunExpirationTime)
+	expectedRunExpiration := wallChildBoot.Add(accum + runTimeout)
+	s.WithinDuration(expectedRunExpiration, childMS.State.ExecutionInfo.WorkflowRunExpirationTime.AsTime(), tol,
+		"WorkflowRunExpirationTime = StartTime + RunTimeout in the virtual frame")
+
+	// WorkflowExecutionExpirationTime: the parent didn't set ExecutionTimeout, so the
+	// child's WorkflowExecutionTimeout is unset and the ExpirationTime is zero. The
+	// shift block in initTimeSkippingInfo only shifts non-nil values, so both branches
+	// are valid: zero is preserved as zero; non-zero is shifted by accum.
+	weExpiration := childMS.State.ExecutionInfo.WorkflowExecutionExpirationTime
+	if weExpiration != nil && !weExpiration.AsTime().IsZero() {
+		s.WithinDuration(expectedRunExpiration, weExpiration.AsTime(), tol,
+			"WorkflowExecutionExpirationTime, when set, lives in the virtual frame and is shifted by accum")
+	}
+
+	recorder := env.GetTestCluster().GetTaskQueueRecorder()
+	s.NotNil(recorder)
+	recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
+		NamespaceID: env.NamespaceID().String(),
+		WorkflowID:  childWFID,
+		RunID:       childRunID,
+	})
+	var runTimeoutTask *historytasks.WorkflowRunTimeoutTask
+	for _, rec := range recorded {
+		if t, ok := rec.Task.(*historytasks.WorkflowRunTimeoutTask); ok {
+			runTimeoutTask = t
+			break
+		}
+	}
+	s.NotNil(runTimeoutTask, "child should have a WorkflowRunTimeoutTask recorded")
+	// virtual_expiration (childBoot + accum + runTimeout) − accum = childBoot + runTimeout;
+	// confirms toRealTime converts back to the wall frame for task firing.
+	expectedWall := wallChildBoot.Add(runTimeout)
+	s.WithinDuration(expectedWall, runTimeoutTask.VisibilityTimestamp, tol,
+		"WorkflowRunTimeoutTask must fire at wall-clock = virtual_expiration − accum (so the child still runs 2h of real time)")
+
+	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: parentWFID, RunId: parentRunID},
+		Reason:            "test cleanup: stop parent",
+	})
+	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: childWFID, RunId: childRunID},
+		Reason:            "test cleanup: stop child",
+	})
 }
 
 // approxDuration asserts actual is within 5s of expected. Each skip loses

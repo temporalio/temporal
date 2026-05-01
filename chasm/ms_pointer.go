@@ -54,4 +54,7 @@ func (m MSPointer) ScheduleWorkflowTask() error {
 	return m.backend.ScheduleWorkflowTask()
 }
 
-
+// GetWorkflowTypeName retrieves the workflow type name from the underlying mutable state.
+func (m MSPointer) GetWorkflowTypeName() string {
+	return m.backend.GetExecutionInfo().GetWorkflowTypeName()
+}
