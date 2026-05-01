@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -1440,12 +1442,11 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 	}
 
 	// Assert visibility is correct
-	s.Eventually(
-		func() bool {
-			listResp, err := env.FrontendClient().ListOpenWorkflowExecutions(env.Context(), listOpenRequest)
-			s.NoError(err)
-			return len(listResp.Executions) == 1
-		},
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		listResp, err := env.FrontendClient().ListOpenWorkflowExecutions(env.Context(), listOpenRequest)
+		s.NoError(err)
+		require.Equal(t, 1, len(listResp.Executions))
+	},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
@@ -1462,12 +1463,11 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 	})
 	s.NoError(err)
 
-	s.Eventually(
-		func() bool {
-			listResp, err := env.FrontendClient().ListOpenWorkflowExecutions(env.Context(), listOpenRequest)
-			s.NoError(err)
-			return len(listResp.Executions) == 0
-		},
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		listResp, err := env.FrontendClient().ListOpenWorkflowExecutions(env.Context(), listOpenRequest)
+		s.NoError(err)
+		require.Equal(t, 0, len(listResp.Executions))
+	},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)

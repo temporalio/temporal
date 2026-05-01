@@ -137,7 +137,6 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
 		// also verify that the number of attempts was reset
 		require.Equal(t, int32(1), description.PendingActivities[0].Attempt)
-
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let activity finish

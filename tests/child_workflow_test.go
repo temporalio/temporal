@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -1145,7 +1147,7 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution_AlreadyRunning_Terminate
 
 	// The old execution should be terminated once the child start is migrated to
 	// conflict=TERMINATE_EXISTING for the running-workflow case.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
@@ -1153,7 +1155,8 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution_AlreadyRunning_Terminate
 				RunId:      existingChildResp.GetRunId(),
 			},
 		})
-		return err == nil && resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
+		require.NoError(t, err)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, resp.GetWorkflowExecutionInfo().GetStatus())
 	}, 10*time.Second, 200*time.Millisecond)
 }
 

@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -694,14 +696,15 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_NoVersioning() {
 	s.spoolDefaultTasks(pm, 5)
 
 	// Wait for backlog stats to stabilize, then emit logical metrics.
-	s.Require().Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
 		pm.fetchAndEmitLogicalBacklogMetrics(ctx)
 
 		snap := capture.Snapshot()
 		count, ok := latestLogicalBacklogCount(snap, "__unversioned__", defaultPriorityTag)
-		return ok && count == float64(5)
+		require.True(t, ok)
+		require.Equal(t, float64(5), count)
 	}, 2*time.Second, 50*time.Millisecond)
 }
 
@@ -751,14 +754,16 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_CurrentOnly() {
 	)
 
 	// Wait for backlog stats to stabilize, then emit logical metrics.
-	s.Require().Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		pm.fetchAndEmitLogicalBacklogMetrics(ctx)
 		snap := capture.Snapshot()
 
 		unvCount, unvOk := latestLogicalBacklogCount(snap, "__unversioned__", defaultPriorityTag)
 		curCount, curOk := latestLogicalBacklogCount(snap, currentVersionTag, defaultPriorityTag)
-		return unvOk && unvCount == float64(0) &&
-			curOk && curCount == float64(12)
+		require.True(t, unvOk)
+		require.Equal(t, float64(0), unvCount)
+		require.True(t, curOk)
+		require.Equal(t, float64(12), curCount)
 	}, 2*time.Second, 50*time.Millisecond)
 }
 
@@ -802,7 +807,7 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_CurrentAndRamping(
 	)
 
 	// ceil(10 * 70/100) = 7 for current, ceil(10 * 30/100) = 3 for ramping
-	s.Require().Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		iterCtx, iterCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer iterCancel()
 		pm.fetchAndEmitLogicalBacklogMetrics(iterCtx)
@@ -811,9 +816,12 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_CurrentAndRamping(
 		unvCount, unvOk := latestLogicalBacklogCount(snap, "__unversioned__", defaultPriorityTag)
 		curCount, curOk := latestLogicalBacklogCount(snap, currentVersionTag, defaultPriorityTag)
 		rmpCount, rmpOk := latestLogicalBacklogCount(snap, rampingVersionTag, defaultPriorityTag)
-		return unvOk && unvCount == float64(0) &&
-			curOk && curCount == float64(7) &&
-			rmpOk && rmpCount == float64(3)
+		require.True(t, unvOk)
+		require.Equal(t, float64(0), unvCount)
+		require.True(t, curOk)
+		require.Equal(t, float64(7), curCount)
+		require.True(t, rmpOk)
+		require.Equal(t, float64(3), rmpCount)
 	}, 2*time.Second, 50*time.Millisecond)
 }
 
@@ -858,7 +866,7 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_SmallBacklog() {
 
 	// ceil(1 * 70/100) = 1 for current, ceil(1 * 30/100) = 1 for ramping.
 	// Over-attribution: both get 1, unversioned is max(0, 1-1-1) = 0.
-	s.Require().Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		iterCtx, iterCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer iterCancel()
 		pm.fetchAndEmitLogicalBacklogMetrics(iterCtx)
@@ -867,9 +875,12 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_SmallBacklog() {
 		unvCount, unvOk := latestLogicalBacklogCount(snap, "__unversioned__", defaultPriorityTag)
 		curCount, curOk := latestLogicalBacklogCount(snap, currentVersionTag, defaultPriorityTag)
 		rmpCount, rmpOk := latestLogicalBacklogCount(snap, rampingVersionTag, defaultPriorityTag)
-		return unvOk && unvCount == float64(0) &&
-			curOk && curCount == float64(1) &&
-			rmpOk && rmpCount == float64(1)
+		require.True(t, unvOk)
+		require.Equal(t, float64(0), unvCount)
+		require.True(t, curOk)
+		require.Equal(t, float64(1), curCount)
+		require.True(t, rmpOk)
+		require.Equal(t, float64(1), rmpCount)
 	}, 2*time.Second, 50*time.Millisecond)
 }
 
@@ -904,14 +915,16 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_BreakdownByBuildID
 	s.Require().NoError(err)
 
 	// Wait for backlog stats to stabilize, then emit.
-	s.Require().Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		pm.fetchAndEmitLogicalBacklogMetrics(ctx)
 		snap := capture.Snapshot()
 
 		// Unversioned should still be emitted (with attributed count = 0 since current takes all).
 		_, unvOk := latestLogicalBacklogCount(snap, "__unversioned__", defaultPriorityTag)
 		if !unvOk {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 
 		// Versioned entry should NOT be emitted with the actual version tag.
@@ -920,12 +933,14 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_BreakdownByBuildID
 		)
 		_, curOk := latestLogicalBacklogCount(snap, currentVersionTag, defaultPriorityTag)
 		if curOk {
-			return false // should not be present
+			require.Fail(t, "condition was false")
+
+			return // should not be present
 		}
 
 		// Also should not appear under the generic "__versioned__" tag, since we skip entirely.
 		_, genericOk := latestLogicalBacklogCount(snap, "__versioned__", defaultPriorityTag)
-		return !genericOk
+		require.False(t, genericOk)
 	}, 2*time.Second, 50*time.Millisecond)
 }
 
@@ -1322,14 +1337,16 @@ func (s *PartitionManagerTestSuite) describeStatsEventually(
 	check func(resp *matchingservice.DescribeTaskQueuePartitionResponse) bool,
 ) {
 	// Backlog stats are sourced from async readers; wait until Describe reflects expected stable values.
-	s.Require().Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
 		resp, err := s.partitionMgr.Describe(ctx, buildIds, includeAllActive, true /* reportStats */, reportPollers, internalTaskQueueStatus)
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
-		return check(resp)
+		require.True(t, check(resp))
 	}, 2*time.Second, 10*time.Millisecond)
 }
 
@@ -1580,7 +1597,9 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookSyncMatch() {
 		}
 	}()
 	pq := pm.defaultQueue().(*physicalTaskQueueManagerImpl)
-	s.Require().Eventually(pq.matcher.HasWaitingPoller, 2*time.Second, time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.True(t, pq.matcher.HasWaitingPoller())
+	}, 2*time.Second, time.Millisecond)
 
 	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
 		taskInfo: &persistencespb.TaskInfo{
@@ -1593,19 +1612,20 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookSyncMatch() {
 	s.Require().True(syncMatched)
 
 	var pr pollResult
-	s.Require().Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		select {
 		case pr = <-pollDone:
-			return true
+
 		default:
-			return false
+			require.Fail(t, "condition was false")
+
 		}
 	}, 2*time.Second, 10*time.Millisecond)
 	s.Require().NoError(pr.err)
 	s.Require().NotNil(pr.task)
 	s.Require().NotNil(pr.task.responseC)
 
-	s.Require().Eventually(func() bool { return len(hook.getCalls()) >= 1 }, 2*time.Second, 10*time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) { require.GreaterOrEqual(t, len(hook.getCalls()), 1) }, 2*time.Second, 10*time.Millisecond)
 	calls := hook.getCalls()
 	s.Require().Len(calls, 1)
 	s.Equal(taskQueueName, calls[0].TaskQueueName)
@@ -1669,7 +1689,9 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedSyncMatch_HooksNot
 	// Wait until the poller is actually blocked in the matcher, ready to receive a task.
 	// This guarantees the subsequent AddTask will sync-match rather than spool.
 	pq := pm.defaultQueue().(*physicalTaskQueueManagerImpl)
-	s.Require().Eventually(pq.matcher.HasWaitingPoller, 2*time.Second, time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.True(t, pq.matcher.HasWaitingPoller())
+	}, 2*time.Second, time.Millisecond)
 
 	// Add a forwarded task (simulating a child partition forwarding to this parent).
 	// With a poller waiting, this should sync-match successfully.
@@ -1687,12 +1709,13 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedSyncMatch_HooksNot
 
 	// Drain the poller goroutine and verify it received the task.
 	var pr pollResult
-	s.Require().Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		select {
 		case pr = <-pollDone:
-			return true
+
 		default:
-			return false
+			require.Fail(t, "condition was false")
+
 		}
 	}, 2*time.Second, 10*time.Millisecond)
 	s.Require().NoError(pr.err)

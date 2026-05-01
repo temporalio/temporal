@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/membership"
@@ -47,8 +48,9 @@ func (s *RpoSuite) TestMonitor() {
 	s.Nil(err, "Ringpop monitor failed to find host for key")
 	s.NotNil(host, "Ringpop monitor returned a nil host")
 
-	s.Eventually(func() bool {
-		return len(r.Members()) == 3 && len(r.AvailableMembers()) == 3
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.Equal(t, 3, len(r.Members()))
+		require.Equal(t, 3, len(r.AvailableMembers()))
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Force refresh now and drain the notification channel
@@ -128,9 +130,9 @@ func (s *RpoSuite) TestScheduledUpdates() {
 
 	waitAndCheckMembers := func(elements []string) {
 		var addrs []string
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			addrs = util.MapSlice(r.Members(), func(h membership.HostInfo) string { return h.GetAddress() })
-			return len(addrs) == len(elements)
+			require.Equal(t, len(elements), len(addrs))
 		}, 15*time.Second, 100*time.Millisecond)
 		s.ElementsMatch(elements, addrs)
 	}

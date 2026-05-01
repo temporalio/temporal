@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/quotas"
 )
@@ -30,8 +31,8 @@ func TestDynamicRateLimiterRateAndBurstRefreshAfterInterval(t *testing.T) {
 		rateBurst.SetRPS(updatedRate)
 		rateBurst.SetBurst(updatedBurst)
 
-		require.Eventually(t, func() bool {
-			return limiter.Rate() == updatedRate
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
+			require.Equal(t, updatedRate, limiter.Rate())
 		}, time.Second, 5*time.Millisecond)
 
 		rateBurst.SetRPS(nextRate)
@@ -49,8 +50,8 @@ func TestDynamicRateLimiterRateAndBurstRefreshAfterInterval(t *testing.T) {
 		rateBurst.SetRPS(updatedRate)
 		rateBurst.SetBurst(updatedBurst)
 
-		require.Eventually(t, func() bool {
-			return limiter.Burst() == updatedBurst
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
+			require.Equal(t, updatedBurst, limiter.Burst())
 		}, time.Second, 5*time.Millisecond)
 
 		rateBurst.SetRPS(nextRate)

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/convert"
@@ -87,9 +88,10 @@ func (s *ownershipSuite) TestAcquireViaMembershipUpdate() {
 
 	shardController.ownership.membershipUpdateCh <- &membership.ChangedEvent{}
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		shardIDs := shardController.ShardIDs()
-		return len(shardIDs) == 1 && shardIDs[0] == shardID
+		require.Equal(t, 1, len(shardIDs))
+		require.Equal(t, shardID, shardIDs[0])
 	}, 5*time.Second, 100*time.Millisecond)
 
 	s.resource.HistoryServiceResolver.EXPECT().

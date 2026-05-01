@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -385,10 +387,9 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_RandomWID(
 
 	// save child init initialChildExecutions for later comparison.
 	var initialChildExecutions []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		initialChildExecutions = s.getChildWFIDsFromHistory(ctx, wfID, firstRun.GetRunID())
-		return len(initialChildExecutions) == 1
-
+		require.Equal(t, 1, len(initialChildExecutions))
 	}, 5*time.Second, 100*time.Millisecond)
 
 	resetRequest := &workflowservice.ResetWorkflowExecutionRequest{
@@ -406,9 +407,9 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_RandomWID(
 	s.NoError(err)
 
 	var childExecutionsAfterReset1 []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		childExecutionsAfterReset1 = s.getChildWFIDsFromHistory(ctx, wfID, resp.GetRunId())
-		return len(childExecutionsAfterReset1) == 1
+		require.Equal(t, 1, len(childExecutionsAfterReset1))
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Let the second child finish by sending a signal.
@@ -452,10 +453,9 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID() {
 
 	// save child init initialChildExecutions for later comparison.
 	var initialChildExecutions []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		initialChildExecutions = s.getChildWFIDsFromHistory(ctx, wfID, firstRun.GetRunID())
-		return len(initialChildExecutions) == 1
-
+		require.Equal(t, 1, len(initialChildExecutions))
 	}, 5*time.Second, 100*time.Millisecond)
 
 	resetRequest := &workflowservice.ResetWorkflowExecutionRequest{
@@ -474,9 +474,9 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID() {
 
 	// Let the second child finish
 	var childExecutionsAfterReset1 []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		childExecutionsAfterReset1 = s.getChildWFIDsFromHistory(ctx, wfID, resp.GetRunId())
-		return len(childExecutionsAfterReset1) == 1
+		require.Equal(t, 1, len(childExecutionsAfterReset1))
 	}, 5*time.Second, 100*time.Millisecond)
 
 	err = s.SdkClient().SignalWorkflow(context.Background(), childExecutionsAfterReset1[0].WorkflowId, childExecutionsAfterReset1[0].RunId, "continue", "")
@@ -511,10 +511,9 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID_Wit
 
 	// save child init initialChildExecutions for later comparison.
 	var initialChildExecutions []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		initialChildExecutions = s.getChildWFIDsFromHistory(ctx, wfID, firstRun.GetRunID())
-		return len(initialChildExecutions) == 1
-
+		require.Equal(t, 1, len(initialChildExecutions))
 	}, 5*time.Second, 100*time.Millisecond)
 
 	s.verifyReusePolicyIsSetForAllChild(ctx, wfID, firstRun.GetRunID(), enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE)
@@ -535,9 +534,9 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID_Wit
 
 	// Let the second child finish
 	var childExecutionsAfterReset1 []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		childExecutionsAfterReset1 = s.getChildWFIDsFromHistory(ctx, wfID, resp.GetRunId())
-		return len(childExecutionsAfterReset1) == 1
+		require.Equal(t, 1, len(childExecutionsAfterReset1))
 	}, 5*time.Second, 100*time.Millisecond)
 
 	err = s.SdkClient().SignalWorkflow(context.Background(), childExecutionsAfterReset1[0].WorkflowId, childExecutionsAfterReset1[0].RunId, "continue", "")
@@ -579,13 +578,15 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterStartingChild() {
 
 	// save child init initialChildExecutions for later comparison.
 	var initialChildExecutions []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		initialChildExecutions = s.getChildWFIDsFromHistory(ctx, wfID, firstRun.GetRunID())
 		if len(initialChildExecutions) == 0 {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIdAfterChildInit(ctx, wfID, firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
-		return resetRequest.WorkflowTaskFinishEventId != 0
+		require.NotEqual(t, 0, resetRequest.WorkflowTaskFinishEventId)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// resetting the new workflow execution after child-1 while child-1 is still running
@@ -622,10 +623,9 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildCompletes() {
 
 	// save child init initialChildExecutions for later comparison.
 	var initialChildExecutions []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		initialChildExecutions = s.getChildWFIDsFromHistory(ctx, wfID, firstRun.GetRunID())
-		return len(initialChildExecutions) == 1
-
+		require.Equal(t, 1, len(initialChildExecutions))
 	}, 5*time.Second, 100*time.Millisecond)
 
 	resetRequest := &workflowservice.ResetWorkflowExecutionRequest{
@@ -642,8 +642,8 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildCompletes() {
 	s.NoError(err)
 
 	// Wait for the child to complete.
-	s.Eventually(func() bool {
-		return s.getWorkflowTaskFinishEventIdAfterChild(ctx, wfID, firstRun.GetRunID(), initialChildExecutions[0].WorkflowId) != 0
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.NotEqual(t, 0, s.getWorkflowTaskFinishEventIdAfterChild(ctx, wfID, firstRun.GetRunID(), initialChildExecutions[0].WorkflowId))
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// resetting the new workflow execution after child initiation.
@@ -671,10 +671,9 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildTerminated() 
 
 	// save child init initialChildExecutions for later comparison.
 	var initialChildExecutions []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		initialChildExecutions = s.getChildWFIDsFromHistory(ctx, wfID, firstRun.GetRunID())
-		return len(initialChildExecutions) == 1
-
+		require.Equal(t, 1, len(initialChildExecutions))
 	}, 5*time.Second, 100*time.Millisecond)
 
 	resetRequest := &workflowservice.ResetWorkflowExecutionRequest{
@@ -692,9 +691,9 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildTerminated() 
 
 	// Wait until the parent has recorded the child's terminated event and a subsequent WFT completed.
 	var wftAfterChildTerminated int64
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		wftAfterChildTerminated = s.getWorkflowTaskFinishEventIdAfterChild(ctx, wfID, firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
-		return wftAfterChildTerminated != 0
+		require.NotEqual(t, 0, wftAfterChildTerminated)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// resetting the new workflow execution after child initiation.

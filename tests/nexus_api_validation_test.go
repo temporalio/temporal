@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -199,10 +201,10 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_Forbidden() {
 		capture := env.StartNamespaceMetricCapture()
 
 		// Wait until the endpoint is loaded into the registry.
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			_, err = nexusrpc.StartOperation(env.Context(), client, op, "input", nexus.StartOperationOptions{})
 			var handlerErr *nexus.HandlerError
-			return err == nil || (!errors.As(err, &handlerErr) || handlerErr.Type != nexus.HandlerErrorTypeNotFound)
+			require.True(t, err == nil || (!errors.As(err, &handlerErr) || handlerErr.Type != nexus.HandlerErrorTypeNotFound))
 		}, 10*time.Second, 1*time.Second)
 
 		var handlerErr *nexus.HandlerError
@@ -245,13 +247,13 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_PayloadSizeLimit()
 		var result *nexusrpc.ClientStartOperationResponse[string]
 
 		// Wait until the endpoint is loaded into the registry.
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			result, err = nexusrpc.StartOperation(env.Context(), client, op, input, nexus.StartOperationOptions{
 				CallbackURL: "http://localhost/callback",
 				RequestID:   "request-id",
 			})
 			var handlerErr *nexus.HandlerError
-			return err == nil || (!errors.As(err, &handlerErr) || handlerErr.Type != nexus.HandlerErrorTypeNotFound)
+			require.True(t, err == nil || (!errors.As(err, &handlerErr) || handlerErr.Type != nexus.HandlerErrorTypeNotFound))
 		}, 10*time.Second, 500*time.Millisecond)
 
 		s.Nil(result)

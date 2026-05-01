@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/backoff"
@@ -231,8 +232,8 @@ func (s *sequentialSchedulerSuite) TestTrySubmitLockLeak() {
 	}()
 
 	// Wait for the first TrySubmit to timeout and the spawned goroutine to acquire the lock
-	s.Require().Eventually(func() bool {
-		return firstTrySubmitDone.Load()
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.True(t, firstTrySubmitDone.Load())
 	}, 500*time.Millisecond, 10*time.Millisecond, "First TrySubmit should timeout")
 
 	s.Require().False(firstTrySubmitResult.Load(), "First TrySubmit should return false on timeout")
@@ -261,8 +262,8 @@ func (s *sequentialSchedulerSuite) TestTrySubmitLockLeak() {
 	}()
 
 	// Wait for second TrySubmit to complete
-	s.Require().Eventually(func() bool {
-		return secondTrySubmitDone.Load()
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.True(t, secondTrySubmitDone.Load())
 	}, 500*time.Millisecond, 10*time.Millisecond, "Second TrySubmit should complete")
 
 	elapsed := time.Duration(secondTrySubmitElapsed.Load())

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -1729,9 +1731,9 @@ func (s *FunctionalClustersTestSuite) waitForNewRunToStart(
 	execution *commonpb.WorkflowExecution,
 ) string {
 	var newRunID string
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		newRunID = s.getNewExecutionRunIdFromLastEvent(client, namespace, execution)
-		return newRunID != ""
+		require.NotEqual(t, "", newRunID)
 	}, 10*time.Second, 100*time.Millisecond)
 
 	s.NotEmpty(newRunID, "New run should have started")
@@ -2508,13 +2510,15 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	// Verify all wf in ns is now available in cluster2
 	client1, worker1 := s.newClientAndWorker(s.clusters[1].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
 	verify := func(wfID string, expectedRunID string) {
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			desc1, err := client1.DescribeWorkflowExecution(testCtx, wfID, "")
 			if err != nil {
-				return false
+				require.Fail(t, "condition was false")
+
+				return
 			}
-			return desc1.WorkflowExecutionInfo.Execution.RunId == expectedRunID &&
-				desc1.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+			require.Equal(t, expectedRunID, desc1.WorkflowExecutionInfo.Execution.RunId)
+			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc1.WorkflowExecutionInfo.Status)
 		}, 15*time.Second, 200*time.Millisecond, "workflow %s should be replicated to cluster2", wfID)
 	}
 	verify(workflowID, run1.GetRunID())
@@ -2542,12 +2546,14 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	err = resetRun.Get(testCtx, nil)
 	s.NoError(err)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		descResp, err := client1.DescribeWorkflowExecution(testCtx, workflowID, resetResp.GetRunId())
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
-		return descResp.GetWorkflowExecutionInfo().Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.GetWorkflowExecutionInfo().Status)
 	}, 15*time.Second, 200*time.Millisecond, "reset workflow should be visible on cluster2")
 }
 
@@ -2836,16 +2842,20 @@ func (s *FunctionalClustersWithRedirectionTestSuite) TestActivityMultipleHeartbe
 
 	// Validate heartbeat1 is visible before failover (eventually)
 	var hbVal int
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc0, err := client0.DescribeWorkflowExecution(testcore.NewContext(), workflowID, "")
 		if err != nil || len(desc0.GetPendingActivities()) != 1 {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		hbVal = 0
 		if err := payloads.Decode(desc0.PendingActivities[0].GetHeartbeatDetails(), &hbVal); err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
-		return hbVal == hb1Val
+		require.Equal(t, hb1Val, hbVal)
 	}, 10*time.Second, 200*time.Millisecond)
 
 	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
@@ -2860,16 +2870,20 @@ func (s *FunctionalClustersWithRedirectionTestSuite) TestActivityMultipleHeartbe
 	<-hb3Ch
 
 	// Validate latest heartbeat is visible in new active cluster (eventually)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc1, err := client0.DescribeWorkflowExecution(testcore.NewContext(), workflowID, "")
 		if err != nil || len(desc1.GetPendingActivities()) != 1 {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		hbVal = 0
 		if err := payloads.Decode(desc1.PendingActivities[0].GetHeartbeatDetails(), &hbVal); err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
-		return hbVal == hb3Val
+		require.Equal(t, hb3Val, hbVal)
 	}, 10*time.Second, 200*time.Millisecond)
 
 	// Complete the activity and workflow

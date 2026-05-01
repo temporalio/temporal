@@ -2250,13 +2250,13 @@ func (s *NexusStandaloneTestSuite) startNexusOperation(
 
 func (s *NexusStandaloneTestSuite) eventuallyDeleted(env *NexusTestEnv, t *testing.T, operationID, runID string) {
 	t.Helper()
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		_, err := env.FrontendClient().DescribeNexusOperationExecution(env.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
 			Namespace:   env.Namespace().String(),
 			OperationId: operationID,
 			RunId:       runID,
 		})
 		_, ok := errors.AsType[*serviceerror.NotFound](err)
-		return ok
+		require.True(t, ok)
 	}, 10*time.Second, 100*time.Millisecond)
 }

@@ -155,8 +155,8 @@ func TestUserData_LoadOnInit_Refresh(t *testing.T) {
 	require.NoError(t, m.WaitUntilInitialized(ctx))
 
 	// should be refreshing quickly
-	require.Eventually(t, func() bool {
-		return tm.getGetUserDataCount(dbq) >= 5
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.GreaterOrEqual(t, tm.getGetUserDataCount(dbq), 5)
 	}, time.Second, time.Millisecond)
 
 	// should still have version 2
@@ -181,9 +181,10 @@ func TestUserData_LoadOnInit_Refresh(t *testing.T) {
 	data2.Version++
 
 	// eventually it will notice and reload the data
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		userData, _, err := m.GetUserData()
-		return err == nil && userData.Version == data2.Version
+		require.NoError(t, err)
+		require.Equal(t, data2.Version, userData.Version)
 	}, time.Second, time.Millisecond)
 
 	m.Stop()
@@ -226,8 +227,8 @@ func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
 	require.NoError(t, m.WaitUntilInitialized(ctx))
 
 	// should be refreshing quickly
-	require.Eventually(t, func() bool {
-		return tm.getGetUserDataCount(dbq) >= 5
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.GreaterOrEqual(t, tm.getGetUserDataCount(dbq), 5)
 	}, time.Second, time.Millisecond)
 
 	// should still have version 6
@@ -252,9 +253,9 @@ func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
 	data4.Version++
 
 	// it should unload the task queue
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		_, _, err := m.GetUserData()
-		return errors.Is(err, errTaskQueueClosed)
+		require.True(t, errors.Is(err, errTaskQueueClosed))
 	}, time.Second, time.Millisecond)
 }
 
@@ -828,7 +829,7 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 	userData, _, err := m.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
-	require.Eventually(t, func() bool { return firstPartition.Load() == secondPartition.Load() }, 5*time.Second, time.Millisecond)
+	require.EventuallyWithT(t, func(t *assert.CollectT) { require.Equal(t, secondPartition.Load(), firstPartition.Load()) }, 5*time.Second, time.Millisecond)
 	m.Stop()
 	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
@@ -1052,12 +1053,14 @@ func TestUserData_CheckPropagation(t *testing.T) {
 	failing.Store(false)
 
 	// CheckTaskQueueUserDataPropagation should return soon
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		select {
 		case err := <-checkReturned:
-			return err == nil
+			require.NoError(t, err)
+
 		default:
-			return false
+			require.Fail(t, "condition was false")
+
 		}
 	}, 100*time.Millisecond, 5*time.Millisecond, "CheckTaskQueueUserDataPropagation did not return fast enough")
 }

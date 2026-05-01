@@ -464,13 +464,12 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 		PageSize:  testcore.DefaultPageSize,
 		Query:     `CustomKeywordField = "justice for all"`,
 	}
-	s.EventuallyWithT(
-		func(c *assert.CollectT) {
-			resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
-			require.NoError(c, err)
-			require.Len(c, resp.GetExecutions(), 1)
-			openExecution = resp.GetExecutions()[0]
-		},
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
+		require.NoError(c, err)
+		require.Len(c, resp.GetExecutions(), 1)
+		openExecution = resp.GetExecutions()[0]
+	},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
@@ -682,18 +681,17 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 		s.NoError(err)
 	}
 
-	s.EventuallyWithT(
-		func(c *assert.CollectT) {
-			resp, err := s.FrontendClient().CountWorkflowExecutions(
-				ctx,
-				&workflowservice.CountWorkflowExecutionsRequest{
-					Namespace: s.Namespace().String(),
-					Query:     fmt.Sprintf(`WorkflowType = "%s"`, wt),
-				},
-			)
-			require.NoError(c, err)
-			require.EqualValues(c, 6, resp.GetCount())
-		},
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		resp, err := s.FrontendClient().CountWorkflowExecutions(
+			ctx,
+			&workflowservice.CountWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				Query:     fmt.Sprintf(`WorkflowType = "%s"`, wt),
+			},
+		)
+		require.NoError(c, err)
+		require.EqualValues(c, 6, resp.GetCount())
+	},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
@@ -1677,50 +1675,48 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 	s.NoError(run.Get(ctx, nil))
 
 	// check main workflow doesn't have parent workflow and root is itself
-	s.EventuallyWithT(
-		func(c *assert.CollectT) {
-			resp, err := s.FrontendClient().ListWorkflowExecutions(
-				ctx,
-				&workflowservice.ListWorkflowExecutionsRequest{
-					Namespace: s.Namespace().String(),
-					Query:     fmt.Sprintf("WorkflowType = %q", wfType),
-					PageSize:  testcore.DefaultPageSize,
-				},
-			)
-			require.NoError(c, err)
-			require.Len(c, resp.Executions, 1)
-			wfInfo := resp.Executions[0]
-			require.Nil(c, wfInfo.GetParentExecution())
-			require.NotNil(c, wfInfo.GetRootExecution())
-			require.Equal(c, wfID, wfInfo.RootExecution.GetWorkflowId())
-			require.Equal(c, run.GetRunID(), wfInfo.RootExecution.GetRunId())
-		},
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		resp, err := s.FrontendClient().ListWorkflowExecutions(
+			ctx,
+			&workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				Query:     fmt.Sprintf("WorkflowType = %q", wfType),
+				PageSize:  testcore.DefaultPageSize,
+			},
+		)
+		require.NoError(c, err)
+		require.Len(c, resp.Executions, 1)
+		wfInfo := resp.Executions[0]
+		require.Nil(c, wfInfo.GetParentExecution())
+		require.NotNil(c, wfInfo.GetRootExecution())
+		require.Equal(c, wfID, wfInfo.RootExecution.GetWorkflowId())
+		require.Equal(c, run.GetRunID(), wfInfo.RootExecution.GetRunId())
+	},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 
 	// check child workflow has parent workflow and root is the parent
 	var childWfInfo *workflowpb.WorkflowExecutionInfo
-	s.EventuallyWithT(
-		func(c *assert.CollectT) {
-			resp, err := s.FrontendClient().ListWorkflowExecutions(
-				ctx,
-				&workflowservice.ListWorkflowExecutionsRequest{
-					Namespace: s.Namespace().String(),
-					Query:     fmt.Sprintf("WorkflowType = %q", childWfType),
-					PageSize:  testcore.DefaultPageSize,
-				},
-			)
-			require.NoError(c, err)
-			require.Len(c, resp.Executions, 1)
-			childWfInfo = resp.Executions[0]
-			require.NotNil(c, childWfInfo.GetParentExecution())
-			require.Equal(c, wfID, childWfInfo.ParentExecution.GetWorkflowId())
-			require.Equal(c, run.GetRunID(), childWfInfo.ParentExecution.GetRunId())
-			require.NotNil(c, childWfInfo.GetRootExecution())
-			require.Equal(c, wfID, childWfInfo.RootExecution.GetWorkflowId())
-			require.Equal(c, run.GetRunID(), childWfInfo.RootExecution.GetRunId())
-		},
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		resp, err := s.FrontendClient().ListWorkflowExecutions(
+			ctx,
+			&workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				Query:     fmt.Sprintf("WorkflowType = %q", childWfType),
+				PageSize:  testcore.DefaultPageSize,
+			},
+		)
+		require.NoError(c, err)
+		require.Len(c, resp.Executions, 1)
+		childWfInfo = resp.Executions[0]
+		require.NotNil(c, childWfInfo.GetParentExecution())
+		require.Equal(c, wfID, childWfInfo.ParentExecution.GetWorkflowId())
+		require.Equal(c, run.GetRunID(), childWfInfo.ParentExecution.GetRunId())
+		require.NotNil(c, childWfInfo.GetRootExecution())
+		require.Equal(c, wfID, childWfInfo.RootExecution.GetWorkflowId())
+		require.Equal(c, run.GetRunID(), childWfInfo.RootExecution.GetRunId())
+	},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
@@ -1827,20 +1823,24 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWor
 	s.Equal([]string{worker_versioning.UnversionedSearchAttribute, worker_versioning.UnversionedBuildIdSearchAttribute("1.2")}, buildIDs)
 
 	for minor := 1; minor <= 2; minor++ {
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			response, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.Namespace().String(),
 				Query:     fmt.Sprintf("BuildIds = '%s'", worker_versioning.UnversionedBuildIdSearchAttribute(fmt.Sprintf("1.%d", minor))),
 				PageSize:  testcore.DefaultPageSize,
 			})
 			if err != nil {
-				return false
+				require.Fail(t, "condition was false")
+
+				return
 			}
 			if len(response.Executions) == 0 {
-				return false
+				require.Fail(t, "condition was false")
+
+				return
 			}
 			s.Equal(id, response.Executions[0].Execution.WorkflowId)
-			return true
+
 		}, 10*time.Second, 100*time.Millisecond)
 	}
 }
@@ -1922,13 +1922,15 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 	w1.Stop()
 
 	// Verify first WFT was processed by our v1 worker
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		buildIDs := s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: id})
 		if len(buildIDs) == 0 {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(buildIdv1)}, buildIDs)
-		return true
+
 	}, time.Second*15, time.Millisecond*100)
 
 	// Update sets with v1.1
@@ -1993,19 +1995,23 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 	s.Equal([]string{}, buildIDs)
 
 	// We should have 3 runs with the v1.1 search attribute: First and second run in chain, and single child
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		response, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
 			Query:     fmt.Sprintf("BuildIds = %q", worker_versioning.VersionedBuildIdSearchAttribute(buildIdv11)),
 			PageSize:  testcore.DefaultPageSize,
 		})
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		if len(response.Executions) != 3 {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
-		return true
+
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
@@ -2077,19 +2083,23 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 	buildIDs := s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: id, RunId: resetResult.RunId})
 	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(buildIdv1)}, buildIDs)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		response, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
 			Query:     fmt.Sprintf("BuildIds = %q AND RunId = %q", worker_versioning.VersionedBuildIdSearchAttribute(buildIdv1), resetResult.RunId),
 			PageSize:  testcore.DefaultPageSize,
 		})
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		if len(response.Executions) != 1 {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
-		return true
+
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
@@ -2144,20 +2154,24 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 	buildIDs := s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: id})
 	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(buildIdv1)}, buildIDs)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		response, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
 			Query:     fmt.Sprintf("BuildIds = %q", worker_versioning.VersionedBuildIdSearchAttribute(buildIdv1)),
 			PageSize:  testcore.DefaultPageSize,
 		})
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		// Both runs should be associated with this build ID
 		if len(response.Executions) != 2 {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
-		return true
+
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
@@ -2566,13 +2580,14 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 		Query:           fmt.Sprintf(`%s = "%s"`, sadefs.ScheduleID, scheduleID),
 	}
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		listResponse, err := s.FrontendClient().ListSchedules(ctx, listRequest)
 		if err != nil || len(listResponse.Schedules) != 1 {
-			return false
-		}
+			require.Fail(t, "condition was false")
 
-		return listResponse.Schedules[0].ScheduleId == scheduleID
+			return
+		}
+		require.Equal(t, scheduleID, listResponse.Schedules[0].ScheduleId)
 	}, 30*time.Second, 1*time.Second)
 
 	listRequest.Query = fmt.Sprintf(`%s IN ("%s", "foo", "bar")`, sadefs.ScheduleID, scheduleID)
@@ -2600,13 +2615,14 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 	s.NoError(err)
 
 	listRequest.Query = fmt.Sprintf(`%s = "%s"`, sadefs.ScheduleID, customSearchAttrValue)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		listResponse, err := s.FrontendClient().ListSchedules(ctx, listRequest)
 		if err != nil || len(listResponse.Schedules) != 1 {
-			return false
-		}
+			require.Fail(t, "condition was false")
 
-		return listResponse.Schedules[0].ScheduleId == customScheduleID
+			return
+		}
+		require.Equal(t, customScheduleID, listResponse.Schedules[0].ScheduleId)
 	}, 30*time.Second, 1*time.Second)
 
 	listRequest.Query = fmt.Sprintf(`%s IN ("%s", "foo", "bar")`, sadefs.ScheduleID, customSearchAttrValue)
@@ -2617,7 +2633,7 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 }
 
 func (s *AdvancedVisibilitySuite) checkReachability(ctx context.Context, taskQueue, buildId string, expectedReachability ...enumspb.TaskReachability) {
-	s.Require().Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		reachabilityResponse, err := s.FrontendClient().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
 			Namespace:    s.Namespace().String(),
 			BuildIds:     []string{buildId},
@@ -2626,13 +2642,17 @@ func (s *AdvancedVisibilitySuite) checkReachability(ctx context.Context, taskQue
 		})
 		s.Require().NoError(err)
 		if len(reachabilityResponse.BuildIdReachability[0].TaskQueueReachability[0].Reachability) != len(expectedReachability) {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		actualReachability := reachabilityResponse.BuildIdReachability[0].TaskQueueReachability[0].Reachability
 		for i, expected := range expectedReachability {
 			actual := actualReachability[i]
 			if expected != actual {
-				return false
+				require.Fail(t, "condition was false")
+
+				return
 			}
 		}
 		s.Require().Equal(
@@ -2642,7 +2662,7 @@ func (s *AdvancedVisibilitySuite) checkReachability(ctx context.Context, taskQue
 					{TaskQueue: taskQueue, Reachability: expectedReachability},
 				},
 			}}, reachabilityResponse.BuildIdReachability)
-		return true
+
 	}, 15*time.Second, 100*time.Millisecond)
 }
 
@@ -2697,15 +2717,17 @@ func (s *AdvancedVisibilitySuite) addCustomKeywordSearchAttribute(ctx context.Co
 	s.NoError(err)
 
 	// Wait for search attribute to be available
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		descResp, err := s.OperatorClient().ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{
 			Namespace: s.Namespace().String(),
 		})
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 
 		_, exists := descResp.CustomAttributes[attrName]
-		return exists
+		require.True(t, exists)
 	}, 30*time.Second, 1*time.Second)
 }

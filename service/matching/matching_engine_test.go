@@ -453,7 +453,9 @@ func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
 	partitionReady := func() bool {
 		return len(s.matchingEngine.getTaskQueuePartitions(10)) >= 1
 	}
-	s.Eventually(partitionReady, 100*time.Millisecond, 10*time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.True(t, partitionReady())
+	}, 100*time.Millisecond, 10*time.Millisecond)
 
 	recordWorkflowTaskStartedResponse := &historyservice.RecordWorkflowTaskStartedResponse{
 		PreviousStartedEventId:     scheduledEventID,
@@ -826,7 +828,9 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 	if err != errShutdown {
 		s.Require().NoError(err)
 	}
-	s.Eventually(didUpdate.Load, time.Second, time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.True(t, didUpdate.Load())
+	}, time.Second, time.Millisecond)
 
 	// We check the old partition manager for the change because a new partition created will not reference the same mockUserDataManager.
 	data, _, _ := mgr.GetUserDataManager().GetUserData()
@@ -1226,8 +1230,8 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	}
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		assert.EqualValues(collect, 1, s.taskManager.getCreateTaskCount(dbq)) // Check times zero rps is set = Tasks stored in persistence
-		assert.EqualValues(collect, 0, s.taskManager.getTaskCount(dbq))
+		require.EqualValues(collect, 1, s.taskManager.getCreateTaskCount(dbq)) // Check times zero rps is set = Tasks stored in persistence
+		require.EqualValues(collect, 0, s.taskManager.getTaskCount(dbq))
 	}, 2*time.Second, 100*time.Millisecond)
 
 	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+namespace="+matchingTestNamespace+",namespace_state=active,operation=TaskQueueMgr,partition=0,service_name=matching,task_type=Activity,taskqueue=makeToast,worker_build_id=,worker_deployment_name=,worker_version=__unversioned__"]
@@ -2214,7 +2218,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	// at the end of this step, ackManager readLevel will also be equal to the buffer size
 	blm := tlMgr.backlogMgr.(*backlogManagerImpl)
 	expectedBufSize := min(cap(blm.taskReader.taskBuffer), taskCount)
-	s.Eventually(func() bool { return len(blm.taskReader.taskBuffer) == expectedBufSize },
+	s.EventuallyWithT(func(t *assert.CollectT) { require.Equal(t, expectedBufSize, len(blm.taskReader.taskBuffer)) },
 		time.Second, 5*time.Millisecond)
 
 	// unload the queue and stop all goroutines that read / write tasks in the background
@@ -2348,7 +2352,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 		// wait until all tasks are loaded by into in-memory buffers by task queue manager
 		// the buffer size should be one less than expected because dispatcher will dequeue the head
 		// 1/4 should be thrown out because they are expired before they hit the buffer
-		s.Eventually(func() bool { return len(blm.taskReader.taskBuffer) >= (3*taskCount/4 - 1) },
+		s.EventuallyWithT(func(t *assert.CollectT) { require.GreaterOrEqual(t, len(blm.taskReader.taskBuffer), 3*taskCount/4-1) },
 			time.Second, 5*time.Millisecond)
 
 		// ensure the 1/4 of tasks with small ScheduleToStartTimeout will be expired when they come out of the buffer
@@ -2986,8 +2990,8 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	s.mockServiceResolver.EXPECT().LookupN(p1key, p1n+1).Return([]membership.HostInfo{self})
 	s.mockServiceResolver.EXPECT().LookupN(p2key, p2n+1).Return([]membership.HostInfo{other}).Times(2)
 	e.membershipChangedCh <- nil
-	s.Eventually(func() bool {
-		return len(e.getTaskQueuePartitions(1000)) == 1
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.Equal(t, 1, len(e.getTaskQueuePartitions(1000)))
 	}, 100*time.Millisecond, 10*time.Millisecond, "p2 should have been unloaded")
 
 	isLoaded := func(p tqid.Partition) bool {
@@ -3017,11 +3021,11 @@ func (s *matchingEngineSuite) TaskQueueMetricValidator(capture *metricstest.Capt
 
 func (s *matchingEngineSuite) PhysicalQueueMetricValidator(capture *metricstest.Capture, physicalTaskQueueLength int, physicalTaskQueueCounter float64) {
 	// checks the metrics according to the values passed in the parameters
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		snapshot := capture.Snapshot()
 		physicalTaskQueueRecordings := snapshot[metrics.LoadedPhysicalTaskQueueGauge.Name()]
-		return len(physicalTaskQueueRecordings) == physicalTaskQueueLength &&
-			physicalTaskQueueCounter == physicalTaskQueueRecordings[physicalTaskQueueLength-1].Value.(float64)
+		require.Equal(t, physicalTaskQueueLength, len(physicalTaskQueueRecordings))
+		require.Equal(t, physicalTaskQueueRecordings[physicalTaskQueueLength-1].Value.(float64), physicalTaskQueueCounter)
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
@@ -5993,12 +5997,12 @@ func TestAutoEnableV2ConfigChange(t *testing.T) {
 	cleanupAutoEnable()
 	_ = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, false)
 
-	require.Eventually(t, func() bool {
-		return !pm.config.AutoEnableV2()
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.False(t, pm.config.AutoEnableV2())
 	}, 2*time.Second, 10*time.Millisecond, "autoEnable should be updated")
 
-	require.Eventually(t, func() bool {
-		return pq.(*physicalTaskQueueManagerImpl).tqCtx.Err() != nil
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.NotNil(t, pq.(*physicalTaskQueueManagerImpl).tqCtx.Err())
 	}, 2*time.Second, 10*time.Millisecond, "physical queue should be stopped when effective config changes")
 }
 
@@ -6084,8 +6088,10 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 	err = pm.WaitUntilInitialized(ctx)
 	require.NoError(t, err)
 
-	require.Eventually(t, func() bool {
-		return !pm.config.AutoEnableV2() && pm.config.NewMatcher && pm.config.EnableFairness
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.False(t, pm.config.AutoEnableV2())
+		require.True(t, pm.config.NewMatcher)
+		require.True(t, pm.config.EnableFairness)
 	}, 2*time.Second, 10*time.Millisecond, "config should be initialized")
 
 	pq, err := pm.defaultQueueFuture.Get(ctx)
@@ -6095,8 +6101,8 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 	cleanupAutoEnable()
 	_ = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, true)
 
-	require.Eventually(t, func() bool {
-		return pm.config.AutoEnableV2()
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.True(t, pm.config.AutoEnableV2())
 	}, 2*time.Second, 10*time.Millisecond, "autoEnable should be updated")
 
 	require.Never(t, func() bool {

@@ -772,8 +772,8 @@ func (s *DeploymentVersionSuite) signalAndWaitForDrained(ctx context.Context, tv
 	// wait for drained
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.describeVersion(tv)
-		assert.NoError(t, err)
-		assert.Equal(t, enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
+		require.NoError(t, err)
+		require.Equal(t, enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
 	}, 10*time.Second, time.Second)
 }
 
@@ -1989,7 +1989,7 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinned_Ca
 	s.Nil(resp)
 
 	// Wait for the cache TTL to expire
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 			Namespace:                s.Namespace().String(),
 			WorkflowExecution:        tv.WorkflowExecution(),
@@ -1997,7 +1997,7 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinned_Ca
 			UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 			Identity:                 tv.ClientIdentity(),
 		})
-		return err == nil
+		require.NoError(t, err)
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// The Pinned Override should have now succeeded with no error. Verify that the
@@ -2288,7 +2288,7 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_ReactivateVe
 
 	// Pin the workflow to version 1 (both versions are on the same task queue).
 	// Use Eventually to bypass version membership cache checks.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err = s.FrontendClient().UpdateWorkflowExecutionOptions(ctx,
 			&workflowservice.UpdateWorkflowExecutionOptionsRequest{
 				Namespace: s.Namespace().String(),
@@ -2301,7 +2301,7 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_ReactivateVe
 				},
 				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 			})
-		return err == nil
+		require.NoError(t, err)
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Verify workflow has the pinned override
@@ -2369,7 +2369,7 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 	// Start a new workflow with the pinned override pointing to version 1 (INACTIVE).
 	wfTV := testvars.New(s)
 	var run sdkclient.WorkflowRun
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		var startErr error
 		run, startErr = s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 			TaskQueue: tv1.TaskQueue().String(),
@@ -2378,7 +2378,7 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 				Version: tv1.SDKDeploymentVersion(),
 			},
 		}, "waitingWorkflow")
-		return startErr == nil
+		require.Nil(t, startErr)
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Verify workflow has the pinned override
@@ -2471,18 +2471,18 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, startErr := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 			TaskQueue: tv2.TaskQueue().String(),
 			ID:        wfTV.WorkflowID(),
 		}, "waitingWorkflow")
-		return startErr == nil
+		require.Nil(t, startErr)
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Now start a second workflow with the SAME workflow ID, pinned to v1 (INACTIVE),
 	// using TERMINATE_EXISTING conflict policy. This goes through the handleConflict method in api.go.
 	var run sdkclient.WorkflowRun
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		var startErr error
 		run, startErr = s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 			TaskQueue: tv1.TaskQueue().String(),
@@ -2492,7 +2492,7 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnP
 			},
 			WorkflowIDConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 		}, "waitingWorkflow")
-		return startErr == nil
+		require.Nil(t, startErr)
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Verify workflow has the pinned override
@@ -2568,7 +2568,7 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_Reactivate
 	// This should START a new workflow (not signal an existing one) since no workflow exists yet.
 	wfTV := testvars.New(s)
 	var run sdkclient.WorkflowRun
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		var startErr error
 		run, startErr = s.SdkClient().SignalWithStartWorkflow(ctx,
 			wfTV.WorkflowID(),
@@ -2582,7 +2582,7 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_Reactivate
 			},
 			"waitingWorkflow",
 		)
-		return startErr == nil
+		require.Nil(t, startErr)
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Verify workflow has the pinned override
@@ -2689,18 +2689,22 @@ func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnP
 	s.NoError(err)
 
 	// Wait for the workflow to start and complete its first workflow task (creates a reset point)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		hist := s.SdkClient().GetWorkflowHistory(ctx, wfTV.WorkflowID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for hist.HasNext() {
 			event, err := hist.Next()
 			if err != nil {
-				return false
+				require.Fail(t, "condition was false")
+
+				return
 			}
 			if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-				return true
+
+				return
 			}
 		}
-		return false
+		require.Fail(t, "condition was false")
+
 	}, 10*time.Second, 200*time.Millisecond, "Workflow should have completed its first workflow task")
 
 	// Find the first workflow task complete event ID for the reset point
@@ -2718,7 +2722,7 @@ func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnP
 
 	// Reset the workflow with PostResetOperations containing a versioning override pinned to v1 (which is currently INACTIVE)
 	var resetResp *workflowservice.ResetWorkflowExecutionResponse
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		var resetErr error
 		resetResp, resetErr = s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 			Namespace: s.Namespace().String(),
@@ -2751,7 +2755,7 @@ func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnP
 				},
 			},
 		})
-		return resetErr == nil
+		require.Nil(t, resetErr)
 	}, 10*time.Second, 500*time.Millisecond)
 
 	newRunID := resetResp.RunId
@@ -2888,14 +2892,17 @@ func (s *DeploymentVersionSuite) runBatchUpdateWorkflowExecutionOptionsTest(crea
 }
 func (s *DeploymentVersionSuite) startBatchJobWithinConcurrentJobLimit(ctx context.Context, req *workflowservice.StartBatchOperationRequest) error {
 	var err error
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err = s.FrontendClient().StartBatchOperation(ctx, req)
 		if err == nil {
-			return true
+
+			return
 		} else if strings.Contains(err.Error(), "Max concurrent batch operations is reached") {
-			return false // retry
+			require.Fail(t, "condition was false")
+
+			return // retry
 		}
-		return true
+
 	}, 5*time.Second, 500*time.Millisecond)
 	return err
 }
@@ -2986,10 +2993,10 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_WithPinnedOverride_C
 	// Wait for the cache TTL to expire; On expiry of the cache TTL, it would result in a fresh RPC which would verify the version presence,
 	// eventually leading to the StartWorkflowExecution call succeeding.
 	var resp *workflowservice.StartWorkflowExecutionResponse
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		var err error
 		resp, err = s.FrontendClient().StartWorkflowExecution(ctx, request)
-		return err == nil
+		require.NoError(t, err)
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// The StartWorkflowExecution should now succeed with no error. Verify that the workflow shows the override.
@@ -3040,10 +3047,11 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_WithPinned
 	// Wait for the cache TTL to expire; On expiry of the cache TTL, it would result in a fresh RPC which would verify the version presence,
 	// eventually leading to the SignalWithStartWorkflowExecution call succeeding.
 	var resp *workflowservice.SignalWithStartWorkflowExecutionResponse
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		var err error
 		resp, err = s.FrontendClient().SignalWithStartWorkflowExecution(ctx, request)
-		return err == nil && resp.GetStarted()
+		require.NoError(t, err)
+		require.True(t, resp.GetStarted())
 	}, 10*time.Second, 500*time.Millisecond)
 
 	wf := &commonpb.WorkflowExecution{

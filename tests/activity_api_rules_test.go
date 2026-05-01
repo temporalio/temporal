@@ -210,8 +210,9 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_CRUD() {
 		require.NotNil(t, nsResp)
 		require.NotNil(t, nsResp.Rules)
 		require.Len(t, nsResp.Rules, 2)
-		// we can't guarantee the order of the rules
-		require.True(t, nsResp.Rules[0].Spec.Id == ruleID1 || nsResp.Rules[1].Spec.Id == ruleID1)
+		require.
+			// we can't guarantee the order of the rules
+			True(t, nsResp.Rules[0].Spec.Id == ruleID1 || nsResp.Rules[1].Spec.Id == ruleID1)
 		require.True(t, nsResp.Rules[0].Spec.Id == ruleID2 || nsResp.Rules[1].Spec.Id == ruleID2)
 	}, 5*time.Second, 200*time.Millisecond)
 

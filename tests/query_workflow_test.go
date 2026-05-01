@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -305,9 +307,11 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	s.NotNil(workflowRun)
 	s.NotEmpty(workflowRun.GetRunID())
 
-	s.Eventually(func() bool {
-		// wait for workflow task to fail 3 times
-		return atomic.LoadInt32(&failures) >= 3
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.GreaterOrEqual(
+
+			// wait for workflow task to fail 3 times
+			t, atomic.LoadInt32(&failures), 3)
 	}, 10*time.Second, 50*time.Millisecond)
 
 	_, err = env.SdkClient().QueryWorkflow(ctx, id, "", testname)
@@ -392,12 +396,13 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 	s.NotNil(workflowRun)
 
 	// Wait for all activities to complete, generating many event batches.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: id},
 		})
-		return err == nil && resp.GetWorkflowExecutionInfo().GetHistoryLength() > 30
+		require.NoError(t, err)
+		require.Greater(t, resp.GetWorkflowExecutionInfo().GetHistoryLength(), 30)
 	}, 10*time.Second, 200*time.Millisecond)
 
 	// Stop worker so the query goes through the non-sticky path.
@@ -419,7 +424,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 
 	// Poll for the query task on the normal (non-sticky) task queue.
 	var pollResp *workflowservice.PollWorkflowTaskQueueResponse
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		pollCtx, pollCancel := context.WithTimeout(ctx, 3*time.Second)
 		defer pollCancel()
 		pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -427,7 +432,8 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:  "test-worker",
 		})
-		return err == nil && len(pollResp.GetTaskToken()) > 0
+		require.NoError(t, err)
+		require.Greater(t, len(pollResp.GetTaskToken()), 0)
 	}, 20*time.Second, 100*time.Millisecond)
 
 	s.NotNil(pollResp.GetHistory())

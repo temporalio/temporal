@@ -311,11 +311,11 @@ func (s *cachingRedirectorSuite) TestStaleTTL() {
 
 	// Simulate the update, should see the entry marked as stale.
 	r.membershipUpdateCh <- &membership.ChangedEvent{}
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		r.mu.RLock()
 		defer r.mu.RUnlock()
 		entry := r.mu.cache[shardID]
-		return !entry.staleAt.IsZero()
+		require.False(t, entry.staleAt.IsZero())
 	}, 4*staleTTL, 10*time.Millisecond)
 
 	// Wait for the stale TTL to expire so clientForShardID re-resolves the shard owner.
@@ -326,8 +326,8 @@ func (s *cachingRedirectorSuite) TestStaleTTL() {
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		cli, err = r.clientForShardID(shardID)
-		assert.NoError(t, err)
-		assert.Equal(t, mockClient, cli)
-		assert.Equal(t, 2, s.connections.resetCalls)
+		require.NoError(t, err)
+		require.Equal(t, mockClient, cli)
+		require.Equal(t, 2, s.connections.resetCalls)
 	}, 4*staleTTL, 10*time.Millisecond)
 }

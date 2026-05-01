@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	versionpb "go.temporal.io/api/version/v1"
@@ -250,7 +251,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertExpiresCorrectl
 // waitForPrune waits up for the persistence backend to prune all records. Some persistence backends
 // may not remove TTL'd entries at the exact instant they should expire, so we allow some timing flexibility here.
 func (s *ClusterMetadataManagerSuite) waitForPrune(waitFor time.Duration) {
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		err := s.ClusterMetadataManager.PruneClusterMembership(s.ctx, &p.PruneClusterMembershipRequest{MaxRecordsPruned: 100})
 		s.Nil(err)
 
@@ -260,8 +261,7 @@ func (s *ClusterMetadataManagerSuite) waitForPrune(waitFor time.Duration) {
 		)
 		s.NoError(err)
 		s.NotNil(resp)
-		return len(resp.ActiveMembers) == 0
-
+		require.Equal(t, 0, len(resp.ActiveMembers))
 	},
 		waitFor,
 		500*time.Millisecond)

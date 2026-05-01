@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -121,55 +123,57 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 	openCount := 0
 
 	var historyLength int64
-	s.Eventually(
-		func() bool {
-			resp, err3 := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-				Namespace:       s.Namespace().String(),
-				MaximumPageSize: 100,
-				StartTimeFilter: startFilter,
-				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{
-					TypeFilter: &filterpb.WorkflowTypeFilter{
-						Name: wt,
-					},
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err3 := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+			Namespace:       s.Namespace().String(),
+			MaximumPageSize: 100,
+			StartTimeFilter: startFilter,
+			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{
+				TypeFilter: &filterpb.WorkflowTypeFilter{
+					Name: wt,
 				},
-			})
-			s.NoError(err3)
-			closedCount = len(resp.Executions)
-			if closedCount == 1 {
-				historyLength = resp.Executions[0].HistoryLength
-				s.Nil(resp.NextPageToken)
-				return true
-			}
-			s.Logger.Info("Closed WorkflowExecution is not yet visible")
-			return false
-		},
+			},
+		})
+		s.NoError(err3)
+		closedCount = len(resp.Executions)
+		if closedCount == 1 {
+			historyLength = resp.Executions[0].HistoryLength
+			s.Nil(resp.NextPageToken)
+
+			return
+		}
+		s.Logger.Info("Closed WorkflowExecution is not yet visible")
+		require.Fail(t, "condition was false")
+
+	},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 	s.Equal(1, closedCount)
 	s.Equal(int64(5), historyLength)
 
-	s.Eventually(
-		func() bool {
-			resp, err4 := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-				Namespace:       s.Namespace().String(),
-				MaximumPageSize: 100,
-				StartTimeFilter: startFilter,
-				Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{
-					TypeFilter: &filterpb.WorkflowTypeFilter{
-						Name: wt,
-					},
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err4 := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+			Namespace:       s.Namespace().String(),
+			MaximumPageSize: 100,
+			StartTimeFilter: startFilter,
+			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{
+				TypeFilter: &filterpb.WorkflowTypeFilter{
+					Name: wt,
 				},
-			})
-			s.NoError(err4)
-			openCount = len(resp.Executions)
-			if openCount == 1 {
-				s.Nil(resp.NextPageToken)
-				return true
-			}
-			s.Logger.Info("Open WorkflowExecution is not yet visible")
-			return false
-		},
+			},
+		})
+		s.NoError(err4)
+		openCount = len(resp.Executions)
+		if openCount == 1 {
+			s.Nil(resp.NextPageToken)
+
+			return
+		}
+		s.Logger.Info("Open WorkflowExecution is not yet visible")
+		require.Fail(t, "condition was false")
+
+	},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)

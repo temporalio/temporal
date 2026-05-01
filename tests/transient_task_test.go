@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -299,7 +300,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 				break
 			}
 		}
-		assert.True(c, timedOutFound, "Expected WorkflowTaskTimedOut event not found in history")
+		require.True(c, timedOutFound, "Expected WorkflowTaskTimedOut event not found in history")
 	}, 15*time.Second, 500*time.Millisecond)
 
 	// stage 5: process task after timeout and complete workflow

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -61,18 +62,19 @@ func WaitGoRoutineWithFn(t testing.TB, fn any, opts ...func(*WaitOptions)) int {
 
 	attempt := 1
 	numFound := 0
-	require.Eventually(t,
-		func() bool {
-			numFound, err = numGoRoutinesWithFn(fnName)
-			require.NoError(t, err)
-			if numFound == wo.NumGoRoutines {
-				t.Logf("Found %s function %d times on %d attempt\n", fnName, numFound, attempt)
-				return true
-			}
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		numFound, err = numGoRoutinesWithFn(fnName)
+		require.NoError(t, err)
+		if numFound == wo.NumGoRoutines {
+			t.Logf("Found %s function %d times on %d attempt\n", fnName, numFound, attempt)
 
-			attempt++
-			return false
-		},
+			return
+		}
+
+		attempt++
+		require.Fail(collect, "condition was false")
+
+	},
 		wo.MaxDuration,
 		wo.CheckInterval,
 		"Function %s must be found %d times but was found %d times in all go routine call stacks after %s", fnName, wo.NumGoRoutines, numFound, wo.MaxDuration.String())

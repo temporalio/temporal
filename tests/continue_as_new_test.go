@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -343,21 +345,21 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunExecutionTimeout() {
 		}
 	}()
 
-	s.Eventually(
-		func() bool {
-			descResp, err := s.FrontendClient().DescribeWorkflowExecution(
-				testcore.NewContext(),
-				&workflowservice.DescribeWorkflowExecutionRequest{
-					Namespace: s.Namespace().String(),
-					Execution: &commonpb.WorkflowExecution{
-						WorkflowId: id,
-					},
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		descResp, err := s.FrontendClient().DescribeWorkflowExecution(
+			testcore.NewContext(),
+			&workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: s.Namespace().String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: id,
 				},
-			)
-			s.NoError(err)
-			return descResp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT &&
-				descResp.GetWorkflowExecutionInfo().Execution.GetRunId() != we.RunId // validate that workflow did continue as new
-		},
+			},
+		)
+		s.NoError(err)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, descResp.GetWorkflowExecutionInfo().GetStatus())
+		require.NotEqual(t, we.RunId, descResp.GetWorkflowExecutionInfo().Execution.GetRunId())
+		// validate that workflow did continue as new
+	},
 		time.Second*10,
 		time.Millisecond*50,
 	)

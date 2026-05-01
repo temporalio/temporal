@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
@@ -310,8 +311,9 @@ func TestSearchAttributeRegistration(t *testing.T) {
 
 	// Wait a bit longer for the workflow to be indexed. This usually isn't necessary,
 	// but helps avoid test flakiness.
-	assert.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(collect *assert.
 		// Confirm workflow has search attribute and shows up in custom list query
+		CollectT) {
 		listFilter := fmt.Sprintf("%s=%q", testSearchAttr, "foo")
 		workflowList, err := c.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: ts.GetDefaultNamespace(),
@@ -322,9 +324,10 @@ func TestSearchAttributeRegistration(t *testing.T) {
 		}
 		if numExecutions := len(workflowList.GetExecutions()); numExecutions != 1 {
 			t.Logf("Expected list filter %q to return one workflow, got %d", listFilter, numExecutions)
-			return false
-		}
+			require.Fail(collect, "condition was false")
 
+			return
+		}
 		searchAttrPayload, ok := workflowList.GetExecutions()[0].GetSearchAttributes().GetIndexedFields()[testSearchAttr]
 		if !ok {
 			t.Fatal("Workflow missing test search attr")
@@ -335,7 +338,6 @@ func TestSearchAttributeRegistration(t *testing.T) {
 		}
 		assert.Equal(t, "foo", searchAttrValue)
 
-		return true
 	}, 30*time.Second, 100*time.Millisecond)
 }
 

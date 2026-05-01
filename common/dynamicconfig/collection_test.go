@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -638,11 +639,11 @@ func (s *subscriptionSuite) TestSubscriptionGlobal() {
 	s.False(initial)
 
 	s.client.Set(setting.Key().String(), []dynamicconfig.ConstrainedValue{{Value: true}})
-	s.Require().Eventually(func() bool { return len(vals) == 1 }, time.Second, time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) { require.Equal(t, 1, len(vals)) }, time.Second, time.Millisecond)
 	s.True(<-vals)
 
 	s.client.Set(setting.Key().String(), nil) // back to default
-	s.Require().Eventually(func() bool { return len(vals) == 1 }, time.Second, time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) { require.Equal(t, 1, len(vals)) }, time.Second, time.Millisecond)
 	s.False(<-vals)
 
 	cancel()
@@ -689,7 +690,7 @@ func (s *subscriptionSuite) TestSubscriptionNamespace() {
 		{Constraints: dynamicconfig.Constraints{Namespace: "ns3"}, Value: 33},
 	})
 
-	s.Require().Eventually(func() bool { return len(vals3) == 1 }, time.Second, time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) { require.Equal(t, 1, len(vals3)) }, time.Second, time.Millisecond)
 	s.Equal(33, <-vals3)
 	s.Empty(vals1)
 	s.Empty(vals2)
@@ -700,7 +701,7 @@ func (s *subscriptionSuite) TestSubscriptionNamespace() {
 		{Constraints: dynamicconfig.Constraints{Namespace: "ns2"}, Value: 2},
 		{Constraints: dynamicconfig.Constraints{Namespace: "ns3"}, Value: 33},
 	})
-	s.Require().Eventually(func() bool { return len(vals2) == 1 }, time.Second, time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) { require.Equal(t, 1, len(vals2)) }, time.Second, time.Millisecond)
 	s.Equal(2, <-vals2)
 	s.Empty(vals1)
 	s.Empty(vals3)
@@ -709,8 +710,7 @@ func (s *subscriptionSuite) TestSubscriptionNamespace() {
 	s.client.Set(setting.Key().String(), []dynamicconfig.ConstrainedValue{
 		{Constraints: dynamicconfig.Constraints{Namespace: "ns2"}, Value: 2},
 	})
-	s.Require().Eventually(
-		func() bool { return len(vals1) == 1 && len(vals3) == 1 },
+	s.EventuallyWithT(func(t *assert.CollectT) { require.Equal(t, 1, len(vals1)); require.Equal(t, 1, len(vals3)) },
 		time.Second, time.Millisecond)
 	s.Equal(0, <-vals1)
 	s.Empty(vals2)
@@ -729,7 +729,7 @@ func (s *subscriptionSuite) TestSubscriptionWithDefault() {
 
 	// remove, should get default
 	s.client.Set(setting.Key().String(), nil)
-	s.Require().Eventually(func() bool { return len(vals) == 1 }, time.Second, time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) { require.Equal(t, 1, len(vals)) }, time.Second, time.Millisecond)
 	s.Equal(100, <-vals)
 
 	// test nil callback
@@ -753,8 +753,8 @@ func (s *subscriptionSuite) TestSubscriptionConstrainedDefaults() {
 
 	waitFor := func(normalv, specialv, normalc, specialc int) {
 		s.EventuallyWithT(func(c *assert.CollectT) {
-			assert.Equal(c, normalv, int(normal.Load()))
-			assert.Equal(c, specialv, int(special.Load()))
+			require.Equal(c, normalv, int(normal.Load()))
+			require.Equal(c, specialv, int(special.Load()))
 		}, time.Second, time.Millisecond)
 		s.Equal(normalc, int(normalCalls.Load()))
 		s.Equal(specialc, int(specialCalls.Load()))

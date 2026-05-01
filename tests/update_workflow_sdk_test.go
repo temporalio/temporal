@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -241,7 +243,7 @@ func (s *UpdateWorkflowSdkSuite) TestContinueAsNewAfterUpdateAdmitted() {
 	var firstRun sdkclient.WorkflowRun
 	firstRun = s.startWorkflow(rootCtx, tv, workflowFn1)
 	var secondRunID string
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.pollUpdate(rootCtx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 		if err != nil {
 			var notFoundErr *serviceerror.NotFound
@@ -250,10 +252,12 @@ func (s *UpdateWorkflowSdkSuite) TestContinueAsNewAfterUpdateAdmitted() {
 			// If poll lands on 2nd run, it will get NotFound error for few attempts.
 			// All other errors are unexpected.
 			s.True(errors.As(err, &notFoundErr) || errors.As(err, &resourceExhaustedErr), "error must be NotFound or ResourceExhausted")
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		secondRunID = testcore.DecodeString(s.T(), resp.GetOutcome().GetSuccess())
-		return true
+
 	}, 5*time.Second, 100*time.Millisecond, "update did not reach Completed stage")
 
 	s.NotEqual(firstRun.GetRunID(), secondRunID, "RunId of started WF and WF that received Update should be different")
@@ -325,18 +329,20 @@ func (s *UpdateWorkflowSdkSuite) TestTimeoutWithRetryAfterUpdateAdmitted() {
 	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	var secondRunID string
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 		if err != nil {
 			var notFoundErr *serviceerror.NotFound
 			// If a poll beats internal update retries, it will get NotFound error for a few attempts.
 			// All other errors are unexpected.
 			s.ErrorAs(err, &notFoundErr, "error must be NotFound")
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		secondRunID = testcore.DecodeString(s.T(), resp.GetOutcome().GetSuccess())
 		s.NotEmpty(secondRunID)
-		return true
+
 	}, 5*time.Second, 100*time.Millisecond, "update did not reach Completed stage")
 
 	s.NotEqual(firstRun.GetRunID(), secondRunID, "RunId of started WF and WF that received Update should be different")
@@ -367,15 +373,19 @@ func (s *UpdateWorkflowSdkSuite) startWorkflow(ctx context.Context, tv *testvars
 
 func (s *UpdateWorkflowSdkSuite) updateWorkflowWaitAdmitted(ctx context.Context, tv *testvars.TestVars, arg string) {
 	go func() { _, _ = s.updateWorkflowWaitAccepted(ctx, tv, arg) }()
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED})
 		if err == nil {
 			s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, resp.Stage)
-			return true
+
+			return
 		}
 		var notFoundErr *serviceerror.NotFound
-		s.ErrorAs(err, &notFoundErr) // poll beat send in race
-		return false
+		s.ErrorAs(err, &notFoundErr)
+		require.Fail(
+			// poll beat send in race
+			t, "condition was false")
+
 	}, 5*time.Second, 100*time.Millisecond, "update %s did not reach Admitted stage", tv.UpdateID())
 }
 

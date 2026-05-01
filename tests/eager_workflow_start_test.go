@@ -256,18 +256,17 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_WorkflowRetry() {
 	task = s.pollWorkflowTaskQueue()
 	s.failWorkflow(task, "failure 2")
 
-	s.Require().EventuallyWithT(
-		func(c *assert.CollectT) {
-			resp, err := s.FrontendClient().CountWorkflowExecutions(
-				testcore.NewContext(),
-				&workflowservice.CountWorkflowExecutionsRequest{
-					Namespace: s.Namespace().String(),
-					Query:     fmt.Sprintf("WorkflowId = '%s' AND ExecutionStatus = 'Failed'", s.defaultWorkflowID()),
-				},
-			)
-			require.NoError(c, err)
-			require.Equal(c, int64(2), resp.Count)
-		},
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		resp, err := s.FrontendClient().CountWorkflowExecutions(
+			testcore.NewContext(),
+			&workflowservice.CountWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				Query:     fmt.Sprintf("WorkflowId = '%s' AND ExecutionStatus = 'Failed'", s.defaultWorkflowID()),
+			},
+		)
+		require.NoError(c, err)
+		require.Equal(c, int64(2), resp.Count)
+	},
 		testcore.WaitForESToSettle,
 		200*time.Millisecond,
 	)

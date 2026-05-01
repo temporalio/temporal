@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -193,31 +195,32 @@ SignalLoop:
  22 WorkflowExecutionTerminated`, historyEvents)
 
 	// verify visibility is correctly processed from open to close
-	s.Eventually(
-		func() bool {
-			resp, err1 := env.FrontendClient().ListClosedWorkflowExecutions(
-				testcore.NewContext(),
-				&workflowservice.ListClosedWorkflowExecutionsRequest{
-					Namespace:       env.Namespace().String(),
-					MaximumPageSize: 100,
-					StartTimeFilter: &filterpb.StartTimeFilter{
-						EarliestTime: nil,
-						LatestTime:   timestamppb.New(time.Now().UTC()),
-					},
-					Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
-						ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-							WorkflowId: id,
-						},
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err1 := env.FrontendClient().ListClosedWorkflowExecutions(
+			testcore.NewContext(),
+			&workflowservice.ListClosedWorkflowExecutionsRequest{
+				Namespace:       env.Namespace().String(),
+				MaximumPageSize: 100,
+				StartTimeFilter: &filterpb.StartTimeFilter{
+					EarliestTime: nil,
+					LatestTime:   timestamppb.New(time.Now().UTC()),
+				},
+				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
+					ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+						WorkflowId: id,
 					},
 				},
-			)
-			s.NoError(err1)
-			if len(resp.Executions) == 1 {
-				return true
-			}
-			env.Logger.Info("Closed WorkflowExecution is not yet visible")
-			return false
-		},
+			},
+		)
+		s.NoError(err1)
+		if len(resp.Executions) == 1 {
+
+			return
+		}
+		env.Logger.Info("Closed WorkflowExecution is not yet visible")
+		require.Fail(t, "condition was false")
+
+	},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
@@ -424,31 +427,32 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
   5 WorkflowExecutionTerminated`, historyEvents)
 
 	// verify visibility is correctly processed from open to close
-	s.Eventually(
-		func() bool {
-			resp, err1 := env.FrontendClient().ListClosedWorkflowExecutions(
-				testcore.NewContext(),
-				&workflowservice.ListClosedWorkflowExecutionsRequest{
-					Namespace:       env.Namespace().String(),
-					MaximumPageSize: 100,
-					StartTimeFilter: &filterpb.StartTimeFilter{
-						EarliestTime: nil,
-						LatestTime:   timestamppb.New(time.Now().UTC()),
-					},
-					Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
-						ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-							WorkflowId: id,
-						},
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err1 := env.FrontendClient().ListClosedWorkflowExecutions(
+			testcore.NewContext(),
+			&workflowservice.ListClosedWorkflowExecutionsRequest{
+				Namespace:       env.Namespace().String(),
+				MaximumPageSize: 100,
+				StartTimeFilter: &filterpb.StartTimeFilter{
+					EarliestTime: nil,
+					LatestTime:   timestamppb.New(time.Now().UTC()),
+				},
+				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
+					ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+						WorkflowId: id,
 					},
 				},
-			)
-			s.NoError(err1)
-			if len(resp.Executions) == 1 {
-				return true
-			}
-			env.Logger.Info("Closed WorkflowExecution is not yet visible")
-			return false
-		},
+			},
+		)
+		s.NoError(err1)
+		if len(resp.Executions) == 1 {
+
+			return
+		}
+		env.Logger.Info("Closed WorkflowExecution is not yet visible")
+		require.Fail(t, "condition was false")
+
+	},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
@@ -529,31 +533,32 @@ SignalLoop:
  12 WorkflowExecutionTerminated`, historyEvents)
 
 	// verify visibility is correctly processed from open to close
-	s.Eventually(
-		func() bool {
-			resp, err1 := env.FrontendClient().ListClosedWorkflowExecutions(
-				testcore.NewContext(),
-				&workflowservice.ListClosedWorkflowExecutionsRequest{
-					Namespace:       env.Namespace().String(),
-					MaximumPageSize: 100,
-					StartTimeFilter: &filterpb.StartTimeFilter{
-						EarliestTime: nil,
-						LatestTime:   timestamppb.New(time.Now().UTC()),
-					},
-					Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
-						ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-							WorkflowId: id,
-						},
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err1 := env.FrontendClient().ListClosedWorkflowExecutions(
+			testcore.NewContext(),
+			&workflowservice.ListClosedWorkflowExecutionsRequest{
+				Namespace:       env.Namespace().String(),
+				MaximumPageSize: 100,
+				StartTimeFilter: &filterpb.StartTimeFilter{
+					EarliestTime: nil,
+					LatestTime:   timestamppb.New(time.Now().UTC()),
+				},
+				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
+					ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+						WorkflowId: id,
 					},
 				},
-			)
-			s.NoError(err1)
-			if len(resp.Executions) == 1 {
-				return true
-			}
-			env.Logger.Info("Closed WorkflowExecution is not yet visible")
-			return false
-		},
+			},
+		)
+		s.NoError(err1)
+		if len(resp.Executions) == 1 {
+
+			return
+		}
+		env.Logger.Info("Closed WorkflowExecution is not yet visible")
+		require.Fail(t, "condition was false")
+
+	},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)

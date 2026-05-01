@@ -411,7 +411,6 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBackl
 			rampingBuildID,
 			activitiesOnRampingVersionExpectation,
 		)
-
 	}, 10*time.Second, 200*time.Millisecond)
 }
 

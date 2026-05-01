@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/clock"
 )
 
@@ -21,11 +22,9 @@ func TestNewRealClock_Since(t *testing.T) {
 
 	source := clock.NewRealTimeSource()
 	start := source.Now()
-	assert.Eventually(
-		t,
-		func() bool {
-			return source.Since(start) >= 5*time.Millisecond
-		},
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.GreaterOrEqual(t, source.Since(start), 5*time.Millisecond)
+	},
 		time.Second,
 		time.Millisecond,
 	)

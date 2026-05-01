@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -243,7 +245,7 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 
 	var executions []*workflowpb.WorkflowExecutionInfo
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		request := &workflowservice.ListArchivedWorkflowExecutionsRequest{
 			Namespace: s.archivalNamespace.String(),
 			PageSize:  2,
@@ -257,9 +259,11 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 			request.NextPageToken = response.NextPageToken
 		}
 		if len(executions) == numRuns {
-			return true
+
+			return
 		}
-		return false
+		require.Fail(t, "condition was false")
+
 	}, 20*time.Second, 500*time.Millisecond)
 
 	for _, execution := range executions {
@@ -293,13 +297,13 @@ func (s *ArchivalSuite) TestCustomArchiver() {
 	s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.customArchiverNamespace, numActivities, numRuns)
 
 	// Verify custom archiver's Archive method was called at least once
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		called := s.customHistoryArchiveCalled.Load()
-		return called > 0
+		require.Greater(t, called, 0)
 	}, 10*time.Second, 500*time.Millisecond, "Custom history archiver Archive method should have been called")
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		called := s.customVisibilityArchiveCalled.Load()
-		return called > 0
+		require.Greater(t, called, 0)
 	}, 10*time.Second, 500*time.Millisecond, "Custom visibility archiver Archive method should have been called")
 }
 
@@ -319,7 +323,7 @@ func (s *ArchivalSuite) workflowIsArchived(namespaceID namespace.ID, execution *
 	)
 	s.NoError(err)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		ctx := testcore.NewContext()
 		var historyResponse *archiver.GetHistoryResponse
 		historyResponse, err = historyArchiver.Get(ctx, historyURI, &archiver.GetHistoryRequest{
@@ -329,10 +333,14 @@ func (s *ArchivalSuite) workflowIsArchived(namespaceID namespace.ID, execution *
 			PageSize:    1,
 		})
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		if len(historyResponse.HistoryBatches) == 0 {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		var visibilityResponse *archiver.QueryVisibilityResponse
 		visibilityResponse, err = visibilityArchiver.Query(
@@ -350,12 +358,16 @@ func (s *ArchivalSuite) workflowIsArchived(namespaceID namespace.ID, execution *
 			searchattribute.NameTypeMap{},
 		)
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		if len(visibilityResponse.Executions) > 0 {
-			return true
+
+			return
 		}
-		return false
+		require.Fail(t, "condition was false")
+
 	}, 20*time.Second, 500*time.Millisecond)
 }
 
@@ -366,7 +378,7 @@ func (s *ArchivalSuite) historyIsDeleted(workflowInfo archivalWorkflowInfo) {
 		s.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err := s.GetTestCluster().TestBase().ExecutionManager.ReadHistoryBranch(
 			testcore.NewContext(),
 			&persistence.ReadHistoryBranchRequest{
@@ -379,10 +391,12 @@ func (s *ArchivalSuite) historyIsDeleted(workflowInfo archivalWorkflowInfo) {
 			},
 		)
 		if common.IsNotFoundError(err) {
-			return true
+
+			return
 		}
 		s.NoError(err)
-		return false
+		require.Fail(t, "condition was false")
+
 	}, 20*time.Second, 500*time.Millisecond)
 }
 
@@ -397,13 +411,15 @@ func (s *ArchivalSuite) mutableStateIsDeleted(namespaceID namespace.ID, executio
 		ArchetypeID: chasm.WorkflowArchetypeID,
 	}
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err := s.GetTestCluster().TestBase().ExecutionManager.GetWorkflowExecution(testcore.NewContext(), request)
 		if common.IsNotFoundError(err) {
-			return true
+
+			return
 		}
 		s.NoError(err)
-		return false
+		require.Fail(t, "condition was false")
+
 	}, 20*time.Second, 500*time.Millisecond)
 }
 

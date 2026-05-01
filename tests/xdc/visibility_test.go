@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -113,16 +115,18 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 	testListResult := func(client workflowservice.WorkflowServiceClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
 		var openExecution *workflowpb.WorkflowExecutionInfo
 
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 
 			resp, err := client.ListWorkflowExecutions(testcore.NewContext(), lr)
 			s.NoError(err)
 			if len(resp.GetExecutions()) == 1 {
 				openExecution = resp.GetExecutions()[0]
-				return true
+
+				return
 			}
-			return false
+			require.Fail(t, "condition was false")
+
 		}, 20*time.Second, 100*time.Millisecond)
 		s.NotNil(openExecution)
 		s.Equal(we.GetRunId(), openExecution.GetExecution().GetRunId())
@@ -168,15 +172,19 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 	s.NoError(err)
 
 	testListResult = func(client workflowservice.WorkflowServiceClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			resp, err := client.ListWorkflowExecutions(testcore.NewContext(), lr)
 			s.NoError(err)
 			if len(resp.GetExecutions()) != 1 {
-				return false
+				require.Fail(t, "condition was false")
+
+				return
 			}
 			fields := resp.GetExecutions()[0].SearchAttributes.GetIndexedFields()
 			if len(fields) < 3 {
-				return false
+				require.Fail(t, "condition was false")
+
+				return
 			}
 			s.Len(fields, 3)
 
@@ -196,7 +204,6 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 			s.NoError(err)
 			s.Equal([]string{worker_versioning.UnversionedSearchAttribute}, buildIds)
 
-			return true
 		}, 20*time.Second, 100*time.Millisecond)
 	}
 

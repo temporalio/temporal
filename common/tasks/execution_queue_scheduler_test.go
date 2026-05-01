@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/backoff"
@@ -365,8 +366,8 @@ func (s *executionQueueSchedulerSuite) TestQueueTTL_ExpiresAfterIdle() {
 	s.True(scheduler.HasQueue(testExecutionKey{workflowID: "wf1", runID: "run1"}))
 
 	// Wait for sweeper to remove the idle queue
-	s.Eventually(func() bool {
-		return !scheduler.HasQueue(testExecutionKey{workflowID: "wf1", runID: "run1"})
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.False(t, scheduler.HasQueue(testExecutionKey{workflowID: "wf1", runID: "run1"}))
 	}, 5*time.Second, 10*time.Millisecond, "Queue should be removed after TTL")
 }
 
@@ -399,8 +400,8 @@ func (s *executionQueueSchedulerSuite) TestTTLExpiryRace_NoTaskOrphaning() {
 		scheduler.TrySubmit(&testExecutionTask{MockTask: mockTask, workflowID: "wf1", runID: "run1"})
 
 		// Wait for sweeper to remove the queue before next iteration
-		s.Eventually(func() bool {
-			return !scheduler.HasQueue(testExecutionKey{workflowID: "wf1", runID: "run1"})
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			require.False(t, scheduler.HasQueue(testExecutionKey{workflowID: "wf1", runID: "run1"}))
 		}, 5*time.Second, time.Millisecond)
 	}
 

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -137,28 +139,32 @@ func (s *deleteExecutionReplicationTestSuite) TestDeleteClosedWorkflow_Replicate
 	s.Require().NoError(err)
 
 	// Wait for workflow to be completed on active cluster.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := sourceClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: ns,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 		})
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
-		return resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetWorkflowExecutionInfo().GetStatus())
 	}, time.Second*10, time.Second)
 
 	// Wait for the workflow to be replicated to the passive cluster.
 	targetClient := s.clusters[1].FrontendClient()
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := targetClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: ns,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 		})
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
-		return resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetWorkflowExecutionInfo().GetStatus())
 	}, replicationWaitTime, replicationCheckInterval, "Workflow should be replicated to passive cluster")
 
 	// Delete the workflow on the active cluster.
@@ -172,30 +178,34 @@ func (s *deleteExecutionReplicationTestSuite) TestDeleteClosedWorkflow_Replicate
 	s.Require().NoError(err)
 
 	// Verify the workflow is deleted on the active cluster.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err := sourceClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: ns,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 		})
 		if err == nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		var notFound *serviceerror.NotFound
-		return errors.As(err, &notFound)
+		require.True(t, errors.As(err, &notFound))
 	}, time.Second*10, time.Second, "Workflow should be deleted on active cluster")
 
 	// Verify the workflow mutable state is deleted on the passive cluster via replication.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err := s.clusters[1].HistoryClient().DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
 			NamespaceId: nsID,
 			Execution:   &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 			ArchetypeId: chasm.WorkflowArchetypeID,
 		})
 		if err == nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		var notFound *serviceerror.NotFound
-		return errors.As(err, &notFound)
+		require.True(t, errors.As(err, &notFound))
 	}, time.Second*30, replicationCheckInterval, "Workflow mutable state should be deleted on passive cluster via replication")
 }
 
@@ -228,12 +238,12 @@ func (s *deleteExecutionReplicationTestSuite) TestDeleteRunningWorkflow_Replicat
 	runID := startResp.GetRunId()
 
 	// Wait for the workflow to be replicated to the passive cluster.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err := s.clusters[1].FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: ns,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 		})
-		return err == nil
+		require.NoError(t, err)
 	}, replicationWaitTime, replicationCheckInterval, "Workflow should be replicated to passive cluster")
 
 	// Delete the running workflow on the active cluster.
@@ -248,30 +258,34 @@ func (s *deleteExecutionReplicationTestSuite) TestDeleteRunningWorkflow_Replicat
 	s.Require().NoError(err)
 
 	// Verify the workflow is deleted on the active cluster.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err := sourceClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: ns,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 		})
 		if err == nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		var notFound *serviceerror.NotFound
-		return errors.As(err, &notFound)
+		require.True(t, errors.As(err, &notFound))
 	}, time.Second*10, time.Second, "Workflow should be deleted on active cluster")
 
 	// Verify the workflow mutable state is deleted on the passive cluster via replication.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err := s.clusters[1].HistoryClient().DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
 			NamespaceId: nsID,
 			Execution:   &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 			ArchetypeId: chasm.WorkflowArchetypeID,
 		})
 		if err == nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		var notFound *serviceerror.NotFound
-		return errors.As(err, &notFound)
+		require.True(t, errors.As(err, &notFound))
 	}, time.Second*30, replicationCheckInterval, "Workflow mutable state should be deleted on passive cluster via replication")
 }
 
@@ -329,15 +343,17 @@ func (s *deleteExecutionReplicationTestSuite) TestDeleteWorkflow_NotReplicatedWh
 
 	// Wait for replication to passive.
 	targetClient := s.clusters[1].FrontendClient()
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := targetClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: ns,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 		})
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
-		return resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetWorkflowExecutionInfo().GetStatus())
 	}, replicationWaitTime, replicationCheckInterval)
 
 	// Delete on active cluster.
@@ -351,13 +367,13 @@ func (s *deleteExecutionReplicationTestSuite) TestDeleteWorkflow_NotReplicatedWh
 	s.Require().NoError(err)
 
 	// Wait for deletion on active.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err := sourceClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: ns,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 		})
 		var notFound *serviceerror.NotFound
-		return errors.As(err, &notFound)
+		require.True(t, errors.As(err, &notFound))
 	}, time.Second*10, time.Second)
 
 	// Workflow should still exist on the passive cluster (no replication of deletion).
@@ -383,18 +399,18 @@ func (s *deleteExecutionReplicationTestSuite) createGlobalNamespace() string {
 	s.Require().NoError(err)
 
 	// Wait for namespace to be available on both clusters.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err := s.clusters[0].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 			Namespace: ns,
 		})
-		return err == nil
+		require.NoError(t, err)
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err := s.clusters[1].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 			Namespace: ns,
 		})
-		return err == nil
+		require.NoError(t, err)
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
 
 	return ns

@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -370,10 +372,11 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_StartBackoffCron() 
 	// NOT wait for the first WT — that would require waiting wall-clock (cronGap - bound),
 	// up to ~59 minutes. The TSI / history state is observable as soon as the start
 	// transaction commits.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		ms := s.getMutableState(env, tv.WorkflowID(), run1ID)
 		tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
-		return tsi != nil && tsi.GetAccumulatedSkippedDuration().AsDuration() > 0
+		require.NotNil(t, tsi)
+		require.Greater(t, tsi.GetAccumulatedSkippedDuration().AsDuration(), 0)
 	}, 30*time.Second, 200*time.Millisecond, "expected MS to record a skip after workflow start")
 
 	elapsed := time.Since(startWall)
@@ -441,10 +444,11 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxSkip_StartWithDelay() {
 	// Bound disable fires during WorkflowExecutionStarted's closeTransaction. Don't wait
 	// for the first WT — that requires waiting wall-clock (delay - bound), which would
 	// exceed the default poll timeout and may de-subscribe matching pollers.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		ms := s.getMutableState(env, tv.WorkflowID(), runID)
 		tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
-		return tsi != nil && tsi.GetAccumulatedSkippedDuration().AsDuration() > 0
+		require.NotNil(t, tsi)
+		require.Greater(t, tsi.GetAccumulatedSkippedDuration().AsDuration(), 0)
 	}, 30*time.Second, 200*time.Millisecond, "expected MS to record a skip after workflow start")
 
 	elapsed := time.Since(startWall)
@@ -522,11 +526,12 @@ func (s *TimeSkippingBoundFunctionalSuite) TestBound_MaxElapsed_WithActivity() {
 	// VisibilityTime is at startTime+2s; the executor hits this within seconds of WT2
 	// closing. B3 not fixed: the executor emits the disable transition regardless of
 	// the in-flight activity, flipping Enabled=false / HasReached=true on the bound.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		ms := s.getMutableState(env, tv.WorkflowID(), runID)
 		tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
 		bi := tsi.GetCurrentElapsedDurationBound()
-		return bi != nil && bi.GetHasReached()
+		require.NotNil(t, bi)
+		require.True(t, bi.GetHasReached())
 	}, 30*time.Second, 200*time.Millisecond, "expected bound timer task to fire while activity is in-flight (B3 path)")
 
 	// AT1: complete the activity.

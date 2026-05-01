@@ -362,15 +362,17 @@ func (s *WorkflowResetSuite) TestBatchResetWithOptionsUpdate() {
 	s.NoError(err)
 
 	// Wait for batch operation to complete
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
 			Namespace: s.Namespace().String(),
 			JobId:     batchJobID,
 		})
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
-		return resp.State == enumspb.BATCH_OPERATION_STATE_COMPLETED
+		require.Equal(t, enumspb.BATCH_OPERATION_STATE_COMPLETED, resp.State)
 	}, 20*time.Second, 1*time.Second, "Batch operation should complete")
 
 	// Get the new run IDs after reset

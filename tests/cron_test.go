@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -462,11 +464,10 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 	ts = time.Now()
 
 	// let first run finish, then check execution and history of second run
-	s.Eventually(
-		func() bool {
-			exec = s.listOpenWorkflowExecutions(startTs, time.Now(), id, 1)[0]
-			return exec.GetExecution().GetRunId() != firstRunID
-		},
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		exec = s.listOpenWorkflowExecutions(startTs, time.Now(), id, 1)[0]
+		require.NotEqual(t, firstRunID, exec.GetExecution().GetRunId())
+	},
 		targetBackoffDuration+tolerance,
 		250*time.Millisecond,
 	)
@@ -569,27 +570,26 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 func (s *CronTestClientSuite) listOpenWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
 	s.T().Helper()
 	var resp *workflowservice.ListOpenWorkflowExecutionsResponse
-	s.Eventuallyf(
-		func() bool {
-			var err error
-			resp, err = s.SdkClient().ListOpenWorkflow(
-				testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-					Namespace:       s.Namespace().String(),
-					MaximumPageSize: int32(2 * expectedNumber),
-					StartTimeFilter: &filterpb.StartTimeFilter{
-						EarliestTime: timestamppb.New(start),
-						LatestTime:   timestamppb.New(end),
-					},
-					Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{
-						ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-							WorkflowId: id,
-						},
+	s.EventuallyWithTf(func(t *assert.CollectT) {
+		var err error
+		resp, err = s.SdkClient().ListOpenWorkflow(
+			testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+				Namespace:       s.Namespace().String(),
+				MaximumPageSize: int32(2 * expectedNumber),
+				StartTimeFilter: &filterpb.StartTimeFilter{
+					EarliestTime: timestamppb.New(start),
+					LatestTime:   timestamppb.New(end),
+				},
+				Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{
+					ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+						WorkflowId: id,
 					},
 				},
-			)
-			s.NoError(err)
-			return len(resp.GetExecutions()) == expectedNumber
-		},
+			},
+		)
+		s.NoError(err)
+		require.Equal(t, expectedNumber, len(resp.GetExecutions()))
+	},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 		"timeout expecting %d executions, found %d",
@@ -602,28 +602,27 @@ func (s *CronTestClientSuite) listOpenWorkflowExecutions(start, end time.Time, i
 func (s *CronTestClientSuite) listClosedWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
 	s.T().Helper()
 	var resp *workflowservice.ListClosedWorkflowExecutionsResponse
-	s.Eventuallyf(
-		func() bool {
-			var err error
-			resp, err = s.SdkClient().ListClosedWorkflow(
-				testcore.NewContext(),
-				&workflowservice.ListClosedWorkflowExecutionsRequest{
-					Namespace:       s.Namespace().String(),
-					MaximumPageSize: int32(2 * expectedNumber),
-					StartTimeFilter: &filterpb.StartTimeFilter{
-						EarliestTime: timestamppb.New(start),
-						LatestTime:   timestamppb.New(end),
-					},
-					Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
-						ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-							WorkflowId: id,
-						},
+	s.EventuallyWithTf(func(t *assert.CollectT) {
+		var err error
+		resp, err = s.SdkClient().ListClosedWorkflow(
+			testcore.NewContext(),
+			&workflowservice.ListClosedWorkflowExecutionsRequest{
+				Namespace:       s.Namespace().String(),
+				MaximumPageSize: int32(2 * expectedNumber),
+				StartTimeFilter: &filterpb.StartTimeFilter{
+					EarliestTime: timestamppb.New(start),
+					LatestTime:   timestamppb.New(end),
+				},
+				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
+					ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+						WorkflowId: id,
 					},
 				},
-			)
-			s.NoError(err)
-			return len(resp.GetExecutions()) == expectedNumber
-		},
+			},
+		)
+		s.NoError(err)
+		require.Equal(t, expectedNumber, len(resp.GetExecutions()))
+	},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 		"timeout expecting %d executions, found %d",

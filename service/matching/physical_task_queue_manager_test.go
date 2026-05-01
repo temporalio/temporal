@@ -200,21 +200,21 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestReaderBacklogAge() {
 	go blm.taskReader.dispatchBufferedTasks()
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		assert.InDelta(collect, time.Minute, blm.taskReader.getBacklogHeadAge(), float64(time.Second))
+		require.InDelta(collect, time.Minute, blm.taskReader.getBacklogHeadAge(), float64(time.Second))
 	}, time.Second, 10*time.Millisecond)
 
 	_, err := blm.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	s.NoError(err)
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		assert.InDelta(collect, 10*time.Second, blm.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
+		require.InDelta(collect, 10*time.Second, blm.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
 	}, time.Second, 10*time.Millisecond)
 
 	_, err = blm.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	s.NoError(err)
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		assert.Equalf(collect, time.Duration(0), blm.taskReader.getBacklogHeadAge(), "backlog age being reset because of no tasks in the buffer")
+		require.Equalf(collect, time.Duration(0), blm.taskReader.getBacklogHeadAge(), "backlog age being reset because of no tasks in the buffer")
 	}, time.Second, 10*time.Millisecond)
 }
 
@@ -395,8 +395,8 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnersh
 	s.tqMgr.backlogMgr.getDB().updateAckLevelAndBacklogStats(0, 123456, 10, time.Time{})
 
 	// on the next periodic write, it'll fail due to conflict and unload the task queue
-	s.Eventually(func() bool {
-		return s.tqMgr.tqCtx.Err() != nil
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.NotNil(t, s.tqMgr.tqCtx.Err())
 	}, 5*time.Second, 20*time.Millisecond)
 
 	// no additional updates (the failed periodic update counts as "1")
@@ -557,19 +557,21 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 	fairQueueData := fairTm.getQueueDataByKey(physicalTaskQueueKey)
 
 	// wait for both to be loaded
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		pri, fair := priQueueData.persistenceStats(), fairQueueData.persistenceStats()
-		return (pri.updateCount > 0 || pri.createCount > 0) && (fair.updateCount > 0 || fair.createCount > 0)
+		require.True(t, pri.updateCount > 0 || pri.createCount > 0)
+		require.True(t, fair.updateCount > 0 || fair.createCount > 0)
 	}, 2*time.Second, 10*time.Millisecond, "both tables should be loaded")
 
 	// since the pri table is empty, drain should complete quickly.
 	// wait for drain completion (drainbacklogmgr becomes nil) and
 	// otherhastasks is false in persistence
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		fairQueueData.Lock()
 		otherHasTasks := fairQueueData.info.OtherHasTasks
 		fairQueueData.Unlock()
-		return tqMgr.getDrainBacklogMgr() == nil && !otherHasTasks
+		require.Nil(t, tqMgr.getDrainBacklogMgr())
+		require.False(t, otherHasTasks)
 	}, 5*time.Second, 50*time.Millisecond, "drain should complete")
 
 	// unload
@@ -599,8 +601,8 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 	require.NoError(t, err)
 
 	// wait for fair queue to be updated on reload
-	require.Eventually(t, func() bool {
-		return fairQueueData.persistenceStats().updateCount > prevFairStats.updateCount
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.Greater(t, fairQueueData.persistenceStats().updateCount, prevFairStats.updateCount)
 	}, 2*time.Second, 10*time.Millisecond, "fair table should be updated on reload")
 
 	// verify no draining is set up on reload

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -580,7 +581,7 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 			s.Positive(startedEventIdx)
 
 			// Wait for Nexus operation to be replicated
-			s.Eventually(func() bool {
+			s.EventuallyWithT(func(t *assert.CollectT) {
 				resp, err := feClient1.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 					Namespace: ns,
 					Execution: &commonpb.WorkflowExecution{
@@ -588,7 +589,8 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 						RunId:      run.GetRunID(),
 					},
 				})
-				return err == nil && len(resp.PendingNexusOperations) > 0
+				require.NoError(t, err)
+				require.Greater(t, len(resp.PendingNexusOperations), 0)
 			}, 5*time.Second, 500*time.Millisecond)
 
 			completion := tc.getCompletionFn()

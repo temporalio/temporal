@@ -34,6 +34,10 @@ linters:
       forbid:
         - pattern: time.Sleep
           msg: "Please use require.Eventually or assert.Eventually instead unless you've no other option"
+        - pattern: '(^|\.)Eventually$'
+          msg: "Use EventuallyWithT instead of Eventually with bool callbacks"
+        - pattern: '(^|\.)Eventuallyf$'
+          msg: "Use EventuallyWithTf instead of Eventuallyf with bool callbacks"
         - pattern: "^panic$"
           msg: "Please avoid using panic in application code"
         - pattern: time\.Now

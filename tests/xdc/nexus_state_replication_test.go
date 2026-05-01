@@ -206,12 +206,12 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	// Unblock nexus operation start after failover.
 	failStartOperation.Store(false)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		describeRes, err := sdkClient1.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		s.NoError(err)
 		s.Len(describeRes.PendingNexusOperations, 1)
 		op := describeRes.PendingNexusOperations[0]
-		return op.State == enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED
+		require.Equal(t, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED, op.State)
 	}, time.Second*20, time.Millisecond*100)
 
 	_, err = s.clusters[1].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -365,14 +365,14 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 	})
 	s.NoError(err)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		describeRes, err := sdkClient0.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		s.NoError(err)
 		s.Len(describeRes.PendingNexusOperations, 1)
 		op := describeRes.PendingNexusOperations[0]
 		fmt.Println(op.CancellationInfo)
 		s.NotNil(op.CancellationInfo)
-		return op.CancellationInfo.State == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED
+		require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, op.CancellationInfo.State)
 	}, time.Second*20, time.Millisecond*100)
 
 	s.cancelNexusOperation(ctx, publicCallbackUrl, callbackToken)
@@ -605,10 +605,10 @@ func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplica
 	allowCompletion.Store(true)
 
 	// Wait for operation completion to be recorded
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := sdkClient0.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		s.NoError(err)
-		return len(desc.PendingNexusOperations) == 0
+		require.Equal(t, 0, len(desc.PendingNexusOperations))
 	}, 10*time.Second, 200*time.Millisecond)
 
 	// Try to cancel operation - should succeed since completion is buffered
@@ -629,10 +629,10 @@ func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplica
 	s.NoError(err, "Cancel request should be accepted when operation has buffered completion")
 
 	// Ensure no pending operations in passive cluster state
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := sdkClient1.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		s.NoError(err)
-		return len(desc.PendingNexusOperations) == 0
+		require.Equal(t, 0, len(desc.PendingNexusOperations))
 	}, 10*time.Second, 200*time.Millisecond)
 
 	finalPollResp := s.pollWorkflowTask(ctx, s.clusters[0].FrontendClient(), ns)
@@ -667,17 +667,19 @@ NexusOperationCompleted
 }
 
 func (s *NexusStateReplicationSuite) waitEvent(ctx context.Context, sdkClient sdkclient.Client, run sdkclient.WorkflowRun, eventType enumspb.EventType) (eventID int64) {
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		history := sdkClient.GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for history.HasNext() {
 			event, err := history.Next()
 			s.NoError(err)
 			if event.EventType == eventType {
 				eventID = event.EventId
-				return true
+
+				return
 			}
 		}
-		return false
+		require.Fail(t, "condition was false")
+
 	}, time.Second*10, time.Millisecond*100)
 	return
 }
@@ -687,11 +689,11 @@ func (s *NexusStateReplicationSuite) waitOperationRetry(
 	sdkClient sdkclient.Client,
 	run sdkclient.WorkflowRun,
 ) {
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		descResp, err := sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		s.NoError(err)
 		s.Len(descResp.GetPendingNexusOperations(), 1)
-		return descResp.GetPendingNexusOperations()[0].Attempt > 2
+		require.Greater(t, descResp.GetPendingNexusOperations()[0].Attempt, 2)
 	}, time.Second*10, time.Millisecond*100)
 }
 

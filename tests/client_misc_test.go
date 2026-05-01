@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -113,8 +115,8 @@ func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
 	))
 
 	// verify that the parent workflow completes soon after the number of pending child workflows drops
-	s.Eventually(func() bool {
-		return future.Get(ctx, nil) == nil
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.Nil(t, future.Get(ctx, nil))
 	}, 20*time.Second, 500*time.Millisecond)
 }
 
@@ -417,7 +419,7 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 
 	// wait until wf started and sticky is set
 	var stickyQueue string
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		ms, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 			Namespace: s.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
@@ -427,8 +429,11 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 		})
 		s.NoError(err)
 		stickyQueue = ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue
-		// verify workflow has sticky task queue
-		return stickyQueue != "" && stickyQueue != s.TaskQueue()
+		require.NotEqual(
+
+			// verify workflow has sticky task queue
+			t, "", stickyQueue)
+		require.NotEqual(t, s.TaskQueue(), stickyQueue)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// stop worker
@@ -1027,17 +1032,19 @@ func (s *ClientMiscTestSuite) Test_StickyWorkerRestartWorkflowTask() {
 			s.NotNil(workflowRun)
 			s.NotEmpty(workflowRun.GetRunID())
 
-			s.Eventually(func() bool {
+			s.EventuallyWithT(func(t *assert.CollectT) {
 				// wait until first workflow task completed (so we know sticky is set on workflow)
 				iter := s.SdkClient().GetWorkflowHistory(ctx, id, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 				for iter.HasNext() {
 					evt, err := iter.Next()
 					s.NoError(err)
 					if evt.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-						return true
+
+						return
 					}
 				}
-				return false
+				require.Fail(t, "condition was false")
+
 			}, 10*time.Second, 200*time.Millisecond)
 
 			// stop old worker
@@ -1188,10 +1195,11 @@ func (s *ClientMiscTestSuite) TestBatchReset() {
 	s.NoError(err)
 
 	// latest run should complete successfully
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		workflowRun = s.SdkClient().GetWorkflow(context.Background(), workflowRun.GetID(), "")
 		err = workflowRun.Get(context.Background(), &result)
-		return err == nil && result == 1
+		require.NoError(t, err)
+		require.Equal(t, 1, result)
 	}, 5*time.Second, 200*time.Millisecond)
 }
 
@@ -1274,7 +1282,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	s.NoError(err)
 	ex := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
 	// wait for first wft and first activity to complete
-	s.Eventually(func() bool { return len(s.GetHistory(s.Namespace().String(), ex)) >= 10 }, 5*time.Second, 100*time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) { require.GreaterOrEqual(t, len(s.GetHistory(s.Namespace().String(), ex)), 10) }, 5*time.Second, 100*time.Millisecond)
 
 	w1.Stop()
 
@@ -1293,7 +1301,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
 
 	// wait until we see three calls to badact
-	s.Eventually(func() bool { return badcount.Load() >= 3 }, 10*time.Second, 200*time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) { require.GreaterOrEqual(t, badcount.Load(), 3) }, 10*time.Second, 200*time.Millisecond)
 
 	// at this point act2 should have been invokved once also
 	s.Equal(int32(1), act2count.Load())
@@ -1318,12 +1326,13 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	query := fmt.Sprintf(`%s = "%s" and %s = "%s"`,
 		sadefs.ExecutionStatus, "Running",
 		sadefs.BuildIds, worker_versioning.UnversionedBuildIdSearchAttribute(buildIdv2))
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
 			Query:     query,
 		})
-		return err == nil && len(resp.Executions) == 1
+		require.NoError(t, err)
+		require.Equal(t, 1, len(resp.Executions))
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// reset it using v2 as the bad build ID
@@ -1346,9 +1355,10 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 
 	// now it can complete on v3. (need to loop since runid will be resolved early and we need
 	// to re-resolve to pick up the new run instead of the terminated one)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		var out string
-		return s.SdkClient().GetWorkflow(ctx, run.GetID(), "").Get(ctx, &out) == nil && out == "done 3!"
+		require.Nil(t, s.SdkClient().GetWorkflow(ctx, run.GetID(), "").Get(ctx, &out))
+		require.Equal(t, "done 3!", out)
 	}, 10*time.Second, 200*time.Millisecond)
 
 	s.Equal(int32(1), act1count.Load()) // we should not see an addition run of act1

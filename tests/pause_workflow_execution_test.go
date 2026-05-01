@@ -227,7 +227,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 				var pauseInfoEntries []string
 				err = payload.Decode(pauseInfoPayload, &pauseInfoEntries)
 				require.NoError(t, err)
-				assert.Empty(t, pauseInfoEntries, "TemporalPauseInfo should be empty after unpause")
+				require.Empty(t, pauseInfoEntries, "TemporalPauseInfo should be empty after unpause")
 			}
 		}
 	}, 5*time.Second, 200*time.Millisecond)
@@ -330,7 +330,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowAndActivity() {
 		require.True(t, desc.PendingActivities[0].Paused)
 
 		// Additionally verify TemporalPauseInfo contains activity pause entry
-		assert.True(t, s.hasActivityPauseEntries(desc), "Should contain at least one activity pause entry")
+		require.True(t, s.hasActivityPauseEntries(desc), "Should contain at least one activity pause entry")
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Unblock the failing activity so it can succeed
@@ -373,10 +373,10 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowAndActivity() {
 				break
 			}
 		}
-		assert.True(t, activityCompleted, "Activity should have completed successfully")
+		require.True(t, activityCompleted, "Activity should have completed successfully")
 
 		// Additionally verify TemporalPauseInfo no longer contains activity pause entries
-		assert.False(t, s.hasActivityPauseEntries(desc), "Should not contain activity pause entries")
+		require.False(t, s.hasActivityPauseEntries(desc), "Should not contain activity pause entries")
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Unpause the workflow
@@ -408,7 +408,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowAndActivity() {
 				var pauseInfoEntries []string
 				err = payload.Decode(pauseInfoPayload, &pauseInfoEntries)
 				require.NoError(t, err)
-				assert.Empty(t, pauseInfoEntries, "TemporalPauseInfo should be empty after workflow completes")
+				require.Empty(t, pauseInfoEntries, "TemporalPauseInfo should be empty after workflow completes")
 			}
 		}
 	}, 10*time.Second, 200*time.Millisecond)

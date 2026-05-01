@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
@@ -688,14 +689,14 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 	// be some straggler acquireShard goroutines that call it even after shardController.Stop
 	// (which will cancel all lifecycleCtxs).
 	var prevGetShards int64
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		thisGetShards := getShards.Load()
 		ok := thisGetShards == prevGetShards && thisGetShards == closeContexts.Load()
 		prevGetShards = thisGetShards
-		return ok
+		require.True(t, ok)
 	}, 1*time.Second, 100*time.Millisecond, "all contexts did not close")
-	s.Eventually(func() bool {
-		return engineStarts.Load() == engineStops.Load()
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.Equal(t, engineStops.Load(), engineStarts.Load())
 	}, 1*time.Second, 100*time.Millisecond, "engine start/stop")
 }
 

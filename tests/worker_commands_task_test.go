@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -124,7 +126,7 @@ func TestDispatchCancelToWorker(t *testing.T) {
 
 	// Poll Nexus control queue until we receive the notification request
 	var nexusPollResp *workflowservice.PollNexusTaskQueueResponse
-	env.Eventually(func() bool {
+	env.EventuallyWithT(func(t *assert.CollectT) {
 		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
 		defer pollCancel()
 		resp, err := env.FrontendClient().PollNexusTaskQueue(pollCtx, &workflowservice.PollNexusTaskQueueRequest{
@@ -134,9 +136,11 @@ func TestDispatchCancelToWorker(t *testing.T) {
 		})
 		if err == nil && resp != nil && resp.Request != nil {
 			nexusPollResp = resp
-			return true
+
+			return
 		}
-		return false
+		require.Fail(t, "condition was false")
+
 	}, 120*time.Second, 100*time.Millisecond, "Timed out waiting for Nexus task")
 
 	// Verify we received the notification request on the control queue

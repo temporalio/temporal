@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/goro"
 )
@@ -49,7 +50,7 @@ func TestAdaptivePool_Grows(t *testing.T) {
 
 	// wait for goroutine to block in Do
 	// there should be one timer
-	assert.Eventually(t, func() bool { return ts.NumTimers() == 1 }, time.Second, time.Millisecond)
+	require.EventuallyWithT(t, func(t *assert.CollectT) { require.Equal(t, 1, ts.NumTimers()) }, time.Second, time.Millisecond)
 
 	select {
 	case <-doneCh:
@@ -120,12 +121,12 @@ func TestAdaptivePool_ShrinksAgain(t *testing.T) {
 	syncCh := make(chan struct{}, 10)
 	go p.Do(func() { syncCh <- struct{}{}; block() })
 	// wait for goroutine to block in Do
-	assert.Eventually(t, func() bool { return ts.NumTimers() == 1 }, time.Second, time.Millisecond)
+	require.EventuallyWithT(t, func(t *assert.CollectT) { require.Equal(t, 1, ts.NumTimers()) }, time.Second, time.Millisecond)
 	ts.Advance(10 * time.Millisecond) // allow it to start another
 	<-syncCh                          // wait for it to call the function
 
 	go p.Do(func() { syncCh <- struct{}{} })
-	assert.Eventually(t, func() bool { return ts.NumTimers() == 1 }, time.Second, time.Millisecond)
+	require.EventuallyWithT(t, func(t *assert.CollectT) { require.Equal(t, 1, ts.NumTimers()) }, time.Second, time.Millisecond)
 	ts.Advance(10 * time.Millisecond) // allow it to start another
 	<-syncCh                          // wait for it to call the function
 
@@ -138,8 +139,8 @@ func TestAdaptivePool_ShrinksAgain(t *testing.T) {
 
 	// after no more than 10ms, the free worker should exit
 	// wait until worker is blocked on timer
-	assert.Eventually(t, func() bool { return ts.NumTimers() == 1 }, time.Second, time.Millisecond)
+	require.EventuallyWithT(t, func(t *assert.CollectT) { require.Equal(t, 1, ts.NumTimers()) }, time.Second, time.Millisecond)
 	ts.Advance(20 * time.Millisecond) // let timer fire
 	// wait for worker to exit
-	assert.Eventually(t, func() bool { return p.NumWorkers() == 2 }, time.Second, time.Millisecond)
+	require.EventuallyWithT(t, func(t *assert.CollectT) { require.Equal(t, 2, p.NumWorkers()) }, time.Second, time.Millisecond)
 }

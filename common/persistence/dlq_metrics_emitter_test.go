@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -57,9 +58,9 @@ func TestDLQMetricsEmitter_EmitMetrics_WhenInstanceHostsShardOne(t *testing.T) {
 	capture := metricsHandler.StartCapture()
 	snapshot := capture.Snapshot()
 	emitter.Start()
-	assert.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		snapshot = capture.Snapshot()
-		return len(snapshot[metrics.DLQMessageCount.Name()]) == len(categoryRegistry.GetCategories())
+		require.Equal(t, len(categoryRegistry.GetCategories()), len(snapshot[metrics.DLQMessageCount.Name()]))
 	}, 5*time.Second, 100*time.Millisecond)
 
 	emitter.Stop()
@@ -96,21 +97,27 @@ func TestDLQMetricsEmitter_DoesNotEmitMetrics_WhenInstanceDoesNotHostShardOne(t 
 	logger.EXPECT().Error(gomock.Any()).AnyTimes()
 
 	emitter.Start()
-	assert.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		snapshot := capture.Snapshot()
 		if len(snapshot[metrics.DLQMessageCount.Name()]) == 0 {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		for _, r := range snapshot[metrics.DLQMessageCount.Name()] {
 			value, ok := r.Value.(float64)
 			if !ok {
-				return false
+				require.Fail(t, "condition was false")
+
+				return
 			}
 			if value != 0 {
-				return false
+				require.Fail(t, "condition was false")
+
+				return
 			}
 		}
-		return true
+
 	}, 5*time.Second, 15*time.Millisecond)
 	emitter.Stop()
 	<-emitter.shutdownCh

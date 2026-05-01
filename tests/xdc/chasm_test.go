@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -116,9 +118,9 @@ func (s *ChasmSuite) TestDeleteExecution_RunningExecution() {
 	_, err = s.clusters[0].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 	s.NoError(err)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
-		return err == nil
+		require.NoError(t, err)
 	}, 10*time.Second, 100*time.Millisecond)
 
 	err = tests.DeletePayloadStoreHandler(
@@ -133,21 +135,22 @@ func (s *ChasmSuite) TestDeleteExecution_RunningExecution() {
 	s.NoError(err)
 
 	// Active cluster should fully delete the execution.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err = s.clusters[0].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
-		return errors.As(err, new(*serviceerror.NotFound))
+		require.True(t, errors.As(err, new(*serviceerror.NotFound)))
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Standby cluster receives the close via replication but won't process
 	// the DeleteExecutionTask itself; it will be cleaned up by the retention timer.
 	// Verify the execution is terminated on the standby.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 		if err != nil {
-			// Execution may already be gone if replication of delete happened.
-			return errors.As(err, new(*serviceerror.NotFound))
+			require.True(t, // Execution may already be gone if replication of delete happened.
+				errors.As(err, new(*serviceerror.NotFound)))
+			return
 		}
-		return resp.GetDatabaseMutableState().GetExecutionState().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, resp.GetDatabaseMutableState().GetExecutionState().GetStatus())
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
@@ -193,10 +196,10 @@ func (s *ChasmSuite) TestRetentionTimer() {
 	_, err = s.clusters[0].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 	s.NoError(err)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		// Wait for it to be replicated to the standby cluster
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
-		return err == nil
+		require.NoError(t, err)
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Reduce namespace retention to trigger deletion
@@ -210,13 +213,13 @@ func (s *ChasmSuite) TestRetentionTimer() {
 	s.NoError(err)
 
 	// Wait for ns update to be replicated
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		// Wait for it to be replicated to the standby cluster
 		resp, err := s.clusters[1].FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
 			Namespace: nsName,
 		})
 		s.NoError(err)
-		return resp.GetConfig().GetWorkflowExecutionRetentionTtl().AsDuration() == retention
+		require.Equal(t, retention, resp.GetConfig().GetWorkflowExecutionRetentionTtl().AsDuration())
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Wait for ns registry refresh
@@ -233,10 +236,10 @@ func (s *ChasmSuite) TestRetentionTimer() {
 	s.NoError(err)
 
 	for _, cluster := range []*testcore.TestCluster{s.clusters[0], s.clusters[1]} {
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			// Wait for replication, retention period, and retention timer task processing.
 			_, err = cluster.AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
-			return errors.As(err, new(*serviceerror.NotFound))
+			require.True(t, errors.As(err, new(*serviceerror.NotFound)))
 		}, 10*time.Second, 100*time.Millisecond)
 	}
 }
@@ -290,14 +293,14 @@ func (s *ChasmSuite) TestActivityDispatchTaskStandbySpillover() {
 		},
 		Archetype: activity.Archetype,
 	}
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
-		return err == nil
+		require.NoError(t, err)
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Verify Discard fired on cluster 1 (standby) by checking that the activity task was pushed into cluster 1's
 	// matching backlog
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		for partitionID := range int32(dynamicconfig.GlobalDefaultNumTaskQueuePartitions) {
 			res, err := s.clusters[1].AdminClient().DescribeTaskQueuePartition(ctx,
 				&adminservice.DescribeTaskQueuePartitionRequest{
@@ -315,12 +318,14 @@ func (s *ChasmSuite) TestActivityDispatchTaskStandbySpillover() {
 			for _, vi := range res.VersionsInfoInternal {
 				for _, st := range vi.PhysicalTaskQueueInfo.InternalTaskQueueStatus {
 					if st.ApproximateBacklogCount > 0 {
-						return true
+
+						return
 					}
 				}
 			}
 		}
-		return false
+		require.Fail(t, "condition was false")
+
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Failover namespace to cluster 1. Matching on standby only serves query
@@ -330,7 +335,7 @@ func (s *ChasmSuite) TestActivityDispatchTaskStandbySpillover() {
 
 	// Poll activity task on cluster 1 (now active after failover).
 	var pollResp *workflowservice.PollActivityTaskQueueResponse
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		pollCtx, pollCancel := context.WithTimeout(ctx, 3*time.Second)
 		defer pollCancel()
 		pollResp, err = s.clusters[1].FrontendClient().PollActivityTaskQueue(
@@ -344,7 +349,8 @@ func (s *ChasmSuite) TestActivityDispatchTaskStandbySpillover() {
 				Identity: "standby-worker",
 			},
 		)
-		return err == nil && len(pollResp.GetTaskToken()) > 0
+		require.NoError(t, err)
+		require.Greater(t, len(pollResp.GetTaskToken()), 0)
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Complete the activity from cluster 1.
@@ -361,7 +367,7 @@ func (s *ChasmSuite) TestActivityDispatchTaskStandbySpillover() {
 
 	// Verify completion on both clusters.
 	for _, cluster := range s.clusters {
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			resp, err := cluster.FrontendClient().DescribeActivityExecution(
 				ctx,
 				&workflowservice.DescribeActivityExecutionRequest{
@@ -371,9 +377,11 @@ func (s *ChasmSuite) TestActivityDispatchTaskStandbySpillover() {
 				},
 			)
 			if err != nil {
-				return false
+				require.Fail(t, "condition was false")
+
+				return
 			}
-			return resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED
+			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, resp.GetInfo().GetStatus())
 		}, 10*time.Second, 100*time.Millisecond)
 	}
 }
@@ -424,9 +432,9 @@ func (s *ChasmSuite) TestDeleteExecution_ReplicatedToStandby() {
 		Archetype: archetype,
 	}
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
-		return err == nil
+		require.NoError(t, err)
 	}, 10*time.Second, 100*time.Millisecond)
 
 	err = tests.DeletePayloadStoreHandler(
@@ -442,9 +450,9 @@ func (s *ChasmSuite) TestDeleteExecution_ReplicatedToStandby() {
 
 	// Verify Chasm deletion on both clusters.
 	for _, cluster := range s.clusters {
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			_, err = cluster.AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
-			return errors.As(err, new(*serviceerror.NotFound))
+			require.True(t, errors.As(err, new(*serviceerror.NotFound)))
 		}, 10*time.Second, 100*time.Millisecond)
 	}
 }

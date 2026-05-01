@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -204,11 +205,11 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 
 	// Namespace should replicate even when workflow replication is disabled
 	// because namespace replication happens when clusters are connected
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err := standbyCluster.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 			Namespace: activeNamespace,
 		})
-		return err == nil
+		require.NoError(t, err)
 	}, 60*time.Second, 1*time.Second, "Namespace should replicate when clusters are connected")
 
 	s.logger.Info("Step 4: Start and complete workflow on active cluster (before replication enabled)")
@@ -288,12 +289,14 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 
 	s.logger.Info("Step 7: Verify new workflow DOES replicate to standby")
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		descResp2, descErr := standbyCluster.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: activeNamespace,
 			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID2},
 		})
-		return descErr == nil && descResp2 != nil && descResp2.WorkflowExecutionInfo.Execution.WorkflowId == workflowID2
+		require.Nil(t, descErr)
+		require.NotNil(t, descResp2)
+		require.Equal(t, workflowID2, descResp2.WorkflowExecutionInfo.Execution.WorkflowId)
 	}, 30*time.Second, 1*time.Second, "Workflow started after enabling replication should replicate to standby")
 
 	s.logger.Info("Step 8: Disable replication on both clusters")

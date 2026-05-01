@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -260,16 +262,14 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
 	s.runWorkflowWithPoller(tv)
 
 	var historyEvents []*historypb.HistoryEvent
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: tv.WorkflowID(),
 			RunId:      we.RunId,
 		})
 		lastEvent := historyEvents[len(historyEvents)-1]
 		s.NotNil(historyEvents)
-
-		return lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED
-
+		require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
 	}, 2*time.Second, 200*time.Millisecond)
 
 	s.EqualHistoryEvents(`
@@ -281,7 +281,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
 
 	// wait till workflow is closed
 	closedCount := 0
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 100,
@@ -298,9 +298,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
 		if closedCount == 0 {
 			s.Logger.Info("Closed WorkflowExecution is not yet visible")
 		}
-
-		return closedCount > 0
-
+		require.Greater(t, closedCount, 0)
 	}, 5*time.Second, 500*time.Millisecond)
 	s.Equal(1, closedCount)
 
@@ -955,13 +953,13 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
 	s.NoError(err)
 
 	// wait for your workflow and its CaN to complete
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.FrontendClient().CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
 			Query:     fmt.Sprintf("WorkflowId = \"%s\" AND ExecutionStatus != \"Running\"", run.GetID()),
 		})
 		s.NoError(err)
-		return resp.GetCount() >= 2
+		require.GreaterOrEqual(t, resp.GetCount(), 2)
 	}, 30*time.Second, time.Second)
 
 	wfExec := &commonpb.WorkflowExecution{

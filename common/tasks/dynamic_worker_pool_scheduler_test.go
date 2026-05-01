@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/metrics"
 	"go.uber.org/mock/gomock"
@@ -58,7 +59,7 @@ func TestDynamicWorkerPoolSchedulerLogic(t *testing.T) {
 	require.True(t, sched.TrySubmit(task3))
 	require.True(t, sched.TrySubmit(task4))
 	// The buffer should eventually have capacity to take task5.
-	require.Eventually(t, func() bool { return sched.TrySubmit(task5) }, time.Millisecond*100, time.Millisecond)
+	require.EventuallyWithT(t, func(t *assert.CollectT) { require.True(t, sched.TrySubmit(task5)) }, time.Millisecond*100, time.Millisecond)
 	// The two goroutines are blocked, and two tasks are buffered, reject.
 	require.False(t, sched.TrySubmit(task6))
 

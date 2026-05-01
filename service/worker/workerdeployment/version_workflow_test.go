@@ -162,7 +162,6 @@ func (s *VersionWorkflowSuite) syncStateInBatches(totalWorkers int) {
 			OnAccept: func() {
 			},
 			OnComplete: func(i any, err error) {
-
 			},
 		}, syncStateArgs)
 	}, 30*time.Millisecond)

@@ -761,9 +761,9 @@ func TestCache_UnusedExpiry(t *testing.T) {
 	cache.Put(1, 1)
 	r.Equal(1, cache.Size())
 
-	r.Eventually(func() bool {
+	r.EventuallyWithT(func(t *assert.CollectT) {
 		timeSource.Advance(loopInterval)
-		return cache.Size() == 0
+		require.Equal(t, 0, cache.Size())
 	}, 2*time.Second, 100*time.Millisecond)
 
 	cache.Put(2, 2)
@@ -771,14 +771,18 @@ func TestCache_UnusedExpiry(t *testing.T) {
 	cache.Put(3, 3)
 	r.Equal(2, cache.Size())
 
-	r.Eventually(func() bool {
+	r.EventuallyWithT(func(t *assert.CollectT) {
 		timeSource.Advance(loopInterval)
-		return cache.Size() == 1 && cache.Get(2) == nil && cache.Get(3) == 3
+		require.Equal(t, 1, cache.Size())
+		require.Nil(t, cache.Get(2))
+		require.Equal(t, 3, cache.Get(3))
 	}, 2*time.Second, 100*time.Millisecond)
 
-	r.Eventually(func() bool {
+	r.EventuallyWithT(func(t *assert.CollectT) {
 		timeSource.Advance(loopInterval)
-		return cache.Size() == 0 && cache.Get(2) == nil && cache.Get(3) == nil
+		require.Equal(t, 0, cache.Size())
+		require.Nil(t, cache.Get(2))
+		require.Nil(t, cache.Get(3))
 	}, 2*time.Second, 100*time.Millisecond)
 
 	// Stop the background goroutine, confirm no active expiration.
@@ -791,12 +795,13 @@ func TestCache_UnusedExpiry(t *testing.T) {
 		l.loops.Wait()
 		close(c)
 	}()
-	r.Eventually(func() bool {
+	r.EventuallyWithT(func(t *assert.CollectT) {
 		select {
 		case <-c:
-			return true
+
 		default:
-			return false
+			require.Fail(t, "condition was false")
+
 		}
 	}, 2*time.Second, 100*time.Millisecond)
 	timeSource.Advance(ttl + 1*time.Second)
@@ -837,15 +842,16 @@ func TestCache_UnusedExpiryPin(t *testing.T) {
 	r.NoError(err)
 	r.Equal(2, cache.Size())
 
-	r.Eventually(func() bool {
+	r.EventuallyWithT(func(t *assert.CollectT) {
 		timeSource.Advance(loopInterval)
-		return cache.Size() == 1 && cache.Get(1) == nil
+		require.Equal(t, 1, cache.Size())
+		require.Nil(t, cache.Get(1))
 	}, 1*time.Second, 100*time.Millisecond)
 
 	cache.Release(2)
 
-	r.Eventually(func() bool {
+	r.EventuallyWithT(func(t *assert.CollectT) {
 		timeSource.Advance(loopInterval)
-		return cache.Size() == 0
+		require.Equal(t, 0, cache.Size())
 	}, 1*time.Second, 100*time.Millisecond)
 }

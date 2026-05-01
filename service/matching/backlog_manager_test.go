@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -272,8 +274,8 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedByAppen
 	blm.taskWriter.Start()
 	// Adding tasks to the buffer will increase the in-memory counter by 1
 	// and this will be written to persistence
-	s.Eventually(func() bool {
-		return totalApproximateBacklogCount(blm) == int64(1)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.Equal(t, int64(1), totalApproximateBacklogCount(blm))
 	}, time.Second*30, time.Millisecond)
 }
 
@@ -405,7 +407,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	}
 
 	// Wait for all tasks to reach the matcher via signalNewTasks/direct-add.
-	s.Eventually(func() bool { return s.capturedTasksLen() == 3 }, 5*time.Second, 10*time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) { require.Equal(t, 3, s.capturedTasksLen()) }, 5*time.Second, 10*time.Millisecond)
 
 	s.EqualValues(3, totalApproximateBacklogCount(s.blm))
 
@@ -423,9 +425,9 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	blm.subqueues[subqueueZero].SignalTaskLoading()
 
 	// Wait for the reader pump to scan through the gap.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		rl, _ := blm.subqueues[subqueueZero].getLevels()
-		return rl >= maxRL
+		require.GreaterOrEqual(t, rl, maxRL)
 	}, 5*time.Second, 10*time.Millisecond)
 
 	// Complete all tasks. On the last completion:
@@ -468,7 +470,9 @@ func (s *BacklogManagerTestSuite) TestSyncState_UnloadsOnOwnershipLoss() {
 	tqd.rangeID++
 	tqd.Unlock()
 
-	s.Eventually(unloadCalled.Load, time.Second, 100*time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.True(t, unloadCalled.Load())
+	}, time.Second, 100*time.Millisecond)
 }
 
 type taskBlock struct {
@@ -561,8 +565,8 @@ func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, blocks ...
 	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
 
 	// Wait for all valid tasks to be delivered.
-	s.Require().Eventually(func() bool {
-		return s.capturedTasksLen() >= numValid
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.GreaterOrEqual(t, s.capturedTasksLen(), numValid)
 	}, 2*time.Second, 10*time.Millisecond, "timed out waiting for valid tasks to be delivered")
 
 	// Complete the delivered tasks.
@@ -571,15 +575,16 @@ func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, blocks ...
 	}
 
 	// Verify the ack level advances past all tasks (expired + valid).
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		db := s.blm.getDB()
 		db.Lock()
 		defer db.Unlock()
 		if s.fairness {
 			ackLevel := fairLevelFromProto(db.subqueues[subqueueZero].FairAckLevel)
-			return !ackLevel.less(fairLevel{pass: lastID * 1000, id: lastID})
+			require.False(t, ackLevel.less(fairLevel{pass: lastID * 1000, id: lastID}))
+			return
 		}
-		return db.subqueues[subqueueZero].AckLevel >= lastID
+		require.GreaterOrEqual(t, db.subqueues[subqueueZero].AckLevel, lastID)
 	}, 2*time.Second, 10*time.Millisecond, "ack level did not advance past all tasks")
 }
 
@@ -614,8 +619,8 @@ func (s *BacklogManagerTestSuite) TestBypassReader() {
 	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
 
 	// wait for the initial read to complete so we're at the end
-	s.Eventually(func() bool {
-		return s.taskMgr.getGetTasksCount(qkey) == 1
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.Equal(t, 1, s.taskMgr.getGetTasksCount(qkey))
 	}, 5*time.Second, 10*time.Millisecond)
 
 	for range 3 {
@@ -632,7 +637,7 @@ func (s *BacklogManagerTestSuite) TestBypassReader() {
 		s.Equal(prevCreateCount+1, s.taskMgr.getCreateTaskCount(qkey))
 
 		// wait for the task to arrive at the matcher bypassing the read path
-		s.Eventually(func() bool { return s.capturedTasksLen() == prevCaptureCount+1 }, 5*time.Second, 10*time.Millisecond)
+		s.EventuallyWithT(func(t *assert.CollectT) { require.Equal(t, prevCaptureCount+1, s.capturedTasksLen()) }, 5*time.Second, 10*time.Millisecond)
 
 		// we should have passed the task in memory without any more GetTasks calls
 		s.Equal(1, s.taskMgr.getGetTasksCount(qkey))

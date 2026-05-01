@@ -304,7 +304,6 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 			OnComplete: func(a any, err error) {
 			},
 		}, updateArgs)
-
 	}, 0*time.Millisecond)
 
 	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
@@ -371,12 +370,10 @@ func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpda
 						s.Require().ErrorContains(err, errNoChangeType)
 					},
 				}, updateArgs)
-
 			},
 			OnComplete: func(a any, err error) {
 			},
 		}, updateArgs)
-
 	}, 0*time.Millisecond)
 
 	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
@@ -448,7 +445,6 @@ func (s *WorkerDeploymentSuite) syncUnversionedRampInBatches(totalWorkers int) {
 		}, &deploymentspb.SetRampingVersionArgs{
 			Version: worker_versioning.UnversionedVersionId,
 		})
-
 	}, 0*time.Millisecond)
 
 	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{

@@ -455,13 +455,15 @@ func (s *xdcBaseSuite) newClientAndWorker(hostport, ns, taskqueue, identity stri
 // workflows in a namespace.
 func (s *xdcBaseSuite) waitForVisibilityCount(ctx context.Context, ns string, expectedCount int64) {
 	frontendClient := s.clusters[0].FrontendClient()
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		countResp, err := frontendClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 			Namespace: ns,
 		})
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
-		return countResp.GetCount() == expectedCount
+		require.Equal(t, expectedCount, countResp.GetCount())
 	}, 15*time.Second, 200*time.Millisecond, "visibility should index %d workflow runs before force-replication", expectedCount)
 }

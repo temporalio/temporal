@@ -353,10 +353,9 @@ func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOld() {
 	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	go t.childMatcher.MustOffer(ctx, oldBacklogTask, interruptC) //nolint:errcheck
-	t.Require().Eventually(
-		func() bool {
-			return t.childMatcher.getBacklogAge() > 0
-		}, maxWait, time.Millisecond/2)
+	t.EventuallyWithT(func(collect *assert.CollectT) {
+		require.Greater(collect, t.childMatcher.getBacklogAge(), 0)
+	}, maxWait, time.Millisecond/2)
 
 	// poll the task
 	task, _ := t.childMatcher.Poll(ctx, &pollMetadata{})
@@ -364,10 +363,9 @@ func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOld() {
 	cancel()
 
 	// should be back to no backlog
-	t.Require().Eventually(
-		func() bool {
-			return t.childMatcher.getBacklogAge() == emptyBacklogAge
-		}, maxWait, time.Millisecond/2)
+	t.EventuallyWithT(func(collect *assert.CollectT) {
+		require.Equal(collect, emptyBacklogAge, t.childMatcher.getBacklogAge())
+	}, maxWait, time.Millisecond/2)
 
 	// even old task is forwarded if last poll is not recent enough
 	time.Sleep(t.childConfig.MaxWaitForPollerBeforeFwd() + time.Millisecond) //nolint:forbidigo

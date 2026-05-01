@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -619,7 +621,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	_, err = poller0.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(
 			testcore.NewContext(),
 			&adminservice.DescribeMutableStateRequest{
@@ -630,11 +632,11 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 				},
 				Archetype: chasm.WorkflowArchetype,
 			})
-		return err == nil
+		require.NoError(t, err)
 	},
 		time.Second*10,
 		time.Second)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(
 			testcore.NewContext(),
 			&adminservice.DescribeMutableStateRequest{
@@ -645,11 +647,11 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 				},
 				Archetype: chasm.WorkflowArchetype,
 			})
-		return err == nil
+		require.NoError(t, err)
 	},
 		time.Second*10,
 		time.Second)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(
 			testcore.NewContext(),
 			&adminservice.DescribeMutableStateRequest{
@@ -660,7 +662,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 				},
 				Archetype: chasm.WorkflowArchetype,
 			})
-		return err == nil
+		require.NoError(t, err)
 	},
 		time.Second*10,
 		time.Second)
@@ -694,7 +696,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	})
 	s.NoError(err)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(
 			testcore.NewContext(),
 			&adminservice.DescribeMutableStateRequest{
@@ -706,11 +708,11 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 				Archetype: chasm.WorkflowArchetype,
 			})
 		var expectedErr *serviceerror.NotFound
-		return errors.As(err, &expectedErr)
+		require.True(t, errors.As(err, &expectedErr))
 	},
 		time.Second*10,
 		time.Second)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(
 			testcore.NewContext(),
 			&adminservice.DescribeMutableStateRequest{
@@ -722,11 +724,11 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 				Archetype: chasm.WorkflowArchetype,
 			})
 		var expectedErr *serviceerror.NotFound
-		return errors.As(err, &expectedErr)
+		require.True(t, errors.As(err, &expectedErr))
 	},
 		time.Second*10,
 		time.Second)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(
 			testcore.NewContext(),
 			&adminservice.DescribeMutableStateRequest{
@@ -738,7 +740,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 				Archetype: chasm.WorkflowArchetype,
 			})
 		var expectedErr *serviceerror.NotFound
-		return errors.As(err, &expectedErr)
+		require.True(t, errors.As(err, &expectedErr))
 	},
 		time.Second*10,
 		time.Second)
@@ -752,7 +754,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	s.NoError(err)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(
 			testcore.NewContext(),
 			&adminservice.DescribeMutableStateRequest{
@@ -763,7 +765,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 				},
 				Archetype: chasm.WorkflowArchetype,
 			})
-		return err == nil
+		require.NoError(t, err)
 	},
 		time.Second*10,
 		time.Second)
@@ -777,7 +779,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	s.NoError(err)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(
 			testcore.NewContext(),
 			&adminservice.DescribeMutableStateRequest{
@@ -788,7 +790,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 				},
 				Archetype: chasm.WorkflowArchetype,
 			})
-		return err == nil
+		require.NoError(t, err)
 	},
 		time.Second*10,
 		time.Second)
@@ -802,7 +804,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	s.NoError(err)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(
 			testcore.NewContext(),
 			&adminservice.DescribeMutableStateRequest{
@@ -813,7 +815,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 				},
 				Archetype: chasm.WorkflowArchetype,
 			})
-		return err == nil
+		require.NoError(t, err)
 	},
 		time.Second*10,
 		time.Second)
@@ -874,7 +876,7 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 	s.Require().NoError(err, "Failed to poll and process workflow task")
 	s.T().Log("Completed workflow execution via worker poll")
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := sourceClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: ns,
 			Execution: &commonpb.WorkflowExecution{
@@ -883,9 +885,11 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 			},
 		})
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
-		return resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetWorkflowExecutionInfo().GetStatus())
 	}, 10*time.Second, 100*time.Millisecond)
 	s.T().Log("Verified workflow reached COMPLETED status")
 
@@ -941,11 +945,11 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 	s.Require().NoError(err, "Failed to promote namespace to global")
 	s.T().Logf("Promoted namespace '%s' from local to global (added cluster 1)", ns)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err := targetClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 			Namespace: ns,
 		})
-		return err == nil
+		require.NoError(t, err)
 	}, 60*time.Second, time.Second)
 	s.T().Log("Verified namespace replicated to cluster 1")
 
@@ -967,7 +971,7 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 	if s.enableTransitionHistory {
 		// With transition history: check SyncVersionedTransitionTask
 		s.T().Log("Checking replication stream for close transfer task acknowledgment in versioned transition artifact...")
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			for _, msg := range recorder.GetMessages() {
 				if msg.Direction != testcore.DirectionServerSend {
 					continue
@@ -982,19 +986,21 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 					if syncAttrs := task.GetSyncVersionedTransitionTaskAttributes(); syncAttrs != nil {
 						if artifact := syncAttrs.GetVersionedTransitionArtifact(); artifact != nil {
 							if artifact.GetIsCloseTransferTaskAcked() && artifact.GetIsForceReplication() {
-								return true
+
+								return
 							}
 						}
 					}
 				}
 			}
-			return false
+			require.Fail(t, "condition was false")
+
 		}, 10*time.Second, 100*time.Millisecond)
 		s.T().Log("Verified IsCloseTransferTaskAcked and IsForceReplication flags in SyncVersionedTransitionTask")
 	} else {
 		// Without transition history: check SyncWorkflowStateTask
 		s.T().Log("Checking replication stream for close transfer task acknowledgment in workflow state attributes...")
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			for _, msg := range recorder.GetMessages() {
 				if msg.Direction != testcore.DirectionServerSend {
 					continue
@@ -1008,19 +1014,21 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 				for _, task := range resp.GetReplicationTasks() {
 					if workflowStateAttrs := task.GetSyncWorkflowStateTaskAttributes(); workflowStateAttrs != nil {
 						if workflowStateAttrs.GetIsCloseTransferTaskAcked() && workflowStateAttrs.GetIsForceReplication() {
-							return true
+
+							return
 						}
 					}
 				}
 			}
-			return false
+			require.Fail(t, "condition was false")
+
 		}, 10*time.Second, 100*time.Millisecond)
 		s.T().Log("Verified IsCloseTransferTaskAcked and IsForceReplication flags in SyncWorkflowStateTask")
 	}
 
 	// Wait for replication to complete to the passive cluster
 	s.T().Log("Waiting for workflow to replicate to cluster 1 (passive)...")
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := targetClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: ns,
 			Execution: &commonpb.WorkflowExecution{
@@ -1029,9 +1037,11 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 			},
 		})
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
-		return resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetWorkflowExecutionInfo().GetStatus())
 	}, 30*time.Second, time.Second)
 	s.T().Log("Verified workflow replicated to cluster 1 (passive) with COMPLETED status")
 
@@ -1143,7 +1153,7 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 	s.Require().NotZero(scheduledEventID, "Should have found ActivityTaskScheduled event")
 
 	// Wait for async task generation and replication to standby
-	s.Require().Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		standbyTasks := recorder1.CountTasksForWorkflow(
 			tasks.CategoryTimer,
 			namespaceID,
@@ -1153,7 +1163,7 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 				return rt.TaskType == enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER.String()
 			},
 		)
-		return standbyTasks >= 2
+		require.GreaterOrEqual(t, standbyTasks, 2)
 	}, 10*time.Second, 200*time.Millisecond, "Standby cluster should eventually have replicated retry timers")
 
 	// Verify active cluster generated exactly 1 TransferActivityTask with matching event ID

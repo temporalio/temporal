@@ -132,18 +132,18 @@ func (s *MatcherDataSuite) newBacklogTaskWithPriority(id int64, age time.Duratio
 }
 
 func (s *MatcherDataSuite) waitForPollers(n int) {
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		s.md.lock.Lock()
 		defer s.md.lock.Unlock()
-		return s.md.pollers.Len() >= n
+		require.GreaterOrEqual(t, s.md.pollers.Len(), n)
 	}, time.Second, time.Millisecond)
 }
 
 func (s *MatcherDataSuite) waitForTasks(n int) {
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		s.md.lock.Lock()
 		defer s.md.lock.Unlock()
-		return s.md.tasks.Len() >= n
+		require.GreaterOrEqual(t, s.md.tasks.Len(), n)
 	}, time.Second, time.Millisecond)
 }
 

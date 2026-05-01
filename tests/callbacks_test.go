@@ -578,26 +578,25 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		}
 	}
 
-	s.EventuallyWithT(
-		func(t *assert.CollectT) {
-			// Get the description of the run post-reset and ensure its callbacks are in SUCCEEDED
-			// state.
-			description, err = sdkClient.DescribeWorkflowExecution(ctx, resetWorkflowRun.GetID(), "")
-			require.NoError(t, err)
-			require.Equal(
-				t,
-				enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-				description.WorkflowExecutionInfo.Status,
-			)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		// Get the description of the run post-reset and ensure its callbacks are in SUCCEEDED
+		// state.
+		description, err = sdkClient.DescribeWorkflowExecution(ctx, resetWorkflowRun.GetID(), "")
+		require.NoError(t, err)
+		require.Equal(
+			t,
+			enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			description.WorkflowExecutionInfo.Status,
+		)
 
-			require.Len(t, description.Callbacks, len(cbs))
-			descCbs = make([]*commonpb.Callback, 0, len(description.Callbacks))
-			for _, callbackInfo := range description.Callbacks {
-				require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
-				descCbs = append(descCbs, callbackInfo.Callback)
-			}
-			protoassert.ProtoElementsMatch(t, cbs, descCbs)
-		},
+		require.Len(t, description.Callbacks, len(cbs))
+		descCbs = make([]*commonpb.Callback, 0, len(description.Callbacks))
+		for _, callbackInfo := range description.Callbacks {
+			require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+			descCbs = append(descCbs, callbackInfo.Callback)
+		}
+		protoassert.ProtoElementsMatch(t, cbs, descCbs)
+	},
 		2*time.Second,
 		100*time.Millisecond,
 	)

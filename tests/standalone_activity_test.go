@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	activitypb "go.temporal.io/api/activity/v1"
@@ -2496,38 +2497,40 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 
 func (s *standaloneActivityTestSuite) eventuallyTerminated(ctx context.Context, t *testing.T, activityID, runID string) {
 	t.Helper()
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		resp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
 		})
-		return err == nil && resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED, resp.GetInfo().GetStatus())
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func (s *standaloneActivityTestSuite) eventuallyTimedOut(ctx context.Context, t *testing.T, activityID, runID string) {
 	t.Helper()
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		resp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
 		})
-		return err == nil && resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, resp.GetInfo().GetStatus())
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func (s *standaloneActivityTestSuite) eventuallyDeleted(ctx context.Context, t *testing.T, activityID, runID string) {
 	t.Helper()
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		_, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
 		})
 		var notFoundErr *serviceerror.NotFound
-		return errors.As(err, &notFoundErr)
+		require.True(t, errors.As(err, &notFoundErr))
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
@@ -3791,16 +3794,16 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 	verifyListQuery := func(t *testing.T, query string, pageSize int32) {
 		t.Helper()
 		var resp *workflowservice.ListActivityExecutionsResponse
-		s.Eventually(
-			func() bool {
-				var err error
-				resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
-					Namespace: s.Namespace().String(),
-					PageSize:  pageSize,
-					Query:     query,
-				})
-				return err == nil && len(resp.GetExecutions()) >= 1
-			},
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			var err error
+			resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				PageSize:  pageSize,
+				Query:     query,
+			})
+			require.NoError(t, err)
+			require.GreaterOrEqual(t, len(resp.GetExecutions()), 1)
+		},
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
 		)
@@ -3862,16 +3865,16 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 		require.NoError(t, err)
 
 		var resp *workflowservice.ListActivityExecutionsResponse
-		s.Eventually(
-			func() bool {
-				var err error
-				resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
-					Namespace: s.Namespace().String(),
-					PageSize:  10,
-					Query:     fmt.Sprintf("%s = '%s'", customSAName, customSAValue),
-				})
-				return err == nil && len(resp.GetExecutions()) >= 1
-			},
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			var err error
+			resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				PageSize:  10,
+				Query:     fmt.Sprintf("%s = '%s'", customSAName, customSAValue),
+			})
+			require.NoError(t, err)
+			require.GreaterOrEqual(t, len(resp.GetExecutions()), 1)
+		},
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
 		)
@@ -3944,14 +3947,14 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 		}
 
 		// Wait for both activities to be indexed in Elasticsearch before testing pagination
-		s.Eventually(
-			func() bool {
-				countResp, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
-					Namespace: s.Namespace().String(),
-					Query:     fmt.Sprintf("ActivityType = '%s'", testActivityType),
-				})
-				return err == nil && countResp.GetCount() == 2
-			},
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			countResp, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				Query:     fmt.Sprintf("ActivityType = '%s'", testActivityType),
+			})
+			require.NoError(t, err)
+			require.Equal(t, 2, countResp.GetCount())
+		},
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
 		)
@@ -4001,14 +4004,14 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 
 	verifyCountQuery := func(t *testing.T, query string, expectedCount int) {
 		t.Helper()
-		s.Eventually(
-			func() bool {
-				resp, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
-					Namespace: s.Namespace().String(),
-					Query:     query,
-				})
-				return err == nil && resp.GetCount() == int64(expectedCount)
-			},
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			resp, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				Query:     query,
+			})
+			require.NoError(t, err)
+			require.Equal(t, int64(expectedCount), resp.GetCount())
+		},
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
 		)
@@ -4043,15 +4046,15 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 
 		query := fmt.Sprintf("ActivityType = '%s' GROUP BY ExecutionStatus", groupByType.Name)
 		var resp *workflowservice.CountActivityExecutionsResponse
-		s.Eventually(
-			func() bool {
-				var err error
-				resp, err = s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
-					Namespace: s.Namespace().String(),
-					Query:     query,
-				})
-				return err == nil && resp.GetCount() == 3
-			},
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			var err error
+			resp, err = s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				Query:     query,
+			})
+			require.NoError(t, err)
+			require.Equal(t, 3, resp.GetCount())
+		},
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
 		)
@@ -4075,15 +4078,17 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 		})
 		require.NoError(t, err)
 
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			descResp, err := s.OperatorClient().ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{
 				Namespace: s.Namespace().String(),
 			})
 			if err != nil {
-				return false
+				require.Fail(t, "condition was false")
+
+				return
 			}
 			_, ok := descResp.CustomAttributes[customSAName]
-			return ok
+			require.True(t, ok)
 		}, 10*time.Second, 100*time.Millisecond)
 
 		for i := range 2 {
@@ -4105,14 +4110,14 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 			require.NoError(t, err)
 		}
 
-		s.Eventually(
-			func() bool {
-				resp, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
-					Namespace: s.Namespace().String(),
-					Query:     fmt.Sprintf("%s = '%s'", customSAName, customSAValue),
-				})
-				return err == nil && resp.GetCount() == 2
-			},
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			resp, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				Query:     fmt.Sprintf("%s = '%s'", customSAName, customSAValue),
+			})
+			require.NoError(t, err)
+			require.Equal(t, 2, resp.GetCount())
+		},
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
 		)
@@ -5367,13 +5372,14 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			"activity should not time out before startDelay + scheduleToStartTimeout")
 
 		// Now wait for the ScheduleToStart timeout to actually fire (measured from after delay).
-		require.Eventually(t, func() bool {
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			resp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  s.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
 			})
-			return err == nil && resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+			require.NoError(t, err)
+			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, resp.GetInfo().GetStatus())
 		}, 10*time.Second, 100*time.Millisecond)
 	})
 
@@ -5423,13 +5429,14 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			"activity should not time out before startDelay + scheduleToCloseTimeout")
 
 		// Now wait for the ScheduleToClose timeout to actually fire (measured from after delay).
-		require.Eventually(t, func() bool {
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			resp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  s.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
 			})
-			return err == nil && resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+			require.NoError(t, err)
+			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, resp.GetInfo().GetStatus())
 		}, 10*time.Second, 100*time.Millisecond)
 	})
 

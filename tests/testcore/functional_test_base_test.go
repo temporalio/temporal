@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/worker"
@@ -68,13 +70,13 @@ func (s *FunctionalTestBaseSuite) TestWorkerServiceHealthCheck() {
 	defer func() { _ = conn.Close() }()
 
 	healthClient := healthpb.NewHealthClient(conn)
-	s.Eventually(
-		func() bool {
-			resp, err := healthClient.Check(context.Background(), &healthpb.HealthCheckRequest{
-				Service: worker.ServiceName,
-			})
-			return err == nil && resp.Status == healthpb.HealthCheckResponse_SERVING
-		},
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := healthClient.Check(context.Background(), &healthpb.HealthCheckRequest{
+			Service: worker.ServiceName,
+		})
+		require.NoError(t, err)
+		require.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.Status)
+	},
 		10*time.Second,
 		100*time.Millisecond,
 	)

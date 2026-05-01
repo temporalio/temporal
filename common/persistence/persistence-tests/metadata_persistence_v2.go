@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -1140,15 +1141,16 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 	m.NoError(err3)
 
 	// May need to loop here to avoid potential inconsistent read-after-write in cassandra
-	m.Eventually(
-		func() bool {
-			resp, err := m.GetNamespace("", name)
-			if errors.As(err, new(*serviceerror.NamespaceNotFound)) {
-				m.Nil(resp)
-				return true
-			}
-			return false
-		},
+	m.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := m.GetNamespace("", name)
+		if errors.As(err, new(*serviceerror.NamespaceNotFound)) {
+			m.Nil(resp)
+
+			return
+		}
+		require.Fail(t, "condition was false")
+
+	},
 		10*time.Second,
 		100*time.Millisecond,
 	)
@@ -2028,15 +2030,16 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespaceIdempotency() {
 	m.NoError(err3)
 
 	// May need to loop here to avoid potential inconsistent read-after-write in cassandra
-	m.Eventually(
-		func() bool {
-			resp, err := m.GetNamespace(id, "")
-			if errors.As(err, new(*serviceerror.NamespaceNotFound)) {
-				m.Nil(resp)
-				return true
-			}
-			return false
-		},
+	m.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := m.GetNamespace(id, "")
+		if errors.As(err, new(*serviceerror.NamespaceNotFound)) {
+			m.Nil(resp)
+
+			return
+		}
+		require.Fail(t, "condition was false")
+
+	},
 		10*time.Second,
 		100*time.Millisecond,
 	)
@@ -2200,11 +2203,10 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceCassandra() {
 	m.Equal(newName, resp5.Namespace.Info.Name)
 
 	// Verify old name no longer exists (may need eventual consistency check for Cassandra)
-	m.Eventually(
-		func() bool {
-			_, err := m.GetNamespace("", name)
-			return errors.As(err, new(*serviceerror.NamespaceNotFound))
-		},
+	m.EventuallyWithT(func(t *assert.CollectT) {
+		_, err := m.GetNamespace("", name)
+		require.True(t, errors.As(err, new(*serviceerror.NamespaceNotFound)))
+	},
 		10*time.Second,
 		100*time.Millisecond,
 	)

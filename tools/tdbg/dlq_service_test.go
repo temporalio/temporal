@@ -279,7 +279,6 @@ func TestDLQCommand_V2(t *testing.T) {
 				for _, p := range patterns {
 					assert.Regexp(t, p, b.String())
 				}
-
 			},
 		},
 		{

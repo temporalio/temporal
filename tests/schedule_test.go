@@ -164,12 +164,12 @@ func testDeletedScheduleOperations(t *testing.T, newContext contextFactory) {
 
 	// Describe should return NotFound.
 	var notFoundErr *serviceerror.NotFound
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, descErr := s.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
-		return errors.As(descErr, &notFoundErr)
+		require.True(t, errors.As(descErr, &notFoundErr))
 	}, 10*time.Second, 200*time.Millisecond)
 
 	// Update, Patch, and Delete behave differently across CHASM and V1,
@@ -281,7 +281,7 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	}
 
 	// sleep until we see two runs, plus a bit more to ensure that the second run has completed
-	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 2 }, 15*time.Second, 500*time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) { require.Equal(t, 2, atomic.LoadInt32(&runs)) }, 15*time.Second, 500*time.Millisecond)
 	time.Sleep(2 * time.Second) //nolint:forbidigo
 
 	// wait for visibility to stabilize on completed before calling describe,
@@ -437,8 +437,7 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	s.NoError(err)
 
 	// wait for one new run
-	s.Eventually(
-		func() bool { return atomic.LoadInt32(&runs2) == 1 },
+	s.EventuallyWithT(func(t *assert.CollectT) { require.Equal(t, 1, atomic.LoadInt32(&runs2)) },
 		7*time.Second,
 		500*time.Millisecond,
 	)
@@ -491,22 +490,21 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	s.NoError(err)
 
 	// wait until search attributes are updated
-	s.EventuallyWithT(
-		func(c *assert.CollectT) {
-			describeResp, err = s.FrontendClient().DescribeSchedule(
-				newContext(s.Context()),
-				&workflowservice.DescribeScheduleRequest{
-					Namespace:  s.Namespace().String(),
-					ScheduleId: sid,
-				},
-			)
-			require.NoError(c, err)
-			require.Len(c, describeResp.SearchAttributes.GetIndexedFields(), 3)
-			require.Equal(c, schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csaKeyword].Data)
-			require.Equal(c, schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
-			require.Equal(c, schSADoubleValue.Data, describeResp.SearchAttributes.IndexedFields[csaDouble].Data)
-			require.NotContains(c, describeResp.SearchAttributes.IndexedFields, csaBool)
-		},
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		describeResp, err = s.FrontendClient().DescribeSchedule(
+			newContext(s.Context()),
+			&workflowservice.DescribeScheduleRequest{
+				Namespace:  s.Namespace().String(),
+				ScheduleId: sid,
+			},
+		)
+		require.NoError(c, err)
+		require.Len(c, describeResp.SearchAttributes.GetIndexedFields(), 3)
+		require.Equal(c, schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csaKeyword].Data)
+		require.Equal(c, schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
+		require.Equal(c, schSADoubleValue.Data, describeResp.SearchAttributes.IndexedFields[csaDouble].Data)
+		require.NotContains(c, describeResp.SearchAttributes.IndexedFields, csaBool)
+	},
 		2*time.Second,
 		500*time.Millisecond,
 	)
@@ -527,18 +525,17 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	s.NoError(err)
 
 	// wait until search attributes are updated
-	s.EventuallyWithT(
-		func(c *assert.CollectT) {
-			describeResp, err = s.FrontendClient().DescribeSchedule(
-				newContext(s.Context()),
-				&workflowservice.DescribeScheduleRequest{
-					Namespace:  s.Namespace().String(),
-					ScheduleId: sid,
-				},
-			)
-			require.NoError(c, err)
-			require.Empty(c, describeResp.SearchAttributes.GetIndexedFields())
-		},
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		describeResp, err = s.FrontendClient().DescribeSchedule(
+			newContext(s.Context()),
+			&workflowservice.DescribeScheduleRequest{
+				Namespace:  s.Namespace().String(),
+				ScheduleId: sid,
+			},
+		)
+		require.NoError(c, err)
+		require.Empty(c, describeResp.SearchAttributes.GetIndexedFields())
+	},
 		5*time.Second,
 		500*time.Millisecond,
 	)
@@ -596,13 +593,13 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	var notFoundErr *serviceerror.NotFound
 	s.ErrorAs(err, &notFoundErr)
 
-	s.Eventually(func() bool { // wait for visibility
+	s.EventuallyWithT(func(t *assert.CollectT) { // wait for visibility
 		listResp, err := s.FrontendClient().ListSchedules(newContext(s.Context()), &workflowservice.ListSchedulesRequest{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 5,
 		})
 		s.NoError(err)
-		return len(listResp.Schedules) == 0
+		require.Equal(t, 0, len(listResp.Schedules))
 	}, 10*time.Second, 1*time.Second)
 }
 
@@ -667,7 +664,7 @@ func testInput(t *testing.T, newContext contextFactory) {
 	_, err = s.FrontendClient().CreateSchedule(ctx, req)
 	s.NoError(err)
 
-	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 8*time.Second, 200*time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) { require.Equal(t, 1, atomic.LoadInt32(&runs)) }, 8*time.Second, 200*time.Millisecond)
 }
 
 func testLastCompletionAndError(t *testing.T, newContext contextFactory) {
@@ -742,7 +739,7 @@ func testLastCompletionAndError(t *testing.T, newContext contextFactory) {
 	_, err := s.FrontendClient().CreateSchedule(ctx, req)
 	s.NoError(err)
 
-	s.Eventually(func() bool { return atomic.LoadInt32(&testComplete) == 1 }, 20*time.Second, 200*time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) { require.Equal(t, 1, atomic.LoadInt32(&testComplete)) }, 20*time.Second, 200*time.Millisecond)
 }
 
 func testListSchedulesReturnsWorkflowStatus(t *testing.T, newContext contextFactory) {
@@ -897,8 +894,7 @@ func testUpdateIntervalTakesEffect(t *testing.T, newContext contextFactory) {
 	s.NoError(err)
 
 	// After updating to 1s interval, we should see runs start within a few seconds.
-	s.Eventually(
-		func() bool { return atomic.LoadInt32(&runs) >= 2 },
+	s.EventuallyWithT(func(t *assert.CollectT) { require.GreaterOrEqual(t, atomic.LoadInt32(&runs), 2) },
 		10*time.Second,
 		500*time.Millisecond,
 		"expected at least 2 runs within 10s after updating interval to 1s",
@@ -1069,29 +1065,32 @@ func testCountSchedules(t *testing.T, newContext contextFactory) {
 	}
 
 	// Test basic count (all schedules)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		countResp, err := s.FrontendClient().CountSchedules(newContext(s.Context()), &workflowservice.CountSchedulesRequest{
 			Namespace: s.Namespace().String(),
 		})
-		return err == nil && countResp.Count >= 3
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, countResp.Count, 3)
 	}, 15*time.Second, 1*time.Second, "Expected at least 3 schedules")
 
 	// Test count with query filter for paused schedules
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		countResp, err := s.FrontendClient().CountSchedules(newContext(s.Context()), &workflowservice.CountSchedulesRequest{
 			Namespace: s.Namespace().String(),
 			Query:     fmt.Sprintf("%s = true", sadefs.TemporalSchedulePaused),
 		})
-		return err == nil && countResp.Count >= 1
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, countResp.Count, 1)
 	}, 15*time.Second, 1*time.Second, "Expected at least 1 paused schedule")
 
 	// Test count with query filter for non-paused schedules
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		countResp, err := s.FrontendClient().CountSchedules(newContext(s.Context()), &workflowservice.CountSchedulesRequest{
 			Namespace: s.Namespace().String(),
 			Query:     fmt.Sprintf("%s = false", sadefs.TemporalSchedulePaused),
 		})
-		return err == nil && countResp.Count >= 2
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, countResp.Count, 2)
 	}, 15*time.Second, 1*time.Second, "Expected at least 2 non-paused schedules")
 }
 
@@ -1130,11 +1129,12 @@ func testListSchedulesPagination(t *testing.T, newContext contextFactory) {
 	}
 
 	// Wait for all schedules to be visible.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		countResp, err := s.FrontendClient().CountSchedules(newContext(s.Context()), &workflowservice.CountSchedulesRequest{
 			Namespace: s.Namespace().String(),
 		})
-		return err == nil && countResp.Count >= numSchedules
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, countResp.Count, numSchedules)
 	}, 15*time.Second, 1*time.Second, "Expected all schedules to be visible")
 
 	// Paginate with page size 2 and collect all schedule IDs.
@@ -1728,12 +1728,12 @@ func testCreatesWorkflowSentinel(t *testing.T, newContext contextFactory) {
 	// Verify the dummy workflow was created to reserve the V1 workflow ID.
 	sentinelWfID := scheduler.WorkflowIDPrefix + sid
 	var descResp *workflowservice.DescribeWorkflowExecutionResponse
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		descResp, err = s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: sentinelWfID},
 		})
-		return err == nil
+		require.NoError(t, err)
 	}, 15*time.Second, 500*time.Millisecond, "dummy sentinel workflow should exist")
 	s.Equal(dummy.DummyWFTypeName, descResp.WorkflowExecutionInfo.Type.Name)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
@@ -1793,7 +1793,7 @@ func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
 	// Verify a CHASM sentinel was created to reserve the schedule ID.
 	// DescribeSchedule should return NotFound, as well as CreateSentinel
 	nsID := s.NamespaceID().String()
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, descErr := s.GetTestCluster().SchedulerClient().DescribeSchedule(
 			ctx,
 			&schedulerpb.DescribeScheduleRequest{
@@ -1803,7 +1803,9 @@ func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
 		)
 		var notFoundErr *serviceerror.NotFound
 		if !errors.As(descErr, &notFoundErr) {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 
 		// A CHASM CreateSchedule should also fail with NotFound because
@@ -1820,7 +1822,7 @@ func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
 				},
 			},
 		)
-		return errors.As(createErr, &notFoundErr)
+		require.True(t, errors.As(createErr, &notFoundErr))
 	}, 15*time.Second, 500*time.Millisecond, "CHASM sentinel should exist for V1 schedule")
 
 	// Verify visibility shows exactly one schedule (not the sentinel).
@@ -2178,7 +2180,7 @@ func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
 	)
 	s.NoError(err)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		descResp, err := s.GetTestCluster().SchedulerClient().DescribeSchedule(
 			ctx,
 			&schedulerpb.DescribeScheduleRequest{
@@ -2187,10 +2189,13 @@ func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
 			},
 		)
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		running := descResp.GetFrontendResponse().GetInfo().GetRunningWorkflows()
-		return len(running) > 0 && running[0].WorkflowId == wid
+		require.Greater(t, len(running), 0)
+		require.Equal(t, wid, running[0].WorkflowId)
 	}, 15*time.Second, 500*time.Millisecond, "CHASM scheduler should show running workflow")
 
 	_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
@@ -2203,7 +2208,7 @@ func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
 	})
 	s.NoError(err)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		descResp, err := s.GetTestCluster().SchedulerClient().DescribeSchedule(
 			ctx,
 			&schedulerpb.DescribeScheduleRequest{
@@ -2212,16 +2217,20 @@ func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
 			},
 		)
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		recent := descResp.GetFrontendResponse().GetInfo().GetRecentActions()
 		for _, action := range recent {
 			if action.GetStartWorkflowResult().GetWorkflowId() == wid &&
 				action.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
-				return true
+
+				return
 			}
 		}
-		return false
+		require.Fail(t, "condition was false")
+
 	}, 15*time.Second, 500*time.Millisecond, "CHASM scheduler should reflect workflow completion")
 }
 
@@ -2348,7 +2357,7 @@ func testRefresh(t *testing.T, newContext contextFactory) {
 	_, err := s.FrontendClient().CreateSchedule(newContext(s.Context()), req)
 	s.NoError(err)
 
-	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 6*time.Second, 200*time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) { require.Equal(t, 1, atomic.LoadInt32(&runs)) }, 6*time.Second, 200*time.Millisecond)
 
 	// workflow has started but is now sleeping. it will timeout in 2 seconds.
 
@@ -2396,9 +2405,9 @@ func testRefresh(t *testing.T, newContext contextFactory) {
 	s.Empty(describeResp.Info.RunningWorkflows)
 
 	// check scheduler has gotten the refresh and done some stuff. signal is sent without waiting so we need to wait.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		events3 := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
-		return len(events3) > len(events2)
+		require.Greater(t, len(events3), len(events2))
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
@@ -2553,7 +2562,7 @@ func testNextTimeCache(t *testing.T, newContext contextFactory) {
 
 	// wait for at least 13 runs
 	const count = 13
-	s.Eventually(func() bool { return runs.Load() >= count }, (count+10)*time.Second, 500*time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) { require.GreaterOrEqual(t, runs.Load(), count) }, (count+10)*time.Second, 500*time.Millisecond)
 
 	// there should be only four side effects for 13 runs, and only two mentioning "Next"
 	// (cache refills)
@@ -2591,24 +2600,30 @@ func testNextTimeCache(t *testing.T, newContext contextFactory) {
 func getScheduleEntryFromVisibility(env testcore.Env, sid string, newContext contextFactory, predicate func(*schedulepb.ScheduleListEntry) bool) *schedulepb.ScheduleListEntry {
 	env.T().Helper()
 	var slEntry *schedulepb.ScheduleListEntry
-	require.Eventually(env.T(), func() bool { // wait for visibility
+	require.EventuallyWithT(env.T(), func(t *assert.CollectT) { // wait for visibility
 		listResp, err := env.FrontendClient().ListSchedules(newContext(env.Context()), &workflowservice.ListSchedulesRequest{
 			Namespace:       env.Namespace().String(),
 			MaximumPageSize: 5,
 		})
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		for _, ent := range listResp.Schedules {
 			if ent.ScheduleId == sid {
 				if predicate != nil && !predicate(ent) {
-					return false
+					require.Fail(t, "condition was false")
+
+					return
 				}
 				slEntry = ent
-				return true
+
+				return
 			}
 		}
-		return false
+		require.Fail(t, "condition was false")
+
 	}, 15*time.Second, 1*time.Second)
 	return slEntry
 }
@@ -2963,7 +2978,7 @@ func testCHASMUnpauseResumesProcessing(t *testing.T, newContext contextFactory) 
 	s.NoError(err)
 
 	// Wait for the schedule to fire at least once, confirming it's running.
-	s.Eventually(func() bool { return atomic.LoadInt32(&runs) >= 1 }, 15*time.Second, 500*time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) { require.GreaterOrEqual(t, atomic.LoadInt32(&runs), 1) }, 15*time.Second, 500*time.Millisecond)
 
 	// Pause.
 	_, err = s.FrontendClient().PatchSchedule(newContext(s.Context()), &workflowservice.PatchScheduleRequest{
@@ -2980,7 +2995,7 @@ func testCHASMUnpauseResumesProcessing(t *testing.T, newContext contextFactory) 
 	// becomes quiescent (no new runs over a stability window).
 	stableSamples := 0
 	lastRuns := atomic.LoadInt32(&runs)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		currentRuns := atomic.LoadInt32(&runs)
 		if currentRuns == lastRuns {
 			stableSamples++
@@ -2988,7 +3003,7 @@ func testCHASMUnpauseResumesProcessing(t *testing.T, newContext contextFactory) 
 			lastRuns = currentRuns
 			stableSamples = 0
 		}
-		return stableSamples >= 6
+		require.GreaterOrEqual(t, stableSamples, 6)
 	}, 15*time.Second, 500*time.Millisecond)
 	runsBeforeUnpause := atomic.LoadInt32(&runs)
 
@@ -3003,8 +3018,7 @@ func testCHASMUnpauseResumesProcessing(t *testing.T, newContext contextFactory) 
 	s.NoError(err)
 
 	// The generator should be kicked immediately on unpause and new runs should follow.
-	s.Eventually(
-		func() bool { return atomic.LoadInt32(&runs) > runsBeforeUnpause },
+	s.EventuallyWithT(func(t *assert.CollectT) { require.Greater(t, atomic.LoadInt32(&runs), runsBeforeUnpause) },
 		15*time.Second,
 		500*time.Millisecond,
 		"schedule should resume processing after unpause",

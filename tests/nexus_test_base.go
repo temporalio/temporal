@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -101,7 +102,7 @@ func (env *NexusTestEnv) createRandomExternalNexusServer(ctx context.Context, t 
 // ensureNexusEndpoint probes the specified endpoint until it's visible to StartNexusOperationExecution to ensure tests
 // can use it.
 func (env *NexusTestEnv) ensureNexusEndpoint(ctx context.Context, t *testing.T, endpointName string) {
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		_, err := env.FrontendClient().StartNexusOperationExecution(ctx, &workflowservice.StartNexusOperationExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Endpoint:  endpointName,
@@ -111,9 +112,11 @@ func (env *NexusTestEnv) ensureNexusEndpoint(ctx context.Context, t *testing.T, 
 		})
 		if notFound, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			msg := notFound.Error()
-			return msg != "endpoint not registered" && !strings.HasPrefix(msg, "could not find Nexus endpoint by name:")
+			require.NotEqual(t, "endpoint not registered", msg)
+			require.False(t, strings.HasPrefix(msg, "could not find Nexus endpoint by name:"))
+			return
 		}
-		return true
+
 	}, 10*time.Second, 100*time.Millisecond, "endpoint should become visible")
 }
 

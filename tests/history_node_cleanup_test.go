@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -262,7 +264,7 @@ func captureCurrentBranchToken(ctx context.Context, env *testcore.TestEnv, workf
 
 // waitForMutableStateGone polls until GetWorkflowExecution returns NotFound for the given runID.
 func waitForMutableStateGone(ctx context.Context, env *testcore.TestEnv, shardID int32, execMgr persistence.ExecutionManager, workflowID, runID string) {
-	env.Eventually(func() bool {
+	env.EventuallyWithT(func(t *assert.CollectT) {
 		_, err := execMgr.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     shardID,
 			NamespaceID: env.NamespaceID().String(),
@@ -270,7 +272,7 @@ func waitForMutableStateGone(ctx context.Context, env *testcore.TestEnv, shardID
 			RunID:       runID,
 			ArchetypeID: chasm.WorkflowArchetypeID,
 		})
-		return common.IsNotFoundError(err)
+		require.True(t, common.IsNotFoundError(err))
 	}, 10*time.Second, 100*time.Millisecond,
 		"timed out waiting for mutable state of run %s to be deleted", runID)
 }

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
@@ -86,16 +87,18 @@ func registerDefaultNamespace(t *testing.T, conn *grpc.ClientConn) {
 
 	client := workflowservice.NewWorkflowServiceClient(conn)
 
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		_, err := client.RegisterNamespace(t.Context(), &workflowservice.RegisterNamespaceRequest{
 			Namespace:                        "default",
 			WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
 		})
 		if err == nil {
-			return true
+
+			return
 		}
 		st, ok := status.FromError(err)
-		return ok && st.Code() == codes.AlreadyExists
+		require.True(collect, ok)
+		require.Equal(collect, codes.AlreadyExists, st.Code())
 	}, retryTimeout, time.Second, "failed to register default namespace")
 }
 
@@ -104,7 +107,7 @@ func createNexusEndpoint(t *testing.T, conn *grpc.ClientConn, endpointName, name
 
 	client := operatorservice.NewOperatorServiceClient(conn)
 
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		_, err := client.CreateNexusEndpoint(t.Context(), &operatorservice.CreateNexusEndpointRequest{
 			Spec: &nexuspb.EndpointSpec{
 				Name: endpointName,
@@ -119,10 +122,12 @@ func createNexusEndpoint(t *testing.T, conn *grpc.ClientConn, endpointName, name
 			},
 		})
 		if err == nil {
-			return true
+
+			return
 		}
 		st, ok := status.FromError(err)
-		return ok && st.Code() == codes.AlreadyExists
+		require.True(collect, ok)
+		require.Equal(collect, codes.AlreadyExists, st.Code())
 	}, retryTimeout, time.Second, "failed to create nexus endpoint %s", endpointName)
 }
 
@@ -134,14 +139,18 @@ func waitForClusterFormation(t *testing.T, conn *grpc.ClientConn, timeout time.D
 
 	client := adminservice.NewAdminServiceClient(conn)
 
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		resp, err := client.DescribeCluster(t.Context(), &adminservice.DescribeClusterRequest{})
 		if err != nil {
-			return false
+			require.Fail(collect, "condition was false")
+
+			return
 		}
 		membership := resp.GetMembershipInfo()
 		if membership == nil {
-			return false
+			require.Fail(collect, "condition was false")
+
+			return
 		}
 
 		seen := map[int]bool{}
@@ -161,10 +170,12 @@ func waitForClusterFormation(t *testing.T, conn *grpc.ClientConn, timeout time.D
 			for _, port := range ps.membershipPorts() {
 				if !seen[port] {
 					t.Logf("Waiting for cluster formation: port %d not yet visible", port)
-					return false
+					require.Fail(collect, "condition was false")
+
+					return
 				}
 			}
 		}
-		return true
+
 	}, timeout, time.Second, "cluster did not form within %v", timeout)
 }

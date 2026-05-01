@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -213,16 +214,17 @@ func (s *prioritySemaphoreSuite) waitUntilBlockedInSemaphore(n int) {
 	re := regexp.MustCompile(pattern)
 	// nolint:testifylint
 	// Must use assert.Assertions instead of require.Assertions here because this is running in a separate goroutine.
-	s.Assert().Eventually(
-		func() bool {
-			buf := make([]byte, 100000)
-			size := runtime.Stack(buf, true)
-			threads := len(re.FindAllIndex(buf[:size], -1))
-			if threads == n {
-				return true
-			}
-			return false
-		},
+	s.Assert().EventuallyWithT(func(t *assert.CollectT) {
+		buf := make([]byte, 100000)
+		size := runtime.Stack(buf, true)
+		threads := len(re.FindAllIndex(buf[:size], -1))
+		if threads == n {
+
+			return
+		}
+		require.Fail(t, "condition was false")
+
+	},
 		10*time.Second,
 		100*time.Millisecond,
 	)

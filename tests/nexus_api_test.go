@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -299,7 +300,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 		var result *nexusrpc.ClientStartOperationResponse[string]
 
 		// Wait until the endpoint is loaded into the registry.
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			result, err = nexusrpc.StartOperation(env.Context(), client, op, "input", nexus.StartOperationOptions{
 				CallbackURL: "http://localhost/callback",
 				RequestID:   "request-id",
@@ -307,7 +308,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 				Links:       []nexus.Link{callerNexusLink},
 			})
 			var handlerErr *nexus.HandlerError
-			return err == nil || !(errors.As(err, &handlerErr) && handlerErr.Type == nexus.HandlerErrorTypeNotFound)
+			require.True(t, err == nil || !(errors.As(err, &handlerErr) && handlerErr.Type == nexus.HandlerErrorTypeNotFound))
 		}, 10*time.Second, eventuallyTick)
 
 		tc.assertion(s, result, err, headerCapture.lastHeaders)
@@ -570,10 +571,10 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 		}
 
 		// Wait until the endpoint is loaded into the registry.
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			err = handle.Cancel(env.Context(), nexus.CancelOperationOptions{Header: header})
 			var handlerErr *nexus.HandlerError
-			return err == nil || !(errors.As(err, &handlerErr) && handlerErr.Type == nexus.HandlerErrorTypeNotFound)
+			require.True(t, err == nil || !(errors.As(err, &handlerErr) && handlerErr.Type == nexus.HandlerErrorTypeNotFound))
 		}, 10*time.Second, eventuallyTick)
 
 		tc.assertion(s, err, headerCapture.lastHeaders)
@@ -708,10 +709,10 @@ func (s *NexusApiTestSuite) TestNexusClientNameMetricPropagation(useTemporalFail
 	})
 	s.NoError(err)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		_, err = nexusrpc.StartOperation(env.Context(), client, op, "input", nexus.StartOperationOptions{})
 		var handlerErr *nexus.HandlerError
-		return err == nil || (!errors.As(err, &handlerErr) || handlerErr.Type != nexus.HandlerErrorTypeNotFound)
+		require.True(t, err == nil || (!errors.As(err, &handlerErr) || handlerErr.Type != nexus.HandlerErrorTypeNotFound))
 	}, 10*time.Second, 500*time.Millisecond)
 	s.NoError(err)
 	s.NoError(<-pollerErrCh)

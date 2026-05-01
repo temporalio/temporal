@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/clock"
@@ -427,15 +428,17 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestDeleteInactiveChannels
 	// Advance time past 1 hour. This will make other two channels inactive for more than 1 hour.
 	s.ts.Advance(31 * time.Minute)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		channelWeights = []int{}
 		for _, channel := range s.scheduler.channels() {
 			channelWeights = append(channelWeights, channel.Weight())
 		}
 		if !slices.Equal([]int{5, 5, 5, 3, 5, 3, 5, 3}, channelWeights) {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
-		return true
+
 	}, 30*time.Second, 100*time.Millisecond)
 
 	// set the number of pending task back

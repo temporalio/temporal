@@ -182,7 +182,6 @@ func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
 		require.Equal(t, int32(1), startedActivityCount.Load())
-
 	}, 2*time.Second, 200*time.Millisecond)
 
 	// update schedule_to_close_timeout

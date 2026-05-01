@@ -126,7 +126,7 @@ func runAndTestServer(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = adminConn.Close() }()
 	adminClient := adminservice.NewAdminServiceClient(adminConn)
-	assert.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		response, err := adminClient.GetTaskQueueTasks(ctx, &adminservice.GetTaskQueueTasksRequest{
 			Namespace:     namespace,
 			TaskQueue:     taskQueue,
@@ -136,9 +136,11 @@ func runAndTestServer(t *testing.T) {
 			BatchSize:     10,
 		})
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
-		return len(response.Tasks) > 0
+		require.Greater(t, len(response.Tasks), 0)
 	}, 20*time.Second, 100*time.Millisecond)
 
 	// Start worker.

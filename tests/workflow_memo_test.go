@@ -147,23 +147,22 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(env *testcore.TestEnv, start
 
 	// verify open visibility
 	var openExecutionInfo *workflowpb.WorkflowExecutionInfo
-	s.EventuallyWithT(
-		func(t *assert.CollectT) {
-			resp, err1 := env.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-				Namespace:       env.Namespace().String(),
-				MaximumPageSize: 100,
-				StartTimeFilter: &filterpb.StartTimeFilter{
-					EarliestTime: nil,
-					LatestTime:   timestamppb.New(time.Now().UTC()),
-				},
-				Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-					WorkflowId: id,
-				}},
-			})
-			require.NoError(t, err1)
-			require.Len(t, resp.Executions, 1)
-			openExecutionInfo = resp.Executions[0]
-		},
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err1 := env.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+			Namespace:       env.Namespace().String(),
+			MaximumPageSize: 100,
+			StartTimeFilter: &filterpb.StartTimeFilter{
+				EarliestTime: nil,
+				LatestTime:   timestamppb.New(time.Now().UTC()),
+			},
+			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+				WorkflowId: id,
+			}},
+		})
+		require.NoError(t, err1)
+		require.Len(t, resp.Executions, 1)
+		openExecutionInfo = resp.Executions[0]
+	},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
@@ -199,23 +198,22 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(env *testcore.TestEnv, start
 
 	// verify closed visibility
 	var closedExecutionInfo *workflowpb.WorkflowExecutionInfo
-	s.EventuallyWithT(
-		func(t *assert.CollectT) {
-			resp, err1 := env.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-				Namespace:       env.Namespace().String(),
-				MaximumPageSize: 100,
-				StartTimeFilter: &filterpb.StartTimeFilter{
-					EarliestTime: nil,
-					LatestTime:   timestamppb.New(time.Now().UTC()),
-				},
-				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-					WorkflowId: id,
-				}},
-			})
-			require.NoError(t, err1)
-			require.Len(t, resp.Executions, 1)
-			closedExecutionInfo = resp.Executions[0]
-		},
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err1 := env.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+			Namespace:       env.Namespace().String(),
+			MaximumPageSize: 100,
+			StartTimeFilter: &filterpb.StartTimeFilter{
+				EarliestTime: nil,
+				LatestTime:   timestamppb.New(time.Now().UTC()),
+			},
+			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+				WorkflowId: id,
+			}},
+		})
+		require.NoError(t, err1)
+		require.Len(t, resp.Executions, 1)
+		closedExecutionInfo = resp.Executions[0]
+	},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)

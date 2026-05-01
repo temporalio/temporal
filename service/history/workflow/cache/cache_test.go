@@ -469,8 +469,8 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 		snapshot := capture.Snapshot()
 		recordings := snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()]
 		if assert.NotEmpty(collect, recordings) {
-			assert.Greater(collect, recordings[0].Value, holdDuration)
-			assert.Equal(collect, tests.NamespaceID.String(), recordings[0].Tags["namespace_id"])
+			require.Greater(collect, recordings[0].Value, holdDuration)
+			require.Equal(collect, tests.NamespaceID.String(), recordings[0].Tags["namespace_id"])
 		}
 	}, time.Second, 10*time.Millisecond)
 
@@ -490,8 +490,8 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 		snapshot := capture.Snapshot()
 		recordings := snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()]
 		if assert.NotEmpty(collect, recordings) {
-			assert.Greater(collect, recordings[0].Value, 200*time.Millisecond)
-			assert.Equal(collect, tests.NamespaceID.String(), recordings[0].Tags["namespace_id"])
+			require.Greater(collect, recordings[0].Value, 200*time.Millisecond)
+			require.Equal(collect, tests.NamespaceID.String(), recordings[0].Tags["namespace_id"])
 		}
 	}, time.Second, 10*time.Millisecond)
 }

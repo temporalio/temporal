@@ -115,7 +115,7 @@ func (s *PrioritySuite) TestActivity_Basic() {
 	}
 
 	// wait for activity tasks to appear in the matching backlog (from transfer queue)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		res, err := s.AdminClient().DescribeTaskQueuePartition(ctx, &adminservice.DescribeTaskQueuePartitionRequest{
 			Namespace: s.Namespace().String(),
 			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
@@ -126,7 +126,9 @@ func (s *PrioritySuite) TestActivity_Basic() {
 			BuildIds: &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
 		})
 		if err != nil {
-			return false
+			require.Fail(t, "condition was false")
+
+			return
 		}
 		var count int64
 		for _, versionInfoInternal := range res.VersionsInfoInternal {
@@ -134,7 +136,7 @@ func (s *PrioritySuite) TestActivity_Basic() {
 				count += st.ApproximateBacklogCount
 			}
 		}
-		return count == N*Levels
+		require.Equal(t, N*Levels, count)
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// process activity tasks
@@ -225,7 +227,7 @@ func (s *PrioritySuite) TestSubqueue_Migration() {
 				},
 				taskpoller.WithContext(ctx),
 			)
-			assert.NoError(c, err)
+			require.NoError(c, err)
 		}, 5*time.Second, time.Millisecond)
 	}
 
@@ -471,7 +473,7 @@ func (s *FairnessSuite) TriggerAutoEnable(tv *testvars.TestVars) {
 	})
 	s.Require().NoError(err)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.AdminClient().GetTaskQueueTasks(ctx, &adminservice.GetTaskQueueTasksRequest{
 			Namespace:     s.Namespace().String(),
 			TaskQueue:     tv.TaskQueue().Name,
@@ -479,7 +481,8 @@ func (s *FairnessSuite) TriggerAutoEnable(tv *testvars.TestVars) {
 			BatchSize:     10,
 			MinPass:       1,
 		})
-		return err == nil && len(resp.GetTasks()) == 1
+		require.NoError(t, err)
+		require.Equal(t, 1, len(resp.GetTasks()))
 	}, 10*time.Second, 100*time.Millisecond)
 
 	_, err = s.TaskPoller().PollAndHandleWorkflowTask(tv,
@@ -728,7 +731,7 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 				},
 				taskpoller.WithContext(ctx),
 			)
-			assert.NoError(c, err)
+			require.NoError(c, err)
 		}, 5*time.Second, time.Millisecond)
 	}
 
@@ -776,7 +779,7 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 				},
 				taskpoller.WithContext(ctx),
 			)
-			assert.NoError(c, err)
+			require.NoError(c, err)
 		}, 5*time.Second, time.Millisecond)
 	}
 
@@ -879,7 +882,7 @@ func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTas
 	s.NoError(err)
 
 	// Wait for workflow task to be backlogged.
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.AdminClient().GetTaskQueueTasks(ctx, &adminservice.GetTaskQueueTasksRequest{
 			Namespace:     s.Namespace().String(),
 			TaskQueue:     tv.TaskQueue().Name,
@@ -887,7 +890,8 @@ func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTas
 			BatchSize:     10,
 			MinPass:       1,
 		})
-		return err == nil && len(resp.GetTasks()) == 1
+		require.NoError(t, err)
+		require.Equal(t, 1, len(resp.GetTasks()))
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Update workflow options to set a new priority.
@@ -972,7 +976,7 @@ func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTas
 	s.Equal(1, obsoleteWorkflowTaskCount, "Expected 1 workflow task to be obsolete")
 
 	// Wait for activity task to be backlogged
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.AdminClient().GetTaskQueueTasks(ctx, &adminservice.GetTaskQueueTasksRequest{
 			Namespace:     s.Namespace().String(),
 			TaskQueue:     tv.TaskQueue().Name,
@@ -980,7 +984,8 @@ func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTas
 			BatchSize:     10,
 			MinPass:       1,
 		})
-		return err == nil && len(resp.GetTasks()) == 1
+		require.NoError(t, err)
+		require.Equal(t, 1, len(resp.GetTasks()))
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Update activity options to set a new priority

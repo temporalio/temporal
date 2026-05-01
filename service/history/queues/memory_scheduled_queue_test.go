@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/chasm"
@@ -90,7 +91,7 @@ func (s *memoryScheduledQueueSuite) Test_ThreeInOrderTasks() {
 	s.scheduledQueue.Add(t3)
 
 	// To ensure all timers have fired.
-	s.Eventually(func() bool { return calls.Load() == 0 }, time.Second, 100*time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) { require.Equal(t, 0, calls.Load()) }, time.Second, 100*time.Millisecond)
 }
 
 func (s *memoryScheduledQueueSuite) Test_ThreeCancelledTasks() {
@@ -113,7 +114,7 @@ func (s *memoryScheduledQueueSuite) Test_ThreeCancelledTasks() {
 	s.scheduledQueue.Add(t2)
 	s.scheduledQueue.Add(t3)
 
-	s.Eventually(func() bool { return calls.Load() == 0 }, time.Second, 100*time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) { require.Equal(t, 0, calls.Load()) }, time.Second, 100*time.Millisecond)
 }
 
 func (s *memoryScheduledQueueSuite) Test_1KRandomTasks() {
@@ -146,7 +147,7 @@ func (s *memoryScheduledQueueSuite) Test_1KRandomTasks() {
 	}
 
 	// To ensure all timers have fired.
-	s.Eventually(func() bool { return calls.Load() == 0 }, 10*time.Second, 100*time.Millisecond)
+	s.EventuallyWithT(func(t *assert.CollectT) { require.Equal(t, 0, calls.Load()) }, 10*time.Second, 100*time.Millisecond)
 }
 
 func (s *memoryScheduledQueueSuite) newSpeculativeWorkflowTaskTimeoutTestExecutable(

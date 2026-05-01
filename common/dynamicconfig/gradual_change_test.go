@@ -301,17 +301,17 @@ func TestSubscribeGradualChange_TimerFiresAtTransitionTime(t *testing.T) {
 
 	ts.Update(gc.When(key).Add(-time.Second))
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Empty(c, callbackVals.get())
+		require.Empty(c, callbackVals.get())
 	}, time.Second, time.Millisecond)
 
 	ts.Update(gc.When(key).Add(time.Second))
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, []bool{true}, callbackVals.get())
+		require.Equal(c, []bool{true}, callbackVals.get())
 	}, time.Second, time.Millisecond)
 
 	ts.Update(end.Add(time.Second))
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, []bool{true}, callbackVals.get())
+		require.Equal(c, []bool{true}, callbackVals.get())
 	}, time.Second, time.Millisecond)
 }
 

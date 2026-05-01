@@ -82,9 +82,9 @@ func TestNewOpenTelemetryProviderWithStatsD(t *testing.T) {
 	counter.Add(context.Background(), 5)
 
 	// Test shutdown
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		provider.Stop(logger)
-		return true
+
 	}, time.Second, 100*time.Millisecond)
 }
 
@@ -124,8 +124,8 @@ func TestNewOpenTelemetryProviderWithPrometheus(t *testing.T) {
 	counter.Add(context.Background(), 5)
 
 	// Test shutdown
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		provider.Stop(logger)
-		return true
+
 	}, time.Second, 100*time.Millisecond)
 }

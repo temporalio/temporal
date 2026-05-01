@@ -137,33 +137,32 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 	_, err := s.createWorkflow(ctx, tv, nil)
 	s.Require().NoError(err)
 
-	s.EventuallyWithT(
-		func(t *assert.CollectT) {
-			// Filter by WorkflowId to isolate this test's workflow from other tests
-			resp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("WorkflowId = '%s'", tv.WorkflowID()),
-			})
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			require.Len(t, resp.GetExecutions(), 1)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		// Filter by WorkflowId to isolate this test's workflow from other tests
+		resp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("WorkflowId = '%s'", tv.WorkflowID()),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.Len(t, resp.GetExecutions(), 1)
 
-			queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", sadefs.TemporalWorkflowVersioningBehavior, tv.WorkflowID()),
-			})
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			require.Len(t, queriedResp.GetExecutions(), 1)
+		queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", sadefs.TemporalWorkflowVersioningBehavior, tv.WorkflowID()),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.Len(t, queriedResp.GetExecutions(), 1)
 
-			queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("WorkflowVersioningBehavior = 'Pinned' AND WorkflowId = '%s'", tv.WorkflowID()),
-			})
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			require.Len(t, queriedResp.GetExecutions(), 1)
-		},
+		queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("WorkflowVersioningBehavior = 'Pinned' AND WorkflowId = '%s'", tv.WorkflowID()),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.Len(t, queriedResp.GetExecutions(), 1)
+	},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
@@ -200,25 +199,24 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 	_, err = s.createWorkflow(ctx, tv, sa)
 	s.Require().NoError(err)
 
-	s.EventuallyWithT(
-		func(t *assert.CollectT) {
-			// Filter by WorkflowId to isolate this test's workflow from other tests
-			queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", sadefs.TemporalWorkflowVersioningBehavior, tv.WorkflowID()),
-			})
-			require.NoError(t, err)
-			require.NotNil(t, queriedResp)
-			require.Len(t, queriedResp.GetExecutions(), 1)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		// Filter by WorkflowId to isolate this test's workflow from other tests
+		queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", sadefs.TemporalWorkflowVersioningBehavior, tv.WorkflowID()),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, queriedResp)
+		require.Len(t, queriedResp.GetExecutions(), 1)
 
-			queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("WorkflowVersioningBehavior = 'user-defined' AND WorkflowId = '%s'", tv.WorkflowID()),
-			})
-			require.NoError(t, err)
-			require.NotNil(t, queriedResp)
-			require.Len(t, queriedResp.GetExecutions(), 1)
-		},
+		queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("WorkflowVersioningBehavior = 'user-defined' AND WorkflowId = '%s'", tv.WorkflowID()),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, queriedResp)
+		require.Len(t, queriedResp.GetExecutions(), 1)
+	},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
