@@ -116,6 +116,43 @@ func (this *TimeSkippingInfo) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type TimeSkippingBoundInfo to the protobuf v3 wire format
+func (val *TimeSkippingBoundInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type TimeSkippingBoundInfo from the protobuf v3 wire format
+func (val *TimeSkippingBoundInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *TimeSkippingBoundInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two TimeSkippingBoundInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *TimeSkippingBoundInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *TimeSkippingBoundInfo
+	switch t := that.(type) {
+	case *TimeSkippingBoundInfo:
+		that1 = t
+	case TimeSkippingBoundInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type LastNotifiedTargetVersion to the protobuf v3 wire format
 func (val *LastNotifiedTargetVersion) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

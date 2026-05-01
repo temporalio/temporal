@@ -6,7 +6,14 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/util"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
+)
+
+const (
+	maxMessageLength = 4000
+	truncatedSuffix  = "... <truncated>"
 )
 
 func ServiceErrorInterceptor(
@@ -24,5 +31,14 @@ func ServiceErrorInterceptor(
 	if errors.As(err, &deserializationError) || errors.As(err, &serializationError) {
 		err = serviceerror.NewDataLoss(err.Error())
 	}
-	return resp, serviceerror.ToStatus(err).Err()
+
+	// truncate message length if needed
+	st := serviceerror.ToStatus(err)
+	if len(st.Message()) > maxMessageLength {
+		p := st.Proto()
+		p.Message = util.TruncateUTF8(p.Message, maxMessageLength-len(truncatedSuffix)) + truncatedSuffix
+		st = status.FromProto(p)
+	}
+
+	return resp, st.Err()
 }
