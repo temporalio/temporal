@@ -244,7 +244,8 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 			Started: time.Now(),
 			Command: binaryPath,
 		},
-		retry: retry,
+		retry:       retry,
+		progressKey: unit.label,
 	}
 }
 
@@ -420,10 +421,11 @@ func (r *runner) directExecConfig(pkgs []string, race bool, extraArgs []string, 
 				extraArgs:    extraArgs,
 			}, r.execLogger(desc, attempt))
 		},
-		label:     desc,
-		attempt:   attempt,
-		logPath:   filepath.Join(r.logDir, fmt.Sprintf("all_mode_attempt_%d%s.log", attempt, fileSuffix)),
-		junitPath: filepath.Join(r.logDir, fmt.Sprintf("junit_all_attempt_%d%s.xml", attempt, fileSuffix)),
-		retry:     retry,
+		label:       desc,
+		attempt:     attempt,
+		logPath:     filepath.Join(r.logDir, fmt.Sprintf("all_mode_attempt_%d%s.log", attempt, fileSuffix)),
+		junitPath:   filepath.Join(r.logDir, fmt.Sprintf("junit_all_attempt_%d%s.xml", attempt, fileSuffix)),
+		retry:       retry,
+		progressKey: desc,
 	}
 }
