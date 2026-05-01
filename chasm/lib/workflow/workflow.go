@@ -73,52 +73,18 @@ func (w *Workflow) Terminate(
 	return chasm.TerminateComponentResponse{}, serviceerror.NewInternal("workflow root Terminate should not be called")
 }
 
-// RecordCompleted implements the ActivityStore interface. It is called by embedded Activity
-// sub-components when they reach a terminal state. It applies the activity's terminal mutation
-// (via applyFn) and then schedules a new workflow task so the workflow can react to the completion.
-//
-// TODO(david.porter): Will not merge — prototype only. ScheduleWorkflowTask is a no-op when a
-// WFT is already pending (common case: the forced WFT from RespondWorkflowTaskCompleted fires
-// before the activity completes). In that case we rely on the pending WFT picking up the buffered
-// history events written by WriteActivityTaskCompletedHistoryEvent. This needs an explicit
-// "buffer flush triggers follow-up WFT" mechanism for the case where no WFT is pending.
-func (w *Workflow) RecordCompleted(ctx chasm.MutableContext, activityID string, applyFn func(ctx chasm.MutableContext) error) error {
-	if err := applyFn(ctx); err != nil {
-		return err
-	}
-	// Remove the completed activity from the map so it is cleaned up from the CHASM tree and
-	// excluded from pending-activity counts (GetNumCHASMPendingActivities).
-	if activityID != "" {
-		delete(w.Activities, activityID)
-	}
-	// Schedule a new workflow task so the workflow can observe the completed activity.
-	// Note: if a WFT is already pending (e.g. the forced WFT from RespondWorkflowTaskCompleted),
-	// ScheduleWorkflowTask is a no-op — that pending WFT will see the buffered history events
-	// written by WriteActivityTaskCompletedHistoryEvent and schedule a follow-up WFT automatically.
-	return w.ScheduleWorkflowTask()
-}
-
-// WriteActivityTaskCompletedHistoryEvents implements the ActivityStore interface for
-// workflow-embedded activities. It writes both ActivityTaskStarted and ActivityTaskCompleted
-// history events in the same transaction so event IDs are captured and wired explicitly.
-func (w *Workflow) WriteActivityTaskCompletedHistoryEvents(
-	ctx chasm.MutableContext,
-	scheduledEventID int64,
-	attempt int32,
-	startRequestID string,
-	startIdentity string,
-	startStamp *commonpb.WorkerVersionStamp,
-	identity string,
-	result *commonpb.Payloads,
-) error {
+// OnActivityCompleted implements ActivityStore for workflow-embedded activities.
+// Writes ActivityTaskStarted + ActivityTaskCompleted history events; Apply() handles cleanup.
+func (w *Workflow) OnActivityCompleted(ctx chasm.MutableContext, act *activity.Activity) error {
+	scheduledEventID := act.ActivityState.GetScheduledEventId()
+	attempt := act.LastAttempt.Get(ctx)
 	startedEvent, err := addAndApplyHistoryEvent[ActivityTaskStartedEventDefinition](w, ctx, func(e *historypb.HistoryEvent) {
 		e.Attributes = &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{
 			ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
 				ScheduledEventId: scheduledEventID,
-				Attempt:          attempt,
-				RequestId:        startRequestID,
-				Identity:         startIdentity,
-				WorkerVersion:    startStamp,
+				Attempt:          attempt.GetCount(),
+				RequestId:        attempt.GetStartRequestId(),
+				Identity:         attempt.GetLastWorkerIdentity(),
 			},
 		}
 	})
@@ -130,36 +96,26 @@ func (w *Workflow) WriteActivityTaskCompletedHistoryEvents(
 			ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
 				ScheduledEventId: scheduledEventID,
 				StartedEventId:   startedEvent.GetEventId(),
-				Identity:         identity,
-				Result:           result,
+				Identity:         attempt.GetLastWorkerIdentity(),
+				Result:           act.Outcome.Get(ctx).GetSuccessful().GetOutput(),
 			},
 		}
 	})
 	return err
 }
 
-// WriteActivityTaskFailedHistoryEvents implements the ActivityStore interface for
-// workflow-embedded activities. It writes ActivityTaskStarted + ActivityTaskFailed
-// history events in a single transaction.
-func (w *Workflow) WriteActivityTaskFailedHistoryEvents(
-	ctx chasm.MutableContext,
-	scheduledEventID int64,
-	attempt int32,
-	startRequestID string,
-	startIdentity string,
-	startStamp *commonpb.WorkerVersionStamp,
-	failure *failurepb.Failure,
-	retryState enumspb.RetryState,
-	identity string,
-) error {
+// OnActivityFailed implements ActivityStore for workflow-embedded activities.
+// Writes ActivityTaskStarted + ActivityTaskFailed history events; Apply() handles cleanup.
+func (w *Workflow) OnActivityFailed(ctx chasm.MutableContext, act *activity.Activity) error {
+	scheduledEventID := act.ActivityState.GetScheduledEventId()
+	attempt := act.LastAttempt.Get(ctx)
 	startedEvent, err := addAndApplyHistoryEvent[ActivityTaskStartedEventDefinition](w, ctx, func(e *historypb.HistoryEvent) {
 		e.Attributes = &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{
 			ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
 				ScheduledEventId: scheduledEventID,
-				Attempt:          attempt,
-				RequestId:        startRequestID,
-				Identity:         startIdentity,
-				WorkerVersion:    startStamp,
+				Attempt:          attempt.GetCount(),
+				RequestId:        attempt.GetStartRequestId(),
+				Identity:         attempt.GetLastWorkerIdentity(),
 			},
 		}
 	})
@@ -171,39 +127,33 @@ func (w *Workflow) WriteActivityTaskFailedHistoryEvents(
 			ActivityTaskFailedEventAttributes: &historypb.ActivityTaskFailedEventAttributes{
 				ScheduledEventId: scheduledEventID,
 				StartedEventId:   startedEvent.GetEventId(),
-				Failure:          failure,
-				RetryState:       retryState,
-				Identity:         identity,
+				Failure:          act.Outcome.Get(ctx).GetFailed().GetFailure(),
+				RetryState:       enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
+				Identity:         attempt.GetLastWorkerIdentity(),
 			},
 		}
 	})
 	return err
 }
 
-// WriteActivityTaskTimedOutHistoryEvents implements the ActivityStore interface for
-// workflow-embedded activities. It writes ActivityTaskTimedOut (and optionally
-// ActivityTaskStarted) history events in a single transaction.
-func (w *Workflow) WriteActivityTaskTimedOutHistoryEvents(
-	ctx chasm.MutableContext,
-	scheduledEventID int64,
-	attempt int32,
-	startRequestID string,
-	startIdentity string,
-	startStamp *commonpb.WorkerVersionStamp,
-	needsStartedEvent bool,
-	timeoutFailure *failurepb.Failure,
-	retryState enumspb.RetryState,
-) error {
+// OnActivityTimedOut implements ActivityStore for workflow-embedded activities.
+// Writes ActivityTaskTimedOut (and optionally ActivityTaskStarted) history events; Apply() handles cleanup.
+func (w *Workflow) OnActivityTimedOut(ctx chasm.MutableContext, act *activity.Activity, timeoutFailure *failurepb.Failure, needsStartedEvent bool) error {
+	scheduledEventID := act.ActivityState.GetScheduledEventId()
+	if timeoutFailure == nil {
+		return nil
+	}
+
 	var startedEventID int64
 	if needsStartedEvent {
+		attempt := act.LastAttempt.Get(ctx)
 		startedEvent, err := addAndApplyHistoryEvent[ActivityTaskStartedEventDefinition](w, ctx, func(e *historypb.HistoryEvent) {
 			e.Attributes = &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{
 				ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
 					ScheduledEventId: scheduledEventID,
-					Attempt:          attempt,
-					RequestId:        startRequestID,
-					Identity:         startIdentity,
-					WorkerVersion:    startStamp,
+					Attempt:          attempt.GetCount(),
+					RequestId:        attempt.GetStartRequestId(),
+					Identity:         attempt.GetLastWorkerIdentity(),
 				},
 			}
 		})
@@ -218,11 +168,26 @@ func (w *Workflow) WriteActivityTaskTimedOutHistoryEvents(
 				ScheduledEventId: scheduledEventID,
 				StartedEventId:   startedEventID,
 				Failure:          timeoutFailure,
-				RetryState:       retryState,
+				RetryState:       enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
 			},
 		}
 	})
 	return err
+}
+
+// OnActivityCanceled implements ActivityStore for workflow-embedded activities.
+// No ActivityTaskCanceled history event is written on the forward path in this prototype.
+func (w *Workflow) OnActivityCanceled(ctx chasm.MutableContext, act *activity.Activity) error {
+	activityID := act.ActivityState.GetActivityId()
+	delete(w.Activities, activityID)
+	return w.ScheduleWorkflowTask()
+}
+
+// OnActivityTerminated implements ActivityStore for workflow-embedded activities.
+func (w *Workflow) OnActivityTerminated(ctx chasm.MutableContext, act *activity.Activity) error {
+	activityID := act.ActivityState.GetActivityId()
+	delete(w.Activities, activityID)
+	return w.ScheduleWorkflowTask()
 }
 
 // AddCompletionCallbacks creates completion callbacks using the CHASM implementation.

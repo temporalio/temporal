@@ -58,56 +58,22 @@ var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
 var _ callback.CompletionSource = (*Activity)(nil)
 
 type ActivityStore interface {
-	// RecordCompleted applies the provided function to record activity completion.
-	// activityID is passed so the workflow-embedded store can remove the activity
-	// from its Activities map (empty for standalone activities).
-	RecordCompleted(ctx chasm.MutableContext, activityID string, applyFn func(ctx chasm.MutableContext) error) error
-	// WriteActivityTaskCompletedHistoryEvents writes both an ActivityTaskStarted and an
-	// ActivityTaskCompleted history event for a workflow-embedded CHASM activity in a single
-	// transaction, so that the history builder can wire up the started event ID automatically.
-	// scheduledEventID is the event ID of the corresponding ActivityTaskScheduled event.
-	// attempt, startRequestID, startIdentity, startStamp describe the started attempt.
-	// identity and result describe the completion.
-	// For standalone activities (where Activity itself is the store), this is a no-op.
-	WriteActivityTaskCompletedHistoryEvents(
-		ctx chasm.MutableContext,
-		scheduledEventID int64,
-		attempt int32,
-		startRequestID string,
-		startIdentity string,
-		startStamp *commonpb.WorkerVersionStamp,
-		identity string,
-		result *commonpb.Payloads,
-	) error
-	// WriteActivityTaskFailedHistoryEvents writes both an ActivityTaskStarted and an
-	// ActivityTaskFailed history event for a workflow-embedded CHASM activity in a single
-	// transaction. For standalone activities, this is a no-op.
-	WriteActivityTaskFailedHistoryEvents(
-		ctx chasm.MutableContext,
-		scheduledEventID int64,
-		attempt int32,
-		startRequestID string,
-		startIdentity string,
-		startStamp *commonpb.WorkerVersionStamp,
-		failure *failurepb.Failure,
-		retryState enumspb.RetryState,
-		identity string,
-	) error
-	// WriteActivityTaskTimedOutHistoryEvents writes an ActivityTaskTimedOut history event (and
-	// optionally an ActivityTaskStarted event) for a workflow-embedded CHASM activity.
-	// needsStartedEvent should be true when the activity was never started (schedule-to-start /
-	// schedule-to-close timeouts on the first-and-only attempt). For standalone activities this is a no-op.
-	WriteActivityTaskTimedOutHistoryEvents(
-		ctx chasm.MutableContext,
-		scheduledEventID int64,
-		attempt int32,
-		startRequestID string,
-		startIdentity string,
-		startStamp *commonpb.WorkerVersionStamp,
-		needsStartedEvent bool,
-		timeoutFailure *failurepb.Failure,
-		retryState enumspb.RetryState,
-	) error
+	// OnActivityCompleted is called when an activity reaches the Completed terminal state.
+	// For workflow-embedded activities, the implementation writes history events and cleanup is
+	// handled by the terminal event's Apply method. For standalone activities, it schedules
+	// standby callbacks.
+	OnActivityCompleted(ctx chasm.MutableContext, act *Activity) error
+	// OnActivityFailed is called when an activity reaches the Failed terminal state.
+	OnActivityFailed(ctx chasm.MutableContext, act *Activity) error
+	// OnActivityTimedOut is called when an activity reaches the TimedOut terminal state.
+	// timeoutFailure is the failure to record in the history event.
+	// needsStartedEvent indicates whether an ActivityTaskStarted event must also be written
+	// (true for START_TO_CLOSE and HEARTBEAT timeouts; false for SCHEDULE_TO_START/CLOSE).
+	OnActivityTimedOut(ctx chasm.MutableContext, act *Activity, timeoutFailure *failurepb.Failure, needsStartedEvent bool) error
+	// OnActivityCanceled is called when an activity reaches the Canceled terminal state.
+	OnActivityCanceled(ctx chasm.MutableContext, act *Activity) error
+	// OnActivityTerminated is called when an activity reaches the Terminated terminal state.
+	OnActivityTerminated(ctx chasm.MutableContext, act *Activity) error
 }
 
 // Activity component represents an activity execution persistence object and can be either standalone activity or one
@@ -345,30 +311,30 @@ func attemptScheduleTimeForRetry(attempt *activitypb.ActivityAttemptState) *time
 	return nil
 }
 
-// RecordCompleted applies the provided function to record activity completion.
-// For standalone activities, it also triggers any registered completion callbacks.
-func (a *Activity) RecordCompleted(ctx chasm.MutableContext, _ string, applyFn func(ctx chasm.MutableContext) error) error {
-	if err := applyFn(ctx); err != nil {
-		return err
-	}
+// OnActivityCompleted implements ActivityStore for standalone activities.
+// Schedules standby callbacks to notify registered completion listeners.
+func (a *Activity) OnActivityCompleted(ctx chasm.MutableContext, _ *Activity) error {
 	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
 }
 
-// WriteActivityTaskCompletedHistoryEvents is a no-op for standalone activities.
-// Standalone activities do not write workflow history events.
-// >>> todo (david.porter) Rename this
-func (a *Activity) WriteActivityTaskCompletedHistoryEvents(_ chasm.MutableContext, _ int64, _ int32, _ string, _ string, _ *commonpb.WorkerVersionStamp, _ string, _ *commonpb.Payloads) error {
-	return nil
+// OnActivityFailed implements ActivityStore for standalone activities.
+func (a *Activity) OnActivityFailed(ctx chasm.MutableContext, _ *Activity) error {
+	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
 }
 
-// WriteActivityTaskFailedHistoryEvents is a no-op for standalone activities.
-func (a *Activity) WriteActivityTaskFailedHistoryEvents(_ chasm.MutableContext, _ int64, _ int32, _ string, _ string, _ *commonpb.WorkerVersionStamp, _ *failurepb.Failure, _ enumspb.RetryState, _ string) error {
-	return nil
+// OnActivityTimedOut implements ActivityStore for standalone activities.
+func (a *Activity) OnActivityTimedOut(ctx chasm.MutableContext, _ *Activity, _ *failurepb.Failure, _ bool) error {
+	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
 }
 
-// WriteActivityTaskTimedOutHistoryEvents is a no-op for standalone activities.
-func (a *Activity) WriteActivityTaskTimedOutHistoryEvents(_ chasm.MutableContext, _ int64, _ int32, _ string, _ string, _ *commonpb.WorkerVersionStamp, _ bool, _ *failurepb.Failure, _ enumspb.RetryState) error {
-	return nil
+// OnActivityCanceled implements ActivityStore for standalone activities.
+func (a *Activity) OnActivityCanceled(ctx chasm.MutableContext, _ *Activity) error {
+	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
+}
+
+// OnActivityTerminated implements ActivityStore for standalone activities.
+func (a *Activity) OnActivityTerminated(ctx chasm.MutableContext, _ *Activity) error {
+	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
 }
 
 func (a *Activity) addCompletionCallbacks(

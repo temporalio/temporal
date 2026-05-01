@@ -79,8 +79,8 @@ func (d ActivityTaskStartedEventDefinition) Apply(ctx chasm.MutableContext, wf *
 	}
 
 	// On the forward path, TransitionStarted was already applied by RecordActivityTaskStarted before
-	// WriteActivityTaskCompletedHistoryEvents bundles this event into history. Only apply during
-	// replication replay, when the activity is still in the Scheduled state.
+	// OnActivityCompleted/OnActivityFailed/OnActivityTimedOut bundle this event into history.
+	// Only apply during replication replay, when the activity is still in the Scheduled state.
 	if act.Status != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
 		return nil
 	}
@@ -117,8 +117,8 @@ func (d ActivityTaskCompletedEventDefinition) Apply(ctx chasm.MutableContext, wf
 		return nil
 	}
 
-	activityID := act.ActivityState.GetActivityId()
-	return wf.RecordCompleted(ctx, activityID, func(ctx chasm.MutableContext) error { return nil })
+	delete(wf.Activities, act.ActivityState.GetActivityId())
+	return wf.ScheduleWorkflowTask()
 }
 
 func (d ActivityTaskCompletedEventDefinition) CherryPick(_ chasm.MutableContext, _ *Workflow, _ *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
@@ -144,8 +144,8 @@ func (d ActivityTaskFailedEventDefinition) Apply(ctx chasm.MutableContext, wf *W
 		return nil
 	}
 
-	activityID := act.ActivityState.GetActivityId()
-	return wf.RecordCompleted(ctx, activityID, func(ctx chasm.MutableContext) error { return nil })
+	delete(wf.Activities, act.ActivityState.GetActivityId())
+	return wf.ScheduleWorkflowTask()
 }
 
 func (d ActivityTaskFailedEventDefinition) CherryPick(_ chasm.MutableContext, _ *Workflow, _ *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
@@ -171,8 +171,8 @@ func (d ActivityTaskTimedOutEventDefinition) Apply(ctx chasm.MutableContext, wf 
 		return nil
 	}
 
-	activityID := act.ActivityState.GetActivityId()
-	return wf.RecordCompleted(ctx, activityID, func(ctx chasm.MutableContext) error { return nil })
+	delete(wf.Activities, act.ActivityState.GetActivityId())
+	return wf.ScheduleWorkflowTask()
 }
 
 func (d ActivityTaskTimedOutEventDefinition) CherryPick(_ chasm.MutableContext, _ *Workflow, _ *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
@@ -230,8 +230,8 @@ func (d ActivityTaskCanceledEventDefinition) Apply(ctx chasm.MutableContext, wf 
 		return nil
 	}
 
-	activityID := act.ActivityState.GetActivityId()
-	return wf.RecordCompleted(ctx, activityID, func(ctx chasm.MutableContext) error { return nil })
+	delete(wf.Activities, act.ActivityState.GetActivityId())
+	return wf.ScheduleWorkflowTask()
 }
 
 func (d ActivityTaskCanceledEventDefinition) CherryPick(_ chasm.MutableContext, _ *Workflow, _ *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
