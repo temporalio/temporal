@@ -39,10 +39,8 @@ func WorkflowServiceExtractor(extractor RoutingKeyExtractor) RoutingKeyExtractor
 			return key
 		}
 
-		// Fall back to pattern-based logic for methods the codegen can't cover
-		// (task token deserialization, multi-operation, namespace-level
-		// routing) and as a compatibility path for methods whose callers
-		// haven't populated the resource_id field yet.
+		// Fall back to pattern-based logic as a compatibility path for methods
+		// whose callers haven't populated the resource_id field yet.
 		methodName := api.MethodName(fullMethod)
 		pattern, hasPattern := methodToPattern[methodName]
 		if !hasPattern {

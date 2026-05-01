@@ -45,14 +45,8 @@ const (
 )
 
 // methodToPattern maps API method names to their expected routing key
-// extraction pattern. Methods not in this map fall through to the generated
-// extractor in routing_key_extractor_gen.go; methods handled there do not
-// need an entry here.
-//
-// This map covers cases the codegen cannot express: task token deserialization,
-// ExecuteMultiOperation fan-out, namespace-level routing, and the legacy
-// GetWorkflowId() fallback for *ById methods whose callers have not yet
-// populated the resource_id proto field.
+// extraction pattern. This map exists for backward compatibility reason and
+// only covers methods that have a newly added resource_id field.
 var methodToPattern = map[string]RoutingKeyPattern{
 	// Pattern: GetWorkflowId() - legacy fallback for methods whose proto
 	// annotation uses {resource_id} but whose callers have not yet populated
