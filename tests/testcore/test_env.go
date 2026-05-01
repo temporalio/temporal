@@ -310,6 +310,26 @@ func (e *TestEnv) Context() context.Context {
 	return e.ctx
 }
 
+// WaitForChannel waits for ch to receive using the TestEnv context.
+func (e *TestEnv) WaitForChannel(ch <-chan struct{}) {
+	e.t.Helper()
+	select {
+	case <-ch:
+	case <-e.ctx.Done():
+		e.FailNow("context timeout while waiting for channel")
+	}
+}
+
+// SendToChannel sends to ch using the TestEnv context.
+func (e *TestEnv) SendToChannel(ch chan<- struct{}) {
+	e.t.Helper()
+	select {
+	case ch <- struct{}{}:
+	case <-e.ctx.Done():
+		e.FailNow("context timeout while sending to channel")
+	}
+}
+
 // SdkClient returns the SDK client. It is lazily initialized on the first call.
 func (e *TestEnv) SdkClient() sdkclient.Client {
 	e.sdkClientOnce.Do(func() {

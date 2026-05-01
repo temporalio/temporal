@@ -1408,8 +1408,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 		require.NotNil(t, desc.PendingNexusOperations[0].CancellationInfo)
 	}, time.Second*10, time.Millisecond*100)
 
-	env.SendToChannel(ctx, canStartCh)
-	env.WaitForChannel(ctx, cancelSentCh)
+	env.SendToChannel(canStartCh)
+	env.WaitForChannel(cancelSentCh)
 
 	// Terminate the workflow for good measure.
 	err = env.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
