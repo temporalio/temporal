@@ -40,7 +40,7 @@ func TestUpdateAndListNamespace(t *testing.T) {
 	defer m.Stop()
 
 	// No entries initially
-	list := m.filterWorkers("ns1", alwaysTrue)
+	list := m.filterWorkers("ns1", true, alwaysTrue)
 	assert.Empty(t, list, "expected empty list before updates")
 
 	// Add some heartbeats
@@ -48,7 +48,7 @@ func TestUpdateAndListNamespace(t *testing.T) {
 	hb2 := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "workerB", Status: enumspb.WORKER_STATUS_RUNNING}
 	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hb1, hb2})
 
-	list = m.filterWorkers("ns1", alwaysTrue)
+	list = m.filterWorkers("ns1", true, alwaysTrue)
 	// Order is not guaranteed; check contents by keys
 	keys := []string{list[0].WorkerInstanceKey, list[1].WorkerInstanceKey}
 	assert.Contains(t, keys, "workerA")
@@ -94,7 +94,7 @@ func TestShutdownStatusRemovesWorker(t *testing.T) {
 	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hb1, hb2})
 
 	// Verify both workers are registered
-	list := m.filterWorkers("ns1", alwaysTrue)
+	list := m.filterWorkers("ns1", true, alwaysTrue)
 	assert.Len(t, list, 2, "both workers should be registered")
 	assert.Equal(t, int64(2), m.total.Load(), "total should be 2")
 
@@ -103,7 +103,7 @@ func TestShutdownStatusRemovesWorker(t *testing.T) {
 	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hbShutdown})
 
 	// Verify only worker1 is removed, worker2 remains
-	list = m.filterWorkers("ns1", alwaysTrue)
+	list = m.filterWorkers("ns1", true, alwaysTrue)
 	assert.Len(t, list, 1, "only one worker should remain")
 	assert.Equal(t, "worker2", list[0].WorkerInstanceKey, "worker2 should remain")
 	assert.Equal(t, int64(1), m.total.Load(), "total should be 1 after shutdown")
@@ -141,7 +141,7 @@ func TestShutdownStatusForNonExistentWorker(t *testing.T) {
 	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hb})
 
 	// Verify nothing happened
-	list := m.filterWorkers("ns1", alwaysTrue)
+	list := m.filterWorkers("ns1", true, alwaysTrue)
 	assert.Empty(t, list, "no workers should exist")
 	assert.Zero(t, m.total.Load(), "total should remain 0")
 }
@@ -180,7 +180,7 @@ func TestListNamespacePredicate(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			list := m.filterWorkers("ns", tc.pred)
+			list := m.filterWorkers("ns", true, tc.pred)
 			assert.Len(t, list, tc.wantCount)
 		})
 	}
@@ -216,7 +216,7 @@ func TestEvictByTTL(t *testing.T) {
 	// Perform eviction
 	m.evictByTTL()
 
-	list := m.filterWorkers("ns", alwaysTrue)
+	list := m.filterWorkers("ns", true, alwaysTrue)
 	assert.Empty(t, list, "entry should be evicted by TTL")
 	assert.Zero(t, m.total.Load(), "total counter should be decremented")
 
@@ -261,7 +261,7 @@ func TestEvictByCapacity(t *testing.T) {
 	m.evictByCapacity()
 
 	// Ensure we evicted down to maxItems
-	remaining := m.filterWorkers("ns", alwaysTrue)
+	remaining := m.filterWorkers("ns", true, alwaysTrue)
 	assert.Len(t, remaining, int(maxItems), "should evict down to maxItems")
 	assert.LessOrEqual(t, m.total.Load(), int64(maxItems), "total counter should not exceed maxItems")
 
@@ -323,7 +323,7 @@ func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
 	m.evictByCapacity()
 
 	// All entries should still be there (protected by minEvictAge)
-	workers := m.filterWorkers("ns", alwaysTrue)
+	workers := m.filterWorkers("ns", true, alwaysTrue)
 	assert.Len(t, workers, 3, "all entries should be protected by minEvictAge")
 	assert.Equal(t, int64(3), m.total.Load(), "should still exceed maxItems due to protection")
 
@@ -374,7 +374,7 @@ func TestEvictByCapacityAfterMinAge(t *testing.T) {
 		m.evictByCapacity()
 
 		// Should have evicted down to maxItems
-		workers := m.filterWorkers("ns", alwaysTrue)
+		workers := m.filterWorkers("ns", true, alwaysTrue)
 		assert.LessOrEqual(t, len(workers), int(maxItems), "should evict down to maxItems")
 		assert.LessOrEqual(t, m.total.Load(), int64(maxItems), "total should be within limits")
 
@@ -424,10 +424,10 @@ func TestMultipleNamespaces(t *testing.T) {
 	m.upsertHeartbeats("namespace2", ns2Workers)
 
 	// Verify functional behavior first
-	ns1List := m.filterWorkers("namespace1", alwaysTrue)
+	ns1List := m.filterWorkers("namespace1", true, alwaysTrue)
 	assert.Len(t, ns1List, 3, "namespace1 should have 3 workers")
 
-	ns2List := m.filterWorkers("namespace2", alwaysTrue)
+	ns2List := m.filterWorkers("namespace2", true, alwaysTrue)
 	assert.Len(t, ns2List, 2, "namespace2 should have 2 workers")
 
 	assert.Equal(t, int64(5), m.total.Load(), "total should be 5 workers across namespaces")
@@ -548,7 +548,7 @@ func BenchmarkListNamespace(b *testing.B) {
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = m.filterWorkers("benchNs", alwaysTrue)
+		_ = m.filterWorkers("benchNs", true, alwaysTrue)
 	}
 }
 

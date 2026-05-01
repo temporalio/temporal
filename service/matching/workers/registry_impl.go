@@ -30,10 +30,11 @@ type listWorkersPageToken struct {
 type (
 	// entry wraps a WorkerHeartbeat along with its namespace and eviction metadata.
 	entry struct {
-		nsID     namespace.ID
-		hb       *workerpb.WorkerHeartbeat
-		lastSeen time.Time
-		elem     *list.Element
+		nsID           namespace.ID
+		hb             *workerpb.WorkerHeartbeat
+		lastSeen       time.Time
+		elem           *list.Element
+		isSystemWorker bool
 	}
 	// bucket holds part of the keyspace: a map from namespace → (map of instanceKey → entry),
 	// plus a recency list for eviction.
@@ -106,16 +107,20 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.Work
 			continue
 		}
 
+		isSystem := primitives.IsInternalTaskQueue(hb.GetTaskQueue())
+
 		// Normal upsert
 		if e, exists := mp[key]; exists {
 			e.hb = hb
 			e.lastSeen = now
+			e.isSystemWorker = isSystem
 			b.order.MoveToBack(e.elem)
 		} else {
 			e = &entry{
-				nsID:     nsID,
-				hb:       hb,
-				lastSeen: now,
+				nsID:           nsID,
+				hb:             hb,
+				lastSeen:       now,
+				isSystemWorker: isSystem,
 			}
 			e.elem = b.order.PushBack(e)
 			mp[key] = e
@@ -127,9 +132,11 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.Work
 }
 
 // filterWorkers returns all WorkerHeartbeats in a namespace
-// for which predicate(hb) returns true.
+// for which predicate(hb) returns true. System workers are excluded
+// unless includeSystemWorkers is true.
 func (b *bucket) filterWorkers(
 	nsID namespace.ID,
+	includeSystemWorkers bool,
 	predicate func(*workerpb.WorkerHeartbeat) bool,
 ) []*workerpb.WorkerHeartbeat {
 	b.mu.Lock()
@@ -141,6 +148,9 @@ func (b *bucket) filterWorkers(
 	}
 	out := make([]*workerpb.WorkerHeartbeat, 0, len(mp))
 	for _, e := range mp {
+		if !includeSystemWorkers && e.isSystemWorker {
+			continue
+		}
 		if predicate(e.hb) {
 			out = append(out, e.hb)
 		}
@@ -281,9 +291,11 @@ func (m *registryImpl) recordEvictionMetric() {
 }
 
 // filterWorkers returns all WorkerHeartbeats in a namespace
-// for which predicate(hb) returns true.
+// for which predicate(hb) returns true. System workers are excluded
+// unless includeSystemWorkers is true.
 func (m *registryImpl) filterWorkers(
 	nsID namespace.ID,
+	includeSystemWorkers bool,
 	predicate func(*workerpb.WorkerHeartbeat) bool,
 ) []*workerpb.WorkerHeartbeat {
 	b := m.getBucket(nsID)
@@ -291,7 +303,7 @@ func (m *registryImpl) filterWorkers(
 	if b == nil {
 		return nil
 	}
-	return b.filterWorkers(nsID, predicate)
+	return b.filterWorkers(nsID, includeSystemWorkers, predicate)
 }
 
 // evictLoop periodically triggers TTL and capacity-based eviction.
@@ -384,18 +396,8 @@ func (m *registryImpl) ListWorkers(nsID namespace.ID, params ListWorkersParams) 
 		}
 	}
 
-	if !params.IncludeSystemWorkers {
-		basePredicate := predicate
-		predicate = func(hb *workerpb.WorkerHeartbeat) bool {
-			if primitives.IsInternalTaskQueue(hb.GetTaskQueue()) {
-				return false
-			}
-			return basePredicate(hb)
-		}
-	}
-
 	// Get all matching workers and paginate
-	workers := m.filterWorkers(nsID, predicate)
+	workers := m.filterWorkers(nsID, params.IncludeSystemWorkers, predicate)
 	return paginateWorkers(workers, params.PageSize, params.NextPageToken)
 }
 
