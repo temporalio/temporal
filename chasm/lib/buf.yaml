@@ -6,13 +6,8 @@ breaking:
   use:
     - WIRE
   ignore:
-    # TODO lina: remove after frontend handler PRs merge
-    - chasm/lib/scheduler/proto/v1/message.proto
-    # TODO seankane: remove after merging #8499
-    - chasm/lib/callback/proto/v1/tasks.proto
-    # TODO bergundy: remove after nexus-chasm-cleanup merges
-    - chasm/lib/nexusoperation/proto/v1/operation.proto
-    - chasm/lib/nexusoperation/proto/v1/tasks.proto
+    # TODO(bergundy): remove after 10154 is merged
+    - chasm/lib/workflow/proto/v1/state.proto
 lint:
   use:
     - DEFAULT
