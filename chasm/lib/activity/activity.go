@@ -65,6 +65,7 @@ type ActivityStore interface {
 	// identity and result describe the completion.
 	// For standalone activities (where Activity itself is the store), this is a no-op.
 	WriteActivityTaskCompletedHistoryEvents(
+		ctx chasm.MutableContext,
 		scheduledEventID int64,
 		attempt int32,
 		startRequestID string,
@@ -77,6 +78,7 @@ type ActivityStore interface {
 	// ActivityTaskFailed history event for a workflow-embedded CHASM activity in a single
 	// transaction. For standalone activities, this is a no-op.
 	WriteActivityTaskFailedHistoryEvents(
+		ctx chasm.MutableContext,
 		scheduledEventID int64,
 		attempt int32,
 		startRequestID string,
@@ -91,6 +93,7 @@ type ActivityStore interface {
 	// needsStartedEvent should be true when the activity was never started (schedule-to-start /
 	// schedule-to-close timeouts on the first-and-only attempt). For standalone activities this is a no-op.
 	WriteActivityTaskTimedOutHistoryEvents(
+		ctx chasm.MutableContext,
 		scheduledEventID int64,
 		attempt int32,
 		startRequestID string,
@@ -349,17 +352,17 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, _ string, applyFn f
 // WriteActivityTaskCompletedHistoryEvents is a no-op for standalone activities.
 // Standalone activities do not write workflow history events.
 // >>> todo (david.porter) Rename this
-func (a *Activity) WriteActivityTaskCompletedHistoryEvents(_ int64, _ int32, _ string, _ string, _ *commonpb.WorkerVersionStamp, _ string, _ *commonpb.Payloads) error {
+func (a *Activity) WriteActivityTaskCompletedHistoryEvents(_ chasm.MutableContext, _ int64, _ int32, _ string, _ string, _ *commonpb.WorkerVersionStamp, _ string, _ *commonpb.Payloads) error {
 	return nil
 }
 
 // WriteActivityTaskFailedHistoryEvents is a no-op for standalone activities.
-func (a *Activity) WriteActivityTaskFailedHistoryEvents(_ int64, _ int32, _ string, _ string, _ *commonpb.WorkerVersionStamp, _ *failurepb.Failure, _ enumspb.RetryState, _ string) error {
+func (a *Activity) WriteActivityTaskFailedHistoryEvents(_ chasm.MutableContext, _ int64, _ int32, _ string, _ string, _ *commonpb.WorkerVersionStamp, _ *failurepb.Failure, _ enumspb.RetryState, _ string) error {
 	return nil
 }
 
 // WriteActivityTaskTimedOutHistoryEvents is a no-op for standalone activities.
-func (a *Activity) WriteActivityTaskTimedOutHistoryEvents(_ int64, _ int32, _ string, _ string, _ *commonpb.WorkerVersionStamp, _ bool, _ *failurepb.Failure, _ enumspb.RetryState) error {
+func (a *Activity) WriteActivityTaskTimedOutHistoryEvents(_ chasm.MutableContext, _ int64, _ int32, _ string, _ string, _ *commonpb.WorkerVersionStamp, _ bool, _ *failurepb.Failure, _ enumspb.RetryState) error {
 	return nil
 }
 

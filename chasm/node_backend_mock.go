@@ -5,9 +5,7 @@ import (
 	"sync"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -229,44 +227,6 @@ func (m *MockNodeBackend) ScheduleWorkflowTask() error {
 	if m.HandleScheduleWorkflowTask != nil {
 		return m.HandleScheduleWorkflowTask()
 	}
-	return nil
-}
-
-func (m *MockNodeBackend) WriteActivityTaskStartedHistoryEvent(
-	_ int64,
-	_ int32,
-	_ string,
-	_ string,
-	_ *commonpb.WorkerVersionStamp,
-) error {
-	return nil
-}
-
-func (m *MockNodeBackend) WriteActivityTaskCompletedHistoryEvent(
-	_ int64,
-	_ int64,
-	_ string,
-	_ *commonpb.Payloads,
-) error {
-	return nil
-}
-
-func (m *MockNodeBackend) WriteActivityTaskFailedHistoryEvent(
-	_ int64,
-	_ int64,
-	_ *failurepb.Failure,
-	_ enumspb.RetryState,
-	_ string,
-) error {
-	return nil
-}
-
-func (m *MockNodeBackend) WriteActivityTaskTimedOutHistoryEvent(
-	_ int64,
-	_ int64,
-	_ *failurepb.Failure,
-	_ enumspb.RetryState,
-) error {
 	return nil
 }
 

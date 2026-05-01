@@ -218,6 +218,7 @@ var TransitionCompleted = chasm.NewTransition(
 			if a.ActivityState.GetScheduledEventId() != 0 {
 				startAttempt := a.LastAttempt.Get(ctx)
 				if err := a.StoreOrSelf(ctx).WriteActivityTaskCompletedHistoryEvents(
+					ctx,
 					a.ActivityState.GetScheduledEventId(),
 					startAttempt.GetCount(),
 					startAttempt.GetStartRequestId(),
@@ -270,6 +271,7 @@ var TransitionFailed = chasm.NewTransition(
 			if a.ActivityState.GetScheduledEventId() != 0 {
 				startAttempt := a.LastAttempt.Get(ctx)
 				if err := a.StoreOrSelf(ctx).WriteActivityTaskFailedHistoryEvents(
+					ctx,
 					a.ActivityState.GetScheduledEventId(),
 					startAttempt.GetCount(),
 					startAttempt.GetStartRequestId(),
@@ -439,6 +441,7 @@ var TransitionTimedOut = chasm.NewTransition(
 			if a.ActivityState.GetScheduledEventId() != 0 && timeoutFailure != nil {
 				startAttempt := a.LastAttempt.Get(ctx)
 				if err := a.StoreOrSelf(ctx).WriteActivityTaskTimedOutHistoryEvents(
+					ctx,
 					a.ActivityState.GetScheduledEventId(),
 					startAttempt.GetCount(),
 					startAttempt.GetStartRequestId(),

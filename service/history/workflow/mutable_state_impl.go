@@ -3347,96 +3347,6 @@ func (ms *MutableStateImpl) ScheduleWorkflowTask() error {
 // The event is buffered — the real event ID is assigned during FlushBufferToCurrentBatch.
 // Both started and completed events must be written in the same transaction so that
 // the history builder can wire the started event ID into the completed event automatically.
-func (ms *MutableStateImpl) WriteActivityTaskStartedHistoryEvent(
-	scheduledEventID int64,
-	attempt int32,
-	requestID string,
-	identity string,
-	stamp *commonpb.WorkerVersionStamp,
-) error {
-	if err := ms.checkMutability(tag.WorkflowActionActivityTaskStarted); err != nil {
-		return err
-	}
-	ms.hBuilder.AddActivityTaskStartedEvent(
-		scheduledEventID,
-		attempt,
-		requestID,
-		identity,
-		nil, // lastFailure: nil for CHASM path (no legacy retry tracking)
-		stamp,
-		0, // redirectCounter: not used for CHASM activities
-	)
-	return nil
-}
-
-// WriteActivityTaskCompletedHistoryEvent implements chasm.NodeBackend. It writes an
-// ActivityTaskCompleted history event for a workflow-embedded CHASM activity.
-func (ms *MutableStateImpl) WriteActivityTaskCompletedHistoryEvent(
-	scheduledEventID int64,
-	startedEventID int64,
-	identity string,
-	result *commonpb.Payloads,
-) error {
-	if err := ms.checkMutability(tag.WorkflowActionActivityTaskCompleted); err != nil {
-		return err
-	}
-	ms.hBuilder.AddActivityTaskCompletedEvent(
-		scheduledEventID,
-		startedEventID,
-		identity,
-		result,
-		ms.namespaceEntry.Name(),
-	)
-	return nil
-}
-
-// WriteActivityTaskFailedHistoryEvent implements chasm.NodeBackend. It writes an
-// ActivityTaskFailed history event for a workflow-embedded CHASM activity.
-// Pass startedEventID=0 when both started and failed events are written in the same
-// transaction — the history builder wires the started event ID automatically.
-func (ms *MutableStateImpl) WriteActivityTaskFailedHistoryEvent(
-	scheduledEventID int64,
-	startedEventID int64,
-	failureProto *failurepb.Failure,
-	retryState enumspb.RetryState,
-	identity string,
-) error {
-	if err := ms.checkMutability(tag.WorkflowActionActivityTaskFailed); err != nil {
-		return err
-	}
-	ms.hBuilder.AddActivityTaskFailedEvent(
-		scheduledEventID,
-		startedEventID,
-		failureProto,
-		retryState,
-		identity,
-		ms.namespaceEntry.Name(),
-	)
-	return nil
-}
-
-// WriteActivityTaskTimedOutHistoryEvent implements chasm.NodeBackend. It writes an
-// ActivityTaskTimedOut history event for a workflow-embedded CHASM activity.
-// Pass startedEventID=0 when both started and timed-out events are written in the same
-// transaction — the history builder wires the started event ID automatically.
-func (ms *MutableStateImpl) WriteActivityTaskTimedOutHistoryEvent(
-	scheduledEventID int64,
-	startedEventID int64,
-	timeoutFailure *failurepb.Failure,
-	retryState enumspb.RetryState,
-) error {
-	if err := ms.checkMutability(tag.WorkflowActionActivityTaskTimedOut); err != nil {
-		return err
-	}
-	ms.hBuilder.AddActivityTaskTimedOutEvent(
-		scheduledEventID,
-		startedEventID,
-		timeoutFailure,
-		retryState,
-	)
-	return nil
-}
-
 // AddWorkflowTaskScheduledEventAsHeartbeat is to record the first WorkflowTaskScheduledEvent during workflow task heartbeat.
 func (ms *MutableStateImpl) AddWorkflowTaskScheduledEventAsHeartbeat(
 	bypassTaskGeneration bool,
@@ -7778,7 +7688,9 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTaskScheduling(
 	for _, t := range ms.currentTransactionAddedStateMachineEventTypes {
 		def, ok := ms.shard.StateMachineRegistry().EventDefinition(t)
 		if !ok {
-			return serviceerror.NewInternalf("no event definition registered for %v", t)
+			// Event type not registered with the HSM registry (e.g. activity task events written via
+			// NodeBackend.AddHistoryEvent). Their WFT scheduling is handled independently; skip.
+			continue
 		}
 		if def.IsWorkflowTaskTrigger() {
 			if !ms.HasPendingWorkflowTask() && !ms.IsWorkflowExecutionStatusPaused() {
