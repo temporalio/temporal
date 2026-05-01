@@ -97,8 +97,8 @@ func TestBuildWorkUnits(t *testing.T) {
 		units := buildWorkUnits("./pkg", []string{"TestA", "TestB", "TestC"}, "", 0, 0)
 		require.Len(t, units, 3)
 		for _, u := range units {
-			require.Len(t, u.tests, 1)
-			require.Equal(t, u.tests[0].name, u.label)
+			require.Equal(t, []string{u.rootName}, u.runTests)
+			require.Equal(t, u.rootName, u.displayName)
 			require.Equal(t, "./pkg", u.pkg)
 		}
 	})
@@ -115,7 +115,7 @@ func TestBuildWorkUnits(t *testing.T) {
 		require.Len(t, units, 3)
 		names := make(map[string]bool)
 		for _, u := range units {
-			names[u.tests[0].name] = true
+			names[u.runTests[0]] = true
 		}
 		require.True(t, names["TestWorkflowTestSuite"])
 		require.True(t, names["TestSignalWorkflowTestSuite"])
@@ -126,7 +126,7 @@ func TestBuildWorkUnits(t *testing.T) {
 		testNames := []string{"TestActivityTestSuite", "TestOtherSuite"}
 		units := buildWorkUnits("./pkg", testNames, "TestActivityTestSuite/TestActivityHeartBeatWorkflow_Success", 0, 0)
 		require.Len(t, units, 1)
-		require.Equal(t, "TestActivityTestSuite", units[0].tests[0].name)
+		require.Equal(t, "TestActivityTestSuite", units[0].runTests[0])
 	})
 
 	t.Run("no filter returns all", func(t *testing.T) {
@@ -143,50 +143,16 @@ func TestBuildWorkUnits(t *testing.T) {
 			allUnits = append(allUnits, units...)
 		}
 
-		// All tests should be covered across both shards
 		require.Len(t, allUnits, 4)
 		names := make(map[string]bool)
 		for _, u := range allUnits {
-			names[u.tests[0].name] = true
+			names[u.runTests[0]] = true
 		}
 		require.True(t, names["TestA"])
 		require.True(t, names["TestB"])
 		require.True(t, names["TestC"])
 		require.True(t, names["TestD"])
 	})
-}
-
-func TestTestCasesToRunPattern(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		cases    []testCase
-		expected string
-	}{
-		{
-			cases:    []testCase{{name: "TestFoo"}},
-			expected: "^TestFoo$",
-		},
-		{
-			cases:    []testCase{{name: "TestFoo"}, {name: "TestBar"}},
-			expected: "^(TestFoo|TestBar)$",
-		},
-		{
-			cases:    []testCase{{name: "TestSuite/SubTest"}},
-			expected: "^TestSuite$/^SubTest$",
-		},
-	}
-
-	for _, tt := range tests {
-		names := make([]string, len(tt.cases))
-		for i, tc := range tt.cases {
-			names[i] = tc.name
-		}
-		t.Run(strings.Join(names, ","), func(t *testing.T) {
-			result := testCasesToRunPattern(tt.cases)
-			require.Equal(t, tt.expected, result)
-		})
-	}
 }
 
 func TestBuildTestFilterPattern(t *testing.T) {
