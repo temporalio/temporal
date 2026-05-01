@@ -109,8 +109,12 @@ var (
 		"UpdateActivityOptions":          func() any { return &workflowservice.UpdateActivityOptionsResponse{} },
 		"PauseActivity":                  func() any { return &workflowservice.PauseActivityResponse{} },
 		"UnpauseActivity":                func() any { return &workflowservice.UnpauseActivityResponse{} },
-		"ResetActivity":                  func() any { return &workflowservice.ResetActivityResponse{} },
-		"UpdateWorkflowExecutionOptions": func() any { return &workflowservice.UpdateWorkflowExecutionOptionsResponse{} },
+		"ResetActivity":                      func() any { return &workflowservice.ResetActivityResponse{} },
+		"UpdateActivityExecutionOptions":     func() any { return &workflowservice.UpdateActivityExecutionOptionsResponse{} },
+		"PauseActivityExecution":             func() any { return &workflowservice.PauseActivityExecutionResponse{} },
+		"UnpauseActivityExecution":           func() any { return &workflowservice.UnpauseActivityExecutionResponse{} },
+		"ResetActivityExecution":             func() any { return &workflowservice.ResetActivityExecutionResponse{} },
+		"UpdateWorkflowExecutionOptions":     func() any { return &workflowservice.UpdateWorkflowExecutionOptionsResponse{} },
 
 		"DescribeDeployment":                           func() any { return &workflowservice.DescribeDeploymentResponse{} },        // [cleanup-wv-pre-release]
 		"ListDeployments":                              func() any { return &workflowservice.ListDeploymentsResponse{} },           // [cleanup-wv-pre-release]
