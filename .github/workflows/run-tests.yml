@@ -23,7 +23,9 @@ env:
   PR_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
-  MAX_TEST_ATTEMPTS: 4
+  MAX_TEST_ATTEMPTS: 3
+  SHARD_COUNT: 5 # NOTE: must match shard count in optimize-test-sharding.yml
+  RUNNER_ARM: ubuntu-24.04-arm
 
 jobs:
   test-setup:
@@ -97,20 +99,20 @@ jobs:
 
           MATRIX="[]"
 
-          # Add 5 jobs per DB: tests 1-3 (sharded functional tests), ndc, xdc
+          # Add jobs per DB: sharded functional tests, ndc, xdc
           add_full_jobs() {
             local db=$1
             local config=${DB_CONFIG[$db]}
 
-            # Tests 1-3: regular functional tests with sharding
-            for shard in 1 2 3; do
+            # Regular functional tests with sharding
+            for shard in $(seq 1 "$SHARD_COUNT"); do
               MATRIX=$(jq -c \
                 ". + [\$config + {
                   name: \"$db\",
                   display_name: \"shard $shard\",
                   cmd: \"make functional-test-coverage\",
                   shard_index: $((shard - 1)),
-                  total_shards: 3,
+                  total_shards: $SHARD_COUNT,
                   test_timeout: \"35m\",
                   github_timeout: 40
                 }]" \
@@ -174,17 +176,10 @@ jobs:
             fi
           done
 
-          # Runner configuration: use 8-core runners for temporalio org, standard runners for forks
-          if [[ "${{ github.repository_owner }}" == "temporalio" ]]; then
-            runner_arm="ubuntu-24.04-arm64-8-cores"
-          else
-            runner_arm="ubuntu-24.04-arm"
-          fi
-
           {
             echo "job_matrix=$MATRIX"
             echo "full_test_reason=$FULL_TEST_REASON"
-            echo "runner_arm=$runner_arm"
+            echo "runner_arm=$RUNNER_ARM"
           } >> "$GITHUB_OUTPUT"
           echo "Generated $(jq length <<< "$MATRIX") jobs"
 
