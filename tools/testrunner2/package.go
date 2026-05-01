@@ -56,6 +56,7 @@ type workUnit struct {
 	rootName    string
 	displayName string
 	runTests    []string
+	runPattern  string
 	skipTests   []string
 }
 
@@ -116,6 +117,20 @@ func listTestsFromBinary(ctx context.Context, execFn execFunc, binaryPath string
 		tests = append(tests, line)
 	}
 	return tests, scanner.Err()
+}
+
+// buildPackageWorkUnit creates one workUnit for a whole package, applying
+// package-level sharding while preserving the raw -run pattern for execution.
+func buildPackageWorkUnit(pkg string, runFilter string, totalShards, shardIndex int) (workUnit, bool) {
+	if totalShards > 1 && getShardForKey(pkg, totalShards) != shardIndex {
+		return workUnit{}, false
+	}
+	return workUnit{
+		pkg:         pkg,
+		rootName:    pkg,
+		displayName: pkg,
+		runPattern:  runFilter,
+	}, true
 }
 
 // buildWorkUnits creates one workUnit per test, applying run filter and sharding.
