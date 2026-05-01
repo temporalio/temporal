@@ -415,7 +415,8 @@ func TestIntegration(t *testing.T) {
 		// and produces a complete result (passed + failed entries in junit).
 		require.EventuallyWithT(t, func(ct *assert.CollectT) {
 			res := runIntegTest(t, []string{"./testpkg/datarace"}, "--group-by=test", "-race")
-			if !assert.Error(ct, res.err) {
+			if res.err == nil {
+				ct.Errorf("expected error")
 				return
 			}
 			assertJUnit(ct, res,
