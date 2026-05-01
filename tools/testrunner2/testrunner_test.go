@@ -268,6 +268,7 @@ func TestIntegration(t *testing.T) {
 				"-test.run ^TestDeepSuite$/^GroupB$/^Fail$",
 				"-test.skip ^TestDeepSuite$/^GroupB$/^Pass$"),
 			printed("✅", "TestDeepSuite", "attempt=2", "passed=3/3"),
+			notPrinted("[2/1]"),
 			printed("test run completed"),
 		)
 	})
