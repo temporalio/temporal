@@ -135,3 +135,7 @@ func addAndApplyHistoryEvent[D EventDefinition](
 func (w *Workflow) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool {
 	return w.MSPointer.HasAnyBufferedEvent(filter)
 }
+
+func (w *Workflow) WorkflowTypeName() string {
+	return w.GetWorkflowTypeName()
+}
