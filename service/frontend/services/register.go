@@ -1,6 +1,8 @@
 package services
 
 import (
+	"fmt"
+
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -8,6 +10,21 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"google.golang.org/grpc"
 )
+
+var entries = map[string]variant{}
+var registryErr error
+
+func register(name string, v variant) {
+	if _, dup := entries[name]; dup {
+		registryErr = fmt.Errorf("%w; duplicate registration for variant %s", registryErr, name)
+		return
+	}
+	entries[name] = v
+}
+
+func get(name string) (variant, bool)   { v, ok := entries[name]; return v, ok }
+func names() []string                   { out := make([]string, 0, len(entries)); for n := range entries { out = append(out, n) }; return out }
+func registryError() error              { return registryErr }
 
 type variant struct {
 	registerWorkflow func(*grpc.Server, workflowservice.WorkflowServiceServer)
