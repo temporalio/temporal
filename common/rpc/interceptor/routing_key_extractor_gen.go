@@ -52,6 +52,8 @@ func workflowServiceRequestRoutingKey(req any) namespace.RoutingKey {
 		return namespace.RoutingKey{ID: r.GetTaskQueue().GetName()}
 	case *workflowservice.PatchScheduleRequest:
 		return namespace.RoutingKey{ID: r.GetScheduleId()}
+	case *workflowservice.PauseActivityExecutionRequest:
+		return namespace.RoutingKey{ID: routingIDFromResourceID(r.GetResourceId())}
 	case *workflowservice.PauseActivityRequest:
 		return namespace.RoutingKey{ID: r.GetExecution().GetWorkflowId()}
 	case *workflowservice.PauseWorkflowExecutionRequest:
@@ -78,6 +80,8 @@ func workflowServiceRequestRoutingKey(req any) namespace.RoutingKey {
 		return namespace.RoutingKey{ID: r.GetActivityId()}
 	case *workflowservice.RequestCancelWorkflowExecutionRequest:
 		return namespace.RoutingKey{ID: r.GetWorkflowExecution().GetWorkflowId()}
+	case *workflowservice.ResetActivityExecutionRequest:
+		return namespace.RoutingKey{ID: routingIDFromResourceID(r.GetResourceId())}
 	case *workflowservice.ResetActivityRequest:
 		return namespace.RoutingKey{ID: r.GetExecution().GetWorkflowId()}
 	case *workflowservice.ResetStickyTaskQueueRequest:
@@ -128,10 +132,16 @@ func workflowServiceRequestRoutingKey(req any) namespace.RoutingKey {
 		return namespace.RoutingKey{ID: r.GetActivityId()}
 	case *workflowservice.TerminateWorkflowExecutionRequest:
 		return namespace.RoutingKey{ID: r.GetWorkflowExecution().GetWorkflowId()}
+	case *workflowservice.TriggerWorkflowRuleRequest:
+		return namespace.RoutingKey{ID: r.GetExecution().GetWorkflowId()}
+	case *workflowservice.UnpauseActivityExecutionRequest:
+		return namespace.RoutingKey{ID: routingIDFromResourceID(r.GetResourceId())}
 	case *workflowservice.UnpauseActivityRequest:
 		return namespace.RoutingKey{ID: r.GetExecution().GetWorkflowId()}
 	case *workflowservice.UnpauseWorkflowExecutionRequest:
 		return namespace.RoutingKey{ID: r.GetWorkflowId()}
+	case *workflowservice.UpdateActivityExecutionOptionsRequest:
+		return namespace.RoutingKey{ID: routingIDFromResourceID(r.GetResourceId())}
 	case *workflowservice.UpdateActivityOptionsRequest:
 		return namespace.RoutingKey{ID: r.GetExecution().GetWorkflowId()}
 	case *workflowservice.UpdateScheduleRequest:

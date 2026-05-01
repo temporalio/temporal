@@ -62,11 +62,6 @@ var methodToPattern = map[string]RoutingKeyPattern{
 	"RespondActivityTaskCanceledById":  PatternWorkflowID,
 	"RespondActivityTaskFailedById":    PatternWorkflowID,
 
-	// Pattern: GetExecution().GetWorkflowId() - methods without a proto
-	// request_header annotation yet. Codegen does not emit these, so we rely
-	// on the pattern-based fallback.
-	"TriggerWorkflowRule": PatternExecution,
-
 	// Pattern: TaskToken deserialization
 	"RecordActivityTaskHeartbeat":  PatternTaskToken,
 	"RespondActivityTaskCompleted": PatternTaskToken,

@@ -670,9 +670,6 @@ func TestMethodToPatternMapping(t *testing.T) {
 		// PatternMultiOperation
 		"ExecuteMultiOperation": PatternMultiOperation,
 
-		// PatternExecution — proto-annotation gap; codegen does not emit.
-		"TriggerWorkflowRule": PatternExecution,
-
 		// PatternNamespace
 		"FetchWorkerConfig":     PatternNamespace,
 		"UpdateWorkerConfig":    PatternNamespace,
