@@ -441,6 +441,17 @@ func TestIntegration(t *testing.T) {
 	t.Run("sharding", func(t *testing.T) {
 		t.Parallel()
 
+		testNames := []string{"TestA1", "TestA2", "TestB1"}
+		shardOpts := func(shard int) []junitOpt {
+			var opts []junitOpt
+			for _, name := range testNames {
+				if getShardForKey(name, 2) == shard {
+					opts = append(opts, passed(name))
+				}
+			}
+			return opts
+		}
+
 		t.Run("shard 0", func(t *testing.T) {
 			t.Parallel()
 
@@ -450,10 +461,7 @@ func TestIntegration(t *testing.T) {
 			}, nil, "--group-by=test")
 			require.NoError(t, res.err)
 
-			assertJUnit(t, res,
-				passed("TestA2"),
-				passed("TestB1"),
-			)
+			assertJUnit(t, res, shardOpts(0)...)
 		})
 
 		t.Run("shard 1", func(t *testing.T) {
@@ -465,9 +473,7 @@ func TestIntegration(t *testing.T) {
 			}, nil, "--group-by=test")
 			require.NoError(t, res.err)
 
-			assertJUnit(t, res,
-				passed("TestA1"),
-			)
+			assertJUnit(t, res, shardOpts(1)...)
 		})
 	})
 
