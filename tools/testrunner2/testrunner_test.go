@@ -223,6 +223,22 @@ func TestIntegration(t *testing.T) {
 		)
 	})
 
+	t.Run("failure: flaky subtest package mode", func(t *testing.T) {
+		t.Parallel()
+
+		res := runIntegTest(t, []string{"./testpkg/flaky"}, "--group-by=package", "--max-attempts=2", "-run=TestSuite")
+		require.NoError(t, res.err, "should pass on retry")
+
+		assertConsole(t, res,
+			printed("🚀 go test packages", "attempt 1"),
+			printed("🔄 scheduling package retry:", "^TestSuite$/^FailChild$"),
+			printed("🚀 go test packages", "attempt 2"),
+			printed("$", "go test", "-run ^TestSuite$/^FailChild$"),
+			notPrintedLine("$", "go test", "-run ^TestSuite$ ", "testpkg/flaky"),
+			printed("test run completed"),
+		)
+	})
+
 	t.Run("failure: deep subtest (3-level nesting)", func(t *testing.T) {
 		t.Parallel()
 
