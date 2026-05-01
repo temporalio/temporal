@@ -10,8 +10,9 @@ type workTracker struct {
 }
 
 type workSlot struct {
-	running   int
-	completed bool
+	running    int
+	completed  bool
+	successful bool
 }
 
 type progressUpdate struct {
@@ -58,6 +59,7 @@ func (t *workTracker) beginAttempt(root string) {
 	}
 	if slot.completed {
 		slot.completed = false
+		slot.successful = false
 		if t.completed > 0 {
 			t.completed--
 		}
@@ -80,7 +82,10 @@ func (t *workTracker) finishAttempt(root string, successful bool) progressUpdate
 	if slot.running > 0 {
 		slot.running--
 	}
-	if successful && !slot.completed && slot.running == 0 {
+	if successful {
+		slot.successful = true
+	}
+	if slot.successful && !slot.completed && slot.running == 0 {
 		slot.completed = true
 		t.completed++
 		return progressUpdate{completed: t.completed, total: t.total, done: true}

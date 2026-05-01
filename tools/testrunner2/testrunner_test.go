@@ -51,10 +51,10 @@ func TestIntegration(t *testing.T) {
 			assertNoLogFiles(t, res)
 		})
 
-		t.Run("group mode: none", func(t *testing.T) {
+		t.Run("group mode: package", func(t *testing.T) {
 			t.Parallel()
 
-			res := runIntegTest(t, []string{"./testpkg/passing"}, "--group-by=none")
+			res := runIntegTest(t, []string{"./testpkg/passing"}, "--group-by=package")
 			require.NoError(t, res.err)
 
 			assertJUnit(t, res,
@@ -63,30 +63,32 @@ func TestIntegration(t *testing.T) {
 				passed("TestB1"),
 			)
 			assertConsole(t, res,
-				printed("running in 'none' mode"),
-				printed("🚀", "all", "attempt 1"),
-				printed("$", "go test", "./testpkg/passing"),
-				printed("✅ [1/1]", "all", "attempt=1", "passed=3/3"),
+				printed("starting scheduler with parallelism=1"),
+				printed("🚀 compiling", "./testpkg/passing"),
+				printed("$", "go test -c", "./testpkg/passing"),
+				printed("🔨 compiled", "./testpkg/passing"),
+				printed("$", ".test", "-test.v=test2json"),
+				notPrintedLine("-test.run", "TestA1"),
+				printed("✅ [1/1]", "./testpkg/passing", "attempt=1", "passed=3/3"),
 				printed("test run completed"),
-				notPrinted("go test -c"), // no compile step
+				notPrinted("failure="),
 			)
 			assertNoLogFiles(t, res)
 		})
 
-		t.Run("group mode: none with -run filter", func(t *testing.T) {
+		t.Run("group mode: package with -run filter", func(t *testing.T) {
 			t.Parallel()
 
-			res := runIntegTest(t, []string{"./testpkg/passing"}, "--group-by=none", "-run=TestA1")
+			res := runIntegTest(t, []string{"./testpkg/passing"}, "--group-by=package", "-run=TestA1")
 			require.NoError(t, res.err)
 
 			assertJUnit(t, res,
 				passed("TestA1"),
 			)
 			assertConsole(t, res,
-				printed("running in 'none' mode"),
-				printed("🚀", "all", "attempt 1"),
-				printed("$", "go test", "-run", "TestA1", "./testpkg/passing"),
-				printed("✅ [1/1]", "all", "attempt=1", "passed=1/1"),
+				printed("🚀", "./testpkg/passing", "attempt 1"),
+				printed("$", ".test", "-test.run TestA1"),
+				printed("✅ [1/1]", "./testpkg/passing", "attempt=1", "passed=1/1"),
 				printed("test run completed"),
 			)
 			assertNoLogFiles(t, res)
@@ -137,24 +139,27 @@ func TestIntegration(t *testing.T) {
 			)
 		})
 
-		t.Run("group mode: none", func(t *testing.T) {
+		t.Run("group mode: package", func(t *testing.T) {
 			t.Parallel()
 
-			res := runIntegTest(t, []string{"./testpkg/failing"}, "--group-by=none", "--max-attempts=2")
+			res := runIntegTest(t, []string{"./testpkg/failing"}, "--group-by=package", "--max-attempts=2")
 			require.Error(t, res.err)
+			require.Contains(t, res.err.Error(), "failed on attempt 2")
 
+			assertJUnit(t, res,
+				passed("TestOK"),
+				failed("TestAlwaysFails", "Failed"),
+				failed("TestAlwaysFails (retry 1)", "Failed"),
+			)
 			assertConsole(t, res,
-				// Mid-stream retry fires before the first attempt finishes
-				printed("🚀", "all", "attempt 1"),
-				printed("$", "go test", "./testpkg/failing"),
+				printed("🚀", "./testpkg/failing", "attempt 1"),
+				printed("$", ".test", "-test.v=test2json"),
 				printed("🔄 scheduling retry:", "^TestAlwaysFails$"),
-				printed("🚀", "all", "attempt 2.1"),
-				printed("$", "go test", "-run", "^TestAlwaysFails$", "./testpkg/failing"),
-				printed("❌️", "all", "attempt=1", "passed=1/2", "failure=failed"),
-				printed("--- TestAlwaysFails"),
-				printed("always fails"),
-				printed("❌️", "all", "attempt=2.1", "passed=0/1", "failure=failed"),
-				notPrinted("go test -c"), // no compile step
+				printed("❌️", "./testpkg/failing", "attempt=1", "passed=1/2", "failure=failed"),
+				printed("🚀", "./testpkg/failing", "attempt 2.1"),
+				printed("$", ".test", "-test.run ^TestAlwaysFails$"),
+				printed("❌️", "./testpkg/failing", "attempt=2.1", "passed=0/1", "failure=failed"),
+				notPrinted("go test ./testpkg/failing"),
 			)
 		})
 	})
@@ -190,27 +195,6 @@ func TestIntegration(t *testing.T) {
 			)
 		})
 
-		t.Run("group mode: none", func(t *testing.T) {
-			t.Parallel()
-
-			res := runIntegTest(t, []string{"./testpkg/flaky"}, "--group-by=none", "--max-attempts=2", "-run=TestFlaky|TestStable")
-			require.NoError(t, res.err)
-
-			assertConsole(t, res,
-				printed("running in 'none' mode"),
-				printed("🚀", "all", "attempt 1"),
-				printed("$", "go test", "-run", "TestFlaky|TestStable", "./testpkg/flaky"),
-				printed("🔄 scheduling retry:", "^TestFlaky$"),
-				printed("🚀", "all", "attempt 2.1"),
-				printed("$", "go test", "-run", "^TestFlaky$", "./testpkg/flaky"),
-				printed("❌️", "all", "attempt=1", "passed=1/2", "failure=failed"),
-				printed("--- TestFlaky"),
-				printed("intentional first-attempt failure"),
-				printed("✅ [1/1]", "all", "attempt=2.1", "passed=1/1"),
-				printed("test run completed"),
-				notPrinted("go test -c"),
-			)
-		})
 	})
 
 	t.Run("failure: flaky subtest", func(t *testing.T) {
@@ -480,37 +464,6 @@ func TestIntegration(t *testing.T) {
 		})
 	})
 
-	t.Run("direct mode: multiple failures retried without file collision", func(t *testing.T) {
-		t.Parallel()
-
-		// In direct mode (group-by=none), multiple tests failing on the same
-		// attempt each produce a separate stream retry. Before the fix, all
-		// retries shared the same log/JUnit file name (all_mode_attempt_N),
-		// causing concurrent retries to corrupt each other's output. Use
-		// parallelism=2 so retries can overlap (the default test parallelism
-		// of 1 serializes retries, masking the collision).
-		// The flaky package has both TestFlaky (top-level) and TestSuite/FailChild
-		// (subtest) failing on attempt 1, producing two concurrent retries.
-		res := runIntegTest(t, []string{
-			"./testpkg/flaky",
-		}, "--group-by=none", "--max-attempts=2", "--parallelism=2")
-		require.NoError(t, res.err)
-
-		assertJUnit(t, res,
-			passed("TestStable"),
-			passed("TestFlaky (retry 1)"),
-			passed("TestSuite/FailChild (retry 1)"),
-			passed("TestSuite/PassChild"),
-			passed("TestDeepSuite/GroupA/Pass"),
-			passed("TestDeepSuite/GroupA/Fail (retry 1)"),
-			passed("TestDeepSuite/GroupB/Pass"),
-			passed("TestDeepSuite/GroupB/Fail (retry 1)"),
-			failed("TestFlaky"),
-			failed("TestSuite/FailChild"),
-			failed("TestDeepSuite/GroupA/Fail"),
-			failed("TestDeepSuite/GroupB/Fail"),
-		)
-	})
 }
 
 // ---- test helpers ----

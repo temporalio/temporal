@@ -530,12 +530,12 @@ prepare-coverage-test: $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	go run ./cmd/tools/test-runner2 --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) --log-dir=$(TEST_OUTPUT_ROOT) --group-by=none -- \
+	go run ./cmd/tools/test-runner2 --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) --log-dir=$(TEST_OUTPUT_ROOT) --group-by=package -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(UNIT_TEST_DIRS)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	go run ./cmd/tools/test-runner2 --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) --log-dir=$(TEST_OUTPUT_ROOT) --group-by=test -- \
+	go run ./cmd/tools/test-runner2 --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) --log-dir=$(TEST_OUTPUT_ROOT) --group-by=package -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(INTEGRATION_TEST_DIRS)
 
 functional-test-coverage: prepare-coverage-test

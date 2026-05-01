@@ -26,8 +26,8 @@ const (
 type GroupMode string
 
 const (
-	GroupByTest GroupMode = "test" // each TestXxx function runs separately (for functional tests)
-	GroupByNone GroupMode = "none" // run go test directly on all packages without precompilation
+	GroupByTest    GroupMode = "test"    // each TestXxx function runs separately (for functional tests)
+	GroupByPackage GroupMode = "package" // each package runs separately from one compiled test binary
 )
 
 type config struct {
@@ -148,10 +148,10 @@ var flagDefinitions = map[string]flagDefinition{
 		runnerOnly: true,
 		handle: func(after string, cfg *config) error {
 			switch GroupMode(after) {
-			case GroupByTest, GroupByNone:
+			case GroupByTest, GroupByPackage:
 				cfg.groupBy = GroupMode(after)
 			default:
-				return fmt.Errorf("invalid argument %s: must be 'test' or 'none'", groupByFlag)
+				return fmt.Errorf("invalid argument %s: must be 'test' or 'package'", groupByFlag)
 			}
 			cfg.log("group-by mode set to %s", cfg.groupBy)
 			return nil
@@ -177,11 +177,10 @@ var flagDefinitions = map[string]flagDefinition{
 // and values from environment variables
 func defaultConfig() config {
 	cfg := config{
-		maxAttempts:      1,
-		parallelism:      runtime.NumCPU(),
-		totalShards:      1,
-		shardIndex:       0,
-		stuckTestTimeout: time.Minute,
+		maxAttempts: 1,
+		parallelism: runtime.NumCPU(),
+		totalShards: 1,
+		shardIndex:  0,
 	}
 
 	if v := os.Getenv("TEST_RUNNER_SHARDS_TOTAL"); v != "" {
@@ -247,22 +246,42 @@ func parseTestArgs(args []string) (testDirs []string, baseArgs []string, testBin
 	return
 }
 
-// filterBaseArgs separates runner-managed flags from go test passthrough args.
-// It returns whether -race was present and the remaining args to pass to go test.
-func filterBaseArgs(baseArgs []string) (race bool, extraArgs []string) {
-	for _, arg := range baseArgs {
+func testBinaryArgsFromBaseArgs(baseArgs []string) []string {
+	var args []string
+	for i := 0; i < len(baseArgs); i++ {
+		arg := baseArgs[i]
 		switch {
-		case arg == "-race":
-			race = true
 		case arg == "--":
-			// stop processing; everything after is already in testBinaryArgs
+			continue
+		case arg == "-race" || arg == "-cover" || arg == "-v":
+			continue
+		case strings.HasPrefix(arg, "-tags="),
+			strings.HasPrefix(arg, "-coverprofile="),
+			strings.HasPrefix(arg, "-coverpkg="),
+			strings.HasPrefix(arg, "-timeout="):
+			continue
 		case lookupFlag(arg) != nil:
-			// Already managed by the runner; skip.
+			continue
+		case arg == "-shuffle" || arg == "-parallel" || arg == "-count" || arg == "-cpu" || arg == "-skip":
+			args = append(args, "-test."+strings.TrimPrefix(arg, "-"))
+			if i+1 < len(baseArgs) {
+				i++
+				args = append(args, baseArgs[i])
+			}
+		case strings.HasPrefix(arg, "-shuffle="),
+			strings.HasPrefix(arg, "-parallel="),
+			strings.HasPrefix(arg, "-count="),
+			strings.HasPrefix(arg, "-cpu="),
+			strings.HasPrefix(arg, "-skip="):
+			name, value, _ := strings.Cut(strings.TrimPrefix(arg, "-"), "=")
+			args = append(args, "-test."+name+"="+value)
+		case arg == "-short" || arg == "-failfast":
+			args = append(args, "-test."+strings.TrimPrefix(arg, "-"))
 		default:
-			extraArgs = append(extraArgs, arg)
+			args = append(args, arg)
 		}
 	}
-	return
+	return args
 }
 
 // lookupFlag returns the flagDefinition for arg, or nil if arg is not a known flag.

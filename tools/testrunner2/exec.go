@@ -91,6 +91,7 @@ type executeTestInput struct {
 	binary       string
 	pkgDir       string
 	tests        []string
+	runPattern   string
 	skipPattern  string // -test.skip pattern to skip already-passed tests on retry
 	coverProfile string
 	extraArgs    []string // args to pass after -args (e.g., -persistenceType=xxx)
@@ -98,51 +99,14 @@ type executeTestInput struct {
 	output       io.Writer
 }
 
-// runDirectGoTestInput holds the input for runDirectGoTest.
-type runDirectGoTestInput struct {
-	pkgs         []string // package paths to test
-	buildTags    string   // build tags
-	race         bool     // enable race detector
-	coverProfile string   // coverage profile path
-	env          []string // extra environment variables
-	output       io.Writer
-	runFilter    string   // -run pattern (to target specific tests on retry)
-	skipFilter   string   // -skip pattern (to skip passed tests on retry)
-	extraArgs    []string // extra args to pass through to go test (e.g., -shuffle)
-}
-
-func runDirectGoTest(ctx context.Context, execFn execFunc, req runDirectGoTestInput, onCommand func(string)) int {
-	args := []string{"test", "-v"}
-	if req.race {
-		args = append(args, "-race")
-	}
-	if req.buildTags != "" {
-		args = append(args, "-tags="+req.buildTags)
-	}
-	if req.coverProfile != "" {
-		args = append(args, fmt.Sprintf("-coverprofile=%s", req.coverProfile))
-	}
-	if req.runFilter != "" {
-		args = append(args, "-run", req.runFilter)
-	}
-	if req.skipFilter != "" {
-		args = append(args, "-skip", req.skipFilter)
-	}
-	args = append(args, req.extraArgs...)
-	args = append(args, req.pkgs...)
-
-	command := fmt.Sprintf("go %s", strings.Join(args, " "))
-	if onCommand != nil {
-		onCommand(command)
-	}
-
-	return execFn(ctx, "", "go", args, req.env, req.output)
-}
-
 func executeTest(ctx context.Context, execFn execFunc, req executeTestInput, onCommand func(string)) int {
 	args := []string{
 		"-test.v=test2json",
-		"-test.run", buildTestFilterPattern(req.tests),
+	}
+	if req.runPattern != "" {
+		args = append(args, "-test.run", req.runPattern)
+	} else if len(req.tests) > 0 {
+		args = append(args, "-test.run", buildTestFilterPattern(req.tests))
 	}
 	if req.skipPattern != "" {
 		args = append(args, "-test.skip", req.skipPattern)
@@ -174,9 +138,14 @@ func (r *runner) execLogger(desc, attempt string) func(string) {
 // --- compiled mode (compile + run per test) ---
 
 func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt, retryOrdinal int) execConfig {
-	coverProfile := fmt.Sprintf("%s_run_%d%s",
+	runSuffix := fmt.Sprintf("%d", attempt)
+	if retryOrdinal > 0 {
+		runSuffix = fmt.Sprintf("%d_%d", attempt, retryOrdinal)
+	}
+	coverProfile := fmt.Sprintf("%s_run_%s_%s%s",
 		strings.TrimSuffix(r.coverProfilePath, codeCoverageExtension),
-		attempt,
+		runSuffix,
+		uuid.New().String(),
 		codeCoverageExtension)
 	coverProfile, _ = filepath.Abs(coverProfile)
 
@@ -190,6 +159,7 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt, r
 				binary:       binaryPath,
 				pkgDir:       unit.pkg,
 				tests:        unit.runTests,
+				runPattern:   unit.runPattern,
 				skipPattern:  unit.skipPattern(),
 				coverProfile: coverProfile,
 				extraArgs:    r.testBinaryArgs,
@@ -208,7 +178,6 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt, r
 			Started: time.Now(),
 			Command: binaryPath,
 		},
-		retryMode:          retryCompiled,
 		compiledBinaryPath: binaryPath,
 	}
 }
@@ -270,29 +239,42 @@ func (r *runner) newCompileItem(pkg string, binaryPath string, baseArgs []string
 				return
 			}
 
-			testNames, err := listTestsFromBinary(ctx, r.exec, binaryPath)
-			if err != nil {
-				r.addError(fmt.Errorf("failed to list tests from %s: %w", binaryPath, err))
-				return
+			var units []workUnit
+			if r.groupBy == GroupByPackage {
+				unit, ok := buildPackageWorkUnit(pkg, r.runFilter, r.totalShards, r.shardIndex)
+				if !ok {
+					r.log("no tests matched filter/shard for %s", pkg)
+					return
+				}
+				units = []workUnit{unit}
+			} else {
+				testNames, err := listTestsFromBinary(ctx, r.exec, binaryPath)
+				if err != nil {
+					r.addError(fmt.Errorf("failed to list tests from %s: %w", binaryPath, err))
+					return
+				}
+				units = buildWorkUnits(pkg, testNames, r.runFilter, r.totalShards, r.shardIndex)
 			}
-
-			units := buildWorkUnits(pkg, testNames, r.runFilter, r.totalShards, r.shardIndex)
 
 			if len(units) == 0 {
 				r.log("no tests matched filter/shard for %s", pkg)
 				return
 			}
 
-			r.log("discovered %d tests for %s", len(units), pkg)
-
 			r.tracker.addRoots(len(units))
 
-			var testList strings.Builder
-			for _, u := range units {
-				testList.WriteString("\n  ")
-				testList.WriteString(u.displayName)
+			if r.groupBy == GroupByPackage {
+				r.log("scheduled package %s", pkg)
+			} else {
+				r.log("discovered %d tests for %s", len(units), pkg)
+
+				var testList strings.Builder
+				for _, u := range units {
+					testList.WriteString("\n  ")
+					testList.WriteString(u.displayName)
+				}
+				r.log("tests for %s:%s", pkg, testList.String())
 			}
-			r.log("tests for %s:%s", pkg, testList.String())
 
 			var items []*queueItem
 			for _, unit := range units {
@@ -300,72 +282,5 @@ func (r *runner) newCompileItem(pkg string, binaryPath string, baseArgs []string
 			}
 			emit(items...)
 		},
-	}
-}
-
-// --- direct mode (go test without precompilation) ---
-
-// runDirectMode runs all tests via `go test` without precompilation, using the
-// scheduler for retry lifecycle. This is the GroupByNone path.
-func (r *runner) runDirectMode(ctx context.Context, testDirs []string, baseArgs []string) error {
-	r.log("running in 'none' mode - executing go test directly without precompilation")
-
-	if err := os.MkdirAll(r.logDir, 0755); err != nil {
-		return fmt.Errorf("failed to create log directory: %w", err)
-	}
-	r.log("log directory: %s", r.logDir)
-
-	race, extraArgs := filterBaseArgs(baseArgs)
-	pkgs := normalizePkgPaths(testDirs)
-	r.log("test packages: %v", pkgs)
-
-	items := []*queueItem{r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, 1, 0, r.runFilter, ""))}
-	return r.runWithScheduler(ctx, max(2, r.parallelism), items, 1)
-}
-
-// normalizePkgPaths ensures each directory has a "./" prefix.
-func normalizePkgPaths(dirs []string) []string {
-	pkgs := make([]string, len(dirs))
-	for i, dir := range dirs {
-		if !strings.HasPrefix(dir, "./") && !strings.HasPrefix(dir, "/") {
-			pkgs[i] = "./" + dir
-		} else {
-			pkgs[i] = dir
-		}
-	}
-	return pkgs
-}
-
-func (r *runner) directExecConfig(pkgs []string, race bool, extraArgs []string, attempt, retryOrdinal int, runFilter, skipFilter string) execConfig {
-	fileSuffix := ""
-	if retryOrdinal > 0 {
-		fileSuffix = fmt.Sprintf("_%d", retryOrdinal)
-	}
-
-	unit := workUnit{rootName: "all", displayName: "all"}
-
-	return execConfig{
-		startProcess: func(ctx context.Context, output io.Writer) int {
-			return runDirectGoTest(ctx, r.exec, runDirectGoTestInput{
-				pkgs:         pkgs,
-				buildTags:    r.buildTags,
-				race:         race,
-				coverProfile: r.coverProfilePath,
-				env:          append(r.env, fmt.Sprintf("TEMPORAL_TEST_ATTEMPT=%d", attempt)),
-				output:       output,
-				runFilter:    runFilter,
-				skipFilter:   skipFilter,
-				extraArgs:    extraArgs,
-			}, r.execLogger(unit.displayName, displayAttempt(attempt, retryOrdinal)))
-		},
-		unit:            unit,
-		attempt:         attempt,
-		retryOrdinal:    retryOrdinal,
-		logPath:         filepath.Join(r.logDir, fmt.Sprintf("all_mode_attempt_%d%s.log", attempt, fileSuffix)),
-		junitPath:       filepath.Join(r.logDir, fmt.Sprintf("junit_all_attempt_%d%s.xml", attempt, fileSuffix)),
-		retryMode:       retryDirect,
-		directPkgs:      pkgs,
-		directRace:      race,
-		directExtraArgs: extraArgs,
 	}
 }

@@ -41,4 +41,21 @@ func TestWorkTracker(t *testing.T) {
 		update = tracker.finishAttempt("root", true)
 		require.Equal(t, progressUpdate{completed: 1, total: 1, done: true}, update)
 	})
+
+	t.Run("counts a root when retry succeeds before original attempt fails", func(t *testing.T) {
+		t.Parallel()
+
+		var tracker workTracker
+		tracker.reset()
+		tracker.addRoots(1)
+
+		tracker.beginAttempt("root")
+		tracker.beginAttempt("root")
+
+		update := tracker.finishAttempt("root", true)
+		require.Equal(t, progressUpdate{completed: 0, total: 1}, update)
+
+		update = tracker.finishAttempt("root", false)
+		require.Equal(t, progressUpdate{completed: 1, total: 1, done: true}, update)
+	})
 }
