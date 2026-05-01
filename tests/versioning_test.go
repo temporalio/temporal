@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -3953,14 +3955,14 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 	s.WaitForChannel(ctx, started)
 
 	// 2. Wait for visibility to show A as running with BuildId SearchAttribute 'assigned:A'
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		queryARunning := fmt.Sprintf("TaskQueue = '%s' AND BuildIds IN ('assigned:A') AND ExecutionStatus = \"Running\"", tq)
 		resp, err := s.FrontendClient().CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
 			Query:     queryARunning,
 		})
-		s.NoError(err)
-		return resp.GetCount() > 0
+		require.NoError(t, err)
+		require.Positive(t, resp.GetCount())
 	}, 5*time.Second, 50*time.Millisecond)
 
 	// 3. Commit a different build id --> A should now only be reachable via visibility query
@@ -3975,10 +3977,10 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	// 6. Query reachability(A) --> eventually shows closed_only by visibility db (after TTL passes and A is closed in visibility)
-	s.Eventually(func() bool {
-		return s.checkBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.True(t, s.checkBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
 			"A": enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, // closed_only by visibility db (after TTL)
-		})
+		}))
 	}, 5*time.Second, 50*time.Millisecond)
 }
 
@@ -4021,14 +4023,14 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	s.WaitForChannel(ctx, started)
 
 	// wait for visibility to show A as running with BuildId SearchAttribute 'assigned:A'
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		queryARunning := fmt.Sprintf("TaskQueue = '%s' AND BuildIds IN ('assigned:A') AND ExecutionStatus = \"Running\"", tq)
 		resp, err := s.FrontendClient().CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
 			Query:     queryARunning,
 		})
-		s.NoError(err)
-		return resp.GetCount() > 0
+		require.NoError(t, err)
+		require.Positive(t, resp.GetCount())
 	}, 3*time.Second, 50*time.Millisecond)
 
 	// commit a different build ID --> A should now only be reachable via visibility query, B reachable as default
@@ -4045,11 +4047,11 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	// Query reachability(A) --> eventually shows closed_only by visibility db (after TTL passes and A is closed in visibility)
-	s.Eventually(func() bool {
-		return s.checkBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.True(t, s.checkBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
 			"A": enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, // closed_only by visibility db (after TTL)
 			"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,             // reachable by default assignment rule
-		})
+		}))
 	}, 5*time.Second, 50*time.Millisecond)
 }
 
@@ -4073,7 +4075,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 		workerMap[wId] = w
 	}
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 			Namespace:              s.Namespace().String(),
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -4084,11 +4086,11 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 			ReportTaskReachability: true,
 			ReportStats:            false,
 		})
-		s.NoError(err)
-		s.NotNil(resp)
-		s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue") //nolint:staticcheck
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.Len(t, resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue") //nolint:staticcheck
 		versionInfo := resp.GetVersionsInfo()[""]
-		s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
+		require.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
 		var pollersInfo []*taskqueuepb.PollerInfo
 		for _, t := range versionInfo.GetTypesInfo() {
 			pollersInfo = append(pollersInfo, t.GetPollers()...)
@@ -4096,7 +4098,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 		foundN := 0
 		for wId := range workerMap {
 			for _, pi := range pollersInfo {
-				s.False(pi.GetWorkerVersionCapabilities().GetUseVersioning())
+				require.False(t, pi.GetWorkerVersionCapabilities().GetUseVersioning())
 				if pi.GetIdentity() == wId {
 					foundN++
 					break
@@ -4104,7 +4106,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 			}
 		}
 
-		return foundN == workerN
+		require.Equal(t, workerN, foundN)
 	}, 3*time.Second, 50*time.Millisecond)
 }
 
@@ -4124,7 +4126,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 	defer w.Stop()
 
 	// wait for pollers to show up, verify both ReportPollers and ReportTaskReachability
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 			Namespace:              s.Namespace().String(),
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -4134,23 +4136,25 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 			ReportPollers:          true,
 			ReportTaskReachability: true,
 		})
-		s.NoError(err)
-		s.NotNil(resp)
-		s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue") //nolint:staticcheck
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.Len(t, resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue") //nolint:staticcheck
 		versionInfo := resp.GetVersionsInfo()[""]
-		s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
+		require.Equal(t, enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
 		var pollersInfo []*taskqueuepb.PollerInfo
 		for _, t := range versionInfo.GetTypesInfo() {
 			pollersInfo = append(pollersInfo, t.GetPollers()...)
 		}
+		foundPoller := false
 		for _, pi := range pollersInfo {
-			s.False(pi.GetWorkerVersionCapabilities().GetUseVersioning())
+			require.False(t, pi.GetWorkerVersionCapabilities().GetUseVersioning())
 			if pi.GetIdentity() == wId {
-				return true
+				foundPoller = true
+				break
 			}
 		}
 
-		return false
+		require.True(t, foundPoller)
 	}, 3*time.Second, 50*time.Millisecond)
 
 	// ask for reachability only
@@ -4269,13 +4273,13 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     s.Namespace().String(),
 			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		})
-		s.NoError(err)
+		require.NoError(t, err)
 		havePoller := func(v string) bool {
 			for _, p := range resp.Pollers {
 				if p.WorkerVersionCapabilities.UseVersioning && v == p.WorkerVersionCapabilities.BuildId {
@@ -4285,7 +4289,9 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 			return false
 		}
 		// v1 polls get rejected because v11 is newer
-		return !havePoller(v1) && havePoller(v11) && havePoller(v2)
+		require.False(t, havePoller(v1))
+		require.True(t, havePoller(v11))
+		require.True(t, havePoller(v2))
 	}, 3*time.Second, 50*time.Millisecond)
 }
 
@@ -4328,10 +4334,10 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 	s.WaitForChannel(ctx, started1)
 
 	// describe and check build ID
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), "")
-		s.NoError(err)
-		return v1 == resp.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId()
+		require.NoError(t, err)
+		require.Equal(t, v1, resp.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// now register v11 as newer compatible with v1
@@ -4356,10 +4362,10 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 	s.WaitForChannel(ctx, started11)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), "")
-		s.NoError(err)
-		return v11 == resp.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId()
+		require.NoError(t, err)
+		require.Equal(t, v11, resp.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// unblock. it should complete
@@ -4901,10 +4907,10 @@ func (s *VersioningIntegSuite) waitForPropagation(
 		remaining[partAndType{i, enumspb.TASK_QUEUE_TYPE_ACTIVITY}] = struct{}{}
 		remaining[partAndType{i, enumspb.TASK_QUEUE_TYPE_WORKFLOW}] = struct{}{}
 	}
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		for pt := range remaining {
 			f, err := tqid.NewTaskQueueFamily(s.NamespaceID().String(), taskQueue)
-			s.NoError(err)
+			require.NoError(t, err)
 			partition := f.TaskQueue(pt.tp).NormalPartition(pt.part)
 			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility
 			// here so that we can target activity queues.
@@ -4915,12 +4921,12 @@ func (s *VersioningIntegSuite) waitForPropagation(
 					TaskQueue:     partition.RpcName(),
 					TaskQueueType: partition.TaskType(),
 				})
-			s.NoError(err)
+			require.NoError(t, err)
 			if condition(res.GetUserData().GetData().GetVersioningData()) {
 				delete(remaining, pt)
 			}
 		}
-		return len(remaining) == 0
+		require.Empty(t, remaining)
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
