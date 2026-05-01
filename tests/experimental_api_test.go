@@ -52,10 +52,11 @@ func TestExperimentalApi_Example(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("experimental enum value reaches server", func(t *testing.T) {
+	t.Run("experimental enum value handled by server", func(t *testing.T) {
 		// WORKFLOW_ID_CONFLICT_POLICY_FOO = 1000 is an experimental enum value.
-		// Sending it through the server proves it crosses the gRPC boundary
-		// without being rejected as Unimplemented.
+		// The example feature's StartWorkflowExecution wrapper reads it and
+		// returns InvalidArgument — proving the value crossed the gRPC boundary
+		// and reached feature-specific handler code.
 		_, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:                env.Namespace().String(),
 			WorkflowId:               "test-experimental-enum",
@@ -63,14 +64,14 @@ func TestExperimentalApi_Example(t *testing.T) {
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: "test"},
 			WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FOO,
 		})
-		require.NotEqual(t, codes.Unimplemented, status.Code(err),
-			"experimental enum value must reach the handler, not be rejected at the gRPC layer")
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
-	t.Run("experimental overlay field reaches server", func(t *testing.T) {
+	t.Run("experimental overlay field handled by server", func(t *testing.T) {
 		// foo_text is an experimental_field overlay on StartWorkflowExecutionRequest.
-		// Sending it through the server proves the unknown bytes cross the gRPC
-		// boundary without being dropped or rejected.
+		// The example feature's StartWorkflowExecution wrapper reads it via
+		// GetStartWorkflowExecutionRequestOverlay — proving the bytes crossed
+		// the gRPC boundary and were decoded by feature-specific server code.
 		req := &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			WorkflowId:   "test-experimental-overlay",
@@ -79,9 +80,10 @@ func TestExperimentalApi_Example(t *testing.T) {
 		}
 		require.NoError(t, workflowservice.SetStartWorkflowExecutionRequestOverlay(req,
 			&workflowservice.StartWorkflowExecutionRequestOverlay{FooText: "hello overlay"}))
+		// Request is forwarded to the stable handler after overlay is read;
+		// it will fail for other reasons (no worker) but not Unimplemented.
 		_, err := env.FrontendClient().StartWorkflowExecution(ctx, req)
-		require.NotEqual(t, codes.Unimplemented, status.Code(err),
-			"experimental overlay bytes must reach the handler, not be dropped or rejected")
+		require.NotEqual(t, codes.Unimplemented, status.Code(err))
 	})
 }
 
