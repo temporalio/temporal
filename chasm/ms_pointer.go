@@ -47,3 +47,8 @@ func (m MSPointer) LoadHistoryEvent(ctx Context, token []byte) (*historypb.Histo
 func (m MSPointer) GetNexusCompletion(ctx Context, requestID string) (nexusrpc.CompleteOperationOptions, error) {
 	return m.backend.GetNexusCompletion(ctx.goContext(), requestID)
 }
+
+// GetWorkflowTypeName retrieves the workflow type name from the underlying mutable state.
+func (m MSPointer) GetWorkflowTypeName() string {
+	return m.backend.GetExecutionInfo().GetWorkflowTypeName()
+}
