@@ -66,7 +66,7 @@ const (
 	//
 	// LifecycleStateCreated LifecycleState = 1 << iota
 	LifecycleStateRunning LifecycleState = 2 << iota
-	// LifecycleStatePaused
+	LifecycleStatePaused
 
 	// Lifecycle states that are considered CLOSED
 	//
@@ -81,10 +81,16 @@ func (s LifecycleState) IsClosed() bool {
 	return s >= LifecycleStateCompleted
 }
 
+func (s LifecycleState) IsPaused() bool {
+	return s == LifecycleStatePaused
+}
+
 func (s LifecycleState) String() string {
 	switch s {
 	case LifecycleStateRunning:
 		return "Running"
+	case LifecycleStatePaused:
+		return "Paused"
 	case LifecycleStateCompleted:
 		return "Completed"
 	case LifecycleStateFailed:

@@ -109,6 +109,10 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 		err = t.executeChasmPureTimerTask(ctx, task)
 	case *tasks.ChasmTask:
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
+	case *tasks.TimeSkippingTimerTask:
+		// todo@time-skipping: replication. The disable-after-bound transition is emitted
+		// on the active side and will replicate; standby drops the local task.
+		err = nil
 	default:
 		err = queueserrors.NewUnprocessableTaskError("unknown task type")
 	}

@@ -1539,6 +1539,11 @@ Don't change this on a live cluster without using the gradual change mechanism.
 		true,
 		`EnableReplicationStream turn on replication stream`,
 	)
+	EnableCloseInboundReplicationStreamOnShutdown = NewGlobalBoolSetting(
+		"history.enableCloseInboundReplicationStreamOnShutdown",
+		true,
+		`EnableCloseInboundReplicationStreamOnShutdown closes inbound replication streams on shutdown, signaling the remote sender to stop. Disable if this causes unexpected issues during rolling restarts.`,
+	)
 	EnableSeparateReplicationEnableFlag = NewGlobalBoolSetting(
 		"history.enableSeparateReplicationEnableFlag",
 		false,
