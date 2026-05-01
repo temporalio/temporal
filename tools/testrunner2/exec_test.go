@@ -27,7 +27,7 @@ func TestExecuteTest_EscapesSpecialCharsInSubtestNames(t *testing.T) {
 		return 0
 	}, executeTestInput{
 		binary: "/tmp/foo.test",
-		tests:  []testCase{{name: "TestFoo/sub(test)"}},
+		tests:  []string{"TestFoo/sub(test)"},
 		output: io.Discard,
 	}, nil)
 
@@ -175,7 +175,7 @@ func TestExecuteTest(t *testing.T) {
 		var captured []string
 		executeTest(context.Background(), mockExec(&captured), executeTestInput{
 			binary:       "/tmp/foo.test",
-			tests:        []testCase{{name: "TestFoo"}},
+			tests:        []string{"TestFoo"},
 			coverProfile: "cover.out",
 			output:       io.Discard,
 		}, nil)
@@ -191,7 +191,7 @@ func TestExecuteTest(t *testing.T) {
 		var captured []string
 		executeTest(context.Background(), mockExec(&captured), executeTestInput{
 			binary:    "/tmp/foo.test",
-			tests:     []testCase{{name: "TestFoo"}},
+			tests:     []string{"TestFoo"},
 			extraArgs: []string{"-persistenceType=sql"},
 			output:    io.Discard,
 		}, nil)
