@@ -63,13 +63,10 @@ func TestIntegration(t *testing.T) {
 				passed("TestB1"),
 			)
 			assertConsole(t, res,
-				printed("starting scheduler with parallelism=1"),
-				printed("🚀 compiling", "./testpkg/passing"),
-				printed("$", "go test -c", "./testpkg/passing"),
-				printed("🔨 compiled", "./testpkg/passing"),
-				printed("$", ".test", "-test.v=test2json"),
-				notPrintedLine("-test.run", "TestA1"),
-				printed("✅ [1/1]", "./testpkg/passing", "attempt=1", "passed=3/3"),
+				printed("🚀 go test packages", "attempt 1"),
+				printed("$", "go test", "-json", "./testpkg/passing"),
+				notPrintedLine("-run", "TestA1"),
+				printed("✅ package attempt 1", "passed=3/3"),
 				printed("test run completed"),
 				notPrinted("failure="),
 			)
@@ -86,9 +83,9 @@ func TestIntegration(t *testing.T) {
 				passed("TestA1"),
 			)
 			assertConsole(t, res,
-				printed("🚀", "./testpkg/passing", "attempt 1"),
-				printed("$", ".test", "-test.run TestA1"),
-				printed("✅ [1/1]", "./testpkg/passing", "attempt=1", "passed=1/1"),
+				printed("🚀 go test packages", "attempt 1"),
+				printed("$", "go test", "-run TestA1", "./testpkg/passing"),
+				printed("✅ package attempt 1", "passed=1/1"),
 				printed("test run completed"),
 			)
 			assertNoLogFiles(t, res)
@@ -152,14 +149,14 @@ func TestIntegration(t *testing.T) {
 				failed("TestAlwaysFails (retry 1)", "Failed"),
 			)
 			assertConsole(t, res,
-				printed("🚀", "./testpkg/failing", "attempt 1"),
-				printed("$", ".test", "-test.v=test2json"),
-				printed("🔄 scheduling retry:", "^TestAlwaysFails$"),
-				printed("❌️", "./testpkg/failing", "attempt=1", "passed=1/2", "failure=failed"),
-				printed("🚀", "./testpkg/failing", "attempt 2.1"),
-				printed("$", ".test", "-test.run ^TestAlwaysFails$"),
-				printed("❌️", "./testpkg/failing", "attempt=2.1", "passed=0/1", "failure=failed"),
-				notPrinted("go test ./testpkg/failing"),
+				printed("🚀 go test packages", "attempt 1"),
+				printed("$", "go test", "-json", "./testpkg/failing"),
+				printed("❌️ package attempt 1", "passed=1/2", "failed=1"),
+				printed("🔄 scheduling package retry:", "^TestAlwaysFails$"),
+				printed("🚀 go test packages", "attempt 2"),
+				printed("$", "go test", "-run ^TestAlwaysFails$"),
+				printed("❌️ package attempt 2", "passed=0/1", "failed=1"),
+				notPrinted("go test -c"),
 			)
 		})
 	})

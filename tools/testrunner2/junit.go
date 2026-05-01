@@ -27,6 +27,11 @@ type junitReport struct {
 	reportingErrs []error
 }
 
+type testFailureRef struct {
+	pkg  string
+	name string
+}
+
 func (j *junitReport) read() error {
 	f, err := os.Open(j.path)
 	if err != nil {
@@ -129,6 +134,37 @@ func (j *junitReport) collectTestCaseFailures() []string {
 	}
 	slices.Sort(failures)
 	return filterParentNames(failures)
+}
+
+func (j *junitReport) collectTestCaseFailureRefs() []testFailureRef {
+	byPackage := make(map[string][]string)
+	for _, suite := range j.Suites {
+		for _, tc := range suite.Testcases {
+			if tc.Failure == nil {
+				continue
+			}
+			pkg := tc.Classname
+			if pkg == "" {
+				pkg = suite.Name
+			}
+			byPackage[pkg] = append(byPackage[pkg], tc.Name)
+		}
+	}
+
+	var refs []testFailureRef
+	for pkg, names := range byPackage {
+		slices.Sort(names)
+		for _, name := range filterParentNames(names) {
+			refs = append(refs, testFailureRef{pkg: pkg, name: name})
+		}
+	}
+	slices.SortFunc(refs, func(a, b testFailureRef) int {
+		if c := strings.Compare(a.pkg, b.pkg); c != 0 {
+			return c
+		}
+		return strings.Compare(a.name, b.name)
+	})
+	return refs
 }
 
 func mergeReports(reports []*junitReport) (*junitReport, error) {
@@ -337,18 +373,17 @@ func newJUnitReport(logPath string, junitPath string) testResults {
 	}
 	output := stripLogHeader(string(data))
 
-	// Use ExcludeParents to filter out parent test entries (e.g., TestSuite when
-	// we only care about TestSuite/TestMethod). This works correctly with
-	// -test.v=test2json which emits --- PASS/FAIL lines as subtests complete.
-	parser := gotest.NewParser(gotest.SetSubtestMode(gotest.ExcludeParents))
-	report, err := parser.Parse(strings.NewReader(output))
+	report, isJSON, err := parseGoTestOutput(output)
 	if err != nil {
 		log.Printf("[runner] warning: failed to parse test output for JUnit report: %v", err)
 		return testResults{}
 	}
 
 	// Extract failed and passed tests from a clean parse (without test2json markers).
-	results := extractResultsClean(output)
+	results := extractResults(report)
+	if !isJSON {
+		results = extractResultsClean(output)
+	}
 
 	// Convert to JUnit and write
 	hostname, _ := os.Hostname()
@@ -388,6 +423,20 @@ func newJUnitReport(logPath string, junitPath string) testResults {
 	}
 
 	return results
+}
+
+func parseGoTestOutput(output string) (gtr.Report, bool, error) {
+	// Use ExcludeParents to filter out parent test entries (e.g., TestSuite when
+	// we only care about TestSuite/TestMethod). This works correctly with
+	// -test.v=test2json which emits --- PASS/FAIL lines as subtests complete.
+	if strings.HasPrefix(strings.TrimSpace(output), "{") {
+		parser := gotest.NewJSONParser(gotest.SetSubtestMode(gotest.ExcludeParents))
+		report, err := parser.Parse(strings.NewReader(output))
+		return report, true, err
+	}
+	parser := gotest.NewParser(gotest.SetSubtestMode(gotest.ExcludeParents))
+	report, err := parser.Parse(strings.NewReader(output))
+	return report, false, err
 }
 
 // extractResults returns failed and passed tests from a gtr.Report.
