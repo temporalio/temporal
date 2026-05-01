@@ -51,21 +51,14 @@ func compileRunFilter(filter string) *regexp.Regexp {
 	return regexp.MustCompile(topLevel)
 }
 
-// testCase represents a single test function with its metadata.
-type testCase struct {
-	name     string
-	attempts int // number of times this test has been attempted
-}
-
-// workUnit represents a schedulable unit of test work.
 type workUnit struct {
-	pkg       string     // package path
-	tests     []testCase // specific tests to run (for test mode or retries)
-	skipTests []string   // tests to skip on retry (already passed)
-	label     string     // display label for progress output
+	pkg         string
+	rootName    string
+	displayName string
+	runTests    []string
+	skipTests   []string
 }
 
-// skipPattern returns a -test.skip regex pattern for already-passed tests, or "" if none.
 func (wu workUnit) skipPattern() string {
 	return buildTestFilterPattern(wu.skipTests)
 }
@@ -139,9 +132,10 @@ func buildWorkUnits(pkg string, testNames []string, runFilter string, totalShard
 			}
 		}
 		units = append(units, workUnit{
-			pkg:   pkg,
-			tests: []testCase{{name: name}},
-			label: name,
+			pkg:         pkg,
+			rootName:    name,
+			displayName: name,
+			runTests:    []string{name},
 		})
 	}
 	return units
@@ -167,15 +161,6 @@ func filterParentNames(sorted []string) []string {
 		leaves = append(leaves, name)
 	}
 	return leaves
-}
-
-// testCasesToRunPattern converts a list of test cases to a -run flag regex pattern.
-func testCasesToRunPattern(tests []testCase) string {
-	names := make([]string, len(tests))
-	for i, tc := range tests {
-		names[i] = tc.name
-	}
-	return buildTestFilterPattern(names)
 }
 
 // buildTestFilterPattern builds a regex pattern for -test.run or -test.skip from
