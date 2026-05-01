@@ -118,6 +118,8 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestUpdateScheduleBlobSizeLimit", func(t *testing.T) { testUpdateScheduleBlobSizeLimit(t, newContext) })
 	t.Run("TestListSchedulesPagination", func(t *testing.T) { testListSchedulesPagination(t, newContext) })
 	t.Run("TestListSchedulesFilterAndEntryFields", func(t *testing.T) { testListSchedulesFilterAndEntryFields(t, newContext) })
+	t.Run("TestUpdateDeduplicatesCalendars", func(t *testing.T) { testUpdateDeduplicatesCalendars(t, newContext) })
+	t.Run("TestCreateDeduplicatesCalendars", func(t *testing.T) { testCreateDeduplicatesCalendars(t, newContext) })
 }
 
 func testDeletedScheduleOperations(t *testing.T, newContext contextFactory) {
@@ -3123,4 +3125,119 @@ func testUpdateScheduleBlobSizeLimit(t *testing.T, newContext contextFactory) {
 	})
 	var invalidArgBlob *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgBlob)
+}
+
+// testUpdateDeduplicatesCalendars reproduces the describe-then-update
+// accumulation pattern where repeated SDK updates with the same cron expression
+// would previously cause StructuredCalendar entries to accumulate. With
+// server-side dedup in canonicalizeSpec, the count should stay at 1.
+func testUpdateDeduplicatesCalendars(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+
+	sid := testcore.RandomizeStr("sched-test-update-dedup")
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			CronString: []string{"0 * * * *"},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   "wf-" + sid,
+					WorkflowType: &commonpb.WorkflowType{Name: "myworkflow"},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   testcore.RandomizeStr("identity"),
+		RequestId:  testcore.RandomizeStr("request-id"),
+	})
+	require.NoError(t, err)
+
+	// Simulate the SDK describe-then-update pattern: read the current schedule
+	// (which has StructuredCalendar entries from the original cron), then send
+	// an update that includes both the existing StructuredCalendar entries and
+	// the same cron string again. Without server-side dedup this would
+	// accumulate one extra entry per round.
+	const rounds = 5
+	for i := range rounds {
+		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		require.NoError(t, err, "describe round %d", i+1)
+
+		// Re-add the same cron on top of existing StructuredCalendar entries,
+		// mimicking what the SDK does when the user sets CronExpressions.
+		desc.Schedule.Spec.CronString = []string{"0 * * * *"}
+
+		_, err = s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+			Namespace:     s.Namespace().String(),
+			ScheduleId:    sid,
+			Schedule:      desc.Schedule,
+			ConflictToken: desc.ConflictToken,
+			Identity:      testcore.RandomizeStr("identity"),
+			RequestId:     testcore.RandomizeStr("request-id"),
+		})
+		require.NoError(t, err, "update round %d", i+1)
+	}
+
+	after, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.Len(t, after.Schedule.Spec.StructuredCalendar, 1,
+		"server-side dedup should prevent calendar accumulation across %d update rounds", rounds)
+}
+
+// testCreateDeduplicatesCalendars verifies that CreateSchedule deduplicates
+// StructuredCalendar entries when the same calendar is specified multiple times
+// in the initial request (e.g. via both CronString and StructuredCalendar).
+func testCreateDeduplicatesCalendars(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts()...)
+
+	sid := testcore.RandomizeStr("sched-test-create-dedup")
+
+	// Send the same cron string twice to verify dedup on create. Both get
+	// parsed into identical StructuredCalendarSpec entries.
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			CronString: []string{"0 * * * *", "0 * * * *"},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   "wf-" + sid,
+					WorkflowType: &commonpb.WorkflowType{Name: "myworkflow"},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   testcore.RandomizeStr("identity"),
+		RequestId:  testcore.RandomizeStr("request-id"),
+	})
+	require.NoError(t, err)
+
+	desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.Len(t, desc.Schedule.Spec.StructuredCalendar, 1,
+		"create should deduplicate identical cron-derived structured calendar entries")
 }

@@ -22,7 +22,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/service/worker/scheduler"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -52,7 +52,7 @@ type Scheduler struct {
 
 	// Locally-cached state, invalidated whenever cacheConflictToken != ConflictToken.
 	cacheConflictToken int64
-	compiledSpec       *scheduler.CompiledSpec // compiledSpec is only ever replaced whole, not mutated.
+	compiledSpec       *legacyscheduler.CompiledSpec // compiledSpec is only ever replaced whole, not mutated.
 }
 
 var (
@@ -66,7 +66,7 @@ var (
 )
 
 var executionStatusSearchAttribute = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
-var initialSerializedConflictToken = serializeConflictToken(scheduler.InitialConflictToken)
+var initialSerializedConflictToken = serializeConflictToken(legacyscheduler.InitialConflictToken)
 
 const (
 	// How many recent actions to keep on the Info.RecentActions list.
@@ -113,9 +113,9 @@ func NewScheduler(
 			Namespace:     namespace,
 			NamespaceId:   namespaceID,
 			ScheduleId:    scheduleID,
-			ConflictToken: scheduler.InitialConflictToken,
+			ConflictToken: legacyscheduler.InitialConflictToken,
 		},
-		cacheConflictToken:   scheduler.InitialConflictToken,
+		cacheConflictToken:   legacyscheduler.InitialConflictToken,
 		Backfillers:          make(chasm.Map[string, *Backfiller]),
 		LastCompletionResult: chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{}),
 	}
@@ -152,10 +152,10 @@ func NewSentinel(
 			NamespaceId:   namespaceID,
 			ScheduleId:    scheduleID,
 			Sentinel:      true,
-			ConflictToken: scheduler.InitialConflictToken,
+			ConflictToken: legacyscheduler.InitialConflictToken,
 			Info:          &schedulepb.ScheduleInfo{},
 		},
-		cacheConflictToken: scheduler.InitialConflictToken,
+		cacheConflictToken: legacyscheduler.InitialConflictToken,
 	}
 	now := ctx.Now(s)
 	s.Info.CreateTime = timestamppb.New(now)
@@ -375,7 +375,7 @@ func (s *Scheduler) useScheduledAction(decrement bool) bool {
 	return false
 }
 
-func (s *Scheduler) getCompiledSpec(specBuilder *scheduler.SpecBuilder) (*scheduler.CompiledSpec, error) {
+func (s *Scheduler) getCompiledSpec(specBuilder *legacyscheduler.SpecBuilder) (*legacyscheduler.CompiledSpec, error) {
 	s.validateCachedState()
 
 	// Cache compiled spec.
@@ -586,7 +586,7 @@ func (s *Scheduler) HandleNexusCompletion(
 func (s *Scheduler) Describe(
 	ctx chasm.Context,
 	req *schedulerpb.DescribeScheduleRequest,
-	specBuilder *scheduler.SpecBuilder,
+	specBuilder *legacyscheduler.SpecBuilder,
 ) (*schedulerpb.DescribeScheduleResponse, error) {
 	if s.Sentinel {
 		return nil, ErrSentinel
@@ -608,7 +608,7 @@ func (s *Scheduler) Describe(
 	}
 
 	schedule := common.CloneProto(s.Schedule)
-	cleanSpec(schedule.Spec)
+	legacyscheduler.CleanSpec(schedule.Spec)
 
 	generator := s.Generator.Get(ctx)
 	if generator.GetFutureActionTimes() == nil {
@@ -636,41 +636,12 @@ func (s *Scheduler) Describe(
 	}, nil
 }
 
-// cleanSpec sets default values in ranges for the DescribeSchedule response.
-func cleanSpec(spec *schedulepb.ScheduleSpec) {
-	cleanRanges := func(ranges []*schedulepb.Range) {
-		for _, r := range ranges {
-			if r.End < r.Start {
-				r.End = r.Start
-			}
-			if r.Step == 0 {
-				r.Step = 1
-			}
-		}
-	}
-	cleanCal := func(structured *schedulepb.StructuredCalendarSpec) {
-		cleanRanges(structured.Second)
-		cleanRanges(structured.Minute)
-		cleanRanges(structured.Hour)
-		cleanRanges(structured.DayOfMonth)
-		cleanRanges(structured.Month)
-		cleanRanges(structured.Year)
-		cleanRanges(structured.DayOfWeek)
-	}
-	for _, structured := range spec.StructuredCalendar {
-		cleanCal(structured)
-	}
-	for _, structured := range spec.ExcludeStructuredCalendar {
-		cleanCal(structured)
-	}
-}
-
 // ListMatchingTimes returns the upcoming times that the schedule will trigger
 // within the given time range.
 func (s *Scheduler) ListMatchingTimes(
 	ctx chasm.Context,
 	req *schedulerpb.ListScheduleMatchingTimesRequest,
-	specBuilder *scheduler.SpecBuilder,
+	specBuilder *legacyscheduler.SpecBuilder,
 ) (*schedulerpb.ListScheduleMatchingTimesResponse, error) {
 	if s.Sentinel {
 		return nil, ErrSentinel

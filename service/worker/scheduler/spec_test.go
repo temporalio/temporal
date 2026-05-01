@@ -494,3 +494,70 @@ func (s *specSuite) TestSpecJitterSeed() {
 		time.Date(2022, 3, 24, 0, 39, 16, 922000000, time.UTC),
 	)
 }
+
+func (s *specSuite) TestDeduplicateStructuredCalendars() {
+	cal1 := &schedulepb.StructuredCalendarSpec{
+		Hour:   []*schedulepb.Range{{Start: 9, End: 9, Step: 1}},
+		Minute: []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
+	}
+	// Same as cal1 but with proto defaults (Step=0, End=0 which defaults to Start)
+	cal1Defaults := &schedulepb.StructuredCalendarSpec{
+		Hour:   []*schedulepb.Range{{Start: 9}},
+		Minute: []*schedulepb.Range{{Start: 0}},
+	}
+	cal2 := &schedulepb.StructuredCalendarSpec{
+		Hour:   []*schedulepb.Range{{Start: 17, End: 17, Step: 1}},
+		Minute: []*schedulepb.Range{{Start: 30, End: 30, Step: 1}},
+	}
+
+	// exact duplicates removed
+	result := deduplicateStructuredCalendars([]*schedulepb.StructuredCalendarSpec{cal1, cal1})
+	s.Len(result, 1)
+
+	// proto-default-equivalent duplicates removed
+	result = deduplicateStructuredCalendars([]*schedulepb.StructuredCalendarSpec{cal1, cal1Defaults})
+	s.Len(result, 1)
+
+	// distinct entries preserved
+	result = deduplicateStructuredCalendars([]*schedulepb.StructuredCalendarSpec{cal1, cal2})
+	s.Len(result, 2)
+
+	// nil/empty input
+	result = deduplicateStructuredCalendars(nil)
+	s.Nil(result)
+	result = deduplicateStructuredCalendars([]*schedulepb.StructuredCalendarSpec{})
+	s.Empty(result)
+
+	// single entry returned as-is
+	result = deduplicateStructuredCalendars([]*schedulepb.StructuredCalendarSpec{cal1})
+	s.Len(result, 1)
+
+	// multiple duplicates with different default representations
+	result = deduplicateStructuredCalendars([]*schedulepb.StructuredCalendarSpec{
+		cal1, cal1Defaults, cal2, cal1, cal2,
+	})
+	s.Len(result, 2)
+}
+
+func (s *specSuite) TestCanonicalizeDeduplicates() {
+	// canonicalizeSpec should deduplicate StructuredCalendar entries
+	spec, err := canonicalizeSpec(&schedulepb.ScheduleSpec{
+		StructuredCalendar: []*schedulepb.StructuredCalendarSpec{
+			{Hour: []*schedulepb.Range{{Start: 9, End: 9, Step: 1}}},
+			{Hour: []*schedulepb.Range{{Start: 9}}},  // same after normalization
+			{Hour: []*schedulepb.Range{{Start: 17}}}, // different
+		},
+	})
+	s.Require().NoError(err)
+	s.Len(spec.StructuredCalendar, 2)
+
+	// also deduplicates ExcludeStructuredCalendar
+	spec, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
+		ExcludeStructuredCalendar: []*schedulepb.StructuredCalendarSpec{
+			{Hour: []*schedulepb.Range{{Start: 12, End: 12, Step: 1}}},
+			{Hour: []*schedulepb.Range{{Start: 12}}},
+		},
+	})
+	s.Require().NoError(err)
+	s.Len(spec.ExcludeStructuredCalendar, 1)
+}
