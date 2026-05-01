@@ -5,11 +5,36 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"hash/fnv"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+
+	"github.com/dgryski/go-farm"
 )
+
+const shardSaltRelPath = "tests/testcore/shard_salt.txt"
+
+var readShardSalt = sync.OnceValue(func() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+
+	for {
+		saltBytes, err := os.ReadFile(filepath.Join(dir, shardSaltRelPath))
+		if err == nil {
+			return strings.TrimSpace(string(saltBytes))
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+})
 
 // compileRunFilter compiles a -run filter string into a regexp that matches
 // top-level test names. Returns nil if the filter is empty (matches all).
@@ -125,9 +150,10 @@ func buildWorkUnits(pkg string, testNames []string, runFilter string, totalShard
 
 // getShardForKey returns the shard index for a given key using consistent hashing.
 func getShardForKey(key string, totalShards int) int {
-	h := fnv.New32a()
-	_, _ = h.Write([]byte(key))
-	return int(h.Sum32() % uint32(totalShards))
+	if totalShards <= 1 {
+		return 0
+	}
+	return int(farm.Fingerprint32([]byte(key+readShardSalt())) % uint32(totalShards))
 }
 
 // filterParentNames removes parent names from a sorted list.
