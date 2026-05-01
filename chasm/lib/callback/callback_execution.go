@@ -95,7 +95,7 @@ func createCallbackExecution(
 
 	// Create child Callback component.
 	//
-	// TODO(chrsmith): Unresolved comment.
+	// TODO(chrsmith): Unresolved comment: https://github.com/temporalio/temporal/pull/9805/changes#r3105934702
 	// > Roey: When you rewrite to reuse the callback component, make the completion an embedded field
 	// > because it can save some memory for transitions and APIs that don't require this potentially large piece of data.
 	cb := NewCallback(
@@ -206,7 +206,10 @@ func (e *CallbackExecution) Describe(ctx chasm.Context) (*callbackpb.CallbackExe
 func (e *CallbackExecution) GetOutcome(ctx chasm.Context) (*callbackpb.CallbackExecutionOutcome, error) {
 
 	// BUG: This is returning the Callback's outcome. But this should instead return the CallbackExecution's
-	// outcome. (That is, the CallbackExecutionState.Commpletion field.)
+	// outcome. (That is, the CallbackExecutionState.Completion field.)
+	//
+	// The problem is that a "failure" outcome will get delivered successfully, resulting in the Outcome
+	// field on the _CallbackExecution_ having the wrong value.
 	cb := e.Callback.Get(ctx)
 	switch cb.Status {
 	case callbackspb.CALLBACK_STATUS_SUCCEEDED:

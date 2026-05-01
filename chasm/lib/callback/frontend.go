@@ -78,6 +78,8 @@ func (h *frontendHandler) getTargetNamespace(requestProto HasNamespace) (namespa
 // Checks if standalone callback executions are enabled in the request's target namesapce.
 func (h *frontendHandler) checkFeatureEnabled(requestProto HasNamespace) error {
 	targetNamespaceName := requestProto.GetNamespace()
+	// TODO(chrsmith): Unresolved comment: https://github.com/temporalio/temporal/pull/9805/changes#r3105961224
+	// > You should change this to also check if CHASM and transition history is enabled. Those are all prereqs.
 	if !h.config.EnableStandaloneExecutions(targetNamespaceName) {
 		return ErrStandaloneCallbackDisabled
 	}
@@ -174,6 +176,11 @@ func validateDescribeCallbackExecution(req *workflowservice.DescribeCallbackExec
 		}
 	}
 
+	// A long-poll token requires the RunID be set.
+	if len(req.GetLongPollToken()) > 0 && req.GetRunId() == "" {
+		return serviceerror.NewInvalidArgument("RunID is required when LongPollToken is provided")
+	}
+
 	return nil
 }
 
@@ -190,6 +197,8 @@ func (h *frontendHandler) DescribeCallbackExecution(
 	if err := validateDescribeCallbackExecution(request); err != nil {
 		return nil, err
 	}
+
+	// TODO(chrsmith): Honor the request.LongPollToken if set... how?
 
 	// Execute
 	namespaceID, err := h.getTargetNamespace(request)
@@ -344,7 +353,7 @@ func validateListCallbackExecutions(req *workflowservice.ListCallbackExecutionsR
 // ListCallbackExecutions queries the visibility store for callback executions matching
 // the provided filter. Supports the same query syntax as workflow list filters.
 //
-// TODO(chrsmith): Unresolved comments.
+// TODO(chrsmith): Unresolved comment: https://github.com/temporalio/temporal/pull/9805/changes#r3105968698
 // > Roey: Follow chasm/lib/activity/frontend.go ListActivityExecutions please.
 // > Quinn:  I did when I wrote this, sorry I don't understand the feedback here.
 // > Roey: Read the fields either from search attributes or VisibilityExecutionInfo, same as ListActivityExecutions.

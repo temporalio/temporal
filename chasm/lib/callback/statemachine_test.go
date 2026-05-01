@@ -145,12 +145,14 @@ func TestTerminatedTransition(t *testing.T) {
 			err := TransitionTerminated.Apply(cb, mctx, EventTerminated{})
 			require.NoError(t, err)
 			require.Equal(t, callbackspb.CALLBACK_STATUS_TERMINATED, cb.StateMachineState())
-			// TODO(chrsmith): Check the rest of the fields are noset and that no tasks are emitted.
+			// TODO(chrsmith): Unresolved comment: https://github.com/temporalio/temporal/pull/9805/changes#r3106029253
+			// > Check the rest of the fields are set and that no tasks are emitted.
 		})
 	}
 }
 
-// TODO(chrsmith): I wpuld put this in component_test.go since it test a method of the component.
+// TODO(chrsmith): Unresolved comment: https://github.com/temporalio/temporal/pull/9805/changes#r3106029987
+// > I would put this in component_test.go since it test a method of the component.
 // > But as mentioned before, youc an fold that into invocationResultRetry.
 func TestSaveResult_RetryNoCB(t *testing.T) {
 	// invocationResultRetryNoCB should transition to BACKING_OFF just like

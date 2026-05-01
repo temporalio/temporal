@@ -24,8 +24,7 @@ var _ chasm.StateMachine[callbackspb.CallbackStatus] = (*Callback)(nil)
 
 // Callback represents a callback component in CHASM.
 //
-// Note that there is a separate CHASM component, CallbackExecution,
-// which ...
+// Note that there is a separate CHASM component, CallbackExecution, which...
 // TODO(chrsmith): Explain the distinction between these two CHASM components.
 type Callback struct {
 	chasm.UnimplementedComponent
@@ -82,9 +81,6 @@ func (c *Callback) SetStateMachineState(status callbackspb.CallbackStatus) {
 //
 // IMPORTANT: Don't conflate this with `c.Failure`, which is the raw data from the `CallbackState`,
 // and does not take `c.LastFailureAttempt` into account.
-// TODO(chrsmith): Unaddress comment in earlier PR.
-//
-// TODO(chrsmith): Rename to something more meaningful? MostRecentFailure? TerminalFailure?
 func (c *Callback) GetFailure() *failurepb.Failure {
 	if c.Failure != nil {
 		return c.Failure
@@ -145,7 +141,7 @@ func (c *Callback) saveResult(
 	// If the callback was terminated while the invocation was in-flight,
 	// the result is no longer relevant — drop it silently.
 	//
-	// TODO(chrsmith): Unresolved comment.
+	// TODO(chrsmith): Unresolved comment: https://github.com/temporalio/temporal/pull/9805/changes#r3105945291
 	// > Roey: The transitions should already validate that the callback is in a correct state
 	// > 	and the task will fail with a warning in the log (IIRC). It's an edge case that I am
 	// > 	happy to ignore since the error would be benign.

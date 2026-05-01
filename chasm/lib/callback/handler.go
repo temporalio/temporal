@@ -124,9 +124,11 @@ func (h *callbackExecutionHandler) DescribeCallbackExecution(
 			resp := &workflowservice.DescribeCallbackExecutionResponse{
 				Info: info,
 			}
-			// TODO(chrsmith): There should be an IncludeInput field on this request since you don't want the input populated on every describe response in the UI.
-			// The field is on the incomming API, but we just aren't honoring it here.
-			// if req.FrontendRequest.GetIncludeInput() { ... }
+			// TODO(chrsmith): There should be an IncludeInput field on this request, so that you
+			// opt into getting the callback execution's input data. However, it's not available
+			// on the DescribeCallbackExecutionResponse object. That's an oversight in the API,
+			// right? But what is the "input"? Is it the full `StartCallbackExecutionRequest`?
+			// Or the `oneof input { CallbackExecutionCompletion } ` field?
 			if req.FrontendRequest.GetIncludeOutcome() {
 				outcome, err := e.GetOutcome(ctx)
 				if err != nil {
@@ -188,20 +190,10 @@ func (h *callbackExecutionHandler) PollCallbackExecution(
 		}, true, nil
 	}, req)
 
-	// TODO(chrsmith): Unresolved comment.
-	/**
-	Prefer checking the context error just in case the error that was returned by the code somehow did not propagate the context error back.
-
-	From the SAA code:
-
-		if err != nil && ctx.Err() != nil {
-			// Send empty non-error response on deadline expiry: caller should continue long-polling.
-			return &activitypb.DescribeActivityExecutionResponse{
-				FrontendResponse: &workflowservice.DescribeActivityExecutionResponse{},
-			}, nil
-		}
-	*/
-
+	// TODO(chrsmith): Unresolved comment: https://github.com/temporalio/temporal/pull/9805/changes#r3105991472
+	// > Prefer checking the context error just in case the error that was returned by the code
+	// > somehow did not propagate the context error back.
+	// ... But if `ctx.Err()` is set, it could be for a non-timeout reason. Right?
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		// Send an empty non-error response as an invitation to resubmit the long-poll.
 		return &callbackspb.PollCallbackExecutionResponse{
