@@ -186,7 +186,7 @@ func TestNexusHandlersEmitClientNameMetric(t *testing.T) {
 		h, _ := newTestHandler(t, captureHandler)
 		ctx := ctxWithClientName(t, expectedClientName)
 		internalTQ := &taskqueuepb.TaskQueue{
-			Name: "/temporal-sys/worker-commands/ns/grouping-key",
+			Name: "some-task-queue",
 			Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
 		}
 

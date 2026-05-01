@@ -20,8 +20,18 @@ const (
 
 // IsInternalTaskQueueKind returns true if the task queue kind identifies a
 // server-internal task queue (e.g. worker commands queues).
+// All kinds are listed explicitly so that adding a new kind produces a compile error.
 func IsInternalTaskQueueKind(kind enumspb.TaskQueueKind) bool {
-	return kind == enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS
+	switch kind {
+	case enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS:
+		return true
+	case enumspb.TASK_QUEUE_KIND_UNSPECIFIED,
+		enumspb.TASK_QUEUE_KIND_NORMAL,
+		enumspb.TASK_QUEUE_KIND_STICKY:
+		return false
+	default:
+		return false
+	}
 }
 
 func IsInternalPerNsTaskQueue(taskQueue string) bool {
