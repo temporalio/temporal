@@ -27,6 +27,13 @@ func Main() {
 	log.SetFlags(log.Ltime)
 	ctx := context.Background()
 
+	if len(os.Args) > 1 && os.Args[1] == summaryCommand {
+		if err := printSummary(os.Args[2:], os.Stdout); err != nil {
+			log.Fatalf("failed to print summary: %v", err)
+		}
+		return
+	}
+
 	cfg := defaultConfig()
 	cfg.log = log.Printf
 	args, err := parseArgs(os.Args[1:], &cfg)
