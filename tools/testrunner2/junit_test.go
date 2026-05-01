@@ -130,6 +130,34 @@ func TestMergeReports_MissingRetry(t *testing.T) {
 		"expected rerun of all failures from attempt 1, missing in attempt 2: [TestFooSuite/TestFoo_InvalidArgument]")
 }
 
+func TestMergeReports_PreservesFailureDetailsForSummary(t *testing.T) {
+	t.Parallel()
+
+	report := summaryReport("TestStandalone", "", "plain failure output with no recognizable block")
+
+	merged, err := mergeReports([]*junitReport{report})
+	require.NoError(t, err)
+
+	failure := merged.Suites[0].Testcases[0].Failure
+	require.Equal(t, string(failureTypeFailed), failure.Type)
+	require.Equal(t, "plain failure output with no recognizable block", failure.Data)
+}
+
+func TestMergeReports_TrimsActionableFailureDetails(t *testing.T) {
+	t.Parallel()
+
+	report := summaryReport("TestFoo", "", "setup log\n    foo_test.go:99:\n        Error Trace:\tfoo_test.go:99\n        Error:      \tNot equal:\n                    \texpected: 1\n                    \tactual  : 2\n        Test:       \tTestFoo\n--- FAIL: TestFoo (0.00s)\n")
+
+	merged, err := mergeReports([]*junitReport{report})
+	require.NoError(t, err)
+
+	failure := merged.Suites[0].Testcases[0].Failure
+	require.Equal(t, string(failureTypeFailed), failure.Type)
+	require.Contains(t, failure.Data, "Error Trace:")
+	require.Contains(t, failure.Data, "expected: 1")
+	require.NotContains(t, failure.Data, "setup log")
+}
+
 func TestAppendAlertsSuite(t *testing.T) {
 	t.Parallel()
 

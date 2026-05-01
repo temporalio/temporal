@@ -15,6 +15,11 @@ import (
 	"github.com/jstemmer/go-junit-report/v2/parser/gotest"
 )
 
+const (
+	alertsSuiteName  = "ALERTS"
+	noFailureDetails = "(error details not found)"
+)
+
 type junitReport struct {
 	junit.Testsuites
 	path          string
@@ -69,13 +74,13 @@ func (j *junitReport) appendAlerts(alerts alerts) {
 		} else {
 			classname, name = splitTestName(fullName)
 		}
-		// Include alert details in the failure message
+		failureType := alertFailureType(alert.Kind)
 		message := fmt.Sprintf("%s: %s", alert.Kind, alert.Summary)
 		var details string
 		if len(alert.Tests) > 0 {
 			details = fmt.Sprintf("Detected in tests:\n\t%s", strings.Join(alert.Tests, "\n\t"))
 		}
-		r := &junit.Result{Message: message, Data: details}
+		r := &junit.Result{Message: message, Type: string(failureType), Data: details}
 		cases = append(cases, junit.Testcase{
 			Classname: classname,
 			Name:      name,
@@ -84,7 +89,7 @@ func (j *junitReport) appendAlerts(alerts alerts) {
 	}
 
 	suite := junit.Testsuite{
-		Name:      "ALERTS",
+		Name:      alertsSuiteName,
 		Failures:  len(cases),
 		Tests:     len(cases),
 		Testcases: cases,
@@ -136,62 +141,12 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 	combined.Name = reports[0].Name
 
 	for _, report := range reports {
-		combined.Tests += report.Tests
-		combined.Errors += report.Errors
-		combined.Failures += report.Failures
-		combined.Skipped += report.Skipped
-		combined.Disabled += report.Disabled
-		combined.Time += report.Time
-
-		// Add retry suffix only for actual retries (attempt > 1)
-		var suffix string
-		if report.attempt > 1 {
-			suffix = fmt.Sprintf(" (retry %d)", report.attempt-1)
-		}
-
+		addReportCounts(&combined, report)
+		suffix := retrySuffix(report.attempt)
 		for _, suite := range report.Suites {
-			if len(suite.Testcases) == 0 {
-				continue
+			if mergedSuite, ok := mergeSuite(suite, suffix); ok {
+				combined.Suites = append(combined.Suites, mergedSuite)
 			}
-
-			newSuite := suite // shallow copy
-
-			// Strip logs from suite to reduce report size
-			newSuite.SystemOut = nil
-			newSuite.SystemErr = nil
-
-			newSuite.Name += suffix
-			newSuite.Testcases = make([]junit.Testcase, 0, len(suite.Testcases))
-
-			// Sort test cases by name for parent filtering.
-			slices.SortFunc(suite.Testcases, func(a, b junit.Testcase) int {
-				return strings.Compare(a.Name, b.Name)
-			})
-
-			// Build set of leaf test names (filtering out parent tests).
-			names := make([]string, len(suite.Testcases))
-			for j, tc := range suite.Testcases {
-				names[j] = tc.Name
-			}
-			leafSet := make(map[string]struct{}, len(names))
-			for _, n := range filterParentNames(names) {
-				leafSet[n] = struct{}{}
-			}
-
-			// Collect leaf test cases.
-			for _, testCase := range suite.Testcases {
-				if _, isLeaf := leafSet[testCase.Name]; !isLeaf {
-					continue
-				}
-
-				// Strip logs from test case to reduce report size
-				testCase.SystemOut = nil
-				testCase.SystemErr = nil
-
-				testCase.Name += suffix
-				newSuite.Testcases = append(newSuite.Testcases, testCase)
-			}
-			combined.Suites = append(combined.Suites, newSuite)
 		}
 	}
 
@@ -199,6 +154,83 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 		Testsuites:    combined,
 		reportingErrs: validateRetries(reports),
 	}, nil
+}
+
+func addReportCounts(combined *junit.Testsuites, report *junitReport) {
+	combined.Tests += report.Tests
+	combined.Errors += report.Errors
+	combined.Failures += report.Failures
+	combined.Skipped += report.Skipped
+	combined.Disabled += report.Disabled
+	combined.Time += report.Time
+}
+
+func retrySuffix(attempt int) string {
+	if attempt <= 1 {
+		return ""
+	}
+	return fmt.Sprintf(" (retry %d)", attempt-1)
+}
+
+func mergeSuite(suite junit.Testsuite, suffix string) (junit.Testsuite, bool) {
+	if len(suite.Testcases) == 0 {
+		return junit.Testsuite{}, false
+	}
+
+	testcases := slices.Clone(suite.Testcases)
+	slices.SortFunc(testcases, func(a, b junit.Testcase) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+
+	merged := suite
+	merged.SystemOut = nil
+	merged.SystemErr = nil
+	merged.Name += suffix
+	merged.Testcases = make([]junit.Testcase, 0, len(testcases))
+
+	leafSet := leafTestCaseSet(testcases)
+	for _, testCase := range testcases {
+		if _, isLeaf := leafSet[testCase.Name]; !isLeaf {
+			continue
+		}
+		merged.Testcases = append(merged.Testcases, mergeTestCase(testCase, suite.Name, suffix))
+	}
+	return merged, true
+}
+
+func leafTestCaseSet(testcases []junit.Testcase) map[string]struct{} {
+	names := make([]string, len(testcases))
+	for i, tc := range testcases {
+		names[i] = tc.Name
+	}
+	leafSet := make(map[string]struct{}, len(names))
+	for _, name := range filterParentNames(names) {
+		leafSet[name] = struct{}{}
+	}
+	return leafSet
+}
+
+func mergeTestCase(testCase junit.Testcase, suiteName, suffix string) junit.Testcase {
+	testCase.SystemOut = nil
+	testCase.SystemErr = nil
+	if testCase.Failure != nil {
+		normalizeFailure(testCase.Failure, suiteName)
+	}
+	testCase.Name += suffix
+	return testCase
+}
+
+func normalizeFailure(failure *junit.Result, suiteName string) {
+	if failure.Data != "" {
+		if details := parseFailureDetails(failure.Data); details != noFailureDetails {
+			failure.Data = details
+		}
+	}
+	if suiteName == alertsSuiteName {
+		failure.Type = canonicalAlertFailureType(failure)
+	} else {
+		failure.Type = string(failureTypeFailed)
+	}
 }
 
 // validateRetries checks that all failures from attempt N were retried in attempt N+1.
@@ -245,6 +277,44 @@ func validateRetries(reports []*junitReport) []error {
 	return errs
 }
 
+func alertFailureType(kind failureKind) failureType {
+	switch kind {
+	case failureKindDataRace:
+		return failureTypeDataRace
+	case failureKindPanic:
+		return failureTypePanic
+	case failureKindFatal:
+		return failureTypeFatal
+	case failureKindTimeout:
+		return failureTypeTimeout
+	case failureKindCrash:
+		return failureTypeCrash
+	default:
+		return failureTypeFailed
+	}
+}
+
+func canonicalAlertFailureType(result *junit.Result) string {
+	if result.Type != "" {
+		return result.Type
+	}
+	message := strings.ToLower(result.Message)
+	switch {
+	case strings.Contains(message, "data race"), strings.Contains(message, "race"):
+		return string(failureTypeDataRace)
+	case strings.Contains(message, "panic"):
+		return string(failureTypePanic)
+	case strings.Contains(message, "fatal"):
+		return string(failureTypeFatal)
+	case strings.Contains(message, "timeout"), strings.Contains(message, "stuck"):
+		return string(failureTypeTimeout)
+	case strings.Contains(message, "crash"):
+		return string(failureTypeCrash)
+	default:
+		return string(failureTypeFailed)
+	}
+}
+
 // testFailure holds information about a failed test.
 type testFailure struct {
 	Name       string
@@ -289,10 +359,15 @@ func newJUnitReport(logPath string, junitPath string) testResults {
 		for j := range testsuites.Suites[i].Testcases {
 			tc := &testsuites.Suites[i].Testcases[j]
 			if tc.Failure != nil && tc.Failure.Data != "" {
-				tc.Failure.Data = extractErrorTrace(strings.Split(tc.Failure.Data, "\n"))
+				if details := extractErrorTrace(strings.Split(tc.Failure.Data, "\n")); details != "" {
+					tc.Failure.Data = cleanFailureDetails(details)
+				}
+				tc.Failure.Type = string(failureTypeFailed)
 			}
 			if tc.Error != nil && tc.Error.Data != "" {
-				tc.Error.Data = extractErrorTrace(strings.Split(tc.Error.Data, "\n"))
+				if details := extractErrorTrace(strings.Split(tc.Error.Data, "\n")); details != "" {
+					tc.Error.Data = cleanFailureDetails(details)
+				}
 			}
 		}
 	}
@@ -386,4 +461,71 @@ func lastLines(output []string, n int) string {
 	}
 	slices.Reverse(lines)
 	return strings.Join(lines, "\n")
+}
+
+func parseFailureDetails(data string) string {
+	lines := normalizedFailureLines(data)
+
+	if start, end, ok := findTestifyFailureBlock(lines); ok {
+		return cleanFailureDetails(strings.Join(lines[start:end], "\n"))
+	}
+	if start, end, ok := findLastFailureBlock(lines); ok {
+		return cleanFailureDetails(strings.Join(lines[start:end], "\n"))
+	}
+	return noFailureDetails
+}
+
+func cleanFailureDetails(details string) string {
+	return strings.ReplaceAll(details, "\t", "    ")
+}
+
+func normalizedFailureLines(data string) []string {
+	lines := strings.Split(strings.ReplaceAll(data, "\r\n", "\n"), "\n")
+	for len(lines) > 0 {
+		t := strings.TrimSpace(lines[len(lines)-1])
+		if t != "" && t != "FAIL" {
+			break
+		}
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+func findTestifyFailureBlock(lines []string) (start, end int, ok bool) {
+	for i, line := range lines {
+		if !strings.Contains(line, "Error Trace:") {
+			continue
+		}
+		start = i
+		if i > 0 {
+			start = i - 1
+		}
+		return start, endOfFailureBlock(lines, start+1), true
+	}
+	return 0, 0, false
+}
+
+func findLastFailureBlock(lines []string) (start, end int, ok bool) {
+	lastStart := -1
+	for i, line := range lines {
+		if isTestOutputLine(line) {
+			lastStart = i
+		}
+	}
+	if lastStart < 0 {
+		return 0, 0, false
+	}
+	return lastStart, endOfFailureBlock(lines, lastStart+1), true
+}
+
+func endOfFailureBlock(lines []string, start int) int {
+	end := start
+	for end < len(lines) && !isTestOutputLine(lines[end]) && lines[end] != "" {
+		end++
+	}
+	return end
+}
+
+func isTestOutputLine(line string) bool {
+	return len(line) > 4 && line[:4] == "    " && line[4] != ' ' && line[4] != '\t'
 }

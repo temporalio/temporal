@@ -558,7 +558,7 @@ functional-test-ndc-coverage: prepare-coverage-test
 
 
 print-test-summary: $(TEST_OUTPUT_ROOT)
-	@go run ./cmd/tools/test-runner print-summary \
+	@go run ./cmd/tools/test-runner2 print-summary \
 		--junit-glob=$(TEST_OUTPUT_ROOT)/junit.*.xml
 
 ##### Schema #####
