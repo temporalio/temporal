@@ -3507,8 +3507,7 @@ func (s *Versioning3Suite) TestSyncDeploymentUserDataWithRoutingConfig_Update() 
 func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-
-	var unexpectedErr error
+	failedPrecondition := serviceerror.NewFailedPreconditionf(workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error()
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:      s.Namespace().String(),
@@ -3516,14 +3515,12 @@ func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 		}
 		req.BuildId = tv.BuildID()
 		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
-		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok || (err != nil && strings.Contains(err.Error(), serviceerror.NewFailedPreconditionf(workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error())) {
+		if s.shouldRetryWorkerDeploymentRPC(err, failedPrecondition) {
 			require.NoError(t, err)
+			return
 		}
-		if err != nil {
-			unexpectedErr = err
-		}
+		require.NoError(t, err)
 	}, 60*time.Second, 500*time.Millisecond)
-	s.NoError(unexpectedErr)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(tv)
@@ -3556,57 +3553,50 @@ func (s *Versioning3Suite) pollUntilRegistered(ctx context.Context, tv *testvars
 	}
 
 	// Wait until the version is visible and all requested task queue types are registered.
-	var unexpectedErr error
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: s.Namespace().String(),
 			Version:   tv.DeploymentVersionString(),
 		})
-		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
 			require.NoError(t, err)
+			return
 		}
-		if err != nil {
-			unexpectedErr = err
-		} else {
-			tqName := tv.TaskQueue().GetName()
-			for _, tqType := range tqTypes {
-				found := false
-				for _, tq := range resp.GetVersionTaskQueues() {
-					if tq.GetName() == tqName && tq.GetType() == tqType {
-						found = true
-						break
-					}
+		require.NoError(t, err)
+		tqName := tv.TaskQueue().GetName()
+		for _, tqType := range tqTypes {
+			found := false
+			for _, tq := range resp.GetVersionTaskQueues() {
+				if tq.GetName() == tqName && tq.GetType() == tqType {
+					found = true
+					break
 				}
-				if !found {
-					require.True(t, found)
-					return
-				}
+			}
+			if !found {
+				require.True(t, found)
+				return
 			}
 		}
 	}, 30*time.Second, 100*time.Millisecond)
-	s.NoError(unexpectedErr)
 	cancel()
 }
 
 func (s *Versioning3Suite) unsetCurrentDeployment(tv *testvars.TestVars) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-
-	var unexpectedErr error
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:      s.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 		}
 		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
-		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+		if s.shouldRetryWorkerDeploymentRPC(err) {
 			require.NoError(t, err)
+			return
 		}
-		if err != nil {
-			unexpectedErr = err
-		}
+		require.NoError(t, err)
 	}, 60*time.Second, 500*time.Millisecond)
-	s.NoError(unexpectedErr)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(tv)
@@ -3623,8 +3613,8 @@ func (s *Versioning3Suite) setRampingDeployment(
 	if rampUnversioned {
 		bid = ""
 	}
+	failedPrecondition := serviceerror.NewFailedPreconditionf(workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error()
 
-	var unexpectedErr error
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		req := &workflowservice.SetWorkerDeploymentRampingVersionRequest{
 			Namespace:      s.Namespace().String(),
@@ -3633,14 +3623,12 @@ func (s *Versioning3Suite) setRampingDeployment(
 		}
 		req.BuildId = bid
 		_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, req)
-		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok || (err != nil && strings.Contains(err.Error(), serviceerror.NewFailedPreconditionf(workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error())) {
+		if s.shouldRetryWorkerDeploymentRPC(err, failedPrecondition) {
 			require.NoError(t, err)
+			return
 		}
-		if err != nil {
-			unexpectedErr = err
-		}
+		require.NoError(t, err)
 	}, 60*time.Second, 500*time.Millisecond)
-	s.NoError(unexpectedErr)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(tv)
@@ -3653,10 +3641,31 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagationQueryWorkerDeployment
 				Namespace:      s.Namespace().String(),
 				DeploymentName: tv.DeploymentSeries(),
 			})
+			if s.shouldRetryWorkerDeploymentRPC(err) {
+				require.NoError(t, err)
+				return
+			}
 			require.NoError(t, err)
 			require.Equal(t, enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED, resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState())
 		}, 10*time.Second, 100*time.Millisecond)
 	}
+}
+
+func (s *Versioning3Suite) shouldRetryWorkerDeploymentRPC(err error, retryableMessages ...string) bool {
+	if err == nil || s.T().Context().Err() != nil {
+		return false
+	}
+	var notFound *serviceerror.NotFound
+	if errors.As(err, &notFound) || errors.Is(err, context.DeadlineExceeded) || common.IsRetryableRPCError(err) {
+		return true
+	}
+	errMsg := err.Error()
+	for _, msg := range retryableMessages {
+		if strings.Contains(errMsg, msg) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Versioning3Suite) updateTaskQueueDeploymentData(
@@ -5636,8 +5645,8 @@ func (s *Versioning3Suite) TestActivityRetryAutoUpgradeDuringBackoff() {
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Wait for first activity attempt to fail (should be on v1)
-	s.Eventually(func() bool {
-		return v1AttemptCount.Load() == 1
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		require.Equal(t, int32(1), v1AttemptCount.Load())
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Now the activity is in retry backoff. Change the current deployment to v2
