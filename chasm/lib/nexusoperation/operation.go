@@ -578,7 +578,6 @@ func (o *Operation) metricsHandler(ctx chasm.Context) metrics.Handler {
 		metrics.WorkflowTypeTag(wftt),
 	}
 
-	// nolint:revive // unchecked-type-assertion: intentional panic on missing context value
 	opCtx, ok := ctx.Value(OperationContextKey).(*OperationContext)
 	if !ok {
 		softassert.Fail(ctx.Logger(), "operation context missing")
@@ -627,7 +626,7 @@ func (o *Operation) emitOnTimedOutMetrics(ctx chasm.Context, closeTime time.Time
 		strings.ToLower(nexusoperationpb.OPERATION_STATUS_TIMED_OUT.String()),
 	)
 	handler := o.metricsHandler(ctx)
-	NexusOperationTimeoutCount.With(handler).Record(1, metrics.StringTag("timeout_type", timeoutType))
+	NexusOperationTimeoutCount.With(handler).Record(1, metrics.TimeoutTypeTag(timeoutType))
 	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
 }
 
@@ -653,7 +652,7 @@ func (o *Operation) emitLatencyMetrics(handler metrics.Handler, closeTime time.T
 	} else {
 		// Sync operation or operation that never started.
 		// For sync ops, schedule-to-start equals schedule-to-close.
-		NexusOperationScheduleToStartLatency.With(handler).Record(closeTime.Sub(scheduledTime), outcomeTag)
+		NexusOperationScheduleToStartLatency.With(handler).Record(closeTime.Sub(scheduledTime))
 	}
 }
 

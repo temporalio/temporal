@@ -2,6 +2,7 @@ package nexusoperation
 
 import (
 	"context"
+	"maps"
 	"testing"
 	"time"
 
@@ -392,7 +393,8 @@ func TestTransitionSucceeded(t *testing.T) {
 
 			operation := newTestOperation()
 			operation.Status = nexusoperationpb.OPERATION_STATUS_STARTED
-			operation.StartedTime = operation.ScheduledTime
+			operation.StartedTime =
+				timestamppb.New(operation.ScheduledTime.AsTime().Add(time.Second))
 
 			err := TransitionSucceeded.Apply(operation, ctx, EventSucceeded{
 				CompleteTime: tc.completeTime,
@@ -408,37 +410,27 @@ func TestTransitionSucceeded(t *testing.T) {
 			protorequire.ProtoEqual(t, tc.result, outcome.GetSuccessful().GetResult())
 			require.Empty(t, ctx.Tasks)
 
-			snap := capture.Snapshot()
+			countTags := map[string]string{
+				"namespace":       "ns-name",
+				"nexus_endpoint":  "test-endpoint",
+				"nexus_service":   "test-service",
+				"nexus_operation": "test-operation",
+				"workflowType":    standaloneOperationWorkflowTypeName,
+			}
+			latencyTags := maps.Clone(countTags)
+			latencyTags["outcome"] = "succeeded"
 
-			successCount := snap[NexusOperationSuccessCount.Name()]
-			require.Len(t, successCount, 1)
-			require.Equal(t, int64(1), successCount[0].Value)
-			require.Equal(t, "ns-name", successCount[0].Tags["namespace"])
-			require.Equal(t, "test-endpoint", successCount[0].Tags["nexus_endpoint"])
-			require.Equal(t, "test-service", successCount[0].Tags["nexus_service"])
-			require.Equal(t, "test-operation", successCount[0].Tags["nexus_operation"])
-			require.Equal(t, standaloneOperationWorkflowTypeName, successCount[0].Tags["workflowType"])
-
-			expectedLatency := tc.expectedClosedTime.Sub(operation.ScheduledTime.AsTime())
-
-			stcLatency := snap[NexusOperationScheduleToCloseLatency.Name()]
-			require.Len(t, stcLatency, 1)
-			require.Equal(t, expectedLatency, stcLatency[0].Value)
-			require.Equal(t, "succeeded", stcLatency[0].Tags["outcome"])
-
-			startToCloseLatency := snap[NexusOperationStartToCloseLatency.Name()]
-			require.Len(t, startToCloseLatency, 1)
-			require.Equal(t, expectedLatency, startToCloseLatency[0].Value)
-			require.Equal(t, "succeeded", startToCloseLatency[0].Tags["outcome"])
-
-			// Schedule-to-start is emitted in TransitionStarted, not from the success path
-			// when the operation was already started.
-			require.Empty(t, snap[NexusOperationScheduleToStartLatency.Name()])
-
-			require.Empty(t, snap[NexusOperationFailedCount.Name()])
-			require.Empty(t, snap[NexusOperationCancelCount.Name()])
-			require.Empty(t, snap[NexusOperationTimeoutCount.Name()])
-			require.Empty(t, snap[NexusOperationTerminateCount.Name()])
+			require.Equal(t, metricstest.CaptureSnapshot{
+				NexusOperationSuccessCount.Name(): {
+					{Value: int64(1), Tags: countTags},
+				},
+				NexusOperationScheduleToCloseLatency.Name(): {
+					{Value: tc.expectedClosedTime.Sub(operation.ScheduledTime.AsTime()), Tags: latencyTags},
+				},
+				NexusOperationStartToCloseLatency.Name(): {
+					{Value: tc.expectedClosedTime.Sub(operation.StartedTime.AsTime()), Tags: latencyTags},
+				},
+			}, capture.Snapshot())
 		})
 	}
 }
@@ -490,6 +482,10 @@ func TestTransitionFailed(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+
 			ctx := &chasm.MockMutableContext{
 				MockContext: chasm.MockContext{
 					HandleNow: func(chasm.Component) time.Time { return defaultTime },
@@ -498,8 +494,12 @@ func TestTransitionFailed(t *testing.T) {
 							&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0,
 						)
 					},
+					HandleMetricsHandler: func() metrics.Handler { return metricsHandler },
 					GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
-						MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
+						MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{
+							IncludeServiceTag:   true,
+							IncludeOperationTag: true,
+						}),
 					}),
 				},
 			}
@@ -517,6 +517,28 @@ func TestTransitionFailed(t *testing.T) {
 			require.Nil(t, operation.NextAttemptScheduleTime)
 			require.Empty(t, ctx.Tasks)
 			tc.assert(t, ctx, operation)
+
+			countTags := map[string]string{
+				"namespace":       "ns-name",
+				"nexus_endpoint":  "test-endpoint",
+				"nexus_service":   "test-service",
+				"nexus_operation": "test-operation",
+				"workflowType":    standaloneOperationWorkflowTypeName,
+			}
+			latencyTags := maps.Clone(countTags)
+			latencyTags["outcome"] = "failed"
+			latency := operation.ClosedTime.AsTime().Sub(operation.ScheduledTime.AsTime())
+			require.Equal(t, metricstest.CaptureSnapshot{
+				NexusOperationFailedCount.Name(): {
+					{Value: int64(1), Tags: countTags},
+				},
+				NexusOperationScheduleToCloseLatency.Name(): {
+					{Value: latency, Tags: latencyTags},
+				},
+				NexusOperationScheduleToStartLatency.Name(): {
+					{Value: latency, Tags: countTags},
+				},
+			}, capture.Snapshot())
 		})
 	}
 }
@@ -568,6 +590,10 @@ func TestTransitionCanceled(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+
 			ctx := &chasm.MockMutableContext{
 				MockContext: chasm.MockContext{
 					HandleNow: func(chasm.Component) time.Time { return defaultTime },
@@ -576,8 +602,12 @@ func TestTransitionCanceled(t *testing.T) {
 							&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0,
 						)
 					},
+					HandleMetricsHandler: func() metrics.Handler { return metricsHandler },
 					GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
-						MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
+						MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{
+							IncludeServiceTag:   true,
+							IncludeOperationTag: true,
+						}),
 					}),
 				},
 			}
@@ -595,6 +625,28 @@ func TestTransitionCanceled(t *testing.T) {
 			require.Nil(t, operation.NextAttemptScheduleTime)
 			require.Empty(t, ctx.Tasks)
 			tc.assert(t, ctx, operation)
+
+			countTags := map[string]string{
+				"namespace":       "ns-name",
+				"nexus_endpoint":  "test-endpoint",
+				"nexus_service":   "test-service",
+				"nexus_operation": "test-operation",
+				"workflowType":    standaloneOperationWorkflowTypeName,
+			}
+			latencyTags := maps.Clone(countTags)
+			latencyTags["outcome"] = "canceled"
+			latency := operation.ClosedTime.AsTime().Sub(operation.ScheduledTime.AsTime())
+			require.Equal(t, metricstest.CaptureSnapshot{
+				NexusOperationCancelCount.Name(): {
+					{Value: int64(1), Tags: countTags},
+				},
+				NexusOperationScheduleToCloseLatency.Name(): {
+					{Value: latency, Tags: latencyTags},
+				},
+				NexusOperationScheduleToStartLatency.Name(): {
+					{Value: latency, Tags: countTags},
+				},
+			}, capture.Snapshot())
 		})
 	}
 }
@@ -639,6 +691,10 @@ func TestTransitionTimedOut(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+
 			ctx := &chasm.MockMutableContext{
 				MockContext: chasm.MockContext{
 					HandleNow: func(chasm.Component) time.Time { return defaultTime },
@@ -647,8 +703,12 @@ func TestTransitionTimedOut(t *testing.T) {
 							&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0,
 						)
 					},
+					HandleMetricsHandler: func() metrics.Handler { return metricsHandler },
 					GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
-						MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
+						MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{
+							IncludeServiceTag:   true,
+							IncludeOperationTag: true,
+						}),
 					}),
 				},
 			}
@@ -666,6 +726,30 @@ func TestTransitionTimedOut(t *testing.T) {
 			require.Nil(t, operation.NextAttemptScheduleTime)
 			require.Empty(t, ctx.Tasks)
 			tc.assert(t, ctx, operation)
+
+			countTags := map[string]string{
+				"namespace":       "ns-name",
+				"nexus_endpoint":  "test-endpoint",
+				"nexus_service":   "test-service",
+				"nexus_operation": "test-operation",
+				"workflowType":    standaloneOperationWorkflowTypeName,
+			}
+			timeoutCountTags := maps.Clone(countTags)
+			timeoutCountTags["timeout_type"] = tc.event.Failure.GetTimeoutFailureInfo().GetTimeoutType().String()
+			latencyTags := maps.Clone(countTags)
+			latencyTags["outcome"] = "timedout"
+			latency := operation.ClosedTime.AsTime().Sub(operation.ScheduledTime.AsTime())
+			require.Equal(t, metricstest.CaptureSnapshot{
+				NexusOperationTimeoutCount.Name(): {
+					{Value: int64(1), Tags: timeoutCountTags},
+				},
+				NexusOperationScheduleToCloseLatency.Name(): {
+					{Value: latency, Tags: latencyTags},
+				},
+				NexusOperationScheduleToStartLatency.Name(): {
+					{Value: latency, Tags: countTags},
+				},
+			}, capture.Snapshot())
 		})
 	}
 }
@@ -709,6 +793,10 @@ func TestTransitionTerminated(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+
 			ctx := &chasm.MockMutableContext{
 				MockContext: chasm.MockContext{
 					HandleNow: func(chasm.Component) time.Time { return defaultTime },
@@ -717,8 +805,12 @@ func TestTransitionTerminated(t *testing.T) {
 							&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0,
 						)
 					},
+					HandleMetricsHandler: func() metrics.Handler { return metricsHandler },
 					GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
-						MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
+						MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{
+							IncludeServiceTag:   true,
+							IncludeOperationTag: true,
+						}),
 					}),
 				},
 			}
@@ -752,6 +844,28 @@ func TestTransitionTerminated(t *testing.T) {
 				},
 			}, operation.Outcome.Get(ctx))
 			require.Empty(t, ctx.Tasks)
+
+			countTags := map[string]string{
+				"namespace":       "ns-name",
+				"nexus_endpoint":  "test-endpoint",
+				"nexus_service":   "test-service",
+				"nexus_operation": "test-operation",
+				"workflowType":    standaloneOperationWorkflowTypeName,
+			}
+			latencyTags := maps.Clone(countTags)
+			latencyTags["outcome"] = "terminated"
+			latency := operation.ClosedTime.AsTime().Sub(operation.ScheduledTime.AsTime())
+			require.Equal(t, metricstest.CaptureSnapshot{
+				NexusOperationTerminateCount.Name(): {
+					{Value: int64(1), Tags: countTags},
+				},
+				NexusOperationScheduleToCloseLatency.Name(): {
+					{Value: latency, Tags: latencyTags},
+				},
+				NexusOperationScheduleToStartLatency.Name(): {
+					{Value: latency, Tags: countTags},
+				},
+			}, capture.Snapshot())
 		})
 	}
 }
