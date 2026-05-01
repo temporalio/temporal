@@ -29,7 +29,7 @@ func TestDispatchNexusTaskWithMatchingBehaviors(t *testing.T) {
 func TestDispatchNexusTaskOnNonRootPartitionNoForwarding(t *testing.T) {
 	// Both poll and task go to partition 1 with no forwarding. This verifies that
 	// non-root partitions work correctly even when no forwarding is involved.
-	s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+	s := testcore.NewEnv(t)
 
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)

@@ -346,14 +346,13 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted(
 // non-sticky query task poll is a valid HistoryContinuation token usable with
 // GetWorkflowExecutionHistory. Fails with "Invalid NextPageToken" if matching service
 // returns a RawHistoryContinuation token instead.
-// Uses a dedicated cluster with MatchingHistoryMaxPageSize=14 (for query tasks) and
-// HistoryMaxPageSize=14 (for regular workflow tasks via RecordWorkflowTaskStarted).
+// Uses MatchingHistoryMaxPageSize=14 (for query tasks) and HistoryMaxPageSize=14
+// (for regular workflow tasks via RecordWorkflowTaskStarted).
 // With 5 activities generating ~16 history blobs, page size 14 ensures any task type
 // produces a multi-page history response with a non-empty NextPageToken. 14 is large
 // enough that activity-phase WFTs (≤14 blobs) don't need extra pagination roundtrips.
 func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 	env := testcore.NewEnv(s.T(),
-		testcore.WithDedicatedCluster(),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingHistoryMaxPageSize, 14),
 		testcore.WithDynamicConfig(dynamicconfig.HistoryMaxPageSize, 14),
 	)
