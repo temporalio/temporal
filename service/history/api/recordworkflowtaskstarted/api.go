@@ -165,11 +165,12 @@ func Invoke(
 				requestID,
 				pollerTaskQueue,
 				req.PollRequest.Identity,
-				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities),
+				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities, req.PollRequest.DeploymentOptions), //nolint:staticcheck // SA1019: WorkerVersionCapabilities is deprecated but still used for old versioning [cleanup-old-wv]
 				req.GetBuildIdRedirectInfo(),
 				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
 				req.TargetDeploymentVersion,
+				req.TaskDispatchRevisionNumber,
 			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history

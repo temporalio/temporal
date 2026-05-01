@@ -136,7 +136,7 @@ PINNED_DEPENDENCIES := \
 TEST_OUTPUT_ROOT        := ./.testoutput
 NEW_COVER_PROFILE       = $(TEST_OUTPUT_ROOT)/coverage.$(shell xxd -p -l 16 /dev/urandom).out   # generates a new filename each time it's substituted
 NEW_REPORT              = $(TEST_OUTPUT_ROOT)/junit.$(shell xxd -p -l 16 /dev/urandom).xml   # generates a new filename each time it's substituted
-COVERPKG_FLAG 		    = -coverpkg=$(shell go list ./... | paste -sd "," -)
+COVERPKG_FLAG 		    = -coverpkg=./...
 
 # DB
 SQL_USER ?= temporal
@@ -409,7 +409,7 @@ lint-protos: $(BUF) $(INTERNAL_BINPB) $(CHASM_BINPB)
 	@$(BUF) lint $(INTERNAL_BINPB)
 	@$(BUF) lint --config chasm/lib/buf.yaml $(CHASM_BINPB)
 
-fmt: fmt-gofix fmt-imports fmt-yaml
+fmt: fmt-gofix fmt-imports fmt-protos fmt-yaml
 
 # Some fixes enable others (e.g. rangeint may expose minmax opportunities),
 # so - as recommended by the Go team - we run go fix in a loop until it reaches
@@ -437,6 +437,11 @@ fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, w
 parallelize-tests:
 	@printf $(COLOR) "Add t.Parallel() to tests..."
 	@go run ./cmd/tools/parallelize $(INTEGRATION_TEST_DIRS)
+
+fmt-protos: $(BUF)
+	@printf $(COLOR) "Formatting proto files..."
+	@$(BUF) format -w $(PROTO_ROOT)/internal
+	@$(BUF) format -w --config chasm/lib/buf.yaml chasm/lib
 
 fmt-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Formatting YAML files..."
@@ -551,6 +556,10 @@ report-test-crash: $(TEST_OUTPUT_ROOT)
 	@go run ./cmd/tools/test-runner report-crash --gotestsum=report-crash \
 		--junitfile=$(TEST_OUTPUT_ROOT)/junit.crash.xml \
 		--crashreportname=$(CRASH_REPORT_NAME)
+
+print-test-summary: $(TEST_OUTPUT_ROOT)
+	@go run ./cmd/tools/test-runner print-summary \
+		--junit-glob=$(TEST_OUTPUT_ROOT)/junit.*.xml
 
 ##### Schema #####
 install-schema-cass-es: temporal-cassandra-tool install-schema-es
@@ -691,6 +700,10 @@ start-xdc-cluster-b: temporal-server
 
 start-xdc-cluster-c: temporal-server
 	./temporal-server --config-file config/development-cluster-c.yaml --allow-no-auth start
+
+start-jwt: temporal-server
+	@./config/jwt/setup-keys.sh
+	./temporal-server --config-file config/development-jwt.yaml start --service frontend --service internal-frontend --service history --service matching --service worker
 
 ##### Grafana #####
 update-dashboards:

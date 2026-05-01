@@ -56,7 +56,7 @@ jobs:
           cp ./develop/docker-compose/docker-compose.yml /tmp/docker-compose.yml
 
       - name: Upload Docker artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: temporal-server-docker
           path: |

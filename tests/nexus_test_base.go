@@ -3,9 +3,13 @@ package tests
 import (
 	"context"
 	"errors"
+	"strings"
+	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
@@ -15,30 +19,102 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	cnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/tests/testcore"
 )
 
-type NexusTestBaseSuite struct {
-	testcore.FunctionalTestBase
+type NexusTestEnv struct {
+	*testcore.TestEnv
 	useTemporalFailures bool
 }
 
-func (s *NexusTestBaseSuite) createNexusEndpoint(name string, taskQueue string) *nexuspb.Endpoint {
-	resp, err := s.OperatorClient().CreateNexusEndpoint(testcore.NewContext(), &operatorservice.CreateNexusEndpointRequest{
+func newNexusTestEnv(t *testing.T, useTemporalFailures bool, opts ...testcore.TestOption) *NexusTestEnv {
+	return &NexusTestEnv{
+		TestEnv:             testcore.NewEnv(t, opts...),
+		useTemporalFailures: useTemporalFailures,
+	}
+}
+
+func (env *NexusTestEnv) createNexusEndpoint(ctx context.Context, t *testing.T, name string, taskQueue string) *nexuspb.Endpoint {
+	resp, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: name,
 			Target: &nexuspb.EndpointTarget{
 				Variant: &nexuspb.EndpointTarget_Worker_{
 					Worker: &nexuspb.EndpointTarget_Worker{
-						Namespace: s.Namespace().String(),
+						Namespace: env.Namespace().String(),
 						TaskQueue: taskQueue,
 					},
 				},
 			},
 		},
 	})
-	s.NoError(err)
+	require.NoError(t, err)
+
+	// Using a fresh context here in case 'ctx' is tied to a test's lifetime which could cancel this deletion request.
+	t.Cleanup(func() {
+		_, _ = env.OperatorClient().DeleteNexusEndpoint(testcore.NewContext(), &operatorservice.DeleteNexusEndpointRequest{
+			Id:      resp.Endpoint.Id,
+			Version: resp.Endpoint.Version,
+		})
+	})
+
+	env.ensureNexusEndpoint(ctx, t, name)
 	return resp.Endpoint
+}
+
+func (env *NexusTestEnv) createRandomNexusEndpoint(ctx context.Context, t *testing.T) *nexuspb.Endpoint {
+	return env.createNexusEndpoint(ctx, t, testcore.RandomizedNexusEndpoint(t.Name()), "unused")
+}
+
+// createRandomExternalNexusServer creates a mock nexus server that listens via a randomized endpointName and return this name to the caller.
+func (env *NexusTestEnv) createRandomExternalNexusServer(ctx context.Context, t *testing.T, handler nexustest.Handler) string {
+	endpointName := testcore.RandomizedNexusEndpoint(t.Name())
+	listenAddr := nexustest.AllocListenAddress()
+	nexustest.NewNexusServer(t, listenAddr, handler)
+	resp, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_External_{
+					External: &nexuspb.EndpointTarget_External{
+						Url: "http://" + listenAddr,
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Using a fresh context here in case 'ctx' is tied to a test's lifetime which could cancel this deletion request.
+	t.Cleanup(func() {
+		_, _ = env.OperatorClient().DeleteNexusEndpoint(testcore.NewContext(), &operatorservice.DeleteNexusEndpointRequest{
+			Id:      resp.Endpoint.Id,
+			Version: resp.Endpoint.Version,
+		})
+	})
+
+	env.ensureNexusEndpoint(ctx, t, endpointName)
+	return endpointName
+}
+
+// ensureNexusEndpoint probes the specified endpoint until it's visible to StartNexusOperationExecution to ensure tests
+// can use it.
+func (env *NexusTestEnv) ensureNexusEndpoint(ctx context.Context, t *testing.T, endpointName string) {
+	require.Eventually(t, func() bool {
+		_, err := env.FrontendClient().StartNexusOperationExecution(ctx, &workflowservice.StartNexusOperationExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Endpoint:  endpointName,
+			Service:   "probe",
+			Operation: "probe",
+			RequestId: "probe",
+		})
+		if notFound, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+			msg := notFound.Error()
+			return msg != "endpoint not registered" && !strings.HasPrefix(msg, "could not find Nexus endpoint by name:")
+		}
+		return true
+	}, 10*time.Second, 100*time.Millisecond, "endpoint should become visible")
 }
 
 // nexusTaskResponse represents a successful response from a nexus task handler.
@@ -54,21 +130,21 @@ type nexusTaskResponse struct {
 	Links []nexus.Link
 }
 
-type nexusTaskHandler func(res *workflowservice.PollNexusTaskQueueResponse) (*nexusTaskResponse, error)
+type nexusTaskHandler func(t *testing.T, res *workflowservice.PollNexusTaskQueueResponse) (*nexusTaskResponse, error)
 
-func (s *NexusTestBaseSuite) nexusTaskPoller(ctx context.Context, taskQueue string, handler nexusTaskHandler) <-chan error {
-	return s.versionedNexusTaskPoller(ctx, taskQueue, "", handler)
+func (env *NexusTestEnv) nexusTaskPoller(ctx context.Context, t *testing.T, taskQueue string, handler nexusTaskHandler) <-chan error {
+	return env.versionedNexusTaskPoller(ctx, t, taskQueue, "", handler)
 }
 
-func (s *NexusTestBaseSuite) versionedNexusTaskPoller(ctx context.Context, taskQueue, buildID string, handler nexusTaskHandler) <-chan error {
+func (env *NexusTestEnv) versionedNexusTaskPoller(ctx context.Context, t *testing.T, taskQueue, buildID string, handler nexusTaskHandler) <-chan error {
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- s.versionedNexusTaskPollerDo(ctx, taskQueue, buildID, handler)
+		errCh <- env.versionedNexusTaskPollerDo(ctx, t, taskQueue, buildID, handler)
 	}()
 	return errCh
 }
 
-func (s *NexusTestBaseSuite) versionedNexusTaskPollerDo(ctx context.Context, taskQueue, buildID string, handler nexusTaskHandler) error {
+func (env *NexusTestEnv) versionedNexusTaskPollerDo(ctx context.Context, t *testing.T, taskQueue, buildID string, handler nexusTaskHandler) error {
 	var vc *commonpb.WorkerVersionCapabilities
 	if buildID != "" {
 		vc = &commonpb.WorkerVersionCapabilities{
@@ -76,8 +152,8 @@ func (s *NexusTestBaseSuite) versionedNexusTaskPollerDo(ctx context.Context, tas
 			UseVersioning: true,
 		}
 	}
-	res, err := s.GetTestCluster().FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	res, err := env.FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		Identity:  uuid.NewString(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
@@ -98,14 +174,12 @@ func (s *NexusTestBaseSuite) versionedNexusTaskPollerDo(ctx context.Context, tas
 	if res.Request.GetStartOperation().GetService() != "test-service" && res.Request.GetCancelOperation().GetService() != "test-service" {
 		return errors.New("expected service to be test-service")
 	}
-	result, handlerErr := handler(res)
+	result, handlerErr := handler(t, res)
 	if handlerErr != nil {
-		var opErr *nexus.OperationError
-		var he *nexus.HandlerError
-		if errors.As(handlerErr, &opErr) {
-			return s.respondNexusTaskCompletedWithOperationError(ctx, res.TaskToken, opErr)
-		} else if errors.As(handlerErr, &he) {
-			return s.respondNexusTaskFailed(ctx, res.TaskToken, he)
+		if opErr, ok := errors.AsType[*nexus.OperationError](handlerErr); ok {
+			return env.respondNexusTaskCompletedWithOperationError(ctx, res.TaskToken, opErr)
+		} else if he, ok := errors.AsType[*nexus.HandlerError](handlerErr); ok {
+			return env.respondNexusTaskFailed(ctx, res.TaskToken, he)
 		}
 		return handlerErr
 	}
@@ -163,20 +237,20 @@ func (s *NexusTestBaseSuite) versionedNexusTaskPollerDo(ctx context.Context, tas
 			panic("unreachable") // nolint:revive // all implementations of HandlerStartOperationResult must be covered here, so this should be unreachable.
 		}
 	}
-	_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
 		Identity:  uuid.NewString(),
 		TaskToken: res.TaskToken,
 		Response:  response,
 	})
-	if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); err != nil && ctx.Err() == nil && !ok {
 		return err
 	}
 	return nil
 }
 
-func (s *NexusTestBaseSuite) respondNexusTaskFailed(ctx context.Context, taskToken []byte, he *nexus.HandlerError) error {
-	if s.useTemporalFailures {
+func (env *NexusTestEnv) respondNexusTaskFailed(ctx context.Context, taskToken []byte, he *nexus.HandlerError) error {
+	if env.useTemporalFailures {
 		nexusFailure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(he)
 		if err != nil {
 			return err
@@ -185,13 +259,13 @@ func (s *NexusTestBaseSuite) respondNexusTaskFailed(ctx context.Context, taskTok
 		if err != nil {
 			return err
 		}
-		_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
-			Namespace: s.Namespace().String(),
+		_, err = env.FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
+			Namespace: env.Namespace().String(),
 			Identity:  uuid.NewString(),
 			TaskToken: taskToken,
 			Failure:   temporalFailure,
 		})
-		if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); err != nil && ctx.Err() == nil && !ok {
 			return err
 		}
 		return nil
@@ -219,20 +293,20 @@ func (s *NexusTestBaseSuite) respondNexusTaskFailed(ctx context.Context, taskTok
 		protoError.RetryBehavior = enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE
 	default:
 	}
-	_, err := s.GetTestCluster().FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
-		Namespace: s.Namespace().String(),
+	_, err := env.FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
+		Namespace: env.Namespace().String(),
 		Identity:  uuid.NewString(),
 		TaskToken: taskToken,
 		Error:     protoError,
 	})
-	if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); err != nil && ctx.Err() == nil && !ok {
 		return err
 	}
 	return nil
 }
 
-func (s *NexusTestBaseSuite) respondNexusTaskCompletedWithOperationError(ctx context.Context, taskToken []byte, opErr *nexus.OperationError) error {
-	if s.useTemporalFailures {
+func (env *NexusTestEnv) respondNexusTaskCompletedWithOperationError(ctx context.Context, taskToken []byte, opErr *nexus.OperationError) error {
+	if env.useTemporalFailures {
 		nexusFailure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
 		if err != nil {
 			return err
@@ -250,13 +324,13 @@ func (s *NexusTestBaseSuite) respondNexusTaskCompletedWithOperationError(ctx con
 				},
 			},
 		}
-		_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
-			Namespace: s.Namespace().String(),
+		_, err = env.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
 			Identity:  uuid.NewString(),
 			TaskToken: taskToken,
 			Response:  response,
 		})
-		if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); err != nil && ctx.Err() == nil && !ok {
 			return err
 		}
 		return nil
@@ -284,13 +358,13 @@ func (s *NexusTestBaseSuite) respondNexusTaskCompletedWithOperationError(ctx con
 			},
 		},
 	}
-	_, err := s.GetTestCluster().FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
-		Namespace: s.Namespace().String(),
+	_, err := env.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
 		Identity:  uuid.NewString(),
 		TaskToken: taskToken,
 		Response:  response,
 	})
-	if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); err != nil && ctx.Err() == nil && !ok {
 		return err
 	}
 	return nil

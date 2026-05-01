@@ -9,6 +9,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	workerpb "go.temporal.io/api/worker/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -62,6 +63,7 @@ type (
 			activityScheduledEventID int64,
 		) error
 		GenerateActivityRetryTasks(activityInfo *persistencespb.ActivityInfo) error
+		GenerateWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error
 		GenerateChildWorkflowTasks(
 			childInitiatedEventId int64,
 		) error
@@ -77,6 +79,9 @@ type (
 		// these 2 APIs should only be called when mutable state transaction is being closed
 		GenerateActivityTimerTasks() error
 		GenerateUserTimerTasks() error
+
+		// time skipping tasks
+		RegenerateTimerTasksForTimeSkipping() error
 
 		// replication tasks
 		GenerateHistoryReplicationTasks(
@@ -577,6 +582,23 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistence
 	return nil
 }
 
+func (r *TaskGeneratorImpl) GenerateWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error {
+	if !r.config.EnableCancelActivityWorkerCommand() {
+		return nil
+	}
+
+	if len(commands) == 0 || controlQueue == "" {
+		return nil
+	}
+
+	r.mutableState.AddTasks(&tasks.WorkerCommandsTask{
+		WorkflowKey: r.mutableState.GetWorkflowKey(),
+		Commands:    commands,
+		Destination: controlQueue,
+	})
+	return nil
+}
+
 func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
 	childInitiatedEventId int64,
 ) error {
@@ -1007,4 +1029,106 @@ func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.St
 		}
 	}
 	return true
+}
+
+// RegenerateTimerTasksForTimeSkipping regenerates the timer tasks for time skipping.
+// This function is not idempotent, but when called twice, logically the timerTasks regenerated will have the same contents,
+// and the only difference is the TaskID.
+// TODO@time-skipping: currently not safe to call in replication context
+func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
+
+	if r.mutableState.GetExecutionInfo().TimeSkippingInfo == nil {
+		return nil
+	}
+	accumulatedSkippedDuration := r.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration.AsDuration()
+	if accumulatedSkippedDuration <= 0 {
+		return nil
+	}
+
+	// Task regeneration: mutableState.AddTask will adapt virtual time to wall time.
+	// (1) user timers — regenerate one task per pending user timer. User timers
+	// are only one of the task types that may need regeneration, so continue to
+	// the timeout timers below even when none are pending.
+	for _, userTimerSequenceID := range r.getTimerSequence().LoadAndSortUserTimers() {
+		r.mutableState.AddTasks(&tasks.UserTimerTask{
+			// TaskID is set by shard
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: userTimerSequenceID.Timestamp,
+			EventID:             userTimerSequenceID.EventID,
+		})
+	}
+
+	// (2) execution and run timeout timers
+	executionTimeoutTimer := r.mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime
+	if !timeNotSet(executionTimeoutTimer) {
+		r.mutableState.AddTasks(&tasks.WorkflowExecutionTimeoutTask{
+			// TaskID is set by shard
+			NamespaceID:         r.mutableState.GetExecutionInfo().NamespaceId,
+			WorkflowID:          r.mutableState.GetExecutionInfo().WorkflowId,
+			FirstRunID:          r.mutableState.GetExecutionInfo().FirstExecutionRunId,
+			VisibilityTimestamp: timestamp.TimeValue(executionTimeoutTimer),
+		})
+	}
+	runTimeoutTimer := r.mutableState.GetExecutionInfo().WorkflowRunExpirationTime
+	if !timeNotSet(runTimeoutTimer) {
+		// Version must match the workflow's start version so the executor's
+		// CheckTaskVersion passes for global namespaces (see timer_queue_active_task_executor.go).
+		startVersion, err := r.mutableState.GetStartVersion()
+		if err != nil {
+			return err
+		}
+		r.mutableState.AddTasks(&tasks.WorkflowRunTimeoutTask{
+			// TaskID is set by shard
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: timestamp.TimeValue(runTimeoutTimer),
+			Version:             startVersion,
+		})
+	}
+
+	// (3) elapsed-duration bound timer — regenerate when configured so its real-time
+	// VisibilityTimestamp tracks the new accumulated skip.
+	tsi := r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	if tsi.GetConfig().GetEnabled() {
+		boundInfo := tsi.GetCurrentElapsedDurationBound()
+		if boundInfo != nil && !boundInfo.GetHasReached() {
+			r.mutableState.AddTasks(&tasks.TimeSkippingTimerTask{
+				// TaskID is set by shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: boundInfo.GetTargetTime().AsTime(),
+				EventID:             boundInfo.GetSourceEventId(),
+			})
+		}
+	}
+
+	// (4) start delays (start-with-delay, cron, retry in CAN, etc).
+	// Gate matches calculateTimeSkippingTransition: only regenerate when there's a real backoff
+	// configured (ExecutionTime > StartTime) — a child workflow with !HadOrHasWorkflowTask but
+	// no backoff has no real timer to regenerate.
+	if !r.mutableState.HadOrHasWorkflowTask() {
+		ei := r.mutableState.GetExecutionInfo()
+		executionTime := ei.GetExecutionTime().AsTime()
+		startTime := ei.GetStartTime().AsTime()
+		if executionTime.After(startTime) {
+			startVersion, err := r.mutableState.GetStartVersion()
+			if err != nil {
+				return err
+			}
+			var backOffType enumsspb.WorkflowBackoffType
+			if ei.CronSchedule != "" {
+				backOffType = enumsspb.WORKFLOW_BACKOFF_TYPE_CRON
+			} else if ei.Attempt > 1 {
+				backOffType = enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY
+			} else {
+				backOffType = enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START
+			}
+			r.mutableState.AddTasks(&tasks.WorkflowBackoffTimerTask{
+				// TaskID is set by shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: executionTime,
+				Version:             startVersion,
+				WorkflowBackoffType: backOffType,
+			})
+		}
+	}
+	return nil
 }

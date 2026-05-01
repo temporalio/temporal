@@ -4,11 +4,13 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
-	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/service/history/historybuilder"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -25,6 +27,9 @@ type Workflow struct {
 
 	// Callbacks map is used to store the callbacks for the workflow.
 	Callbacks chasm.Map[string, *callback.Callback]
+
+	// Operations map is used to store the Nexus operations for the workflow, keyed by scheduled event ID.
+	Operations chasm.Map[int64, *nexusoperation.Operation]
 }
 
 func NewWorkflow(
@@ -46,22 +51,16 @@ func (w *Workflow) LifecycleState(
 	return chasm.LifecycleStateRunning
 }
 
-// ProcessCloseCallbacks triggers "WorkflowClosed" callbacks using the CHASM implementation.
-// It iterates through all callbacks and schedules WorkflowClosed ones that are in STANDBY state.
-func (w *Workflow) ProcessCloseCallbacks(ctx chasm.MutableContext) error {
-	// Iterate through all callbacks and schedule WorkflowClosed ones
-	for _, field := range w.Callbacks {
-		cb := field.Get(ctx)
-		// Only process callbacks in STANDBY state (not already triggered)
-		if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
-			continue
-		}
-		// Trigger the callback by transitioning to SCHEDULED state
-		if err := callback.TransitionScheduled.Apply(cb, ctx, callback.EventScheduled{}); err != nil {
-			return err
-		}
-	}
+func (w *Workflow) ContextMetadata(_ chasm.Context) map[string]string {
+	// TODO: Export workflow metadata from the CHASM workflow root instead of CloseTransaction().
 	return nil
+}
+
+func (w *Workflow) Terminate(
+	_ chasm.MutableContext,
+	_ chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	return chasm.TerminateComponentResponse{}, serviceerror.NewInternal("workflow root Terminate should not be called")
 }
 
 // AddCompletionCallbacks creates completion callbacks using the CHASM implementation.
@@ -102,9 +101,12 @@ func (w *Workflow) AddCompletionCallbacks(
 				},
 			}
 		default:
-			return fmt.Errorf("unsupported callback variant: %T", variant)
+			return serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", variant)
 		}
 
+		// requestID (unique per API call) + idx (position within the request) ensures unique, idempotent callback IDs.
+		// Unlike HSM callbacks, CHASM replicates entire trees rather than replaying events, so deterministic
+		// cross-cluster IDs based on event version are not needed.
 		id := fmt.Sprintf("%s-%d", requestID, idx)
 
 		// Create and add callback
@@ -114,10 +116,22 @@ func (w *Workflow) AddCompletionCallbacks(
 	return nil
 }
 
-func (w *Workflow) GetNexusCompletion(
-	ctx chasm.Context,
-	requestID string,
-) (nexusrpc.CompleteOperationOptions, error) {
-	// Retrieve the completion data from the underlying mutable state via MSPointer
-	return w.MSPointer.GetNexusCompletion(ctx, requestID)
+// addAndApplyHistoryEvent adds a history event to the workflow and applies the corresponding event definition,
+// looked up by Go type. This is the preferred way to add and apply events as it provides go-to-definition navigation.
+func addAndApplyHistoryEvent[D EventDefinition](
+	w *Workflow,
+	ctx chasm.MutableContext,
+	setAttributes func(*historypb.HistoryEvent),
+) (*historypb.HistoryEvent, error) {
+	def, ok := eventDefinitionByGoType[D](workflowContextFromChasm(ctx).registry)
+	if !ok {
+		return nil, serviceerror.NewInternalf("no event definition registered for Go type %T", (*D)(nil))
+	}
+	event := w.AddHistoryEvent(def.Type(), setAttributes)
+	return event, def.Apply(ctx, w, event)
+}
+
+// HasAnyBufferedEvent returns true if the workflow has any buffered event matching the given filter.
+func (w *Workflow) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool {
+	return w.MSPointer.HasAnyBufferedEvent(filter)
 }

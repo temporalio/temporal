@@ -145,6 +145,46 @@ func (c *metricClient) QueryWorkflow(
 	return c.client.QueryWorkflow(ctx, request, opts...)
 }
 
+func (c *metricClient) DispatchNexusTask(
+	ctx context.Context,
+	request *matchingservice.DispatchNexusTaskRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.DispatchNexusTaskResponse, retError error) {
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientDispatchNexusTaskScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
+
+	c.emitForwardedSourceStats(
+		scope,
+		request.GetForwardInfo().GetSourcePartition(),
+		request.TaskQueue,
+	)
+
+	return c.client.DispatchNexusTask(ctx, request, opts...)
+}
+
+func (c *metricClient) PollNexusTaskQueue(
+	ctx context.Context,
+	request *matchingservice.PollNexusTaskQueueRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.PollNexusTaskQueueResponse, retError error) {
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientPollNexusTaskQueueScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
+
+	if request.Request != nil {
+		c.emitForwardedSourceStats(
+			scope,
+			request.GetForwardedSource(),
+			request.Request.TaskQueue,
+		)
+	}
+
+	return c.client.PollNexusTaskQueue(ctx, request, opts...)
+}
+
 func (c *metricClient) emitForwardedSourceStats(
 	metricsHandler metrics.Handler,
 	forwardedFrom string,

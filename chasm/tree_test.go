@@ -455,7 +455,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 		SubComponent11: NewComponentField(nil, sc11),
 	}
 
-	s.Run("Sync and serialize component with pointer", func() {
+	s.Run("Sync and serialize component with ancestor pointer", func() {
 		var nilSerializedNodes map[string]*persistencespb.ChasmNode
 		rootNode, err := s.newTestTree(nilSerializedNodes)
 		s.NoError(err)
@@ -466,26 +466,33 @@ func (s *nodeSuite) TestPointerAttributes() {
 			MSPointer:                    NewMSPointer(s.nodeBackend),
 			SubComponent1:                NewComponentField(nil, sc1),
 			SubComponentInterfacePointer: NewComponentField[Component](nil, sc1),
-			SubComponent11Pointer:        ComponentPointerTo(ctx, sc11),
 		}
+
+		// sc11 points to root (grandparent) -- an ancestor pointer.
+		sc11.GrandparentPointer = ComponentPointerTo(ctx, rootComponent)
+
 		s.NoError(rootNode.SetRootComponent(rootComponent))
 
-		s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.ft)
+		s.Equal(fieldTypeDeferredPointer, sc11.GrandparentPointer.Internal.ft)
 
 		mutations, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		s.Len(mutations.UpdatedNodes, 5, "root, SubComponent1, SubComponent11, SubComponent11Pointer, and SubComponentInterfacePointer must be updated")
+		s.Len(mutations.UpdatedNodes, 5, "root, SubComponent1, SubComponent11, GrandparentPointer, and SubComponentInterfacePointer must be updated")
 		s.Empty(mutations.DeletedNodes)
 
-		s.Equal([]string{"SubComponent1", "SubComponent11"}, rootNode.children["SubComponent11Pointer"].serializedNode.GetMetadata().GetPointerAttributes().GetNodePath())
+		sc11Node := rootNode.children["SubComponent1"].children["SubComponent11"]
+		s.Equal(
+			[]string{},
+			sc11Node.children["GrandparentPointer"].serializedNode.GetMetadata().GetPointerAttributes().GetNodePath(),
+		)
 
-		// Save it use in other subtests.
+		// Save for use in other subtests.
 		persistedNodes = common.CloneProtoMap(mutations.UpdatedNodes)
 	})
 
 	s.NotNil(persistedNodes)
 
-	s.Run("Deserialize pointer component", func() {
+	s.Run("Deserialize ancestor pointer component", func() {
 		rootNode, err := s.newTestTree(persistedNodes)
 		s.NoError(err)
 
@@ -497,9 +504,14 @@ func (s *nodeSuite) TestPointerAttributes() {
 		s.NotNil(testComponent.MSPointer)
 
 		chasmContext := NewMutableContext(context.Background(), rootNode)
-		sc11Des := testComponent.SubComponent11Pointer.Get(chasmContext)
+		sc1Des := testComponent.SubComponent1.Get(chasmContext)
+		s.NotNil(sc1Des)
+		sc11Des := sc1Des.SubComponent11.Get(chasmContext)
 		s.NotNil(sc11Des)
-		s.Equal(sc11.SubComponent11Data.GetRunId(), sc11Des.SubComponent11Data.GetRunId())
+
+		rootViaPointer := sc11Des.GrandparentPointer.Get(chasmContext)
+		s.NotNil(rootViaPointer)
+		s.Equal(testComponent, rootViaPointer)
 
 		ifacePtr := testComponent.SubComponentInterfacePointer.Get(chasmContext)
 		s.NotNil(ifacePtr)
@@ -509,7 +521,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 		s.ProtoEqual(sc1ptr.SubComponent1Data, sc1.SubComponent1Data)
 	})
 
-	s.Run("Clear pointer by setting it to the empty field", func() {
+	s.Run("Clear ancestor pointer by setting it to the empty field", func() {
 		rootNode, err := s.newTestTree(persistedNodes)
 		s.NoError(err)
 
@@ -517,13 +529,15 @@ func (s *nodeSuite) TestPointerAttributes() {
 		component, err := rootNode.Component(mutableContext, ComponentRef{})
 		s.NoError(err)
 		testComponent := component.(*TestComponent)
+		sc1Des := testComponent.SubComponent1.Get(mutableContext)
+		sc11Des := sc1Des.SubComponent11.Get(mutableContext)
 
-		testComponent.SubComponent11Pointer = NewEmptyField[*TestSubComponent11]()
+		sc11Des.GrandparentPointer = NewEmptyField[*TestComponent]()
 
 		mutation, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		s.Len(mutation.UpdatedNodes, 1, "root should be updated")
-		s.Len(mutation.DeletedNodes, 1, "SubComponent11Pointer must be deleted")
+		s.NotEmpty(mutation.UpdatedNodes)
+		s.Len(mutation.DeletedNodes, 1, "GrandparentPointer must be deleted")
 	})
 }
 
@@ -1012,6 +1026,61 @@ func (s *nodeSuite) TestApplyMutation() {
 	s.Len(root.taskValueCache, 1)
 }
 
+func (s *nodeSuite) TestApplyMutation_DeleteUpdateSamePath() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+					},
+				},
+			},
+		},
+		"SubComponent1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
+			},
+		},
+	}
+	root, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+
+	// First apply a mutation to delete "SubComponent1" node.
+	err = root.ApplyMutation(NodesMutation{
+		DeletedNodes: map[string]struct{}{
+			"SubComponent1": {},
+		},
+	})
+	s.NoError(err)
+	s.Empty(root.mutation.UpdatedNodes)
+	s.Len(root.mutation.DeletedNodes, 1)
+
+	// Then apply another mutation to update "SubComponent1" node.
+	// This simulates the applyMutation logic in mutable state where the logic
+	// first applies a deletion only mutation for recorded chasm node tombstones,
+	// and then applies an update only mutation for updated nodes.
+
+	mutation := NodesMutation{
+		UpdatedNodes: map[string]*persistencespb.ChasmNode{
+			"SubComponent1": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 20},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 20},
+				},
+			},
+		},
+	}
+	err = root.ApplyMutation(mutation)
+	s.NoError(err)
+	s.Len(root.mutation.UpdatedNodes, 1)
+	s.Empty(root.mutation.DeletedNodes, 1)
+
+}
+
 func (s *nodeSuite) TestApplySnapshot() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
@@ -1112,6 +1181,45 @@ func (s *nodeSuite) TestApplySnapshot() {
 	s.Len(root.currentSA, 3)
 	s.Contains(root.currentSA, "TemporalDatetime01")
 	s.True(root.currentSA["TemporalDatetime01"].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
+}
+
+func (s *nodeSuite) TestApplySnapshot_EmptySnapshot() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+					},
+				},
+			},
+		},
+		"SubComponent1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
+			},
+		},
+	}
+	root, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+
+	// Apply an empty snapshot to simulate the case where
+	// chasm is disabled in source cluster or chasm tree is empty in
+	// source cluster.
+	err = root.ApplySnapshot(NodesSnapshot{})
+	s.NoError(err)
+
+	// Validate that nodeBase.mutation reflects the applied snapshot.
+	expectedMutation := NodesMutation{
+		UpdatedNodes: map[string]*persistencespb.ChasmNode{},
+		DeletedNodes: map[string]struct{}{
+			"SubComponent1": {}, // NOTE: root component can't be deleted.
+		},
+	}
+	s.Equal(expectedMutation, root.mutation)
 }
 
 func (s *nodeSuite) TestApplyMutation_OutOfOrder() {
@@ -3130,6 +3238,16 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 				},
 			},
 		},
+		"SubComponent1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testSubComponent1TypeID,
+					},
+				},
+			},
+		},
 	}
 
 	taskInfo := &persistencespb.ChasmTaskInfo{
@@ -3139,8 +3257,9 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 		ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 			TransitionCount: 1,
 		},
-		Path:   rootPath,
-		TypeId: testSideEffectTaskTypeID,
+		Path:        []string{"SubComponent1"},
+		TypeId:      testSideEffectTaskTypeID,
+		ArchetypeId: testComponentTypeID,
 		Data: &commonpb.DataBlob{
 			Data:         nil,
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
@@ -3201,12 +3320,14 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 			).DoAndReturn(
 			func(_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestSideEffectTask) error {
 				s.NotNil(ref.validationFn)
+				s.Equal(taskInfo.GetArchetypeId(), uint32(ref.archetypeID))
 
 				// Accessing the Component should trigger the validationFn.
-				_, err := root.Component(chasmContext, ref)
+				component, err := root.Component(chasmContext, ref)
 				if err != nil {
 					return err
 				}
+				s.IsType(&TestSubComponent1{}, component)
 				return result
 			}).Times(1)
 	}
@@ -3258,6 +3379,16 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 					},
 				},
 			},
+			"SubComponent1": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testSubComponent1TypeID,
+						},
+					},
+				},
+			},
 		}
 
 		root, err := s.newTestTree(persistenceNodes)
@@ -3282,8 +3413,9 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 				ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 					TransitionCount: 1,
 				},
-				Path:   rootPath,
-				TypeId: testDiscardableSideEffectTaskTypeID,
+				Path:        []string{"SubComponent1"},
+				TypeId:      testDiscardableSideEffectTaskTypeID,
+				ArchetypeId: testComponentTypeID,
 				Data: &commonpb.DataBlob{
 					Data:         nil,
 					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
@@ -3321,8 +3453,13 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
 			s.NotNil(ref.validationFn)
-			_, err := root.Component(chasmContext, ref)
-			return err
+			s.Equal(chasmTask.Info.GetArchetypeId(), uint32(ref.archetypeID))
+			component, err := root.Component(chasmContext, ref)
+			if err != nil {
+				return err
+			}
+			s.IsType(&TestSubComponent1{}, component)
+			return nil
 		}).Times(1)
 
 		err := root.ExecuteSideEffectDiscardTask(ctx, executionKey, chasmTask, dummyValidationFn)

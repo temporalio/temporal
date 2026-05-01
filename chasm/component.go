@@ -44,6 +44,11 @@ type TerminateComponentResponse struct{}
 // TODO: (not yet true) Visibility record will no longer be updated after RootComponent is closed.
 type RootComponent interface {
 	TerminableComponent
+
+	// ContextMetadata returns execution metadata to propagate to the request context.
+	// When the ContextMetadataInterceptor is configured with setTrailer=true (history, matching),
+	// these keys are propagated via gRPC trailers. Keys defined in common/contextutil/metadata.go.
+	ContextMetadata(Context) map[string]string
 }
 
 // Embed UnimplementedComponent to get forward compatibility

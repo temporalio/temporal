@@ -45,11 +45,16 @@ var TransitionScheduled = chasm.NewTransition(
 		attempt.Count++
 		attempt.Stamp++
 
+		// Start delay defers the dispatch and extends ScheduleToClose and ScheduleToStart timeouts. StartToClose and
+		// Heartbeat timeouts are unaffected as they only start when a worker picks up the task.
+		startDelay := a.GetStartDelay().AsDuration()
+		startDelayEnd := currentTime.Add(startDelay)
+
 		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
-					ScheduledTime: currentTime.Add(timeout),
+					ScheduledTime: startDelayEnd.Add(timeout),
 				},
 				&activitypb.ScheduleToStartTimeoutTask{
 					Stamp: attempt.GetStamp(),
@@ -60,14 +65,18 @@ var TransitionScheduled = chasm.NewTransition(
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
-					ScheduledTime: currentTime.Add(timeout),
+					ScheduledTime: startDelayEnd.Add(timeout),
 				},
 				&activitypb.ScheduleToCloseTimeoutTask{})
 		}
 
+		dispatchAttrs := chasm.TaskAttributes{}
+		if startDelay > 0 {
+			dispatchAttrs.ScheduledTime = startDelayEnd
+		}
 		ctx.AddTask(
 			a,
-			chasm.TaskAttributes{},
+			dispatchAttrs,
 			&activitypb.ActivityDispatchTask{
 				Stamp: attempt.GetStamp(),
 			})
@@ -257,9 +266,12 @@ var TransitionTerminated = chasm.NewTransition(
 			}
 			outcome := a.Outcome.Get(ctx)
 			failure := &failurepb.Failure{
-				// TODO(saa-preview): if the reason isn't provided, perhaps set a default reason. Also see if we should prefix with "Activity terminated: "
-				Message:     event.request.Reason,
-				FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
+				Message: event.request.Reason,
+				FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+					TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{
+						Identity: event.request.Identity,
+					},
+				},
 			}
 			outcome.Variant = &activitypb.ActivityOutcome_Failed_{
 				Failed: &activitypb.ActivityOutcome_Failed{
@@ -313,7 +325,8 @@ var TransitionCanceled = chasm.NewTransition(
 				Message: "Activity canceled",
 				FailureInfo: &failurepb.Failure_CanceledFailureInfo{
 					CanceledFailureInfo: &failurepb.CanceledFailureInfo{
-						Details: event.details,
+						Details:  event.details,
+						Identity: a.GetCancelState().GetIdentity(),
 					},
 				},
 			}

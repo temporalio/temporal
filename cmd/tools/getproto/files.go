@@ -8,8 +8,10 @@ import (
 
 	activity "go.temporal.io/api/activity/v1"
 	batch "go.temporal.io/api/batch/v1"
+	callback "go.temporal.io/api/callback/v1"
 	command "go.temporal.io/api/command/v1"
 	common "go.temporal.io/api/common/v1"
+	compute "go.temporal.io/api/compute/v1"
 	deployment "go.temporal.io/api/deployment/v1"
 	enums "go.temporal.io/api/enums/v1"
 	failure "go.temporal.io/api/failure/v1"
@@ -47,8 +49,12 @@ func init() {
 	importMap["google/protobuf/wrappers.proto"] = wrapperspb.File_google_protobuf_wrappers_proto
 	importMap["temporal/api/activity/v1/message.proto"] = activity.File_temporal_api_activity_v1_message_proto
 	importMap["temporal/api/batch/v1/message.proto"] = batch.File_temporal_api_batch_v1_message_proto
+	importMap["temporal/api/callback/v1/message.proto"] = callback.File_temporal_api_callback_v1_message_proto
 	importMap["temporal/api/command/v1/message.proto"] = command.File_temporal_api_command_v1_message_proto
 	importMap["temporal/api/common/v1/message.proto"] = common.File_temporal_api_common_v1_message_proto
+	importMap["temporal/api/compute/v1/config.proto"] = compute.File_temporal_api_compute_v1_config_proto
+	importMap["temporal/api/compute/v1/provider.proto"] = compute.File_temporal_api_compute_v1_provider_proto
+	importMap["temporal/api/compute/v1/scaler.proto"] = compute.File_temporal_api_compute_v1_scaler_proto
 	importMap["temporal/api/deployment/v1/message.proto"] = deployment.File_temporal_api_deployment_v1_message_proto
 	importMap["temporal/api/enums/v1/activity.proto"] = enums.File_temporal_api_enums_v1_activity_proto
 	importMap["temporal/api/enums/v1/batch_operation.proto"] = enums.File_temporal_api_enums_v1_batch_operation_proto
