@@ -1377,14 +1377,13 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 
 	s.Run("InvalidCallbackToken", func(s *NexusWorkflowTestSuite) {
 		env := s.newTestEnv(chasmEnabled)
-		ctx := env.Context()
 		completion := nexusrpc.CompleteOperationOptions{
 			Result: testcore.MustToPayload(s.T(), "result"),
 		}
 		publicCallbackURL := "http://" + env.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(env.Namespace().String())
 		// metrics collection is not initialized before callback validation
 		// Send request without callback token, helper does not add token if blank
-		err := s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
+		err := s.sendNexusCompletionRequest(env.Context(), publicCallbackURL, completion)
 		// Verify we get the correct error response
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)
@@ -1394,14 +1393,13 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 
 	s.Run("InvalidCallbackTokenNoIdentifier", func(s *NexusWorkflowTestSuite) {
 		env := s.newTestEnv(chasmEnabled)
-		ctx := env.Context()
 		completion := nexusrpc.CompleteOperationOptions{
 			Result: testcore.MustToPayload(s.T(), "result"),
 		}
 		publicCallbackURL := "http://" + env.HttpAPIAddress() + commonnexus.PathCompletionCallbackNoIdentifier
 		// metrics collection is not initialized before callback validation
 		// Send request without callback token, helper does not add token if blank
-		err := s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
+		err := s.sendNexusCompletionRequest(env.Context(), publicCallbackURL, completion)
 		// Verify we get the correct error response
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)
@@ -1411,7 +1409,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 
 	s.Run("InvalidClientVersion", func(s *NexusWorkflowTestSuite) {
 		env := s.newTestEnv(chasmEnabled)
-		ctx := env.Context()
 		publicCallbackURL := "http://" + env.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(env.Namespace().String())
 		capture := env.StartNamespaceMetricCapture()
 
@@ -1430,7 +1427,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 		client := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
 			Serializer: commonnexus.PayloadSerializer,
 		})
-		err = client.CompleteOperation(ctx, publicCallbackURL, completion)
+		err = client.CompleteOperation(env.Context(), publicCallbackURL, completion)
 		completionRequests := capture.Metric("nexus_completion_requests")
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)
@@ -1441,7 +1438,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 
 	s.Run("InvalidClientVersionNoIdentifier", func(s *NexusWorkflowTestSuite) {
 		env := s.newTestEnv(chasmEnabled)
-		ctx := env.Context()
 		publicCallbackURL := "http://" + env.HttpAPIAddress() + commonnexus.PathCompletionCallbackNoIdentifier
 		capture := env.StartNamespaceMetricCapture()
 
@@ -1461,7 +1457,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 		client := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
 			Serializer: commonnexus.PayloadSerializer,
 		})
-		err = client.CompleteOperation(ctx, publicCallbackURL, completion)
+		err = client.CompleteOperation(env.Context(), publicCallbackURL, completion)
 		completionRequests := capture.Metric("nexus_completion_requests")
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)
@@ -1479,7 +1475,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrors(cha
 		return authorization.Result{Decision: authorization.DecisionAllow}, nil
 	}
 	env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
-	ctx := env.Context()
 	env.SetOnAuthorize(onAuthorize)
 
 	// Generate a valid callback token for testing
@@ -1494,7 +1489,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrors(cha
 
 	publicCallbackURL := "http://" + env.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(env.Namespace().String())
 	capture := env.StartNamespaceMetricCapture()
-	err = s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
+	err = s.sendNexusCompletionRequest(env.Context(), publicCallbackURL, completion)
 	completionRequests := capture.Metric("nexus_completion_requests")
 	var handlerErr *nexus.HandlerError
 	s.ErrorAs(err, &handlerErr)
@@ -1511,7 +1506,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrorsNoId
 		return authorization.Result{Decision: authorization.DecisionAllow}, nil
 	}
 	env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
-	ctx := env.Context()
 	env.SetOnAuthorize(onAuthorize)
 
 	// Generate a valid callback token for testing
@@ -1525,7 +1519,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrorsNoId
 	}
 	publicCallbackURL := "http://" + env.HttpAPIAddress() + commonnexus.PathCompletionCallbackNoIdentifier
 	capture := env.StartNamespaceMetricCapture()
-	err = s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
+	err = s.sendNexusCompletionRequest(env.Context(), publicCallbackURL, completion)
 	completionRequests := capture.Metric("nexus_completion_requests")
 	var handlerErr *nexus.HandlerError
 	s.ErrorAs(err, &handlerErr)
@@ -1728,7 +1722,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 		s.T().Skip("Blocked on CHASM Nexus cancellation before start support")
 	}
 	env := s.newTestEnv(chasmEnabled)
-	ctx := env.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 
 	canStartCh := make(chan struct{})
@@ -1748,14 +1741,14 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 			return nil
 		},
 	}
-	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
+	endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), h)
 
-	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	run, err := env.SdkClient().ExecuteWorkflow(env.Context(), client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
 	}, "workflow")
 	s.NoError(err)
 
-	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(env.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
@@ -1764,7 +1757,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 		Identity: "test",
 	})
 	s.NoError(err)
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
@@ -1794,7 +1787,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 	s.NoError(err)
 
 	// Poll and cancel the operation.
-	pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(env.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
@@ -1811,7 +1804,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 	s.Positive(scheduledEventIdx)
 	scheduledEventID := pollResp.History.Events[scheduledEventIdx].EventId
 
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
@@ -1827,11 +1820,11 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 	})
 	s.NoError(err)
 
-	env.SendToChannel(ctx, canStartCh)
-	env.WaitForChannel(ctx, cancelSentCh)
+	env.SendToChannel(env.Context(), canStartCh)
+	env.WaitForChannel(env.Context(), cancelSentCh)
 
 	// Terminate the workflow for good measure.
-	err = env.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
+	err = env.SdkClient().TerminateWorkflow(env.Context(), run.GetID(), run.GetRunID(), "test")
 	s.NoError(err)
 
 	// Assert that we did not send a cancel request until after the operation was started.
@@ -2522,7 +2515,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 		s.T().Skip("Blocked on CHASM Nexus sync failure conversion support")
 	}
 	env := s.newTestEnv(chasmEnabled)
-	ctx := env.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 
 	h := nexustest.Handler{
@@ -2539,7 +2531,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 			}
 		},
 	}
-	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
+	endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), h)
 
 	w := worker.New(
 		env.SdkClient(),
@@ -2558,11 +2550,11 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 	s.T().Cleanup(w.Stop)
 
 	capture := env.StartNamespaceMetricCapture()
-	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	run, err := env.SdkClient().ExecuteWorkflow(env.Context(), client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
 	}, callerWF)
 	s.NoError(err)
-	wfErr := run.Get(ctx, nil)
+	wfErr := run.Get(env.Context(), nil)
 
 	var handlerErr *nexus.HandlerError
 	s.ErrorAs(wfErr, &handlerErr)
