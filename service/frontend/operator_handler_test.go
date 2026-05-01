@@ -817,7 +817,7 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_Elasticsearch() {
 	ctx := context.Background()
 
 	// Configure Elasticsearch: add advanced visibility store config with index name.
-	s.mockResource.VisibilityManager.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true)
+	s.mockResource.VisibilityManager.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
 	s.mockResource.SearchAttributesManager.EXPECT().GetSearchAttributes(testIndexName, true).Return(searchattribute.TestEsNameTypeMap(), nil)
 	resp, err := handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
@@ -834,7 +834,7 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_SQL() {
 	handler := s.handler
 	ctx := context.Background()
 
-	s.mockResource.VisibilityManager.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(false)
+	s.mockResource.VisibilityManager.EXPECT().GetStoreNames().Return([]string{mysql.PluginName})
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
 	s.mockResource.ClientFactory.EXPECT().
 		NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
