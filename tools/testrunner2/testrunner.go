@@ -94,8 +94,15 @@ type runner struct {
 	errors       []error
 
 	// Progress tracking
-	progressTotal     atomic.Int64
-	progressCompleted atomic.Int64
+	progressMu        sync.Mutex
+	progressTotal     int
+	progressCompleted int
+	progressSlots     map[string]*progressSlot
+}
+
+type progressSlot struct {
+	pending   int
+	completed bool
 }
 
 func (r *runner) addReport(jr *junitReport) {
@@ -116,13 +123,64 @@ func (r *runner) addError(err error) {
 	r.errors = append(r.errors, err)
 }
 
-func (r *runner) addProgressTotal(n int64) {
-	r.progressTotal.Add(n)
+func (r *runner) resetProgress() {
+	r.progressMu.Lock()
+	defer r.progressMu.Unlock()
+	r.progressTotal = 0
+	r.progressCompleted = 0
+	r.progressSlots = make(map[string]*progressSlot)
 }
 
-func (r *runner) completeProgress(n int) (completed, total int) {
-	c := r.progressCompleted.Add(int64(n))
-	return int(c), int(r.progressTotal.Load())
+func (r *runner) addProgressTotal(n int64) {
+	r.progressMu.Lock()
+	defer r.progressMu.Unlock()
+	r.progressTotal += int(n)
+}
+
+func (r *runner) beginProgress(key string) {
+	if key == "" {
+		return
+	}
+	r.progressMu.Lock()
+	defer r.progressMu.Unlock()
+	if r.progressSlots == nil {
+		r.progressSlots = make(map[string]*progressSlot)
+	}
+	slot := r.progressSlots[key]
+	if slot == nil {
+		slot = &progressSlot{}
+		r.progressSlots[key] = slot
+	}
+	if slot.completed {
+		// Crash recovery retries are emitted after the failed attempt is reported.
+		// Reopen the slot so the retry can complete the original work unit.
+		slot.completed = false
+		if r.progressCompleted > 0 {
+			r.progressCompleted--
+		}
+	}
+	slot.pending++
+}
+
+func (r *runner) finishProgress(key string) (completed, total int, slotCompleted bool) {
+	if key == "" {
+		return 0, 0, false
+	}
+	r.progressMu.Lock()
+	defer r.progressMu.Unlock()
+	slot := r.progressSlots[key]
+	if slot == nil {
+		return r.progressCompleted, r.progressTotal, false
+	}
+	if slot.pending > 0 {
+		slot.pending--
+	}
+	if !slot.completed && slot.pending == 0 {
+		slot.completed = true
+		r.progressCompleted++
+		return r.progressCompleted, r.progressTotal, true
+	}
+	return r.progressCompleted, r.progressTotal, false
 }
 
 func newRunner(cfg config) *runner {
@@ -195,8 +253,7 @@ func (r *runner) runWithScheduler(ctx context.Context, parallelism int, items []
 	r.junitReports = nil
 	r.alerts = nil
 	r.errors = nil
-	r.progressTotal.Store(0)
-	r.progressCompleted.Store(0)
+	r.resetProgress()
 	if initialTotal > 0 {
 		r.addProgressTotal(initialTotal)
 	}
@@ -239,10 +296,16 @@ type execConfig struct {
 
 	// Retry callback for failures.
 	retry retryHandler
+
+	// Progress key for the top-level work represented by this execution.
+	progressKey string
 }
 
 func (r *runner) newExecItem(cfg execConfig) *queueItem {
 	return &queueItem{
+		onEnqueue: func() {
+			r.beginProgress(cfg.progressKey)
+		},
 		run: func(ctx context.Context, emit func(...*queueItem)) {
 			start := time.Now()
 
@@ -289,8 +352,9 @@ func (r *runner) newExecItem(cfg execConfig) *queueItem {
 			numTests, numFailedTests, failureKind := r.collectJUnitResult(cfg, result, detectedAlerts)
 
 			// 6. Console output
+			completed, total, progressDone := r.finishProgress(cfg.progressKey)
 			writeConsoleResult(r, cfg, result, numTests, numFailedTests,
-				failureKind, detectedAlerts, results, start)
+				failureKind, detectedAlerts, results, start, completed, total, progressDone)
 
 			failed := result.exitCode != 0 || numFailedTests > 0 || numTests == 0
 			if !failed {
@@ -452,14 +516,13 @@ func (r *runner) finalizeReport(reports []*junitReport) error {
 // writeConsoleResult formats and prints the test result to the console.
 func writeConsoleResult(r *runner, cfg execConfig, result commandResult,
 	numTests, numFailed int, failureKind string, detectedAlerts alerts,
-	results testResults, start time.Time) {
+	results testResults, start time.Time, progressCompleted, progressTotal int, progressDone bool) {
 
 	failed := result.exitCode != 0 || numFailed > 0 || numTests == 0
 	status := "❌️"
 	if !failed {
-		if r.progressTotal.Load() > 0 {
-			completed, total := r.completeProgress(1)
-			status = fmt.Sprintf("✅ [%d/%d]", completed, total)
+		if progressDone && progressTotal > 0 {
+			status = fmt.Sprintf("✅ [%d/%d]", progressCompleted, progressTotal)
 		} else {
 			status = "✅"
 		}
