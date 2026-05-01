@@ -29,9 +29,8 @@ func IsInternalTaskQueueKind(kind enumspb.TaskQueueKind) bool {
 		enumspb.TASK_QUEUE_KIND_NORMAL,
 		enumspb.TASK_QUEUE_KIND_STICKY:
 		return false
-	default:
-		return false
 	}
+	return false
 }
 
 func IsInternalPerNsTaskQueue(taskQueue string) bool {
