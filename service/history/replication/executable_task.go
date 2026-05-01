@@ -336,6 +336,8 @@ func (e *ExecutableTaskImpl) workflowKeyFromTask() (namespaceID, workflowID, run
 	case *replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes:
 		a := attrs.SyncVersionedTransitionTaskAttributes
 		namespaceID, workflowID, runID = a.NamespaceId, a.WorkflowId, a.RunId
+	default:
+		return
 	}
 	return
 }
