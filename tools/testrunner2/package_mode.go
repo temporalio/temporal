@@ -256,15 +256,12 @@ func packageRetryRunPattern(failures []testFailureRef) string {
 	seen := make(map[string]bool)
 	for _, failure := range failures {
 		name := failure.name
-		if idx := strings.IndexByte(name, '/'); idx >= 0 {
-			name = name[:idx]
-		}
 		if !seen[name] {
 			seen[name] = true
 			names = append(names, name)
 		}
 	}
-	return regexAlternation(names)
+	return buildTestFilterPattern(names)
 }
 
 func packageRetryDirs(failures []testFailureRef) []string {
