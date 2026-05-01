@@ -233,6 +233,51 @@ func TestBuildTestFilterPattern(t *testing.T) {
 	}
 }
 
+func TestPackageRetryRunPattern(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		failures []testFailureRef
+		expected string
+	}{
+		{
+			name:     "top-level test",
+			failures: []testFailureRef{{pkg: "./pkg", name: "TestFoo"}},
+			expected: "^TestFoo$",
+		},
+		{
+			name: "same suite subtests",
+			failures: []testFailureRef{
+				{pkg: "./pkg", name: "TestSuite/Sub1"},
+				{pkg: "./pkg", name: "TestSuite/Sub2"},
+			},
+			expected: "^TestSuite$/^(Sub1|Sub2)$",
+		},
+		{
+			name: "duplicate failure names",
+			failures: []testFailureRef{
+				{pkg: "./pkg", name: "TestSuite/Sub"},
+				{pkg: "./pkg", name: "TestSuite/Sub"},
+			},
+			expected: "^TestSuite$/^Sub$",
+		},
+		{
+			name: "deep subtest",
+			failures: []testFailureRef{
+				{pkg: "./pkg", name: "TestSuite/Group/Case"},
+			},
+			expected: "^TestSuite$/^Group$/^Case$",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.expected, packageRetryRunPattern(tt.failures))
+		})
+	}
+}
+
 func TestTestNameToRegex(t *testing.T) {
 	t.Parallel()
 
