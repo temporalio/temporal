@@ -342,7 +342,7 @@ func (h *Handler) DescribeTaskQueue(
 	}
 
 	// TODO: remove after 1.24.0-m3
-	if len(resp.DescResponse.Pollers) > 0 || resp.DescResponse.TaskQueueStatus != nil {
+	if resp.DescResponse != nil && (len(resp.DescResponse.Pollers) > 0 || resp.DescResponse.TaskQueueStatus != nil) {
 		// Expand pollerinfo and task queue status into tags 1 and 2 for old frontend to handle
 		// proto incompatibility. This only works without ugly protowire code because
 		// workflowservice.DescribeTaskQueueResponse and the previous version of
