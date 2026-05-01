@@ -87,7 +87,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 			return "", activityErr
 		}
 
-		env.WaitForChannel(ctx, activityCompleteCh)
+		env.WaitForChannel(activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -160,7 +160,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhileRunning() {
 	var startedActivityCount atomic.Int32
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
-		env.WaitForChannel(ctx, activityCompleteCh)
+		env.WaitForChannel(activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -242,7 +242,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 			return "", activityErr
 		}
 
-		env.WaitForChannel(ctx, activityCompleteCh)
+		env.WaitForChannel(activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -322,7 +322,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 			return "", activityErr
 		}
 
-		env.WaitForChannel(ctx, activityCompleteCh)
+		env.WaitForChannel(activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -462,7 +462,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {
 			return "", errors.New("bad-luck-please-retry")
 		}
 		// not the first iteration
-		env.WaitForChannel(ctx, activityCompleteCh)
+		env.WaitForChannel(activityCompleteCh)
 		for activityShouldFinish.Load() == false {
 			activity.RecordHeartbeat(ctx, "second")
 			time.Sleep(time.Second) //nolint:forbidigo

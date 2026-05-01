@@ -82,7 +82,7 @@ func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 			return "", activityErr
 		}
 
-		env.WaitForChannel(ctx, activityUpdated)
+		env.WaitForChannel(activityUpdated)
 		return "done!", nil
 	}
 
@@ -327,7 +327,7 @@ func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ResetDefaultOpt
 			return "", activityErr
 		}
 
-		env.WaitForChannel(ctx, activityUpdated)
+		env.WaitForChannel(activityUpdated)
 		return "done!", nil
 	}
 
