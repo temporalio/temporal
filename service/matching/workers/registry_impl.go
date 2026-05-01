@@ -34,7 +34,7 @@ type (
 		hb             *workerpb.WorkerHeartbeat
 		lastSeen       time.Time
 		elem           *list.Element
-		isSystemWorker bool
+		isSystemWorkerWorker bool
 	}
 	// bucket holds part of the keyspace: a map from namespace → (map of instanceKey → entry),
 	// plus a recency list for eviction.
@@ -107,20 +107,20 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.Work
 			continue
 		}
 
-		isSystem := primitives.IsInternalTaskQueue(hb.GetTaskQueue())
+		isSystemWorker := primitives.IsInternalTaskQueue(hb.GetTaskQueue())
 
 		// Normal upsert
 		if e, exists := mp[key]; exists {
 			e.hb = hb
 			e.lastSeen = now
-			e.isSystemWorker = isSystem
+			e.isSystemWorkerWorker = isSystemWorker
 			b.order.MoveToBack(e.elem)
 		} else {
 			e = &entry{
 				nsID:           nsID,
 				hb:             hb,
 				lastSeen:       now,
-				isSystemWorker: isSystem,
+				isSystemWorkerWorker: isSystemWorker,
 			}
 			e.elem = b.order.PushBack(e)
 			mp[key] = e
@@ -148,7 +148,7 @@ func (b *bucket) filterWorkers(
 	}
 	out := make([]*workerpb.WorkerHeartbeat, 0, len(mp))
 	for _, e := range mp {
-		if !includeSystemWorkers && e.isSystemWorker {
+		if !includeSystemWorkers && e.isSystemWorkerWorker {
 			continue
 		}
 		if predicate(e.hb) {
