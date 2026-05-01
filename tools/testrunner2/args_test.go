@@ -16,6 +16,7 @@ func TestDefaultConfig(t *testing.T) {
 		require.Equal(t, runtime.NumCPU(), cfg.parallelism)
 		require.Equal(t, 1, cfg.totalShards)
 		require.Equal(t, 0, cfg.shardIndex)
+		require.Zero(t, cfg.stuckTestTimeout)
 	})
 
 	t.Run("reads sharding from env", func(t *testing.T) {
@@ -113,7 +114,7 @@ func TestParseArgs(t *testing.T) {
 	})
 
 	t.Run("accepts valid group-by modes", func(t *testing.T) {
-		for _, mode := range []string{"test", "none"} {
+		for _, mode := range []string{"test", "package"} {
 			cfg := defaultConfig()
 			cfg.log = func(string, ...any) {}
 			_, err := parseArgs([]string{
@@ -136,7 +137,7 @@ func TestParseArgs(t *testing.T) {
 			"-coverprofile=test.cover.out",
 			"--group-by=invalid",
 		}, &cfg)
-		require.ErrorContains(t, err, `invalid argument --group-by: must be 'test' or 'none'`)
+		require.ErrorContains(t, err, `invalid argument --group-by: must be 'test' or 'package'`)
 	})
 }
 
@@ -176,4 +177,30 @@ func TestParseTestArgs(t *testing.T) {
 		require.Equal(t, []string{"-race"}, baseArgs)
 		require.Empty(t, testBinaryArgs)
 	})
+}
+
+func TestTestBinaryArgsFromBaseArgs(t *testing.T) {
+	t.Parallel()
+
+	args := testBinaryArgsFromBaseArgs([]string{
+		"-timeout=35m",
+		"-race",
+		"-shuffle", "on",
+		"-parallel=8",
+		"-count", "1",
+		"-tags=test_dep",
+		"-coverprofile=cover.out",
+		"-coverpkg=./...",
+		"--junitfile=report.xml",
+		"-short",
+		"-custom=value",
+	})
+
+	require.Equal(t, []string{
+		"-test.shuffle", "on",
+		"-test.parallel=8",
+		"-test.count", "1",
+		"-test.short",
+		"-custom=value",
+	}, args)
 }
