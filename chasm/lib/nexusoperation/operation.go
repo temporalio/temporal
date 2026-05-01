@@ -242,6 +242,7 @@ func (o *Operation) HandleNexusCompletion(
 	ctx chasm.MutableContext,
 	completion *persistencespb.ChasmNexusCompletion,
 ) error {
+	softassert.That(ctx.Logger(), o.GetRequestId() != "", "operation has no request ID")
 	// Request ID lets us reject a stale or misrouted completion.
 	if completion.GetRequestId() != "" && o.GetRequestId() != completion.GetRequestId() {
 		return serviceerror.NewNotFound("operation not found")
@@ -340,6 +341,7 @@ func (o *Operation) saveInvocationResult(
 		if r.response.Pending != nil {
 			// An async operation transitions to STARTED here;
 			// HandleNexusCompletion will apply its outcome from the completion callback.
+			softassert.That(ctx.Logger(), r.response.Pending.Token != "", "async operation response has empty token")
 			return nil, o.onStarted(ctx, r.response.Pending.Token, nil, links)
 		}
 		return nil, o.onCompleted(ctx, r.response.Successful, links)
@@ -479,6 +481,7 @@ func (o *Operation) outcome(ctx chasm.Context) (*commonpb.Payload, *failurepb.Fa
 
 	switch {
 	case !hasOutcome:
+		softassert.That(ctx.Logger(), o.LastAttemptFailure != nil, "closed operation has no outcome and no last attempt failure")
 		return nil, o.LastAttemptFailure
 	case outcome.GetSuccessful() != nil:
 		return outcome.GetSuccessful().GetResult(), nil
@@ -555,6 +558,7 @@ func (o *Operation) closeTime(ctx chasm.Context) *timestamppb.Timestamp {
 	if !o.LifecycleState(ctx).IsClosed() {
 		return nil
 	}
+	softassert.That(ctx.Logger(), o.ClosedTime != nil, "closed operation has nil close time")
 	return o.ClosedTime
 }
 

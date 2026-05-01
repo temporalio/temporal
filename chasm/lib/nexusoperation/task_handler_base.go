@@ -20,6 +20,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/softassert"
 	"go.uber.org/fx"
 )
 
@@ -135,6 +136,8 @@ func (b *nexusTaskHandlerBase) newInvocation(
 	if endpointName == commonnexus.SystemEndpoint {
 		return b.newInvocationSystem(ns), nil
 	}
+	// endpoint is nil only for system operations, which are handled above.
+	softassert.That(b.logger, endpoint != nil, "nil endpoint for non-system nexus invocation")
 	return b.newInvocationHTTP(ctx, ns, endpoint, service, traceCtx)
 }
 
