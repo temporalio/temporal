@@ -548,6 +548,9 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	if request, err = wh.prepareStartWorkflowRequest(request); err != nil {
 		return nil, err
 	}
+	if err = startWorkflowExperimentalCheck(request); err != nil {
+		return nil, err
+	}
 
 	wh.logger.Debug("Received StartWorkflowExecution.", tag.WorkflowID(request.GetWorkflowId()), tag.WorkflowType(request.GetWorkflowType().GetName()))
 
