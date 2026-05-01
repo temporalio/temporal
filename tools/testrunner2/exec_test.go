@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,8 +48,8 @@ func TestCompileTest(t *testing.T) {
 		}, nil)
 
 		argsStr := strings.Join(captured, " ")
-		assert.Contains(t, argsStr, "test -c")
-		assert.Contains(t, argsStr, "-o /tmp/foo.test ./pkg/foo")
+		require.Contains(t, argsStr, "test -c")
+		require.Contains(t, argsStr, "-o /tmp/foo.test ./pkg/foo")
 	})
 
 	t.Run("race flag", func(t *testing.T) {
@@ -64,7 +63,7 @@ func TestCompileTest(t *testing.T) {
 		}, nil)
 
 		argsStr := strings.Join(captured, " ")
-		assert.Contains(t, argsStr, "-race")
+		require.Contains(t, argsStr, "-race")
 	})
 
 	t.Run("build tags", func(t *testing.T) {
@@ -78,7 +77,7 @@ func TestCompileTest(t *testing.T) {
 		}, nil)
 
 		argsStr := strings.Join(captured, " ")
-		assert.Contains(t, argsStr, "-tags=integration")
+		require.Contains(t, argsStr, "-tags=integration")
 	})
 
 	t.Run("cover flag", func(t *testing.T) {
@@ -92,7 +91,7 @@ func TestCompileTest(t *testing.T) {
 		}, nil)
 
 		argsStr := strings.Join(captured, " ")
-		assert.Contains(t, argsStr, "-cover")
+		require.Contains(t, argsStr, "-cover")
 	})
 }
 
@@ -108,8 +107,8 @@ func TestRunDirectGoTest(t *testing.T) {
 		}, nil)
 
 		argsStr := strings.Join(captured, " ")
-		assert.Contains(t, argsStr, "test -v")
-		assert.Contains(t, argsStr, "./pkg/a ./pkg/b")
+		require.Contains(t, argsStr, "test -v")
+		require.Contains(t, argsStr, "./pkg/a ./pkg/b")
 	})
 
 	t.Run("run filter", func(t *testing.T) {
@@ -122,7 +121,7 @@ func TestRunDirectGoTest(t *testing.T) {
 		}, nil)
 
 		argsStr := strings.Join(captured, " ")
-		assert.Contains(t, argsStr, "-run ^TestFoo$")
+		require.Contains(t, argsStr, "-run ^TestFoo$")
 	})
 
 	t.Run("race and tags", func(t *testing.T) {
@@ -136,8 +135,8 @@ func TestRunDirectGoTest(t *testing.T) {
 		}, nil)
 
 		argsStr := strings.Join(captured, " ")
-		assert.Contains(t, argsStr, "-race")
-		assert.Contains(t, argsStr, "-tags=integration")
+		require.Contains(t, argsStr, "-race")
+		require.Contains(t, argsStr, "-tags=integration")
 	})
 
 	t.Run("extra args", func(t *testing.T) {
@@ -150,8 +149,8 @@ func TestRunDirectGoTest(t *testing.T) {
 		}, nil)
 
 		argsStr := strings.Join(captured, " ")
-		assert.Contains(t, argsStr, "-shuffle=on")
-		assert.Contains(t, argsStr, "-count=1")
+		require.Contains(t, argsStr, "-shuffle=on")
+		require.Contains(t, argsStr, "-count=1")
 	})
 
 	t.Run("no timeout or skip args", func(t *testing.T) {
@@ -163,8 +162,8 @@ func TestRunDirectGoTest(t *testing.T) {
 		}, nil)
 
 		argsStr := strings.Join(captured, " ")
-		assert.NotContains(t, argsStr, "-timeout")
-		assert.NotContains(t, argsStr, "-skip")
+		require.NotContains(t, argsStr, "-timeout")
+		require.NotContains(t, argsStr, "-skip")
 	})
 }
 
@@ -182,9 +181,9 @@ func TestExecuteTest(t *testing.T) {
 		}, nil)
 
 		argsStr := strings.Join(captured, " ")
-		assert.Contains(t, argsStr, "-test.coverprofile=cover.out")
-		assert.NotContains(t, argsStr, "-test.timeout")
-		assert.NotContains(t, argsStr, "-test.skip")
+		require.Contains(t, argsStr, "-test.coverprofile=cover.out")
+		require.NotContains(t, argsStr, "-test.timeout")
+		require.NotContains(t, argsStr, "-test.skip")
 	})
 
 	t.Run("extra args", func(t *testing.T) {
@@ -198,6 +197,6 @@ func TestExecuteTest(t *testing.T) {
 		}, nil)
 
 		argsStr := strings.Join(captured, " ")
-		assert.Contains(t, argsStr, "-persistenceType=sql")
+		require.Contains(t, argsStr, "-persistenceType=sql")
 	})
 }
