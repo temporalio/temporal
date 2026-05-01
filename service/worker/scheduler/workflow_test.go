@@ -2106,6 +2106,45 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
 	s.True(s.env.Now().Sub(baseStartTime) == CurrentTweakablePolicies.RetentionTime)
 }
 
+func (s *workflowSuite) TestUnpauseAfterRetentionPeriodDoesNotClose() {
+	scheduleID := "myschedule"
+	pauseTime := baseStartTime.Add(time.Minute)
+	unpauseTime := baseStartTime.Add(CurrentTweakablePolicies.RetentionTime + 2*time.Minute)
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+			Pause: "paused for a long time",
+		})
+	}, pauseTime.Sub(baseStartTime))
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+			Unpause: "go ahead",
+		})
+	}, unpauseTime.Sub(baseStartTime))
+	s.env.RegisterDelayedCallback(func() {
+		s.False(s.env.IsWorkflowCompleted(), "workflow should not have closed immediately after unpause")
+	}, unpauseTime.Sub(baseStartTime)+time.Second)
+
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 5
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedulespb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    scheduleID,
+			ConflictToken: InitialConflictToken,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	// retention should be measured from unpause, not original create time
+	s.Equal(CurrentTweakablePolicies.RetentionTime, s.env.Now().Sub(unpauseTime))
+}
+
 func (s *workflowSuite) TestCANByIterations() {
 	// written using low-level mocks so we can control iteration count
 

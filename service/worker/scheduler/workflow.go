@@ -65,6 +65,8 @@ const (
 	LimitMemoSpecSize = 11
 	// trigger immediately timestamp is added to the PatchRequest
 	TriggerImmediatelyTimestamp = 12
+	// reset retention timer when a paused schedule is unpaused
+	ResetRetentionOnUnpause = 13
 )
 
 const (
@@ -210,7 +212,7 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
-		Version:                           TriggerImmediatelyTimestamp,
+		Version:                           ResetRetentionOnUnpause,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -500,6 +502,9 @@ func (s *scheduler) processPatch(patch *schedulepb.SchedulePatch) {
 	if patch.Unpause != "" {
 		s.Schedule.State.Paused = false
 		s.Schedule.State.Notes = patch.Unpause
+		if s.hasMinVersion(ResetRetentionOnUnpause) {
+			s.Info.UpdateTime = timestamppb.New(s.now())
+		}
 		s.incSeqNo()
 	}
 }
