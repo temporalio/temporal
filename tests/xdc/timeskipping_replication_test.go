@@ -80,8 +80,8 @@ func (s *timeSkippingReplicationSuite) getExecutionInfoFromCluster(
 }
 
 // waitForTimeSkippingInfoSynced blocks until the standby cluster's TimeSkippingInfo
-// agrees with the active's on Config, AccumulatedSkippedDuration, and entry count.
-// Per-entry TaskRegenStatus is cluster-local and explicitly excluded.
+// agrees with the active's on Config and AccumulatedSkippedDuration. TaskRegenerationStatus
+// is cluster-local (regen is re-run on standby after replication) and is not asserted.
 func (s *timeSkippingReplicationSuite) waitForTimeSkippingInfoSynced(
 	ctx context.Context,
 	nsID, wfID, runID string,
@@ -98,8 +98,6 @@ func (s *timeSkippingReplicationSuite) waitForTimeSkippingInfoSynced(
 			active.GetAccumulatedSkippedDuration().AsDuration(),
 			standby.GetAccumulatedSkippedDuration().AsDuration(),
 			"accumulated skipped duration must match")
-		require.Len(c, standby.GetTaskRegenEntries(), len(active.GetTaskRegenEntries()),
-			"task regen entry count must match")
 	}, replicationWaitTime, replicationCheckInterval)
 }
 
@@ -134,9 +132,8 @@ func (s *timeSkippingReplicationSuite) startSkippingWorkflow(
 
 // TestBasicSkipReplicates verifies the core replication contract for time-skipping:
 // a skip transition applied on the active cluster's mutable state replicates to the
-// standby with matching Config, AccumulatedSkippedDuration, and TaskRegenEntries
-// count. Per-entry TaskRegenStatus is intentionally not asserted — it is local to
-// each cluster (see TimeSkipTaskRegenEntry contract).
+// standby with matching Config and AccumulatedSkippedDuration. TaskRegenerationStatus
+// is cluster-local (the standby re-runs regen after replication) and is not asserted.
 func (s *timeSkippingReplicationSuite) TestBasicSkipReplicates() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -156,7 +153,6 @@ func (s *timeSkippingReplicationSuite) TestBasicSkipReplicates() {
 		require.NotNil(c, info, "active must persist TimeSkippingInfo after start")
 		require.Greater(c, info.GetAccumulatedSkippedDuration().AsDuration(), 30*time.Minute,
 			"active must accumulate ~startDelay of skip on the first close transaction")
-		require.NotEmpty(c, info.GetTaskRegenEntries(), "active must record at least one regen entry")
 	}, 15*time.Second, 200*time.Millisecond)
 
 	s.waitForTimeSkippingInfoSynced(ctx, nsID, wfID, runID)
@@ -168,7 +164,6 @@ func (s *timeSkippingReplicationSuite) TestBasicSkipReplicates() {
 		active.GetAccumulatedSkippedDuration().AsDuration(),
 		standby.GetAccumulatedSkippedDuration().AsDuration(),
 	)
-	s.Len(standby.GetTaskRegenEntries(), len(active.GetTaskRegenEntries()))
 	s.InDelta(float64(startDelay), float64(standby.GetAccumulatedSkippedDuration().AsDuration()), float64(time.Minute),
 		"standby's accumulated skip should match the configured startDelay within tolerance")
 }

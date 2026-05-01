@@ -470,11 +470,6 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 	return err
 }
 
-// refreshTasksForTimeSkipping re-emits time-skipping-affected timer tasks
-// (user timers + run/execution timeouts + bound + start-delay) for any
-// TimeSkipTaskRegenEntry still flagged TaskRegenStatusNone on this cluster.
-// Idempotent via the entry's TaskRegenStatus, so this pass is a no-op on
-// workflows whose entries are already marked Regenerated locally.
 func (r *TaskRefresherImpl) refreshTasksForTimeSkipping(
 	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,

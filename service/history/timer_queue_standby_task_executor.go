@@ -255,8 +255,6 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 			return nil, nil
 		}
 
-		// Use mutableState.Now() as reference time as the mutable state may use virtual time
-		// which can skip duration and be before the wall clock time.
 		referenceTime := mutableState.Now()
 
 		timerSequence := t.getTimerSequence(mutableState)
@@ -270,6 +268,10 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 				return nil, serviceerror.NewInternal(errString)
 			}
 
+			// Use mutableState.Now() as reference time as a mutable state may use virtual time
+			// which can skip duration and be before the wall clock time.
+			// And when this happens the timerSequenceID.Timestamp is also virtual time and before the wall clock time,
+			// while the timerTask.VisibilityTimestamp uses the wall clock time that maps to the virtual time.
 			if queues.IsTimeExpired(
 				timerTask,
 				referenceTime,
@@ -332,6 +334,10 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 				return nil, serviceerror.NewInternal(errString)
 			}
 
+			// Use mutableState.Now() as reference time as a mutable state may use virtual time
+			// which can skip duration and be before the wall clock time.
+			// And when this happens the timerSequenceID.Timestamp is also virtual time and before the wall clock time,
+			// while the timerTask.VisibilityTimestamp uses the wall clock time that maps to the virtual time.
 			if queues.IsTimeExpired(
 				timerTask,
 				referenceTime,
@@ -354,6 +360,8 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// created.
 		isHeartBeatTask := timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 		ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(timerTask.EventID)
+
+		// todo@time-skipping: the virtual time may impact the heartbeat timeout as well
 		if isHeartBeatTask && ok && queues.IsTimeExpired(timerTask, timerTask.GetVisibilityTime(), heartbeatTimeoutVis) {
 			if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(ai.ScheduledEventId, ai.TimerTaskStatus&^workflow.TimerTaskStatusCreatedHeartbeat, nil); err != nil {
 				return nil, err

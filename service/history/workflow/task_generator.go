@@ -1031,38 +1031,20 @@ func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.St
 	return true
 }
 
-// TimeSkippingTaskRegenStatus tracks per-cluster status for time-skipping timer-task regeneration
-// on each TimeSkipTaskRegenEntry. Mirrors TimerInfo.TaskStatus's idempotency role for user timers
-// (see CreateNextUserTimer in timer_sequence.go) — the value is local to each cluster, not
-// replicated, and gates re-emission of timer tasks on this cluster.
-const (
-	TimeSkippingTaskRegenStatusNone        int32 = 0
-	TimeSkippingTaskRegenStatusRegenerated int32 = 1
-)
-
 // RegenerateTimerTasksForTimeSkipping regenerates the timer tasks for time skipping.
-// Idempotent via TimeSkippingInfo.TaskRegenEntries: only emits when at least one detail's
-// TaskRegenStatus is None, then marks all unmarked details as Regenerated. Safe to call in
-// replication context — mirrors the TimerInfo.TaskStatus pattern in CreateNextUserTimer.
+// Idempotent via TimeSkippingInfo.TaskRegenerationStatus: only emits when the status
+// is Needed, then flips it to Completed. Safe to call in replication context — mirrors
+// the TimerInfo.TaskStatus pattern in CreateNextUserTimer.
 func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 
 	tsi := r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
-	if tsi == nil {
-		return nil
-	}
-	accumulatedSkippedDuration := tsi.GetAccumulatedSkippedDuration().AsDuration()
-	if accumulatedSkippedDuration <= 0 {
+	if tsi == nil || tsi.GetTaskRegenerationStatus() != TimerRegenStatusNeeded {
 		return nil
 	}
 
-	hasUnmarked := false
-	for _, d := range tsi.GetTaskRegenEntries() {
-		if d.GetTaskRegenStatus() == TimeSkippingTaskRegenStatusNone {
-			hasUnmarked = true
-			break
-		}
-	}
-	if !hasUnmarked {
+	// todo@time-skipping: add precision to the entire time-skipping feature
+	accumulatedSkippedDuration := tsi.GetAccumulatedSkippedDuration().AsDuration()
+	if accumulatedSkippedDuration <= 0 {
 		return nil
 	}
 
@@ -1151,10 +1133,6 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 		}
 	}
 
-	for _, d := range tsi.GetTaskRegenEntries() {
-		if d.GetTaskRegenStatus() == TimeSkippingTaskRegenStatusNone {
-			d.TaskRegenStatus = TimeSkippingTaskRegenStatusRegenerated
-		}
-	}
+	tsi.TaskRegenerationStatus = TimerRegenStatusCompleted
 	return nil
 }

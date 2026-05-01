@@ -328,19 +328,14 @@ message TimeSkippingInfo {
   // inherited skipped duration carried over from a preceding execution that started this run.
   google.protobuf.Duration accumulated_skipped_duration = 2;
 
+  // Task regeneration status is used to track the status of the task regeneration.
+  // 0: Not set
+  // 1: Need to regenerate tasks
+  // 2: All tasks regenerated
+  int32 task_regeneration_status = 4;
+
   // The current bound based on elapsed duration for time skipping.
   TimeSkippingBoundInfo current_elapsed_duration_bound = 3;
-
-  repeated TimeSkipTaskRegenEntry task_regen_entries = 4;
-}
-
-message TimeSkipTaskRegenEntry {
-  // The TimeSkippingTransitionedEvent that caused the skipped duration.
-  int64 source_event_id = 1;
-
-  // the mask to have idempotency for task recreation
-  // especially when tasks are regenerated in the passive cluster in a state-based replication
-  int32 task_regen_status = 2;
 }
 
 message TimeSkippingBoundInfo {

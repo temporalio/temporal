@@ -8154,57 +8154,73 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping_Bound() {
 	})
 }
 
-// TestApplyIncomingTimeSkippingInfo_PreservesLocalRegenStatus verifies the
-// merge contract: TimeSkipTaskRegenEntry.TaskRegenStatus is per-cluster local
-// state. For details the receiver already has (matched by SourceEventId), the
-// local status is preserved; new details are reset to None so the local
-// refresh can regenerate timer tasks.
-func TestApplyIncomingTimeSkippingInfo_PreservesLocalRegenStatus(t *testing.T) {
+// TestApplyIncomingTimeSkippingInfo_RegenStatusOnSkipChange verifies the merge
+// contract: TaskRegenerationStatus is per-cluster local state. The receiver resets
+// it to Needed whenever the incoming AccumulatedSkippedDuration differs from the
+// current value (so the local refresh can regenerate timer tasks for the new
+// skip), and otherwise preserves the incoming status.
+func TestApplyIncomingTimeSkippingInfo_RegenStatusOnSkipChange(t *testing.T) {
 	t.Parallel()
 
 	ms := &MutableStateImpl{}
 
 	for _, tc := range []struct {
-		name         string
-		current      *persistencespb.TimeSkippingInfo
-		incoming     *persistencespb.TimeSkippingInfo
-		wantStatuses map[int64]int32 // SourceEventId -> expected TaskRegenStatus
+		name            string
+		current         *persistencespb.TimeSkippingInfo
+		incoming        *persistencespb.TimeSkippingInfo
+		wantNil         bool
+		wantRegenStatus int32
 	}{
 		{
-			name:    "current nil",
-			current: nil,
-			incoming: &persistencespb.TimeSkippingInfo{
-				TaskRegenEntries: []*persistencespb.TimeSkipTaskRegenEntry{
-					{SourceEventId: 5, TaskRegenStatus: TimeSkippingTaskRegenStatusRegenerated},
-					{SourceEventId: 9, TaskRegenStatus: TimeSkippingTaskRegenStatusRegenerated},
-				},
-			},
-			wantStatuses: map[int64]int32{
-				5: TimeSkippingTaskRegenStatusNone,
-				9: TimeSkippingTaskRegenStatusNone,
-			},
+			name:     "incoming nil clears current",
+			current:  &persistencespb.TimeSkippingInfo{TaskRegenerationStatus: TimerRegenStatusCompleted},
+			incoming: nil,
+			wantNil:  true,
 		},
 		{
-			name: "matching by SourceEventId preserves local status; new entry resets to None",
+			name:    "current nil, incoming has skipped duration: reset to Needed",
+			current: nil,
+			incoming: &persistencespb.TimeSkippingInfo{
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+				TaskRegenerationStatus:     TimerRegenStatusCompleted,
+			},
+			wantRegenStatus: TimerRegenStatusNeeded,
+		},
+		{
+			name: "same skipped duration preserves incoming status",
 			current: &persistencespb.TimeSkippingInfo{
-				TaskRegenEntries: []*persistencespb.TimeSkipTaskRegenEntry{
-					{SourceEventId: 5, TaskRegenStatus: TimeSkippingTaskRegenStatusRegenerated},
-					{SourceEventId: 9, TaskRegenStatus: TimeSkippingTaskRegenStatusNone},
-				},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+				TaskRegenerationStatus:     TimerRegenStatusNeeded,
 			},
 			incoming: &persistencespb.TimeSkippingInfo{
-				TaskRegenEntries: []*persistencespb.TimeSkipTaskRegenEntry{
-					// Wire always carries Regenerated (sender marked before sending).
-					{SourceEventId: 5, TaskRegenStatus: TimeSkippingTaskRegenStatusRegenerated},
-					{SourceEventId: 9, TaskRegenStatus: TimeSkippingTaskRegenStatusRegenerated},
-					{SourceEventId: 13, TaskRegenStatus: TimeSkippingTaskRegenStatusRegenerated},
-				},
+				// Wire carries Completed (sender marked before sending).
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+				TaskRegenerationStatus:     TimerRegenStatusCompleted,
 			},
-			wantStatuses: map[int64]int32{
-				5:  TimeSkippingTaskRegenStatusRegenerated, // local kept
-				9:  TimeSkippingTaskRegenStatusNone,        // local kept
-				13: TimeSkippingTaskRegenStatusNone,        // new -> None
+			wantRegenStatus: TimerRegenStatusCompleted,
+		},
+		{
+			name: "different skipped duration resets to Needed",
+			current: &persistencespb.TimeSkippingInfo{
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+				TaskRegenerationStatus:     TimerRegenStatusCompleted,
 			},
+			incoming: &persistencespb.TimeSkippingInfo{
+				AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
+				TaskRegenerationStatus:     TimerRegenStatusCompleted,
+			},
+			wantRegenStatus: TimerRegenStatusNeeded,
+		},
+		{
+			name: "incoming skipped duration nil preserves incoming status",
+			current: &persistencespb.TimeSkippingInfo{
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+				TaskRegenerationStatus:     TimerRegenStatusNeeded,
+			},
+			incoming: &persistencespb.TimeSkippingInfo{
+				TaskRegenerationStatus: TimerRegenStatusCompleted,
+			},
+			wantRegenStatus: TimerRegenStatusCompleted,
 		},
 	} {
 		tc := tc
@@ -8216,27 +8232,20 @@ func TestApplyIncomingTimeSkippingInfo_PreservesLocalRegenStatus(t *testing.T) {
 
 			ms.applyIncomingTimeSkippingInfo(current, incoming)
 
-			if tc.wantStatuses == nil {
+			if tc.wantNil {
 				require.Nil(t, current.TimeSkippingInfo)
 				return
 			}
 			require.NotNil(t, current.TimeSkippingInfo)
-			require.Len(t, current.TimeSkippingInfo.TaskRegenEntries, len(tc.wantStatuses))
-			for _, d := range current.TimeSkippingInfo.TaskRegenEntries {
-				want, ok := tc.wantStatuses[d.GetSourceEventId()]
-				require.True(t, ok, "unexpected detail SourceEventId=%d in result", d.GetSourceEventId())
-				require.Equal(t, want, d.GetTaskRegenStatus(),
-					"detail SourceEventId=%d: expected status %d, got %d",
-					d.GetSourceEventId(), want, d.GetTaskRegenStatus())
-			}
+			require.Equal(t, tc.wantRegenStatus, current.TimeSkippingInfo.GetTaskRegenerationStatus())
 		})
 	}
 }
 
 // TestApplyIncomingTimeSkippingInfo_ClonesToBreakAliasing verifies the merge
 // clones the incoming TimeSkippingInfo so subsequent local mutations
-// (e.g. flipping TaskRegenStatus during PartialRefresh) cannot leak back into
-// the wire message.
+// (e.g. flipping TaskRegenerationStatus during PartialRefresh) cannot leak back
+// into the wire message.
 func TestApplyIncomingTimeSkippingInfo_ClonesToBreakAliasing(t *testing.T) {
 	t.Parallel()
 
@@ -8244,9 +8253,8 @@ func TestApplyIncomingTimeSkippingInfo_ClonesToBreakAliasing(t *testing.T) {
 
 	incoming := &persistencespb.WorkflowExecutionInfo{
 		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
-			TaskRegenEntries: []*persistencespb.TimeSkipTaskRegenEntry{
-				{SourceEventId: 5, TaskRegenStatus: TimeSkippingTaskRegenStatusRegenerated},
-			},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			TaskRegenerationStatus:     TimerRegenStatusCompleted,
 		},
 	}
 	current := &persistencespb.WorkflowExecutionInfo{}
@@ -8255,13 +8263,10 @@ func TestApplyIncomingTimeSkippingInfo_ClonesToBreakAliasing(t *testing.T) {
 
 	require.NotSame(t, current.TimeSkippingInfo, incoming.TimeSkippingInfo,
 		"current.TimeSkippingInfo must be a cloned copy, not aliased to incoming")
-	require.NotSame(t, current.TimeSkippingInfo.TaskRegenEntries[0],
-		incoming.TimeSkippingInfo.TaskRegenEntries[0],
-		"detail must also be cloned")
 
 	// Mutate local; incoming must not change.
-	current.TimeSkippingInfo.TaskRegenEntries[0].TaskRegenStatus = TimeSkippingTaskRegenStatusRegenerated
-	require.Equal(t, TimeSkippingTaskRegenStatusRegenerated,
-		incoming.TimeSkippingInfo.TaskRegenEntries[0].GetTaskRegenStatus(),
-		"sanity: incoming was already Regenerated; this assertion is a regression guard if the wire value were ever mutated")
+	current.TimeSkippingInfo.TaskRegenerationStatus = TimerRegenStatusCompleted
+	require.Equal(t, int32(TimerRegenStatusCompleted),
+		incoming.TimeSkippingInfo.GetTaskRegenerationStatus(),
+		"sanity: incoming was already Completed; this assertion is a regression guard if the wire value were ever mutated")
 }
