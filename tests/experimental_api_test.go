@@ -76,11 +76,36 @@ func TestExperimentalApi_Stable(t *testing.T) {
 	})
 }
 
-// TestExperimentalApi_MessageOverlay is skipped until experimental_field
-// annotations are added to StartWorkflowExecutionRequest in the proto,
-// which will generate the overlay types into go.temporal.io/api/workflowservice/v1.
 func TestExperimentalApi_MessageOverlay(t *testing.T) {
-	t.Skip("requires experimental_field annotations on StartWorkflowExecutionRequest — not yet added")
+	req := &workflowservice.StartWorkflowExecutionRequest{}
+
+	overlay := &workflowservice.StartWorkflowExecutionRequestOverlay{
+		FooText: "hello overlay",
+	}
+	require.NoError(t, workflowservice.SetStartWorkflowExecutionRequestOverlay(req, overlay))
+
+	got, ok, err := workflowservice.GetStartWorkflowExecutionRequestOverlay(req)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "hello overlay", got.GetFooText())
+
+	// Round-trip through proto marshal/unmarshal preserves the overlay bytes.
+	payload, err := proto.Marshal(req)
+	require.NoError(t, err)
+	roundTrip := &workflowservice.StartWorkflowExecutionRequest{}
+	require.NoError(t, proto.Unmarshal(payload, roundTrip))
+
+	got, ok, err = workflowservice.GetStartWorkflowExecutionRequestOverlay(roundTrip)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "hello overlay", got.GetFooText())
+
+	// Clear removes the overlay bytes.
+	require.NoError(t, workflowservice.ClearStartWorkflowExecutionRequestOverlay(roundTrip))
+	got, ok, err = workflowservice.GetStartWorkflowExecutionRequestOverlay(roundTrip)
+	require.NoError(t, err)
+	require.False(t, ok)
+	require.Empty(t, got.GetFooText())
 }
 
 func TestExperimentalApi_EnumValue(t *testing.T) {
