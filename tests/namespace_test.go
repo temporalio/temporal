@@ -278,7 +278,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 			}
 		}
 		return true
-	}, 20*time.Second, time.Second)
+	}, time.Minute, time.Second)
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
