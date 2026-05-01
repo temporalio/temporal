@@ -160,6 +160,25 @@ type (
 	}
 )
 
+// HACK: DO NOT SUBMIT: The api repo contains service endpoints not yet implemented in the
+// temporal repo. Stubbing out. But these should be merged by somebody else.
+// See https://github.com/temporalio/api/pull/743.
+func (wh *WorkflowHandler) PauseActivityExecution(_ context.Context, _ *workflowservice.PauseActivityExecutionRequest) (*workflowservice.PauseActivityExecutionResponse, error) {
+	panic("not implemented")
+}
+
+func (wh *WorkflowHandler) UnpauseActivityExecution(_ context.Context, _ *workflowservice.UnpauseActivityExecutionRequest) (*workflowservice.UnpauseActivityExecutionResponse, error) {
+	panic("not implemented")
+}
+
+func (wh *WorkflowHandler) ResetActivityExecution(_ context.Context, _ *workflowservice.ResetActivityExecutionRequest) (*workflowservice.ResetActivityExecutionResponse, error) {
+	panic("not implemented")
+}
+
+func (wh *WorkflowHandler) UpdateActivityExecutionOptions(_ context.Context, _ *workflowservice.UpdateActivityExecutionOptionsRequest) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
+	panic("not implemented")
+}
+
 func (wh *WorkflowHandler) CreateWorkerDeploymentVersion(
 	ctx context.Context,
 	request *workflowservice.CreateWorkerDeploymentVersionRequest,
