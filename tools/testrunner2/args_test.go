@@ -66,10 +66,9 @@ func TestParseArgs(t *testing.T) {
 		}, &cfg)
 		require.NoError(t, err)
 		require.Equal(t, []string{
-			"--junitfile=test.xml",
 			"-foo",
 			"bar",
-			// max-attempts, log-dir, and group-by have been stripped
+			// junitfile, max-attempts, log-dir, and group-by have been stripped
 			"--",
 			"-coverprofile=test.cover.out",
 			"baz",
@@ -177,30 +176,4 @@ func TestParseTestArgs(t *testing.T) {
 		require.Equal(t, []string{"-race"}, baseArgs)
 		require.Empty(t, testBinaryArgs)
 	})
-}
-
-func TestTestBinaryArgsFromBaseArgs(t *testing.T) {
-	t.Parallel()
-
-	args := testBinaryArgsFromBaseArgs([]string{
-		"-timeout=35m",
-		"-race",
-		"-shuffle", "on",
-		"-parallel=8",
-		"-count", "1",
-		"-tags=test_dep",
-		"-coverprofile=cover.out",
-		"-coverpkg=./...",
-		"--junitfile=report.xml",
-		"-short",
-		"-custom=value",
-	})
-
-	require.Equal(t, []string{
-		"-test.shuffle", "on",
-		"-test.parallel=8",
-		"-test.count", "1",
-		"-test.short",
-		"-custom=value",
-	}, args)
 }

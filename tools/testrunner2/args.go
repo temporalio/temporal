@@ -26,8 +26,8 @@ const (
 type GroupMode string
 
 const (
-	GroupByTest    GroupMode = "test"    // each TestXxx function runs separately (for functional tests)
-	GroupByPackage GroupMode = "package" // each package runs separately from one compiled test binary
+	GroupByTest    GroupMode = "test"    // compile once per package, run each top-level test separately
+	GroupByPackage GroupMode = "package" // run go test over packages directly, retry failed tests
 )
 
 type config struct {
@@ -46,7 +46,7 @@ type config struct {
 	shardIndex       int       // for CI sharding
 	testBinaryArgs   []string  // args to pass to test binary (after -args)
 	env              []string  // extra environment variables for child processes
-	groupBy          GroupMode // how to group tests: test, none
+	groupBy          GroupMode // how to group tests: test, package
 }
 
 type flagDefinition struct {
@@ -165,7 +165,7 @@ var flagDefinitions = map[string]flagDefinition{
 		},
 	},
 	junitReportFlag: {
-		runnerOnly: false,
+		runnerOnly: true,
 		handle: func(after string, cfg *config) error {
 			cfg.junitReportPath = after
 			return nil
@@ -244,44 +244,6 @@ func parseTestArgs(args []string) (testDirs []string, baseArgs []string, testBin
 		}
 	}
 	return
-}
-
-func testBinaryArgsFromBaseArgs(baseArgs []string) []string {
-	var args []string
-	for i := 0; i < len(baseArgs); i++ {
-		arg := baseArgs[i]
-		switch {
-		case arg == "--":
-			continue
-		case arg == "-race" || arg == "-cover" || arg == "-v":
-			continue
-		case strings.HasPrefix(arg, "-tags="),
-			strings.HasPrefix(arg, "-coverprofile="),
-			strings.HasPrefix(arg, "-coverpkg="),
-			strings.HasPrefix(arg, "-timeout="):
-			continue
-		case lookupFlag(arg) != nil:
-			continue
-		case arg == "-shuffle" || arg == "-parallel" || arg == "-count" || arg == "-cpu" || arg == "-skip":
-			args = append(args, "-test."+strings.TrimPrefix(arg, "-"))
-			if i+1 < len(baseArgs) {
-				i++
-				args = append(args, baseArgs[i])
-			}
-		case strings.HasPrefix(arg, "-shuffle="),
-			strings.HasPrefix(arg, "-parallel="),
-			strings.HasPrefix(arg, "-count="),
-			strings.HasPrefix(arg, "-cpu="),
-			strings.HasPrefix(arg, "-skip="):
-			name, value, _ := strings.Cut(strings.TrimPrefix(arg, "-"), "=")
-			args = append(args, "-test."+name+"="+value)
-		case arg == "-short" || arg == "-failfast":
-			args = append(args, "-test."+strings.TrimPrefix(arg, "-"))
-		default:
-			args = append(args, arg)
-		}
-	}
-	return args
 }
 
 // lookupFlag returns the flagDefinition for arg, or nil if arg is not a known flag.

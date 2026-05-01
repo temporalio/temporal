@@ -51,7 +51,7 @@ func Main() {
 		log.Fatalf("missing required argument %q", logDirFlag)
 	}
 	if cfg.groupBy == "" {
-		log.Fatalf("missing required argument %q: use 'test' for compiled per-test execution, 'package' for compiled per-package execution", groupByFlag)
+		log.Fatalf("missing required argument %q: use 'test' for compiled per-test execution or 'package' for go test package execution", groupByFlag)
 	}
 
 	r := newRunner(cfg)
@@ -154,7 +154,12 @@ func (r *runner) runTests(ctx context.Context, args []string) error {
 	if len(testDirs) == 0 {
 		return errors.New("no test directories specified")
 	}
-	r.testBinaryArgs = append(testBinaryArgsFromBaseArgs(baseArgs), testBinaryArgs...)
+
+	if r.groupBy == GroupByPackage {
+		return r.runPackageTests(ctx, args)
+	}
+
+	r.testBinaryArgs = testBinaryArgs
 
 	pkgs, err := findTestPackages(testDirs)
 	if err != nil {
