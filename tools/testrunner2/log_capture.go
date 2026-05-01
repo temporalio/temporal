@@ -22,11 +22,10 @@ const (
 
 // logFileHeader contains metadata for a log file header.
 type logFileHeader struct {
-	Package   string
-	TestFiles []string
-	Attempt   int
-	Started   time.Time
-	Command   string
+	Package string
+	Attempt string
+	Started time.Time
+	Command string
 }
 
 // logCapture captures test output, streaming filtered lines to disk.
@@ -81,12 +80,11 @@ func (lc *logCapture) writeHeader() error {
 	b.WriteString(logHeaderSeparator)
 	b.WriteByte('\n')
 
-	fmt.Fprintf(&b, "Package:     %s\n", lc.header.Package)
-	fmt.Fprintf(&b, "Test Files:  %s\n", strings.Join(lc.header.TestFiles, ", "))
-	fmt.Fprintf(&b, "Attempt:     %d\n", lc.header.Attempt)
-	fmt.Fprintf(&b, "Started:     %s\n", lc.header.Started.Format(time.RFC3339))
+	fmt.Fprintf(&b, "Package: %s\n", lc.header.Package)
+	fmt.Fprintf(&b, "Attempt: %s\n", lc.header.Attempt)
+	fmt.Fprintf(&b, "Started: %s\n", lc.header.Started.Format(time.RFC3339))
 	if lc.header.Command != "" {
-		fmt.Fprintf(&b, "Command:     %s\n", lc.header.Command)
+		fmt.Fprintf(&b, "Command: %s\n", lc.header.Command)
 	}
 
 	b.WriteString(logHeaderSeparator)

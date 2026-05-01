@@ -18,30 +18,6 @@ func classifyAlerts(detectedAlerts alerts) string {
 	return ""
 }
 
-// retryItemFunc converts failed test names into a queueItem for a given attempt.
-// skipNames lists tests that already passed and should be skipped on retry.
-type retryItemFunc func(failedNames, skipNames []string, attempt int, attemptLabel string) *queueItem
-
-// retryHandler encapsulates the retry callback for test failures.
-type retryHandler struct {
-	forFailures func(failedNames, skipNames []string, attempt int) []*queueItem
-}
-
-// buildRetryHandler wires up the retry callback using a shared retryItemFunc.
-func (r *runner) buildRetryHandler(makeItem retryItemFunc) retryHandler {
-	return retryHandler{
-		forFailures: func(failedNames, skipNames []string, attempt int) []*queueItem {
-			nextAttempt := attempt + 1
-			attemptLabel := r.nextRetryAttemptLabel(nextAttempt)
-			r.log("🔄 scheduling retry: %s (attempt %s)", buildTestFilterPattern(failedNames), attemptLabel)
-			if item := makeItem(failedNames, skipNames, nextAttempt, attemptLabel); item != nil {
-				return []*queueItem{item}
-			}
-			return nil
-		},
-	}
-}
-
 // parentTestName returns the parent of a test name by truncating the last "/" segment.
 // Returns "" if the name has no parent (top-level test).
 func parentTestName(name string) string {
