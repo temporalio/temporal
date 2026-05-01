@@ -266,10 +266,19 @@ func (s *VisibilityStore) countChasmExecutions(
 		return nil, err
 	}
 
+	resolvedQuery, err := query.ResolveRelativeTimes(request.Query, time.Now().UTC())
+	if err != nil {
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, converterErr.ToInvalidArgument()
+		}
+		return nil, err
+	}
+
 	queryParams, err := buildQueryParams(
 		namespace.ID(request.NamespaceId),
 		namespace.Name(request.Namespace),
-		request.Query,
+		resolvedQuery,
 		sqlQC,
 		saTypeMap,
 		saMapper,
@@ -314,13 +323,22 @@ func (s *VisibilityStore) countChasmExecutionsLegacy(
 		return nil, err
 	}
 
+	resolvedQuery, err := query.ResolveRelativeTimes(request.Query, time.Now().UTC())
+	if err != nil {
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, converterErr.ToInvalidArgument()
+		}
+		return nil, err
+	}
+
 	converter := NewQueryConverterLegacy(
 		s.GetName(),
 		namespace.Name(request.Namespace),
 		namespace.ID(request.NamespaceId),
 		saTypeMap,
 		saMapper,
-		request.Query,
+		resolvedQuery,
 		mapper,
 		request.ArchetypeId,
 	)
@@ -378,10 +396,28 @@ func (s *VisibilityStore) listExecutionsInternal(
 		return nil, err
 	}
 
+	pageToken, err := sqlplugin.DeserializeVisibilityPageToken(request.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+	queryTime := time.Now().UTC()
+	if pageToken != nil && pageToken.QueryTime != nil {
+		queryTime = pageToken.QueryTime.UTC()
+	}
+
+	resolvedQuery, err := query.ResolveRelativeTimes(request.Query, queryTime)
+	if err != nil {
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, converterErr.ToInvalidArgument()
+		}
+		return nil, err
+	}
+
 	queryParams, err := buildQueryParams(
 		request.NamespaceID,
 		request.Namespace,
-		request.Query,
+		resolvedQuery,
 		sqlQC,
 		saTypeMap,
 		saMapper,
@@ -395,11 +431,6 @@ func (s *VisibilityStore) listExecutionsInternal(
 		if errors.As(err, &converterErr) {
 			return nil, converterErr.ToInvalidArgument()
 		}
-		return nil, err
-	}
-
-	pageToken, err := sqlplugin.DeserializeVisibilityPageToken(request.NextPageToken)
-	if err != nil {
 		return nil, err
 	}
 
@@ -440,6 +471,7 @@ func (s *VisibilityStore) listExecutionsInternal(
 			CloseTime: closeTime,
 			StartTime: lastRow.StartTime,
 			RunID:     lastRow.RunID,
+			QueryTime: &queryTime,
 		})
 		if err != nil {
 			return nil, err
@@ -480,13 +512,31 @@ func (s *VisibilityStore) listExecutionsInternalLegacy(
 		return nil, err
 	}
 
+	pageToken, err := deserializePageTokenLegacy(request.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+	queryTime := time.Now().UTC()
+	if pageToken != nil && pageToken.QueryTime != nil {
+		queryTime = pageToken.QueryTime.UTC()
+	}
+
+	resolvedQuery, err := query.ResolveRelativeTimes(request.Query, queryTime)
+	if err != nil {
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, converterErr.ToInvalidArgument()
+		}
+		return nil, err
+	}
+
 	converter := NewQueryConverterLegacy(
 		s.GetName(),
 		request.Namespace,
 		request.NamespaceID,
 		saTypeMap,
 		saMapper,
-		request.Query,
+		resolvedQuery,
 		request.ChasmMapper,
 		request.ArchetypeID,
 	)
@@ -527,6 +577,7 @@ func (s *VisibilityStore) listExecutionsInternalLegacy(
 			CloseTime: closeTime,
 			StartTime: lastRow.StartTime,
 			RunID:     lastRow.RunID,
+			QueryTime: &queryTime,
 		})
 		if err != nil {
 			return nil, err
@@ -562,13 +613,22 @@ func (s *VisibilityStore) countWorkflowExecutionsLegacy(
 		return nil, err
 	}
 
+	resolvedQuery, err := query.ResolveRelativeTimes(request.Query, time.Now().UTC())
+	if err != nil {
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, converterErr.ToInvalidArgument()
+		}
+		return nil, err
+	}
+
 	converter := NewQueryConverterLegacy(
 		s.GetName(),
 		request.Namespace,
 		request.NamespaceID,
 		saTypeMap,
 		saMapper,
-		request.Query,
+		resolvedQuery,
 		nil,
 		chasm.UnspecifiedArchetypeID,
 	)
@@ -613,10 +673,19 @@ func (s *VisibilityStore) countWorkflowExecutions(
 		return nil, err
 	}
 
+	resolvedQuery, err := query.ResolveRelativeTimes(request.Query, time.Now().UTC())
+	if err != nil {
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, converterErr.ToInvalidArgument()
+		}
+		return nil, err
+	}
+
 	queryParams, err := buildQueryParams(
 		request.NamespaceID,
 		request.Namespace,
-		request.Query,
+		resolvedQuery,
 		sqlQC,
 		saTypeMap,
 		saMapper,
