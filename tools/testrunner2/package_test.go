@@ -155,6 +155,35 @@ func TestBuildWorkUnits(t *testing.T) {
 	})
 }
 
+func TestBuildPackageWorkUnit(t *testing.T) {
+	t.Parallel()
+
+	t.Run("creates one unit for the package", func(t *testing.T) {
+		t.Parallel()
+
+		unit, ok := buildPackageWorkUnit("./pkg", "TestA", 1, 0)
+		require.True(t, ok)
+		require.Equal(t, "./pkg", unit.pkg)
+		require.Equal(t, "./pkg", unit.rootName)
+		require.Equal(t, "./pkg", unit.displayName)
+		require.Equal(t, "TestA", unit.runPattern)
+		require.Empty(t, unit.runTests)
+	})
+
+	t.Run("shards by package", func(t *testing.T) {
+		t.Parallel()
+
+		var matched int
+		for shard := range 4 {
+			_, ok := buildPackageWorkUnit("./pkg", "", 4, shard)
+			if ok {
+				matched++
+			}
+		}
+		require.Equal(t, 1, matched)
+	})
+}
+
 func TestBuildTestFilterPattern(t *testing.T) {
 	t.Parallel()
 

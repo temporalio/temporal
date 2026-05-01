@@ -51,7 +51,7 @@ func Main() {
 		log.Fatalf("missing required argument %q", logDirFlag)
 	}
 	if cfg.groupBy == "" {
-		log.Fatalf("missing required argument %q: use 'test' for compiled per-test execution, 'none' for direct go test", groupByFlag)
+		log.Fatalf("missing required argument %q: use 'test' for compiled per-test execution, 'package' for compiled per-package execution", groupByFlag)
 	}
 
 	r := newRunner(cfg)
@@ -154,11 +154,7 @@ func (r *runner) runTests(ctx context.Context, args []string) error {
 	if len(testDirs) == 0 {
 		return errors.New("no test directories specified")
 	}
-	r.testBinaryArgs = testBinaryArgs
-
-	if r.groupBy == GroupByNone {
-		return r.runDirectMode(ctx, testDirs, baseArgs)
-	}
+	r.testBinaryArgs = append(testBinaryArgsFromBaseArgs(baseArgs), testBinaryArgs...)
 
 	pkgs, err := findTestPackages(testDirs)
 	if err != nil {
@@ -192,8 +188,7 @@ func (r *runner) runTests(ctx context.Context, args []string) error {
 }
 
 // runWithScheduler runs queue items through the scheduler and finalizes the report.
-// initialTotal pre-seeds the progress tracker (direct mode passes 1; compiled mode
-// passes 0 because compile items dynamically add totals).
+// initialTotal pre-seeds the progress tracker when roots are known upfront.
 func (r *runner) runWithScheduler(ctx context.Context, parallelism int, items []*queueItem, initialTotal int64) error {
 	r.junitReports = nil
 	r.alerts = nil
@@ -223,13 +218,6 @@ func (r *runner) runWithScheduler(ctx context.Context, parallelism int, items []
 	return nil
 }
 
-type retryMode int
-
-const (
-	retryCompiled retryMode = iota
-	retryDirect
-)
-
 type execConfig struct {
 	startProcess func(ctx context.Context, output io.Writer) int
 
@@ -241,11 +229,7 @@ type execConfig struct {
 	junitPath string
 	logHeader *logFileHeader
 
-	retryMode          retryMode
 	compiledBinaryPath string
-	directPkgs         []string
-	directRace         bool
-	directExtraArgs    []string
 }
 
 func (cfg execConfig) displayAttempt() string {
@@ -358,28 +342,14 @@ func (r *runner) scheduleRetry(cfg execConfig, failedNames, skipNames []string, 
 	retryOrdinal := r.nextRetryOrdinal(nextAttempt)
 	r.log("🔄 scheduling retry: %s (attempt %s)", buildTestFilterPattern(failedNames), displayAttempt(nextAttempt, retryOrdinal))
 
-	switch cfg.retryMode {
-	case retryCompiled:
-		unit := workUnit{
-			pkg:         cfg.unit.pkg,
-			rootName:    cfg.unit.rootName,
-			displayName: cfg.unit.displayName,
-			runTests:    failedNames,
-			skipTests:   skipNames,
-		}
-		emit(r.newExecItem(r.compiledExecConfig(unit, cfg.compiledBinaryPath, nextAttempt, retryOrdinal)))
-	case retryDirect:
-		emit(r.newExecItem(r.directExecConfig(
-			cfg.directPkgs,
-			cfg.directRace,
-			cfg.directExtraArgs,
-			nextAttempt,
-			retryOrdinal,
-			buildTestFilterPattern(failedNames),
-			buildTestFilterPattern(skipNames),
-		)))
-	default:
+	unit := workUnit{
+		pkg:         cfg.unit.pkg,
+		rootName:    cfg.unit.rootName,
+		displayName: cfg.unit.displayName,
+		runTests:    failedNames,
+		skipTests:   skipNames,
 	}
+	emit(r.newExecItem(r.compiledExecConfig(unit, cfg.compiledBinaryPath, nextAttempt, retryOrdinal)))
 }
 
 // passedSiblings returns passed tests that can be skipped when retrying testName.
