@@ -134,8 +134,7 @@ func buildWorkUnits(pkg string, testNames []string, runFilter string, totalShard
 			continue
 		}
 		if totalShards > 1 {
-			shardKey := pkg + "/" + name
-			if getShardForKey(shardKey, totalShards) != shardIndex {
+			if getShardForKey(name, totalShards) != shardIndex {
 				continue
 			}
 		}
