@@ -212,7 +212,7 @@ func TestFilterWorkersExcludesSystemWorkers(t *testing.T) {
 	})
 }
 
-func TestIsSystemPrincipal(t *testing.T) {
+func TestIsSystemWorker(t *testing.T) {
 	t.Run("principal with type temporal marks as system worker", func(t *testing.T) {
 		m := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 		defer m.Stop()
