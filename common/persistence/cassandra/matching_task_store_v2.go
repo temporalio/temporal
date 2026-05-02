@@ -172,35 +172,17 @@ func (d *matchingTaskStoreV2) GetTasks(
 	iter := query.WithContext(ctx).PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalGetTasksResponse{}
-	task := make(map[string]any)
-	for iter.MapScan(task) {
-		_, ok := task["task_id"]
-		if !ok { // no tasks, but static column record returned
+	var taskID *int64
+	var taskVal []byte
+	var encodingVal string
+	// Column order must match templateGetTasksQuery_v2 / templateGetTasksQuery_v2_limit SELECT clause.
+	for iter.Scan(&taskID, &taskVal, &encodingVal) {
+		if taskID == nil { // no tasks, but static column record returned
 			continue
 		}
-
-		rawTask, ok := task["task"]
-		if !ok {
-			return nil, newFieldNotFoundError("task", task)
-		}
-		taskVal, ok := rawTask.([]byte)
-		if !ok {
-			var byteSliceType []byte
-			return nil, newPersistedTypeMismatchError("task", byteSliceType, rawTask, task)
-		}
-
-		rawEncoding, ok := task["task_encoding"]
-		if !ok {
-			return nil, newFieldNotFoundError("task_encoding", task)
-		}
-		encodingVal, ok := rawEncoding.(string)
-		if !ok {
-			var byteSliceType []byte
-			return nil, newPersistedTypeMismatchError("task_encoding", byteSliceType, rawEncoding, task)
-		}
-		response.Tasks = append(response.Tasks, p.NewDataBlob(taskVal, encodingVal))
-
-		task = make(map[string]any) // Reinitialize map as initialized fails on unmarshalling
+		dataCopy := make([]byte, len(taskVal))
+		copy(dataCopy, taskVal)
+		response.Tasks = append(response.Tasks, p.NewDataBlob(dataCopy, encodingVal))
 	}
 	if len(iter.PageState()) > 0 {
 		response.NextPageToken = iter.PageState()
