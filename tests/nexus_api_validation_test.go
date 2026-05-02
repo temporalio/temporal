@@ -178,14 +178,13 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_Forbidden() {
 	}
 
 	testFn := func(s *NexusAPIValidationTestSuite, tc testcase, dispatchOnlyByEndpoint bool) {
-		env := newNexusTestEnv(s.T(), false, testcore.WithDedicatedCluster())
+		env := newNexusTestEnv(s.T(), false,
+			testcore.WithDynamicConfig(dynamicconfig.ExposeAuthorizerErrors, tc.exposeAuthorizerErrors),
+		)
 		taskQueue := testcore.RandomizeStr("task-queue")
 		testEndpoint := env.createNexusEndpoint(env.Context(), s.T(), testcore.RandomizeStr("test-endpoint"), taskQueue)
 
-		env.GetTestCluster().Host().SetOnAuthorize(tc.onAuthorize(testEndpoint.Spec.Name))
-		s.T().Cleanup(func() { env.GetTestCluster().Host().SetOnAuthorize(nil) })
-
-		env.OverrideDynamicConfig(dynamicconfig.ExposeAuthorizerErrors, tc.exposeAuthorizerErrors)
+		env.SetOnAuthorize(tc.onAuthorize(testEndpoint.Spec.Name))
 
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {

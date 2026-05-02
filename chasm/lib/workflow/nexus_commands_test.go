@@ -110,6 +110,12 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 			HandleEndpointByName: func(name string) (*persistencespb.NexusEndpointEntry, error) {
 				return endpointReg.GetByName(context.Background(), tests.GlobalNamespaceEntry.ID(), name)
 			},
+			HandleExecutionKey: func() chasm.ExecutionKey {
+				return chasm.ExecutionKey{
+					NamespaceID: tests.GlobalNamespaceEntry.ID().String(),
+				}
+			},
+			GoCtx: context.WithValue(context.Background(), nexusoperation.OperationContextKey, &nexusoperation.OperationContext{MetricTagConfig: dynamicconfig.GetTypedPropertyFn(nexusoperation.NexusMetricTagConfig{})}),
 		},
 	}, wfreg)
 
