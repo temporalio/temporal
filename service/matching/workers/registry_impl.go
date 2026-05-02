@@ -108,7 +108,7 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, principal *commonpb.Princip
 			continue
 		}
 
-		isSystemWorker := isSystemPrincipal(principal, hb.GetTaskQueue())
+		isSystemWorker := isSystemWorker(principal, hb.GetTaskQueue())
 
 		// Normal upsert
 		if e, exists := mp[key]; exists {
@@ -479,11 +479,11 @@ func (m *registryImpl) DescribeWorker(nsID namespace.ID, workerInstanceKey strin
 	return b.getWorkerHeartbeat(nsID, workerInstanceKey)
 }
 
-// isSystemPrincipal determines if a worker is a system worker.
+// isSystemWorker determines if a worker is a system worker.
 // If a principal is available, it checks whether the principal identifies
 // the Temporal server itself (type="temporal", name="internal"). Otherwise,
 // it falls back to checking the task queue name prefix.
-func isSystemPrincipal(principal *commonpb.Principal, taskQueue string) bool {
+func isSystemWorker(principal *commonpb.Principal, taskQueue string) bool {
 	if principal != nil {
 		return principal.GetType() == "temporal" && principal.GetName() == "internal"
 	}
