@@ -76,7 +76,7 @@ func (w *Workflow) Terminate(
 // OnActivityCompleted implements ActivityStore for workflow-embedded activities.
 // Writes ActivityTaskStarted + ActivityTaskCompleted history events; Apply() handles cleanup.
 func (w *Workflow) OnActivityCompleted(ctx chasm.MutableContext, act *activity.Activity) error {
-	scheduledEventID := act.ActivityState.GetScheduledEventId()
+	scheduledEventID := act.GetScheduledEventId()
 	attempt := act.LastAttempt.Get(ctx)
 	startedEvent, err := addAndApplyHistoryEvent[ActivityTaskStartedEventDefinition](w, ctx, func(e *historypb.HistoryEvent) {
 		e.Attributes = &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{
@@ -107,7 +107,7 @@ func (w *Workflow) OnActivityCompleted(ctx chasm.MutableContext, act *activity.A
 // OnActivityFailed implements ActivityStore for workflow-embedded activities.
 // Writes ActivityTaskStarted + ActivityTaskFailed history events; Apply() handles cleanup.
 func (w *Workflow) OnActivityFailed(ctx chasm.MutableContext, act *activity.Activity) error {
-	scheduledEventID := act.ActivityState.GetScheduledEventId()
+	scheduledEventID := act.GetScheduledEventId()
 	attempt := act.LastAttempt.Get(ctx)
 	startedEvent, err := addAndApplyHistoryEvent[ActivityTaskStartedEventDefinition](w, ctx, func(e *historypb.HistoryEvent) {
 		e.Attributes = &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{
@@ -139,7 +139,7 @@ func (w *Workflow) OnActivityFailed(ctx chasm.MutableContext, act *activity.Acti
 // OnActivityTimedOut implements ActivityStore for workflow-embedded activities.
 // Writes ActivityTaskTimedOut (and optionally ActivityTaskStarted) history events; Apply() handles cleanup.
 func (w *Workflow) OnActivityTimedOut(ctx chasm.MutableContext, act *activity.Activity, timeoutFailure *failurepb.Failure, needsStartedEvent bool) error {
-	scheduledEventID := act.ActivityState.GetScheduledEventId()
+	scheduledEventID := act.GetScheduledEventId()
 	if timeoutFailure == nil {
 		return nil
 	}
@@ -178,14 +178,14 @@ func (w *Workflow) OnActivityTimedOut(ctx chasm.MutableContext, act *activity.Ac
 // OnActivityCanceled implements ActivityStore for workflow-embedded activities.
 // No ActivityTaskCanceled history event is written on the forward path in this prototype.
 func (w *Workflow) OnActivityCanceled(ctx chasm.MutableContext, act *activity.Activity) error {
-	activityID := act.ActivityState.GetActivityId()
+	activityID := act.GetActivityId()
 	delete(w.Activities, activityID)
 	return w.ScheduleWorkflowTask()
 }
 
 // OnActivityTerminated implements ActivityStore for workflow-embedded activities.
 func (w *Workflow) OnActivityTerminated(ctx chasm.MutableContext, act *activity.Activity) error {
-	activityID := act.ActivityState.GetActivityId()
+	activityID := act.GetActivityId()
 	delete(w.Activities, activityID)
 	return w.ScheduleWorkflowTask()
 }
@@ -311,7 +311,7 @@ func (w *Workflow) BuildPendingActivityInfos(ctx chasm.Context) ([]*workflowpb.P
 func (w *Workflow) FindActivityByScheduledEventID(ctx chasm.Context, scheduledEventID int64) *activity.Activity {
 	for _, field := range w.Activities {
 		act := field.Get(ctx)
-		if act.ActivityState.GetScheduledEventId() == scheduledEventID {
+		if act.GetScheduledEventId() == scheduledEventID {
 			return act
 		}
 	}

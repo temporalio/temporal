@@ -217,7 +217,7 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 			WorkflowId: execKey.BusinessID,
 			RunId:      execKey.RunID,
 		}
-		req.ScheduledEventId = a.ActivityState.GetScheduledEventId()
+		req.ScheduledEventId = a.GetScheduledEventId()
 	}
 
 	return req, nil
@@ -256,7 +256,7 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 
 	// For workflow-embedded activities, ActivityId is the SDK-provided activity ID string.
 	// For standalone activities, fall back to the execution key's BusinessID.
-	activityID := a.ActivityState.GetActivityId()
+	activityID := a.GetActivityId()
 	if activityID == "" {
 		activityID = key.BusinessID
 	}
@@ -918,7 +918,7 @@ func (a *Activity) BuildPendingActivityInfo(ctx chasm.Context) *workflowpb.Pendi
 
 	// For workflow-embedded activities, ActivityId is the SDK-provided activity ID string.
 	// For standalone activities, this will be empty (standalone activities don't use BuildPendingActivityInfo).
-	activityID := a.ActivityState.GetActivityId()
+	activityID := a.GetActivityId()
 
 	return &workflowpb.PendingActivityInfo{
 		ActivityId:         activityID,

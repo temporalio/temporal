@@ -3339,11 +3339,6 @@ func (ms *MutableStateImpl) ScheduleWorkflowTask() error {
 	return ScheduleWorkflowTask(ms)
 }
 
-// WriteActivityTaskStartedHistoryEvent implements chasm.NodeBackend. It writes an
-// ActivityTaskStarted history event for a workflow-embedded CHASM activity.
-// The event is buffered — the real event ID is assigned during FlushBufferToCurrentBatch.
-// Both started and completed events must be written in the same transaction so that
-// the history builder can wire the started event ID into the completed event automatically.
 // AddWorkflowTaskScheduledEventAsHeartbeat is to record the first WorkflowTaskScheduledEvent during workflow task heartbeat.
 func (ms *MutableStateImpl) AddWorkflowTaskScheduledEventAsHeartbeat(
 	bypassTaskGeneration bool,

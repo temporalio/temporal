@@ -3,8 +3,8 @@ package workflow
 import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	workflowservice "go.temporal.io/api/workflowservice/v1"
-	historyservice "go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	chasmactivity "go.temporal.io/server/chasm/lib/activity"
 	activitypb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
@@ -117,7 +117,7 @@ func (d ActivityTaskCompletedEventDefinition) Apply(ctx chasm.MutableContext, wf
 		return nil
 	}
 
-	delete(wf.Activities, act.ActivityState.GetActivityId())
+	delete(wf.Activities, act.GetActivityId())
 	return wf.ScheduleWorkflowTask()
 }
 
@@ -144,7 +144,7 @@ func (d ActivityTaskFailedEventDefinition) Apply(ctx chasm.MutableContext, wf *W
 		return nil
 	}
 
-	delete(wf.Activities, act.ActivityState.GetActivityId())
+	delete(wf.Activities, act.GetActivityId())
 	return wf.ScheduleWorkflowTask()
 }
 
@@ -171,7 +171,7 @@ func (d ActivityTaskTimedOutEventDefinition) Apply(ctx chasm.MutableContext, wf 
 		return nil
 	}
 
-	delete(wf.Activities, act.ActivityState.GetActivityId())
+	delete(wf.Activities, act.GetActivityId())
 	return wf.ScheduleWorkflowTask()
 }
 
@@ -230,7 +230,7 @@ func (d ActivityTaskCanceledEventDefinition) Apply(ctx chasm.MutableContext, wf 
 		return nil
 	}
 
-	delete(wf.Activities, act.ActivityState.GetActivityId())
+	delete(wf.Activities, act.GetActivityId())
 	return wf.ScheduleWorkflowTask()
 }
 
