@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"go.temporal.io/api/protometa/v1"
+	protometapb "go.temporal.io/api/protometa/v1"
 	_ "go.temporal.io/api/workflowservice/v1" // trigger proto file registration
 	"go.temporal.io/server/cmd/tools/codegen"
 	"google.golang.org/protobuf/proto"
@@ -81,11 +81,12 @@ func methodEntryFromDescriptor(
 	method protoreflect.MethodDescriptor,
 ) (methodEntry, bool) {
 	opts := method.Options()
-	if opts == nil || !proto.HasExtension(opts, protometa.E_RequestHeader) {
+	if opts == nil || !proto.HasExtension(opts, protometapb.E_RequestHeader) {
 		return methodEntry{}, false
 	}
 
-	annotations, _ := proto.GetExtension(opts, protometa.E_RequestHeader).([]*protometa.RequestHeaderAnnotation)
+	//nolint:revive // unchecked-type-assertion
+	annotations := proto.GetExtension(opts, protometapb.E_RequestHeader).([]*protometapb.RequestHeaderAnnotation)
 	for _, ann := range annotations {
 		if ann.GetHeader() != resourceIDHeader {
 			continue
