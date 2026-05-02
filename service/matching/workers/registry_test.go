@@ -554,6 +554,57 @@ func TestRegistryImpl_ListWorkersInvalidPageToken(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid next_page_token")
 }
 
+func TestRegistryImpl_ListWorkersExcludesSystemWorkers(t *testing.T) {
+	r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
+
+	// Add workers on a user task queue and a system (internal) task queue.
+	r.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{
+		{WorkerInstanceKey: "user-worker-1", TaskQueue: "my-queue"},
+		{WorkerInstanceKey: "user-worker-2", TaskQueue: "my-queue"},
+		{WorkerInstanceKey: "sys-worker-1", TaskQueue: "temporal-sys-per-ns-tq"},
+	})
+
+	t.Run("excludes system workers by default", func(t *testing.T) {
+		resp, err := r.ListWorkers("ns1", ListWorkersParams{})
+		require.NoError(t, err)
+		require.Len(t, resp.Workers, 2, "should only return user workers")
+
+		workerKeys := make([]string, len(resp.Workers))
+		for i, w := range resp.Workers {
+			workerKeys[i] = w.WorkerInstanceKey
+		}
+		require.ElementsMatch(t, []string{"user-worker-1", "user-worker-2"}, workerKeys)
+	})
+
+	t.Run("includes system workers when requested", func(t *testing.T) {
+		resp, err := r.ListWorkers("ns1", ListWorkersParams{IncludeSystemWorkers: true})
+		require.NoError(t, err)
+		require.Len(t, resp.Workers, 3, "should return all workers including system")
+
+		workerKeys := make([]string, len(resp.Workers))
+		for i, w := range resp.Workers {
+			workerKeys[i] = w.WorkerInstanceKey
+		}
+		require.ElementsMatch(t, []string{"user-worker-1", "user-worker-2", "sys-worker-1"}, workerKeys)
+	})
+
+	t.Run("pagination excludes system workers from page counts", func(t *testing.T) {
+		// Page 1 (sorted: "user-worker-1" comes first)
+		resp1, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 1})
+		require.NoError(t, err)
+		require.Len(t, resp1.Workers, 1)
+		require.Equal(t, "user-worker-1", resp1.Workers[0].WorkerInstanceKey)
+		require.NotNil(t, resp1.NextPageToken)
+
+		// Page 2
+		resp2, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 1, NextPageToken: resp1.NextPageToken})
+		require.NoError(t, err)
+		require.Len(t, resp2.Workers, 1)
+		require.Equal(t, "user-worker-2", resp2.Workers[0].WorkerInstanceKey)
+		require.Nil(t, resp2.NextPageToken)
+	})
+}
+
 func TestRegistryImpl_RecordStorageDriverMetric(t *testing.T) {
 	t.Run("disabled when ExternalPayloadsEnabled is false", func(t *testing.T) {
 		captureHandler := metricstest.NewCaptureHandler()
