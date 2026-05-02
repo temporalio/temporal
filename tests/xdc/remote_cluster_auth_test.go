@@ -21,10 +21,10 @@ import (
 
 const expectedXDCToken = "test-xdc-jwt-token"
 
-type staticTokenProvider map[string]string
+type staticTokenProvider string
 
-func (p staticTokenProvider) GetToken(_ context.Context, clusterName string) (string, error) {
-	return p[clusterName], nil
+func (t staticTokenProvider) GetToken(context.Context, string) (string, error) {
+	return string(t), nil
 }
 
 type capturedCall struct {
@@ -84,13 +84,7 @@ func (s *RemoteClusterAuthSuite) SetupSuite() {
 	s.dynamicConfigOverrides[dynamicconfig.VisibilityProcessorMaxPollInterval.Key()] = time.Second * 3
 	s.dynamicConfigOverrides[dynamicconfig.OutboundProcessorMaxPollInterval.Key()] = time.Second * 3
 
-	suffix := common.GenerateRandomString(5)
-	clusterNames := []string{"active_" + suffix, "standby_" + suffix}
-
-	tokenProvider := staticTokenProvider{
-		clusterNames[0]: expectedXDCToken,
-		clusterNames[1]: expectedXDCToken,
-	}
+	tokenProvider := staticTokenProvider(expectedXDCToken)
 
 	persistenceDefaults := testcore.GetPersistenceTestDefaults()
 	clusterConfigs := []*testcore.TestClusterConfig{
@@ -116,8 +110,9 @@ func (s *RemoteClusterAuthSuite) SetupSuite() {
 
 	s.clusters = make([]*testcore.TestCluster, len(clusterConfigs))
 
+	suffix := common.GenerateRandomString(5)
 	testClusterFactory := testcore.NewTestClusterFactory()
-	for clusterIndex, clusterName := range clusterNames {
+	for clusterIndex, clusterName := range []string{"active_" + suffix, "standby_" + suffix} {
 		clusterConfigs[clusterIndex].DynamicConfigOverrides = s.dynamicConfigOverrides
 		clusterConfigs[clusterIndex].ClusterMetadata.MasterClusterName = clusterName
 		clusterConfigs[clusterIndex].ClusterMetadata.CurrentClusterName = clusterName

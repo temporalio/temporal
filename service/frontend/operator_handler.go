@@ -608,7 +608,6 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	defer log.CapturePanic(h.logger, &retError)
 
 	adminClient := h.clientFactory.NewRemoteAdminClientWithTimeout(
-		"", // cluster name not yet known: this is a discovery probe
 		request.GetFrontendAddress(),
 		admin.DefaultTimeout,
 		admin.DefaultLargeTimeout,

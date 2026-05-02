@@ -21,10 +21,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type staticTokenProvider map[string]string
+type staticTokenProvider string
 
-func (p staticTokenProvider) GetToken(_ context.Context, clusterName string) (string, error) {
-	return p[clusterName], nil
+func (t staticTokenProvider) GetToken(context.Context, string) (string, error) {
+	return string(t), nil
 }
 
 func TestTokenAuthHeader_SentOnRemoteConnection(t *testing.T) {
@@ -52,7 +52,7 @@ func TestTokenAuthHeader_SentOnRemoteConnection(t *testing.T) {
 
 	address := listener.Addr().String()
 
-	tokenProvider := staticTokenProvider{"remote-cluster": expectedToken}
+	tokenProvider := staticTokenProvider(expectedToken)
 
 	testCfg := &config.Config{
 		Services: map[string]config.Service{
@@ -69,7 +69,7 @@ func TestTokenAuthHeader_SentOnRemoteConnection(t *testing.T) {
 		tokenProvider,
 	)
 
-	conn := factory.CreateRemoteFrontendGRPCConnection("remote-cluster", address)
+	conn := factory.CreateRemoteFrontendGRPCConnection(address)
 	defer func() { _ = conn.Close() }()
 
 	client := testservice.NewTestServiceClient(conn)
@@ -120,7 +120,7 @@ func TestTokenAuthHeader_NotSentWhenNoProvider(t *testing.T) {
 		nil,
 	)
 
-	conn := factory.CreateRemoteFrontendGRPCConnection("remote-cluster", address)
+	conn := factory.CreateRemoteFrontendGRPCConnection(address)
 	defer func() { _ = conn.Close() }()
 
 	client := testservice.NewTestServiceClient(conn)
@@ -160,7 +160,7 @@ func TestTokenAuthHeader_ReceiverRejectsWrongToken(t *testing.T) {
 
 	address := listener.Addr().String()
 
-	tokenProvider := staticTokenProvider{"remote-cluster": "wrong-token"}
+	tokenProvider := staticTokenProvider("wrong-token")
 
 	testCfg := &config.Config{
 		Services: map[string]config.Service{
@@ -177,7 +177,7 @@ func TestTokenAuthHeader_ReceiverRejectsWrongToken(t *testing.T) {
 		tokenProvider,
 	)
 
-	conn := factory.CreateRemoteFrontendGRPCConnection("remote-cluster", address)
+	conn := factory.CreateRemoteFrontendGRPCConnection(address)
 	defer func() { _ = conn.Close() }()
 
 	client := testservice.NewTestServiceClient(conn)
@@ -201,7 +201,7 @@ func TestTokenAuthHeader_StrictModeRejectsEmptyToken(t *testing.T) {
 
 	address := listener.Addr().String()
 
-	tokenProvider := staticTokenProvider{}
+	tokenProvider := staticTokenProvider("")
 
 	testCfg := &config.Config{
 		Global: config.Global{
@@ -221,7 +221,7 @@ func TestTokenAuthHeader_StrictModeRejectsEmptyToken(t *testing.T) {
 		tokenProvider,
 	)
 
-	conn := factory.CreateRemoteFrontendGRPCConnection("unknown-cluster", address)
+	conn := factory.CreateRemoteFrontendGRPCConnection(address)
 	defer func() { _ = conn.Close() }()
 
 	client := testservice.NewTestServiceClient(conn)

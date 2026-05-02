@@ -38,7 +38,7 @@ func (f *RPCFactory) GetGRPCListener() net.Listener {
 	return f.listener
 }
 
-func (f *RPCFactory) CreateRemoteFrontendGRPCConnection(_, rpcAddress string) *grpc.ClientConn {
+func (f *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
 	return f.dial(rpcAddress)
 }
 
