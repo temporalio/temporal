@@ -558,7 +558,7 @@ func TestRegistryImpl_ListWorkersExcludesSystemWorkers(t *testing.T) {
 	r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 
 	// Add workers on a user task queue and a system (internal) task queue.
-	r.upsertHeartbeats("ns1", nil /*principal*/,[]*workerpb.WorkerHeartbeat{
+	r.upsertHeartbeats("ns1", nil /* principal */, []*workerpb.WorkerHeartbeat{
 		{WorkerInstanceKey: "user-worker-1", TaskQueue: "my-queue"},
 		{WorkerInstanceKey: "user-worker-2", TaskQueue: "my-queue"},
 		{WorkerInstanceKey: "sys-worker-1", TaskQueue: "temporal-sys-per-ns-tq"},

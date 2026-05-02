@@ -192,7 +192,7 @@ func TestFilterWorkersExcludesSystemWorkers(t *testing.T) {
 	m := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 	defer m.Stop()
 
-	m.upsertHeartbeats("ns", nil /*principal*/,[]*workerpb.WorkerHeartbeat{
+	m.upsertHeartbeats("ns", nil /* principal */, []*workerpb.WorkerHeartbeat{
 		{WorkerInstanceKey: "user-1", TaskQueue: "my-queue"},
 		{WorkerInstanceKey: "user-2", TaskQueue: "my-queue"},
 		{WorkerInstanceKey: "sys-1", TaskQueue: "temporal-sys-per-ns-tq"},
@@ -222,10 +222,10 @@ func TestIsSystemPrincipal(t *testing.T) {
 			{WorkerInstanceKey: "sys-worker", TaskQueue: "any-queue"},
 		})
 
-		list := m.filterWorkers("ns", false /*includeSystemWorkers*/, alwaysTrue)
+		list := m.filterWorkers("ns", false /* includeSystemWorkers */, alwaysTrue)
 		require.Empty(t, list, "worker with temporal principal should be excluded")
 
-		list = m.filterWorkers("ns", true /*includeSystemWorkers*/, alwaysTrue)
+		list = m.filterWorkers("ns", true /* includeSystemWorkers */, alwaysTrue)
 		require.Len(t, list, 1)
 	})
 
@@ -238,7 +238,7 @@ func TestIsSystemPrincipal(t *testing.T) {
 			{WorkerInstanceKey: "worker", TaskQueue: "any-queue"},
 		})
 
-		list := m.filterWorkers("ns", false /*includeSystemWorkers*/, alwaysTrue)
+		list := m.filterWorkers("ns", false /* includeSystemWorkers */, alwaysTrue)
 		require.Len(t, list, 1, "worker with non-internal name should not be excluded")
 	})
 
@@ -252,7 +252,7 @@ func TestIsSystemPrincipal(t *testing.T) {
 		})
 
 		// Even though task queue has system prefix, principal says it's a user
-		list := m.filterWorkers("ns", false /*includeSystemWorkers*/, alwaysTrue)
+		list := m.filterWorkers("ns", false /* includeSystemWorkers */, alwaysTrue)
 		require.Len(t, list, 1, "worker with user principal should not be excluded")
 	})
 
@@ -260,16 +260,17 @@ func TestIsSystemPrincipal(t *testing.T) {
 		m := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 		defer m.Stop()
 
-		m.upsertHeartbeats("ns", nil /*principal*/, []*workerpb.WorkerHeartbeat{
+		m.upsertHeartbeats("ns", nil /* principal */, []*workerpb.WorkerHeartbeat{
 			{WorkerInstanceKey: "sys-worker", TaskQueue: "temporal-sys-per-ns-tq"},
 			{WorkerInstanceKey: "user-worker", TaskQueue: "my-queue"},
 		})
 
-		list := m.filterWorkers("ns", false /*includeSystemWorkers*/, alwaysTrue)
+		list := m.filterWorkers("ns", false /* includeSystemWorkers */, alwaysTrue)
 		require.Len(t, list, 1)
 		require.Equal(t, "user-worker", list[0].WorkerInstanceKey)
 	})
 }
+
 
 func TestEvictByTTL(t *testing.T) {
 	// Use capture handler to verify metrics
