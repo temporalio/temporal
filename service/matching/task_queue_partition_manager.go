@@ -440,7 +440,9 @@ reredirectTask:
 	}
 
 	if isActive {
-		syncMatched, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
+		var outcome syncMatchOutcome
+		outcome, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
+		syncMatched = outcome == syncMatchSuccess
 		if syncMatched && !pm.shouldBacklogSyncMatchTaskOnError(err) {
 			// Only fire hooks for non-forwarded tasks. Forwarded tasks already had hooks fired
 			// on the child partition that originally received the task.

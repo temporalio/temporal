@@ -29,8 +29,9 @@ type (
 		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
 		// MarkAlive updates the liveness timer to keep this physicalTaskQueueManager alive.
 		MarkAlive()
-		// TrySyncMatch tries to match task to a local or remote poller. If not possible, returns false.
-		TrySyncMatch(ctx context.Context, task *internalTask) (bool, error)
+		// TrySyncMatch tries to match task to a local or remote poller. Returns a syncMatchOutcome
+		// indicating success or the reason the match failed.
+		TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, error)
 		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
 		// TODO(pri): old matcher cleanup
