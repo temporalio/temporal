@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -196,4 +197,21 @@ func (a *VersionActivities) GetVersionDrainageStatus(ctx context.Context, versio
 		LastChangedTime: nil, // ignored; whether Status changed will be evaluated by the receiver
 		LastCheckedTime: timestamppb.Now(),
 	}, nil
+}
+
+func (a *VersionActivities) UpdateWorkerControllerInstance(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) (*computepb.ComputeConfigSummary, error) {
+	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
+	resp, err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups())
+	if err != nil {
+		var invalidArgs *serviceerror.InvalidArgument
+		if errors.As(err, &invalidArgs) {
+			return nil, temporal.NewNonRetryableApplicationError(err.Error(), errInvalidComputeConfig, nil)
+		}
+		return nil, err
+	}
+	return wciSpecToComputeConfigSummary(resp.Spec), nil
+}
+
+func (a *VersionActivities) DeleteWorkerControllerInstance(ctx context.Context, input *deploymentspb.DeleteWorkerControllerInstanceInput) error {
+	return a.WorkerControllerInstanceClient.DeleteWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), input.GetIdentity())
 }

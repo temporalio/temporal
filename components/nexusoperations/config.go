@@ -107,6 +107,8 @@ var DisallowedOperationHeaders = dynamicconfig.NewGlobalTypedSettingWithConverte
 		headers.CallerNameHeaderName,
 		headers.CallerTypeHeaderName,
 		headers.CallOriginHeaderName,
+		headers.PrincipalTypeHeaderName,
+		headers.PrincipalNameHeaderName,
 	},
 	`Case insensitive list of disallowed header keys for Nexus Operations.
 ScheduleNexusOperation commands with a "nexus_header" field that contains any of these disallowed keys will be
@@ -145,9 +147,9 @@ var MetricTagConfiguration = dynamicconfig.NewGlobalTypedSetting(
 	"component.nexusoperations.metrics.tags",
 	chasmnexus.NexusMetricTagConfig{},
 	`Controls which metric tags are included with Nexus operation metrics. This configuration supports:
-1. Service name tag - adds the Nexus service name as a metric dimension (IncludeServiceTag)
-2. Operation name tag - adds the Nexus operation name as a metric dimension (IncludeOperationTag)
-3. Header-based tags - maps values from request headers to metric tags (HeaderTagMappings)
+1. Service name tag - adds the Nexus service name as a metric dimension (IncludeServiceTag). Used by callers and handlers.
+2. Operation name tag - adds the Nexus operation name as a metric dimension (IncludeOperationTag). Used by callers and handlers.
+3. Header-based tags - maps values from request headers to metric tags (HeaderTagMappings). Only used by handlers.
 
 Note: default metric tags (like namespace, endpoint) are always included and not affected by this configuration.
 Adding high-cardinality tags (like unique operation names) can significantly increase metric storage

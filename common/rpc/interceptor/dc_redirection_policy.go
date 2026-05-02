@@ -192,17 +192,17 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 		return policy.currentClusterName, false
 	}
 
-	// Get business ID from context (set by BusinessIDInterceptor)
-	businessID := GetBusinessIDFromContext(ctx)
+	// Get routingKey from context (set by RoutingKeyInterceptor)
+	routingKey := GetRoutingKeyFromContext(ctx)
 
 	if _, whitelisted := selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs[apiName]; whitelisted {
 		// redirect if API is whitelisted
-		return namespaceEntry.ActiveClusterName(businessID), true
+		return namespaceEntry.ActiveClusterName(routingKey), true
 	}
 
 	if policy.selectedAPIsOnly || policy.selectedAPIsOnlyForNS(namespaceEntry.Name().String()) {
 		return policy.currentClusterName, false
 	}
 
-	return namespaceEntry.ActiveClusterName(businessID), true
+	return namespaceEntry.ActiveClusterName(routingKey), true
 }

@@ -62,6 +62,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) CountActivityExecutions(ctx, in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountActivityExecutions", reflect.TypeOf((*MockWorkflowServiceClient)(nil).CountActivityExecutions), varargs...)
 }
 
+// CountNexusOperationExecutions mocks base method.
+func (m *MockWorkflowServiceClient) CountNexusOperationExecutions(ctx context.Context, in *workflowservice.CountNexusOperationExecutionsRequest, opts ...grpc.CallOption) (*workflowservice.CountNexusOperationExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CountNexusOperationExecutions", varargs...)
+	ret0, _ := ret[0].(*workflowservice.CountNexusOperationExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountNexusOperationExecutions indicates an expected call of CountNexusOperationExecutions.
+func (mr *MockWorkflowServiceClientMockRecorder) CountNexusOperationExecutions(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountNexusOperationExecutions", reflect.TypeOf((*MockWorkflowServiceClient)(nil).CountNexusOperationExecutions), varargs...)
+}
+
 // CountSchedules mocks base method.
 func (m *MockWorkflowServiceClient) CountSchedules(ctx context.Context, in *workflowservice.CountSchedulesRequest, opts ...grpc.CallOption) (*workflowservice.CountSchedulesResponse, error) {
 	m.ctrl.T.Helper()
@@ -122,6 +142,46 @@ func (mr *MockWorkflowServiceClientMockRecorder) CreateSchedule(ctx, in any, opt
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateSchedule", reflect.TypeOf((*MockWorkflowServiceClient)(nil).CreateSchedule), varargs...)
 }
 
+// CreateWorkerDeployment mocks base method.
+func (m *MockWorkflowServiceClient) CreateWorkerDeployment(ctx context.Context, in *workflowservice.CreateWorkerDeploymentRequest, opts ...grpc.CallOption) (*workflowservice.CreateWorkerDeploymentResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CreateWorkerDeployment", varargs...)
+	ret0, _ := ret[0].(*workflowservice.CreateWorkerDeploymentResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateWorkerDeployment indicates an expected call of CreateWorkerDeployment.
+func (mr *MockWorkflowServiceClientMockRecorder) CreateWorkerDeployment(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkerDeployment", reflect.TypeOf((*MockWorkflowServiceClient)(nil).CreateWorkerDeployment), varargs...)
+}
+
+// CreateWorkerDeploymentVersion mocks base method.
+func (m *MockWorkflowServiceClient) CreateWorkerDeploymentVersion(ctx context.Context, in *workflowservice.CreateWorkerDeploymentVersionRequest, opts ...grpc.CallOption) (*workflowservice.CreateWorkerDeploymentVersionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CreateWorkerDeploymentVersion", varargs...)
+	ret0, _ := ret[0].(*workflowservice.CreateWorkerDeploymentVersionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateWorkerDeploymentVersion indicates an expected call of CreateWorkerDeploymentVersion.
+func (mr *MockWorkflowServiceClientMockRecorder) CreateWorkerDeploymentVersion(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkerDeploymentVersion", reflect.TypeOf((*MockWorkflowServiceClient)(nil).CreateWorkerDeploymentVersion), varargs...)
+}
+
 // CreateWorkflowRule mocks base method.
 func (m *MockWorkflowServiceClient) CreateWorkflowRule(ctx context.Context, in *workflowservice.CreateWorkflowRuleRequest, opts ...grpc.CallOption) (*workflowservice.CreateWorkflowRuleResponse, error) {
 	m.ctrl.T.Helper()
@@ -160,6 +220,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) DeleteActivityExecution(ctx, in
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteActivityExecution", reflect.TypeOf((*MockWorkflowServiceClient)(nil).DeleteActivityExecution), varargs...)
+}
+
+// DeleteNexusOperationExecution mocks base method.
+func (m *MockWorkflowServiceClient) DeleteNexusOperationExecution(ctx context.Context, in *workflowservice.DeleteNexusOperationExecutionRequest, opts ...grpc.CallOption) (*workflowservice.DeleteNexusOperationExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeleteNexusOperationExecution", varargs...)
+	ret0, _ := ret[0].(*workflowservice.DeleteNexusOperationExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteNexusOperationExecution indicates an expected call of DeleteNexusOperationExecution.
+func (mr *MockWorkflowServiceClientMockRecorder) DeleteNexusOperationExecution(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNexusOperationExecution", reflect.TypeOf((*MockWorkflowServiceClient)(nil).DeleteNexusOperationExecution), varargs...)
 }
 
 // DeleteSchedule mocks base method.
@@ -360,6 +440,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) DescribeNamespace(ctx, in any, 
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeNamespace", reflect.TypeOf((*MockWorkflowServiceClient)(nil).DescribeNamespace), varargs...)
+}
+
+// DescribeNexusOperationExecution mocks base method.
+func (m *MockWorkflowServiceClient) DescribeNexusOperationExecution(ctx context.Context, in *workflowservice.DescribeNexusOperationExecutionRequest, opts ...grpc.CallOption) (*workflowservice.DescribeNexusOperationExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeNexusOperationExecution", varargs...)
+	ret0, _ := ret[0].(*workflowservice.DescribeNexusOperationExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeNexusOperationExecution indicates an expected call of DescribeNexusOperationExecution.
+func (mr *MockWorkflowServiceClientMockRecorder) DescribeNexusOperationExecution(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeNexusOperationExecution", reflect.TypeOf((*MockWorkflowServiceClient)(nil).DescribeNexusOperationExecution), varargs...)
 }
 
 // DescribeSchedule mocks base method.
@@ -862,6 +962,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) ListNamespaces(ctx, in any, opt
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNamespaces", reflect.TypeOf((*MockWorkflowServiceClient)(nil).ListNamespaces), varargs...)
 }
 
+// ListNexusOperationExecutions mocks base method.
+func (m *MockWorkflowServiceClient) ListNexusOperationExecutions(ctx context.Context, in *workflowservice.ListNexusOperationExecutionsRequest, opts ...grpc.CallOption) (*workflowservice.ListNexusOperationExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListNexusOperationExecutions", varargs...)
+	ret0, _ := ret[0].(*workflowservice.ListNexusOperationExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListNexusOperationExecutions indicates an expected call of ListNexusOperationExecutions.
+func (mr *MockWorkflowServiceClientMockRecorder) ListNexusOperationExecutions(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNexusOperationExecutions", reflect.TypeOf((*MockWorkflowServiceClient)(nil).ListNexusOperationExecutions), varargs...)
+}
+
 // ListOpenWorkflowExecutions mocks base method.
 func (m *MockWorkflowServiceClient) ListOpenWorkflowExecutions(ctx context.Context, in *workflowservice.ListOpenWorkflowExecutionsRequest, opts ...grpc.CallOption) (*workflowservice.ListOpenWorkflowExecutionsResponse, error) {
 	m.ctrl.T.Helper()
@@ -1062,6 +1182,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) PauseActivity(ctx, in any, opts
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseActivity", reflect.TypeOf((*MockWorkflowServiceClient)(nil).PauseActivity), varargs...)
 }
 
+// PauseActivityExecution mocks base method.
+func (m *MockWorkflowServiceClient) PauseActivityExecution(ctx context.Context, in *workflowservice.PauseActivityExecutionRequest, opts ...grpc.CallOption) (*workflowservice.PauseActivityExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "PauseActivityExecution", varargs...)
+	ret0, _ := ret[0].(*workflowservice.PauseActivityExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PauseActivityExecution indicates an expected call of PauseActivityExecution.
+func (mr *MockWorkflowServiceClientMockRecorder) PauseActivityExecution(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseActivityExecution", reflect.TypeOf((*MockWorkflowServiceClient)(nil).PauseActivityExecution), varargs...)
+}
+
 // PauseWorkflowExecution mocks base method.
 func (m *MockWorkflowServiceClient) PauseWorkflowExecution(ctx context.Context, in *workflowservice.PauseWorkflowExecutionRequest, opts ...grpc.CallOption) (*workflowservice.PauseWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -1120,6 +1260,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) PollActivityTaskQueue(ctx, in a
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollActivityTaskQueue", reflect.TypeOf((*MockWorkflowServiceClient)(nil).PollActivityTaskQueue), varargs...)
+}
+
+// PollNexusOperationExecution mocks base method.
+func (m *MockWorkflowServiceClient) PollNexusOperationExecution(ctx context.Context, in *workflowservice.PollNexusOperationExecutionRequest, opts ...grpc.CallOption) (*workflowservice.PollNexusOperationExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "PollNexusOperationExecution", varargs...)
+	ret0, _ := ret[0].(*workflowservice.PollNexusOperationExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PollNexusOperationExecution indicates an expected call of PollNexusOperationExecution.
+func (mr *MockWorkflowServiceClientMockRecorder) PollNexusOperationExecution(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollNexusOperationExecution", reflect.TypeOf((*MockWorkflowServiceClient)(nil).PollNexusOperationExecution), varargs...)
 }
 
 // PollNexusTaskQueue mocks base method.
@@ -1302,6 +1462,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) RequestCancelActivityExecution(
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestCancelActivityExecution", reflect.TypeOf((*MockWorkflowServiceClient)(nil).RequestCancelActivityExecution), varargs...)
 }
 
+// RequestCancelNexusOperationExecution mocks base method.
+func (m *MockWorkflowServiceClient) RequestCancelNexusOperationExecution(ctx context.Context, in *workflowservice.RequestCancelNexusOperationExecutionRequest, opts ...grpc.CallOption) (*workflowservice.RequestCancelNexusOperationExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RequestCancelNexusOperationExecution", varargs...)
+	ret0, _ := ret[0].(*workflowservice.RequestCancelNexusOperationExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RequestCancelNexusOperationExecution indicates an expected call of RequestCancelNexusOperationExecution.
+func (mr *MockWorkflowServiceClientMockRecorder) RequestCancelNexusOperationExecution(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestCancelNexusOperationExecution", reflect.TypeOf((*MockWorkflowServiceClient)(nil).RequestCancelNexusOperationExecution), varargs...)
+}
+
 // RequestCancelWorkflowExecution mocks base method.
 func (m *MockWorkflowServiceClient) RequestCancelWorkflowExecution(ctx context.Context, in *workflowservice.RequestCancelWorkflowExecutionRequest, opts ...grpc.CallOption) (*workflowservice.RequestCancelWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -1340,6 +1520,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) ResetActivity(ctx, in any, opts
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetActivity", reflect.TypeOf((*MockWorkflowServiceClient)(nil).ResetActivity), varargs...)
+}
+
+// ResetActivityExecution mocks base method.
+func (m *MockWorkflowServiceClient) ResetActivityExecution(ctx context.Context, in *workflowservice.ResetActivityExecutionRequest, opts ...grpc.CallOption) (*workflowservice.ResetActivityExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ResetActivityExecution", varargs...)
+	ret0, _ := ret[0].(*workflowservice.ResetActivityExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResetActivityExecution indicates an expected call of ResetActivityExecution.
+func (mr *MockWorkflowServiceClientMockRecorder) ResetActivityExecution(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetActivityExecution", reflect.TypeOf((*MockWorkflowServiceClient)(nil).ResetActivityExecution), varargs...)
 }
 
 // ResetStickyTaskQueue mocks base method.
@@ -1802,6 +2002,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) StartBatchOperation(ctx, in any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartBatchOperation", reflect.TypeOf((*MockWorkflowServiceClient)(nil).StartBatchOperation), varargs...)
 }
 
+// StartNexusOperationExecution mocks base method.
+func (m *MockWorkflowServiceClient) StartNexusOperationExecution(ctx context.Context, in *workflowservice.StartNexusOperationExecutionRequest, opts ...grpc.CallOption) (*workflowservice.StartNexusOperationExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "StartNexusOperationExecution", varargs...)
+	ret0, _ := ret[0].(*workflowservice.StartNexusOperationExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StartNexusOperationExecution indicates an expected call of StartNexusOperationExecution.
+func (mr *MockWorkflowServiceClientMockRecorder) StartNexusOperationExecution(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartNexusOperationExecution", reflect.TypeOf((*MockWorkflowServiceClient)(nil).StartNexusOperationExecution), varargs...)
+}
+
 // StartWorkflowExecution mocks base method.
 func (m *MockWorkflowServiceClient) StartWorkflowExecution(ctx context.Context, in *workflowservice.StartWorkflowExecutionRequest, opts ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -1860,6 +2080,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) TerminateActivityExecution(ctx,
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateActivityExecution", reflect.TypeOf((*MockWorkflowServiceClient)(nil).TerminateActivityExecution), varargs...)
+}
+
+// TerminateNexusOperationExecution mocks base method.
+func (m *MockWorkflowServiceClient) TerminateNexusOperationExecution(ctx context.Context, in *workflowservice.TerminateNexusOperationExecutionRequest, opts ...grpc.CallOption) (*workflowservice.TerminateNexusOperationExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "TerminateNexusOperationExecution", varargs...)
+	ret0, _ := ret[0].(*workflowservice.TerminateNexusOperationExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// TerminateNexusOperationExecution indicates an expected call of TerminateNexusOperationExecution.
+func (mr *MockWorkflowServiceClientMockRecorder) TerminateNexusOperationExecution(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateNexusOperationExecution", reflect.TypeOf((*MockWorkflowServiceClient)(nil).TerminateNexusOperationExecution), varargs...)
 }
 
 // TerminateWorkflowExecution mocks base method.
@@ -1922,6 +2162,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) UnpauseActivity(ctx, in any, op
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpauseActivity", reflect.TypeOf((*MockWorkflowServiceClient)(nil).UnpauseActivity), varargs...)
 }
 
+// UnpauseActivityExecution mocks base method.
+func (m *MockWorkflowServiceClient) UnpauseActivityExecution(ctx context.Context, in *workflowservice.UnpauseActivityExecutionRequest, opts ...grpc.CallOption) (*workflowservice.UnpauseActivityExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UnpauseActivityExecution", varargs...)
+	ret0, _ := ret[0].(*workflowservice.UnpauseActivityExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnpauseActivityExecution indicates an expected call of UnpauseActivityExecution.
+func (mr *MockWorkflowServiceClientMockRecorder) UnpauseActivityExecution(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpauseActivityExecution", reflect.TypeOf((*MockWorkflowServiceClient)(nil).UnpauseActivityExecution), varargs...)
+}
+
 // UnpauseWorkflowExecution mocks base method.
 func (m *MockWorkflowServiceClient) UnpauseWorkflowExecution(ctx context.Context, in *workflowservice.UnpauseWorkflowExecutionRequest, opts ...grpc.CallOption) (*workflowservice.UnpauseWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -1940,6 +2200,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) UnpauseWorkflowExecution(ctx, i
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpauseWorkflowExecution", reflect.TypeOf((*MockWorkflowServiceClient)(nil).UnpauseWorkflowExecution), varargs...)
+}
+
+// UpdateActivityExecutionOptions mocks base method.
+func (m *MockWorkflowServiceClient) UpdateActivityExecutionOptions(ctx context.Context, in *workflowservice.UpdateActivityExecutionOptionsRequest, opts ...grpc.CallOption) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateActivityExecutionOptions", varargs...)
+	ret0, _ := ret[0].(*workflowservice.UpdateActivityExecutionOptionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateActivityExecutionOptions indicates an expected call of UpdateActivityExecutionOptions.
+func (mr *MockWorkflowServiceClientMockRecorder) UpdateActivityExecutionOptions(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityExecutionOptions", reflect.TypeOf((*MockWorkflowServiceClient)(nil).UpdateActivityExecutionOptions), varargs...)
 }
 
 // UpdateActivityOptions mocks base method.
@@ -2062,6 +2342,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) UpdateWorkerConfig(ctx, in any,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerConfig", reflect.TypeOf((*MockWorkflowServiceClient)(nil).UpdateWorkerConfig), varargs...)
 }
 
+// UpdateWorkerDeploymentVersionComputeConfig mocks base method.
+func (m *MockWorkflowServiceClient) UpdateWorkerDeploymentVersionComputeConfig(ctx context.Context, in *workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest, opts ...grpc.CallOption) (*workflowservice.UpdateWorkerDeploymentVersionComputeConfigResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateWorkerDeploymentVersionComputeConfig", varargs...)
+	ret0, _ := ret[0].(*workflowservice.UpdateWorkerDeploymentVersionComputeConfigResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkerDeploymentVersionComputeConfig indicates an expected call of UpdateWorkerDeploymentVersionComputeConfig.
+func (mr *MockWorkflowServiceClientMockRecorder) UpdateWorkerDeploymentVersionComputeConfig(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerDeploymentVersionComputeConfig", reflect.TypeOf((*MockWorkflowServiceClient)(nil).UpdateWorkerDeploymentVersionComputeConfig), varargs...)
+}
+
 // UpdateWorkerDeploymentVersionMetadata mocks base method.
 func (m *MockWorkflowServiceClient) UpdateWorkerDeploymentVersionMetadata(ctx context.Context, in *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest, opts ...grpc.CallOption) (*workflowservice.UpdateWorkerDeploymentVersionMetadataResponse, error) {
 	m.ctrl.T.Helper()
@@ -2140,4 +2440,24 @@ func (mr *MockWorkflowServiceClientMockRecorder) UpdateWorkflowExecutionOptions(
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionOptions", reflect.TypeOf((*MockWorkflowServiceClient)(nil).UpdateWorkflowExecutionOptions), varargs...)
+}
+
+// ValidateWorkerDeploymentVersionComputeConfig mocks base method.
+func (m *MockWorkflowServiceClient) ValidateWorkerDeploymentVersionComputeConfig(ctx context.Context, in *workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest, opts ...grpc.CallOption) (*workflowservice.ValidateWorkerDeploymentVersionComputeConfigResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ValidateWorkerDeploymentVersionComputeConfig", varargs...)
+	ret0, _ := ret[0].(*workflowservice.ValidateWorkerDeploymentVersionComputeConfigResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ValidateWorkerDeploymentVersionComputeConfig indicates an expected call of ValidateWorkerDeploymentVersionComputeConfig.
+func (mr *MockWorkflowServiceClientMockRecorder) ValidateWorkerDeploymentVersionComputeConfig(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateWorkerDeploymentVersionComputeConfig", reflect.TypeOf((*MockWorkflowServiceClient)(nil).ValidateWorkerDeploymentVersionComputeConfig), varargs...)
 }

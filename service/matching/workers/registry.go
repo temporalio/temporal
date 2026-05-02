@@ -8,9 +8,10 @@ import (
 type (
 	// ListWorkersParams contains parameters for listing workers.
 	ListWorkersParams struct {
-		Query         string
-		PageSize      int
-		NextPageToken []byte // Opaque token from a previous response to resume pagination.
+		Query                string
+		PageSize             int
+		NextPageToken        []byte // Opaque token from a previous response to resume pagination.
+		IncludeSystemWorkers bool
 	}
 
 	// ListWorkersResponse contains the result of listing workers.

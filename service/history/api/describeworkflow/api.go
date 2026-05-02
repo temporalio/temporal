@@ -17,6 +17,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -286,11 +287,10 @@ func Invoke(
 	}
 	result.Callbacks = append(result.Callbacks, hsmCallbackInfos...)
 
-	opColl := nexusoperations.MachineCollection(mutableState.HSM())
-	ops := opColl.List()
-	result.PendingNexusOperations = make([]*workflowpb.PendingNexusOperationInfo, 0, len(ops))
-	for _, node := range ops {
-		op, err := opColl.Data(node.Key.ID)
+	result.PendingNexusOperations = make([]*workflowpb.PendingNexusOperationInfo, 0)
+	// Check for CHASM nexus operations
+	if mutableState.ChasmEnabled() {
+		wf, chasmCtx, err := mutableState.ChasmWorkflowComponentReadOnly(ctx)
 		if err != nil {
 			shard.GetLogger().Error(
 				"failed to load Nexus operation data while building describe response",
@@ -302,7 +302,16 @@ func Invoke(
 			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
 
-		operationInfo, err := buildPendingNexusOperationInfo(namespaceID, node, op, outboundQueueCBPool)
+		outboundCB := func(endpoint string) bool {
+			cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
+				TaskGroup:   nexusoperation.TaskGroupName,
+				NamespaceID: namespaceID.String(),
+				Destination: endpoint,
+			})
+			return cb.State() != gobreaker.StateClosed
+		}
+
+		chasmNexusOpInfos, err := wf.BuildPendingNexusOperationInfos(chasmCtx, outboundCB)
 		if err != nil {
 			shard.GetLogger().Error(
 				"failed to build Nexus operation info while building describe response",
@@ -313,12 +322,22 @@ func Invoke(
 			)
 			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
-		if operationInfo == nil {
-			// Operation is not pending
-			continue
-		}
-		result.PendingNexusOperations = append(result.PendingNexusOperations, operationInfo)
+		result.PendingNexusOperations = append(result.PendingNexusOperations, chasmNexusOpInfos...)
 	}
+
+	// Check for HSM nexus operations
+	hsmNexusOpInfos, err := buildPendingNexusOperationInfosFromHSM(
+		namespaceID,
+		mutableState,
+		executionInfo,
+		executionState,
+		outboundQueueCBPool,
+		shard.GetLogger(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	result.PendingNexusOperations = append(result.PendingNexusOperations, hsmNexusOpInfos...)
 
 	return result, nil
 }
@@ -560,6 +579,52 @@ func buildChasmCallbackInfo(
 		NextAttemptScheduleTime: cb.NextAttemptScheduleTime,
 		BlockedReason:           blockedReason,
 	}, nil
+}
+
+// buildPendingNexusOperationInfosFromHSM reads nexus operations from HSM and converts them to API format.
+func buildPendingNexusOperationInfosFromHSM(
+	namespaceID namespace.ID,
+	mutableState historyi.MutableState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	logger log.Logger,
+) ([]*workflowpb.PendingNexusOperationInfo, error) {
+	opColl := nexusoperations.MachineCollection(mutableState.HSM())
+	ops := opColl.List()
+	result := make([]*workflowpb.PendingNexusOperationInfo, 0, len(ops))
+	for _, node := range ops {
+		op, err := opColl.Data(node.Key.ID)
+		if err != nil {
+			logger.Error(
+				"failed to load Nexus operation data while building describe response",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		}
+
+		operationInfo, err := buildPendingNexusOperationInfo(namespaceID, node, op, outboundQueueCBPool)
+		if err != nil {
+			logger.Error(
+				"failed to build Nexus operation info while building describe response",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		}
+		if operationInfo == nil {
+			// Operation is not pending
+			continue
+		}
+		result = append(result, operationInfo)
+	}
+
+	return result, nil
 }
 
 func buildPendingNexusOperationInfo(

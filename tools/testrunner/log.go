@@ -9,6 +9,10 @@ import (
 	"github.com/maruel/panicparse/v2/stack"
 )
 
+// noFailureDetails is returned by parseFailureDetails when no recognisable
+// failure block is found.
+const noFailureDetails = "(error details not found)"
+
 // parseTestTimeouts parses the stdout of a test run and returns the stacktrace and names of tests that timed out.
 func parseTestTimeouts(stdout string) (stacktrace string, timedoutTests []string) {
 	lines := strings.Split(strings.ReplaceAll(stdout, "\r\n", "\n"), "\n")
@@ -66,18 +70,9 @@ func testOnlyStacktrace(stacktrace string) string {
 	return res
 }
 
-// alertKind represents a category of high-priority alert detected in test output.
-type alertKind string
-
-const (
-	alertKindDataRace alertKind = "DATA RACE"
-	alertKindPanic    alertKind = "PANIC"
-	alertKindFatal    alertKind = "FATAL"
-)
-
 // alert captures a prominent issue detected from stdout/stderr of test runs.
 type alert struct {
-	Kind    alertKind
+	Type    failureType
 	Summary string
 	Details string
 	Tests   []string
@@ -259,7 +254,7 @@ func tryParseDataRace(lines []string, i int, line string) (alert, int, bool) {
 		return false
 	})
 	return alert{
-		Kind:    alertKindDataRace,
+		Type:    failureTypeDataRace,
 		Summary: "Data race detected",
 		Details: block,
 		Tests:   extractTestNames(block),
@@ -273,7 +268,7 @@ func tryParsePanic(lines []string, i int, line string) (alert, int, bool) {
 	}
 	block, end := collectBlock(lines, i, shouldStopOnTestBoundary)
 	return alert{
-		Kind:    alertKindPanic,
+		Type:    failureTypePanic,
 		Summary: strings.TrimSpace(strings.TrimPrefix(line, "panic: ")),
 		Details: block,
 		Tests:   extractTestNames(block),
@@ -287,7 +282,7 @@ func tryParseFatal(lines []string, i int, line string) (alert, int, bool) {
 	}
 	block, end := collectBlock(lines, i, shouldStopOnTestBoundary)
 	return alert{
-		Kind:    alertKindFatal,
+		Type:    failureTypeFatal,
 		Summary: strings.TrimSpace(strings.TrimPrefix(line, "fatal error: ")),
 		Details: block,
 		Tests:   extractTestNames(block),
@@ -332,4 +327,90 @@ func isTestResultBoundary(line string) bool {
 
 func shouldStopOnTestBoundary(line string, _ int, _ int) bool {
 	return isTestResultBoundary(line)
+}
+
+// parseFailedTestsFromOutput extracts failing test names from gotestsum stdout.
+// It looks for "--- FAIL: TestName" lines produced as tests complete, and is
+// used when the test binary was killed externally before producing a JUnit XML.
+func parseFailedTestsFromOutput(stdout string) []string {
+	var failed []string
+	seen := make(map[string]struct{})
+	for _, line := range strings.Split(strings.ReplaceAll(stdout, "\r\n", "\n"), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "--- FAIL: ") {
+			continue
+		}
+		if name, ok := parseTripleDashTestName(line); ok {
+			addUniqueTest(&failed, seen, name)
+		}
+	}
+	return failed
+}
+
+// parseFailureDetails extracts the actionable part of a JUnit failure Data block.
+func parseFailureDetails(data string) string {
+	lines := normalizedFailureLines(data)
+
+	if start, end, ok := findTestifyFailureBlock(lines); ok {
+		return strings.Join(lines[start:end], "\n")
+	}
+	if start, end, ok := findLastFailureBlock(lines); ok {
+		return strings.Join(lines[start:end], "\n")
+	}
+	return noFailureDetails
+}
+
+func normalizedFailureLines(data string) []string {
+	lines := strings.Split(strings.ReplaceAll(data, "\r\n", "\n"), "\n")
+	for len(lines) > 0 {
+		t := strings.TrimSpace(lines[len(lines)-1])
+		if t != "" && t != "FAIL" {
+			break
+		}
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+func findTestifyFailureBlock(lines []string) (start, end int, ok bool) {
+	for i, line := range lines {
+		if !strings.Contains(line, "Error Trace:") {
+			continue
+		}
+		start = i
+		if i > 0 {
+			start = i - 1
+		}
+		return start, endOfFailureBlock(lines, start+1), true
+	}
+	return 0, 0, false
+}
+
+func findLastFailureBlock(lines []string) (start, end int, ok bool) {
+	lastStart := -1
+	for i, line := range lines {
+		if isTestOutputLine(line) {
+			lastStart = i
+		}
+	}
+	if lastStart < 0 {
+		return 0, 0, false
+	}
+	return lastStart, endOfFailureBlock(lines, lastStart+1), true
+}
+
+func endOfFailureBlock(lines []string, start int) int {
+	end := start
+	for end < len(lines) && !isTestOutputLine(lines[end]) && lines[end] != "" {
+		end++
+	}
+	return end
+}
+
+// isTestOutputLine reports whether line is a Go test-framework output line,
+// i.e. "    file.go:N: …" — exactly 4 spaces then a non-whitespace character.
+// Testify assertion content is indented further (8+ spaces or tabs), so this
+// distinguishes log entries from assertion block content.
+func isTestOutputLine(line string) bool {
+	return len(line) > 4 && line[:4] == "    " && line[4] != ' ' && line[4] != '\t'
 }

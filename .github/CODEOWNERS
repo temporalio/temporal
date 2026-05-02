@@ -54,18 +54,17 @@
 # History Service
 
 /service/history/archival/ @temporalio/oss-foundations
+/service/history/*archival* @temporalio/oss-foundations
 /service/history/*chasm* @temporalio/oss-foundations
 /service/history/deletemanager/ @temporalio/oss-foundations
 /service/history/queues/ @temporalio/oss-foundations
 /service/history/shard/ @temporalio/oss-foundations
-/service/history/*queue* @temporalio/oss-foundations
+/service/history/*queue_factory* @temporalio/oss-foundations
 /service/history/*statemachine* @temporalio/oss-foundations
+/service/history/*visibility* @temporalio/oss-foundations
 
 /service/history/ndc/ @temporalio/cgs
 /service/history/replication/ @temporalio/cgs
-
-/service/history/tasks/ @temporalio/oss-foundations @temporalio/cgs
-/service/history/*task* @temporalio/oss-foundations @temporalio/cgs
 
 # Matching Service
 
@@ -92,3 +91,5 @@
 /service/worker/replicator/ @temporalio/cgs
 
 /service/worker/parentclosepolicy/ @temporalio/oss-foundations @temporalio/act
+
+/tools/ @temporalio/server
