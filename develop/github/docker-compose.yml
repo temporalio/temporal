@@ -12,8 +12,17 @@ services:
       CASSANDRA_LISTEN_ADDRESS: 127.0.0.1
       MAX_HEAP_SIZE: "2G"
       HEAP_NEWSIZE: "200M"
-      # Increase native transport threads for handling more concurrent connections
-      JVM_EXTRA_OPTS: "-Dcassandra.native_transport_max_threads=512"
+      JVM_EXTRA_OPTS: >-
+        -Dcassandra.native_transport_max_threads=512
+        -Dcassandra.ring_delay_ms=1000
+        -Dcassandra.skip_wait_for_gossip_to_settle=0
+        -Dcassandra.initial_token=0
+        -Dcassandra.num_tokens=1
+        -Dcassandra.consistent.rangemovement=false
+      # native_transport_max_threads: handle more concurrent connections.
+      # ring_delay_ms / skip_wait_for_gossip_to_settle / initial_token /
+      # num_tokens / consistent.rangemovement: skip the ~30s gossip-settle
+      # wait that's pointless on a single-node test cluster.
     healthcheck:
       !!merge <<: *healthcheck-defaults
       test: ["CMD-SHELL", "cqlsh -e 'describe cluster'"]
@@ -58,7 +67,11 @@ services:
       - ES_JAVA_OPTS=-Xms1g -Xmx1g
     healthcheck:
       !!merge <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:9200/_cluster/health || exit 1",
+        ]
 
   elasticsearch8:
     image: elasticsearch:8.5.0
@@ -74,7 +87,11 @@ services:
       - ES_JAVA_OPTS=-Xms1g -Xmx1g
     healthcheck:
       !!merge <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:9200/_cluster/health || exit 1",
+        ]
 
   opensearch2:
     image: opensearchproject/opensearch:2
@@ -90,7 +107,11 @@ services:
       - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g
     healthcheck:
       !!merge <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:9200/_cluster/health || exit 1",
+        ]
 
   opensearch3:
     image: opensearchproject/opensearch:3
@@ -106,4 +127,8 @@ services:
       - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g
     healthcheck:
       !!merge <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:9200/_cluster/health || exit 1",
+        ]
