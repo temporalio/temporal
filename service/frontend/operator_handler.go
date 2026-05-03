@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -185,7 +187,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesInternal(
 	visManager manager.VisibilityManager,
 ) error {
 	storeName := visManager.GetStoreNames()[0]
-	if storeName == elasticsearch.PersistenceName {
+	if strings.HasPrefix(storeName, elasticsearch.PersistenceName) {
 		return h.addSearchAttributesElasticsearch(ctx, request, visManager)
 	}
 	return h.addSearchAttributesSQL(ctx, request, visManager)
@@ -367,7 +369,7 @@ func (h *OperatorHandlerImpl) removeSearchAttributesInternal(
 	visManager manager.VisibilityManager,
 ) error {
 	storeName := visManager.GetStoreNames()[0]
-	if storeName == elasticsearch.PersistenceName {
+	if strings.HasPrefix(storeName, elasticsearch.PersistenceName) {
 		return h.removeSearchAttributesElasticsearch(ctx, request, visManager)
 	}
 	return h.removeSearchAttributesSQL(ctx, request, visManager)
@@ -485,7 +487,12 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(
 		)
 	}
 
-	if h.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) {
+	if slices.ContainsFunc(
+		h.visibilityMgr.GetStoreNames(),
+		func(storeName string) bool {
+			return strings.HasPrefix(storeName, elasticsearch.PersistenceName)
+		},
+	) {
 		return h.listSearchAttributesElasticsearch(ctx, indexName, searchAttributes)
 	}
 	return h.listSearchAttributesSQL(ctx, request, searchAttributes)
