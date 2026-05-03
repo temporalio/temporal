@@ -14,6 +14,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workerpb "go.temporal.io/api/worker/v1"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -485,7 +486,7 @@ func (m *registryImpl) DescribeWorker(nsID namespace.ID, workerInstanceKey strin
 // it falls back to checking the task queue name prefix.
 func isSystemWorker(principal *commonpb.Principal, taskQueue string) bool {
 	if principal != nil {
-		return principal.GetType() == "temporal" && principal.GetName() == "internal"
+		return principal.GetType() == authorization.InternalPrincipalType && principal.GetName() == authorization.InternalPrincipalName
 	}
 	return primitives.IsInternalTaskQueue(taskQueue)
 }

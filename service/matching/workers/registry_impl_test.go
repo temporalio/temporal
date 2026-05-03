@@ -12,6 +12,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -217,7 +218,7 @@ func TestIsSystemWorker(t *testing.T) {
 		m := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 		defer m.Stop()
 
-		principal := &commonpb.Principal{Type: "temporal", Name: "internal"}
+		principal := &commonpb.Principal{Type: authorization.InternalPrincipalType, Name: authorization.InternalPrincipalName}
 		m.upsertHeartbeats("ns", principal, []*workerpb.WorkerHeartbeat{
 			{WorkerInstanceKey: "sys-worker", TaskQueue: "any-queue"},
 		})
@@ -233,7 +234,7 @@ func TestIsSystemWorker(t *testing.T) {
 		m := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 		defer m.Stop()
 
-		principal := &commonpb.Principal{Type: "temporal", Name: "other"}
+		principal := &commonpb.Principal{Type: authorization.InternalPrincipalType, Name: "other"}
 		m.upsertHeartbeats("ns", principal, []*workerpb.WorkerHeartbeat{
 			{WorkerInstanceKey: "worker", TaskQueue: "any-queue"},
 		})
