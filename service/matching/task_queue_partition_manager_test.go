@@ -22,6 +22,8 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -69,6 +71,34 @@ func TestTaskQueuePartitionManager_Pri_Suite(t *testing.T) {
 func TestTaskQueuePartitionManager_Fair_Suite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &PartitionManagerTestSuite{newMatcher: true, fairness: true})
+}
+
+func TestDescribeReleasesVersionedQueuesLockWhenDefaultQueueNotInitialized(t *testing.T) {
+	t.Parallel()
+
+	pm := &taskQueuePartitionManagerImpl{
+		versionedQueues:    make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
+		defaultQueueFuture: future.NewFuture[physicalTaskQueueManager](),
+		logger:             log.NewNoopLogger(),
+	}
+
+	_, err := pm.describe(context.Background(), map[string]bool{"": true}, false, false, false, false, false)
+	if !errors.Is(err, errDefaultQueueNotInit) {
+		t.Fatalf("describe() error = %v, want %v", err, errDefaultQueueNotInit)
+	}
+
+	lockAcquired := make(chan struct{})
+	go func() {
+		pm.versionedQueuesLock.Lock()
+		defer pm.versionedQueuesLock.Unlock()
+		close(lockAcquired)
+	}()
+
+	select {
+	case <-lockAcquired:
+	case <-time.After(time.Second):
+		t.Fatal("versionedQueuesLock remained locked after describe returned")
+	}
 }
 
 func (s *PartitionManagerTestSuite) SetupTest() {
