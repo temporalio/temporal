@@ -20,6 +20,7 @@ This document describes the project's testing setup, utilities and best practice
 - `TEMPORAL_TEST_SHARED_CLUSTERS`: Number of shared clusters in the pool. Each can be used by multiple tests simultaneously.
 - `TEMPORAL_TEST_DEDICATED_CLUSTERS`: Number of dedicated clusters in the pool. Each can be used by one test only at a time.
 - `TEMPORAL_TEST_TIMEOUT`: Sets the duration timeout per test (e.g., `90s` for 90 seconds). This can be overridden per-test using `testcore.WithTimeout()`. The timeout is multiplied by `debug.TimeoutMultiplier` when debugging.
+- `TEMPORAL_TEST_AWAIT_SCALE`: Positive integer or decimal number that scales `await.Require` / `s.Await` timeouts and poll intervals together. Useful in slower environments like CI.
 - `TEMPORAL_TEST_DATA_ENCODING`: Controls the encoding used for persistence DataBlobs. Available options: `proto3` (default) or `json`.
 
 ### Debugging via IDE
@@ -40,6 +41,37 @@ To pass in the required build tags, add them to the "Go tool arguments" field in
 Always use `require.X` (and `protorequire.X`) instead of `assert.X` (and `protoassert.X`).
 `assert` records a failure but lets the test continue, which often leads to confusing
 cascading errors.
+
+### Polling with await.Require
+
+For polling/retry loops in tests, use `await.Require` (or `await.Requiref`)
+from `common/testing/await` instead of testify's `EventuallyWithT` or `Eventually`.
+The callback context is canceled when the await timeout or test deadline is reached.
+
+```go
+await.Require(t, func(ctx context.Context, t *await.T) {
+    resp, err := client.GetStatus(ctx)
+    require.NoError(t, err)
+    require.Equal(t, "ready", resp.Status)
+}, 5*time.Second, 200*time.Millisecond)
+```
+
+In parallelsuite-based tests, use `s.Await` directly:
+
+```go
+s.Await(func(ctx context.Context, s *MySuite) {
+    s.Equal("ready", status)
+}, 5*time.Second, 200*time.Millisecond)
+```
+
+Use `AwaitTrue` / `RequireTrue` for bool-returning predicates:
+
+```go
+s.AwaitTrue(func(ctx context.Context, s *MySuite) bool {
+    s.NoError(cache.Refresh(ctx))
+    return cache.Ready()
+}, 5*time.Second, 200*time.Millisecond)
+```
 
 ### Parallelization
 

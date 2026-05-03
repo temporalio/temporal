@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
@@ -308,6 +309,28 @@ func (e *TestEnv) Tv() *testvars.TestVars {
 //	defer cancel()
 func (e *TestEnv) Context() context.Context {
 	return e.ctx
+}
+
+// Await calls fn repeatedly until all assertions pass or timeout is reached.
+func (e *TestEnv) Await(fn func(context.Context, *await.T), timeout, interval time.Duration) {
+	e.Awaitf(fn, timeout, interval, "")
+}
+
+// Awaitf is like Await but includes a format string appended to the failure message.
+func (e *TestEnv) Awaitf(fn func(context.Context, *await.T), timeout, interval time.Duration, msg string, args ...any) {
+	e.t.Helper()
+	await.Requiref(e.t, fn, timeout, interval, msg, args...)
+}
+
+// AwaitTrue calls fn repeatedly until it returns true and all assertions pass, or timeout is reached.
+func (e *TestEnv) AwaitTrue(fn func(context.Context, *await.T) bool, timeout, interval time.Duration) {
+	e.AwaitTruef(fn, timeout, interval, "")
+}
+
+// AwaitTruef is like AwaitTrue but includes a format string appended to the failure message.
+func (e *TestEnv) AwaitTruef(fn func(context.Context, *await.T) bool, timeout, interval time.Duration, msg string, args ...any) {
+	e.t.Helper()
+	await.RequireTruef(e.t, fn, timeout, interval, msg, args...)
 }
 
 // SdkClient returns the SDK client. It is lazily initialized on the first call.
