@@ -100,12 +100,9 @@ jobs:
       - name: Configure runners
         id: configure_runners
         run: |
-          # Use 8-core runners for temporalio org, standard runners for forks
-          if [[ "${{ github.repository_owner }}" == "temporalio" ]]; then
-            runner_arm="ubuntu-24.04-arm64-8-cores"
-          else
-            runner_arm="ubuntu-24.04-arm"
-          fi
+          # Use standard runners on this branch to stress-test DB tweaks under
+          # tighter memory/CPU; restore 8-core selection before merging.
+          runner_arm="ubuntu-24.04-arm"
           echo "runner_arm=$runner_arm" >> "$GITHUB_OUTPUT"
 
       # Primary DBs always get full tests, extended DBs get smoke tests (1 job) in abridged PRs.
