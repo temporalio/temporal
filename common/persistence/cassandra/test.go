@@ -175,6 +175,16 @@ func (s *TestCluster) LoadSchema(schemaFile string) {
 	}
 	for _, stmt := range statements {
 		if err = s.session.Query(stmt).Exec(); err != nil {
+			// CreateDatabase recreates the keyspace via DROP+CREATE. Cassandra's
+			// schema metadata can briefly lag the DROP, so the next CREATE TYPE /
+			// TABLE / INDEX may fail with "already exists" against stale state.
+			// Treat that as success: a fresh keyspace can't have any object that
+			// matters here besides what we're trying to create.
+			if strings.Contains(err.Error(), "already exists") {
+				s.logger.Warn("LoadSchema: object already exists, skipping",
+					tag.NewStringTag("statement", stmt), tag.Error(err))
+				continue
+			}
 			s.logger.Fatal("LoadSchema", tag.Error(err))
 		}
 	}
