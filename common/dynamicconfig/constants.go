@@ -3234,6 +3234,12 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
 	)
 
+	MaxServiceErrorMessageLength = NewGlobalIntSetting(
+		"system.maxServiceErrorMessageLength",
+		4000,
+		"MaxServiceErrorMessageLength is the max length of service error message. If it's longer, it will be truncated.",
+	)
+
 	LogAllReqErrors = NewNamespaceBoolSetting(
 		"system.logAllReqErrors",
 		false,

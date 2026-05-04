@@ -2,6 +2,7 @@ package primitives
 
 import (
 	"fmt"
+	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -31,6 +32,13 @@ func IsInternalTaskQueueKind(kind enumspb.TaskQueueKind) bool {
 		return false
 	}
 	return false
+}
+
+const internalTaskQueuePrefix = "temporal-sys-"
+
+// IsInternalTaskQueue returns true if the task queue name belongs to an internal system task queue.
+func IsInternalTaskQueue(taskQueue string) bool {
+	return strings.HasPrefix(taskQueue, internalTaskQueuePrefix)
 }
 
 func IsInternalPerNsTaskQueue(taskQueue string) bool {
