@@ -24,8 +24,13 @@ var _ chasm.StateMachine[callbackspb.CallbackStatus] = (*Callback)(nil)
 
 // Callback represents a callback component in CHASM.
 //
-// Note that there is a separate CHASM component, CallbackExecution, which...
-// TODO(chrsmith): Explain the distinction between these two CHASM components.
+// Note that there is a separate CHASM component, CallbackExecution, which represents
+// a callback that needs to be triggered from outside of Temporal. (An external service
+// reporting some operation has completed.)
+//
+// Whereas Callback is used for things that are entirely within CHASM, and supports
+// durably sending an HTTP POST request in response to something. (e.g. a Workflow
+// completing, to mark the Nexus operation has having finished.)
 type Callback struct {
 	chasm.UnimplementedComponent
 

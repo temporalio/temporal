@@ -52,6 +52,9 @@ The long-poll response is sent before the caller's deadline by this amount of ti
 		`RequestTimeout is the timeout for executing a single callback request.`,
 	)
 
+	// TODO(chrsmith): Adress the PR feedback at https://github.com/temporalio/temporal/pull/9805/changes#r3105952880
+	// > We sould reuse the DC in the nexusoperation package.
+	// > But we could also unify with the common struct for retry policies in common/retrypolicy.
 	RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
 		"callback.retryPolicy.initialInterval",
 		time.Second,
