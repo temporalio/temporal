@@ -2314,7 +2314,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		return nil, err
 	}
 
-	_, err = wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
+	resp, err := wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
 		NamespaceId:   namespaceID.String(),
 		SignalRequest: request,
 	})
@@ -2322,7 +2322,9 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		return nil, err
 	}
 
-	return &workflowservice.SignalWorkflowExecutionResponse{}, nil
+	return &workflowservice.SignalWorkflowExecutionResponse{
+		Link: resp.GetLink(),
+	}, nil
 }
 
 // SignalWithStartWorkflowExecution is used to ensure sending signal to a workflow.
@@ -2440,8 +2442,9 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	return &workflowservice.SignalWithStartWorkflowExecutionResponse{
-		RunId:   resp.GetRunId(),
-		Started: resp.Started,
+		RunId:      resp.GetRunId(),
+		Started:    resp.Started,
+		SignalLink: resp.GetSignalLink(),
 	}, nil
 }
 

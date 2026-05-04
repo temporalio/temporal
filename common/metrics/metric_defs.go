@@ -900,6 +900,14 @@ var (
 		"chasm_pure_task_errors",
 		WithDescription("The number of errors during CHASM pure task execution."),
 	)
+	ChasmIncomingSignalWritten = NewCounterDef(
+		"chasm_incoming_signal_written",
+		WithDescription("The number of signal backlinks written to the CHASM IncomingSignals map."),
+	)
+	ChasmIncomingSignalDuplicate = NewCounterDef(
+		"chasm_incoming_signal_duplicate",
+		WithDescription("The number of duplicate signal request IDs detected when writing to the CHASM IncomingSignals map. Non-zero values indicate unexpected signal redelivery."),
+	)
 	TaskScheduleToStartLatency  = NewTimerDef("task_schedule_to_start_latency")
 	TaskBatchCompleteCounter    = NewCounterDef("task_batch_complete_counter")
 	TaskReschedulerPendingTasks = NewDimensionlessHistogramDef("task_rescheduler_pending_tasks")
@@ -1002,30 +1010,34 @@ var (
 		"persisted_mutable_state_size",
 		WithDescription("Size of the persisted Workflow Execution's state in DB, emitted each time a workflow execution is updated."),
 	)
-	ExecutionInfoSize                     = NewBytesHistogramDef("execution_info_size")
-	ExecutionStateSize                    = NewBytesHistogramDef("execution_state_size")
-	ActivityInfoSize                      = NewBytesHistogramDef("activity_info_size")
-	TimerInfoSize                         = NewBytesHistogramDef("timer_info_size")
-	ChildInfoSize                         = NewBytesHistogramDef("child_info_size")
-	RequestCancelInfoSize                 = NewBytesHistogramDef("request_cancel_info_size")
-	SignalInfoSize                        = NewBytesHistogramDef("signal_info_size")
-	SignalRequestIDSize                   = NewBytesHistogramDef("signal_request_id_size")
-	BufferedEventsSize                    = NewBytesHistogramDef("buffered_events_size")
-	ChasmTotalSize                        = NewBytesHistogramDef("chasm_total_size")
-	ActivityInfoCount                     = NewDimensionlessHistogramDef("activity_info_count")
-	TimerInfoCount                        = NewDimensionlessHistogramDef("timer_info_count")
-	ChildInfoCount                        = NewDimensionlessHistogramDef("child_info_count")
-	SignalInfoCount                       = NewDimensionlessHistogramDef("signal_info_count")
-	RequestCancelInfoCount                = NewDimensionlessHistogramDef("request_cancel_info_count")
-	SignalRequestIDCount                  = NewDimensionlessHistogramDef("signal_request_id_count")
-	BufferedEventsCount                   = NewDimensionlessHistogramDef("buffered_events_count")
-	TaskCount                             = NewDimensionlessHistogramDef("task_count")
-	TotalActivityCount                    = NewDimensionlessHistogramDef("total_activity_count")
-	TotalUserTimerCount                   = NewDimensionlessHistogramDef("total_user_timer_count")
-	TotalChildExecutionCount              = NewDimensionlessHistogramDef("total_child_execution_count")
-	TotalRequestCancelExternalCount       = NewDimensionlessHistogramDef("total_request_cancel_external_count")
-	TotalSignalExternalCount              = NewDimensionlessHistogramDef("total_signal_external_count")
-	TotalSignalCount                      = NewDimensionlessHistogramDef("total_signal_count")
+	ExecutionInfoSize                    = NewBytesHistogramDef("execution_info_size")
+	ExecutionStateSize                   = NewBytesHistogramDef("execution_state_size")
+	ActivityInfoSize                     = NewBytesHistogramDef("activity_info_size")
+	TimerInfoSize                        = NewBytesHistogramDef("timer_info_size")
+	ChildInfoSize                        = NewBytesHistogramDef("child_info_size")
+	RequestCancelInfoSize                = NewBytesHistogramDef("request_cancel_info_size")
+	SignalInfoSize                       = NewBytesHistogramDef("signal_info_size")
+	SignalRequestIDSize                  = NewBytesHistogramDef("signal_request_id_size")
+	BufferedEventsSize                   = NewBytesHistogramDef("buffered_events_size")
+	ChasmTotalSize                       = NewBytesHistogramDef("chasm_total_size")
+	ActivityInfoCount                    = NewDimensionlessHistogramDef("activity_info_count")
+	TimerInfoCount                       = NewDimensionlessHistogramDef("timer_info_count")
+	ChildInfoCount                       = NewDimensionlessHistogramDef("child_info_count")
+	SignalInfoCount                      = NewDimensionlessHistogramDef("signal_info_count")
+	RequestCancelInfoCount               = NewDimensionlessHistogramDef("request_cancel_info_count")
+	SignalRequestIDCount                 = NewDimensionlessHistogramDef("signal_request_id_count")
+	BufferedEventsCount                  = NewDimensionlessHistogramDef("buffered_events_count")
+	TaskCount                            = NewDimensionlessHistogramDef("task_count")
+	TotalActivityCount                   = NewDimensionlessHistogramDef("total_activity_count")
+	TotalUserTimerCount                  = NewDimensionlessHistogramDef("total_user_timer_count")
+	TotalChildExecutionCount             = NewDimensionlessHistogramDef("total_child_execution_count")
+	TotalRequestCancelExternalCount      = NewDimensionlessHistogramDef("total_request_cancel_external_count")
+	TotalSignalExternalCount             = NewDimensionlessHistogramDef("total_signal_external_count")
+	TotalSignalCount                     = NewDimensionlessHistogramDef("total_signal_count")
+	DescribeWorkflowSignalBacklinksCount = NewCounterDef(
+		"describe_workflow_signal_backlinks",
+		WithDescription("The number of signal backlinks resolved from the CHASM IncomingSignals map in DescribeWorkflow responses."),
+	)
 	WorkflowBackoffCount                  = NewCounterDef("workflow_backoff_timer")
 	WorkflowRetryBackoffTimerCount        = NewCounterDef("workflow_retry_backoff_timer")
 	WorkflowCronBackoffTimerCount         = NewCounterDef("workflow_cron_backoff_timer")

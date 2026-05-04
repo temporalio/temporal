@@ -4,12 +4,14 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
+	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	"go.temporal.io/server/service/history/historybuilder"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -30,6 +32,10 @@ type Workflow struct {
 
 	// Operations map is used to store the Nexus operations for the workflow, keyed by scheduled event ID.
 	Operations chasm.Map[int64, *nexusoperation.Operation]
+
+	// IncomingSignals map is used to track incoming signals, keyed by request ID,
+	// to allow DescribeWorkflow to resolve RequestIDRef signal backlinks.
+	IncomingSignals chasm.Map[string, *chasmworkflowpb.IncomingSignalData]
 }
 
 func NewWorkflow(
@@ -129,6 +135,53 @@ func addAndApplyHistoryEvent[D EventDefinition](
 	}
 	event := w.AddHistoryEvent(def.Type(), setAttributes)
 	return event, def.Apply(ctx, w, event)
+}
+
+// AddIncomingSignalEvent adds an entry for the signal requestID -> eventID mapping to
+// track all signals that have been received by the workflow.
+// Returns error if this requestID already exists in the map -- use UpdateIncomingSignalEvent to update existing entries.
+func (w *Workflow) AddIncomingSignalEvent(
+	ctx chasm.MutableContext,
+	requestID string,
+	eventID int64,
+) error {
+	if w.IncomingSignals == nil {
+		w.IncomingSignals = make(chasm.Map[string, *chasmworkflowpb.IncomingSignalData])
+	}
+	if w.HasIncomingSignalEvent(ctx, requestID) {
+		return serviceerror.NewInvalidArgumentf(
+			"signal request ID %s already exists, use UpdateIncomingSignalEvent to update it instead",
+			requestID,
+		)
+	}
+	w.IncomingSignals[requestID] = chasm.NewDataField(ctx, &chasmworkflowpb.IncomingSignalData{
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		EventId:   eventID,
+	})
+	return nil
+}
+
+// UpdateIncomingSignalEvent updates the eventID for an existing signal requestID in the map.
+// If the requestID is not in the map, this is a no-op (e.g. when called for non-signal request IDs
+// during buffer flush).
+func (w *Workflow) UpdateIncomingSignalEvent(
+	ctx chasm.MutableContext,
+	requestID string,
+	eventID int64,
+) error {
+	if !w.HasIncomingSignalEvent(ctx, requestID) {
+		return nil
+	}
+	w.IncomingSignals[requestID] = chasm.NewDataField(ctx, &chasmworkflowpb.IncomingSignalData{
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		EventId:   eventID,
+	})
+	return nil
+}
+
+func (w *Workflow) HasIncomingSignalEvent(_ chasm.Context, requestID string) bool {
+	_, exists := w.IncomingSignals[requestID]
+	return exists
 }
 
 // HasAnyBufferedEvent returns true if the workflow has any buffered event matching the given filter.

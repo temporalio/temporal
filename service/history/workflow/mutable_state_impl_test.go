@@ -2763,6 +2763,7 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 		&commonpb.Payloads{},
 		"identity",
 		&commonpb.Header{},
+		"",
 		nil,
 	)
 	s.NoError(err)
@@ -3321,6 +3322,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 					"identity",
 					&commonpb.Header{},
 					nil,
+					"",
 					nil,
 				)
 				if err != nil {
@@ -6507,6 +6509,7 @@ func (s *mutableStateSuite) TestCloseTransaction_PrincipalPreserved() {
 		"alice-identity",
 		&commonpb.Header{},
 		nil,
+		"",
 		nil,
 	)
 	s.NoError(err)
@@ -6526,6 +6529,7 @@ func (s *mutableStateSuite) TestCloseTransaction_PrincipalPreserved() {
 		"bob-identity",
 		&commonpb.Header{},
 		nil,
+		"",
 		nil,
 	)
 	s.NoError(err)

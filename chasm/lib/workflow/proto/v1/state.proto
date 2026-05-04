@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.workflow.proto.v1;
 
+import "temporal/api/enums/v1/event_type.proto";
+
 option go_package = "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpb";
 
 // NexusOperationParentData contains workflow-specific data stored in a nexus operation's
@@ -18,4 +20,11 @@ message NexusOperationParentData {
 message NexusCancellationParentData {
   // Event ID of the NEXUS_OPERATION_CANCEL_REQUESTED event.
   int64 requested_event_id = 1;
+}
+
+// IncomingSignalData records the event associated with a signal's request ID, which allows
+// DescribeWorkflow to resolve RequestIDRef signal backlinks.
+message IncomingSignalData {
+  temporal.api.enums.v1.EventType event_type = 1;
+  int64 event_id = 2;
 }

@@ -102,6 +102,7 @@ type (
 			input *commonpb.Payloads,
 			identity string,
 			header *commonpb.Header,
+			requestID string,
 			links []*commonpb.Link,
 		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionSignaledEvent(
@@ -110,6 +111,7 @@ type (
 			identity string,
 			header *commonpb.Header,
 			externalWorkflowExecution *commonpb.WorkflowExecution,
+			requestID string,
 			links []*commonpb.Link,
 		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEvent(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
@@ -344,6 +346,7 @@ type (
 		IsWorkflow() bool
 		ChasmTree() ChasmTree
 		ChasmEnabled() bool
+		ChasmSignalBacklinksEnabled() bool
 		ChasmWorkflowComponent(ctx context.Context) (*chasmworkflow.Workflow, chasm.MutableContext, error)
 		ChasmWorkflowComponentReadOnly(ctx context.Context) (*chasmworkflow.Workflow, chasm.Context, error)
 		// Ensures that the chasm workflow component is installed in the mutable state CHASM tree.
