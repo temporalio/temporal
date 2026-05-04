@@ -77,6 +77,7 @@ var Module = fx.Options(
 	// A more robust approach would require using fx groups but we shouldn't overcomplicate until this becomes an issue.
 	fx.Provide(MuxRouterProvider),
 	fx.Provide(ConfigProvider),
+	fx.Provide(ServiceErrorInterceptorProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
 	fx.Provide(NamespaceHandoverInterceptorProvider),
 	fx.Provide(interceptor.NewRoutingKeyExtractor),
@@ -218,6 +219,7 @@ func GrpcServerOptionsProvider(
 	serviceConfig *Config,
 	serviceName primitives.ServiceName,
 	rpcFactory common.RPCFactory,
+	serviceErrorInterceptor *interceptor.ServiceErrorInterceptor,
 	namespaceLogInterceptor *interceptor.NamespaceLogInterceptor,
 	namespaceRateLimiterInterceptor interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
@@ -271,7 +273,7 @@ func GrpcServerOptionsProvider(
 		// Mask error interceptor should be the most outer interceptor since it handle the errors format
 		// Service Error Interceptor should be the next most outer interceptor on error handling
 		maskInternalErrorDetailsInterceptor.Intercept,
-		interceptor.ServiceErrorInterceptor,
+		serviceErrorInterceptor.Intercept,
 		interceptor.NewFrontendServiceErrorInterceptor(logger),
 		// BusinessID interceptor extracts business ID and adds it to context for use, must be before any interceptor that touches namespaces (namespaceValidator, handoverInterceptor)
 		businessIDInterceptor.Intercept,
@@ -339,6 +341,14 @@ func ConfigProvider(
 	return NewConfig(
 		dc,
 		persistenceConfig.NumHistoryShards,
+	)
+}
+
+func ServiceErrorInterceptorProvider(
+	dc *dynamicconfig.Collection,
+) *interceptor.ServiceErrorInterceptor {
+	return interceptor.NewServiceErrorInterceptor(
+		dynamicconfig.MaxServiceErrorMessageLength.Get(dc),
 	)
 }
 

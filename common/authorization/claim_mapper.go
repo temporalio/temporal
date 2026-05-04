@@ -70,7 +70,7 @@ func NewInternalClaimMapper() ClaimMapper {
 }
 
 func (*internalClaimMapper) GetClaims(_ *AuthInfo) (*Claims, error) {
-	return &Claims{System: RoleAdmin, AuthType: "temporal", Subject: "internal"}, nil
+	return &Claims{System: RoleAdmin, AuthType: InternalPrincipalType, Subject: InternalPrincipalName}, nil
 }
 
 func (*internalClaimMapper) AuthInfoRequired() bool {

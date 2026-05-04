@@ -33,6 +33,7 @@ const (
 	headerCallsiteTagName          = "header_callsite"
 	ArchetypeTagName               = "archetype"
 	ChasmTaskTypeTagName           = "chasm_task_type"
+	timeoutTypeTagName             = "timeout_type"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -50,6 +51,7 @@ const (
 	ReactivationSignalDedupCacheTypeTagValue          = "reactivation_signal_dedup"
 	RoutingInfoCacheTypeTagValue                      = "routing_info"
 	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
+	ReplicationProgressCacheTypeTagValue              = "replication_progress"
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
 	InvalidVisibilityURITagValue = "invalid_visibility_uri"
