@@ -1,0 +1,18 @@
+# ScyllaDB base compose file for development and benchmarks.
+# Usage: podman compose -f docker-compose.scylla.yml up -d scylladb
+#
+# ScyllaDB uses host networking so the gocql shard-aware port (19042) is
+# directly reachable without NAT. Port-mapping breaks shard-aware routing.
+services:
+  scylladb:
+    image: scylladb/scylla:2026.1
+    container_name: temporal-dev-scylladb
+    network_mode: host
+    command: >-
+      --smp 2
+      --memory 1G
+      --listen-address 127.0.0.1
+      --rpc-address 127.0.0.1
+      --seed-provider-parameters seeds=127.0.0.1
+      --auto-snapshot=0
+      --developer-mode 0

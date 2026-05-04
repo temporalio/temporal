@@ -1,9 +1,9 @@
-#history.persistenceMaxQPS:
-#- value: 3000
-#  constraints: {}
-#frontend.persistenceMaxQPS:
-#- value: 3000
-#  constraints: {}
+history.persistenceMaxQPS:
+- value: 0
+frontend.persistenceMaxQPS:
+- value: 0
+matching.persistenceMaxQPS:
+- value: 0
 #frontend.throttledLogRPS:
 #- value: 20
 #  constraints: {}
@@ -49,6 +49,8 @@ history.ReplicationEnableUpdateWithNewTaskMerge:
   - value: true
 history.hostLevelCacheMaxSize:
   - value: 8192
+history.shardIOConcurrency:
+  - value: 4
 history.enableTransitionHistory:
   - value: true
 history.enableChasm:
