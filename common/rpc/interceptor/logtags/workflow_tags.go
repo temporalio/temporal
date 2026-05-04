@@ -54,10 +54,22 @@ func (wt *WorkflowTags) fromTaskToken(taskTokenBytes []byte) []tag.Tag {
 	if len(taskTokenBytes) == 0 {
 		return nil
 	}
+
 	taskToken, err := wt.serializer.Deserialize(taskTokenBytes)
 	if err != nil {
 		wt.logger.Warn("unable to deserialize task token while getting workflow tags", tag.Error(err))
 		return nil
 	}
-	return []tag.Tag{tag.WorkflowID(taskToken.WorkflowId), tag.WorkflowRunID(taskToken.RunId)}
+
+	var tags []tag.Tag
+	if taskToken.WorkflowId != "" {
+		tags = append(tags, tag.WorkflowID(taskToken.WorkflowId))
+	}
+	if taskToken.RunId != "" {
+		tags = append(tags, tag.WorkflowRunID(taskToken.RunId))
+	}
+	if len(taskToken.ComponentRef) > 0 && taskToken.ActivityId != "" {
+		tags = append(tags, tag.ActivityID(taskToken.ActivityId))
+	}
+	return tags
 }

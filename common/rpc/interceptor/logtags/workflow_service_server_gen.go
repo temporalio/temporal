@@ -297,6 +297,7 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.PollActivityTaskQueueResponse:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
+			tag.ActivityID(r.GetActivityId()),
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
 		}
 	case *workflowservice.PollNexusOperationExecutionRequest:
