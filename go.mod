@@ -32,6 +32,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0
 	github.com/iancoleman/strcase v0.3.0
 	github.com/jackc/pgx/v5 v5.9.2
+	github.com/jmespath/go-jmespath v0.4.0
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/jstemmer/go-junit-report/v2 v2.1.0
 	github.com/lib/pq v1.12.3

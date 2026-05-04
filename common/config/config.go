@@ -627,6 +627,8 @@ type (
 		// Signing key provider for validating JWT tokens
 		JWTKeyProvider       JWTKeyProvider `yaml:"jwtKeyProvider"`
 		PermissionsClaimName string         `yaml:"permissionsClaimName"`
+		// JMESPath expression to extract permissions from JWT claims. Allows querying nested claim values.
+		PermissionsClaimQuery string `yaml:"permissionsClaimQuery"`
 		// Regular expression to parse permissions claim value. The regex should contain named groups "namespace" and "role", for example
 		// `^(?P<role>\w+):(?P<namespace>\w+)$` will match `admin:default` and extract `default` as namespace and `admin` as role.
 		PermissionsRegex string `yaml:"permissionsRegex"`
