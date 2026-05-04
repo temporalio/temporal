@@ -648,6 +648,8 @@ type (
 	RemoteClusterAuth struct {
 		// Require fails outbound remote-cluster RPCs that have no token (and fails server boot if no TokenProvider is set).
 		Require bool `yaml:"require"`
+		// GraceWindow is how long before a token's `exp` to begin attempting to refresh. Zero defaults to 30s.
+		GraceWindow time.Duration `yaml:"graceWindow"`
 	}
 
 	// @@@SNIPSTART temporal-common-service-config-jwtkeyprovider
