@@ -191,6 +191,12 @@ type (
 
 		// Requires clients to authenticate with a certificate when connecting, otherwise known as mutual TLS.
 		RequireClientAuth bool `yaml:"requireClientAuth"`
+
+		// CipherSuites is an optional list of TLS cipher suite names to restrict TLS 1.0–1.2 connections.
+		// When empty, Go's default secure cipher suites are used (3DES and other weak ciphers are excluded).
+		// Cipher suite names follow Go's naming convention (e.g. "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256").
+		// This field has no effect on TLS 1.3, whose cipher suites are not configurable in Go.
+		CipherSuites []string `yaml:"cipherSuites"`
 	}
 
 	// ClientTLS contains TLS configuration for clients within the Temporal Cluster to connect to Temporal nodes.
@@ -216,6 +222,12 @@ type (
 		// Optional - Use TLS even is neither client certificate nor root CAs are configured
 		// This is for non-mTLS cases when client validates serve against a set of trusted CA certificates configured in the environment
 		ForceTLS bool `yaml:"forceTLS"`
+
+		// CipherSuites is an optional list of TLS cipher suite names to restrict TLS 1.0–1.2 connections.
+		// When empty, Go's default secure cipher suites are used (3DES and other weak ciphers are excluded).
+		// Cipher suite names follow Go's naming convention (e.g. "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256").
+		// This field has no effect on TLS 1.3, whose cipher suites are not configurable in Go.
+		CipherSuites []string `yaml:"cipherSuites"`
 	}
 
 	// WorkerTLS contains TLS configuration for system workers within the Temporal Cluster to connect to Temporal frontend.

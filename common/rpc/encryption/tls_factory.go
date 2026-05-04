@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -130,6 +131,9 @@ func validateServerTLS(cfg *config.ServerTLS) error {
 	if len(cfg.ClientCAFiles) > 0 && len(cfg.ClientCAData) > 0 {
 		return fmt.Errorf("cannot specify ClientCAFiles and ClientCAData at the same time")
 	}
+	if _, err := auth.ParseCipherSuites(cfg.CipherSuites); err != nil {
+		return fmt.Errorf("invalid ServerTLS.CipherSuites: %w", err)
+	}
 	return nil
 }
 
@@ -142,6 +146,9 @@ func validateClientTLS(cfg *config.ClientTLS) error {
 	}
 	if len(cfg.RootCAData) > 0 && len(cfg.RootCAFiles) > 0 {
 		return fmt.Errorf("cannot specify RootCAFiles and RootCAData at the same time")
+	}
+	if _, err := auth.ParseCipherSuites(cfg.CipherSuites); err != nil {
+		return fmt.Errorf("invalid ClientTLS.CipherSuites: %w", err)
 	}
 	return nil
 }
