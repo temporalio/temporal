@@ -59,7 +59,7 @@ type (
 		searchAttributesMapper          searchattribute.Mapper
 		customFrontendInterceptors      []grpc.UnaryServerInterceptor
 		metricHandler                   metrics.Handler
-		remoteClusterTokenProvider      auth.TokenProvider
+		tokenProvider                   auth.TokenProvider
 	}
 )
 

@@ -199,11 +199,10 @@ func WithChainedFrontendGrpcInterceptors(
 	})
 }
 
-// WithRemoteClusterTokenProvider sets a custom token provider for remote cluster auth.
-// When set, this overrides the default file-based provider from config.
-func WithRemoteClusterTokenProvider(tp auth.TokenProvider) ServerOption {
+// WithTokenProvider sets a custom token provider for outbound remote-cluster auth.
+func WithTokenProvider(tp auth.TokenProvider) ServerOption {
 	return applyFunc(func(s *serverOptions) {
-		s.remoteClusterTokenProvider = tp
+		s.tokenProvider = tp
 	})
 }
 

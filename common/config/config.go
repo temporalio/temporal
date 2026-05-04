@@ -138,8 +138,6 @@ type (
 		Metrics *metrics.Config `yaml:"metrics"`
 		// Settings for authentication and authorization
 		Authorization Authorization `yaml:"authorization"`
-		// RequireRemoteClusterAuth fails outbound remote-cluster RPCs that have no token (and fails server boot if no TokenProvider is set)
-		RequireRemoteClusterAuth bool `yaml:"requireRemoteClusterAuth"`
 	}
 
 	// RootTLS contains all TLS settings for the Temporal server
@@ -642,6 +640,14 @@ type (
 		AuthExtraHeaderName string `yaml:"authExtraHeaderName"`
 		// JWT audience for validating tokens
 		Audience string `yaml:"audience"`
+		// RemoteClusterAuth controls outbound credentials carried on cross-cluster RPCs.
+		RemoteClusterAuth RemoteClusterAuth `yaml:"remoteClusterAuth"`
+	}
+
+	// RemoteClusterAuth controls outbound auth on cross-cluster RPCs.
+	RemoteClusterAuth struct {
+		// Require fails outbound remote-cluster RPCs that have no token (and fails server boot if no TokenProvider is set).
+		Require bool `yaml:"require"`
 	}
 
 	// @@@SNIPSTART temporal-common-service-config-jwtkeyprovider
