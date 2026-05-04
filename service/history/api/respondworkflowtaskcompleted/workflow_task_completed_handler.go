@@ -817,6 +817,10 @@ func (handler *workflowTaskCompletedHandler) handleCommandCompleteWorkflow(
 		newExecutionRunID = uuid.NewString()
 	}
 
+	if err := handler.mutableState.FlushPendingActivityEventsForCompletion(); err != nil {
+		return nil, err
+	}
+
 	// Always add workflow completed event to this one
 	event, err := handler.mutableState.AddCompletedWorkflowEvent(handler.workflowTaskCompletedID, attr, newExecutionRunID)
 	if err != nil {
@@ -1114,6 +1118,10 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 		if err == nil {
 			parentNamespace = parentNamespaceEntry.Name()
 		}
+	}
+
+	if err := handler.mutableState.FlushPendingActivityEventsForCompletion(); err != nil {
+		return nil, err
 	}
 
 	event, newMutableState, err := handler.mutableState.AddContinueAsNewEvent(

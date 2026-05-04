@@ -2982,6 +2982,114 @@ func (s *mutableStateSuite) TestRetryActivity_PausedIncrementsStamp() {
 	s.Equal(int32(2), updatedActivityInfo.Attempt)
 }
 
+func (s *mutableStateSuite) TestFlushPendingActivityEventsForCompletion() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	retryPolicy := &commonpb.RetryPolicy{
+		InitialInterval: durationpb.New(time.Second),
+	}
+
+	s.Run("no_pending_activities", func() {
+		s.createVersionedMutableStateWithCompletedWFT(tq)
+		nextBefore := s.mutableState.GetNextEventID()
+		err := s.mutableState.FlushPendingActivityEventsForCompletion()
+		s.NoError(err)
+		s.Equal(nextBefore, s.mutableState.GetNextEventID())
+	})
+
+	s.Run("pending_activity_with_transient_started_flushes_started", func() {
+		s.createVersionedMutableStateWithCompletedWFT(tq)
+		workflowTaskCompletedEventID := s.mutableState.GetNextEventID() - 1
+		_, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
+			workflowTaskCompletedEventID,
+			&commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId:   "flush-started",
+				ActivityType: &commonpb.ActivityType{Name: "activity-type"},
+				TaskQueue:    tq,
+				RetryPolicy:  retryPolicy,
+			},
+			false,
+		)
+		s.NoError(err)
+		_, err = s.mutableState.AddActivityTaskStartedEvent(
+			activityInfo,
+			activityInfo.ScheduledEventId,
+			uuid.NewString(),
+			"worker",
+			nil,
+			nil,
+			nil,
+		)
+		s.NoError(err)
+		ai, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
+		s.True(ok)
+		s.Equal(common.TransientEventID, ai.StartedEventId)
+
+		err = s.mutableState.FlushPendingActivityEventsForCompletion()
+		s.NoError(err)
+		ai, ok = s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
+		s.True(ok)
+		s.NotEqual(common.TransientEventID, ai.StartedEventId, "flush should have written ActivityTaskStarted so StartedEventId is no longer transient")
+	})
+
+	s.Run("pending_activity_between_retries_flushes_started_and_failed", func() {
+		s.createVersionedMutableStateWithCompletedWFT(tq)
+		workflowTaskCompletedEventID := s.mutableState.GetNextEventID() - 1
+		_, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
+			workflowTaskCompletedEventID,
+			&commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId:   "flush-failed",
+				ActivityType: &commonpb.ActivityType{Name: "activity-type"},
+				TaskQueue:    tq,
+				RetryPolicy:  retryPolicy,
+			},
+			false,
+		)
+		s.NoError(err)
+		_, err = s.mutableState.AddActivityTaskStartedEvent(
+			activityInfo,
+			activityInfo.ScheduledEventId,
+			uuid.NewString(),
+			"worker",
+			nil,
+			nil,
+			nil,
+		)
+		s.NoError(err)
+		_, err = s.mutableState.RetryActivity(activityInfo, &failurepb.Failure{Message: "attempt failed"})
+		s.NoError(err)
+		s.Len(s.mutableState.GetPendingActivityInfos(), 1)
+
+		err = s.mutableState.FlushPendingActivityEventsForCompletion()
+		s.NoError(err)
+		s.Len(s.mutableState.GetPendingActivityInfos(), 0)
+		_, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
+		s.False(ok)
+	})
+
+	s.Run("pending_activity_without_retry_skipped", func() {
+		s.createVersionedMutableStateWithCompletedWFT(tq)
+		workflowTaskCompletedEventID := s.mutableState.GetNextEventID() - 1
+		_, _, err := s.mutableState.AddActivityTaskScheduledEvent(
+			workflowTaskCompletedEventID,
+			&commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId:   "no-retry",
+				ActivityType: &commonpb.ActivityType{Name: "activity-type"},
+				TaskQueue:    tq,
+			},
+			false,
+		)
+		s.NoError(err)
+		s.Len(s.mutableState.GetPendingActivityInfos(), 1)
+		nextBefore := s.mutableState.GetNextEventID()
+		err = s.mutableState.FlushPendingActivityEventsForCompletion()
+		s.NoError(err)
+		s.Equal(nextBefore, s.mutableState.GetNextEventID())
+		s.Len(s.mutableState.GetPendingActivityInfos(), 1)
+	})
+}
+
 func (s *mutableStateSuite) TestupdateBuildIdsAndDeploymentSearchAttributes() {
 	versioned := func(buildId string) *commonpb.WorkerVersionStamp {
 		return &commonpb.WorkerVersionStamp{BuildId: buildId, UseVersioning: true}
