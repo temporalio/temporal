@@ -9,8 +9,8 @@ option go_package = "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb;wor
 message NexusOperationParentData {
   // Event ID of the NEXUS_OPERATION_SCHEDULED event.
   int64 scheduled_event_id = 1;
-  // Batch ID of the NEXUS_OPERATION_SCHEDULED event.
-  int64 scheduled_event_batch_id = 2;
+  // Token for loading the NEXUS_OPERATION_SCHEDULED event.
+  bytes scheduled_event_token = 2;
 }
 
 // NexusCancellationParentData contains workflow-specific data stored in a nexus cancellation's

@@ -25,9 +25,14 @@ func (d ScheduledEventDefinition) Type() enumspb.EventType {
 func (d ScheduledEventDefinition) Apply(ctx chasm.MutableContext, wf *Workflow, event *historypb.HistoryEvent) error {
 	attrs := event.GetNexusOperationScheduledEventAttributes()
 
+	token, err := wf.GenerateEventLoadToken(event)
+	if err != nil {
+		return serviceerror.NewInternalf("failed to generate event load token: %v", err)
+	}
+
 	parentData, err := anypb.New(&workflowpb.NexusOperationParentData{
-		ScheduledEventId:      event.GetEventId(),
-		ScheduledEventBatchId: attrs.GetWorkflowTaskCompletedEventId(),
+		ScheduledEventId:    event.GetEventId(),
+		ScheduledEventToken: token,
 	})
 	if err != nil {
 		return serviceerror.NewInternalf("failed to marshal parent data: %v", err)

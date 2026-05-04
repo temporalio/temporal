@@ -28,10 +28,10 @@ type NexusOperationParentData struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Event ID of the NEXUS_OPERATION_SCHEDULED event.
 	ScheduledEventId int64 `protobuf:"varint,1,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
-	// Batch ID of the NEXUS_OPERATION_SCHEDULED event.
-	ScheduledEventBatchId int64 `protobuf:"varint,2,opt,name=scheduled_event_batch_id,json=scheduledEventBatchId,proto3" json:"scheduled_event_batch_id,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// Token for loading the NEXUS_OPERATION_SCHEDULED event.
+	ScheduledEventToken []byte `protobuf:"bytes,2,opt,name=scheduled_event_token,json=scheduledEventToken,proto3" json:"scheduled_event_token,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *NexusOperationParentData) Reset() {
@@ -71,11 +71,11 @@ func (x *NexusOperationParentData) GetScheduledEventId() int64 {
 	return 0
 }
 
-func (x *NexusOperationParentData) GetScheduledEventBatchId() int64 {
+func (x *NexusOperationParentData) GetScheduledEventToken() []byte {
 	if x != nil {
-		return x.ScheduledEventBatchId
+		return x.ScheduledEventToken
 	}
-	return 0
+	return nil
 }
 
 // NexusCancellationParentData contains workflow-specific data stored in a nexus cancellation's
@@ -129,10 +129,10 @@ var File_temporal_server_chasm_lib_workflow_proto_v1_state_proto protoreflect.Fi
 
 const file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/workflow/proto/v1/state.proto\x12+temporal.server.chasm.lib.workflow.proto.v1\"\x81\x01\n" +
+	"7temporal/server/chasm/lib/workflow/proto/v1/state.proto\x12+temporal.server.chasm.lib.workflow.proto.v1\"|\n" +
 	"\x18NexusOperationParentData\x12,\n" +
-	"\x12scheduled_event_id\x18\x01 \x01(\x03R\x10scheduledEventId\x127\n" +
-	"\x18scheduled_event_batch_id\x18\x02 \x01(\x03R\x15scheduledEventBatchId\"K\n" +
+	"\x12scheduled_event_id\x18\x01 \x01(\x03R\x10scheduledEventId\x122\n" +
+	"\x15scheduled_event_token\x18\x02 \x01(\fR\x13scheduledEventToken\"K\n" +
 	"\x1bNexusCancellationParentData\x12,\n" +
 	"\x12requested_event_id\x18\x01 \x01(\x03R\x10requestedEventIdBDZBgo.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpbb\x06proto3"
 
