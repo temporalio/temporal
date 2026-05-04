@@ -845,12 +845,15 @@ func callbackValidatorProvider(dc *dynamicconfig.Collection) callback.Validator 
 		dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
 		dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
 		func(ns string) callback.AddressMatchRules {
+			// Unify the HSM and CHASM configuration settings for AllowedAddresses.
+			// They are using the same type and DC converter.
 			hsmRules := hsmcallbacks.AllowedAddresses.Get(dc)(ns)
-			chasmRules := make([]callback.AddressMatchRule, len(hsmRules.Rules))
-			for i, r := range hsmRules.Rules {
-				chasmRules[i] = callback.AddressMatchRule{Regexp: r.Regexp, AllowInsecure: r.AllowInsecure}
-			}
-			return callback.AddressMatchRules{Rules: chasmRules}
+			chasmRules := callback.AllowedAddresses.Get(dc)(ns)
+
+			allRules := make([]callback.AddressMatchRule, 0, len(hsmRules.Rules)+len(chasmRules.Rules))
+			allRules = append(allRules, hsmRules.Rules...)
+			allRules = append(allRules, chasmRules.Rules...)
+			return callback.AddressMatchRules{Rules: allRules}
 		},
 	)
 }
