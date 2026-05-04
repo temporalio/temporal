@@ -2845,7 +2845,9 @@ func (e *matchingEngineImpl) pollTask(
 		return nil, false, errNoTasks
 	}
 
-	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, pm.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
+	timeout := pm.LongPollExpirationInterval()
+	timeout = jitteredLongPollTimeout(timeout, backoff.FullJitter[time.Duration])
+	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, timeout, returnEmptyTaskTimeBudget)
 	defer cancel()
 
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
@@ -2866,6 +2868,14 @@ func (e *matchingEngineImpl) pollTask(
 		}()
 	}
 	return pm.PollTask(ctx, pollMetadata)
+}
+
+func jitteredLongPollTimeout(
+	timeout time.Duration,
+	jitterFn func(time.Duration) time.Duration,
+) time.Duration {
+	maxJitter := time.Duration(float64(timeout) * longPollJitterCoefficient)
+	return timeout - jitterFn(maxJitter)
 }
 
 // emitTaskDispatchLatency emits latency metrics for a task dispatched to a worker.
