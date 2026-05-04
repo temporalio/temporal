@@ -1,0 +1,22 @@
+=== RUN   TestVersioningSuite
+=== RUN   TestVersioningSuite/TestFirstMethod
+--- PASS: TestVersioningSuite/TestFirstMethod (0.10s)
+=== NAME  TestVersioningSuite
+=== RUN   TestVersioningSuite/TestSecondMethod
+--- PASS: TestVersioningSuite/TestSecondMethod (0.20s)
+=== NAME  TestVersioningSuite
+=== RUN   TestVersioningSuite/TestThirdMethod
+--- PASS: TestVersioningSuite/TestThirdMethod (0.15s)
+=== NAME  TestVersioningSuite
+=== RUN   TestVersioningSuite/TestFourthMethod
+panic: test timed out after 1s
+	running tests:
+		TestVersioningSuite (0.5s)
+		TestVersioningSuite/TestFourthMethod (0.1s)
+
+goroutine 53 [running]:
+testing.(*M).startAlarm.func1()
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:2373 +0x1dc
+created by time.goFunc
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/time/sleep.go:215 +0x44
+FAIL	go.temporal.io/server/tests	1.01s

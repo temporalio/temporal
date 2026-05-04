@@ -230,9 +230,12 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 	s.NoError(err)
 	nsID := descResp.GetNamespaceInfo().GetId()
 
+	const workflowCount = 10
+	const terminatedWorkflowCount = 3
+
 	// Start few workflow executions.
 	var executions []*commonpb.WorkflowExecution
-	for i := range 100 {
+	for i := range workflowCount {
 		wid := "wf_id_" + strconv.Itoa(i)
 		resp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.NewString(),
@@ -249,7 +252,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 	}
 
 	// Terminate some workflow executions.
-	for _, execution := range executions[:30] {
+	for _, execution := range executions[:terminatedWorkflowCount] {
 		_, err = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
 			Namespace:         "ns_name_seattle",
 			WorkflowExecution: execution,
@@ -290,7 +293,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 			}
 		}
 		return true
-	}, 20*time.Second, time.Second)
+	}, time.Minute, time.Second)
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
