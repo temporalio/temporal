@@ -6733,6 +6733,22 @@ func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
 	})
 }
 
+func (s *mutableStateSuite) TestToRealTime() {
+	virtualTime := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
+	s.Run("IdentityWhenTimeSkippingInfoNil", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		s.Equal(virtualTime, s.mutableState.ToRealTime(virtualTime))
+	})
+	s.Run("SubtractsAccumulatedSkip", func() {
+		accum := time.Hour
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &workflowpb.TimeSkippingConfig{Enabled: false},
+			AccumulatedSkippedDuration: durationpb.New(accum),
+		}
+		s.Equal(virtualTime.Add(-accum), s.mutableState.ToRealTime(virtualTime))
+	})
+}
+
 func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEvent() {
 	// Use fixed UTC times so duration arithmetic is exact.
 	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)

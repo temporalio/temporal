@@ -143,7 +143,10 @@ func (s *timeSkippingReplicationSuite) TestBasicSkipReplicates() {
 	wfID := "ts-repl-basic-" + uuid.NewString()
 	tq := "ts-repl-basic-tq-" + uuid.NewString()
 
-	const startDelay = time.Hour
+	const (
+		startDelay = time.Hour
+		accumTol   = 100 * time.Millisecond
+	)
 	runID := s.startSkippingWorkflow(ctx, ns, wfID, tq, 24*time.Hour, startDelay,
 		&workflowpb.TimeSkippingConfig{Enabled: true})
 
@@ -164,7 +167,7 @@ func (s *timeSkippingReplicationSuite) TestBasicSkipReplicates() {
 		active.GetAccumulatedSkippedDuration().AsDuration(),
 		standby.GetAccumulatedSkippedDuration().AsDuration(),
 	)
-	s.InDelta(float64(startDelay), float64(standby.GetAccumulatedSkippedDuration().AsDuration()), float64(time.Minute),
+	s.InDelta(float64(startDelay), float64(standby.GetAccumulatedSkippedDuration().AsDuration()), float64(accumTol),
 		"standby's accumulated skip should match the configured startDelay within tolerance")
 }
 
@@ -184,7 +187,7 @@ func (s *timeSkippingReplicationSuite) TestBoundReachedPropagates() {
 	const (
 		maxSkip    = 30 * time.Minute
 		startDelay = time.Hour
-		accumTol   = time.Minute
+		accumTol   = 100 * time.Millisecond
 	)
 	runID := s.startSkippingWorkflow(ctx, ns, wfID, tq, 24*time.Hour, startDelay,
 		&workflowpb.TimeSkippingConfig{
@@ -212,6 +215,27 @@ func (s *timeSkippingReplicationSuite) TestBoundReachedPropagates() {
 	s.False(standby.GetConfig().GetEnabled(),
 		"standby must observe Config.Enabled=false after bound replication")
 	s.InDelta(float64(maxSkip), float64(standby.GetAccumulatedSkippedDuration().AsDuration()), float64(accumTol))
+
+	// Standby's history must contain the TimeSkippingTransitioned event marking
+	// the bound crossing — proves the event itself (not just the MS field)
+	// replicated from active.
+	histResp, err := s.clusters[1].FrontendClient().GetWorkflowExecutionHistory(ctx,
+		&workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace: ns,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: runID},
+		})
+	s.NoError(err)
+	boundTransitions := 0
+	for _, ev := range histResp.GetHistory().GetEvents() {
+		if ev.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED {
+			continue
+		}
+		if ev.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterBound() {
+			boundTransitions++
+		}
+	}
+	s.Equal(1, boundTransitions,
+		"standby history must contain exactly one TimeSkippingTransitioned event with DisabledAfterBound=true")
 }
 
 // TestFailoverPreservesAccumulatedSkip verifies that after failover, the new active
@@ -268,4 +292,127 @@ func (s *timeSkippingReplicationSuite) TestFailoverPreservesAccumulatedSkip() {
 			}, nil
 		})
 	s.NoError(err, "new active must be able to complete a workflow task post-failover")
+}
+
+// TestActivityHeartbeatTimeoutUnderSkip exercises the activity heartbeat-timeout
+// path under accumulated skip. The fix under test is the virtual→wall conversion
+// at mutable_state_impl.go:6851-6852 in AddTasks: heartbeat ActivityTimeoutTask's
+// VisibilityTimestamp is in the workflow's virtual frame on creation and must be
+// shifted by -accumulatedSkippedDuration so the timer queue dispatches at wall
+// +HeartbeatTimeout instead of wall +HeartbeatTimeout+skip.
+//
+// Scenario: workflow accumulates ~1h skip on the start close-tx, schedules an
+// activity with HeartbeatTimeout=2s and StartToClose=30s, polls the activity (so
+// it starts and the heartbeat timer is created), then never heartbeats. We
+// measure wall-clock latency from PollActivityTaskQueue → WT 2 arrival:
+//   - With the fix: heartbeat fires at ~2s wall → WT 2 arrives within a few
+//     seconds of activity start.
+//   - Without the fix: heartbeat would fire at ~2s+skip wall (~1h), StartToClose
+//     (30s wall) wins the race, and WT 2 arrives ~30s after activity start.
+//
+// 10s is comfortably between the two regimes; we assert latency < 10s. We also
+// confirm an ActivityTaskTimedOut event is present as a sanity check.
+func (s *timeSkippingReplicationSuite) TestActivityHeartbeatTimeoutUnderSkip() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	ns := s.createGlobalNamespace()
+	nsID := s.describeNamespaceID(ctx, ns)
+	wfID := "ts-repl-heartbeat-timeout-" + uuid.NewString()
+	tq := "ts-repl-heartbeat-timeout-tq-" + uuid.NewString()
+
+	const startDelay = time.Hour
+	runID := s.startSkippingWorkflow(ctx, ns, wfID, tq, 24*time.Hour, startDelay,
+		&workflowpb.TimeSkippingConfig{Enabled: true})
+
+	// Wait for the start-delay skip to land on active before scheduling the activity.
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		info := s.getExecutionInfoFromCluster(ctx, 0, nsID, wfID, runID).GetTimeSkippingInfo()
+		require.NotNil(c, info, "active must persist TimeSkippingInfo after start")
+		require.Greater(c, info.GetAccumulatedSkippedDuration().AsDuration(), 30*time.Minute,
+			"active must accumulate ~startDelay before activity is scheduled")
+	}, 15*time.Second, 200*time.Millisecond)
+
+	tv := testvars.New(s.T()).WithTaskQueue(tq).WithWorkflowID(wfID)
+	poller := taskpoller.New(s.T(), s.clusters[0].FrontendClient(), ns)
+	const workerIdentity = "ts-heartbeat-worker"
+
+	// WT 1: schedule the activity. HeartbeatTimeout (2s) << StartToClose (15s)
+	// so wall-clock latency to WT 2 discriminates whether heartbeat fired first.
+	_, err := poller.PollAndHandleWorkflowTask(tv,
+		func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+							ActivityId:             tv.ActivityID(),
+							ActivityType:           tv.ActivityType(),
+							TaskQueue:              tv.TaskQueue(),
+							ScheduleToCloseTimeout: durationpb.New(30 * time.Second),
+							StartToCloseTimeout:    durationpb.New(30 * time.Second),
+							HeartbeatTimeout:       durationpb.New(2 * time.Second),
+							RetryPolicy:            &commonpb.RetryPolicy{MaximumAttempts: 1},
+						},
+					},
+				}},
+			}, nil
+		})
+	s.NoError(err)
+
+	// Poll the activity so it starts. CreateNextActivityTimer emits a heartbeat
+	// ActivityTimeoutTask whose VisibilityTimestamp is converted from virtual to
+	// wall by AddTasks (mutable_state_impl.go:6851-6852). We never heartbeat or
+	// respond, so the heartbeat timer fires on its own.
+	actTask, err := s.clusters[0].FrontendClient().PollActivityTaskQueue(ctx,
+		&workflowservice.PollActivityTaskQueueRequest{
+			Namespace: ns,
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  workerIdentity,
+		})
+	s.NoError(err)
+	s.NotEmpty(actTask.GetTaskToken(), "must receive an activity task to start the activity")
+	activityStartedWall := time.Now()
+
+	// WT 2 arrives once the activity times out. With the virtual→wall conversion
+	// in place, heartbeat fires at ~2s wall and WT 2 arrives shortly after. Without
+	// the conversion, heartbeat would fire at ~2s+skip wall (≫15s), and StartToClose
+	// (15s wall) wins the race instead — which we detect via wall-clock latency.
+	_, err = poller.PollAndHandleWorkflowTask(tv,
+		func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+						CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+					},
+				}},
+			}, nil
+		})
+	s.NoError(err)
+	wt2Latency := time.Since(activityStartedWall)
+
+	// 10s is comfortably between heartbeat (~2s) and StartToClose (15s), with slack
+	// for CI scheduler/queue overhead.
+	s.Less(wt2Latency, 10*time.Second,
+		"WT 2 must arrive within ~heartbeat (2s); >10s indicates StartToClose (15s) won the race — heartbeat task visibility wasn't converted to wall under accumulated skip")
+
+	// Sanity: the activity did time out (any type), proving the timer queue advanced.
+	histResp, err := s.clusters[0].FrontendClient().GetWorkflowExecutionHistory(ctx,
+		&workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace: ns,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: runID},
+		})
+	s.NoError(err)
+	foundActivityTimeout := false
+	for _, ev := range histResp.GetHistory().GetEvents() {
+		if ev.GetActivityTaskTimedOutEventAttributes() != nil {
+			foundActivityTimeout = true
+			break
+		}
+	}
+	s.True(foundActivityTimeout, "history must contain an ActivityTaskTimedOut event")
+
+	// Replication must converge — the timeout event and skip state both make it to standby.
+	s.waitForTimeSkippingInfoSynced(ctx, nsID, wfID, runID)
 }

@@ -9819,3 +9819,15 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 	}
 	return transition, nil
 }
+
+func (ms *MutableStateImpl) ToRealTime(virtualTime time.Time) time.Time {
+	if ms.GetExecutionInfo().GetTimeSkippingInfo() == nil {
+		return virtualTime
+	}
+	tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
+	if tsi.GetAccumulatedSkippedDuration() == nil {
+		return virtualTime
+	}
+	accumulated := tsi.GetAccumulatedSkippedDuration().AsDuration()
+	return virtualTime.Add(-accumulated)
+}
