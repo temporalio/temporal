@@ -10,7 +10,7 @@ import (
 // Dynamic config settings
 var (
 	AllowedAddresses = dynamicconfig.NewNamespaceTypedSettingWithConverter(
-		"chasm.callback.allowedAddresses",
+		"callback.allowedAddresses",
 		allowedAddressConverter,
 		AddressMatchRules{},
 		`The per-namespace list of addresses that are allowed for callbacks and whether secure connections (https) are required.
