@@ -459,6 +459,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Termination(
 		false,
 		nil,
 	).Return(nil, nil)
+	msCurrent.EXPECT().GenerateActivityCancelCommandsForClose().Return(nil)
 	events := []*historypb.HistoryEvent{
 		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
 		event,
