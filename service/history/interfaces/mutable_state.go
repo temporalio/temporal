@@ -400,6 +400,10 @@ type (
 		SetSuccessorRunID(runID string)
 
 		Now() time.Time // the time of a mutable state may be ahead of the wall-clock time because of time skipping
+		// convert a virtual time set by the mutable state to the wall-clock time
+		// usually the management of time is encapsulated in the mutable state,
+		// and this method is exposed for legacy code that needs to convert virtual time to wall-clock time.
+		ToRealTime(virtualTime time.Time) time.Time
 
 		AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx context.Context, targetTime time.Time, disabledAfterBound bool) (*historypb.HistoryEvent, error)

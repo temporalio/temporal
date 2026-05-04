@@ -3998,30 +3998,30 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	tsi := ms.executionInfo.GetTimeSkippingInfo()
 
 	if tsi == nil {
-		return serviceerror.NewInternal(
-			"TimeSkippingInfo is not set when applying WorkflowExecutionTimeSkippingTransitionedEvent, mutable state is corrupted",
-		)
+		ms.logger.Error("TimeSkippingTransitionedEvent failed to apply to nil TimeSkippingInfo")
+		return serviceerror.NewInternal("TimeSkippingTransitionedEvent failed to apply")
 	}
-	if attr.TargetTime == nil && !attr.GetDisabledAfterBound() {
-		return serviceerror.NewInternal(
-			"empty WorkflowExecutionTimeSkippingTransitionedEvent found, event is corrupted",
-		)
+	if timeNotSet(attr.TargetTime) && !attr.GetDisabledAfterBound() {
+		ms.logger.Error("TimeSkippingTransitionedEvent failed to apply to nil TargetTime and not disabled after bound")
+		return serviceerror.NewInternal("TimeSkippingTransitionedEvent failed to apply")
 	}
-
 	if tsi.GetAccumulatedSkippedDuration() == nil {
 		tsi.AccumulatedSkippedDuration = durationpb.New(0)
 	}
+
 	accumulatedSkippedDuration := tsi.GetAccumulatedSkippedDuration().AsDuration()
+	var skipDelta time.Duration
 	if !timeNotSet(attr.TargetTime) {
-		accumulatedSkippedDuration += attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
+		// todo@time-skipping: add precision to the entire time-skipping feature
+		skipDelta = attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
+		accumulatedSkippedDuration += skipDelta
+		tsi.TaskRegenerationStatus = TimerRegenStatusNeeded
 	}
 	tsi.AccumulatedSkippedDuration = durationpb.New(accumulatedSkippedDuration)
 	tsi.Config.Enabled = !attr.GetDisabledAfterBound()
-
 	if attr.GetDisabledAfterBound() && tsi.GetCurrentElapsedDurationBound() != nil {
 		tsi.CurrentElapsedDurationBound.HasReached = true
 	}
-
 	ms.timeSkippingInfoUpdated = true
 	return nil
 }
@@ -8483,7 +8483,6 @@ func (ms *MutableStateImpl) closeTransactionRegenerateTimerTasksForTimeSkipping(
 ) error {
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
-		// todo@time-skipping: impacts of paused workflow to be considered
 		if !ms.IsWorkflowExecutionRunning() {
 			return nil
 		}
@@ -9011,6 +9010,8 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 		}
 	}
 
+	ms.applyIncomingTimeSkippingInfo(current, incoming)
+
 	doNotSync := func(v any) []any {
 		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
 		if !ok || info == nil {
@@ -9044,6 +9045,10 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			&info.StateMachineTimers,
 			&info.TaskGenerationShardClockTimestamp,
 			&info.UpdateInfos,
+			// TimeSkippingInfo is handled by applyIncomingTimeSkippingInfo above
+			// because TimeSkipTaskRegenEntry.TaskRegenStatus is per-cluster local state
+			// and must not be clobbered by the wire value.
+			&info.TimeSkippingInfo,
 		}
 		if !isSnapshot {
 			ignoreFields = append(ignoreFields, &info.SubStateMachineTombstoneBatches)
@@ -9058,6 +9063,27 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 	ms.ClearStickyTaskQueue()
 
 	return nil
+}
+
+// applyIncomingTimeSkippingInfo is used in state-based replication
+// and merges the incoming TimeSkippingInfo (from a replication mutation/snapshot) into current,
+// preserving each local task regen status.
+func (ms *MutableStateImpl) applyIncomingTimeSkippingInfo(
+	current *persistencespb.WorkflowExecutionInfo,
+	incoming *persistencespb.WorkflowExecutionInfo,
+) {
+	if incoming.GetTimeSkippingInfo() == nil {
+		current.TimeSkippingInfo = nil
+		return
+	}
+	newTSI := common.CloneProto(incoming.TimeSkippingInfo)
+	// only when the skippedDuration is updated, the task regen status is reset to None
+	currentSD := current.GetTimeSkippingInfo().GetAccumulatedSkippedDuration()
+	incommingSD := incoming.GetTimeSkippingInfo().GetAccumulatedSkippedDuration()
+	if incommingSD != nil && (currentSD == nil || incommingSD.AsDuration() != currentSD.AsDuration()) {
+		newTSI.TaskRegenerationStatus = TimerRegenStatusNeeded
+	}
+	current.TimeSkippingInfo = newTSI
 }
 
 func (ms *MutableStateImpl) syncSubStateMachinesByType(incoming map[string]*persistencespb.StateMachineMap) error {
@@ -9541,10 +9567,13 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 	initialSkippedDuration *durationpb.Duration,
 	currentEventID int64,
 ) {
-	ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config:                     config,
-		AccumulatedSkippedDuration: initialSkippedDuration,
+	tsi := &persistencespb.TimeSkippingInfo{
+		Config: config,
 	}
+	if initialSkippedDuration != nil && initialSkippedDuration.AsDuration() > 0 {
+		tsi.AccumulatedSkippedDuration = initialSkippedDuration
+	}
+	ms.executionInfo.TimeSkippingInfo = tsi
 	ms.wrapTimeSourceWithTimeSkipping()
 	ms.shiftWorkflowTimes(initialSkippedDuration)
 	ms.applyTimeSkippingBound(currentEventID)
@@ -9789,4 +9818,16 @@ func (ms *MutableStateImpl) calculateTimeSkippingTransition() (timeSkippingTrans
 		return timeSkippingTransition{}, serviceerror.NewInternal("unknown time skipping bound type")
 	}
 	return transition, nil
+}
+
+func (ms *MutableStateImpl) ToRealTime(virtualTime time.Time) time.Time {
+	if ms.GetExecutionInfo().GetTimeSkippingInfo() == nil {
+		return virtualTime
+	}
+	tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
+	if tsi.GetAccumulatedSkippedDuration() == nil {
+		return virtualTime
+	}
+	accumulated := tsi.GetAccumulatedSkippedDuration().AsDuration()
+	return virtualTime.Add(-accumulated)
 }

@@ -3662,6 +3662,20 @@ func (mr *MockMutableStateMockRecorder) TaskQueueScheduleToStartTimeout(name any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TaskQueueScheduleToStartTimeout", reflect.TypeOf((*MockMutableState)(nil).TaskQueueScheduleToStartTimeout), name)
 }
 
+// ToRealTime mocks base method.
+func (m *MockMutableState) ToRealTime(virtualTime time.Time) time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ToRealTime", virtualTime)
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// ToRealTime indicates an expected call of ToRealTime.
+func (mr *MockMutableStateMockRecorder) ToRealTime(virtualTime any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ToRealTime", reflect.TypeOf((*MockMutableState)(nil).ToRealTime), virtualTime)
+}
+
 // UpdateActivity mocks base method.
 func (m *MockMutableState) UpdateActivity(arg0 int64, arg1 ActivityUpdater) error {
 	m.ctrl.T.Helper()

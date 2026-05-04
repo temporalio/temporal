@@ -325,7 +325,14 @@ message TimeSkippingInfo {
   temporal.api.workflow.v1.TimeSkippingConfig config = 1;
 
   // Total skipped duration for the current workflow execution run, including any
-  ./* inherited skipped duration carried over from a preceding execution that started this run. */google.protobuf.Duration accumulated_skipped_duration = 2;
+  // inherited skipped duration carried over from a preceding execution that started this run.
+  google.protobuf.Duration accumulated_skipped_duration = 2;
+
+  // Task regeneration status is used to track the status of the task regeneration.
+  // 0: Not set
+  // 1: Need to regenerate tasks
+  // 2: All tasks regenerated
+  int32 task_regeneration_status = 4;
 
   // The current bound based on elapsed duration for time skipping.
   TimeSkippingBoundInfo current_elapsed_duration_bound = 3;
