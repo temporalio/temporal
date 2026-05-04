@@ -36,13 +36,16 @@ func (b *Batch) Query(stmt string, args ...any) {
 	b.gocqlBatch.Query(stmt, args...)
 }
 
+// WithContext mutates b in place and returns it. The caller must not retain
+// a reference to b before this call and use it concurrently afterward.
 func (b *Batch) WithContext(ctx context.Context) *Batch {
-	return newBatch(b.session, b.gocqlBatch.WithContext(ctx))
+	b.gocqlBatch = b.gocqlBatch.WithContext(ctx)
+	return b
 }
 
 func (b *Batch) WithTimestamp(timestamp int64) *Batch {
 	b.gocqlBatch.WithTimestamp(timestamp)
-	return newBatch(b.session, b.gocqlBatch)
+	return b
 }
 
 func mustConvertBatchType(batchType BatchType) gocql.BatchType {
