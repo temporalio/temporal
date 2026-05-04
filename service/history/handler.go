@@ -927,6 +927,10 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *histor
 	return resp, nil
 }
 
+func (h *Handler) GetWorkflowExecutionResult(ctx context.Context, request *historyservice.GetWorkflowExecutionResultRequest) (*historyservice.GetWorkflowExecutionResultResponse, error) {
+	return nil, nil
+}
+
 // RequestCancelWorkflowExecution - requests cancellation of a workflow
 func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *historyservice.RequestCancelWorkflowExecutionRequest) (*historyservice.RequestCancelWorkflowExecutionResponse, error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())

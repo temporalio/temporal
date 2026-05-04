@@ -48,6 +48,7 @@ const (
 	HistoryService_RecordChildExecutionCompleted_FullMethodName          = "/temporal.server.api.historyservice.v1.HistoryService/RecordChildExecutionCompleted"
 	HistoryService_VerifyChildExecutionCompletionRecorded_FullMethodName = "/temporal.server.api.historyservice.v1.HistoryService/VerifyChildExecutionCompletionRecorded"
 	HistoryService_DescribeWorkflowExecution_FullMethodName              = "/temporal.server.api.historyservice.v1.HistoryService/DescribeWorkflowExecution"
+	HistoryService_GetWorkflowExecutionResult_FullMethodName             = "/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionResult"
 	HistoryService_ReplicateEventsV2_FullMethodName                      = "/temporal.server.api.historyservice.v1.HistoryService/ReplicateEventsV2"
 	HistoryService_ReplicateWorkflowState_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/ReplicateWorkflowState"
 	HistoryService_SyncShardStatus_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/SyncShardStatus"
@@ -230,6 +231,10 @@ type HistoryServiceClient interface {
 	VerifyChildExecutionCompletionRecorded(ctx context.Context, in *VerifyChildExecutionCompletionRecordedRequest, opts ...grpc.CallOption) (*VerifyChildExecutionCompletionRecordedResponse, error)
 	// DescribeWorkflowExecution returns information about the specified workflow execution.
 	DescribeWorkflowExecution(ctx context.Context, in *DescribeWorkflowExecutionRequest, opts ...grpc.CallOption) (*DescribeWorkflowExecutionResponse, error)
+	// GetWorkflowExecutionResult returns the result of a workflow execution if completed,
+	// or the current status if still running. Optionally registers callbacks to be invoked
+	// upon completion.
+	GetWorkflowExecutionResult(ctx context.Context, in *GetWorkflowExecutionResultRequest, opts ...grpc.CallOption) (*GetWorkflowExecutionResultResponse, error)
 	// ReplicateEventsV2 replicates workflow history events
 	ReplicateEventsV2(ctx context.Context, in *ReplicateEventsV2Request, opts ...grpc.CallOption) (*ReplicateEventsV2Response, error)
 	// ReplicateWorkflowState replicates workflow state
@@ -643,6 +648,15 @@ func (c *historyServiceClient) VerifyChildExecutionCompletionRecorded(ctx contex
 func (c *historyServiceClient) DescribeWorkflowExecution(ctx context.Context, in *DescribeWorkflowExecutionRequest, opts ...grpc.CallOption) (*DescribeWorkflowExecutionResponse, error) {
 	out := new(DescribeWorkflowExecutionResponse)
 	err := c.cc.Invoke(ctx, HistoryService_DescribeWorkflowExecution_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) GetWorkflowExecutionResult(ctx context.Context, in *GetWorkflowExecutionResultRequest, opts ...grpc.CallOption) (*GetWorkflowExecutionResultResponse, error) {
+	out := new(GetWorkflowExecutionResultResponse)
+	err := c.cc.Invoke(ctx, HistoryService_GetWorkflowExecutionResult_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1235,6 +1249,10 @@ type HistoryServiceServer interface {
 	VerifyChildExecutionCompletionRecorded(context.Context, *VerifyChildExecutionCompletionRecordedRequest) (*VerifyChildExecutionCompletionRecordedResponse, error)
 	// DescribeWorkflowExecution returns information about the specified workflow execution.
 	DescribeWorkflowExecution(context.Context, *DescribeWorkflowExecutionRequest) (*DescribeWorkflowExecutionResponse, error)
+	// GetWorkflowExecutionResult returns the result of a workflow execution if completed,
+	// or the current status if still running. Optionally registers callbacks to be invoked
+	// upon completion.
+	GetWorkflowExecutionResult(context.Context, *GetWorkflowExecutionResultRequest) (*GetWorkflowExecutionResultResponse, error)
 	// ReplicateEventsV2 replicates workflow history events
 	ReplicateEventsV2(context.Context, *ReplicateEventsV2Request) (*ReplicateEventsV2Response, error)
 	// ReplicateWorkflowState replicates workflow state
@@ -1482,6 +1500,9 @@ func (UnimplementedHistoryServiceServer) VerifyChildExecutionCompletionRecorded(
 }
 func (UnimplementedHistoryServiceServer) DescribeWorkflowExecution(context.Context, *DescribeWorkflowExecutionRequest) (*DescribeWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeWorkflowExecution not implemented")
+}
+func (UnimplementedHistoryServiceServer) GetWorkflowExecutionResult(context.Context, *GetWorkflowExecutionResultRequest) (*GetWorkflowExecutionResultResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetWorkflowExecutionResult not implemented")
 }
 func (UnimplementedHistoryServiceServer) ReplicateEventsV2(context.Context, *ReplicateEventsV2Request) (*ReplicateEventsV2Response, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReplicateEventsV2 not implemented")
@@ -2140,6 +2161,24 @@ func _HistoryService_DescribeWorkflowExecution_Handler(srv interface{}, ctx cont
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HistoryServiceServer).DescribeWorkflowExecution(ctx, req.(*DescribeWorkflowExecutionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_GetWorkflowExecutionResult_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetWorkflowExecutionResultRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).GetWorkflowExecutionResult(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_GetWorkflowExecutionResult_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).GetWorkflowExecutionResult(ctx, req.(*GetWorkflowExecutionResultRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -3134,6 +3173,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DescribeWorkflowExecution",
 			Handler:    _HistoryService_DescribeWorkflowExecution_Handler,
+		},
+		{
+			MethodName: "GetWorkflowExecutionResult",
+			Handler:    _HistoryService_GetWorkflowExecutionResult_Handler,
 		},
 		{
 			MethodName: "ReplicateEventsV2",

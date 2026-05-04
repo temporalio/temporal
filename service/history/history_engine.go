@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/service/history/api/getworkflowexecutionhistoryreverse"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistory"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistoryv2"
+	"go.temporal.io/server/service/history/api/getworkflowexecutionresult"
 	"go.temporal.io/server/service/history/api/isactivitytaskvalid"
 	"go.temporal.io/server/service/history/api/isworkflowtaskvalid"
 	"go.temporal.io/server/service/history/api/listtasks"
@@ -528,6 +529,18 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		e.workflowConsistencyChecker,
 		e.persistenceVisibilityMgr,
 		e.outboundQueueCBPool,
+	)
+}
+
+func (e *historyEngineImpl) GetWorkflowExecutionResult(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionResultRequest,
+) (*historyservice.GetWorkflowExecutionResultResponse, error) {
+	return getworkflowexecutionresult.Invoke(
+		ctx,
+		request,
+		e.shardContext,
+		e.workflowConsistencyChecker,
 	)
 }
 

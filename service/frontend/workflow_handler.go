@@ -7393,3 +7393,8 @@ func (wh *WorkflowHandler) UnpauseActivityExecution(context.Context, *workflowse
 func (wh *WorkflowHandler) UpdateActivityExecutionOptions(context.Context, *workflowservice.UpdateActivityExecutionOptionsRequest) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
 	return nil, serviceerror.NewUnimplemented("UpdateActivityExecutionOptions not implemented")
 }
+
+func (wh *WorkflowHandler) GetWorkflowExecutionResult(ctx context.Context, in *workflowservice.GetWorkflowExecutionResultRequest) (_ *workflowservice.GetWorkflowExecutionResultResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+	return nil, serviceerror.NewUnimplemented("method GetWorkflowExecutionResult not yet implemented")
+}
