@@ -485,7 +485,7 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 		// can be completed through the public Nexus task APIs.
 
 		s.Run("ScheduleToStartTimeout", func(s *NexusStandaloneTestSuite) {
-			env := s.newTestEnv(testcore.WithDedicatedCluster())
+			env := s.newTestEnv()
 			taskQueue := testcore.RandomizedNexusEndpoint(s.T().Name())
 			endpointName := env.createNexusEndpoint(env.Context(), s.T(), testcore.RandomizedNexusEndpoint(s.T().Name()), taskQueue).GetSpec().GetName()
 
