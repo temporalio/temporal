@@ -11,6 +11,7 @@ import (
 const (
 	// Not much of a need to make this configurable, we're just reading some strings
 	listTaskQueueNamesByBuildIdPageSize = 100
+	maxTaskQueuesByBuildIdResults       = 10000
 
 	templateUpdateTaskQueueUserDataQuery = `UPDATE task_queue_user_data SET
 		data = ?,
@@ -172,7 +173,7 @@ func (d *userDataStore) ListTaskQueueUserDataEntries(ctx context.Context, reques
 }
 
 func (d *userDataStore) GetTaskQueuesByBuildId(ctx context.Context, request *p.GetTaskQueuesByBuildIdRequest) ([]string, error) {
-	query := d.Session.Query(templateListTaskQueueNamesByBuildIdQuery, request.NamespaceID, request.BuildID).WithContext(ctx)
+	query := d.Session.Query(templateListTaskQueueNamesByBuildIdQuery, request.NamespaceID, request.BuildID).WithContext(ctx).Idempotent(true)
 	iter := query.PageSize(listTaskQueueNamesByBuildIdPageSize).Iter()
 
 	var taskQueues []string
@@ -191,6 +192,11 @@ func (d *userDataStore) GetTaskQueuesByBuildId(ctx context.Context, request *p.G
 			}
 
 			taskQueues = append(taskQueues, taskQueue)
+
+			if len(taskQueues) >= maxTaskQueuesByBuildIdResults {
+				_ = iter.Close()
+				return taskQueues, nil
+			}
 
 			row = make(map[string]any) // Reinitialize map as initialized fails on unmarshalling
 		}

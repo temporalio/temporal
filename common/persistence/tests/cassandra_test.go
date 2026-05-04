@@ -98,6 +98,14 @@ func (q failingQuery) Iter() gocql.Iter {
 	return failingIter{}
 }
 
+func (q failingQuery) PageSize(int) gocql.Query {
+	return q
+}
+
+func (q failingQuery) PageState([]byte) gocql.Query {
+	return q
+}
+
 func (q failingQuery) Scan(...any) error {
 	return assert.AnError
 }
@@ -428,6 +436,10 @@ func testCassandraQueueV2QueryErrors(t *testing.T, cluster *cassandra.TestCluste
 		t.Parallel()
 		testCassandraQueueV2ErrListQueuesGetMaxMessageIDQuery(t, cluster)
 	})
+	t.Run("ListQueuesGetQueueNamesQuery", func(t *testing.T) {
+		t.Parallel()
+		testCassandraQueueV2ErrListQueuesGetQueueNamesQuery(t, cluster)
+	})
 	t.Run("RangeDeleteMessagesGetMaxMessageIDQuery", func(t *testing.T) {
 		t.Parallel()
 		testCassandraQueueV2ErrRangeDeleteMessagesGetMaxMessageIDQuery(t, cluster)
@@ -523,6 +535,23 @@ func testCassandraQueueV2ErrListQueuesGetMaxMessageIDQuery(t *testing.T, cluster
 	assert.ErrorAs(t, err, new(*serviceerror.Unavailable))
 	assert.ErrorContains(t, err, assert.AnError.Error())
 	assert.ErrorContains(t, err, "QueueV2GetMaxMessageID")
+}
+
+func testCassandraQueueV2ErrListQueuesGetQueueNamesQuery(t *testing.T, cluster *cassandra.TestCluster) {
+	q := newQueueV2Store(failingSession{
+		Session:        cluster.GetSession(),
+		failingQueries: []string{cassandra.TemplateGetQueueNamesQuery},
+	})
+	ctx := context.Background()
+	queueType := persistence.QueueTypeHistoryDLQ
+	_, err := q.ListQueues(ctx, &persistence.InternalListQueuesRequest{
+		QueueType: queueType,
+		PageSize:  100,
+	})
+	require.Error(t, err)
+	assert.ErrorAs(t, err, new(*serviceerror.Unavailable))
+	assert.ErrorContains(t, err, assert.AnError.Error())
+	assert.ErrorContains(t, err, "QueueV2ListQueues")
 }
 
 func testCassandraQueueV2MultiplePartitions(t *testing.T, cluster *cassandra.TestCluster) {
