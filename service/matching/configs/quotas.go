@@ -6,11 +6,6 @@ import (
 	"go.temporal.io/server/common/quotas"
 )
 
-const (
-	// OperatorPriority is used to give precedence to calls coming from web UI or tctl
-	OperatorPriority = 0
-)
-
 var (
 	APIToPriority = map[string]int{
 		"/temporal.server.api.matchingservice.v1.MatchingService/AddActivityTask":                        1,
@@ -56,36 +51,54 @@ var (
 	}
 
 	APIPrioritiesOrdered = []int{0, 1, 2}
+
+	PollTaskAPISet = map[string]struct{}{
+		"/temporal.server.api.matchingservice.v1.MatchingService/PollActivityTaskQueue": {},
+		"/temporal.server.api.matchingservice.v1.MatchingService/PollWorkflowTaskQueue": {},
+		"/temporal.server.api.matchingservice.v1.MatchingService/PollNexusTaskQueue":    {},
+	}
 )
 
 func NewPriorityRateLimiter(
 	rateFn quotas.RateFn,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RequestRateLimiter)
-	for priority := range APIPrioritiesOrdered {
-		if priority == OperatorPriority {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(operatorRateFn(rateFn, operatorRPSRatio)))
-		} else {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(rateFn))
-		}
-	}
-	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
-		if req.CallerType == headers.CallerTypeOperator {
-			return OperatorPriority
-		}
-		if priority, ok := APIToPriority[req.API]; ok {
-			return priority
-		}
-		return APIPrioritiesOrdered[len(APIPrioritiesOrdered)-1]
-	}, rateLimiters)
+	return quotas.NewPriorityRateLimiterHelper(
+		quotas.NewDefaultIncomingRateBurst(rateFn),
+		operatorRPSRatio,
+		RequestToPriority,
+		APIPrioritiesOrdered,
+	)
 }
 
-func operatorRateFn(
-	rateFn quotas.RateFn,
+func NewNamespaceRateLimiter(
+	namespaceRateFn quotas.NamespaceRateFn,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
-) quotas.RateFn {
-	return func() float64 {
-		return operatorRPSRatio() * rateFn()
+) quotas.RequestRateLimiter {
+	return quotas.NewNamespaceRequestRateLimiter(
+		func(req quotas.Request) quotas.RequestRateLimiter {
+			return quotas.NewPriorityRateLimiterHelper(
+				quotas.NewNamespaceRateBurst(
+					req.Caller,
+					namespaceRateFn,
+					// TODO: We can consider adding a separate burst ratio dynamic config
+					// on namespace level rate limiter if needed.
+					quotas.DefaultIncomingNamespaceBurstRatioFn,
+				),
+				operatorRPSRatio,
+				RequestToPriority,
+				APIPrioritiesOrdered,
+			)
+		},
+	)
+}
+
+func RequestToPriority(req quotas.Request) int {
+	if req.CallerType == headers.CallerTypeOperator {
+		return quotas.OperatorPriority
 	}
+	if priority, ok := APIToPriority[req.API]; ok {
+		return priority
+	}
+	return APIPrioritiesOrdered[len(APIPrioritiesOrdered)-1]
 }
