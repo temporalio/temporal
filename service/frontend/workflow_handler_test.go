@@ -38,6 +38,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -208,7 +209,16 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		scheduler.NewSpecBuilder(),
 		true,
 		nil, // Not testing activity handler here
-		nil,
+		nexusoperation.NewFrontendHandler(
+			nil,
+			nil,
+			s.mockResource.GetLogger(),
+			s.mockResource.GetNamespaceRegistry(),
+			nil,
+			s.mockResource.GetSearchAttributesMapperProvider(),
+			nil,
+		),
+		nil, // Not testing CHASM registry here
 		quotas.NoopRequestRateLimiter,
 	)
 }
@@ -1594,6 +1604,91 @@ func (s *WorkflowHandlerSuite) TestDescribeNamespace_Success_ArchivalEnabled() {
 	s.Equal(testHistoryArchivalURI, result.Config.GetHistoryArchivalUri())
 	s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, result.Config.GetVisibilityArchivalState())
 	s.Equal(testVisibilityArchivalURI, result.Config.GetVisibilityArchivalUri())
+}
+
+func (s *WorkflowHandlerSuite) TestDescribeNamespace_WeakConsistency_ByName() {
+	ns := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: testNamespaceID, Name: "test-namespace"},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		cluster.TestCurrentClusterName,
+	)
+	s.mockNamespaceCache.EXPECT().
+		GetNamespaceWithOptions(namespace.Name("test-namespace"), namespace.GetNamespaceOptions{DisableReadthrough: true}).
+		Return(ns, nil)
+
+	wh := s.getWorkflowHandler(s.newConfig())
+	result, err := wh.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Namespace:       "test-namespace",
+		WeakConsistency: true,
+	})
+
+	s.NoError(err)
+	s.NotNil(result)
+	s.Equal("test-namespace", result.NamespaceInfo.Name)
+	s.Equal(testNamespaceID, result.NamespaceInfo.Id)
+}
+
+func (s *WorkflowHandlerSuite) TestDescribeNamespace_WeakConsistency_ByID() {
+	ns := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: testNamespaceID, Name: "test-namespace"},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		cluster.TestCurrentClusterName,
+	)
+	s.mockNamespaceCache.EXPECT().
+		GetNamespaceByIDWithOptions(namespace.ID(testNamespaceID), namespace.GetNamespaceOptions{DisableReadthrough: true}).
+		Return(ns, nil)
+
+	wh := s.getWorkflowHandler(s.newConfig())
+	result, err := wh.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Id:              testNamespaceID,
+		WeakConsistency: true,
+	})
+
+	s.NoError(err)
+	s.NotNil(result)
+	s.Equal(testNamespaceID, result.NamespaceInfo.Id)
+}
+
+func (s *WorkflowHandlerSuite) TestDescribeNamespace_WeakConsistency_CacheMiss() {
+	notFound := serviceerror.NewNamespaceNotFound("missing")
+	s.mockNamespaceCache.EXPECT().
+		GetNamespaceWithOptions(namespace.Name("missing"), namespace.GetNamespaceOptions{DisableReadthrough: true}).
+		Return(nil, notFound)
+
+	wh := s.getWorkflowHandler(s.newConfig())
+	result, err := wh.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Namespace:       "missing",
+		WeakConsistency: true,
+	})
+
+	s.Error(err)
+	s.Nil(result)
+	var nsNotFound *serviceerror.NamespaceNotFound
+	s.ErrorAs(err, &nsNotFound)
+}
+
+func (s *WorkflowHandlerSuite) TestDescribeNamespace_WeakConsistency_NameAndIDNotSet() {
+	wh := s.getWorkflowHandler(s.newConfig())
+	result, err := wh.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		WeakConsistency: true,
+	})
+
+	s.Equal(errNamespaceNotSet, err)
+	s.Nil(result)
+}
+
+func (s *WorkflowHandlerSuite) TestDescribeNamespace_WeakConsistency_BothNameAndIDSet() {
+	wh := s.getWorkflowHandler(s.newConfig())
+	result, err := wh.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Namespace:       "test-namespace",
+		Id:              testNamespaceID,
+		WeakConsistency: true,
+	})
+
+	s.Error(err)
+	s.Nil(result)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
 }
 
 func (s *WorkflowHandlerSuite) TestUpdateNamespace_Failure_UpdateExistingArchivalURI() {
@@ -3286,17 +3381,6 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 		Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(namespace.MinTimeSkippingDuration)},
 	}, s.testNamespace))
 
-	// MaxTargetTime less than 1 minute from now is rejected
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxTargetTime{MaxTargetTime: timestamppb.New(time.Now().Add(halfMinDuration))},
-	}, s.testNamespace), &invalidArgumentErr)
-
-	// MaxTargetTime well beyond 1 minute from now is valid
-	s.Require().NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxTargetTime{MaxTargetTime: timestamppb.New(time.Now().Add(2 * namespace.MinTimeSkippingDuration))},
-	}, s.testNamespace))
 }
 
 // TestExecuteMultiOperation_TimeSkipping_DCDisabled verifies that when the DC gate is off,

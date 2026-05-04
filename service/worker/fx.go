@@ -85,16 +85,19 @@ var Module = fx.Options(
 		clusterMetadata cluster.Metadata,
 		metadataManager persistence.MetadataManager,
 		dataMerger nsreplication.NamespaceDataMerger,
+		admitter nsreplication.NamespaceReplicationAdmitter,
 		logger log.Logger,
 	) nsreplication.TaskExecutor {
 		return nsreplication.NewTaskExecutor(
 			clusterMetadata.GetCurrentClusterName(),
 			metadataManager,
 			dataMerger,
+			admitter,
 			logger,
 		)
 	}),
 	fx.Provide(nsreplication.NewNoopDataMerger),
+	fx.Provide(nsreplication.NewDefaultAdmitter),
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(fx.Annotate(NewWorkerManager, fx.ParamTags(workercommon.WorkerComponentTag))),

@@ -179,6 +179,10 @@ func (ns *Namespace) State() enumspb.NamespaceState {
 	return ns.info.State
 }
 
+func (ns *Namespace) ReplicationResolver() ReplicationResolver {
+	return ns.replicationResolver
+}
+
 func (ns *Namespace) ReplicationState(businessID string) enumspb.ReplicationState {
 	return ns.replicationResolver.ReplicationState(businessID)
 }
@@ -225,6 +229,24 @@ func (ns *Namespace) IsGlobalNamespace() bool {
 // FailoverNotificationVersion return the global notification version of when failover happened
 func (ns *Namespace) FailoverNotificationVersion() int64 {
 	return ns.replicationResolver.FailoverNotificationVersion()
+}
+
+// Info returns the underlying NamespaceInfo proto. The returned value is the registry's own
+// copy and must not be mutated.
+func (ns *Namespace) Info() *persistencespb.NamespaceInfo {
+	return ns.info
+}
+
+// Config returns the underlying NamespaceConfig proto. The returned value is the registry's own
+// copy and must not be mutated.
+func (ns *Namespace) Config() *persistencespb.NamespaceConfig {
+	return ns.config
+}
+
+// ReplicationConfig returns the underlying NamespaceReplicationConfig proto. The returned value
+// is the registry's own copy and must not be mutated.
+func (ns *Namespace) ReplicationConfig() *persistencespb.NamespaceReplicationConfig {
+	return ns.replicationResolver.ReplicationConfig()
 }
 
 // NotificationVersion return the global notification version of when namespace changed

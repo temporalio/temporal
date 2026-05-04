@@ -422,9 +422,18 @@ type ChasmTaskInfo struct {
 	Data *v1.DataBlob `protobuf:"bytes,5,opt,name=data,proto3" json:"data,omitempty"`
 	// ArchetypeID of the execution that generated this task.
 	// (-- api-linter: core::0141::forbidden-types=disabled --)
-	ArchetypeId   uint32 `protobuf:"varint,6,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ArchetypeId uint32 `protobuf:"varint,6,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
+	// Versioned transition of the execution when the logical task was created.
+	// Together with task_versioned_transition_offset, uniquely identifies the
+	// corresponding logical task in ChasmComponentAttributes.side_effect_tasks.
+	// Used to verify the logical task still exists before executing the physical task.
+	TaskVersionedTransition *VersionedTransition `protobuf:"bytes,7,opt,name=task_versioned_transition,json=taskVersionedTransition,proto3" json:"task_versioned_transition,omitempty"`
+	// The xth task generated in the versioned transition identified by
+	// task_versioned_transition. Together with task_versioned_transition,
+	// forms a unique identifier for the logical task.
+	TaskVersionedTransitionOffset int64 `protobuf:"varint,8,opt,name=task_versioned_transition_offset,json=taskVersionedTransitionOffset,proto3" json:"task_versioned_transition_offset,omitempty"`
+	unknownFields                 protoimpl.UnknownFields
+	sizeCache                     protoimpl.SizeCache
 }
 
 func (x *ChasmTaskInfo) Reset() {
@@ -495,6 +504,20 @@ func (x *ChasmTaskInfo) GetData() *v1.DataBlob {
 func (x *ChasmTaskInfo) GetArchetypeId() uint32 {
 	if x != nil {
 		return x.ArchetypeId
+	}
+	return 0
+}
+
+func (x *ChasmTaskInfo) GetTaskVersionedTransition() *VersionedTransition {
+	if x != nil {
+		return x.TaskVersionedTransition
+	}
+	return nil
+}
+
+func (x *ChasmTaskInfo) GetTaskVersionedTransitionOffset() int64 {
+	if x != nil {
+		return x.TaskVersionedTransitionOffset
 	}
 	return 0
 }
@@ -608,7 +631,11 @@ type ChasmNexusCompletion struct {
 	// Allows completing a started operation after a workflow has been reset.
 	RequestId string `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	// Links from the Nexus completion callback (e.g. references to the handler workflow).
-	Links         []*v1.Link `protobuf:"bytes,5,rep,name=links,proto3" json:"links,omitempty"`
+	Links []*v1.Link `protobuf:"bytes,5,rep,name=links,proto3" json:"links,omitempty"`
+	// Async operation token from the callback request, used for completion-before-start.
+	OperationToken string `protobuf:"bytes,6,opt,name=operation_token,json=operationToken,proto3" json:"operation_token,omitempty"`
+	// Start time from the callback request, used for completion-before-start.
+	StartTime     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -685,6 +712,20 @@ func (x *ChasmNexusCompletion) GetRequestId() string {
 func (x *ChasmNexusCompletion) GetLinks() []*v1.Link {
 	if x != nil {
 		return x.Links
+	}
+	return nil
+}
+
+func (x *ChasmNexusCompletion) GetOperationToken() string {
+	if x != nil {
+		return x.OperationToken
+	}
+	return ""
+}
+
+func (x *ChasmNexusCompletion) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
 	}
 	return nil
 }
@@ -842,14 +883,16 @@ const file_temporal_server_api_persistence_v1_chasm_proto_rawDesc = "" +
 	"\x13ChasmDataAttributes\"\x1b\n" +
 	"\x19ChasmCollectionAttributes\"5\n" +
 	"\x16ChasmPointerAttributes\x12\x1b\n" +
-	"\tnode_path\x18\x01 \x03(\tR\bnodePath\"\xba\x03\n" +
+	"\tnode_path\x18\x01 \x03(\tR\bnodePath\"\xf8\x04\n" +
 	"\rChasmTaskInfo\x12\x8c\x01\n" +
 	"&component_initial_versioned_transition\x18\x01 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR#componentInitialVersionedTransition\x12\x93\x01\n" +
 	"*component_last_update_versioned_transition\x18\x02 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR&componentLastUpdateVersionedTransition\x12\x12\n" +
 	"\x04path\x18\x03 \x03(\tR\x04path\x12\x17\n" +
 	"\atype_id\x18\x04 \x01(\rR\x06typeId\x124\n" +
 	"\x04data\x18\x05 \x01(\v2 .temporal.api.common.v1.DataBlobR\x04data\x12!\n" +
-	"\farchetype_id\x18\x06 \x01(\rR\varchetypeId\"\xc6\x03\n" +
+	"\farchetype_id\x18\x06 \x01(\rR\varchetypeId\x12s\n" +
+	"\x19task_versioned_transition\x18\a \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x17taskVersionedTransition\x12G\n" +
+	" task_versioned_transition_offset\x18\b \x01(\x03R\x1dtaskVersionedTransitionOffset\"\xc6\x03\n" +
 	"\x11ChasmComponentRef\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vbusiness_id\x18\x02 \x01(\tR\n" +
@@ -858,7 +901,7 @@ const file_temporal_server_api_persistence_v1_chasm_proto_rawDesc = "" +
 	"\farchetype_id\x18\x04 \x01(\rR\varchetypeId\x12}\n" +
 	"\x1eexecution_versioned_transition\x18\x05 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x1cexecutionVersionedTransition\x12%\n" +
 	"\x0ecomponent_path\x18\x06 \x03(\tR\rcomponentPath\x12\x8c\x01\n" +
-	"&component_initial_versioned_transition\x18\a \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR#componentInitialVersionedTransition\"\xaa\x02\n" +
+	"&component_initial_versioned_transition\x18\a \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR#componentInitialVersionedTransition\"\x8e\x03\n" +
 	"\x14ChasmNexusCompletion\x12;\n" +
 	"\asuccess\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadH\x00R\asuccess\x12<\n" +
 	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureH\x00R\afailure\x129\n" +
@@ -866,7 +909,10 @@ const file_temporal_server_api_persistence_v1_chasm_proto_rawDesc = "" +
 	"close_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x04 \x01(\tR\trequestId\x122\n" +
-	"\x05links\x18\x05 \x03(\v2\x1c.temporal.api.common.v1.LinkR\x05linksB\t\n" +
+	"\x05links\x18\x05 \x03(\v2\x1c.temporal.api.common.v1.LinkR\x05links\x12'\n" +
+	"\x0foperation_token\x18\x06 \x01(\tR\x0eoperationToken\x129\n" +
+	"\n" +
+	"start_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tstartTimeB\t\n" +
 	"\aoutcomeB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
 
 var (
@@ -914,20 +960,22 @@ var file_temporal_server_api_persistence_v1_chasm_proto_depIdxs = []int32{
 	11, // 10: temporal.server.api.persistence.v1.ChasmTaskInfo.component_initial_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
 	11, // 11: temporal.server.api.persistence.v1.ChasmTaskInfo.component_last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
 	10, // 12: temporal.server.api.persistence.v1.ChasmTaskInfo.data:type_name -> temporal.api.common.v1.DataBlob
-	11, // 13: temporal.server.api.persistence.v1.ChasmComponentRef.execution_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	11, // 14: temporal.server.api.persistence.v1.ChasmComponentRef.component_initial_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	12, // 15: temporal.server.api.persistence.v1.ChasmNexusCompletion.success:type_name -> temporal.api.common.v1.Payload
-	13, // 16: temporal.server.api.persistence.v1.ChasmNexusCompletion.failure:type_name -> temporal.api.failure.v1.Failure
-	14, // 17: temporal.server.api.persistence.v1.ChasmNexusCompletion.close_time:type_name -> google.protobuf.Timestamp
-	15, // 18: temporal.server.api.persistence.v1.ChasmNexusCompletion.links:type_name -> temporal.api.common.v1.Link
-	14, // 19: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task.scheduled_time:type_name -> google.protobuf.Timestamp
-	10, // 20: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task.data:type_name -> temporal.api.common.v1.DataBlob
-	11, // 21: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	22, // [22:22] is the sub-list for method output_type
-	22, // [22:22] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	11, // 13: temporal.server.api.persistence.v1.ChasmTaskInfo.task_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	11, // 14: temporal.server.api.persistence.v1.ChasmComponentRef.execution_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	11, // 15: temporal.server.api.persistence.v1.ChasmComponentRef.component_initial_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	12, // 16: temporal.server.api.persistence.v1.ChasmNexusCompletion.success:type_name -> temporal.api.common.v1.Payload
+	13, // 17: temporal.server.api.persistence.v1.ChasmNexusCompletion.failure:type_name -> temporal.api.failure.v1.Failure
+	14, // 18: temporal.server.api.persistence.v1.ChasmNexusCompletion.close_time:type_name -> google.protobuf.Timestamp
+	15, // 19: temporal.server.api.persistence.v1.ChasmNexusCompletion.links:type_name -> temporal.api.common.v1.Link
+	14, // 20: temporal.server.api.persistence.v1.ChasmNexusCompletion.start_time:type_name -> google.protobuf.Timestamp
+	14, // 21: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task.scheduled_time:type_name -> google.protobuf.Timestamp
+	10, // 22: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task.data:type_name -> temporal.api.common.v1.DataBlob
+	11, // 23: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	24, // [24:24] is the sub-list for method output_type
+	24, // [24:24] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_persistence_v1_chasm_proto_init() }

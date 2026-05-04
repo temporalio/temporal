@@ -228,6 +228,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestIsValidExecutionTimeoutTask() {
 				FirstExecutionRunId: mutableStateFirstRunID,
 			}).AnyTimes()
 			mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(tc.workflowRunning).AnyTimes()
+			mockMutableState.EXPECT().Now().Return(s.testShardContext.GetTimeSource().Now()).AnyTimes()
 
 			isValid := s.timerQueueTaskExecutorBase.isValidWorkflowExecutionTimeoutTask(mockMutableState, timerTask)
 			s.Equal(tc.isValid, isValid)
@@ -249,6 +250,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestIsValidExecutionTimeouts() {
 	}
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	mockMutableState.EXPECT().Now().Return(timeNow).AnyTimes()
 
 	testCases := []struct {
 		name           string

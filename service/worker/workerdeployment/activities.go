@@ -285,7 +285,7 @@ func (a *Activities) UpdateWorkerControllerInstanceFromDeployment(ctx context.Co
 	if err != nil {
 		var invalidArgs *serviceerror.InvalidArgument
 		if errors.As(err, &invalidArgs) {
-			return nil, temporal.NewApplicationError(err.Error(), errInvalidComputeConfig)
+			return nil, temporal.NewNonRetryableApplicationError(err.Error(), errInvalidComputeConfig, nil)
 		}
 		return nil, err
 	}

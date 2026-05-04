@@ -115,11 +115,13 @@ func (d *DynamicRateLimiterImpl) WaitN(ctx context.Context, numToken int) error 
 
 // Rate returns the rate per second for this rate limiter
 func (d *DynamicRateLimiterImpl) Rate() float64 {
+	d.maybeRefresh()
 	return d.rateLimiter.Rate()
 }
 
 // Burst returns the burst for this rate limiter
 func (d *DynamicRateLimiterImpl) Burst() int {
+	d.maybeRefresh()
 	return d.rateLimiter.Burst()
 }
 

@@ -30,39 +30,34 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type noopVersionMembershipCache struct{}
+type noopVersionCache struct{}
 
-func (noopVersionMembershipCache) Get(
+func (noopVersionCache) Get(
 	_ string,
 	_ string,
 	_ enumspb.TaskQueueType,
 	_ string,
 	_ string,
-) (isMember bool, ok bool) {
-	return false, false
+) (isMember bool, shouldSkipReactivation bool, revisionNumber int64, ok bool) {
+	return false, false, 0, false
 }
 
-func (noopVersionMembershipCache) Put(
+func (noopVersionCache) Put(
 	_ string,
 	_ string,
 	_ enumspb.TaskQueueType,
 	_ string,
 	_ string,
 	_ bool,
+	_ bool,
+	_ int64,
 ) {
 }
 
-type noopReactivationSignalCache struct{}
-
-func (noopReactivationSignalCache) ShouldSendSignal(_, _, _ string) bool {
-	return false // Always return false to skip sending signals in tests
-}
-
 // noopReactivationSignaler is a no-op signaler function for tests
-func noopReactivationSignaler(_ context.Context, _ *namespace.Namespace, _, _ string) error {
+func noopReactivationSignaler(_ context.Context, _ *namespace.Namespace, _, _ string, _ int64) error {
 	return nil
 }
 
@@ -330,9 +325,8 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 		s.shardContext,
 		s.workflowConsistencyChecker,
 		s.mockMatchingClient,
-		noopVersionMembershipCache{},  // cache not meant to be used in this test
-		noopReactivationSignalCache{}, // cache not meant to be used in this test
-		noopReactivationSignaler,      // signaler not meant to be used in this test
+		noopVersionCache{},       // cache not meant to be used in this test
+		noopReactivationSignaler, // signaler not meant to be used in this test
 	)
 	s.NoError(err)
 	s.NotNil(resp)
@@ -343,7 +337,6 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 	oneHour := durationpb.New(time.Hour)
 	twoHours := durationpb.New(2 * time.Hour)
 	thirtyMin := durationpb.New(30 * time.Minute)
-	targetTime := timestamppb.New(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 
 	testCases := []struct {
 		name           string
@@ -353,10 +346,9 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 		expectedConfig *workflowpb.TimeSkippingConfig
 	}{
 		{
-			name: "update max_skipped_duration preserves enabled and disable_propagation",
+			name: "update max_skipped_duration preserves enabled",
 			initialConfig: &workflowpb.TimeSkippingConfig{
-				Enabled:            true,
-				DisablePropagation: true,
+				Enabled: true,
 				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
 					MaxSkippedDuration: oneHour,
 				},
@@ -370,8 +362,7 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 			},
 			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_skipped_duration"}},
 			expectedConfig: &workflowpb.TimeSkippingConfig{
-				Enabled:            true,
-				DisablePropagation: true,
+				Enabled: true,
 				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
 					MaxSkippedDuration: twoHours,
 				},
@@ -417,29 +408,6 @@ func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
 			},
 			updateMask:     &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.enabled"}},
 			expectedConfig: &workflowpb.TimeSkippingConfig{Enabled: false},
-		},
-		{
-			name: "change bound type to max_target_time preserves enabled",
-			initialConfig: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-					MaxSkippedDuration: oneHour,
-				},
-			},
-			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
-					Bound: &workflowpb.TimeSkippingConfig_MaxTargetTime{
-						MaxTargetTime: targetTime,
-					},
-				},
-			},
-			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_target_time"}},
-			expectedConfig: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound: &workflowpb.TimeSkippingConfig_MaxTargetTime{
-					MaxTargetTime: targetTime,
-				},
-			},
 		},
 	}
 
