@@ -1117,6 +1117,18 @@ message ForceDeleteWorkflowExecutionResponse {
   temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse response = 1;
 }
 
+message DeleteExecutionRequest {
+  option (routing).workflow_id = "execution.workflow_id";
+
+  string namespace_id = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+  // (-- api-linter: core::0141::forbidden-types=disabled --)
+  uint32 archetype_id = 3;
+  string reason = 4;
+}
+
+message DeleteExecutionResponse {}
+
 message GetDLQTasksRequest {
   option (routing).any_host = true;
 
