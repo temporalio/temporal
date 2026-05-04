@@ -561,6 +561,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		false,
 		nil,
 	).Return(&historypb.HistoryEvent{}, nil)
+	mutableState.EXPECT().GenerateActivityCancelCommandsForClose().Return(nil)
 
 	err := s.workflowResetter.terminateWorkflow(mutableState, terminateReason)
 	s.NoError(err)
@@ -1255,6 +1256,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 							false,
 							event.Links,
 						).Return(&historypb.HistoryEvent{}, nil)
+						ms.EXPECT().GenerateActivityCancelCommandsForClose().Return(nil)
 					}
 				}
 			}

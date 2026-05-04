@@ -7285,3 +7285,161 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSk
 		})
 	}
 }
+
+func TestGenerateActivityCancelCommandsForClose(t *testing.T) {
+	t.Parallel()
+
+	startedClock := &clockspb.VectorClock{ShardId: 1, Clock: 100}
+
+	testCases := []struct {
+		name            string
+		featureEnabled  bool
+		activities      map[int64]*persistencespb.ActivityInfo
+		expectedQueues  map[string]int // controlQueue -> expected command count
+		expectedNoTasks bool
+	}{
+		{
+			name:           "activities with control queue and started clock",
+			featureEnabled: true,
+			activities: map[int64]*persistencespb.ActivityInfo{
+				1: {
+					ScheduledEventId:       1,
+					ActivityId:             "act-1",
+					ActivityType:           &commonpb.ActivityType{Name: "type1"},
+					WorkerControlTaskQueue: "control-queue-1",
+					StartedClock:           startedClock,
+					Attempt:                1,
+				},
+			},
+			expectedQueues: map[string]int{"control-queue-1": 1},
+		},
+		{
+			name:           "skips activities without control queue",
+			featureEnabled: true,
+			activities: map[int64]*persistencespb.ActivityInfo{
+				1: {
+					ScheduledEventId: 1,
+					ActivityId:       "act-1",
+					ActivityType:     &commonpb.ActivityType{Name: "type1"},
+					StartedClock:     startedClock,
+					Attempt:          1,
+				},
+			},
+			expectedNoTasks: true,
+		},
+		{
+			name:           "skips activities without started clock",
+			featureEnabled: true,
+			activities: map[int64]*persistencespb.ActivityInfo{
+				1: {
+					ScheduledEventId:       1,
+					ActivityId:             "act-1",
+					ActivityType:           &commonpb.ActivityType{Name: "type1"},
+					WorkerControlTaskQueue: "control-queue-1",
+					Attempt:                1,
+				},
+			},
+			expectedNoTasks: true,
+		},
+		{
+			name:           "multiple activities batched by control queue",
+			featureEnabled: true,
+			activities: map[int64]*persistencespb.ActivityInfo{
+				1: {
+					ScheduledEventId:       1,
+					ActivityId:             "act-1",
+					ActivityType:           &commonpb.ActivityType{Name: "type1"},
+					WorkerControlTaskQueue: "queue-A",
+					StartedClock:           startedClock,
+					Attempt:                1,
+				},
+				2: {
+					ScheduledEventId:       2,
+					ActivityId:             "act-2",
+					ActivityType:           &commonpb.ActivityType{Name: "type2"},
+					WorkerControlTaskQueue: "queue-A",
+					StartedClock:           startedClock,
+					Attempt:                1,
+				},
+				3: {
+					ScheduledEventId:       3,
+					ActivityId:             "act-3",
+					ActivityType:           &commonpb.ActivityType{Name: "type3"},
+					WorkerControlTaskQueue: "queue-B",
+					StartedClock:           startedClock,
+					Attempt:                1,
+				},
+			},
+			expectedQueues: map[string]int{"queue-A": 2, "queue-B": 1},
+		},
+		{
+			name:           "feature flag disabled - no tasks generated",
+			featureEnabled: false,
+			activities: map[int64]*persistencespb.ActivityInfo{
+				1: {
+					ScheduledEventId:       1,
+					ActivityId:             "act-1",
+					ActivityType:           &commonpb.ActivityType{Name: "type1"},
+					WorkerControlTaskQueue: "control-queue-1",
+					StartedClock:           startedClock,
+					Attempt:                1,
+				},
+			},
+			expectedNoTasks: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			mockEventsCache := events.NewMockCache(ctrl)
+			mockConfig := tests.NewDynamicConfig()
+			mockConfig.EnableCancelActivityWorkerCommand = dynamicconfig.GetBoolPropertyFn(tc.featureEnabled)
+
+			mockShard := shard.NewTestContext(
+				ctrl,
+				&persistencespb.ShardInfo{ShardId: 0, RangeId: 1},
+				mockConfig,
+			)
+			defer mockShard.StopForTest()
+			reg := hsm.NewRegistry()
+			require.NoError(t, RegisterStateMachine(reg))
+			require.NoError(t, callbacks.RegisterStateMachine(reg))
+			require.NoError(t, nexusoperations.RegisterStateMachines(reg))
+			mockShard.SetStateMachineRegistry(reg)
+			mockShard.SetEventsCacheForTesting(mockEventsCache)
+
+			namespaceEntry := tests.GlobalNamespaceEntry
+			mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespaceEntry, nil).AnyTimes()
+			mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(gomock.Any(), gomock.Any()).Return(cluster.TestCurrentClusterName).AnyTimes()
+			mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+			mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
+
+			ms := NewMutableState(mockShard, mockEventsCache, log.NewTestLogger(), namespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
+			ms.pendingActivityInfoIDs = tc.activities
+
+			err := ms.GenerateActivityCancelCommandsForClose()
+			require.NoError(t, err)
+
+			if tc.expectedNoTasks {
+				require.Empty(t, ms.InsertTasks[tasks.CategoryOutbound])
+				return
+			}
+
+			// Verify tasks were generated by checking outbound task messages
+			var workerCommandTasks []*tasks.WorkerCommandsTask
+			for _, task := range ms.InsertTasks[tasks.CategoryOutbound] {
+				if wct, ok := task.(*tasks.WorkerCommandsTask); ok {
+					workerCommandTasks = append(workerCommandTasks, wct)
+				}
+			}
+
+			// Verify each expected queue got the right number of commands
+			tasksByQueue := make(map[string]int)
+			for _, wct := range workerCommandTasks {
+				tasksByQueue[wct.Destination] = len(wct.Commands)
+			}
+			require.Equal(t, tc.expectedQueues, tasksByQueue)
+		})
+	}
+}
