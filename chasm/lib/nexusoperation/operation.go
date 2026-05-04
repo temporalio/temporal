@@ -127,7 +127,6 @@ func newStandaloneOperation(
 		UserMetadata: frontendReq.GetUserMetadata(),
 		Identity:     frontendReq.GetIdentity(),
 	})
-	op.Outcome = chasm.NewDataField(ctx, &nexusoperationpb.OperationOutcome{})
 	op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibilityWithData(
 		ctx,
 		frontendReq.GetSearchAttributes().GetIndexedFields(),
