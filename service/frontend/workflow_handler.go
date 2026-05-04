@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
@@ -52,6 +53,7 @@ import (
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
+	internalhealth "go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -147,6 +149,7 @@ type (
 		saValidator                     *searchattribute.Validator
 		archivalMetadata                archiver.ArchivalMetadata
 		healthServer                    *health.Server
+		internalHealthState             healthCounters
 		overrides                       *Overrides
 		membershipMonitor               membership.Monitor
 		healthInterceptor               *interceptor.HealthInterceptor
@@ -156,7 +159,58 @@ type (
 		registry                        *chasm.Registry
 		workerDeploymentReadRateLimiter quotas.RequestRateLimiter
 	}
+	// Counters for health monitoring.
+	healthCounters struct {
+		mu sync.Mutex
+		// heartbeatTime is updated periodically
+		heartbeatTime time.Time
+		// creationTime is set when NewWorkflowHandler got called
+		creationTime time.Time
+		// handlerStartTime is set from WorkflowHandler.Start() after
+		// it successfully starts the worker and joins RingPop membership
+		handlerStartTime time.Time
+	}
 )
+
+// CheckHealth implements health.Checkable for health.HostHealthAggregator
+func (wh *WorkflowHandler) CheckHealth() []internalhealth.HealthCheck {
+	checks := make([]internalhealth.HealthCheck, 10)
+	whState := internalhealth.HealthCheck{
+		CheckName: "handler-state",
+		State:     enumsspb.HEALTH_STATE_SERVING,
+	}
+	handlerState := atomic.LoadInt32(&wh.status)
+	switch handlerState {
+	case common.DaemonStatusInitialized:
+		// "DaemonStatusInitialized" is a bit of a misnomer: That's the 0-value,
+		// meaning we have no information on whether the daemon is initialized.
+		// We do know it's not started, though.
+		whState.Message = "Daemon not yet started!"
+	case common.DaemonStatusStarted:
+		whState.Message = "Daemon started"
+	case common.DaemonStatusStopped:
+		whState.Message = "Daemon stopped"
+	default:
+		whState.State = enumsspb.HEALTH_STATE_INTERNAL_ERROR
+		whState.Message = fmt.Sprintf("unknown status %v", handlerState)
+	}
+	checks = append(checks, whState)
+	if handlerState == common.DaemonStatusInitialized {
+		initializeTimeCheck := internalhealth.HealthCheck{
+			CheckName: "initialization-delay",
+			Value:     time.Since(wh.internalHealthState.creationTime).Seconds(),
+			Threshold: (5 * time.Second).Seconds(),
+			State:     enumsspb.HEALTH_STATE_SERVING,
+			Message:   "Initialization delay",
+		}
+		if initializeTimeCheck.Value > initializeTimeCheck.Threshold {
+			initializeTimeCheck.State = enumsspb.HEALTH_STATE_SERVING
+			initializeTimeCheck.Message = "Exceeded limit on initialization time!"
+		}
+		checks = append(checks, initializeTimeCheck)
+	}
+	return checks
+}
 
 func (wh *WorkflowHandler) CreateWorkerDeploymentVersion(
 	ctx context.Context,
