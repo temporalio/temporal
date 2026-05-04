@@ -1,6 +1,7 @@
 package workers
 
 import (
+	commonpb "go.temporal.io/api/common/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/common/namespace"
 )
@@ -21,7 +22,7 @@ type (
 	}
 
 	Registry interface {
-		RecordWorkerHeartbeats(nsID namespace.ID, nsName namespace.Name, workerHeartbeat []*workerpb.WorkerHeartbeat)
+		RecordWorkerHeartbeats(nsID namespace.ID, nsName namespace.Name, principal *commonpb.Principal, workerHeartbeat []*workerpb.WorkerHeartbeat)
 		ListWorkers(nsID namespace.ID, params ListWorkersParams) (ListWorkersResponse, error)
 		DescribeWorker(nsID namespace.ID, workerInstanceKey string) (*workerpb.WorkerHeartbeat, error)
 	}
