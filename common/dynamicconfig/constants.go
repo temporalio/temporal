@@ -2680,6 +2680,16 @@ that task will be sent to DLQ.`,
 		false,
 		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
 	)
+	EnableReplicationReaderGroup = NewGlobalBoolSetting(
+		"history.EnableReplicationReaderGroup",
+		false,
+		`EnableReplicationReaderGroup enables multi-cursor for replication streaming`,
+	)
+	EnableReplicationNamespaceIsolation = NewGlobalBoolSetting(
+		"history.EnableReplicationNamespaceIsolation",
+		false,
+		`EnableReplicationNamespaceIsolation enables per-namespace isolation for the replication LOW priority lane`,
+	)
 	ReplicationStreamSenderHighPriorityQPS = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderHighPriorityQPS",
 		100,
