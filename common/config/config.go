@@ -138,10 +138,11 @@ type (
 		Metrics *metrics.Config `yaml:"metrics"`
 		// Settings for authentication and authorization
 		Authorization Authorization `yaml:"authorization"`
-		// RemoteClusterAuth configures file-based auth tokens for outbound connections to remote clusters.
-		// Map keys are hostnames; values are file paths containing JWT tokens.
-		// Used as the default TokenProvider when no custom provider is set via WithRemoteClusterTokenProvider.
+		// RemoteClusterAuth maps remote cluster name to a JWT token file path. Backs the default TokenProvider when none is set programmatically;
+		// FileTokenProvider is for local testing only — production should plug in a custom TokenProvider that reads from a secret manager.
 		RemoteClusterAuth map[string]string `yaml:"remoteClusterAuth"`
+		// RequireRemoteClusterAuth fails outbound remote-cluster RPCs that have no token (and fails server boot if no TokenProvider is set)
+		RequireRemoteClusterAuth bool `yaml:"requireRemoteClusterAuth"`
 	}
 
 	// RootTLS contains all TLS settings for the Temporal server
@@ -653,7 +654,6 @@ type (
 		RefreshInterval time.Duration `yaml:"refreshInterval"`
 	}
 	// @@@SNIPEND
-
 )
 
 const (

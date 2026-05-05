@@ -55,7 +55,7 @@ func TestRPCFactory_CreateRemoteFrontendGRPCConnection(t *testing.T) {
 	t.Parallel()
 
 	testDialer(t, "localhost", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
-		return rpcFactory.CreateRemoteFrontendGRPCConnection("localhost")
+		return rpcFactory.CreateRemoteFrontendGRPCConnection("test-cluster", "localhost")
 	})
 }
 

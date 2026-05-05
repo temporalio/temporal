@@ -158,6 +158,7 @@ func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) (adminservice.Admi
 	}
 
 	client = h.factory.NewRemoteAdminClientWithTimeout(
+		cluster,
 		clusterInfo.RPCAddress,
 		admin.DefaultTimeout,
 		admin.DefaultLargeTimeout,
@@ -198,6 +199,7 @@ func (h *clientBeanImpl) GetRemoteFrontendClient(clusterName string) (grpc.Clien
 	}
 
 	conn, fClient := h.factory.NewRemoteFrontendClientWithTimeout(
+		clusterName,
 		clusterInfo.RPCAddress,
 		frontend.DefaultTimeout,
 		frontend.DefaultLongPollTimeout,

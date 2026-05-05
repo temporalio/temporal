@@ -1,9 +1,10 @@
 package xdc
 
 import (
-	"cmp"
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -18,16 +19,54 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/grpc/metadata"
 )
+
+const expectedXDCToken = "test-xdc-jwt-token"
+
+type capturedCall struct {
+	cluster string
+	api     string
+	token   string
+}
 
 type RemoteClusterAuthSuite struct {
 	xdcBaseSuite
-	capturedTokens sync.Map
+	captured sync.Map // map[string][]capturedCall keyed by cluster name
 }
 
 func TestRemoteClusterAuthSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &RemoteClusterAuthSuite{})
+}
+
+func (s *RemoteClusterAuthSuite) record(call capturedCall) {
+	v, _ := s.captured.LoadOrStore(call.cluster, &sync.Mutex{})
+	mu := v.(*sync.Mutex)
+	mu.Lock()
+	defer mu.Unlock()
+	listV, _ := s.captured.LoadOrStore(call.cluster+":calls", &[]capturedCall{})
+	list := listV.(*[]capturedCall)
+	*list = append(*list, call)
+}
+
+func (s *RemoteClusterAuthSuite) callsFor(clusterName string) []capturedCall {
+	listV, ok := s.captured.Load(clusterName + ":calls")
+	if !ok {
+		return nil
+	}
+	v, _ := s.captured.LoadOrStore(clusterName, &sync.Mutex{})
+	mu := v.(*sync.Mutex)
+	mu.Lock()
+	defer mu.Unlock()
+	list := listV.(*[]capturedCall)
+	out := make([]capturedCall, len(*list))
+	copy(out, *list)
+	return out
+}
+
+func (s *RemoteClusterAuthSuite) clearCaptures() {
+	s.captured = sync.Map{}
 }
 
 func (s *RemoteClusterAuthSuite) SetupSuite() {
@@ -47,11 +86,15 @@ func (s *RemoteClusterAuthSuite) SetupSuite() {
 	s.dynamicConfigOverrides[dynamicconfig.OutboundProcessorMaxPollInterval.Key()] = time.Second * 3
 
 	tokenFile := filepath.Join(s.T().TempDir(), "remote-cluster.jwt")
-	s.Require().NoError(os.WriteFile(tokenFile, []byte("test-xdc-jwt-token"), 0600))
+	s.Require().NoError(os.WriteFile(tokenFile, []byte(expectedXDCToken), 0600))
+
+	suffix := common.GenerateRandomString(5)
+	clusterNames := []string{"active_" + suffix, "standby_" + suffix}
 
 	tokenProvider := &auth.FileTokenProvider{
 		TokenFiles: map[string]string{
-			"127.0.0.1": tokenFile,
+			clusterNames[0]: tokenFile,
+			clusterNames[1]: tokenFile,
 		},
 	}
 
@@ -78,10 +121,9 @@ func (s *RemoteClusterAuthSuite) SetupSuite() {
 	}
 
 	s.clusters = make([]*testcore.TestCluster, len(clusterConfigs))
-	suffix := common.GenerateRandomString(5)
 
 	testClusterFactory := testcore.NewTestClusterFactory()
-	for clusterIndex, clusterName := range []string{"active_" + cmp.Or(suffix), "standby_" + cmp.Or(suffix)} {
+	for clusterIndex, clusterName := range clusterNames {
 		clusterConfigs[clusterIndex].DynamicConfigOverrides = s.dynamicConfigOverrides
 		clusterConfigs[clusterIndex].ClusterMetadata.MasterClusterName = clusterName
 		clusterConfigs[clusterIndex].ClusterMetadata.CurrentClusterName = clusterName
@@ -105,10 +147,19 @@ func (s *RemoteClusterAuthSuite) SetupSuite() {
 	for _, c := range s.clusters {
 		clusterName := c.ClusterName()
 		c.Host().SetOnGetClaims(func(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
-			if authInfo != nil && authInfo.AuthToken != "" {
-				s.capturedTokens.Store(clusterName, authInfo.AuthToken)
-			}
 			return &authorization.Claims{System: authorization.RoleAdmin}, nil
+		})
+		c.Host().SetOnAuthorize(func(ctx context.Context, _ *authorization.Claims, target *authorization.CallTarget) (authorization.Result, error) {
+			token := ""
+			if md, ok := metadata.FromIncomingContext(ctx); ok {
+				if vals := md.Get("authorization"); len(vals) > 0 {
+					token = vals[0]
+				}
+			}
+			if token != "" {
+				s.record(capturedCall{cluster: clusterName, api: target.APIName, token: token})
+			}
+			return authorization.Result{Decision: authorization.DecisionAllow}, nil
 		})
 	}
 
@@ -127,7 +178,24 @@ func (s *RemoteClusterAuthSuite) SetupSuite() {
 			}
 		}
 	}
-	time.Sleep(time.Millisecond * 200)
+	s.Require().Eventually(func() bool {
+		for _, c := range s.clusters {
+			resp, err := c.AdminClient().ListClusters(testcore.NewContext(), &adminservice.ListClustersRequest{})
+			if err != nil {
+				return false
+			}
+			seen := map[string]struct{}{}
+			for _, m := range resp.GetClusters() {
+				seen[m.GetClusterName()] = struct{}{}
+			}
+			for _, peer := range s.clusters {
+				if _, ok := seen[peer.ClusterName()]; !ok {
+					return false
+				}
+			}
+		}
+		return true
+	}, 5*time.Second, 50*time.Millisecond, "expected ListClusters on every cluster to include every peer after AddOrUpdateRemoteCluster")
 }
 
 func (s *RemoteClusterAuthSuite) SetupTest() {
@@ -139,32 +207,36 @@ func (s *RemoteClusterAuthSuite) TearDownSuite() {
 }
 
 func (s *RemoteClusterAuthSuite) TestAuthTokenSentOnRemoteClusterConnection() {
-	var found bool
-	s.capturedTokens.Range(func(key, value any) bool {
-		s.Equal("Bearer test-xdc-jwt-token", value.(string))
-		found = true
-		return true
-	})
-	s.True(found, "expected auth token to be captured on at least one cluster")
+	var sawToken bool
+	for _, c := range s.clusters {
+		for _, call := range s.callsFor(c.ClusterName()) {
+			if call.token == "Bearer "+expectedXDCToken {
+				sawToken = true
+				break
+			}
+		}
+	}
+	s.True(sawToken, "expected at least one cross-cluster RPC to carry the auth token")
 }
 
-func (s *RemoteClusterAuthSuite) TestAuthTokenSentDuringReplication() {
-	s.capturedTokens = sync.Map{}
+// Asserts the bearer reaches the streaming replication path, not just unary RPCs.
+func (s *RemoteClusterAuthSuite) TestAuthTokenSentOnStreamingRPC() {
+	s.clearCaptures()
 
 	ns := s.createGlobalNamespace()
 	s.NotEmpty(ns)
 
 	s.Eventually(func() bool {
-		var found bool
-		s.capturedTokens.Range(func(_, _ any) bool {
-			found = true
-			return false
-		})
-		return found
-	}, 10*time.Second, 500*time.Millisecond, "expected auth token during replication")
-
-	s.capturedTokens.Range(func(key, value any) bool {
-		s.Equal("Bearer test-xdc-jwt-token", value.(string))
-		return true
-	})
+		for _, c := range s.clusters {
+			for _, call := range s.callsFor(c.ClusterName()) {
+				if strings.Contains(call.api, "Stream") && call.token == "Bearer "+expectedXDCToken {
+					return true
+				}
+			}
+		}
+		return false
+	}, 15*time.Second, 500*time.Millisecond, "expected streaming RPC to carry the auth token after global namespace creation")
 }
+
+// Receiver-side rejection is covered by TestTokenAuthHeader_ReceiverRejectsWrongToken in common/rpc/test;
+// asserting it cleanly here would require driving a post-discovery RPC, and replication's async retries make that flaky.

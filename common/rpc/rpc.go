@@ -45,13 +45,14 @@ type RPCFactory struct {
 	frontendHTTPPort  int
 	frontendTLSConfig *tls.Config
 
-	grpcListener          func() net.Listener
-	tlsFactory            encryption.TLSConfigProvider
-	commonDialOptions     []grpc.DialOption
-	perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption
-	tokenProvider         auth.TokenProvider
-	authHeaderName        string
-	monitor               membership.Monitor
+	grpcListener             func() net.Listener
+	tlsFactory               encryption.TLSConfigProvider
+	commonDialOptions        []grpc.DialOption
+	perServiceDialOptions    map[primitives.ServiceName][]grpc.DialOption
+	tokenProvider            auth.TokenProvider
+	authHeaderName           string
+	requireRemoteClusterAuth bool
+	monitor                  membership.Monitor
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
 	localFrontendClient      func() (*common.FrontendHTTPClient, error)
 	interNodeGrpcConnections cache.Cache
@@ -78,21 +79,28 @@ func NewFactory(
 	monitor membership.Monitor,
 	tokenProvider auth.TokenProvider,
 ) *RPCFactory {
+	authHeaderName := "authorization"
+	requireRemoteClusterAuth := false
+	if cfg != nil {
+		authHeaderName = cmp.Or(cfg.Global.Authorization.AuthHeaderName, authHeaderName)
+		requireRemoteClusterAuth = cfg.Global.RequireRemoteClusterAuth
+	}
 	f := &RPCFactory{
-		config:                cfg,
-		serviceName:           sName,
-		logger:                logger,
-		metricsHandler:        metricsHandler,
-		frontendURL:           frontendURL,
-		frontendHTTPURL:       frontendHTTPURL,
-		frontendHTTPPort:      frontendHTTPPort,
-		frontendTLSConfig:     frontendTLSConfig,
-		tlsFactory:            tlsProvider,
-		commonDialOptions:     commonDialOptions,
-		perServiceDialOptions: perServiceDialOptions,
-		tokenProvider:         tokenProvider,
-		authHeaderName:        cmp.Or(cfg.Global.Authorization.AuthHeaderName, "authorization"),
-		monitor:               monitor,
+		config:                   cfg,
+		serviceName:              sName,
+		logger:                   logger,
+		metricsHandler:           metricsHandler,
+		frontendURL:              frontendURL,
+		frontendHTTPURL:          frontendHTTPURL,
+		frontendHTTPPort:         frontendHTTPPort,
+		frontendTLSConfig:        frontendTLSConfig,
+		tlsFactory:               tlsProvider,
+		commonDialOptions:        commonDialOptions,
+		perServiceDialOptions:    perServiceDialOptions,
+		tokenProvider:            tokenProvider,
+		authHeaderName:           authHeaderName,
+		requireRemoteClusterAuth: requireRemoteClusterAuth,
+		monitor:                  monitor,
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
@@ -208,8 +216,8 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 	return ip
 }
 
-// CreateRemoteFrontendGRPCConnection creates connection for gRPC calls
-func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
+// CreateRemoteFrontendGRPCConnection creates a gRPC connection. Pass an empty clusterName for discovery probes (e.g. AddOrUpdateRemoteCluster).
+func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(clusterName, rpcAddress string) *grpc.ClientConn {
 	hostname, _, err := net.SplitHostPort(rpcAddress)
 	if err != nil {
 		d.logger.Fatal("Invalid rpcAddress for remote cluster", tag.Error(err))
@@ -228,10 +236,13 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 	keepAliveOption := d.getClientKeepAliveConfig(primitives.FrontendService)
 	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[primitives.FrontendService]...)
 
-	if d.tokenProvider != nil {
-		creds := auth.NewTokenCredentials(d.authHeaderName, func() (string, error) {
-			return d.tokenProvider.GetToken(context.Background(), hostname)
-		}, 0)
+	if d.tokenProvider != nil || d.requireRemoteClusterAuth {
+		creds := auth.NewTokenCredentials(d.authHeaderName, func(ctx context.Context) (string, error) {
+			if d.tokenProvider == nil {
+				return "", nil
+			}
+			return d.tokenProvider.GetToken(ctx, clusterName)
+		}, 0, d.requireRemoteClusterAuth)
 		additionalDialOptions = append(additionalDialOptions, grpc.WithPerRPCCredentials(creds))
 	}
 

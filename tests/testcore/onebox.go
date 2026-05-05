@@ -884,17 +884,19 @@ type clientFactory struct {
 }
 
 // override just this one and look up connections in mock admin client map
-func (f *clientFactory) NewRemoteAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) adminservice.AdminServiceClient {
-	var clusterName string
-	for name, info := range f.config.ClusterInformation {
-		if rpcAddress == info.RPCAddress {
-			clusterName = name
+func (f *clientFactory) NewRemoteAdminClientWithTimeout(clusterName string, rpcAddress string, timeout time.Duration, largeTimeout time.Duration) adminservice.AdminServiceClient {
+	resolvedClusterName := clusterName
+	if resolvedClusterName == "" {
+		for name, info := range f.config.ClusterInformation {
+			if rpcAddress == info.RPCAddress {
+				resolvedClusterName = name
+			}
 		}
 	}
-	if mock, ok := f.mockAdminClient[clusterName]; ok {
+	if mock, ok := f.mockAdminClient[resolvedClusterName]; ok {
 		return mock
 	}
-	return f.Factory.NewRemoteAdminClientWithTimeout(rpcAddress, timeout, largeTimeout)
+	return f.Factory.NewRemoteAdminClientWithTimeout(clusterName, rpcAddress, timeout, largeTimeout)
 }
 
 func (c *TemporalImpl) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {

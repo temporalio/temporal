@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func makeTestJWT(exp *int64) string {
@@ -29,10 +31,10 @@ func TestTokenCredentials_FetchesOnFirstCall(t *testing.T) {
 	token := makeTestJWT(&exp)
 	callCount := atomic.Int32{}
 
-	creds := NewTokenCredentials("authorization", func() (string, error) {
+	creds := NewTokenCredentials("authorization", func(context.Context) (string, error) {
 		callCount.Add(1)
 		return token, nil
-	}, time.Second)
+	}, time.Second, false)
 
 	md, err := creds.GetRequestMetadata(context.Background())
 	require.NoError(t, err)
@@ -46,10 +48,10 @@ func TestTokenCredentials_UsesCachedToken(t *testing.T) {
 	token := makeTestJWT(&exp)
 	callCount := atomic.Int32{}
 
-	creds := NewTokenCredentials("authorization", func() (string, error) {
+	creds := NewTokenCredentials("authorization", func(context.Context) (string, error) {
 		callCount.Add(1)
 		return token, nil
-	}, time.Second)
+	}, time.Second, false)
 
 	_, err := creds.GetRequestMetadata(context.Background())
 	require.NoError(t, err)
@@ -69,12 +71,12 @@ func TestTokenCredentials_RefreshesExpiredToken(t *testing.T) {
 	newToken := makeTestJWT(&expFuture)
 	callCount := atomic.Int32{}
 
-	creds := NewTokenCredentials("authorization", func() (string, error) {
+	creds := NewTokenCredentials("authorization", func(context.Context) (string, error) {
 		if callCount.Add(1) == 1 {
 			return oldToken, nil
 		}
 		return newToken, nil
-	}, time.Second)
+	}, time.Second, false)
 
 	// First call fetches the expired token, which triggers an immediate re-fetch on second call.
 	md1, err := creds.GetRequestMetadata(context.Background())
@@ -97,12 +99,12 @@ func TestTokenCredentials_RefreshesWithinGraceWindow(t *testing.T) {
 	newToken := makeTestJWT(&expFuture)
 	callCount := atomic.Int32{}
 
-	creds := NewTokenCredentials("authorization", func() (string, error) {
+	creds := NewTokenCredentials("authorization", func(context.Context) (string, error) {
 		if callCount.Add(1) == 1 {
 			return oldToken, nil
 		}
 		return newToken, nil
-	}, 10*time.Second)
+	}, 10*time.Second, false)
 
 	_, err := creds.GetRequestMetadata(context.Background())
 	require.NoError(t, err)
@@ -120,12 +122,12 @@ func TestTokenCredentials_FallsBackOnFetchError(t *testing.T) {
 	token := makeTestJWT(&expSoon)
 	callCount := atomic.Int32{}
 
-	creds := NewTokenCredentials("authorization", func() (string, error) {
+	creds := NewTokenCredentials("authorization", func(context.Context) (string, error) {
 		if callCount.Add(1) == 1 {
 			return token, nil
 		}
 		return "", errors.New("token server unavailable")
-	}, 10*time.Second)
+	}, 10*time.Second, false)
 
 	_, err := creds.GetRequestMetadata(context.Background())
 	require.NoError(t, err)
@@ -142,12 +144,12 @@ func TestTokenCredentials_ErrorsWhenHardExpiredAndFetchFails(t *testing.T) {
 	token := makeTestJWT(&expPast)
 	callCount := atomic.Int32{}
 
-	creds := NewTokenCredentials("authorization", func() (string, error) {
+	creds := NewTokenCredentials("authorization", func(context.Context) (string, error) {
 		if callCount.Add(1) == 1 {
 			return token, nil
 		}
 		return "", errors.New("token server unavailable")
-	}, time.Second)
+	}, time.Second, false)
 
 	_, err := creds.GetRequestMetadata(context.Background())
 	require.NoError(t, err)
@@ -162,10 +164,10 @@ func TestTokenCredentials_NoExpClaimNeverExpires(t *testing.T) {
 	token := makeTestJWT(nil)
 	callCount := atomic.Int32{}
 
-	creds := NewTokenCredentials("authorization", func() (string, error) {
+	creds := NewTokenCredentials("authorization", func(context.Context) (string, error) {
 		callCount.Add(1)
 		return token, nil
-	}, time.Second)
+	}, time.Second, false)
 
 	for range 5 {
 		_, err := creds.GetRequestMetadata(context.Background())
@@ -177,20 +179,34 @@ func TestTokenCredentials_NoExpClaimNeverExpires(t *testing.T) {
 
 func TestTokenCredentials_EmptyTokenReturnsNilMetadata(t *testing.T) {
 	t.Parallel()
-	creds := NewTokenCredentials("authorization", func() (string, error) {
+	creds := NewTokenCredentials("authorization", func(context.Context) (string, error) {
 		return "", nil
-	}, time.Second)
+	}, time.Second, false)
 
 	md, err := creds.GetRequestMetadata(context.Background())
 	require.NoError(t, err)
 	require.Nil(t, md)
 }
 
+func TestTokenCredentials_RequireTokenErrorsOnEmpty(t *testing.T) {
+	t.Parallel()
+	creds := NewTokenCredentials("authorization", func(context.Context) (string, error) {
+		return "", nil
+	}, time.Second, true)
+
+	md, err := creds.GetRequestMetadata(context.Background())
+	require.Nil(t, md)
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	require.Equal(t, codes.Unauthenticated, st.Code())
+}
+
 func TestTokenCredentials_RequireTransportSecurity(t *testing.T) {
 	t.Parallel()
-	creds := NewTokenCredentials("authorization", func() (string, error) {
+	creds := NewTokenCredentials("authorization", func(context.Context) (string, error) {
 		return "token", nil
-	}, 0)
+	}, 0, false)
 	require.False(t, creds.RequireTransportSecurity())
 }
 

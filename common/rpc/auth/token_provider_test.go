@@ -35,12 +35,22 @@ func TestFileTokenProvider_TrimsWhitespace(t *testing.T) {
 	require.Equal(t, "my-jwt-token", token)
 }
 
-func TestFileTokenProvider_UnknownHostReturnsEmpty(t *testing.T) {
+func TestFileTokenProvider_UnknownClusterReturnsEmpty(t *testing.T) {
 	t.Parallel()
 	provider := &FileTokenProvider{
 		TokenFiles: map[string]string{"cluster-a": "/some/path"},
 	}
-	token, err := provider.GetToken(context.Background(), "unknown-host")
+	token, err := provider.GetToken(context.Background(), "unknown-cluster")
+	require.NoError(t, err)
+	require.Empty(t, token)
+}
+
+func TestFileTokenProvider_EmptyClusterNameReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	provider := &FileTokenProvider{
+		TokenFiles: map[string]string{"cluster-a": "/some/path"},
+	}
+	token, err := provider.GetToken(context.Background(), "")
 	require.NoError(t, err)
 	require.Empty(t, token)
 }
