@@ -1202,7 +1202,6 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	defer log.CapturePanic(adh.logger, &retError)
 
 	adminClient := adh.clientFactory.NewRemoteAdminClientWithTimeout(
-		"", // cluster name not yet known: this is a discovery probe
 		request.GetFrontendAddress(),
 		admin.DefaultTimeout,
 		admin.DefaultLargeTimeout,

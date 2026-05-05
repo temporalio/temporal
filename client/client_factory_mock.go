@@ -113,32 +113,32 @@ func (mr *MockFactoryMockRecorder) NewMatchingClientWithTimeout(namespaceIDToNam
 }
 
 // NewRemoteAdminClientWithTimeout mocks base method.
-func (m *MockFactory) NewRemoteAdminClientWithTimeout(clusterName, rpcAddress string, timeout, largeTimeout time.Duration) adminservice.AdminServiceClient {
+func (m *MockFactory) NewRemoteAdminClientWithTimeout(rpcAddress string, timeout, largeTimeout time.Duration) adminservice.AdminServiceClient {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewRemoteAdminClientWithTimeout", clusterName, rpcAddress, timeout, largeTimeout)
+	ret := m.ctrl.Call(m, "NewRemoteAdminClientWithTimeout", rpcAddress, timeout, largeTimeout)
 	ret0, _ := ret[0].(adminservice.AdminServiceClient)
 	return ret0
 }
 
 // NewRemoteAdminClientWithTimeout indicates an expected call of NewRemoteAdminClientWithTimeout.
-func (mr *MockFactoryMockRecorder) NewRemoteAdminClientWithTimeout(clusterName, rpcAddress, timeout, largeTimeout any) *gomock.Call {
+func (mr *MockFactoryMockRecorder) NewRemoteAdminClientWithTimeout(rpcAddress, timeout, largeTimeout any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewRemoteAdminClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewRemoteAdminClientWithTimeout), clusterName, rpcAddress, timeout, largeTimeout)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewRemoteAdminClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewRemoteAdminClientWithTimeout), rpcAddress, timeout, largeTimeout)
 }
 
 // NewRemoteFrontendClientWithTimeout mocks base method.
-func (m *MockFactory) NewRemoteFrontendClientWithTimeout(clusterName, rpcAddress string, timeout, longPollTimeout time.Duration) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient) {
+func (m *MockFactory) NewRemoteFrontendClientWithTimeout(rpcAddress string, timeout, longPollTimeout time.Duration) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewRemoteFrontendClientWithTimeout", clusterName, rpcAddress, timeout, longPollTimeout)
+	ret := m.ctrl.Call(m, "NewRemoteFrontendClientWithTimeout", rpcAddress, timeout, longPollTimeout)
 	ret0, _ := ret[0].(grpc.ClientConnInterface)
 	ret1, _ := ret[1].(workflowservice.WorkflowServiceClient)
 	return ret0, ret1
 }
 
 // NewRemoteFrontendClientWithTimeout indicates an expected call of NewRemoteFrontendClientWithTimeout.
-func (mr *MockFactoryMockRecorder) NewRemoteFrontendClientWithTimeout(clusterName, rpcAddress, timeout, longPollTimeout any) *gomock.Call {
+func (mr *MockFactoryMockRecorder) NewRemoteFrontendClientWithTimeout(rpcAddress, timeout, longPollTimeout any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewRemoteFrontendClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewRemoteFrontendClientWithTimeout), clusterName, rpcAddress, timeout, longPollTimeout)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewRemoteFrontendClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewRemoteFrontendClientWithTimeout), rpcAddress, timeout, longPollTimeout)
 }
 
 // MockFactoryProvider is a mock of FactoryProvider interface.

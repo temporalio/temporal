@@ -216,8 +216,8 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 	return ip
 }
 
-// CreateRemoteFrontendGRPCConnection creates a gRPC connection. Pass an empty clusterName for discovery probes (e.g. AddOrUpdateRemoteCluster).
-func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(clusterName, rpcAddress string) *grpc.ClientConn {
+// CreateRemoteFrontendGRPCConnection creates a gRPC connection for cross-cluster calls.
+func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
 	hostname, _, err := net.SplitHostPort(rpcAddress)
 	if err != nil {
 		d.logger.Fatal("Invalid rpcAddress for remote cluster", tag.Error(err))
@@ -241,7 +241,7 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(clusterName, rpcAddress 
 			if d.tokenProvider == nil {
 				return "", nil
 			}
-			return d.tokenProvider.GetToken(ctx, clusterName)
+			return d.tokenProvider.GetToken(ctx, rpcAddress)
 		}, 0, d.requireRemoteClusterAuth)
 		additionalDialOptions = append(additionalDialOptions, grpc.WithPerRPCCredentials(creds))
 	}
