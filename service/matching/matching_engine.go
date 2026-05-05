@@ -72,6 +72,13 @@ const (
 	// This seems aggressive, but the default sticky schedule_to_start timeout is 5s, so 10s seems reasonable.
 	stickyPollerUnavailableWindow = 10 * time.Second
 
+	// Maximum jitter subtracted from the long poll timeout for non-forwarded polls.
+	// Spreads out expiration times across pollers to prevent thundering herd reconnects.
+	forwardedPollJitterMax = 10 * time.Second
+	// Minimum long poll interval required to apply jitter. Ensures the timeout remains
+	// meaningful even after the maximum jitter is subtracted.
+	forwardedPollMinInterval = 50 * time.Second
+
 	// shutdownWorkersCacheMaxSize is generous: each entry is a UUID string (~36 bytes),
 	// entries auto-expire after shutdownWorkersCacheTTL, and the cache only grows when
 	// workers shut down. Even with aggressive autoscaling, a single matching node is
@@ -2845,7 +2852,13 @@ func (e *matchingEngineImpl) pollTask(
 		return nil, false, errNoTasks
 	}
 
-	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, pm.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
+	// For non-forwarded polls with a long enough interval, subtract a random jitter to spread
+	// expiration times across pollers and prevent thundering herd reconnects.
+	longPollInterval := pm.LongPollExpirationInterval()
+	if pollMetadata.forwardedFrom == "" && longPollInterval >= forwardedPollMinInterval {
+		longPollInterval -= time.Duration(rand.Int63n(int64(forwardedPollJitterMax)))
+	}
+	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, returnEmptyTaskTimeBudget)
 	defer cancel()
 
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
