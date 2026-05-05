@@ -14,6 +14,25 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+var EnableStandaloneExecutions = dynamicconfig.NewNamespaceBoolSetting(
+	"callback.enableStandaloneExecutions",
+	false,
+	`Toggles standalone callback execution functionality on the server.`,
+)
+
+var LongPollBuffer = dynamicconfig.NewNamespaceDurationSetting(
+	"callback.longPollBuffer",
+	time.Second,
+	`A buffer used to adjust the callback execution long-poll timeouts.
+The long-poll response is sent before the caller's deadline by this amount of time.`,
+)
+
+var LongPollTimeout = dynamicconfig.NewNamespaceDurationSetting(
+	"callback.longPollTimeout",
+	20*time.Second,
+	`Timeout for callback execution long-poll requests.`,
+)
+
 var MaxPerExecution = dynamicconfig.NewNamespaceIntSetting(
 	"callback.maxPerExecution",
 	2000,
@@ -39,13 +58,37 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 )
 
 type Config struct {
-	RequestTimeout dynamicconfig.DurationPropertyFnWithDestinationFilter
-	RetryPolicy    func() backoff.RetryPolicy
+	// callback.* settings.
+	EnableStandaloneExecutions dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	LongPollBuffer             dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	LongPollTimeout            dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	RequestTimeout             dynamicconfig.DurationPropertyFnWithDestinationFilter
+	RetryPolicy                func() backoff.RetryPolicy
+
+	// Settings defined elsewhere.
+	CHASMEnabled          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	CHASMCallbacksEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	// Validation related config.
+	BlobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
+	BlobSizeLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxIDLength        dynamicconfig.IntPropertyFn // Used to check CallbackID, RequestID, etc.
+
+	// NOTE: The configuration setting defining the allowlist of supported callback
+	// addresses is defined in components/callbacks/config.go, via AllowedAddresses.
+	//
+	// Similarly, MaxPerExecution is missing. It is used by `Validator` and is loaded there.
+	// Once HSM callbacks (components/callbacks) are removed, the callbackValidatorProvider in
+	// frontend/fx.go can be moved into this package. And at that time, we can simply have the
+	// callback.Validator inject callback.Config. (And have a single location for all config.)
 }
 
-func configProvider(dc *dynamicconfig.Collection) *Config {
+func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		RequestTimeout: RequestTimeout.Get(dc),
+		EnableStandaloneExecutions: EnableStandaloneExecutions.Get(dc),
+		LongPollBuffer:             LongPollBuffer.Get(dc),
+		LongPollTimeout:            LongPollTimeout.Get(dc),
+		RequestTimeout:             RequestTimeout.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),
@@ -55,20 +98,15 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 				backoff.NoInterval,
 			)
 		},
+
+		CHASMEnabled:          dynamicconfig.EnableChasm.Get(dc),
+		CHASMCallbacksEnabled: dynamicconfig.EnableCHASMCallbacks.Get(dc),
+
+		MaxIDLength:        dynamicconfig.MaxIDLengthLimit.Get(dc),
+		BlobSizeLimitError: dynamicconfig.BlobSizeLimitError.Get(dc),
+		BlobSizeLimitWarn:  dynamicconfig.BlobSizeLimitWarn.Get(dc),
 	}
 }
-
-var AllowedAddresses = dynamicconfig.NewNamespaceTypedSettingWithConverter(
-	"chasm.callback.allowedAddresses",
-	allowedAddressConverter,
-	AddressMatchRules{},
-	`The per-namespace list of addresses that are allowed for callbacks and whether secure connections (https) are required.
-URL: "temporal://system" is always allowed for worker callbacks. The default is no address rules.
-URLs are checked against each in order when starting a workflow with attached callbacks and only need to match one to pass validation.
-This configuration is required for external endpoint targets; any invalid entries are ignored. Each entry is a map with possible values:
-     - "Pattern":string (required) the host:port pattern to which this config applies.
-        Wildcards, '*', are supported and can match any number of characters (e.g. '*' matches everything, 'prefix.*.domain' matches 'prefix.a.domain' as well as 'prefix.a.b.domain').
-     - "AllowInsecure":bool (optional, default=false) indicates whether https is required`)
 
 type AddressMatchRules struct {
 	Rules []AddressMatchRule

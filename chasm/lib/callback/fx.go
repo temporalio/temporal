@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"go.temporal.io/server/chasm"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -14,13 +15,6 @@ import (
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	"go.uber.org/fx"
 )
-
-func register(
-	registry *chasm.Registry,
-	library *Library,
-) error {
-	return registry.Register(library)
-}
 
 // httpCallerProviderProvider provides an HTTPCallerProvider for CHASM callbacks.
 func httpCallerProviderProvider(
@@ -53,12 +47,30 @@ func httpCallerProviderProvider(
 	return m.Get, nil
 }
 
-var Module = fx.Module(
+// FrontendModule just contains the CHASM components, but not their implementation.
+var FrontendModule = fx.Module(
+	"callback-frontend",
+	fx.Provide(callbackspb.NewCallbackServiceLayeredClient),
+	fx.Provide(ConfigProvider),
+	fx.Provide(NewFrontendHandler),
+
+	fx.Provide(newComponentOnlyLibrary),
+	fx.Invoke(func(registry *chasm.Registry, coLibrary *componentOnlyLibrary) error {
+		return registry.Register(coLibrary)
+	}),
+)
+
+var HistoryModule = fx.Module(
 	"chasm.lib.callback",
-	fx.Provide(configProvider),
+	fx.Provide(ConfigProvider),
 	fx.Provide(httpCallerProviderProvider),
 	fx.Provide(newInvocationTaskHandler),
 	fx.Provide(newBackoffTaskHandler),
+	fx.Provide(newCallbackHandler),
+	fx.Provide(NewCompletionScheduleToCloseTimeoutTaskHandler),
+
 	fx.Provide(newLibrary),
-	fx.Invoke(register),
+	fx.Invoke(func(registry *chasm.Registry, library *library) error {
+		return registry.Register(library)
+	}),
 )

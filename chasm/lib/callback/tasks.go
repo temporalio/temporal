@@ -180,3 +180,30 @@ func (h *backoffTaskHandler) Validate(
 ) (bool, error) {
 	return callback.Status == callbackspb.CALLBACK_STATUS_BACKING_OFF && callback.Attempt == task.Attempt, nil
 }
+
+// CompletionScheduleToCloseTimeoutTaskHandler handles schedule-to-close timeout for standalone callback executions.
+type CompletionScheduleToCloseTimeoutTaskHandler struct {
+	chasm.PureTaskHandlerBase
+}
+
+func NewCompletionScheduleToCloseTimeoutTaskHandler() *CompletionScheduleToCloseTimeoutTaskHandler {
+	return &CompletionScheduleToCloseTimeoutTaskHandler{}
+}
+
+func (h *CompletionScheduleToCloseTimeoutTaskHandler) Validate(
+	_ chasm.Context,
+	callback *Callback,
+	_ chasm.TaskAttributes,
+	_ *callbackspb.CompletionScheduleToCloseTimeoutTask,
+) (bool, error) {
+	return TransitionTimedOut.Possible(callback), nil
+}
+
+func (h *CompletionScheduleToCloseTimeoutTaskHandler) Execute(
+	ctx chasm.MutableContext,
+	callback *Callback,
+	_ chasm.TaskAttributes,
+	_ *callbackspb.CompletionScheduleToCloseTimeoutTask,
+) error {
+	return TransitionTimedOut.Apply(callback, ctx, EventTimedOut{})
+}

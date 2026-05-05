@@ -106,6 +106,8 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 
 		"/temporal.api.workflowservice.v1.WorkflowService/CountActivityExecutions":       {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListActivityExecutions":        {},
+		"/temporal.api.workflowservice.v1.WorkflowService/CountCallbackExecutions":       {},
+		"/temporal.api.workflowservice.v1.WorkflowService/ListCallbackExecutions":        {},
 		"/temporal.api.workflowservice.v1.WorkflowService/CountNexusOperationExecutions": {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListNexusOperationExecutions":  {},
 	}

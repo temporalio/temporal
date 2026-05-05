@@ -110,7 +110,7 @@ func (w *Workflow) AddCompletionCallbacks(
 		id := fmt.Sprintf("%s-%d", requestID, idx)
 
 		// Create and add callback
-		callbackObj := callback.NewCallback(requestID, eventTime, &callbackspb.CallbackState{}, chasmCB)
+		callbackObj := callback.NewEmbeddedCallback(ctx, requestID, eventTime, chasmCB)
 		w.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
 	}
 	return nil

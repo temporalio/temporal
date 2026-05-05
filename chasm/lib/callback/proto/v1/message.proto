@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.callbacks.proto.v1;
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
@@ -33,6 +34,19 @@ message CallbackState {
 
   // Request ID that added the callback.
   string request_id = 9;
+  // Request ID that terminated the callback, if applicable. Used for idempotency.
+  string terminate_request_id = 10;
+
+  // The time when the callback reached a terminal state.
+  google.protobuf.Timestamp close_time = 11;
+
+  // (standalone only) User-supplied business ID set when StartCallbackExecution() is
+  // called. Used to identify the callback for operations like Describe- or  Terminate-.
+  string callback_id = 12;
+
+  // (standalone only) Schedule-to-close timeout from when StartCallbackExecution()
+  // is called to when the result gets delivered.
+  google.protobuf.Duration completion_schedule_to_close_timeout = 13;
 }
 
 // Status of a callback.
@@ -49,6 +63,8 @@ enum CallbackStatus {
   CALLBACK_STATUS_FAILED = 4;
   // Callback has succeeded.
   CALLBACK_STATUS_SUCCEEDED = 5;
+  // Callback was terminated by request.
+  CALLBACK_STATUS_TERMINATED = 6;
 }
 
 message Callback {
@@ -59,6 +75,8 @@ message Callback {
     string url = 1;
     // Header to attach to callback request.
     map<string, string> header = 2;
+    // Token identifying the target callback to resolve.
+    string token = 3;
   }
 
   reserved 1; // For a generic callback mechanism to be added later.

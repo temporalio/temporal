@@ -335,9 +335,9 @@ func (a *Activity) addCompletionCallbacks(
 			return serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", variant)
 		}
 
-		// requestID (unique per API call) + idx (position within the request) ensures unique,idempotent callback IDs.
+		// requestID (unique per API call) + idx (position within the request) ensures unique, idempotent callback IDs.
 		id := fmt.Sprintf("%s-%d", requestID, idx)
-		callbackObj := callback.NewCallback(requestID, registrationTime, &callbackspb.CallbackState{}, chasmCB)
+		callbackObj := callback.NewEmbeddedCallback(ctx, requestID, registrationTime, chasmCB)
 		a.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
 	}
 	return nil

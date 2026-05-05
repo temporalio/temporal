@@ -20,7 +20,7 @@ func TestValidTransitions(t *testing.T) {
 			Callback: &callbackspb.Callback{
 				Variant: &callbackspb.Callback_Nexus_{
 					Nexus: &callbackspb.Callback_Nexus{
-						Url: "http://address:666/path/to/callback?query=string",
+						Url: "http://address:999/path/to/callback?query=string",
 					},
 				},
 			},
@@ -30,6 +30,8 @@ func TestValidTransitions(t *testing.T) {
 
 	// AttemptFailed
 	mctx := &chasm.MockMutableContext{}
+	mctx.HandleNow = func(chasm.Component) time.Time { return currentTime }
+
 	err := TransitionAttemptFailed.Apply(callback, mctx, EventAttemptFailed{
 		Time:        currentTime,
 		Err:         errors.New("test"),
@@ -76,6 +78,8 @@ func TestValidTransitions(t *testing.T) {
 	// Succeeded
 	currentTime = currentTime.Add(time.Second)
 	mctx = &chasm.MockMutableContext{}
+	mctx.HandleNow = func(chasm.Component) time.Time { return currentTime }
+
 	err = TransitionSucceeded.Apply(callback, mctx, EventSucceeded{Time: currentTime})
 	require.NoError(t, err)
 
@@ -96,6 +100,8 @@ func TestValidTransitions(t *testing.T) {
 
 	// failed
 	mctx = &chasm.MockMutableContext{}
+	mctx.HandleNow = func(chasm.Component) time.Time { return currentTime }
+
 	err = TransitionFailed.Apply(callback, mctx, EventFailed{Time: currentTime, Err: errors.New("failed")})
 	require.NoError(t, err)
 
@@ -109,4 +115,50 @@ func TestValidTransitions(t *testing.T) {
 
 	// Assert task is not generated, failed is terminal
 	require.Empty(t, mctx.Tasks)
+}
+
+func TestTerminatedTransition(t *testing.T) {
+	callback := &Callback{
+		CallbackState: &callbackspb.CallbackState{
+			Callback: &callbackspb.Callback{
+				Variant: &callbackspb.Callback_Nexus_{
+					Nexus: &callbackspb.Callback_Nexus{
+						Url: "http://address:999/path",
+					},
+				},
+			},
+		},
+	}
+
+	for _, src := range []callbackspb.CallbackStatus{
+		callbackspb.CALLBACK_STATUS_STANDBY,
+		callbackspb.CALLBACK_STATUS_SCHEDULED,
+		callbackspb.CALLBACK_STATUS_BACKING_OFF,
+	} {
+		t.Run("from_"+src.String(), func(t *testing.T) {
+			cb := &Callback{CallbackState: proto.Clone(callback.CallbackState).(*callbackspb.CallbackState)}
+			cb.SetStateMachineState(src)
+			mctx := &chasm.MockMutableContext{}
+			err := TransitionTerminated.Apply(cb, mctx, EventTerminated{})
+			require.NoError(t, err)
+			require.Equal(t, callbackspb.CALLBACK_STATUS_TERMINATED, cb.StateMachineState())
+		})
+	}
+}
+
+func TestSaveResult_TerminatedWhileInFlight(t *testing.T) {
+	// If the callback was terminated while an invocation was in-flight,
+	// saveResult should drop the result silently.
+	cb := &Callback{
+		CallbackState: &callbackspb.CallbackState{
+			Status: callbackspb.CALLBACK_STATUS_TERMINATED,
+		},
+	}
+	mctx := &chasm.MockMutableContext{}
+	_, err := cb.saveResult(mctx, saveResultInput{
+		result:      invocationResultOK{},
+		retryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
+	})
+	require.NoError(t, err)
+	require.Equal(t, callbackspb.CALLBACK_STATUS_TERMINATED, cb.StateMachineState())
 }

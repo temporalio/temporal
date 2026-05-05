@@ -66,8 +66,17 @@ func (n invocableOutbound) Invoke(
 	})
 	// Make the call and record metrics.
 	startTime := time.Now()
-
 	n.completion.Header = n.callback.Header
+
+	// If the outbound call is to a standalone callback, then supply the Nexus
+	// operation's token in the request.
+	if n.callback.GetToken() != "" {
+		if n.completion.Header == nil {
+			n.completion.Header = nexus.Header{}
+		}
+		n.completion.Header.Set(commonnexus.CallbackTokenHeader, n.callback.GetToken())
+	}
+
 	err := client.CompleteOperation(ctx, n.callback.Url, n.completion)
 
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())

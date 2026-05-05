@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -37,7 +38,7 @@ var TransitionRescheduled = chasm.NewTransition(
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventRescheduled) error {
 		cb.NextAttemptScheduleTime = nil
-		u, err := url.Parse(cb.Callback.GetNexus().Url)
+		u, err := url.Parse(cb.Callback.GetNexus().GetUrl())
 		if err != nil {
 			return fmt.Errorf("failed to parse URL: %v: %w", cb.Callback, err)
 		}
@@ -61,7 +62,10 @@ var TransitionAttemptFailed = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_SCHEDULED},
 	callbackspb.CALLBACK_STATUS_BACKING_OFF,
 	func(cb *Callback, ctx chasm.MutableContext, event EventAttemptFailed) error {
-		cb.recordAttempt(event.Time)
+		now := ctx.Now(cb)
+		cb.recordAttempt(now)
+		cb.CloseTime = timestamppb.New(now)
+
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
 		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(cb.Attempt), event.Err)
 		nextAttemptScheduleTime := event.Time.Add(nextDelay)
@@ -93,8 +97,11 @@ var TransitionFailed = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_SCHEDULED},
 	callbackspb.CALLBACK_STATUS_FAILED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventFailed) error {
-		cb.recordAttempt(event.Time)
-		cb.LastAttemptFailure = &failurepb.Failure{
+		now := ctx.Now(cb)
+		cb.recordAttempt(now)
+		cb.CloseTime = timestamppb.New(now)
+
+		failure := &failurepb.Failure{
 			Message: event.Err.Error(),
 			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
 				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
@@ -102,6 +109,9 @@ var TransitionFailed = chasm.NewTransition(
 				},
 			},
 		}
+		cb.LastAttemptFailure = failure
+		cb.TerminalFailure = chasm.NewDataField(ctx, failure)
+
 		return nil
 	},
 )
@@ -115,8 +125,69 @@ var TransitionSucceeded = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_SCHEDULED},
 	callbackspb.CALLBACK_STATUS_SUCCEEDED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventSucceeded) error {
-		cb.recordAttempt(event.Time)
+		now := ctx.Now(cb)
+		cb.recordAttempt(now)
 		cb.LastAttemptFailure = nil
+		cb.TerminalFailure = chasm.NewDataField[*failurepb.Failure](ctx, nil)
+		return nil
+	},
+)
+
+// EventTerminated is triggered when the callback is forcefully terminated.
+type EventTerminated struct {
+	Reason string
+}
+
+var TransitionTerminated = chasm.NewTransition(
+	[]callbackspb.CallbackStatus{
+		callbackspb.CALLBACK_STATUS_STANDBY,
+		callbackspb.CALLBACK_STATUS_SCHEDULED,
+		callbackspb.CALLBACK_STATUS_BACKING_OFF,
+	},
+	callbackspb.CALLBACK_STATUS_TERMINATED,
+	func(cb *Callback, ctx chasm.MutableContext, event EventTerminated) error {
+		now := ctx.Now(cb)
+		cb.CloseTime = timestamppb.New(now)
+
+		reason := event.Reason
+		if reason == "" {
+			reason = "callback execution terminated"
+		}
+
+		failure := &failurepb.Failure{
+			Message:     reason,
+			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
+		}
+		cb.TerminalFailure = chasm.NewDataField(ctx, failure)
+
+		return nil
+	},
+)
+
+// EventTimedOut is triggered when the callback's schedule-to-close timeout fires.
+type EventTimedOut struct{}
+
+var TransitionTimedOut = chasm.NewTransition(
+	[]callbackspb.CallbackStatus{
+		callbackspb.CALLBACK_STATUS_STANDBY,
+		callbackspb.CALLBACK_STATUS_SCHEDULED,
+		callbackspb.CALLBACK_STATUS_BACKING_OFF,
+	},
+	callbackspb.CALLBACK_STATUS_FAILED,
+	func(cb *Callback, ctx chasm.MutableContext, event EventTimedOut) error {
+		now := ctx.Now(cb)
+		cb.CloseTime = timestamppb.New(now)
+
+		failure := &failurepb.Failure{
+			Message: "callback execution timed out",
+			FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+				},
+			},
+		}
+		cb.TerminalFailure = chasm.NewDataField(ctx, failure)
+
 		return nil
 	},
 )
