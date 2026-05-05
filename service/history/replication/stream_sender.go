@@ -808,10 +808,9 @@ func (s *StreamSenderImpl) syncNamespaceIsolation(throttledNamespaceIDs []string
 		if !ok {
 			continue
 		}
-		nsID := ns
 		go func() {
-			err := s.sendNamespaceEventLoop(ctx, nsID, startCursor)
-			s.nsIsolation.Remove(nsID)
+			err := s.sendNamespaceEventLoop(ctx, ns, startCursor)
+			s.nsIsolation.Remove(ns)
 			if err != nil && ctx.Err() == nil {
 				s.Stop()
 			}
