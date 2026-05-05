@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/freeport"
@@ -93,6 +94,7 @@ type (
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
 		ServiceFxOptions map[primitives.ServiceName][]fx.Option
+		TokenProvider    auth.TokenProvider
 	}
 
 	TestClusterFactory interface {
@@ -346,6 +348,7 @@ func newClusterWithPersistenceTestBaseFactory(
 		TaskCategoryRegistry:             temporal.TaskCategoryRegistryProvider(archiverBase.metadata),
 		HostsByProtocolByService:         hostsByProtocolByService,
 		SpanExporters:                    clusterConfig.SpanExporters,
+		TokenProvider:                    clusterConfig.TokenProvider,
 	}
 
 	if clusterConfig.EnableMetricsCapture {
