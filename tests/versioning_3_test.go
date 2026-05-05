@@ -3507,6 +3507,8 @@ func (s *Versioning3Suite) TestSyncDeploymentUserDataWithRoutingConfig_Update() 
 func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+
+	var unexpectedErr error
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:      s.Namespace().String(),
@@ -3514,8 +3516,14 @@ func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 		}
 		req.BuildId = tv.BuildID()
 		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
-		require.NoError(t, err)
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok || (err != nil && strings.Contains(err.Error(), serviceerror.NewFailedPreconditionf(workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error())) {
+			require.NoError(t, err)
+		}
+		if err != nil {
+			unexpectedErr = err
+		}
 	}, 60*time.Second, 500*time.Millisecond)
+	s.NoError(unexpectedErr)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(tv)
@@ -3546,42 +3554,59 @@ func (s *Versioning3Suite) pollUntilRegistered(ctx context.Context, tv *testvars
 			}
 		}()
 	}
+
 	// Wait until the version is visible and all requested task queue types are registered.
+	var unexpectedErr error
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: s.Namespace().String(),
 			Version:   tv.DeploymentVersionString(),
 		})
-		require.NoError(t, err)
-		tqName := tv.TaskQueue().GetName()
-		for _, tqType := range tqTypes {
-			found := false
-			for _, tq := range resp.GetVersionTaskQueues() {
-				if tq.GetName() == tqName && tq.GetType() == tqType {
-					found = true
-					break
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+			require.NoError(t, err)
+		}
+		if err != nil {
+			unexpectedErr = err
+		} else {
+			tqName := tv.TaskQueue().GetName()
+			for _, tqType := range tqTypes {
+				found := false
+				for _, tq := range resp.GetVersionTaskQueues() {
+					if tq.GetName() == tqName && tq.GetType() == tqType {
+						found = true
+						break
+					}
 				}
-			}
-			if !found {
-				require.True(t, found)
-				return
+				if !found {
+					require.True(t, found)
+					return
+				}
 			}
 		}
 	}, 30*time.Second, 100*time.Millisecond)
+	s.NoError(unexpectedErr)
 	cancel()
 }
 
 func (s *Versioning3Suite) unsetCurrentDeployment(tv *testvars.TestVars) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+
+	var unexpectedErr error
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:      s.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 		}
 		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
-		require.NoError(t, err)
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+			require.NoError(t, err)
+		}
+		if err != nil {
+			unexpectedErr = err
+		}
 	}, 60*time.Second, 500*time.Millisecond)
+	s.NoError(unexpectedErr)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(tv)
@@ -3599,6 +3624,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 		bid = ""
 	}
 
+	var unexpectedErr error
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		req := &workflowservice.SetWorkerDeploymentRampingVersionRequest{
 			Namespace:      s.Namespace().String(),
@@ -3607,8 +3633,14 @@ func (s *Versioning3Suite) setRampingDeployment(
 		}
 		req.BuildId = bid
 		_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, req)
-		require.NoError(t, err)
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok || (err != nil && strings.Contains(err.Error(), serviceerror.NewFailedPreconditionf(workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error())) {
+			require.NoError(t, err)
+		}
+		if err != nil {
+			unexpectedErr = err
+		}
 	}, 60*time.Second, 500*time.Millisecond)
+	s.NoError(unexpectedErr)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
 	s.waitForDeploymentDataPropagationQueryWorkerDeployment(tv)
