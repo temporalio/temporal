@@ -364,7 +364,7 @@ func (s *ChasmActivitySuite) TestChasmActivity_PendingActivityDescribe() {
 
 // assertContainsEventType is a helper that asserts the given event type appears at least once
 // in the history events slice.
-func (s *ChasmActivitySuite) assertContainsEventType(events []*historypb.HistoryEvent, eventType enumspb.EventType, msgAndArgs ...interface{}) {
+func (s *ChasmActivitySuite) assertContainsEventType(events []*historypb.HistoryEvent, eventType enumspb.EventType, msgAndArgs ...any) {
 	s.T().Helper()
 	for _, e := range events {
 		if e.EventType == eventType {

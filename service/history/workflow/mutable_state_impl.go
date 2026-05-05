@@ -4175,15 +4175,11 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEventCHASM(
 		}),
 	}
 
-	// 4. Call TransitionScheduled first (generates ActivityDispatchTask and timeout pure tasks),
-	// following the same pattern as nexus operations where the transition is applied before
-	// the component is added to the parent's map field.
-	if err := chasmactivity.TransitionScheduled.Apply(act, chasmCtx, nil); err != nil {
+	// 4. Register: applies TransitionScheduled (generates ActivityDispatchTask and timeout pure
+	// tasks) then adds to the workflow's Activities map, keyed by activity ID.
+	if err := wf.RegisterScheduledActivity(chasmCtx, command.GetActivityId(), act); err != nil {
 		return 0, err
 	}
-
-	// 5. Add to the workflow's Activities map — this registers it in the CHASM tree, keyed by activity ID.
-	wf.AddEmbeddedActivity(chasmCtx, command.GetActivityId(), act)
 
 	// Accumulate the size of this CHASM activity so GetApproximatePersistedSize includes it
 	// before CloseTransaction serializes it into approximateSize.
@@ -4652,8 +4648,11 @@ func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEventCHASM(
 		return nil, false, err
 	}
 
-	act := wf.FindActivityByScheduledEventID(chasmCtx, scheduledEventID)
-	if act == nil {
+	wasNotStarted, found, err := wf.RequestCancelEmbeddedActivity(chasmCtx, scheduledEventID, identity)
+	if err != nil {
+		return nil, false, err
+	}
+	if !found {
 		// Return ErrCHASMActivityNotFound so the caller can fall back to the legacy
 		// AddActivityTaskCancelRequestedEvent path (backwards-compat guard for executions
 		// that scheduled the activity before EnableCHASMActivityPrototype was enabled).
@@ -4661,11 +4660,6 @@ func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEventCHASM(
 	}
 
 	actCancelReqEvent := ms.hBuilder.AddActivityTaskCancelRequestedEvent(workflowTaskCompletedEventID, scheduledEventID)
-
-	wasNotStarted, err := act.RequestCancelFromWorkflowTask(chasmCtx, identity)
-	if err != nil {
-		return nil, false, err
-	}
 
 	// Caller is responsible for writing ActivityTaskCanceled when wasNotStarted is true,
 	// following the same pattern as the legacy AddActivityTaskCancelRequestedEvent path.
@@ -4716,13 +4710,7 @@ func (ms *MutableStateImpl) RespondCHASMActivityCompletedByID(activityID string,
 	if err != nil {
 		return false, err
 	}
-	actField, ok := wf.Activities[activityID]
-	if !ok {
-		return false, nil
-	}
-	act := actField.Get(chasmCtx)
 	metricsHandler := ms.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope))
-	// Build a minimal RespondActivityTaskCompletedRequest for the transition.
 	req := &historyservice.RespondActivityTaskCompletedRequest{
 		NamespaceId: ms.GetNamespaceEntry().ID().String(),
 		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
@@ -4730,7 +4718,7 @@ func (ms *MutableStateImpl) RespondCHASMActivityCompletedByID(activityID string,
 			Identity: identity,
 		},
 	}
-	return true, chasmactivity.TransitionCompleted.Apply(act, chasmCtx, chasmactivity.NewCompleteEvent(req, metricsHandler))
+	return wf.CompleteEmbeddedActivityByID(chasmCtx, activityID, req, metricsHandler)
 }
 
 func (ms *MutableStateImpl) AddWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error {

@@ -71,7 +71,9 @@ type ActivityStore interface {
 	// (true for START_TO_CLOSE and HEARTBEAT timeouts; false for SCHEDULE_TO_START/CLOSE).
 	OnActivityTimedOut(ctx chasm.MutableContext, act *Activity, timeoutFailure *failurepb.Failure, needsStartedEvent bool) error
 	// OnActivityCanceled is called when an activity reaches the Canceled terminal state.
-	OnActivityCanceled(ctx chasm.MutableContext, act *Activity) error
+	// needsStartedEvent indicates whether an ActivityTaskStarted event must also be written
+	// (true when the activity was started before being canceled; false for not-yet-started activities).
+	OnActivityCanceled(ctx chasm.MutableContext, act *Activity, needsStartedEvent bool) error
 	// OnActivityTerminated is called when an activity reaches the Terminated terminal state.
 	OnActivityTerminated(ctx chasm.MutableContext, act *Activity) error
 }
@@ -328,7 +330,7 @@ func (a *Activity) OnActivityTimedOut(ctx chasm.MutableContext, _ *Activity, _ *
 }
 
 // OnActivityCanceled implements ActivityStore for standalone activities.
-func (a *Activity) OnActivityCanceled(ctx chasm.MutableContext, _ *Activity) error {
+func (a *Activity) OnActivityCanceled(ctx chasm.MutableContext, _ *Activity, _ bool) error {
 	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
 }
 

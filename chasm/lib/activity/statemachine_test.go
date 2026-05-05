@@ -562,7 +562,7 @@ func TestTransitionFailed(t *testing.T) {
 	require.NotNil(t, heartbeatState.GetRecordedTime())
 	protorequire.ProtoEqual(t, failure, attemptState.GetLastFailureDetails().GetFailure())
 	require.NotNil(t, attemptState.GetLastFailureDetails().GetTime())
-	require.Nil(t, outcome.GetFailed())
+	protorequire.ProtoEqual(t, failure, outcome.GetFailed().GetFailure())
 }
 
 func TestTransitionTerminated(t *testing.T) {

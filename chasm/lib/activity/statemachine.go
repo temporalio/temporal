@@ -243,6 +243,11 @@ var TransitionFailed = chasm.NewTransition(
 			return err
 		}
 
+		outcome := a.Outcome.Get(ctx)
+		outcome.Variant = &activitypb.ActivityOutcome_Failed_{
+			Failed: &activitypb.ActivityOutcome_Failed{Failure: req.GetFailure()},
+		}
+
 		a.emitOnFailedMetrics(ctx, event.metricsHandler)
 
 		return a.StoreOrSelf(ctx).OnActivityFailed(ctx, a)
@@ -339,7 +344,8 @@ var TransitionCanceled = chasm.NewTransition(
 
 		a.emitOnCanceledMetrics(ctx, event.handler, event.fromStatus)
 
-		return a.StoreOrSelf(ctx).OnActivityCanceled(ctx, a)
+		needsStartedEvent := event.fromStatus != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
+		return a.StoreOrSelf(ctx).OnActivityCanceled(ctx, a, needsStartedEvent)
 	},
 )
 
