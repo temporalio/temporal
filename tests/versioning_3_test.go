@@ -254,7 +254,7 @@ func (s *Versioning3Suite) TestSessionActivityResourceSpecificTaskQueueNotRegist
 		Namespace: s.Namespace().String(),
 		Version:   tv.DeploymentVersionString(),
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	totalActTQ := 0
 	for _, tq := range resp.GetVersionTaskQueues() {
@@ -2378,13 +2378,13 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 						if i < eventsBeforeDeploymentChange {
 							// Events before deployment change should NOT have the flag
 							s.False(attr.GetSuggestContinueAsNew())
-							s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+							s.Empty(attr.GetSuggestContinueAsNewReasons())
 							s.False(attr.GetTargetWorkerDeploymentVersionChanged(),
 								"Event %d should not have flag (before deployment change)", event.GetEventId())
 						} else {
 							// Events after deployment change SHOULD have the flag (including failed attempts and transient retries)
 							s.False(attr.GetSuggestContinueAsNew())
-							s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+							s.Empty(attr.GetSuggestContinueAsNewReasons())
 							s.True(attr.GetTargetWorkerDeploymentVersionChanged(),
 								"Event %d should have flag (after deployment change)", event.GetEventId())
 						}
@@ -2393,7 +2393,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 					for _, event := range wfTaskStartedEvents {
 						attr := event.GetWorkflowTaskStartedEventAttributes()
 						s.False(attr.GetSuggestContinueAsNew())
-						s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+						s.Empty(attr.GetSuggestContinueAsNewReasons())
 						s.False(attr.GetTargetWorkerDeploymentVersionChanged())
 					}
 				}
@@ -2540,7 +2540,7 @@ func (s *Versioning3Suite) testPinnedCaNUseRampingVersionOnCaN(pinnedOverride, n
 					if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
 						attr := event.GetWorkflowTaskStartedEventAttributes()
 						s.False(attr.GetSuggestContinueAsNew())
-						s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+						s.Empty(attr.GetSuggestContinueAsNewReasons())
 						// Setting a ramping version does not change the target for a Pinned workflow:
 						// the target is the pinned version, not current or ramping.
 						s.False(attr.GetTargetWorkerDeploymentVersionChanged(),
@@ -2949,7 +2949,7 @@ func (s *Versioning3Suite) verifyTransientTask(task *workflowservice.PollWorkflo
 			lastScheduledEvent = event
 		}
 	}
-	s.Require().NotNil(lastScheduledEvent)
+	s.NotNil(lastScheduledEvent)
 	s.Equal(int32(2), lastScheduledEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt())
 }
 
@@ -3001,12 +3001,12 @@ func (s *Versioning3Suite) TestAutoUpgradeCaN_UpgradeOnCaN() {
 						wfTaskStartedEvents = append(wfTaskStartedEvents, event)
 					}
 				}
-				s.Require().Len(wfTaskStartedEvents, 2) // make sure we are actually verifying non-zero # of events
+				s.Len(wfTaskStartedEvents, 2) // make sure we are actually verifying non-zero # of events
 
 				for _, event := range wfTaskStartedEvents {
 					attr := event.GetWorkflowTaskStartedEventAttributes()
 					s.False(attr.GetSuggestContinueAsNew())
-					s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+					s.Empty(attr.GetSuggestContinueAsNewReasons())
 				}
 
 				// For AutoUpgrade, I want to test that once the workflow has transitioned to v2, it doesn't get the CaN suggestion anymore.
@@ -3037,7 +3037,7 @@ func (s *Versioning3Suite) TestAutoUpgradeCaN_UpgradeOnCaN() {
 				for _, event := range wfTaskStartedEvents {
 					attr := event.GetWorkflowTaskStartedEventAttributes()
 					s.False(attr.GetSuggestContinueAsNew())
-					s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+					s.Empty(attr.GetSuggestContinueAsNewReasons())
 				}
 
 				return &workflowservice.RespondWorkflowTaskCompletedRequest{

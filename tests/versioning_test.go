@@ -2385,7 +2385,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityEager() {
 	defer cancel()
 
 	_, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	pollResponse, err := s.SdkClient().WorkflowService().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.Namespace().String(),
@@ -2395,7 +2395,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityEager() {
 			BuildId: v1,
 		},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	startToCloseTimeout := time.Minute
 
 	completionResponse, err := s.SdkClient().WorkflowService().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -2442,9 +2442,9 @@ func (s *VersioningIntegSuite) TestDispatchActivityEager() {
 			},
 		},
 	})
-	s.Require().NoError(err)
-	s.Require().Len(completionResponse.ActivityTasks, 1)
-	s.Require().Equal("compatible", completionResponse.ActivityTasks[0].ActivityId)
+	s.NoError(err)
+	s.Len(completionResponse.ActivityTasks, 1)
+	s.Equal("compatible", completionResponse.ActivityTasks[0].ActivityId)
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityCrossTQFails() {
@@ -4941,7 +4941,7 @@ func (s *VersioningIntegSuite) unloadTaskQueue(ctx context.Context, tq string) {
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 }
 
 func (s *VersioningIntegSuite) getStickyQueueName(ctx context.Context, id string) string {
