@@ -18,9 +18,8 @@ type namespaceIsolationManager struct {
 }
 
 type nsReaderHandle struct {
-	cancel      context.CancelFunc
-	startCursor int64
-	drainAt     atomic.Int64 // -1 = actively throttled; >= 0 = drain target
+	cancel  context.CancelFunc
+	drainAt atomic.Int64 // -1 = actively throttled; >= 0 = drain target
 }
 
 func newNamespaceIsolationManager() *namespaceIsolationManager {
@@ -60,8 +59,7 @@ func (m *namespaceIsolationManager) ThrottleNamespace(parentCtx context.Context,
 	startCursor := m.defaultLowCursor.Load()
 	ctx, cancel := context.WithCancel(parentCtx)
 	h := &nsReaderHandle{
-		cancel:      cancel,
-		startCursor: startCursor,
+		cancel: cancel,
 	}
 	h.drainAt.Store(-1)
 	m.readers[namespaceID] = h
