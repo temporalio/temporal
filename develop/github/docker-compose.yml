@@ -1,7 +1,9 @@
 x-healthcheck-defaults: &healthcheck-defaults
-  interval: 3s
+  interval: 30s # steady-state polling once healthy; avoids ongoing probe overhead
   timeout: 3s
-  retries: 60
+  retries: 3 # ~90s of failures at steady-state before marking unhealthy (startup is covered by start_period)
+  start_period: 60s # probe failures within this window don't count against retries
+  start_interval: 1s # probe every 1s during start_period; trims startup wait
 
 services:
   cassandra:
@@ -10,10 +12,20 @@ services:
       - "9042:9042"
     environment:
       CASSANDRA_LISTEN_ADDRESS: 127.0.0.1
-      MAX_HEAP_SIZE: "2G"
-      HEAP_NEWSIZE: "200M"
-      # Increase native transport threads for handling more concurrent connections
-      JVM_EXTRA_OPTS: "-Dcassandra.native_transport_max_threads=512"
+      MAX_HEAP_SIZE: "1G" # default 2G; right-sized for single-node tests
+      HEAP_NEWSIZE: "100M" # 10% of MAX_HEAP_SIZE per Cassandra docs
+      # native_transport_max_threads=512: default 128; xdc tests open many CQL conns.
+      # ring_delay_ms=1000: default 30000; no ring on single node, saves ~30s startup.
+      # skip_wait_for_gossip_to_settle=0: skips additional gossip wait, redundant on single node.
+      # initial_token=0 / num_tokens=1: skip vnode token allocation work.
+      # consistent.rangemovement=false: skip safety check for pending range moves (none on single node).
+      JVM_EXTRA_OPTS: >-
+        -Dcassandra.native_transport_max_threads=512
+        -Dcassandra.ring_delay_ms=1000
+        -Dcassandra.skip_wait_for_gossip_to_settle=0
+        -Dcassandra.initial_token=0
+        -Dcassandra.num_tokens=1
+        -Dcassandra.consistent.rangemovement=false
     healthcheck:
       !!merge <<: *healthcheck-defaults
       test: ["CMD-SHELL", "cqlsh -e 'describe cluster'"]
@@ -24,7 +36,11 @@ services:
       - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: root
-    command: --max-connections=500
+    command:
+      - --max-connections=500
+      - --innodb-flush-log-at-trx-commit=0 # fsync redo log every 1s, not per commit
+      - --innodb-doublewrite=0 # torn-page protection irrelevant for tests
+      - --skip-log-bin # no replication / PITR for tests
     volumes:
       - ./mysql-init:/docker-entrypoint-initdb.d
     healthcheck:
@@ -38,7 +54,16 @@ services:
     environment:
       POSTGRES_USER: temporal
       POSTGRES_PASSWORD: temporal
-    command: postgres -c max_connections=500
+    command:
+      - postgres
+      - -c
+      - max_connections=500
+      - -c
+      - fsync=off # test DB is ephemeral; skip per-commit fsync
+      - -c
+      - synchronous_commit=off # don't block on WAL flush
+      - -c
+      - full_page_writes=off # torn-page protection irrelevant for tests
     volumes:
       - ./postgresql-init:/docker-entrypoint-initdb.d
     healthcheck:
@@ -55,10 +80,14 @@ services:
       - cluster.routing.allocation.disk.watermark.high=256mb
       - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - discovery.type=single-node
-      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m # default 1G; tests use little index data
     healthcheck:
       !!merge <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:9200/_cluster/health || exit 1",
+        ]
 
   elasticsearch8:
     image: elasticsearch:8.5.0
@@ -71,10 +100,14 @@ services:
       - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m # default 1G; tests use little index data
     healthcheck:
       !!merge <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:9200/_cluster/health || exit 1",
+        ]
 
   opensearch2:
     image: opensearchproject/opensearch:2
@@ -87,10 +120,14 @@ services:
       - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - discovery.type=single-node
       - DISABLE_SECURITY_PLUGIN=true
-      - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m # default 1G; tests use little index data
     healthcheck:
       !!merge <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:9200/_cluster/health || exit 1",
+        ]
 
   opensearch3:
     image: opensearchproject/opensearch:3
@@ -103,7 +140,11 @@ services:
       - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - discovery.type=single-node
       - DISABLE_SECURITY_PLUGIN=true
-      - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m # default 1G; tests use little index data
     healthcheck:
       !!merge <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://localhost:9200/_cluster/health || exit 1",
+        ]
