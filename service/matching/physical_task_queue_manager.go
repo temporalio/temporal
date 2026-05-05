@@ -462,7 +462,11 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	c.liveness.markAlive()
 
 	c.currentPolls.Add(1)
-	defer c.currentPolls.Add(-1)
+	metrics.PendingPolls.With(c.metricsHandler).Record(float64(c.currentPolls.Load()))
+	defer func() {
+		c.currentPolls.Add(-1)
+		metrics.PendingPolls.With(c.metricsHandler).Record(float64(c.currentPolls.Load()))
+	}()
 
 	namespaceId := namespace.ID(c.queue.NamespaceId())
 	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespaceId)
