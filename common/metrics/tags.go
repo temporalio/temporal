@@ -46,6 +46,7 @@ const (
 	replicationTaskType                            = "replicationTaskType"
 	replicationTaskPriority                        = "replicationTaskPriority"
 	taskExpireStage                                = "task_expire_stage"
+	taskDispatchResult                             = "dispatch_result"
 	versioningBehavior                             = "versioning_behavior"
 	continueAsNewVersioningBehavior                = "continue_as_new_versioning_behavior"
 	suggestContinueAsNewReasonTooManyUpdates       = "suggest_continue_as_new_reason_too_many_updates"
@@ -313,6 +314,17 @@ func TaskSourceTag(source enumsspb.TaskSource) Tag {
 
 func ForwardedTag(forwarded bool) Tag {
 	return Tag{Key: forwardedTag, Value: strconv.FormatBool(forwarded)}
+}
+
+const (
+	TaskDispatchResultSyncMatch = "sync_match"
+	TaskDispatchResultBacklog   = "backlog"
+	TaskDispatchResultThrottled = "throttled"
+	TaskDispatchResultFailure   = "failure"
+)
+
+func TaskDispatchResultTag(result string) Tag {
+	return Tag{Key: taskDispatchResult, Value: result}
 }
 
 func MatchingTaskPriorityTag(value int32) Tag {

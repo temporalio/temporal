@@ -439,6 +439,9 @@ reredirectTask:
 		return "", false, err
 	}
 
+	behavior := directive.GetBehavior()
+	forwarded := params.forwardInfo != nil
+
 	if isActive {
 		syncMatched, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
 		if syncMatched && !pm.shouldBacklogSyncMatchTaskOnError(err) {
@@ -447,6 +450,8 @@ reredirectTask:
 			if params.forwardInfo == nil {
 				pm.processTaskAddHooks(ctx, targetVersion, syncMatched)
 			}
+
+			syncMatchQueue.RecordTaskDispatched(metrics.TaskDispatchResultSyncMatch, forwarded, behavior)
 
 			// Build ID is not returned for sync match. The returned build ID is used by History to update
 			// mutable state (and visibility) when the first workflow task is spooled.
@@ -463,6 +468,7 @@ reredirectTask:
 
 	if spoolQueue == nil {
 		// This means the task is being forwarded. Child partition will persist the task when sync match fails.
+		// No metric emitted here: the child partition will emit when it calls SpoolTask.
 		return "", false, errRemoteSyncMatchFailed
 	}
 
@@ -474,7 +480,15 @@ reredirectTask:
 
 	err = spoolQueue.SpoolTask(params.taskInfo)
 	if err == nil {
+		spoolQueue.RecordTaskDispatched(metrics.TaskDispatchResultBacklog, forwarded, behavior)
 		pm.processTaskAddHooks(ctx, targetVersion, false)
+	} else {
+		var resourceExhausted *serviceerror.ResourceExhausted
+		if errors.As(err, &resourceExhausted) {
+			spoolQueue.RecordTaskDispatched(metrics.TaskDispatchResultThrottled, forwarded, behavior)
+		} else {
+			spoolQueue.RecordTaskDispatched(metrics.TaskDispatchResultFailure, forwarded, behavior)
+		}
 	}
 
 	return assignedBuildId, false, err

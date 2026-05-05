@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 	time "time"
 
+	enums "go.temporal.io/api/enums/v1"
 	taskqueue "go.temporal.io/api/taskqueue/v1"
 	matchingservice "go.temporal.io/server/api/matchingservice/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
@@ -280,6 +281,18 @@ func (m *MockphysicalTaskQueueManager) QueueKey() *PhysicalTaskQueueKey {
 func (mr *MockphysicalTaskQueueManagerMockRecorder) QueueKey() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueKey", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).QueueKey))
+}
+
+// RecordTaskDispatched mocks base method.
+func (m *MockphysicalTaskQueueManager) RecordTaskDispatched(result string, forwarded bool, behavior enums.VersioningBehavior) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RecordTaskDispatched", result, forwarded, behavior)
+}
+
+// RecordTaskDispatched indicates an expected call of RecordTaskDispatched.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) RecordTaskDispatched(result, forwarded, behavior any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordTaskDispatched", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).RecordTaskDispatched), result, forwarded, behavior)
 }
 
 // RemovePoller mocks base method.
