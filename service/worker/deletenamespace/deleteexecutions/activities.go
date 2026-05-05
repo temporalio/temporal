@@ -43,6 +43,7 @@ type (
 	GetNextPageTokenParams struct {
 		Namespace     namespace.Name
 		NamespaceID   namespace.ID
+		Query         string
 		PageSize      int
 		NextPageToken []byte
 	}
@@ -50,6 +51,7 @@ type (
 	DeleteExecutionsActivityParams struct {
 		Namespace   namespace.Name
 		NamespaceID namespace.ID
+		Query       string
 		// Deprecated.
 		// TODO: remove after 1.27 release.
 		RPS           int
@@ -99,7 +101,7 @@ func (a *LocalActivities) GetNextPageTokenActivity(ctx context.Context, params G
 		Namespace:     params.Namespace,
 		PageSize:      params.PageSize,
 		NextPageToken: params.NextPageToken,
-		Query:         sadefs.QueryWithAnyNamespaceDivision(""),
+		Query:         sadefs.QueryWithAnyNamespaceDivision(params.Query),
 	}
 
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
@@ -160,7 +162,7 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 		Namespace:     params.Namespace,
 		PageSize:      params.ListPageSize,
 		NextPageToken: params.NextPageToken,
-		Query:         sadefs.QueryWithAnyNamespaceDivision(""),
+		Query:         sadefs.QueryWithAnyNamespaceDivision(params.Query),
 	}
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {

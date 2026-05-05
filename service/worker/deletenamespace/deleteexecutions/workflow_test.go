@@ -31,6 +31,8 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+const testDeleteExecutionsQuery = "WorkflowId = 'abc'"
+
 func Test_DeleteExecutionsWorkflow_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
@@ -42,6 +44,7 @@ func Test_DeleteExecutionsWorkflow_Success(t *testing.T) {
 	env.OnActivity(la.GetNextPageTokenActivity, mock.Anything, GetNextPageTokenParams{
 		Namespace:     "namespace",
 		NamespaceID:   "namespace-id",
+		Query:         testDeleteExecutionsQuery,
 		PageSize:      1000,
 		NextPageToken: nil,
 	}).Return(nil, nil).Once()
@@ -49,6 +52,7 @@ func Test_DeleteExecutionsWorkflow_Success(t *testing.T) {
 	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, DeleteExecutionsActivityParams{
 		Namespace:     "namespace",
 		NamespaceID:   "namespace-id",
+		Query:         testDeleteExecutionsQuery,
 		RPS:           100,
 		ListPageSize:  1000,
 		NextPageToken: nil,
@@ -60,6 +64,7 @@ func Test_DeleteExecutionsWorkflow_Success(t *testing.T) {
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       testDeleteExecutionsQuery,
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -82,7 +87,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_NoExecutions(t *testing.T) {
 		Namespace:     "namespace",
 		PageSize:      1000,
 		NextPageToken: nil,
-		Query:         sadefs.QueryWithAnyNamespaceDivision(""),
+		Query:         sadefs.QueryWithAnyNamespaceDivision(testDeleteExecutionsQuery),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions:    nil,
 		NextPageToken: nil,
@@ -107,6 +112,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_NoExecutions(t *testing.T) {
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       testDeleteExecutionsQuery,
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -130,6 +136,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_NoContinueAsNew(t *testing.T) 
 	env.OnActivity(la.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params GetNextPageTokenParams) ([]byte, error) {
 		require.Equal(t, namespace.Name("namespace"), params.Namespace)
 		require.Equal(t, namespace.ID("namespace-id"), params.NamespaceID)
+		require.Equal(t, testDeleteExecutionsQuery, params.Query)
 		require.Equal(t, 3, params.PageSize)
 		if pageNumber.Load() == 0 {
 			require.Nil(t, params.NextPageToken)
@@ -147,6 +154,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_NoContinueAsNew(t *testing.T) 
 	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params DeleteExecutionsActivityParams) (DeleteExecutionsActivityResult, error) {
 		require.Equal(t, namespace.Name("namespace"), params.Namespace)
 		require.Equal(t, namespace.ID("namespace-id"), params.NamespaceID)
+		require.Equal(t, testDeleteExecutionsQuery, params.Query)
 		require.Equal(t, 3, params.ListPageSize)
 		if params.NextPageToken == nil {
 			nilTokenOnce.Store(true)
@@ -163,6 +171,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_NoContinueAsNew(t *testing.T) 
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       testDeleteExecutionsQuery,
 		Config: DeleteExecutionsConfig{
 			PageSize: 3,
 		},
@@ -190,6 +199,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ContinueAsNew(t *testing.T) {
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       "",
 		Config: DeleteExecutionsConfig{
 			PageSize:          3,
 			PagesPerExecution: 78,
@@ -209,6 +219,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ContinueAsNew(t *testing.T) {
 	require.Equal(t, 78, newWfParams.PreviousSuccessCount)
 	require.Equal(t, 0, newWfParams.PreviousErrorCount)
 	require.Equal(t, []byte{3, 22, 83}, newWfParams.NextPageToken)
+	require.Equal(t, "", newWfParams.Query)
 }
 
 func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
@@ -220,15 +231,22 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
 	var la *LocalActivities
 
 	env.OnActivity(la.GetNextPageTokenActivity, mock.Anything, mock.Anything).
-		Return([]byte{3, 22, 83}, nil).
+		Return(func(_ context.Context, params GetNextPageTokenParams) ([]byte, error) {
+			require.Equal(t, testDeleteExecutionsQuery, params.Query)
+			return []byte{3, 22, 83}, nil
+		}).
 		Times(40) // GoSDK defaultMaximumAttemptsForUnitTest value * defaultConcurrentDeleteExecutionsActivities.
 	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).
-		Return(DeleteExecutionsActivityResult{}, serviceerror.NewUnavailable("specific_error_from_activity")).
+		Return(func(_ context.Context, params DeleteExecutionsActivityParams) (DeleteExecutionsActivityResult, error) {
+			require.Equal(t, testDeleteExecutionsQuery, params.Query)
+			return DeleteExecutionsActivityResult{}, serviceerror.NewUnavailable("specific_error_from_activity")
+		}).
 		Times(40) // GoSDK defaultMaximumAttemptsForUnitTest value * defaultConcurrentDeleteExecutionsActivities.
 
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       testDeleteExecutionsQuery,
 		Config: DeleteExecutionsConfig{
 			PageSize: 3,
 		},
@@ -255,7 +273,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 		Namespace:     "namespace",
 		PageSize:      2,
 		NextPageToken: nil,
-		Query:         sadefs.QueryWithAnyNamespaceDivision(""),
+		Query:         sadefs.QueryWithAnyNamespaceDivision(testDeleteExecutionsQuery),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
@@ -282,7 +300,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 		Namespace:     "namespace",
 		PageSize:      2,
 		NextPageToken: []byte{22, 8, 78},
-		Query:         sadefs.QueryWithAnyNamespaceDivision(""),
+		Query:         sadefs.QueryWithAnyNamespaceDivision(testDeleteExecutionsQuery),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
@@ -333,6 +351,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       testDeleteExecutionsQuery,
 		Config: DeleteExecutionsConfig{
 			PageSize: 2,
 		},
@@ -431,6 +450,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ChasmExecutions(t *testing.T)
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       "",
 		Config: DeleteExecutionsConfig{
 			PageSize: 2,
 		},
@@ -458,7 +478,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 		Namespace:     "namespace",
 		PageSize:      2,
 		NextPageToken: nil,
-		Query:         sadefs.QueryWithAnyNamespaceDivision(""),
+		Query:         sadefs.QueryWithAnyNamespaceDivision(testDeleteExecutionsQuery),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
@@ -485,7 +505,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 		Namespace:     "namespace",
 		PageSize:      2,
 		NextPageToken: []byte{22, 8, 78},
-		Query:         sadefs.QueryWithAnyNamespaceDivision(""),
+		Query:         sadefs.QueryWithAnyNamespaceDivision(testDeleteExecutionsQuery),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
@@ -530,6 +550,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       testDeleteExecutionsQuery,
 		Config: DeleteExecutionsConfig{
 			PageSize: 2,
 		},
@@ -555,6 +576,7 @@ func Test_DeleteExecutionsWorkflow_QueryStats(t *testing.T) {
 
 	pageNumber := 0
 	env.OnActivity(la.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params GetNextPageTokenParams) ([]byte, error) {
+		require.Equal(t, testDeleteExecutionsQuery, params.Query)
 		pageNumber++
 
 		if pageNumber == 4 { // Emulate 100 pages of executions.
@@ -564,6 +586,7 @@ func Test_DeleteExecutionsWorkflow_QueryStats(t *testing.T) {
 	}).Times(4)
 
 	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params DeleteExecutionsActivityParams) (DeleteExecutionsActivityResult, error) {
+		require.Equal(t, testDeleteExecutionsQuery, params.Query)
 		return DeleteExecutionsActivityResult{
 			ErrorCount:   10,
 			SuccessCount: 220,
@@ -598,6 +621,7 @@ func Test_DeleteExecutionsWorkflow_QueryStats(t *testing.T) {
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       testDeleteExecutionsQuery,
 		Config: DeleteExecutionsConfig{
 			ConcurrentDeleteExecutionsActivities: 1, // To linearize the execution of activities.
 		},

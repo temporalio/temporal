@@ -21,6 +21,7 @@ type (
 	DeleteExecutionsParams struct {
 		Namespace   namespace.Name
 		NamespaceID namespace.ID
+		Query       string
 		Config      DeleteExecutionsConfig
 
 		// Number of Workflow Executions to delete. Used in statistics computation.
@@ -149,6 +150,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		deleteExecutionsFuture := workflow.ExecuteActivity(ctx1, a.DeleteExecutionsActivity, &DeleteExecutionsActivityParams{
 			Namespace:     params.Namespace,
 			NamespaceID:   params.NamespaceID,
+			Query:         params.Query,
 			RPS:           params.Config.DeleteActivityRPS,
 			ListPageSize:  params.Config.PageSize,
 			NextPageToken: nextPageToken,
@@ -158,6 +160,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		err := workflow.ExecuteLocalActivity(ctx2, la.GetNextPageTokenActivity, GetNextPageTokenParams{
 			NamespaceID:   params.NamespaceID,
 			Namespace:     params.Namespace,
+			Query:         params.Query,
 			PageSize:      params.Config.PageSize,
 			NextPageToken: nextPageToken,
 		}).Get(ctx, &nextPageToken)
