@@ -27,8 +27,10 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/temporal/environment"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
 )
 
 var _ common.RPCFactory = (*RPCFactory)(nil)
@@ -241,12 +243,21 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[primitives.FrontendService]...)
 
 	if d.tokenProvider != nil || d.requireRemoteClusterAuth {
-		creds := auth.NewTokenCredentials(d.authHeaderName, func(ctx context.Context) (string, error) {
-			if d.tokenProvider == nil {
-				return "", nil
+		fetch := func(ctx context.Context) (string, error) {
+			var token string
+			if d.tokenProvider != nil {
+				t, err := d.tokenProvider.GetToken(ctx, rpcAddress)
+				if err != nil {
+					return "", err
+				}
+				token = t
 			}
-			return d.tokenProvider.GetToken(ctx, rpcAddress)
-		}, d.tokenGraceWindow, d.requireRemoteClusterAuth)
+			if token == "" && d.requireRemoteClusterAuth {
+				return "", status.Error(codes.Unauthenticated, "no auth token available for outbound remote-cluster RPC")
+			}
+			return token, nil
+		}
+		creds := auth.NewTokenCredentials(d.authHeaderName, fetch, d.tokenGraceWindow)
 		additionalDialOptions = append(additionalDialOptions, grpc.WithPerRPCCredentials(creds))
 	}
 

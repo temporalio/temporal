@@ -9,18 +9,15 @@ import (
 	"sync"
 	"time"
 
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/status"
 )
 
 const defaultGraceWindow = 30 * time.Second
 
 type TokenCredentials struct {
-	headerName   string
-	fetchToken   func(context.Context) (string, error)
-	graceWindow  time.Duration
-	requireToken bool
+	headerName  string
+	fetchToken  func(context.Context) (string, error)
+	graceWindow time.Duration
 
 	mu          sync.Mutex
 	cachedToken string
@@ -29,22 +26,18 @@ type TokenCredentials struct {
 
 var _ credentials.PerRPCCredentials = (*TokenCredentials)(nil)
 
-// NewTokenCredentials returns a PerRPCCredentials that attaches a Bearer token from fetchToken.
-// When requireToken is true an empty fetched token returns codes.Unauthenticated rather than sending the RPC without a header.
 func NewTokenCredentials(
 	headerName string,
 	fetchToken func(context.Context) (string, error),
 	graceWindow time.Duration,
-	requireToken bool,
 ) *TokenCredentials {
 	if graceWindow == 0 {
 		graceWindow = defaultGraceWindow
 	}
 	return &TokenCredentials{
-		headerName:   headerName,
-		fetchToken:   fetchToken,
-		graceWindow:  graceWindow,
-		requireToken: requireToken,
+		headerName:  headerName,
+		fetchToken:  fetchToken,
+		graceWindow: graceWindow,
 	}
 }
 
@@ -54,9 +47,6 @@ func (c *TokenCredentials) GetRequestMetadata(ctx context.Context, _ ...string) 
 		return nil, err
 	}
 	if token == "" {
-		if c.requireToken {
-			return nil, status.Error(codes.Unauthenticated, "no auth token available for outbound remote-cluster RPC")
-		}
 		return nil, nil
 	}
 	return map[string]string{
