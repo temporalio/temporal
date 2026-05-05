@@ -43,7 +43,7 @@
 ### END of Worker Versioning Replay Test configs
 
 limit.maxIDLength:
-  - value: 255
+  - value: 1000
     constraints: {}
 frontend.workerVersioningDataAPIs:
   - value: true
