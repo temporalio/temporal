@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.20",
+  "MinCompatibleVersion": "1.0",
+  "Description": "Increase workflow ID columns to 1000 bytes",
+  "SchemaUpdateCqlFiles": [
+    "alter_workflow_id_columns.sql"
+  ]
+}
