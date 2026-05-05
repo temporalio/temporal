@@ -9,11 +9,13 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/historybuilder"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -241,6 +243,54 @@ func (w *Workflow) AddCompletionCallbacks(
 		w.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
 	}
 	return nil
+}
+
+// RegisterScheduledActivity applies TransitionScheduled to act and adds it to the workflow's
+// Activities map. This is the single entry point for scheduling embedded activities so that
+// the transition trigger stays inside the workflow package rather than in the caller.
+func (w *Workflow) RegisterScheduledActivity(
+	ctx chasm.MutableContext,
+	activityID string,
+	act *activity.Activity,
+) error {
+	if err := activity.TransitionScheduled.Apply(act, ctx, nil); err != nil {
+		return err
+	}
+	w.AddEmbeddedActivity(ctx, activityID, act)
+	return nil
+}
+
+// RequestCancelEmbeddedActivity finds the embedded activity with scheduledEventID, applies the
+// cancel transition, and returns (wasNotStarted, found, error). found=false means no CHASM
+// activity has that scheduledEventID; the caller should fall back to the legacy path.
+func (w *Workflow) RequestCancelEmbeddedActivity(
+	ctx chasm.MutableContext,
+	scheduledEventID int64,
+	identity string,
+) (wasNotStarted bool, found bool, err error) {
+	act := w.FindActivityByScheduledEventID(ctx, scheduledEventID)
+	if act == nil {
+		return false, false, nil
+	}
+	wasNotStarted, err = act.RequestCancelFromWorkflowTask(ctx, identity)
+	return wasNotStarted, true, err
+}
+
+// CompleteEmbeddedActivityByID finds the activity by activityID, applies TransitionCompleted,
+// and returns (true, nil) on success. Returns (false, nil) if no CHASM activity with that ID
+// exists; the caller should fall back to the legacy path.
+func (w *Workflow) CompleteEmbeddedActivityByID(
+	ctx chasm.MutableContext,
+	activityID string,
+	req *historyservice.RespondActivityTaskCompletedRequest,
+	metricsHandler metrics.Handler,
+) (bool, error) {
+	actField, ok := w.Activities[activityID]
+	if !ok {
+		return false, nil
+	}
+	act := actField.Get(ctx)
+	return true, activity.TransitionCompleted.Apply(act, ctx, activity.NewCompleteEvent(req, metricsHandler))
 }
 
 // AddEmbeddedActivity adds a CHASM activity sub-component to the workflow, keyed by SDK-provided activity ID.
