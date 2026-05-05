@@ -48,6 +48,12 @@ func (m MSPointer) GetNexusCompletion(ctx Context, requestID string) (nexusrpc.C
 	return m.backend.GetNexusCompletion(ctx.goContext(), requestID)
 }
 
+// ScheduleWorkflowTask schedules a new workflow task if one is not already pending.
+// This is called by embedded activity components when they complete, to resume the workflow.
+func (m MSPointer) ScheduleWorkflowTask() error {
+	return m.backend.ScheduleWorkflowTask()
+}
+
 // GetWorkflowTypeName retrieves the workflow type name from the underlying mutable state.
 func (m MSPointer) GetWorkflowTypeName() string {
 	return m.backend.GetExecutionInfo().GetWorkflowTypeName()

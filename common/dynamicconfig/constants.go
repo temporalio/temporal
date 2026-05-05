@@ -2930,6 +2930,15 @@ to the CHASM (V2) implementation on active scheduler workflows.`,
 instead of the previous HSM backed implementation.`,
 	)
 
+	EnableCHASMActivityPrototype = NewNamespaceBoolSetting(
+		"history.enableCHASMActivityPrototype",
+		true, // temporaily setting to true to get test coverage, this should default to false during rollout
+		`Controls whether SCHEDULE_ACTIVITY_TASK and REQUEST_CANCEL_ACTIVITY_TASK commands
+are routed through the CHASM activity prototype codepath instead of the legacy ActivityInfo
+path. Not production-ready: missing retry on failure, heartbeat timeout resets, replication,
+and activity-ID-based deduplication. Default false; enable only in integration tests.`,
+	)
+
 	VersionMembershipCacheTTL = NewGlobalDurationSetting(
 		"history.versionMembershipCacheTTL",
 		1*time.Second,

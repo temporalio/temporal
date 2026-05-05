@@ -182,31 +182,37 @@ type completeEvent struct {
 	metricsHandler metrics.Handler
 }
 
+// NewCompleteEvent constructs a completeEvent for use with TransitionCompleted.Apply.
+// This is exported so that external callers (e.g. mutable_state_impl.go) can apply the transition
+// directly without going through the HandleCompleted method (which requires an engine context).
+func NewCompleteEvent(req *historyservice.RespondActivityTaskCompletedRequest, metricsHandler metrics.Handler) completeEvent {
+	return completeEvent{req: req, metricsHandler: metricsHandler}
+}
+
 // TransitionCompleted transitions to Completed status.
 var TransitionCompleted = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, // for force-complete (CompleteActivityByID)
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 	func(a *Activity, ctx chasm.MutableContext, event completeEvent) error {
-		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			req := event.req.GetCompleteRequest()
+		req := event.req.GetCompleteRequest()
 
-			attempt := a.LastAttempt.Get(ctx)
-			attempt.CompleteTime = timestamppb.New(ctx.Now(a))
-			attempt.LastWorkerIdentity = req.GetIdentity()
-			outcome := a.Outcome.Get(ctx)
-			outcome.Variant = &activitypb.ActivityOutcome_Successful_{
-				Successful: &activitypb.ActivityOutcome_Successful{
-					Output: req.GetResult(),
-				},
-			}
+		attempt := a.LastAttempt.Get(ctx)
+		attempt.CompleteTime = timestamppb.New(ctx.Now(a))
+		attempt.LastWorkerIdentity = req.GetIdentity()
+		outcome := a.Outcome.Get(ctx)
+		outcome.Variant = &activitypb.ActivityOutcome_Successful_{
+			Successful: &activitypb.ActivityOutcome_Successful{
+				Output: req.GetResult(),
+			},
+		}
 
-			a.emitOnCompletedMetrics(ctx, event.metricsHandler)
+		a.emitOnCompletedMetrics(ctx, event.metricsHandler)
 
-			return nil
-		})
+		return a.StoreOrSelf(ctx).OnActivityCompleted(ctx, a)
 	},
 )
 
@@ -223,25 +229,23 @@ var TransitionFailed = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
 	func(a *Activity, ctx chasm.MutableContext, event failedEvent) error {
-		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			req := event.req.GetFailedRequest()
+		req := event.req.GetFailedRequest()
 
-			if details := req.GetLastHeartbeatDetails(); details != nil {
-				heartbeat := a.getOrCreateLastHeartbeat(ctx)
-				heartbeat.Details = details
-				heartbeat.RecordedTime = timestamppb.New(ctx.Now(a))
-			}
-			attempt := a.LastAttempt.Get(ctx)
-			attempt.LastWorkerIdentity = req.GetIdentity()
+		if details := req.GetLastHeartbeatDetails(); details != nil {
+			heartbeat := a.getOrCreateLastHeartbeat(ctx)
+			heartbeat.Details = details
+			heartbeat.RecordedTime = timestamppb.New(ctx.Now(a))
+		}
+		attempt := a.LastAttempt.Get(ctx)
+		attempt.LastWorkerIdentity = req.GetIdentity()
 
-			if err := a.recordFailedAttempt(ctx, 0, req.GetFailure(), ctx.Now(a), true); err != nil {
-				return err
-			}
+		if err := a.recordFailedAttempt(ctx, 0, req.GetFailure(), ctx.Now(a), true); err != nil {
+			return err
+		}
 
-			a.emitOnFailedMetrics(ctx, event.metricsHandler)
+		a.emitOnFailedMetrics(ctx, event.metricsHandler)
 
-			return nil
-		})
+		return a.StoreOrSelf(ctx).OnActivityFailed(ctx, a)
 	},
 )
 
@@ -260,29 +264,27 @@ var TransitionTerminated = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
 	func(a *Activity, ctx chasm.MutableContext, event terminateEvent) error {
-		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			a.TerminateState = &activitypb.ActivityTerminateState{
-				RequestId: event.request.RequestID,
-			}
-			outcome := a.Outcome.Get(ctx)
-			failure := &failurepb.Failure{
-				Message: event.request.Reason,
-				FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
-					TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{
-						Identity: event.request.Identity,
-					},
+		a.TerminateState = &activitypb.ActivityTerminateState{
+			RequestId: event.request.RequestID,
+		}
+		outcome := a.Outcome.Get(ctx)
+		failure := &failurepb.Failure{
+			Message: event.request.Reason,
+			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+				TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{
+					Identity: event.request.Identity,
 				},
-			}
-			outcome.Variant = &activitypb.ActivityOutcome_Failed_{
-				Failed: &activitypb.ActivityOutcome_Failed{
-					Failure: failure,
-				},
-			}
+			},
+		}
+		outcome.Variant = &activitypb.ActivityOutcome_Failed_{
+			Failed: &activitypb.ActivityOutcome_Failed{
+				Failure: failure,
+			},
+		}
 
-			a.emitOnTerminatedMetrics(event.metricsHandler)
+		a.emitOnTerminatedMetrics(event.metricsHandler)
 
-			return nil
-		})
+		return a.StoreOrSelf(ctx).OnActivityTerminated(ctx, a)
 	},
 )
 
@@ -319,27 +321,25 @@ var TransitionCanceled = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
 	func(a *Activity, ctx chasm.MutableContext, event cancelEvent) error {
-		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			outcome := a.Outcome.Get(ctx)
-			failure := &failurepb.Failure{
-				Message: "Activity canceled",
-				FailureInfo: &failurepb.Failure_CanceledFailureInfo{
-					CanceledFailureInfo: &failurepb.CanceledFailureInfo{
-						Details:  event.details,
-						Identity: a.GetCancelState().GetIdentity(),
-					},
+		outcome := a.Outcome.Get(ctx)
+		failure := &failurepb.Failure{
+			Message: "Activity canceled",
+			FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+				CanceledFailureInfo: &failurepb.CanceledFailureInfo{
+					Details:  event.details,
+					Identity: a.GetCancelState().GetIdentity(),
 				},
-			}
-			outcome.Variant = &activitypb.ActivityOutcome_Failed_{
-				Failed: &activitypb.ActivityOutcome_Failed{
-					Failure: failure,
-				},
-			}
+			},
+		}
+		outcome.Variant = &activitypb.ActivityOutcome_Failed_{
+			Failed: &activitypb.ActivityOutcome_Failed{
+				Failure: failure,
+			},
+		}
 
-			a.emitOnCanceledMetrics(ctx, event.handler, event.fromStatus)
+		a.emitOnCanceledMetrics(ctx, event.handler, event.fromStatus)
 
-			return nil
-		})
+		return a.StoreOrSelf(ctx).OnActivityCanceled(ctx, a)
 	},
 )
 
@@ -360,28 +360,41 @@ var TransitionTimedOut = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, event timeoutEvent) error {
 		timeoutType := event.timeoutType
 
-		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			var err error
-			switch timeoutType {
-			case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-				enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
-				err = a.recordScheduleToStartOrCloseTimeoutFailure(ctx, timeoutType)
-			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-				failure := createStartToCloseTimeoutFailure()
-				err = a.recordFailedAttempt(ctx, 0, failure, ctx.Now(a), true)
-			case enumspb.TIMEOUT_TYPE_HEARTBEAT:
-				failure := createHeartbeatTimeoutFailure()
-				err = a.recordFailedAttempt(ctx, 0, failure, ctx.Now(a), true)
-			default:
-				err = fmt.Errorf("unhandled activity timeout: %v", timeoutType)
-			}
-			if err != nil {
-				return err
-			}
+		var (
+			err             error
+			timeoutFailure  *failurepb.Failure
+			needsStartedEvt bool
+		)
+		switch timeoutType {
+		case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
+			err = a.recordScheduleToStartOrCloseTimeoutFailure(ctx, timeoutType)
+			// Activity was never started — no ActivityTaskStarted event needed.
+			// Outcome already set by recordScheduleToStartOrCloseTimeoutFailure.
+			timeoutFailure = a.Outcome.Get(ctx).GetFailed().GetFailure()
+		case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
+			timeoutFailure = createStartToCloseTimeoutFailure()
+			err = a.recordFailedAttempt(ctx, 0, timeoutFailure, ctx.Now(a), true)
+			// Activity was started but no ActivityTaskStarted event in history yet
+			// (it's written alongside the outcome event).
+			needsStartedEvt = true
+		case enumspb.TIMEOUT_TYPE_HEARTBEAT:
+			timeoutFailure = createHeartbeatTimeoutFailure()
+			err = a.recordFailedAttempt(ctx, 0, timeoutFailure, ctx.Now(a), true)
+			// Activity was started but no ActivityTaskStarted event in history yet.
+			needsStartedEvt = true
+		default:
+			err = fmt.Errorf("unhandled activity timeout: %v", timeoutType)
+		}
+		if err != nil {
+			return err
+		}
 
-			a.emitOnTimedOutMetrics(ctx, event.metricsHandler, timeoutType, event.fromStatus)
+		a.emitOnTimedOutMetrics(ctx, event.metricsHandler, timeoutType, event.fromStatus)
 
-			return nil
-		})
+		if timeoutFailure != nil {
+			return a.StoreOrSelf(ctx).OnActivityTimedOut(ctx, a, timeoutFailure, needsStartedEvt)
+		}
+		return nil
 	},
 )

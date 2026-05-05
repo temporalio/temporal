@@ -277,7 +277,14 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 				Request: request,
 			},
 		)
-		return response, h.convertError(err)
+		if err != nil {
+			var nf *serviceerror.NotFound
+			if errors.As(err, &nf) {
+				return nil, consts.ErrActivityTaskNotFound
+			}
+			return nil, h.convertError(err)
+		}
+		return response, nil
 	}
 
 	if !contextutil.ContextMetadataMarkActivityID(ctx, taskToken.GetActivityId()) {
@@ -409,7 +416,11 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 			},
 		)
 		if err != nil {
-			return nil, err
+			var nf *serviceerror.NotFound
+			if errors.As(err, &nf) {
+				return nil, consts.ErrActivityTaskNotFound
+			}
+			return nil, h.convertError(err)
 		}
 		return response, nil
 	}
@@ -460,7 +471,11 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 			},
 		)
 		if err != nil {
-			return nil, err
+			var nf *serviceerror.NotFound
+			if errors.As(err, &nf) {
+				return nil, consts.ErrActivityTaskNotFound
+			}
+			return nil, h.convertError(err)
 		}
 		return response, nil
 	}
@@ -511,7 +526,11 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 			},
 		)
 		if err != nil {
-			return nil, err
+			var nf *serviceerror.NotFound
+			if errors.As(err, &nf) {
+				return nil, consts.ErrActivityTaskNotFound
+			}
+			return nil, h.convertError(err)
 		}
 		return response, nil
 	}

@@ -11,7 +11,7 @@ import (
 var (
 	Enabled = dynamicconfig.NewNamespaceBoolSetting(
 		"activity.enableStandalone",
-		false,
+		true,
 		`Toggles standalone activity functionality on the server.`,
 	)
 

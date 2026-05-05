@@ -220,6 +220,9 @@ type (
 			requestID string,
 		) (nexusrpc.CompleteOperationOptions, error)
 		EndpointRegistry() EndpointRegistry
+		// ScheduleWorkflowTask schedules a new workflow task if one is not already pending.
+		// This is called by embedded activity components when they complete, to resume the workflow.
+		ScheduleWorkflowTask() error
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.

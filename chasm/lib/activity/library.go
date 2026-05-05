@@ -40,6 +40,13 @@ type componentOnlyLibrary struct {
 	namespaceRegistry namespace.Registry
 }
 
+// NewComponentLibraryForTest returns a CHASM library that registers only the Activity
+// component type (no task handlers). Intended for unit tests that need the activity type
+// present in a CHASM registry without the full service stack.
+func NewComponentLibraryForTest(ns namespace.Registry) *componentOnlyLibrary {
+	return newComponentOnlyLibrary(&Config{}, ns)
+}
+
 func newComponentOnlyLibrary(
 	config *Config,
 	namespaceRegistry namespace.Registry,
