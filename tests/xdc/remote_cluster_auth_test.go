@@ -23,8 +23,8 @@ const expectedXDCToken = "test-xdc-jwt-token"
 
 type staticTokenProvider string
 
-func (t staticTokenProvider) GetToken(context.Context, string) (string, error) {
-	return string(t), nil
+func (t staticTokenProvider) GetToken(context.Context, string) (string, time.Time, error) {
+	return string(t), time.Time{}, nil
 }
 
 type capturedCall struct {

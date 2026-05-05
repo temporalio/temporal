@@ -16,19 +16,19 @@ const defaultGraceWindow = 30 * time.Second
 
 type TokenCredentials struct {
 	headerName  string
-	fetchToken  func(context.Context) (string, error)
+	fetchToken  func(context.Context) (string, time.Time, error)
 	graceWindow time.Duration
 
 	mu          sync.Mutex
 	cachedToken string
-	expiry      time.Time // zero value means no expiry (token has no exp claim)
+	expiry      time.Time // zero value means no expiry (provider didn't supply one)
 }
 
 var _ credentials.PerRPCCredentials = (*TokenCredentials)(nil)
 
 func NewTokenCredentials(
 	headerName string,
-	fetchToken func(context.Context) (string, error),
+	fetchToken func(context.Context) (string, time.Time, error),
 	graceWindow time.Duration,
 ) *TokenCredentials {
 	if graceWindow == 0 {
@@ -66,7 +66,7 @@ func (c *TokenCredentials) getToken(ctx context.Context) (string, error) {
 		return c.cachedToken, nil
 	}
 
-	token, err := c.fetchToken(ctx)
+	token, expiresAt, err := c.fetchToken(ctx)
 	if err != nil {
 		if c.cachedToken != "" && !c.isHardExpired() {
 			return c.cachedToken, nil
@@ -75,7 +75,7 @@ func (c *TokenCredentials) getToken(ctx context.Context) (string, error) {
 	}
 
 	c.cachedToken = token
-	c.expiry = parseJWTExpiry(token)
+	c.expiry = expiresAt
 	return token, nil
 }
 
@@ -95,9 +95,11 @@ func (c *TokenCredentials) isHardExpired() bool {
 	return time.Now().After(c.expiry)
 }
 
-// parseJWTExpiry extracts the exp claim from a JWT without verifying the signature.
+// ParseJWTExpiry extracts the exp claim from a JWT without verifying the signature.
 // Returns zero time if the token has no exp claim or cannot be parsed.
-func parseJWTExpiry(token string) time.Time {
+// Exposed as a helper for JWT-based TokenProvider implementations to compute the
+// expiresAt value they return from GetToken.
+func ParseJWTExpiry(token string) time.Time {
 	parts := strings.SplitN(token, ".", 3)
 	if len(parts) < 2 {
 		return time.Time{}

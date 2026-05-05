@@ -6,6 +6,7 @@ import (
 	"net"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
@@ -23,8 +24,8 @@ import (
 
 type staticTokenProvider string
 
-func (t staticTokenProvider) GetToken(context.Context, string) (string, error) {
-	return string(t), nil
+func (t staticTokenProvider) GetToken(context.Context, string) (string, time.Time, error) {
+	return string(t), time.Time{}, nil
 }
 
 func TestTokenAuthHeader_SentOnRemoteConnection(t *testing.T) {
