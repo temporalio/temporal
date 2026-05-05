@@ -83,7 +83,7 @@ func NewFactory(
 	requireRemoteClusterAuth := false
 	if cfg != nil {
 		authHeaderName = cmp.Or(cfg.Global.Authorization.AuthHeaderName, authHeaderName)
-		requireRemoteClusterAuth = cfg.Global.RequireRemoteClusterAuth
+		requireRemoteClusterAuth = cfg.Global.Authorization.RemoteClusterAuth.Require
 	}
 	f := &RPCFactory{
 		config:                   cfg,

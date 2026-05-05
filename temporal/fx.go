@@ -118,7 +118,7 @@ type (
 		Authorizer                 authorization.Authorizer
 		ClaimMapper                authorization.ClaimMapper
 		AudienceGetter             authorization.JWTAudienceMapper
-		RemoteClusterTokenProvider auth.TokenProvider
+		TokenProvider              auth.TokenProvider
 		ServiceHosts               map[primitives.ServiceName]static.Hosts
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
@@ -281,12 +281,12 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		}
 	}
 
-	remoteClusterTokenProvider := so.remoteClusterTokenProvider
-	if remoteClusterTokenProvider == nil {
-		remoteClusterTokenProvider = auth.NewNoopTokenProvider()
+	tokenProvider := so.tokenProvider
+	if tokenProvider == nil {
+		tokenProvider = auth.NewNoopTokenProvider()
 	}
-	if so.config.Global.RequireRemoteClusterAuth && auth.IsNoopTokenProvider(remoteClusterTokenProvider) {
-		return serverOptionsProvider{}, errors.New("global.requireRemoteClusterAuth is true but no TokenProvider is configured: use WithRemoteClusterTokenProvider")
+	if so.config.Global.Authorization.RemoteClusterAuth.Require && auth.IsNoopTokenProvider(tokenProvider) {
+		return serverOptionsProvider{}, errors.New("global.authorization.remoteClusterAuth.require is true but no TokenProvider is configured: use WithTokenProvider")
 	}
 
 	return serverOptionsProvider{
@@ -313,7 +313,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		Authorizer:                 so.authorizer,
 		ClaimMapper:                so.claimMapper,
 		AudienceGetter:             so.audienceGetter,
-		RemoteClusterTokenProvider: remoteClusterTokenProvider,
+		TokenProvider:              tokenProvider,
 
 		Logger:                logger,
 		ClientFactoryProvider: clientFactoryProvider,
@@ -378,6 +378,7 @@ type (
 		CustomFrontendInterceptors      []grpc.UnaryServerInterceptor
 		Authorizer                      authorization.Authorizer
 		ClaimMapper                     authorization.ClaimMapper
+		TokenProvider                   auth.TokenProvider
 		DataStoreFactory                persistenceClient.AbstractDataStoreFactory
 		VisibilityStoreFactory          visibility.VisibilityStoreFactory
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
@@ -442,6 +443,9 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			},
 			func() authorization.ClaimMapper {
 				return params.ClaimMapper
+			},
+			func() auth.TokenProvider {
+				return params.TokenProvider
 			},
 			func() encryption.TLSConfigProvider {
 				return params.TlsConfigProvider

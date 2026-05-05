@@ -205,7 +205,9 @@ func TestTokenAuthHeader_StrictModeRejectsEmptyToken(t *testing.T) {
 
 	testCfg := &config.Config{
 		Global: config.Global{
-			RequireRemoteClusterAuth: true,
+			Authorization: config.Authorization{
+				RemoteClusterAuth: config.RemoteClusterAuth{Require: true},
+			},
 		},
 		Services: map[string]config.Service{
 			"frontend": {RPC: config.RPC{GRPCPort: 0, BindOnIP: localhostIPv4}},
