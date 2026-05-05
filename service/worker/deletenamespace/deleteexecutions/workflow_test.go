@@ -219,7 +219,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ContinueAsNew(t *testing.T) {
 	require.Equal(t, 78, newWfParams.PreviousSuccessCount)
 	require.Equal(t, 0, newWfParams.PreviousErrorCount)
 	require.Equal(t, []byte{3, 22, 83}, newWfParams.NextPageToken)
-	require.Equal(t, "", newWfParams.Query)
+	require.Empty(t, newWfParams.Query)
 }
 
 func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
