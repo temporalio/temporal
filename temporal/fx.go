@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -117,6 +118,7 @@ type (
 		Authorizer                 authorization.Authorizer
 		ClaimMapper                authorization.ClaimMapper
 		AudienceGetter             authorization.JWTAudienceMapper
+		RemoteClusterTokenProvider auth.TokenProvider
 		ServiceHosts               map[primitives.ServiceName]static.Hosts
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
@@ -279,6 +281,13 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		}
 	}
 
+	remoteClusterTokenProvider := so.remoteClusterTokenProvider
+	if remoteClusterTokenProvider == nil && len(so.config.Global.RemoteClusterAuth) > 0 {
+		remoteClusterTokenProvider = &auth.FileTokenProvider{
+			TokenFiles: so.config.Global.RemoteClusterAuth,
+		}
+	}
+
 	return serverOptionsProvider{
 		ServerOptions:              so,
 		StopChan:                   stopChan,
@@ -303,6 +312,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		Authorizer:                 so.authorizer,
 		ClaimMapper:                so.claimMapper,
 		AudienceGetter:             so.audienceGetter,
+		RemoteClusterTokenProvider: remoteClusterTokenProvider,
 
 		Logger:                logger,
 		ClientFactoryProvider: clientFactoryProvider,

@@ -1,6 +1,8 @@
 package rpc
 
 import (
+	"cmp"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"math"
@@ -21,6 +23,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/temporal/environment"
 	"google.golang.org/grpc"
@@ -46,6 +49,8 @@ type RPCFactory struct {
 	tlsFactory            encryption.TLSConfigProvider
 	commonDialOptions     []grpc.DialOption
 	perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption
+	tokenProvider         auth.TokenProvider
+	authHeaderName        string
 	monitor               membership.Monitor
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
 	localFrontendClient      func() (*common.FrontendHTTPClient, error)
@@ -71,6 +76,7 @@ func NewFactory(
 	commonDialOptions []grpc.DialOption,
 	perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption,
 	monitor membership.Monitor,
+	tokenProvider auth.TokenProvider,
 ) *RPCFactory {
 	f := &RPCFactory{
 		config:                cfg,
@@ -84,6 +90,8 @@ func NewFactory(
 		tlsFactory:            tlsProvider,
 		commonDialOptions:     commonDialOptions,
 		perServiceDialOptions: perServiceDialOptions,
+		tokenProvider:         tokenProvider,
+		authHeaderName:        cmp.Or(cfg.Global.Authorization.AuthHeaderName, "authorization"),
 		monitor:               monitor,
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
@@ -202,22 +210,30 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 
 // CreateRemoteFrontendGRPCConnection creates connection for gRPC calls
 func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
-	var tlsClientConfig *tls.Config
-	var err error
-	if d.tlsFactory != nil {
-		hostname, _, err2 := net.SplitHostPort(rpcAddress)
-		if err2 != nil {
-			d.logger.Fatal("Invalid rpcAddress for remote cluster", tag.Error(err2))
-		}
-		tlsClientConfig, err = d.tlsFactory.GetRemoteClusterClientConfig(hostname)
+	hostname, _, err := net.SplitHostPort(rpcAddress)
+	if err != nil {
+		d.logger.Fatal("Invalid rpcAddress for remote cluster", tag.Error(err))
+	}
 
-		if err != nil {
-			d.logger.Fatal("Failed to create tls config for gRPC connection", tag.Error(err))
+	var tlsClientConfig *tls.Config
+	if d.tlsFactory != nil {
+		var tlsErr error
+		tlsClientConfig, tlsErr = d.tlsFactory.GetRemoteClusterClientConfig(hostname)
+		if tlsErr != nil {
+			d.logger.Fatal("Failed to create tls config for gRPC connection", tag.Error(tlsErr))
 			return nil
 		}
 	}
+
 	keepAliveOption := d.getClientKeepAliveConfig(primitives.FrontendService)
 	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[primitives.FrontendService]...)
+
+	if d.tokenProvider != nil {
+		creds := auth.NewTokenCredentials(d.authHeaderName, func() (string, error) {
+			return d.tokenProvider.GetToken(context.Background(), hostname)
+		}, 0)
+		additionalDialOptions = append(additionalDialOptions, grpc.WithPerRPCCredentials(creds))
+	}
 
 	return d.dial(rpcAddress, tlsClientConfig, append(additionalDialOptions, keepAliveOption)...)
 }
