@@ -94,15 +94,15 @@ func (f failingIter) Close() error {
 	return assert.AnError
 }
 
-func (q failingQuery) Iter() gocql.Iter {
+func (q failingQuery) Iter(context.Context) gocql.Iter {
 	return failingIter{}
 }
 
-func (q failingQuery) Scan(...any) error {
+func (q failingQuery) Scan(context.Context, ...any) error {
 	return assert.AnError
 }
 
-func (q failingQuery) Exec() error {
+func (q failingQuery) Exec(context.Context) error {
 	return assert.AnError
 }
 
@@ -661,6 +661,7 @@ func printResults(t *testing.T, results chan enqueueMessageResult) {
 func testCassandraQueueV2ErrInvalidQueueMessageEncodingType(t *testing.T, cluster *cassandra.TestCluster) {
 	session := cluster.GetSession()
 	q := newQueueV2Store(session)
+	ctx := context.Background()
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
 	_, err := q.CreateQueue(context.Background(), &persistence.InternalCreateQueueRequest{
@@ -676,7 +677,7 @@ func testCassandraQueueV2ErrInvalidQueueMessageEncodingType(t *testing.T, cluste
 		1, // messageID
 		[]byte("test"),
 		"bad-encoding-type",
-	).Exec()
+	).Exec(ctx)
 	require.NoError(t, err)
 	_, err = q.ReadMessages(context.Background(), &persistence.InternalReadMessagesRequest{
 		QueueType: queueType,
@@ -687,12 +688,8 @@ func testCassandraQueueV2ErrInvalidQueueMessageEncodingType(t *testing.T, cluste
 	assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
 }
 
-func (q failingQuery) MapScanCAS(map[string]any) (bool, error) {
+func (q failingQuery) MapScanCAS(context.Context, map[string]any) (bool, error) {
 	return false, assert.AnError
-}
-
-func (q failingQuery) WithContext(context.Context) gocql.Query {
-	return q
 }
 
 func (f failingSession) Query(query string, args ...any) gocql.Query {
@@ -754,6 +751,7 @@ func testCassandraQueueV2ErrInvalidPayloadEncodingType(t *testing.T, cluster *ca
 
 	session := cluster.GetSession()
 	q := newQueueV2Store(session)
+	ctx := context.Background()
 	// Using a different QueueType so that ListQueue tests are not failing because of corrupt queue metadata.
 	queueType := persistence.QueueV2Type(3)
 	queueName := "test-queue-" + t.Name()
@@ -764,7 +762,7 @@ func testCassandraQueueV2ErrInvalidPayloadEncodingType(t *testing.T, cluster *ca
 		[]byte("test"),      // payload
 		"bad-encoding-type", // payload encoding type
 		0,                   // version
-	).Exec()
+	).Exec(ctx)
 	require.NoError(t, err)
 	_, err = q.ReadMessages(context.Background(), &persistence.InternalReadMessagesRequest{
 		QueueType: queueType,
@@ -794,6 +792,7 @@ func testCassandraQueueV2ErrInvalidPayload(t *testing.T, cluster *cassandra.Test
 
 	session := cluster.GetSession()
 	q := newQueueV2Store(session)
+	ctx := context.Background()
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
 	err := session.Query(
@@ -803,7 +802,7 @@ func testCassandraQueueV2ErrInvalidPayload(t *testing.T, cluster *cassandra.Test
 		[]byte("invalid-payload"),             // payload
 		enumspb.ENCODING_TYPE_PROTO3.String(), // payload encoding type
 		0,                                     // version
-	).Exec()
+	).Exec(ctx)
 	require.NoError(t, err)
 	_, err = q.ReadMessages(context.Background(), &persistence.InternalReadMessagesRequest{
 		QueueType: queueType,
@@ -1182,6 +1181,7 @@ func getNumMessages(
 	queueName string,
 	numMessages int,
 ) int {
+	ctx := context.Background()
 	// We query the database directly here to get the actual count of messages deleted. If we just rely on the store
 	// method to read messages, that would indicate that we're updating min_message_id correctly, but it wouldn't verify
 	// that any messages less than min_message_id are actually deleted from the database.
@@ -1193,7 +1193,7 @@ func getNumMessages(
 		0,                               // partition
 		persistence.FirstQueueMessageID, // minMessageID
 		numMessages,                     // limit
-	).Iter()
+	).Iter(ctx)
 	numRemainingMessages := 0
 	for iter.MapScan(map[string]any{}) {
 		numRemainingMessages++
@@ -1219,6 +1219,7 @@ func insertQueueMetadataWithMultiplePartitions(
 	queueName string,
 ) {
 	t.Helper()
+	ctx := context.Background()
 
 	queuePB := persistencespb.Queue{
 		Partitions: map[int32]*persistencespb.QueuePartition{
@@ -1234,7 +1235,7 @@ func insertQueueMetadataWithMultiplePartitions(
 		bytes,                                 // payload
 		enumspb.ENCODING_TYPE_PROTO3.String(), // payload encoding type
 		0,                                     // version
-	).Exec()
+	).Exec(ctx)
 	require.NoError(t, err)
 }
 

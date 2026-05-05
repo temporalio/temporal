@@ -63,7 +63,7 @@ func (d *matchingTaskStoreV2) CreateTasks(
 	ctx context.Context,
 	request *p.InternalCreateTasksRequest,
 ) (*p.CreateTasksResponse, error) {
-	batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+	batch := d.Session.NewBatch(gocql.LoggedBatch)
 	namespaceID := request.NamespaceID
 	taskQueue := request.TaskQueue
 	taskQueueType := request.TaskType
@@ -112,7 +112,7 @@ func (d *matchingTaskStoreV2) CreateTasks(
 	}
 
 	previous := make(map[string]any)
-	applied, _, err := d.Session.MapExecuteBatchCAS(batch, previous)
+	applied, _, err := batch.MapExecCAS(ctx, previous)
 	if err != nil {
 		return nil, gocql.ConvertError("CreateTasks", err)
 	}
@@ -169,7 +169,7 @@ func (d *matchingTaskStoreV2) GetTasks(
 			int64(math.MaxInt64),
 		)
 	}
-	iter := query.WithContext(ctx).PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter(ctx)
 
 	response := &p.InternalGetTasksResponse{}
 	task := make(map[string]any)
@@ -236,8 +236,8 @@ func (d *matchingTaskStoreV2) CompleteTasksLessThan(
 		rowType,
 		request.ExclusiveMaxPass,
 		request.ExclusiveMaxTaskID,
-	).WithContext(ctx)
-	err := query.Exec()
+	)
+	err := query.Exec(ctx)
 	if err != nil {
 		return 0, gocql.ConvertError("CompleteTasksLessThan", err)
 	}

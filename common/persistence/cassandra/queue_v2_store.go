@@ -160,7 +160,7 @@ func (s *queueV2Store) ReadMessages(
 		0,
 		int(minMessageID),
 		request.PageSize,
-	).WithContext(ctx).Iter()
+	).Iter(ctx)
 
 	var (
 		messages []persistence.QueueV2Message
@@ -225,7 +225,7 @@ func (s *queueV2Store) CreateQueue(
 		bytes,
 		enumspb.ENCODING_TYPE_PROTO3.String(),
 		0,
-	).WithContext(ctx).MapScanCAS(make(map[string]any))
+	).MapScanCAS(ctx, make(map[string]any))
 	if err != nil {
 		return nil, gocql.ConvertError("QueueV2CreateQueue", err)
 	}
@@ -288,7 +288,7 @@ func (s *queueV2Store) RangeDeleteMessages(
 		0, // partition
 		deleteRange.MinMessageID,
 		deleteRange.MaxMessageID,
-	).WithContext(ctx).Exec()
+	).Exec(ctx)
 	if err != nil {
 		return nil, gocql.ConvertError("QueueV2RangeDeleteMessages", err)
 	}
@@ -320,7 +320,7 @@ func (s *queueV2Store) updateQueue(
 		queueType,
 		queueName,
 		version,
-	).WithContext(ctx).MapScanCAS(make(map[string]any))
+	).MapScanCAS(ctx, make(map[string]any))
 	if err != nil {
 		return gocql.ConvertError("QueueV2UpdateQueueMetadata", err)
 	}
@@ -350,7 +350,7 @@ func (s *queueV2Store) tryInsert(
 		messageID,
 		blob.Data,
 		blob.EncodingType.String(),
-	).WithContext(ctx).MapScanCAS(make(map[string]any))
+	).MapScanCAS(ctx, make(map[string]any))
 	if err != nil {
 		return gocql.ConvertError("QueueV2EnqueueMessage", err)
 	}
@@ -387,7 +387,8 @@ func GetQueue(
 		version          int64
 	)
 
-	err := session.Query(TemplateGetQueueQuery, queueType, queueName).WithContext(ctx).Scan(
+	err := session.Query(TemplateGetQueueQuery, queueType, queueName).Scan(
+		ctx,
 		&queueBytes,
 		&queueEncodingStr,
 		&version,
@@ -454,7 +455,7 @@ func (s *queueV2Store) getMessageCountAndLastID(
 func (s *queueV2Store) getMaxMessageID(ctx context.Context, queueType persistence.QueueV2Type, queueName string) (int64, bool, error) {
 	var maxMessageID int64
 
-	err := s.session.Query(TemplateGetMaxMessageIDQuery, queueType, queueName, 0).WithContext(ctx).Scan(&maxMessageID)
+	err := s.session.Query(TemplateGetMaxMessageIDQuery, queueType, queueName, 0).Scan(ctx, &maxMessageID)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
 			return 0, false, nil
@@ -474,7 +475,7 @@ func (s *queueV2Store) ListQueues(
 	iter := s.session.Query(
 		templateGetQueueNamesQuery,
 		request.QueueType,
-	).PageSize(request.PageSize).PageState(request.NextPageToken).WithContext(ctx).Iter()
+	).PageSize(request.PageSize).PageState(request.NextPageToken).Iter(ctx)
 
 	var queues []persistence.QueueInfo
 	for {
