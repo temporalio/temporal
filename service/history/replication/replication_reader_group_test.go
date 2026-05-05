@@ -50,8 +50,8 @@ func (s *replicationReaderGroupSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *replicationReaderGroupSuite) newGroup(tiered bool) *ReplicationReaderGroup {
-	return NewReplicationReaderGroup(s.shardContext, s.clientShardKey, tiered)
+func (s *replicationReaderGroupSuite) newGroup(tiered bool) *replicationReaderGroup {
+	return newReplicationReaderGroup(s.shardContext, s.clientShardKey, tiered)
 }
 
 // ReaderID
@@ -102,9 +102,9 @@ func (s *replicationReaderGroupSuite) TestCatchupBeginWatermark_ThreeScopes_Uses
 func (s *replicationReaderGroupSuite) TestBuildReaderState_Tiered_Success() {
 	g := s.newGroup(true)
 	attr := &replicationspb.SyncReplicationState{
-		InclusiveLowWatermark:     50,
-		HighPriorityState:         &replicationspb.ReplicationState{InclusiveLowWatermark: 100},
-		LowPriorityState:          &replicationspb.ReplicationState{InclusiveLowWatermark: 200},
+		InclusiveLowWatermark: 50,
+		HighPriorityState:     &replicationspb.ReplicationState{InclusiveLowWatermark: 100},
+		LowPriorityState:      &replicationspb.ReplicationState{InclusiveLowWatermark: 200},
 	}
 	got, err := g.BuildReaderState(attr)
 	s.NoError(err)

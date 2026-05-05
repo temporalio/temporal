@@ -60,7 +60,7 @@ type (
 		shutdownChan            channel.ShutdownOnce
 		config                  *configs.Config
 		isTieredStackEnabled    bool
-		readerGroup             *ReplicationReaderGroup
+		readerGroup             *replicationReaderGroup
 		nsIsolation             *namespaceIsolationManager
 		flowController          SenderFlowController
 		sendLock                sync.Mutex
@@ -772,11 +772,11 @@ func newReaderGroupIfEnabled(
 	config *configs.Config,
 	shardContext historyi.ShardContext,
 	clientShardKey ClusterShardKey,
-) *ReplicationReaderGroup {
+) *replicationReaderGroup {
 	if !config.EnableReplicationReaderGroup() {
 		return nil
 	}
-	return NewReplicationReaderGroup(shardContext, clientShardKey, config.EnableReplicationTaskTieredProcessing())
+	return newReplicationReaderGroup(shardContext, clientShardKey, config.EnableReplicationTaskTieredProcessing())
 }
 
 func newNsIsolationIfEnabled(config *configs.Config) *namespaceIsolationManager {

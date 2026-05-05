@@ -12,25 +12,25 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-// ReplicationReaderGroup manages per-priority cursor state for a replication stream
+// replicationReaderGroup manages per-priority cursor state for a replication stream
 // sender. It encapsulates the QueueReaderState scope-index arithmetic that was
 // previously spread across recvSyncReplicationState and
 // getSendCatchupBeginInclusiveWatermark.
 //
 // HIGH/LOW priority lane isolation using the existing 3-scope QueueReaderState
 // encoding. No wire-protocol or persistence-format changes.
-type ReplicationReaderGroup struct {
+type replicationReaderGroup struct {
 	shardContext   historyi.ShardContext
 	clientShardKey ClusterShardKey
 	tieredEnabled  bool
 }
 
-func NewReplicationReaderGroup(
+func newReplicationReaderGroup(
 	shardContext historyi.ShardContext,
 	clientShardKey ClusterShardKey,
 	tieredEnabled bool,
-) *ReplicationReaderGroup {
-	return &ReplicationReaderGroup{
+) *replicationReaderGroup {
+	return &replicationReaderGroup{
 		shardContext:   shardContext,
 		clientShardKey: clientShardKey,
 		tieredEnabled:  tieredEnabled,
@@ -38,7 +38,7 @@ func NewReplicationReaderGroup(
 }
 
 // ReaderID returns the persistence reader ID for this stream's remote shard.
-func (r *ReplicationReaderGroup) ReaderID() int64 {
+func (r *replicationReaderGroup) ReaderID() int64 {
 	return shard.ReplicationReaderIDFromClusterShardID(
 		int64(r.clientShardKey.ClusterID),
 		r.clientShardKey.ShardID,
@@ -47,7 +47,7 @@ func (r *ReplicationReaderGroup) ReaderID() int64 {
 
 // CatchupBeginWatermark returns the inclusive low watermark for the given priority
 // lane from the persisted QueueState. Falls back to catchupEnd if no state is found.
-func (r *ReplicationReaderGroup) CatchupBeginWatermark(
+func (r *replicationReaderGroup) CatchupBeginWatermark(
 	catchupEnd int64,
 	priority enumsspb.TaskPriority,
 ) int64 {
@@ -65,7 +65,7 @@ func (r *ReplicationReaderGroup) CatchupBeginWatermark(
 // BuildReaderState constructs the QueueReaderState to persist from a received
 // SyncReplicationState ack. Returns an error if the priority fields are inconsistent
 // with the current tiered/single-stack mode.
-func (r *ReplicationReaderGroup) BuildReaderState(
+func (r *replicationReaderGroup) BuildReaderState(
 	attr *replicationspb.SyncReplicationState,
 ) (*persistencespb.QueueReaderState, error) {
 	if r.tieredEnabled {
@@ -82,7 +82,7 @@ func (r *ReplicationReaderGroup) BuildReaderState(
 
 // FailoverWatermark returns the task ID and timestamp for UpdateRemoteReaderInfo.
 // In tiered mode, the high-priority watermark is used since that lane carries live traffic.
-func (r *ReplicationReaderGroup) FailoverWatermark(
+func (r *replicationReaderGroup) FailoverWatermark(
 	attr *replicationspb.SyncReplicationState,
 ) (int64, time.Time) {
 	if r.tieredEnabled {
