@@ -2,8 +2,6 @@ package xdc
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -17,12 +15,17 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/metadata"
 )
 
 const expectedXDCToken = "test-xdc-jwt-token"
+
+type staticTokenProvider map[string]string
+
+func (p staticTokenProvider) GetToken(_ context.Context, clusterName string) (string, error) {
+	return p[clusterName], nil
+}
 
 type capturedCall struct {
 	cluster string
@@ -65,10 +68,6 @@ func (s *RemoteClusterAuthSuite) callsFor(clusterName string) []capturedCall {
 	return out
 }
 
-func (s *RemoteClusterAuthSuite) clearCaptures() {
-	s.captured = sync.Map{}
-}
-
 func (s *RemoteClusterAuthSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.dynamicConfigOverrides = make(map[dynamicconfig.Key]any)
@@ -85,17 +84,12 @@ func (s *RemoteClusterAuthSuite) SetupSuite() {
 	s.dynamicConfigOverrides[dynamicconfig.VisibilityProcessorMaxPollInterval.Key()] = time.Second * 3
 	s.dynamicConfigOverrides[dynamicconfig.OutboundProcessorMaxPollInterval.Key()] = time.Second * 3
 
-	tokenFile := filepath.Join(s.T().TempDir(), "remote-cluster.jwt")
-	s.Require().NoError(os.WriteFile(tokenFile, []byte(expectedXDCToken), 0600))
-
 	suffix := common.GenerateRandomString(5)
 	clusterNames := []string{"active_" + suffix, "standby_" + suffix}
 
-	tokenProvider := &auth.FileTokenProvider{
-		TokenFiles: map[string]string{
-			clusterNames[0]: tokenFile,
-			clusterNames[1]: tokenFile,
-		},
+	tokenProvider := staticTokenProvider{
+		clusterNames[0]: expectedXDCToken,
+		clusterNames[1]: expectedXDCToken,
 	}
 
 	persistenceDefaults := testcore.GetPersistenceTestDefaults()
@@ -220,22 +214,19 @@ func (s *RemoteClusterAuthSuite) TestAuthTokenSentOnRemoteClusterConnection() {
 }
 
 // Asserts the bearer reaches the streaming replication path, not just unary RPCs.
+// Replication streams are opened once at peer-registration time and reused; we don't clear
+// captures here so the initial open is observable.
 func (s *RemoteClusterAuthSuite) TestAuthTokenSentOnStreamingRPC() {
-	s.clearCaptures()
-
-	ns := s.createGlobalNamespace()
-	s.NotEmpty(ns)
-
 	s.Eventually(func() bool {
 		for _, c := range s.clusters {
 			for _, call := range s.callsFor(c.ClusterName()) {
-				if strings.Contains(call.api, "Stream") && call.token == "Bearer "+expectedXDCToken {
+				if strings.Contains(call.api, "StreamWorkflowReplicationMessages") && call.token == "Bearer "+expectedXDCToken {
 					return true
 				}
 			}
 		}
 		return false
-	}, 15*time.Second, 500*time.Millisecond, "expected streaming RPC to carry the auth token after global namespace creation")
+	}, 15*time.Second, 250*time.Millisecond, "expected StreamWorkflowReplicationMessages to carry the auth token")
 }
 
 // Receiver-side rejection is covered by TestTokenAuthHeader_ReceiverRejectsWrongToken in common/rpc/test;

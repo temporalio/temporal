@@ -4,8 +4,6 @@ package rpc
 import (
 	"context"
 	"net"
-	"os"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 
@@ -17,12 +15,17 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc"
-	"go.temporal.io/server/common/rpc/auth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
+
+type staticTokenProvider map[string]string
+
+func (p staticTokenProvider) GetToken(_ context.Context, clusterName string) (string, error) {
+	return p[clusterName], nil
+}
 
 func TestTokenAuthHeader_SentOnRemoteConnection(t *testing.T) {
 	t.Parallel()
@@ -49,14 +52,7 @@ func TestTokenAuthHeader_SentOnRemoteConnection(t *testing.T) {
 
 	address := listener.Addr().String()
 
-	tokenFile := filepath.Join(t.TempDir(), "token.jwt")
-	require.NoError(t, os.WriteFile(tokenFile, []byte(expectedToken), 0600))
-
-	tokenProvider := &auth.FileTokenProvider{
-		TokenFiles: map[string]string{
-			"remote-cluster": tokenFile,
-		},
-	}
+	tokenProvider := staticTokenProvider{"remote-cluster": expectedToken}
 
 	testCfg := &config.Config{
 		Services: map[string]config.Service{
@@ -164,12 +160,7 @@ func TestTokenAuthHeader_ReceiverRejectsWrongToken(t *testing.T) {
 
 	address := listener.Addr().String()
 
-	tokenFile := filepath.Join(t.TempDir(), "token.jwt")
-	require.NoError(t, os.WriteFile(tokenFile, []byte("wrong-token"), 0600))
-
-	tokenProvider := &auth.FileTokenProvider{
-		TokenFiles: map[string]string{"remote-cluster": tokenFile},
-	}
+	tokenProvider := staticTokenProvider{"remote-cluster": "wrong-token"}
 
 	testCfg := &config.Config{
 		Services: map[string]config.Service{
@@ -210,7 +201,7 @@ func TestTokenAuthHeader_StrictModeRejectsEmptyToken(t *testing.T) {
 
 	address := listener.Addr().String()
 
-	tokenProvider := &auth.FileTokenProvider{TokenFiles: map[string]string{}}
+	tokenProvider := staticTokenProvider{}
 
 	testCfg := &config.Config{
 		Global: config.Global{

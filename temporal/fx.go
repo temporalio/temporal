@@ -282,13 +282,11 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}
 
 	remoteClusterTokenProvider := so.remoteClusterTokenProvider
-	if remoteClusterTokenProvider == nil && len(so.config.Global.RemoteClusterAuth) > 0 {
-		remoteClusterTokenProvider = &auth.FileTokenProvider{
-			TokenFiles: so.config.Global.RemoteClusterAuth,
-		}
+	if remoteClusterTokenProvider == nil {
+		remoteClusterTokenProvider = auth.NewNoopTokenProvider()
 	}
-	if so.config.Global.RequireRemoteClusterAuth && remoteClusterTokenProvider == nil {
-		return serverOptionsProvider{}, errors.New("global.requireRemoteClusterAuth is true but no TokenProvider is configured: set global.remoteClusterAuth or use WithRemoteClusterTokenProvider")
+	if so.config.Global.RequireRemoteClusterAuth && auth.IsNoopTokenProvider(remoteClusterTokenProvider) {
+		return serverOptionsProvider{}, errors.New("global.requireRemoteClusterAuth is true but no TokenProvider is configured: use WithRemoteClusterTokenProvider")
 	}
 
 	return serverOptionsProvider{
