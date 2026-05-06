@@ -1,0 +1,10 @@
+<testsuites tests="2" failures="2">
+    <testsuite name="suite" tests="2" failures="2" errors="0" id="0" time="">
+        <testcase name="TestFooSuite/TestFoo_1 (timeout)" classname="">
+            <failure message="Timeout"></failure>
+        </testcase>
+        <testcase name="TestFooSuite/TestFoo_2 (timeout)" classname="">
+            <failure message="Timeout"></failure>
+        </testcase>
+    </testsuite>
+</testsuites>

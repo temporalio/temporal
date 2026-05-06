@@ -14,6 +14,7 @@
 *.test
 *.xml
 !tools/testrunner/testdata/*.xml
+!tools/testrunner2/testdata/*.xml
 *.swp
 /*.iml
 *.cov
@@ -25,6 +26,7 @@
 /tctl*
 /tdbg
 /fairsim
+/test-runner
 
 # proto images
 /proto/image.bin

@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	defaultLevel = 2 // 1 means shard by suite, 2 means shard by test
+	defaultLevel = 1 // 1 means shard by suite, 2 means shard by test
 )
 
 var testNameRe = regexp.MustCompile(`^(.*?)\s*\(.*\)$`)
@@ -238,17 +238,18 @@ func aggregateByLevel(tmap map[string][]float64) map[string]float64 {
 	smap := make(map[string]float64)
 
 	for name, times := range tmap {
-		// Only include entries at the target depth (e.g. "Suite/Test" at level 2).
-		if strings.Count(name, "/")+1 != defaultLevel {
+		parts := strings.Split(name, "/")
+		if len(parts) < defaultLevel {
 			continue
 		}
+		shardName := strings.Join(parts[:defaultLevel], "/")
 
 		// Sum all observed durations across runs.
 		var total float64
 		for _, t := range times {
 			total += t
 		}
-		smap[name] = total
+		smap[shardName] += total
 	}
 
 	return smap
