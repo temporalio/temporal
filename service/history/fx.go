@@ -322,21 +322,21 @@ func RateLimitInterceptorProvider(
 // for the history host RPS rate limiter, along with the priority list to
 // pass to NewPriorityRateLimiterHelper.
 //
-// Priority layout (7 levels):
+// Priority layout (6 levels):
 //
-//	0  Operator           (always, regardless of fairness or share state)
+//	0  Operator           (in-share)
 //	1  API                (in-share)
 //	2  BgHigh             (in-share)
 //	3  BgLow              (in-share)
-//	4  over-share API
-//	5  over-share Bg*     (BgHigh / BgLow)
-//	6  Preemptable        (always, regardless of fairness or share state)
+//	4  over-share         (any caller type except Preemptable, over fair share)
+//	5  Preemptable        (always, regardless of fairness or share state)
 //
-// Operator and Preemptable are treated as outside the fairness model: they
-// never consume the namespace bucket and never produce a demotion metric.
-// Operator stays at the top so admin actions are never throttled by
-// per-namespace fairness; Preemptable stays at the bottom so it is throttled
-// before everything else under contention.
+// All caller types except Preemptable participate in the fairness check:
+// in-share traffic keeps its caller-type priority (including Operator at 0),
+// over-share traffic — Operator included — collapses into the single
+// over-share band at priority 4 and emits a demotion metric. Preemptable is
+// outside the fairness model: it never consumes the namespace bucket, never
+// produces a demotion metric, and always sinks to the bottom band.
 //
 // share(ns) = scaleFactor * FrontendGlobalNamespaceRPS(ns) * multiplier.
 // OwnershipAwareNamespaceQuotaCalculator (with nil MemberCounter and
@@ -345,19 +345,17 @@ func RateLimitInterceptorProvider(
 // (normalized below to >0) doesn't change the sign, so GetQuota>0 alone is
 // the "fairness applies" signal; the bucket rate folds in the multiplier.
 func getFairnessPriorityFn(
-	config *configs.Config,
+	cfg *configs.Config,
 	ownershipBasedQuotaScaler shard.LazyLoadedOwnershipBasedQuotaScaler,
 	metricsHandler metrics.Handler,
 ) (quotas.RequestPriorityFn, []int) {
 	const (
-		overShareUserFacingPriority = 4
-		overShareBackgroundPriority = 5
-		preemptablePriority         = 6
+		overSharePriority   = 4
+		preemptablePriority = 5
 	)
 	priorities := []int{
 		quotas.OperatorPriority, 1, 2, 3,
-		overShareUserFacingPriority,
-		overShareBackgroundPriority,
+		overSharePriority,
 		preemptablePriority,
 	}
 
@@ -365,7 +363,7 @@ func getFairnessPriorityFn(
 		ownershipBasedQuotaScaler,
 		nil,
 		func(string) int { return 0 },
-		config.FrontendGlobalNamespaceRPS,
+		cfg.FrontendGlobalNamespaceRPS,
 	)
 
 	// Per-namespace fair-share buckets, sized at share(ns) with the standard
@@ -377,7 +375,7 @@ func getFairnessPriorityFn(
 			ns := req.Caller
 			return quotas.NewRequestRateLimiterAdapter(
 				quotas.NewDefaultIncomingRateLimiter(func() float64 {
-					mul := config.NamespaceFairShareMultiplier()
+					mul := cfg.NamespaceFairShareMultiplier()
 					if mul <= 0 {
 						mul = 1
 					}
@@ -387,14 +385,11 @@ func getFairnessPriorityFn(
 		},
 	)
 
-	enabled := config.EnableNamespaceFairness
+	enabled := cfg.EnableNamespaceFairness
 	priorityFn := func(req quotas.Request) int {
-		// Operator stays at the top, Preemptable always sinks to the bottom.
-		// Both are outside the fairness model: they don't consume the
-		// namespace bucket and don't produce a demotion metric.
-		if req.CallerType == headers.CallerTypeOperator {
-			return quotas.OperatorPriority
-		}
+		// Preemptable always sinks to the bottom and bypasses the fairness
+		// check — it's already the lowest band, so demotion is meaningless
+		// and there's no reason to consume the namespace bucket for it.
 		if req.CallerType == headers.CallerTypePreemptable {
 			return preemptablePriority
 		}
@@ -416,10 +411,7 @@ func getFairnessPriorityFn(
 			metrics.NamespaceTag(req.Caller),
 			metrics.StringTag("caller_type", req.CallerType),
 		)
-		if callerTypePri == configs.CallerTypeToPriority[headers.CallerTypeAPI] {
-			return overShareUserFacingPriority
-		}
-		return overShareBackgroundPriority
+		return overSharePriority
 	}
 	return priorityFn, priorities
 }
