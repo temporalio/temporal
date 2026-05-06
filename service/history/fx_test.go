@@ -133,9 +133,8 @@ func TestFairnessPriorityFn_MultipleCallers(t *testing.T) {
 }
 
 // TestFairnessPriorityFn_DisabledFlagFallsThrough verifies that with the
-// kill switch off, no namespace traffic is demoted even at very low share.
-// Preemptable still goes to priority 5 (the absolute-lowest layout applies
-// regardless of the flag).
+// kill switch off, every caller type maps to its legacy caller-type
+// priority — no demotion, no Preemptable bottom-band override.
 func TestFairnessPriorityFn_DisabledFlagFallsThrough(t *testing.T) {
 	priorityFn, _ := makeTestPriorityFn(t,
 		false, // fairness disabled
@@ -145,17 +144,11 @@ func TestFairnessPriorityFn_DisabledFlagFallsThrough(t *testing.T) {
 	// Drain what would be the bucket — with fairness off, no demotion
 	// happens regardless.
 	for callerType, expected := range configs.CallerTypeToPriority {
-		if callerType == headers.CallerTypePreemptable {
-			continue // tested separately below
-		}
 		for range 50 {
 			require.Equal(t, expected, priorityFn(req("namespaceA", callerType)),
 				"callerType=%s with fairness disabled should keep its priority", callerType)
 		}
 	}
-	// Operator still routes to 0 and Preemptable to 5 unconditionally.
-	require.Equal(t, 0, priorityFn(req("namespaceA", headers.CallerTypeOperator)))
-	require.Equal(t, 5, priorityFn(req("namespaceA", headers.CallerTypePreemptable)))
 }
 
 // TestFairnessPriorityFn_ScalerNotReady verifies that when the

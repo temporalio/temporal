@@ -387,17 +387,14 @@ func getFairnessPriorityFn(
 
 	enabled := cfg.EnableNamespaceFairness
 	priorityFn := func(req quotas.Request) int {
-		// Preemptable always sinks to the bottom and bypasses the fairness
-		// check — it's already the lowest band, so demotion is meaningless
-		// and there's no reason to consume the namespace bucket for it.
-		if req.CallerType == headers.CallerTypePreemptable {
-			return preemptablePriority
-		}
 		callerTypePri := configs.RequestToPriority(req)
 		if !enabled() {
 			return callerTypePri
 		}
-		if req.Caller == "" || req.Caller == headers.CallerNameSystem {
+		if req.CallerType == headers.CallerTypePreemptable {
+			return preemptablePriority
+		}
+		if req.Caller == "" {
 			return callerTypePri
 		}
 		if nsQuotaCalc.GetQuota(req.Caller) <= 0 {
