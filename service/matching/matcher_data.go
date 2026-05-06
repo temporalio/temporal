@@ -415,13 +415,15 @@ func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalT
 	return reprocess
 }
 
-// findMatch should return the highest priority task+poller match even if the per-task rate
-// limit doesn't allow the task to be matched yet.
+// findMatch returns the highest-priority ready task+poller pair, skipping tasks that are
+// rate-limited. If no task is ready, returns (nil, nil, minDelay) where minDelay is the
+// shortest wait across all rate-limited tasks that have a matching poller available.
 // call with lock held
 // nolint:revive // will improve later
-func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPoller) {
+func (d *matcherData) findMatch(allowForwarding bool, now int64) (*internalTask, *waitingPoller, time.Duration) {
 	// TODO(pri): optimize so it's not O(d*n) worst case
 	// TODO(pri): this iterates over heap as slice, which isn't quite correct, but okay for now
+	var minDelay time.Duration
 	for _, task := range d.tasks.heap {
 		// disallow normal poll forwarding when allowForwarding is false, but allow the
 		// "priority backlog poll forwarders".
@@ -429,6 +431,7 @@ func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPo
 			continue
 		}
 
+		var matched *waitingPoller
 		for _, poller := range d.pollers.heap {
 			// can't match cases:
 			if poller.queryOnly && !task.isQuery() && !task.isPollForwarder() {
@@ -449,11 +452,23 @@ func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPo
 				// their priority above "1". that's inaccurate but it's just a temporary situation.
 				continue
 			}
-
-			return task, poller
+			matched = poller
+			break
 		}
+		if matched == nil {
+			continue
+		}
+
+		delay := d.rateLimitManager.readyTimeForTask(task).delay(now)
+		if delay > 0 {
+			if minDelay == 0 || delay < minDelay {
+				minDelay = delay
+			}
+			continue
+		}
+		return task, matched, 0
 	}
-	return nil, nil
+	return nil, nil, minDelay
 }
 
 // call with lock held
@@ -498,18 +513,14 @@ func (d *matcherData) findAndWakeMatches() {
 
 	for {
 		// search for highest priority match
-		task, poller := d.findMatch(allowForwarding)
+		task, poller, minDelay := d.findMatch(allowForwarding, now)
 		if task == nil || poller == nil {
-			// no more current matches, stop rate limit timer if was running
-			d.rateLimitTimer.unset()
+			if minDelay > 0 {
+				d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, minDelay)
+			} else {
+				d.rateLimitTimer.unset()
+			}
 			return
-		}
-
-		// check ready time
-		delay := d.rateLimitManager.readyTimeForTask(task).delay(now)
-		d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, delay)
-		if delay > 0 {
-			return // not ready yet, timer will call match later
 		}
 
 		// ready to signal match
