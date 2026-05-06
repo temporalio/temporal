@@ -673,6 +673,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 		return e.EventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED && e.EventId > opStartedEvent.EventId
 	})
 	s.Positive(wftCompletedIdx, "expected WorkflowTaskCompleted after NexusOperationStarted")
+	s.Empty(hist[wftCompletedIdx].Links)
 	wftCompletedEventID := hist[wftCompletedIdx].EventId
 
 	// Reset the workflow and check that the completion event has been reapplied.
