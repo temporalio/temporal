@@ -1022,6 +1022,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure(chasmEnabled boo
 	var noe *temporal.NexusOperationError
 	s.ErrorAs(wee, &noe)
 	s.Contains(noe.Error(), "test operation failed")
+
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+	s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED)
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEnabled bool) {
@@ -1344,6 +1347,10 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth(c
 	var result string
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("result", result)
+
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
+	s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
+	s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_CancelationEventuallyDelivered(chasmEnabled bool) {
@@ -1501,6 +1508,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset(cha
 	resetRun := env.SdkClient().GetWorkflow(ctx, run.GetID(), resetResp.RunId)
 	s.NoError(resetRun.Get(ctx, &result))
 	s.Equal("result", result)
+
+	resetHist = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resetResp.RunId})
+	s.RequireHistoryEvent(resetHist, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithNilIO(chasmEnabled bool) {
