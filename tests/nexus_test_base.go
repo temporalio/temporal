@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type NexusTestEnv struct {
@@ -33,6 +35,22 @@ func newNexusTestEnv(t *testing.T, useTemporalFailures bool, opts ...testcore.Te
 		TestEnv:             testcore.NewEnv(t, opts...),
 		useTemporalFailures: useTemporalFailures,
 	}
+}
+
+// startStandaloneNexusOp invokes StartNexusOperationExecution with sane defaults filled
+// in for any unset fields (Namespace, Service, Operation, RequestId, ScheduleToCloseTimeout).
+// Shared by every suite that needs to start a standalone Nexus operation.
+func (env *NexusTestEnv) startStandaloneNexusOp(
+	req *workflowservice.StartNexusOperationExecutionRequest,
+) (*workflowservice.StartNexusOperationExecutionResponse, error) {
+	req.Namespace = cmp.Or(req.Namespace, env.Namespace().String())
+	req.Service = cmp.Or(req.Service, "test-service")
+	req.Operation = cmp.Or(req.Operation, "test-operation")
+	req.RequestId = cmp.Or(req.RequestId, env.Tv().RequestID())
+	if req.ScheduleToCloseTimeout == nil {
+		req.ScheduleToCloseTimeout = durationpb.New(10 * time.Minute)
+	}
+	return env.FrontendClient().StartNexusOperationExecution(env.Context(), req)
 }
 
 func (env *NexusTestEnv) createNexusEndpoint(ctx context.Context, t *testing.T, name string, taskQueue string) *nexuspb.Endpoint {

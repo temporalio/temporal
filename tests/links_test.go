@@ -11,6 +11,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
@@ -136,6 +137,44 @@ func (s *LinksSuite) TestSignalWorkflowExecution_LinksAttachedToEvent() {
 		event, err := history.Next()
 		s.NoError(err)
 		if event.EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+			continue
+		}
+		foundEvent = true
+		protorequire.ProtoSliceEqual(s.T(), links, event.Links)
+	}
+	s.True(foundEvent)
+}
+
+func (s *LinksSuite) TestGetWorkflowExecutionResult_LinksAttachedToEvent() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableGetWorkflowExecutionResult, true),
+	)
+	run, err := env.SdkClient().ExecuteWorkflow(
+		env.Context(),
+		client.StartWorkflowOptions{
+			TaskQueue: "dont-care",
+		},
+		"test-workflow-type",
+	)
+	s.NoError(err)
+
+	_, err = env.FrontendClient().GetWorkflowExecutionResult(env.Context(), &workflowservice.GetWorkflowExecutionResultRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: run.GetID(),
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+		Links:     links,
+	})
+	s.NoError(err)
+
+	history := env.SdkClient().GetWorkflowHistory(env.Context(), run.GetID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	foundEvent := false
+	for history.HasNext() {
+		event, err := history.Next()
+		s.NoError(err)
+		if event.EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
 			continue
 		}
 		foundEvent = true
