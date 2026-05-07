@@ -3,7 +3,10 @@ package rpc
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"net"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,8 +19,13 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/auth"
+	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/tests/testutils"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
@@ -26,6 +34,36 @@ type staticTokenProvider string
 
 func (t staticTokenProvider) GetToken(context.Context, string) (string, time.Time, error) {
 	return string(t), time.Time{}, nil
+}
+
+type tlsEnv struct {
+	serverOpt grpc.ServerOption
+	provider  *encryption.FixedTLSConfigProvider
+}
+
+// newTLSEnv generates a self-signed cert chain for 127.0.0.1 and returns the matching
+// server option and client-side TLSConfigProvider. Both halves trust the same chain.
+func newTLSEnv(t *testing.T) tlsEnv {
+	t.Helper()
+	chain, err := testutils.GenerateTestChain(t.TempDir(), localhostIPv4)
+	require.NoError(t, err)
+
+	serverCreds, err := credentials.NewServerTLSFromFile(chain.CertPubFile, chain.CertKeyFile)
+	require.NoError(t, err)
+
+	caBytes, err := os.ReadFile(chain.CaPubFile)
+	require.NoError(t, err)
+	pool := x509.NewCertPool()
+	require.True(t, pool.AppendCertsFromPEM(caBytes))
+
+	return tlsEnv{
+		serverOpt: grpc.Creds(serverCreds),
+		provider: &encryption.FixedTLSConfigProvider{
+			RemoteClusterClientConfigs: map[string]*tls.Config{
+				localhostIPv4: {ServerName: localhostIPv4, RootCAs: pool},
+			},
+		},
+	}
 }
 
 func TestTokenAuthHeader_SentOnRemoteConnection(t *testing.T) {
@@ -43,7 +81,8 @@ func TestTokenAuthHeader_SentOnRemoteConnection(t *testing.T) {
 		return handler(ctx, req)
 	}
 
-	server := grpc.NewServer(grpc.UnaryInterceptor(interceptor))
+	env := newTLSEnv(t)
+	server := grpc.NewServer(env.serverOpt, grpc.UnaryInterceptor(interceptor))
 	testservice.RegisterTestServiceServer(server, &TestServiceServerHandler{})
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -64,7 +103,7 @@ func TestTokenAuthHeader_SentOnRemoteConnection(t *testing.T) {
 		testCfg,
 		primitives.FrontendService,
 		log.NewTestLogger(),
-		metrics.NoopMetricsHandler, nil,
+		metrics.NoopMetricsHandler, env.provider,
 		"dns:///127.0.0.1:0", "dns:///127.0.0.1:0", 0, nil,
 		nil, nil, nil,
 		tokenProvider,
@@ -96,7 +135,8 @@ func TestTokenAuthHeader_NotSentWhenNoProvider(t *testing.T) {
 		return handler(ctx, req)
 	}
 
-	server := grpc.NewServer(grpc.UnaryInterceptor(interceptor))
+	env := newTLSEnv(t)
+	server := grpc.NewServer(env.serverOpt, grpc.UnaryInterceptor(interceptor))
 	testservice.RegisterTestServiceServer(server, &TestServiceServerHandler{})
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -115,7 +155,7 @@ func TestTokenAuthHeader_NotSentWhenNoProvider(t *testing.T) {
 		testCfg,
 		primitives.FrontendService,
 		log.NewTestLogger(),
-		metrics.NoopMetricsHandler, nil,
+		metrics.NoopMetricsHandler, env.provider,
 		"dns:///127.0.0.1:0", "dns:///127.0.0.1:0", 0, nil,
 		nil, nil, nil,
 		nil,
@@ -151,7 +191,8 @@ func TestTokenAuthHeader_ReceiverRejectsWrongToken(t *testing.T) {
 		return handler(ctx, req)
 	}
 
-	server := grpc.NewServer(grpc.UnaryInterceptor(rejectInterceptor))
+	env := newTLSEnv(t)
+	server := grpc.NewServer(env.serverOpt, grpc.UnaryInterceptor(rejectInterceptor))
 	testservice.RegisterTestServiceServer(server, &TestServiceServerHandler{})
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -172,7 +213,7 @@ func TestTokenAuthHeader_ReceiverRejectsWrongToken(t *testing.T) {
 		testCfg,
 		primitives.FrontendService,
 		log.NewTestLogger(),
-		metrics.NoopMetricsHandler, nil,
+		metrics.NoopMetricsHandler, env.provider,
 		"dns:///127.0.0.1:0", "dns:///127.0.0.1:0", 0, nil,
 		nil, nil, nil,
 		tokenProvider,
@@ -192,7 +233,8 @@ func TestTokenAuthHeader_ReceiverRejectsWrongToken(t *testing.T) {
 func TestTokenAuthHeader_StrictModeRejectsEmptyToken(t *testing.T) {
 	t.Parallel()
 
-	server := grpc.NewServer()
+	env := newTLSEnv(t)
+	server := grpc.NewServer(env.serverOpt)
 	testservice.RegisterTestServiceServer(server, &TestServiceServerHandler{})
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -218,7 +260,7 @@ func TestTokenAuthHeader_StrictModeRejectsEmptyToken(t *testing.T) {
 		testCfg,
 		primitives.FrontendService,
 		log.NewTestLogger(),
-		metrics.NoopMetricsHandler, nil,
+		metrics.NoopMetricsHandler, env.provider,
 		"dns:///127.0.0.1:0", "dns:///127.0.0.1:0", 0, nil,
 		nil, nil, nil,
 		tokenProvider,
@@ -233,4 +275,22 @@ func TestTokenAuthHeader_StrictModeRejectsEmptyToken(t *testing.T) {
 	st, ok := status.FromError(err)
 	require.True(t, ok)
 	require.Equal(t, codes.Unauthenticated, st.Code())
+}
+
+// Asserts production TokenCredentials refuse to attach to a plaintext dial.
+// gRPC validates this at NewClient construction; the bearer never gets a chance to leave.
+func TestTokenAuthHeader_PlaintextDialRejectedByCredentials(t *testing.T) {
+	t.Parallel()
+
+	creds := auth.NewTokenCredentials("authorization", func(context.Context) (string, time.Time, error) {
+		return "any-token", time.Time{}, nil
+	}, time.Second)
+
+	_, err := grpc.NewClient(
+		"127.0.0.1:0",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithPerRPCCredentials(creds),
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "transport level security")
 }

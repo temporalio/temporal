@@ -2,6 +2,9 @@ package xdc
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -15,7 +18,9 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/tests/testcore"
+	"go.temporal.io/server/tests/testutils"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -25,6 +30,38 @@ type staticTokenProvider string
 
 func (t staticTokenProvider) GetToken(context.Context, string) (string, time.Time, error) {
 	return string(t), time.Time{}, nil
+}
+
+// newSharedTLSProvider generates one cert chain for 127.0.0.1 and returns a TLS provider
+// usable as both server and client by every cluster in the suite. The same chain on both
+// sides means cluster A trusts cluster B's cert and vice versa without further wiring.
+func newSharedTLSProvider(t *testing.T) *encryption.FixedTLSConfigProvider {
+	t.Helper()
+	chain, err := testutils.GenerateTestChain(t.TempDir(), "127.0.0.1")
+	if err != nil {
+		t.Fatalf("generate test chain: %v", err)
+	}
+	cert, err := tls.LoadX509KeyPair(chain.CertPubFile, chain.CertKeyFile)
+	if err != nil {
+		t.Fatalf("load cert/key: %v", err)
+	}
+	caBytes, err := os.ReadFile(chain.CaPubFile)
+	if err != nil {
+		t.Fatalf("read CA: %v", err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caBytes) {
+		t.Fatal("append CA to pool")
+	}
+	serverCfg := &tls.Config{Certificates: []tls.Certificate{cert}, ClientCAs: pool, ClientAuth: tls.RequireAndVerifyClientCert}
+	clientCfg := &tls.Config{ServerName: "127.0.0.1", Certificates: []tls.Certificate{cert}, RootCAs: pool}
+	return &encryption.FixedTLSConfigProvider{
+		InternodeServerConfig:      serverCfg,
+		InternodeClientConfig:      clientCfg,
+		FrontendServerConfig:       serverCfg,
+		FrontendClientConfig:       clientCfg,
+		RemoteClusterClientConfigs: map[string]*tls.Config{"127.0.0.1": clientCfg},
+	}
 }
 
 type capturedCall struct {
@@ -86,6 +123,9 @@ func (s *RemoteClusterAuthSuite) SetupSuite() {
 
 	tokenProvider := staticTokenProvider(expectedXDCToken)
 
+	// Production TokenCredentials require TLS; both clusters share one cert chain so they trust each other's cert.
+	tlsProvider := newSharedTLSProvider(s.T())
+
 	persistenceDefaults := testcore.GetPersistenceTestDefaults()
 	clusterConfigs := []*testcore.TestClusterConfig{
 		{
@@ -93,18 +133,20 @@ func (s *RemoteClusterAuthSuite) SetupSuite() {
 				EnableGlobalNamespace:    true,
 				FailoverVersionIncrement: 10,
 			},
-			HistoryConfig: testcore.HistoryConfig{NumHistoryShards: 1},
-			Persistence:   persistenceDefaults,
-			TokenProvider: tokenProvider,
+			HistoryConfig:     testcore.HistoryConfig{NumHistoryShards: 1},
+			Persistence:       persistenceDefaults,
+			TokenProvider:     tokenProvider,
+			TLSConfigProvider: tlsProvider,
 		},
 		{
 			ClusterMetadata: cluster.Config{
 				EnableGlobalNamespace:    true,
 				FailoverVersionIncrement: 10,
 			},
-			HistoryConfig: testcore.HistoryConfig{NumHistoryShards: 1},
-			Persistence:   persistenceDefaults,
-			TokenProvider: tokenProvider,
+			HistoryConfig:     testcore.HistoryConfig{NumHistoryShards: 1},
+			Persistence:       persistenceDefaults,
+			TokenProvider:     tokenProvider,
+			TLSConfigProvider: tlsProvider,
 		},
 	}
 

@@ -93,8 +93,9 @@ type (
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
-		ServiceFxOptions map[primitives.ServiceName][]fx.Option
-		TokenProvider    auth.TokenProvider
+		ServiceFxOptions  map[primitives.ServiceName][]fx.Option
+		TokenProvider     auth.TokenProvider
+		TLSConfigProvider *encryption.FixedTLSConfigProvider
 	}
 
 	TestClusterFactory interface {
@@ -314,7 +315,10 @@ func newClusterWithPersistenceTestBaseFactory(
 	}
 
 	var tlsConfigProvider *encryption.FixedTLSConfigProvider
-	if clusterConfig.EnableMTLS {
+	switch {
+	case clusterConfig.TLSConfigProvider != nil:
+		tlsConfigProvider = clusterConfig.TLSConfigProvider
+	case clusterConfig.EnableMTLS:
 		if tlsConfigProvider, err = createFixedTLSConfigProvider(); err != nil {
 			return nil, err
 		}

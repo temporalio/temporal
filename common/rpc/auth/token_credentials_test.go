@@ -191,7 +191,7 @@ func TestTokenCredentials_RequireTransportSecurity(t *testing.T) {
 	creds := NewTokenCredentials("authorization", func(context.Context) (string, time.Time, error) {
 		return "token", time.Time{}, nil
 	}, 0)
-	require.False(t, creds.RequireTransportSecurity())
+	require.True(t, creds.RequireTransportSecurity(), "production credentials must require TLS")
 }
 
 func TestParseJWTExpiry_Valid(t *testing.T) {

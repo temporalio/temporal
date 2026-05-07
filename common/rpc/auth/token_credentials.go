@@ -54,8 +54,9 @@ func (c *TokenCredentials) GetRequestMetadata(ctx context.Context, _ ...string) 
 	}, nil
 }
 
+// Require TLS as recommended by RFC 9700
 func (c *TokenCredentials) RequireTransportSecurity() bool {
-	return false
+	return true
 }
 
 func (c *TokenCredentials) getToken(ctx context.Context) (string, error) {
