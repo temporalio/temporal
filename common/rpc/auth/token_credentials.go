@@ -73,7 +73,8 @@ func (c *TokenCredentials) getToken(ctx context.Context) (string, error) {
 
 	// Slow path: coalesce concurrent fetches so a slow IdP round-trip doesn't
 	// serialize every RPC on the connection. The cache mutex is never held
-	// while c.fetchToken is in flight.
+	// while c.fetchToken is in flight. Note: only the first caller's ctx drives
+	// fetchToken; later joiners share its outcome and cancellation.
 	v, err, _ := c.sf.Do("token", func() (any, error) {
 		// Re-check under lock — another fetcher may have just updated cache.
 		c.mu.Lock()
