@@ -70,25 +70,19 @@ func (g *CallbackTokenGenerator) DecodeCompletion(token *CallbackToken) (*tokens
 
 func validateCompletion(completion *tokenspb.NexusOperationCompletion) error {
 	hasCHASMRef := len(completion.GetComponentRef()) > 0
-	hasHSMRef := completion.GetNamespaceId() != "" ||
-		completion.GetWorkflowId() != "" ||
-		completion.GetRunId() != "" ||
-		completion.GetRef() != nil
-	isCompleteHSM := completion.GetNamespaceId() != "" &&
+	hasHSMRef := completion.GetNamespaceId() != "" &&
 		completion.GetWorkflowId() != "" &&
 		completion.GetRunId() != "" &&
 		completion.GetRef() != nil
 
-	switch {
-	case hasCHASMRef && hasHSMRef:
-		return serviceerror.NewInvalidArgument("callback token contains both HSM and CHASM fields")
-	case hasCHASMRef:
+	// CHASM tokens may also carry partial HSM-shaped routing fields
+	// (NamespaceId/WorkflowId) so that legacy HSM-only callback routers
+	// can still route the completion. The CHASM ComponentRef remains
+	// authoritative; the HSM fields are routing hints only.
+	if hasCHASMRef || hasHSMRef {
 		return nil
-	case isCompleteHSM:
-		return nil
-	default:
-		return serviceerror.NewInvalidArgument("callback token must contain either all HSM fields or a component ref")
 	}
+	return serviceerror.NewInvalidArgument("callback token must contain either all HSM fields or a component ref")
 }
 
 // DecodeCallbackToken unmarshals the given token applying minimal data verification.

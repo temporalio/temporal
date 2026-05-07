@@ -132,7 +132,7 @@ func (h *operationInvocationTaskHandler) Execute(
 		return fmt.Errorf("failed to build callback URL: %w", err)
 	}
 
-	token, err := h.generateCallbackToken(args.serializedRef, args.requestID)
+	token, err := h.generateCallbackToken(args.serializedRef, opRef.NamespaceID, opRef.BusinessID, opRef.RunID, args.requestID)
 	if err != nil {
 		return err
 	}

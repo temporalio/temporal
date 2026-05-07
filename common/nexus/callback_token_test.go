@@ -33,36 +33,22 @@ func TestCallbackTokenGenerator_DecodeCompletion(t *testing.T) {
 			},
 		},
 		{
-			name: "mixed with namespace id",
+			// CHASM tokens may carry HSM-shaped routing hints alongside ComponentRef
+			// so legacy HSM-only callback routers can still route the completion.
+			name: "CHASM with HSM routing hints",
+			completion: &tokenspb.NexusOperationCompletion{
+				NamespaceId:  "ns-id",
+				WorkflowId:   "wf-id",
+				RunId:        "run-id",
+				ComponentRef: []byte("component-ref"),
+			},
+		},
+		{
+			name: "CHASM with partial HSM routing hints",
 			completion: &tokenspb.NexusOperationCompletion{
 				NamespaceId:  "ns-id",
 				ComponentRef: []byte("component-ref"),
 			},
-			wantErr: "both HSM and CHASM",
-		},
-		{
-			name: "mixed with workflow id",
-			completion: &tokenspb.NexusOperationCompletion{
-				WorkflowId:   "wf-id",
-				ComponentRef: []byte("component-ref"),
-			},
-			wantErr: "both HSM and CHASM",
-		},
-		{
-			name: "mixed with run id",
-			completion: &tokenspb.NexusOperationCompletion{
-				RunId:        "run-id",
-				ComponentRef: []byte("component-ref"),
-			},
-			wantErr: "both HSM and CHASM",
-		},
-		{
-			name: "mixed with ref",
-			completion: &tokenspb.NexusOperationCompletion{
-				Ref:          &persistencespb.StateMachineRef{},
-				ComponentRef: []byte("component-ref"),
-			},
-			wantErr: "both HSM and CHASM",
 		},
 		{
 			name:       "empty",

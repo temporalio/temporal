@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,6 +20,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporalnexus"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -2121,6 +2126,52 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 		s.Error(err)
 		s.Contains(err.Error(), "operation_id is required")
 	})
+}
+
+// Verifies that CHASM-backed Standalone Nexus is compatible with HSM-backed callbacks.
+func (s *NexusStandaloneTestSuite) TestHSMCallbackHandlerCompatability() {
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, false))
+	ctx := env.Context()
+
+	handlerTaskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := env.createNexusEndpoint(ctx, s.T(), testcore.RandomizedNexusEndpoint(s.T().Name()), handlerTaskQueue).GetSpec().GetName()
+
+	handlerWF := func(workflow.Context, nexus.NoValue) (string, error) {
+		return "ok", nil
+	}
+
+	svc := nexus.NewService("test-service")
+	nexusOp := temporalnexus.NewWorkflowRunOperation("test-operation", handlerWF,
+		func(_ context.Context, _ nexus.NoValue, _ nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
+			return client.StartWorkflowOptions{
+				ID:        "handler-wf-" + uuid.NewString(),
+				TaskQueue: handlerTaskQueue,
+			}, nil
+		})
+	svc.MustRegister(nexusOp)
+
+	w := worker.New(env.SdkClient(), handlerTaskQueue, worker.Options{})
+	w.RegisterWorkflow(handlerWF)
+	w.RegisterNexusService(svc)
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+		OperationId: "test-op",
+		Endpoint:    endpointName,
+	})
+	s.NoError(err)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(ctx, &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:      env.Namespace().String(),
+			OperationId:    "test-op",
+			RunId:          startResp.RunId,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+	}, 30*time.Second, 200*time.Millisecond)
 }
 
 func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken() {

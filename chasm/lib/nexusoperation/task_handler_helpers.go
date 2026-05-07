@@ -392,12 +392,20 @@ func lookupEndpoint(ctx context.Context, registry commonnexus.EndpointRegistry, 
 }
 
 // generateCallbackToken creates a callback token for the given operation reference.
+//
+// namespaceID, businessID, and runID are dual-populated alongside ComponentRef so
+// legacy HSM-only callback routers can still route the completion. ComponentRef
+// remains authoritative for completion handling; the HSM-shaped fields are
+// consulted only by routers, never for completion semantics.
 func (h *operationInvocationTaskHandler) generateCallbackToken(
 	serializedRef []byte,
-	requestID string,
+	namespaceID, businessID, runID, requestID string,
 ) (string, error) {
 	token, err := h.callbackTokenGenerator.Tokenize(&tokenspb.NexusOperationCompletion{
 		ComponentRef: serializedRef,
+		NamespaceId:  namespaceID,
+		WorkflowId:   businessID,
+		RunId:        runID,
 		RequestId:    requestID,
 	})
 	if err != nil {
