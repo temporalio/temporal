@@ -593,8 +593,8 @@ func TestHandleScheduleCommand(t *testing.T) {
 		opParentData := &workflowpb.NexusOperationParentData{}
 		require.NoError(t, op.ParentData.UnmarshalTo(opParentData))
 		require.EqualExportedValues(t, &workflowpb.NexusOperationParentData{
-			ScheduledEventId:      event.EventId,
-			ScheduledEventBatchId: 1, // WorkflowTaskCompletedEventID
+			ScheduledEventId:    event.EventId,
+			ScheduledEventToken: []byte("test token"),
 		}, opParentData)
 		require.EqualExportedValues(t, userMetadata, event.UserMetadata)
 	})

@@ -38,6 +38,10 @@ func (m MSPointer) HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool
 	return m.backend.HasAnyBufferedEvent(filter)
 }
 
+func (m MSPointer) GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
+	return m.backend.GenerateEventLoadToken(event)
+}
+
 // LoadHistoryEvent loads a history event from the underlying mutable state using the given token.
 func (m MSPointer) LoadHistoryEvent(ctx Context, token []byte) (*historypb.HistoryEvent, error) {
 	return m.backend.LoadHistoryEvent(ctx.goContext(), token)

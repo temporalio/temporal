@@ -1376,20 +1376,18 @@ func (s *NexusStandaloneTestSuite) TestListStandaloneNexusOperation() {
 				},
 			},
 		} {
-			s.Run(tc.name, func(s *NexusStandaloneTestSuite) {
-				var resp *workflowservice.ListNexusOperationExecutionsResponse
-				s.EventuallyWithT(func(t *assert.CollectT) {
-					var err error
-					resp, err = env.FrontendClient().ListNexusOperationExecutions(env.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
-						Namespace: env.Namespace().String(),
-						PageSize:  10,
-						Query:     tc.query,
-					})
-					require.NoError(t, err, "case=%s query=%s", tc.name, tc.query)
-					require.Len(t, resp.GetOperations(), 1, "case=%s query=%s", tc.name, tc.query)
-				}, testcore.WaitForESToSettle, 100*time.Millisecond)
-				tc.assert(s.T(), resp.GetOperations()[0])
-			})
+			var resp *workflowservice.ListNexusOperationExecutionsResponse
+			s.EventuallyWithT(func(t *assert.CollectT) {
+				var err error
+				resp, err = env.FrontendClient().ListNexusOperationExecutions(env.Context(), &workflowservice.ListNexusOperationExecutionsRequest{
+					Namespace: env.Namespace().String(),
+					PageSize:  10,
+					Query:     tc.query,
+				})
+				require.NoError(t, err, "case=%s query=%s", tc.name, tc.query)
+				require.Len(t, resp.GetOperations(), 1, "case=%s query=%s", tc.name, tc.query)
+			}, testcore.WaitForESToSettle, 100*time.Millisecond)
+			tc.assert(s.T(), resp.GetOperations()[0])
 		}
 	})
 
