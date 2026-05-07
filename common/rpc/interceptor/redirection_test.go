@@ -743,7 +743,7 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_TooManyRedir
 
 	// Verify too-many-redirects metric was emitted
 	snapshot := capture.Snapshot()
-	tooManyRedirectsMetrics := snapshot[metrics.ClientRedirectionTooManyRedirects.Name()]
+	tooManyRedirectsMetrics := snapshot[metrics.ClientDuplicatedRedirects.Name()]
 	s.NotEmpty(tooManyRedirectsMetrics, "ClientRedirectionTooManyRedirects should be emitted when redirect header is present")
 	s.Len(tooManyRedirectsMetrics, 1)
 	s.Equal(int64(1), tooManyRedirectsMetrics[0].Value)
@@ -811,7 +811,7 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_NoRedirectHe
 
 	// Verify too-many-redirects metric was NOT emitted
 	snapshot := capture.Snapshot()
-	s.Empty(snapshot[metrics.ClientRedirectionTooManyRedirects.Name()],
+	s.Empty(snapshot[metrics.ClientDuplicatedRedirects.Name()],
 		"ClientRedirectionTooManyRedirects should NOT be emitted for first redirect")
 
 	// Verify normal redirection metrics ARE emitted
