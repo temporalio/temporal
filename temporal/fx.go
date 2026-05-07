@@ -286,6 +286,8 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}
 	// TokenCredentials require TLS (RFC 9700); without a remote-cluster TLS source the first
 	// cross-cluster dial would fatal-log, with no clear "you forgot TLS" diagnostic.
+	// Coarse check: any remote-cluster TLS entry passes; per-hostname config is still validated
+	// lazily on first dial.
 	if so.tokenProvider != nil && so.tlsConfigProvider == nil && len(so.config.Global.TLS.RemoteClusters) == 0 {
 		return serverOptionsProvider{}, errors.New("WithTokenProvider is set but no remote-cluster TLS is configured: supply global.tls.remoteClusters in config, or pass a provider via WithTLSConfigProvider")
 	}
