@@ -280,10 +280,10 @@ func (w *Workflow) AddCompletionCallbacks(
 	return nil
 }
 
-// RegisterScheduledActivity applies TransitionScheduled to act and adds it to the workflow's
+// AddScheduledActivity applies TransitionScheduled to act and adds it to the workflow's
 // Activities map. This is the single entry point for scheduling embedded activities so that
 // the transition trigger stays inside the workflow package rather than in the caller.
-func (w *Workflow) RegisterScheduledActivity(
+func (w *Workflow) AddScheduledActivity(
 	ctx chasm.MutableContext,
 	activityID string,
 	act *activity.Activity,

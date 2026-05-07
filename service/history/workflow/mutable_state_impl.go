@@ -4177,7 +4177,7 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEventCHASM(
 
 	// 4. Register: applies TransitionScheduled (generates ActivityDispatchTask and timeout pure
 	// tasks) then adds to the workflow's Activities map, keyed by activity ID.
-	if err := wf.RegisterScheduledActivity(chasmCtx, command.GetActivityId(), act); err != nil {
+	if err := wf.AddScheduledActivity(chasmCtx, command.GetActivityId(), act); err != nil {
 		return 0, err
 	}
 
