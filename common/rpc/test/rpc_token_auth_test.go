@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/auth"
+	"go.temporal.io/server/common/rpc/auth/authtest"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/tests/testutils"
 	"google.golang.org/grpc"
@@ -29,12 +30,6 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
-
-type staticTokenProvider string
-
-func (t staticTokenProvider) GetToken(context.Context, string) (string, time.Time, error) {
-	return string(t), time.Time{}, nil
-}
 
 type tlsEnv struct {
 	serverOpt grpc.ServerOption
@@ -92,7 +87,7 @@ func TestTokenAuthHeader_SentOnRemoteConnection(t *testing.T) {
 
 	address := listener.Addr().String()
 
-	tokenProvider := staticTokenProvider(expectedToken)
+	tokenProvider := authtest.StaticTokenProvider(expectedToken)
 
 	testCfg := &config.Config{
 		Services: map[string]config.Service{
@@ -202,7 +197,7 @@ func TestTokenAuthHeader_ReceiverRejectsWrongToken(t *testing.T) {
 
 	address := listener.Addr().String()
 
-	tokenProvider := staticTokenProvider("wrong-token")
+	tokenProvider := authtest.StaticTokenProvider("wrong-token")
 
 	testCfg := &config.Config{
 		Services: map[string]config.Service{
@@ -244,7 +239,7 @@ func TestTokenAuthHeader_StrictModeRejectsEmptyToken(t *testing.T) {
 
 	address := listener.Addr().String()
 
-	tokenProvider := staticTokenProvider("")
+	tokenProvider := authtest.StaticTokenProvider("")
 
 	testCfg := &config.Config{
 		Global: config.Global{

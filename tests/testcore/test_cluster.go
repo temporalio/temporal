@@ -315,10 +315,9 @@ func newClusterWithPersistenceTestBaseFactory(
 	}
 
 	var tlsConfigProvider *encryption.FixedTLSConfigProvider
-	switch {
-	case clusterConfig.TLSConfigProvider != nil:
+	if clusterConfig.TLSConfigProvider != nil {
 		tlsConfigProvider = clusterConfig.TLSConfigProvider
-	case clusterConfig.EnableMTLS:
+	} else if clusterConfig.EnableMTLS {
 		if tlsConfigProvider, err = createFixedTLSConfigProvider(); err != nil {
 			return nil, err
 		}

@@ -54,6 +54,7 @@ type RPCFactory struct {
 	tokenProvider            auth.TokenProvider
 	authHeaderName           string
 	requireRemoteClusterAuth bool
+	tokenGraceWindow         time.Duration
 	monitor                  membership.Monitor
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
 	localFrontendClient      func() (*common.FrontendHTTPClient, error)
@@ -83,9 +84,11 @@ func NewFactory(
 ) *RPCFactory {
 	authHeaderName := "authorization"
 	requireRemoteClusterAuth := false
+	var tokenGraceWindow time.Duration
 	if cfg != nil {
 		authHeaderName = cmp.Or(cfg.Global.Authorization.AuthHeaderName, authHeaderName)
 		requireRemoteClusterAuth = cfg.Global.Authorization.RemoteClusterAuth.Require
+		tokenGraceWindow = cfg.Global.Authorization.RemoteClusterAuth.GraceWindow
 	}
 	f := &RPCFactory{
 		config:                   cfg,
@@ -102,6 +105,7 @@ func NewFactory(
 		tokenProvider:            tokenProvider,
 		authHeaderName:           authHeaderName,
 		requireRemoteClusterAuth: requireRemoteClusterAuth,
+		tokenGraceWindow:         tokenGraceWindow,
 		monitor:                  monitor,
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
@@ -238,6 +242,9 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 	keepAliveOption := d.getClientKeepAliveConfig(primitives.FrontendService)
 	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[primitives.FrontendService]...)
 
+	// requireRemoteClusterAuth is defense-in-depth: temporal/fx.go boot validation
+	// rejects (require=true, tokenProvider=nil), but RPCFactory is also constructed in
+	// tests where the boot path doesn't run.
 	if d.tokenProvider != nil || d.requireRemoteClusterAuth {
 		fetch := func(ctx context.Context) (string, time.Time, error) {
 			var token string
@@ -254,7 +261,7 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 			}
 			return token, expiresAt, nil
 		}
-		creds := auth.NewTokenCredentials(d.authHeaderName, fetch, 0)
+		creds := auth.NewTokenCredentials(d.authHeaderName, fetch, d.tokenGraceWindow)
 		additionalDialOptions = append(additionalDialOptions, grpc.WithPerRPCCredentials(creds))
 	}
 

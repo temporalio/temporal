@@ -281,11 +281,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		}
 	}
 
-	tokenProvider := so.tokenProvider
-	if tokenProvider == nil {
-		tokenProvider = auth.NewNoopTokenProvider()
-	}
-	if so.config.Global.Authorization.RemoteClusterAuth.Require && auth.IsNoopTokenProvider(tokenProvider) {
+	if so.config.Global.Authorization.RemoteClusterAuth.Require && so.tokenProvider == nil {
 		return serverOptionsProvider{}, errors.New("global.authorization.remoteClusterAuth.require is true but no TokenProvider is configured: use WithTokenProvider")
 	}
 
@@ -313,7 +309,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		Authorizer:                 so.authorizer,
 		ClaimMapper:                so.claimMapper,
 		AudienceGetter:             so.audienceGetter,
-		TokenProvider:              tokenProvider,
+		TokenProvider:              so.tokenProvider,
 
 		Logger:                logger,
 		ClientFactoryProvider: clientFactoryProvider,

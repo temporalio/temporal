@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc/credentials"
 )
 
@@ -22,6 +23,7 @@ type TokenCredentials struct {
 	mu          sync.Mutex
 	cachedToken string
 	expiry      time.Time // zero value means no expiry (provider didn't supply one)
+	sf          singleflight.Group
 }
 
 var _ credentials.PerRPCCredentials = (*TokenCredentials)(nil)
@@ -54,29 +56,59 @@ func (c *TokenCredentials) GetRequestMetadata(ctx context.Context, _ ...string) 
 	}, nil
 }
 
-// Require TLS as recommended by RFC 9700
+// RequireTransportSecurity returns true so the bearer never attaches to plaintext dials, per RFC 9700.
 func (c *TokenCredentials) RequireTransportSecurity() bool {
 	return true
 }
 
 func (c *TokenCredentials) getToken(ctx context.Context) (string, error) {
+	// Fast path: cache hit. Hold the lock only long enough to read.
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if c.cachedToken != "" && !c.isExpired() {
-		return c.cachedToken, nil
+		token := c.cachedToken
+		c.mu.Unlock()
+		return token, nil
 	}
+	c.mu.Unlock()
 
-	token, expiresAt, err := c.fetchToken(ctx)
-	if err != nil {
-		if c.cachedToken != "" && !c.isHardExpired() {
-			return c.cachedToken, nil
+	// Slow path: coalesce concurrent fetches so a slow IdP round-trip doesn't
+	// serialize every RPC on the connection. The cache mutex is never held
+	// while c.fetchToken is in flight.
+	v, err, _ := c.sf.Do("token", func() (any, error) {
+		// Re-check under lock — another fetcher may have just updated cache.
+		c.mu.Lock()
+		if c.cachedToken != "" && !c.isExpired() {
+			cached := c.cachedToken
+			c.mu.Unlock()
+			return cached, nil
 		}
-		return "", fmt.Errorf("failed to fetch auth token: %w", err)
-	}
+		c.mu.Unlock()
 
-	c.cachedToken = token
-	c.expiry = expiresAt
+		token, expiresAt, fetchErr := c.fetchToken(ctx)
+		if fetchErr != nil {
+			c.mu.Lock()
+			if c.cachedToken != "" && !c.isHardExpired() {
+				cached := c.cachedToken
+				c.mu.Unlock()
+				return cached, nil
+			}
+			c.mu.Unlock()
+			return nil, fmt.Errorf("failed to fetch auth token: %w", fetchErr)
+		}
+
+		c.mu.Lock()
+		c.cachedToken = token
+		c.expiry = expiresAt
+		c.mu.Unlock()
+		return token, nil
+	})
+	if err != nil {
+		return "", err
+	}
+	token, ok := v.(string)
+	if !ok {
+		return "", fmt.Errorf("token cache returned unexpected type %T", v)
+	}
 	return token, nil
 }
 
@@ -118,5 +150,6 @@ func ParseJWTExpiry(token string) time.Time {
 		return time.Time{}
 	}
 
+	// RFC 7519 allows fractional NumericDate; sub-second precision is irrelevant for cache windows so the int64 truncation is intentional.
 	return time.Unix(int64(*claims.Exp), 0)
 }

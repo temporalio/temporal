@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/rpc/auth/authtest"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tests/testutils"
@@ -25,12 +27,6 @@ import (
 )
 
 const expectedXDCToken = "test-xdc-jwt-token"
-
-type staticTokenProvider string
-
-func (t staticTokenProvider) GetToken(context.Context, string) (string, time.Time, error) {
-	return string(t), time.Time{}, nil
-}
 
 // newSharedTLSProvider generates one cert chain for 127.0.0.1 and returns a TLS provider
 // usable as both server and client by every cluster in the suite. The same chain on both
@@ -72,7 +68,8 @@ type capturedCall struct {
 
 type RemoteClusterAuthSuite struct {
 	xdcBaseSuite
-	captured sync.Map // map[string][]capturedCall keyed by cluster name
+	capturedMu sync.Mutex
+	captured   map[string][]capturedCall
 }
 
 func TestRemoteClusterAuthSuite(t *testing.T) {
@@ -81,28 +78,18 @@ func TestRemoteClusterAuthSuite(t *testing.T) {
 }
 
 func (s *RemoteClusterAuthSuite) record(call capturedCall) {
-	v, _ := s.captured.LoadOrStore(call.cluster, &sync.Mutex{})
-	mu := v.(*sync.Mutex)
-	mu.Lock()
-	defer mu.Unlock()
-	listV, _ := s.captured.LoadOrStore(call.cluster+":calls", &[]capturedCall{})
-	list := listV.(*[]capturedCall)
-	*list = append(*list, call)
+	s.capturedMu.Lock()
+	defer s.capturedMu.Unlock()
+	if s.captured == nil {
+		s.captured = make(map[string][]capturedCall)
+	}
+	s.captured[call.cluster] = append(s.captured[call.cluster], call)
 }
 
 func (s *RemoteClusterAuthSuite) callsFor(clusterName string) []capturedCall {
-	listV, ok := s.captured.Load(clusterName + ":calls")
-	if !ok {
-		return nil
-	}
-	v, _ := s.captured.LoadOrStore(clusterName, &sync.Mutex{})
-	mu := v.(*sync.Mutex)
-	mu.Lock()
-	defer mu.Unlock()
-	list := listV.(*[]capturedCall)
-	out := make([]capturedCall, len(*list))
-	copy(out, *list)
-	return out
+	s.capturedMu.Lock()
+	defer s.capturedMu.Unlock()
+	return slices.Clone(s.captured[clusterName])
 }
 
 func (s *RemoteClusterAuthSuite) SetupSuite() {
@@ -121,7 +108,7 @@ func (s *RemoteClusterAuthSuite) SetupSuite() {
 	s.dynamicConfigOverrides[dynamicconfig.VisibilityProcessorMaxPollInterval.Key()] = time.Second * 3
 	s.dynamicConfigOverrides[dynamicconfig.OutboundProcessorMaxPollInterval.Key()] = time.Second * 3
 
-	tokenProvider := staticTokenProvider(expectedXDCToken)
+	tokenProvider := authtest.StaticTokenProvider(expectedXDCToken)
 
 	// Production TokenCredentials require TLS; both clusters share one cert chain so they trust each other's cert.
 	tlsProvider := newSharedTLSProvider(s.T())
