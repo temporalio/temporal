@@ -92,9 +92,6 @@ func TestStandaloneActivityTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &standaloneActivityTestSuite{})
 }
 
-// standaloneActivityEnv wraps testcore.TestEnv to host the helper methods used
-// across the tests in this file. parallelsuite forbids fields and exported
-// non-Test methods on the suite itself, so per-test state and helpers live here.
 type standaloneActivityEnv struct {
 	*testcore.TestEnv
 }
@@ -103,9 +100,6 @@ func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) *s
 	env := &standaloneActivityEnv{
 		TestEnv: testcore.NewEnv(s.T(), opts...),
 	}
-	// The CHASM/activity dynamic configs are namespace-scoped. Apply them to both
-	// the test's primary namespace and the shared external namespace so cross-namespace
-	// cases (e.g. mismatched-token tests) can start activities in either namespace.
 	nsValues := func(value any) []dynamicconfig.ConstrainedValue {
 		return []dynamicconfig.ConstrainedValue{
 			{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: value},
