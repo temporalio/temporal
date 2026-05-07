@@ -225,16 +225,18 @@ func (s *RemoteClusterAuthSuite) TearDownSuite() {
 }
 
 func (s *RemoteClusterAuthSuite) TestAuthTokenSentOnRemoteClusterConnection() {
-	var sawToken bool
-	for _, c := range s.clusters {
-		for _, call := range s.callsFor(c.ClusterName()) {
-			if call.token == "Bearer "+expectedXDCToken {
-				sawToken = true
-				break
+	// s.captured is populated by background goroutines (cluster metadata refresh, replication setup);
+	// a single-shot read can race their first invocation, especially under CI load.
+	s.Eventually(func() bool {
+		for _, c := range s.clusters {
+			for _, call := range s.callsFor(c.ClusterName()) {
+				if call.token == "Bearer "+expectedXDCToken {
+					return true
+				}
 			}
 		}
-	}
-	s.True(sawToken, "expected at least one cross-cluster RPC to carry the auth token")
+		return false
+	}, 15*time.Second, 250*time.Millisecond, "expected at least one cross-cluster RPC to carry the auth token")
 }
 
 // Asserts the bearer reaches the streaming replication path, not just unary RPCs.

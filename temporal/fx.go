@@ -284,6 +284,11 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	if so.config.Global.Authorization.RemoteClusterAuth.Require && so.tokenProvider == nil {
 		return serverOptionsProvider{}, errors.New("global.authorization.remoteClusterAuth.require is true but no TokenProvider is configured: use WithTokenProvider")
 	}
+	// TokenCredentials require TLS (RFC 9700); without a remote-cluster TLS source the first
+	// cross-cluster dial would fatal-log, with no clear "you forgot TLS" diagnostic.
+	if so.tokenProvider != nil && so.tlsConfigProvider == nil && len(so.config.Global.TLS.RemoteClusters) == 0 {
+		return serverOptionsProvider{}, errors.New("WithTokenProvider is set but no remote-cluster TLS is configured: supply global.tls.remoteClusters in config, or pass a provider via WithTLSConfigProvider")
+	}
 
 	return serverOptionsProvider{
 		ServerOptions:              so,
