@@ -1306,3 +1306,156 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 	})
 	require.NoError(t, err)
 }
+
+// TestDeleteScheduleClearsBothStacks verifies that when a schedule exists in
+// both the CHASM (V2) and workflow-backed (V1) stacks for the same scheduleId
+// — as can happen during dual-stack migration — a single frontend
+// DeleteSchedule call removes it from both stacks.
+func (s *ScheduleMigrationTestSuite) TestDeleteScheduleClearsBothStacks() {
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
+	)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sched-delete-both-stacks")
+	wid := testcore.RandomizeStr("sched-delete-both-stacks-wf")
+	wt := testcore.RandomizeStr("sched-delete-both-stacks-wt")
+	tq := testcore.RandomizeStr("tq")
+
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+	sched := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	// Create the CHASM schedule directly.
+	_, err := env.GetTestCluster().SchedulerClient().CreateSchedule(
+		ctx,
+		&schedulerpb.CreateScheduleRequest{
+			NamespaceId: nsID,
+			FrontendRequest: &workflowservice.CreateScheduleRequest{
+				Namespace:  nsName,
+				ScheduleId: sid,
+				Schedule:   sched,
+				Identity:   "test",
+				RequestId:  testcore.RandomizeStr("request-id"),
+			},
+		},
+	)
+	s.NoError(err)
+
+	// Create the V1 (workflow-backed) scheduler directly with the same ID.
+	startArgs := &schedulespb.StartScheduleArgs{
+		Schedule: sched,
+		State: &schedulespb.InternalState{
+			Namespace:     nsName,
+			NamespaceId:   nsID,
+			ScheduleId:    sid,
+			ConflictToken: scheduler.InitialConflictToken,
+		},
+	}
+	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(startArgs)
+	s.NoError(err)
+	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:                nsName,
+		WorkflowId:               v1WorkflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: scheduler.WorkflowType},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Input:                    inputPayloads,
+		Identity:                 "test",
+		RequestId:                testcore.RandomizeStr("request-id"),
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+	}
+	_, err = env.GetTestCluster().HistoryClient().StartWorkflowExecution(
+		ctx,
+		common.CreateHistoryStartWorkflowRequest(nsID, startReq, nil, nil, time.Now().UTC()),
+	)
+	s.NoError(err)
+
+	// Sanity-check: both stacks have an entry for this scheduleId.
+	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(
+		ctx,
+		&schedulerpb.DescribeScheduleRequest{
+			NamespaceId:     nsID,
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+		},
+	)
+	s.NoError(err)
+	v1Desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
+		ctx,
+		&historyservice.DescribeWorkflowExecutionRequest{
+			NamespaceId: nsID,
+			Request: &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: nsName,
+				Execution: &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
+			},
+		},
+	)
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, v1Desc.GetWorkflowExecutionInfo().GetStatus())
+
+	// Single frontend DeleteSchedule call should clear both stacks.
+	_, err = env.FrontendClient().DeleteSchedule(ctx, &workflowservice.DeleteScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Identity:   "test",
+	})
+	s.NoError(err)
+
+	// CHASM side: the scheduler is marked closed; direct describe rejects with
+	// FailedPrecondition (ErrClosed).
+	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(
+		ctx,
+		&schedulerpb.DescribeScheduleRequest{
+			NamespaceId:     nsID,
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+		},
+	)
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPreconditionErr)
+
+	// V1 side: the workflow is terminated.
+	s.Eventually(func() bool {
+		desc, descErr := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
+			ctx,
+			&historyservice.DescribeWorkflowExecutionRequest{
+				NamespaceId: nsID,
+				Request: &workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: nsName,
+					Execution: &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
+				},
+			},
+		)
+		if descErr != nil {
+			return false
+		}
+		return desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
+	}, 10*time.Second, 200*time.Millisecond, "V1 schedule workflow should be terminated")
+
+	// Frontend describe should also report the schedule as gone.
+	var notFoundErr *serviceerror.NotFound
+	s.Eventually(func() bool {
+		_, descErr := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  nsName,
+			ScheduleId: sid,
+		})
+		return errors.As(descErr, &notFoundErr)
+	}, 10*time.Second, 200*time.Millisecond, "frontend DescribeSchedule should return NotFound")
+}
