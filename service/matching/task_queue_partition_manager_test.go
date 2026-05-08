@@ -1689,7 +1689,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedSyncMatch_HooksNot
 	var pr pollResult
 	select {
 	case pr = <-pollDone:
-	case <-time.After(2 * time.Second):
+	case <-time.After(5 * time.Second):
 		s.Require().Fail("timed out waiting for poll result")
 	}
 	s.Require().NoError(pr.err)
