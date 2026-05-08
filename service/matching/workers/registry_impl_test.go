@@ -230,7 +230,7 @@ func TestIsSystemWorker(t *testing.T) {
 		require.Len(t, list, 1)
 	})
 
-	t.Run("principal with type temporal but non-internal name is not system worker", func(t *testing.T) {
+	t.Run("principal with type temporal but non-internal name is still system worker", func(t *testing.T) {
 		m := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 		defer m.Stop()
 
@@ -240,7 +240,7 @@ func TestIsSystemWorker(t *testing.T) {
 		})
 
 		list := m.filterWorkers("ns", false /* includeSystemWorkers */, alwaysTrue)
-		require.Len(t, list, 1, "worker with non-internal name should not be excluded")
+		require.Empty(t, list, "worker with temporal principal type should be excluded regardless of name")
 	})
 
 	t.Run("principal with non-temporal type is not system worker", func(t *testing.T) {
