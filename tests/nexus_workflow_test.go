@@ -1926,6 +1926,91 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration(chasmEn
 	}
 }
 
+// TestNexusAsyncOperationErrorRehydrationPlainError mirrors the SDK's
+// TestAsyncOperationFromWorkflow/OpFailed case: the handler workflow returns a
+// plain Go error (fmt.Errorf, not a typed Temporal error). The SDK test asserts
+// that the unwrapped Cause is an ApplicationError whose Message equals the
+// underlying error message ("handler workflow failed in test"); on the SDK CI
+// run the chain instead surfaces the wrapper message "nexus operation completed
+// unsuccessfully". This test reproduces that scenario against the current main
+// to determine whether the regression is server-side or limited to the bundled
+// CLI server version the SDK CI tests against.
+func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydrationPlainError(chasmEnabled bool) {
+	if chasmEnabled {
+		s.T().Skip("Blocked on CHASM Nexus async error rehydration support")
+	}
+	env := s.newTestEnv(chasmEnabled)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	defer cancel()
+	taskQueue := testcore.RandomizeStr("caller_" + s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+	handlerWorkflowID := testcore.RandomizeStr(s.T().Name())
+
+	_, err := env.SdkClient().OperatorService().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_Worker_{
+					Worker: &nexuspb.EndpointTarget_Worker{
+						Namespace: env.Namespace().String(),
+						TaskQueue: taskQueue,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
+	svc := nexus.NewService("test")
+
+	handlerWF := func(ctx workflow.Context, _ nexus.NoValue) (nexus.NoValue, error) {
+		return nil, fmt.Errorf("handler workflow failed in test")
+	}
+
+	op := temporalnexus.NewWorkflowRunOperation("op", handlerWF, func(ctx context.Context, _ nexus.NoValue, soo nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
+		return client.StartWorkflowOptions{ID: handlerWorkflowID}, nil
+	})
+	s.NoError(svc.Register(op))
+
+	callerWF := func(ctx workflow.Context) (nexus.NoValue, error) {
+		c := workflow.NewNexusClient(endpointName, svc.Name)
+		fut := c.ExecuteOperation(ctx, op, nil, workflow.NexusOperationOptions{})
+		var exec workflow.NexusOperationExecution
+		if err := fut.GetNexusOperationExecution().Get(ctx, &exec); err != nil {
+			return nil, err
+		}
+		return nil, fut.Get(ctx, nil)
+	}
+
+	w.RegisterNexusService(svc)
+	w.RegisterWorkflow(callerWF)
+	w.RegisterWorkflow(handlerWF)
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, callerWF)
+	s.NoError(err)
+
+	wfErr := run.Get(ctx, nil)
+	s.Error(wfErr)
+
+	var opErr *temporal.NexusOperationError
+	s.ErrorAs(wfErr, &opErr)
+	// The wrapper message is set by the server in components/nexusoperations/executors.go:createNexusOperationFailure.
+	s.Equal("nexus operation completed unsuccessfully", opErr.Message)
+
+	// This is the assertion the SDK CI run reports as failing: after Unwrap,
+	// the ApplicationError should carry the original handler-workflow error
+	// message, not the server wrapper message.
+	err = opErr.Unwrap()
+	var appErr *temporal.ApplicationError
+	s.ErrorAs(err, &appErr)
+	s.Equal("handler workflow failed in test", appErr.Message())
+}
+
 func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete(chasmEnabled bool) {
 	if chasmEnabled {
 		s.T().Skip("Blocked on CHASM Nexus callback failure handling after caller completion")
