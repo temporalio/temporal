@@ -10,6 +10,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -88,16 +89,45 @@ func (p *plugin) createDBConnection(
 		return nil, err
 	}
 
-	// The following options are set based on advice from https://github.com/mattn/go-sqlite3#faq
+	// Connection pool settings.
 	//
-	// Dealing with the error `database is locked`
-	// > ... set the database connections of the SQL package to 1.
-	db.SetMaxOpenConns(1)
-	// Settings for in-memory database (should be fine for file mode as well)
-	// > Note that if the last database connection in the pool closes, the in-memory database is deleted.
-	// > Make sure the max idle connection limit is > 0, and the connection lifetime is infinite.
-	db.SetMaxIdleConns(1)
-	db.SetConnMaxIdleTime(0)
+	// By default, SQLite only supports a single writer at a time (see
+	// https://github.com/mattn/go-sqlite3#faq). Without WAL (Write-Ahead Logging)
+	// mode, concurrent connections will encounter "database is locked" errors.
+	// With WAL mode enabled (journal_mode=wal), SQLite supports concurrent readers
+	// alongside a single writer, making multiple connections safe and beneficial
+	// for throughput.
+	//
+	// These settings mirror the behavior of the MySQL and PostgreSQL plugins:
+	// respect the user's config values when set, otherwise default to 1 for
+	// backward compatibility and safety.
+	walEnabled := strings.EqualFold(cfg.ConnectAttributes["journal_mode"], "wal")
+	if cfg.MaxConns > 0 {
+		if cfg.MaxConns > 1 && !walEnabled {
+			logger.Warn(
+				"SQLite MaxConns > 1 without WAL mode (journal_mode=wal) may cause 'database is locked' errors. "+
+					"Consider enabling WAL mode via ConnectAttributes.",
+				tag.NewInt("maxConns", cfg.MaxConns),
+			)
+		}
+		db.SetMaxOpenConns(cfg.MaxConns)
+	} else {
+		db.SetMaxOpenConns(1)
+	}
+	if cfg.MaxIdleConns > 0 {
+		db.SetMaxIdleConns(cfg.MaxIdleConns)
+	} else {
+		db.SetMaxIdleConns(1)
+	}
+	if cfg.MaxConnLifetime > 0 {
+		db.SetConnMaxLifetime(cfg.MaxConnLifetime)
+	}
+	// For in-memory databases, the database is deleted when the last connection
+	// closes. Set ConnMaxIdleTime to 0 (infinite) to prevent idle connections
+	// from being reaped, which would destroy the database.
+	if cfg.ConnectAttributes["mode"] == "memory" {
+		db.SetConnMaxIdleTime(0)
+	}
 
 	// Maps struct names in CamelCase to snake without need for db struct tags.
 	db.MapperFunc(strcase.ToSnake)

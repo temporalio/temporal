@@ -84,9 +84,8 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		EagerExecutionAccepted:       req.GetRequestEagerExecution(),
 		InheritedAutoUpgradeInfo:     request.InheritedAutoUpgradeInfo,
 		DeclinedTargetVersionUpgrade: request.DeclinedTargetVersionUpgrade,
-	}
-	if req.TimeSkippingConfig != nil {
-		attributes.TimeSkippingConfig = req.TimeSkippingConfig
+		TimeSkippingConfig:           req.GetTimeSkippingConfig(),
+		InitialSkippedDuration:       request.GetInitialSkippedDuration(),
 	}
 
 	parentInfo := request.ParentExecutionInfo
@@ -840,6 +839,8 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	targetNamespaceID namespace.ID,
+	timeSkippingConfig *workflowpb.TimeSkippingConfig,
+	initialSkippedDuration *durationpb.Duration,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{
@@ -862,11 +863,13 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 			// Filter nil values here rather than in the API layer because not all
 			// creation paths go through the frontend (continue-as-new, child workflows, replication).
 			// This CaN event is created on the parent workflow, so we need to filter nil values here.
-			Memo:              payload.FilterNilMemo(command.Memo),
-			SearchAttributes:  payload.FilterNilSearchAttributes(command.SearchAttributes),
-			ParentClosePolicy: command.GetParentClosePolicy(),
-			InheritBuildId:    command.InheritBuildId, //nolint:staticcheck // SA1019: worker versioning v0.2
-			Priority:          command.Priority,
+			Memo:                   payload.FilterNilMemo(command.Memo),
+			SearchAttributes:       payload.FilterNilSearchAttributes(command.SearchAttributes),
+			ParentClosePolicy:      command.GetParentClosePolicy(),
+			InheritBuildId:         command.InheritBuildId, //nolint:staticcheck // SA1019: worker versioning v0.2
+			Priority:               command.Priority,
+			TimeSkippingConfig:     timeSkippingConfig,
+			InitialSkippedDuration: initialSkippedDuration,
 		},
 	}
 	return event
@@ -1085,6 +1088,10 @@ func (b *EventFactory) createHistoryEvent(
 	return historyEvent
 }
 
+// CreateWorkflowExecutionTimeSkippingTransitionedEvent creates a workflow execution time skipping transitioned event.
+// If no time needs to be skipped, the targetTime should be zero time.
+// If the time skipping shouldn't be disabled, triggeredDisable should be false.
+// This method shouldn't be generated when there is no time to skip and no need to disable time skipping.
 func (b *EventFactory) CreateWorkflowExecutionTimeSkippingTransitionedEvent(
 	targetTime time.Time,
 	triggeredDisable bool,
