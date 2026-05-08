@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -114,6 +116,35 @@ func (s *FunctionalClustersTestSuite) TestNamespaceFailover() {
 	we, err := s.clusters[1].FrontendClient().StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
+}
+
+// TestNamespaceFailover_ReplicationStateIsNormalOnBothClusters verifies that after a
+// forceful failover (UpdateNamespace with only ActiveClusterName set), both the
+// failover-receiving cluster and the previously-active cluster end up with
+// ReplicationConfig.State = REPLICATION_STATE_NORMAL. This guards against the
+// regression where State was dropped on the wire for UPDATE replication tasks,
+// leaving the non-receiving cluster's State stuck at UNSPECIFIED.
+func (s *FunctionalClustersTestSuite) TestNamespaceFailover_ReplicationStateIsNormalOnBothClusters() {
+	namespace := s.createGlobalNamespace()
+
+	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		for _, c := range s.clusters {
+			resp, err := c.FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
+				Namespace: namespace,
+			})
+			require.NoError(t, err)
+			require.Equal(
+				t,
+				enumspb.REPLICATION_STATE_NORMAL,
+				resp.ReplicationConfig.State,
+				"cluster %s left ReplicationConfig.State = %s after failover",
+				c.ClusterName(),
+				resp.ReplicationConfig.State,
+			)
+		}
+	}, replicationWaitTime, replicationCheckInterval)
 }
 
 func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {

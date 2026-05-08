@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 )
@@ -48,6 +49,58 @@ func TestHandoverWorkflow(t *testing.T) {
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
 	env.AssertExpectations(t)
+}
+
+// TestHandoverWorkflow_CancelAfterHandoverState_ResetsToNormal verifies that when the
+// workflow is cancelled after Step 4 has set the namespace to HANDOVER, the deferred
+// reset still runs and returns the namespace to NORMAL. This guards against the prior
+// bug where the defer was registered after the HANDOVER activity, so a cancel during
+// Step 4 left the namespace stuck in HANDOVER.
+func TestHandoverWorkflow_CancelAfterHandoverState_ResetsToNormal(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+	var a *activities
+
+	namespaceID := uuid.NewString()
+
+	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).
+		Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
+	env.OnActivity(a.GetMaxReplicationTaskIDs, mock.Anything).
+		Return(&replicationStatus{MaxReplicationTaskIds: map[int32]int64{1: 100}}, nil)
+	env.OnActivity(a.WaitReplication, mock.Anything, mock.Anything).Return(nil)
+
+	var stateUpdates []enumspb.ReplicationState
+	env.OnActivity(a.UpdateNamespaceState, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			req := args.Get(1).(updateStateRequest)
+			stateUpdates = append(stateUpdates, req.NewState)
+			// Simulate a cancel arriving once HANDOVER has been written.
+			if req.NewState == enumspb.REPLICATION_STATE_HANDOVER {
+				env.CancelWorkflow()
+			}
+		}).
+		Return(nil)
+	// WaitHandover should observe the cancel and return an error; the defer must still run.
+	env.OnActivity(a.WaitHandover, mock.Anything, mock.Anything).Return(temporal.NewCanceledError())
+	env.OnActivity(a.UpdateActiveCluster, mock.Anything, mock.Anything).Return(nil)
+
+	env.ExecuteWorkflow(NamespaceHandoverWorkflow, NamespaceHandoverParams{
+		Namespace:              "test-ns",
+		RemoteCluster:          "test-remote",
+		AllowedLaggingSeconds:  10,
+		HandoverTimeoutSeconds: 10,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.Equal(
+		t,
+		[]enumspb.ReplicationState{
+			enumspb.REPLICATION_STATE_HANDOVER,
+			enumspb.REPLICATION_STATE_NORMAL,
+		},
+		stateUpdates,
+		"defer must reset state to NORMAL after cancel",
+	)
 }
 
 func TestHandoverWorkflow_SetTimeout(t *testing.T) {

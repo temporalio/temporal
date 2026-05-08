@@ -121,6 +121,12 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 		return err
 	}
 
+	// Registered before Step 4 so that a cancel arriving after the HANDOVER write
+	// commits but before the activity returns still triggers the reset. The reset
+	// activity is idempotent, so running it when Step 4 never executed is a no-op.
+	// "detach-handover-ctx-20250829" only gates the disconnected-context behavior
+	// inside the defer body; the defer's position itself is replay-safe because
+	// registration is not recorded in workflow history.
 	defer func() {
 		// ** Final Step: Reset namespace state from Handover -> Registered. This helps ensure that whether
 		//                handover failed or succeeded, the namespace (for whichever cluster it is Active on)
@@ -139,9 +145,10 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 		} else {
 			err = workflow.ExecuteActivity(ctx, a.UpdateNamespaceState, resetStateRequest).Get(ctx, nil)
 		}
-		if err != nil {
+		// Don't clobber an existing error from an earlier step — the original
+		// failure is more diagnostically useful than a reset failure.
+		if err != nil && retErr == nil {
 			retErr = err
-			return
 		}
 	}()
 
