@@ -647,20 +647,6 @@ func (mr *MockMutableStateMockRecorder) AddWorkerCommandsTasks(commands, control
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkerCommandsTasks", reflect.TypeOf((*MockMutableState)(nil).AddWorkerCommandsTasks), commands, controlQueue)
 }
 
-// GenerateActivityCancelCommandsForClose mocks base method.
-func (m *MockMutableState) GenerateActivityCancelCommandsForClose() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateActivityCancelCommandsForClose")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// GenerateActivityCancelCommandsForClose indicates an expected call of GenerateActivityCancelCommandsForClose.
-func (mr *MockMutableStateMockRecorder) GenerateActivityCancelCommandsForClose() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityCancelCommandsForClose", reflect.TypeOf((*MockMutableState)(nil).GenerateActivityCancelCommandsForClose))
-}
-
 // AddWorkflowExecutionCancelRequestedEvent mocks base method.
 func (m *MockMutableState) AddWorkflowExecutionCancelRequestedEvent(arg0 *historyservice.RequestCancelWorkflowExecutionRequest) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
@@ -1984,6 +1970,20 @@ func (m *MockMutableState) FlushBufferedEvents() {
 func (mr *MockMutableStateMockRecorder) FlushBufferedEvents() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FlushBufferedEvents", reflect.TypeOf((*MockMutableState)(nil).FlushBufferedEvents))
+}
+
+// GenerateActivityCancelCommandsForClose mocks base method.
+func (m *MockMutableState) GenerateActivityCancelCommandsForClose() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateActivityCancelCommandsForClose")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateActivityCancelCommandsForClose indicates an expected call of GenerateActivityCancelCommandsForClose.
+func (mr *MockMutableStateMockRecorder) GenerateActivityCancelCommandsForClose() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityCancelCommandsForClose", reflect.TypeOf((*MockMutableState)(nil).GenerateActivityCancelCommandsForClose))
 }
 
 // GenerateMigrationTasks mocks base method.
