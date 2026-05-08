@@ -67,7 +67,7 @@ func (s *NexusWorkflowTestSuite) newTestEnv(chasmEnabled bool, opts ...testcore.
 		opts,
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, chasmEnabled),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, chasmEnabled),
-		testcore.WithDynamicConfig(chasmnexus.EnableChasmNexus, chasmEnabled),
+		testcore.WithDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, chasmEnabled),
 	)...)
 }
 
