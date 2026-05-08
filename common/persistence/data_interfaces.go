@@ -609,6 +609,10 @@ type (
 		// If Subqueues is present, it should be the same size as Tasks and hold the subqueue
 		// indexes that each task should be added to.
 		Subqueues []int
+		// UpdateMetadata controls whether the task queue metadata should be written
+		// along with the tasks. When false, only the range ID check is performed
+		// (for write fencing) without rewriting the metadata blob.
+		UpdateMetadata bool
 	}
 
 	// CreateTasksResponse is the response to CreateTasksRequest

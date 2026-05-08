@@ -293,6 +293,10 @@ func (tm *priTaskMatcher) forwardPolls(
 	ft pollForwarderType,
 	target *tqid.NormalPartition,
 ) {
+	policy := backoff.NewExponentialRetryPolicy(time.Second).
+		WithMaximumInterval(tm.config.ForwardPollRetryMaxInterval()).
+		WithExpirationInterval(backoff.NoInterval)
+	retrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
 	forwarderTask := newPollForwarderTask(effectivePriority, ft)
 	ctxs := []context.Context{ctx} // ctx should be equal to or child of tm.tqCtx
 	for ctx.Err() == nil {
@@ -332,6 +336,7 @@ func (tm *priTaskMatcher) forwardPolls(
 		_ = stop()
 		if err == nil {
 			tm.data.FinishMatchAfterPollForward(poller, task)
+			retrier.Reset()
 			if ft == priorityBacklogPollForwarder {
 				metrics.PriorityBacklogForwardedPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 			}
@@ -343,6 +348,10 @@ func (tm *priTaskMatcher) forwardPolls(
 			// 4× to allow for a few rounds plus propagation.
 			interval := cmp.Or(tm.config.EphemeralDataUpdateInterval(), time.Minute)
 			_ = util.InterruptibleSleep(ctx, 4*interval)
+		} else if common.IsResourceExhausted(err) {
+			// Rate limited: re-enqueue with forwarding still enabled so it retries.
+			tm.data.ReenqueuePollerIfNotMatched(poller)
+			_ = util.InterruptibleSleep(ctx, retrier.NextBackOff(err))
 		} else {
 			// Re-enqueue to let it match again, if it hasn't gotten a context timeout already.
 			poller.forwardCtx = nil // disable forwarding next time
@@ -385,7 +394,7 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMa
 	finish := func() (syncMatchOutcome, error) {
 		res, ok := task.getResponse()
 		if !softassert.That(tm.logger, ok, "expected a sync match task") {
-			return syncMatchNoPoller, nil
+			return syncMatchUnspecified, nil
 		}
 		if res.forwarded {
 			if res.forwardErr == nil {
@@ -410,19 +419,19 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMa
 	// Forwarding happens here if we match with the task forwarding poller.
 	task.forwardCtx = ctx
 	outcome := tm.data.MatchTaskImmediately(task)
-	if outcome == syncMatchSuccess {
+	switch outcome {
+	case syncMatchSuccess:
 		return finish()
-	}
-	if outcome == syncMatchBacklogged {
+	case syncMatchBacklogPresent:
 		return outcome, nil
-	}
-
-	// We only block if we are the root and the task is forwarded from a backlog.
-	// Otherwise, stop here.
-	if tm.isForwardingAllowed() ||
-		task.source != enumsspb.TASK_SOURCE_DB_BACKLOG ||
-		!task.isForwarded() {
-		return outcome, nil
+	default:
+		// We only block if we are the root and the task is forwarded from a backlog.
+		// Otherwise, stop here.
+		if tm.isForwardingAllowed() ||
+			task.source != enumsspb.TASK_SOURCE_DB_BACKLOG ||
+			!task.isForwarded() {
+			return outcome, nil
+		}
 	}
 
 	res := tm.data.EnqueueTaskAndWait([]context.Context{ctx, tm.tqCtx}, task)

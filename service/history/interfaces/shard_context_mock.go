@@ -766,15 +766,15 @@ func (mr *MockShardContextMockRecorder) UnloadForOwnershipLost() *gomock.Call {
 }
 
 // UpdateHandoverNamespace mocks base method.
-func (m *MockShardContext) UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDb bool) {
+func (m *MockShardContext) UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDB bool) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateHandoverNamespace", ns, deletedFromDb)
+	m.ctrl.Call(m, "UpdateHandoverNamespace", ns, deletedFromDB)
 }
 
 // UpdateHandoverNamespace indicates an expected call of UpdateHandoverNamespace.
-func (mr *MockShardContextMockRecorder) UpdateHandoverNamespace(ns, deletedFromDb any) *gomock.Call {
+func (mr *MockShardContextMockRecorder) UpdateHandoverNamespace(ns, deletedFromDB any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHandoverNamespace", reflect.TypeOf((*MockShardContext)(nil).UpdateHandoverNamespace), ns, deletedFromDb)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHandoverNamespace", reflect.TypeOf((*MockShardContext)(nil).UpdateHandoverNamespace), ns, deletedFromDB)
 }
 
 // UpdateRemoteClusterInfo mocks base method.
@@ -1611,15 +1611,15 @@ func (mr *MockControllableContextMockRecorder) UnloadForOwnershipLost() *gomock.
 }
 
 // UpdateHandoverNamespace mocks base method.
-func (m *MockControllableContext) UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDb bool) {
+func (m *MockControllableContext) UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDB bool) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateHandoverNamespace", ns, deletedFromDb)
+	m.ctrl.Call(m, "UpdateHandoverNamespace", ns, deletedFromDB)
 }
 
 // UpdateHandoverNamespace indicates an expected call of UpdateHandoverNamespace.
-func (mr *MockControllableContextMockRecorder) UpdateHandoverNamespace(ns, deletedFromDb any) *gomock.Call {
+func (mr *MockControllableContextMockRecorder) UpdateHandoverNamespace(ns, deletedFromDB any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHandoverNamespace", reflect.TypeOf((*MockControllableContext)(nil).UpdateHandoverNamespace), ns, deletedFromDb)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHandoverNamespace", reflect.TypeOf((*MockControllableContext)(nil).UpdateHandoverNamespace), ns, deletedFromDB)
 }
 
 // UpdateRemoteClusterInfo mocks base method.

@@ -5,6 +5,28 @@ import (
 	"sync/atomic"
 )
 
+var (
+	_ RateBurst = (*RateBurstImpl)(nil)
+	_ RateBurst = (*MutableRateBurstImpl)(nil)
+	_ RateBurst = (*NamespaceRateBurstImpl)(nil)
+	_ RateBurst = (*OperatorRateBurstImpl)(nil)
+)
+
+var (
+	DefaultIncomingBurstRatioFn = func() float64 {
+		return defaultIncomingRateBurstRatio
+	}
+	DefaultOutgoingBurstRatioFn = func() float64 {
+		return defaultOutgoingRateBurstRatio
+	}
+	DefaultIncomingNamespaceBurstRatioFn = func(_ string) float64 {
+		return defaultIncomingRateBurstRatio
+	}
+	DefaultOutgoingNamespaceBurstRatioFn = func(_ string) float64 {
+		return defaultOutgoingRateBurstRatio
+	}
+)
+
 type (
 	// RateFn returns a float64 as the RPS
 	RateFn func() float64
@@ -19,7 +41,10 @@ type (
 	BurstRatioFn func() float64
 
 	// NamespaceBurstFn returns an int as the burst / bucket size for the given namespace
-	NamespaceBurstFn func(namespace string) float64
+	NamespaceBurstFn func(namespace string) int
+
+	// NamespaceBurstRatioFn returns a float as the ratio of burst to rate for the given namespace
+	NamespaceBurstRatioFn func(namespace string) float64
 
 	// RateBurst returns rate & burst for rate limiter
 	RateBurst interface {
@@ -42,6 +67,17 @@ type (
 		SetRPS(rps float64)
 		SetBurst(burst int)
 		RateBurst
+	}
+
+	NamespaceRateBurstImpl struct {
+		namespaceName string
+		rateFn        NamespaceRateFn
+		burstFn       NamespaceBurstFn
+	}
+
+	OperatorRateBurstImpl struct {
+		operatorRateRatio func() float64
+		baseRateBurstFn   RateBurst
 	}
 )
 
@@ -127,4 +163,44 @@ func (d *MutableRateBurstImpl) Rate() float64 {
 
 func (d *MutableRateBurstImpl) Burst() int {
 	return int(d.burst.Load())
+}
+
+func NewNamespaceRateBurst(
+	namespaceName string,
+	rateFn NamespaceRateFn,
+	burstRatioFn NamespaceBurstRatioFn,
+) *NamespaceRateBurstImpl {
+	return &NamespaceRateBurstImpl{
+		namespaceName: namespaceName,
+		rateFn:        rateFn,
+		burstFn: func(namespace string) int {
+			return max(1, int(math.Ceil(rateFn(namespace)*burstRatioFn(namespace))))
+		},
+	}
+}
+
+func (n *NamespaceRateBurstImpl) Rate() float64 {
+	return n.rateFn(n.namespaceName)
+}
+
+func (n *NamespaceRateBurstImpl) Burst() int {
+	return n.burstFn(n.namespaceName)
+}
+
+func NewOperatorRateBurst(
+	baseRateBurstFn RateBurst,
+	operatorRateRatio func() float64,
+) *OperatorRateBurstImpl {
+	return &OperatorRateBurstImpl{
+		operatorRateRatio: operatorRateRatio,
+		baseRateBurstFn:   baseRateBurstFn,
+	}
+}
+
+func (c *OperatorRateBurstImpl) Rate() float64 {
+	return c.operatorRateRatio() * c.baseRateBurstFn.Rate()
+}
+
+func (c *OperatorRateBurstImpl) Burst() int {
+	return int(c.operatorRateRatio() * float64(c.baseRateBurstFn.Burst()))
 }

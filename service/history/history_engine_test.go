@@ -6618,6 +6618,7 @@ func addWorkflowTaskStartedEventWithRequestID(ms historyi.MutableState, schedule
 		nil,
 		false,
 		nil,
+		0,
 	)
 
 	return event

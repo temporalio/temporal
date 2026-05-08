@@ -463,6 +463,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	skipVersioningCheck bool,
 	updateReg update.Registry,
 	targetDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
+	targetRevisionNumber int64,
 ) (*historypb.HistoryEvent, *historyi.WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	workflowTask := m.GetWorkflowTaskByID(scheduledEventID)
@@ -515,15 +516,15 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 			// TODO (Shivam): Revision number mechanics to strengthen this check
 			m.ms.executionInfo.DeclinedTargetVersionUpgrade = nil
 			m.ms.executionInfo.LastNotifiedTargetVersion = nil
-		// 4. Previously declined upgrade — target unchanged since the decline.
+		// 4. Previously declined upgrade — target revision is not newer than what was declined.
 		case m.ms.executionInfo.GetDeclinedTargetVersionUpgrade() != nil &&
-			m.ms.executionInfo.GetDeclinedTargetVersionUpgrade().GetDeploymentVersion().GetBuildId() == targetDeploymentVersion.GetBuildId() &&
-			m.ms.executionInfo.GetDeclinedTargetVersionUpgrade().GetDeploymentVersion().GetDeploymentName() == targetDeploymentVersion.GetDeploymentName():
+			targetRevisionNumber <= m.ms.executionInfo.GetDeclinedTargetVersionUpgrade().GetRevisionNumber():
 		default:
 			// Otherwise — target changed + did not decline to upgrade on CaN/retry. Signal the SDK.
 			targetDeploymentVersionChanged = true
 			m.ms.executionInfo.LastNotifiedTargetVersion = &persistencespb.LastNotifiedTargetVersion{
 				DeploymentVersion: targetDeploymentVersion,
+				RevisionNumber:    targetRevisionNumber,
 			}
 			m.ms.executionInfo.DeclinedTargetVersionUpgrade = nil
 		}

@@ -25,6 +25,7 @@ type (
 		ClientBean                client.Bean
 		ShardController           shard.Controller
 		ChasmEngine               chasm.Engine
+		ChasmRegistry             *chasm.Registry
 		NamespaceCache            namespace.Registry
 		EagerNamespaceRefresher   EagerNamespaceRefresher
 		ResendHandler             eventhandler.ResendHandler

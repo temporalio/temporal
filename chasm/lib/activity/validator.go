@@ -125,6 +125,13 @@ func validateAndNormalizeActivityAttributes(
 		options)
 }
 
+func validateStartDelay(startDelay *durationpb.Duration) error {
+	if err := timestamp.ValidateAndCapProtoDuration(startDelay); err != nil {
+		return serviceerror.NewInvalidArgumentf("invalid StartDelay: %v", err)
+	}
+	return nil
+}
+
 func validateActivityRetryPolicy(
 	namespaceID namespace.ID,
 	retryPolicy *commonpb.RetryPolicy,

@@ -418,3 +418,58 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Protected() {
 	s.ErrorAs(err, &failedPreconditionErr)
 	s.Equal(fmt.Sprintf("namespace %s is protected from deletion", tv.NamespaceName().String()), failedPreconditionErr.Message)
 }
+
+func (s *namespaceTestSuite) Test_DescribeNamespace_WeakConsistency() {
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(60 * time.Second)
+	defer cancel()
+
+	nsName := "ns_weak_" + uuid.NewString()
+	_, err := s.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        nsName,
+		Description:                      "weak consistency test",
+		WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
+		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
+		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
+	})
+	s.NoError(err)
+
+	var nsNotFound *serviceerror.NamespaceNotFound
+
+	// Cache is populated by the periodic refresh, so the weak path should eventually succeed.
+	var weakResp *workflowservice.DescribeNamespaceResponse
+	s.Eventually(func() bool {
+		weakResp, err = s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Namespace:       nsName,
+			WeakConsistency: true,
+		})
+		// fail the test if error is not nil or NamespaceNotFound
+		if err != nil && !errors.As(err, &nsNotFound) {
+			s.Failf("unexpected error", "Expected NamespaceNotFound error, got: %v", err)
+		}
+		return err == nil
+	}, 5*testcore.NamespaceCacheRefreshInterval, 100*time.Millisecond) //nolint:forbidigo
+
+	strongResp, err := s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: nsName,
+	})
+	s.NoError(err)
+	s.Equal(strongResp.GetNamespaceInfo().GetId(), weakResp.GetNamespaceInfo().GetId())
+	s.Equal(strongResp.GetNamespaceInfo().GetName(), weakResp.GetNamespaceInfo().GetName())
+	s.Equal(strongResp.GetIsGlobalNamespace(), weakResp.GetIsGlobalNamespace())
+
+	// Lookup by ID should also work via the weak path.
+	nsID := strongResp.GetNamespaceInfo().GetId()
+	weakByIDResp, err := s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Id:              nsID,
+		WeakConsistency: true,
+	})
+	s.NoError(err)
+	s.Equal(nsName, weakByIDResp.GetNamespaceInfo().GetName())
+
+	// Non-existent namespace should return NamespaceNotFound.
+	_, err = s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace:       "ns_does_not_exist_" + uuid.NewString(),
+		WeakConsistency: true,
+	})
+	s.ErrorAs(err, &nsNotFound)
+}
