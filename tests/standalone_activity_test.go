@@ -3465,7 +3465,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_Completed() 
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			t.Cleanup(cancel)
 			activityID := env.Tv().Any().String()
-			taskQueue := env.Tv().TaskQueue()
+			taskQueue := &taskqueuepb.TaskQueue{Name: testcore.RandomizeStr(t.Name())}
 
 			startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 				Namespace:           env.Namespace().String(),
@@ -3615,7 +3615,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			t.Cleanup(cancel)
 			activityID := env.Tv().Any().String()
-			taskQueue := env.Tv().TaskQueue().String()
+			taskQueue := testcore.RandomizeStr(t.Name())
 
 			startResp, err := env.startActivity(ctx, activityID, taskQueue)
 			require.NoError(t, err)
