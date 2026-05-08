@@ -10,10 +10,9 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/validation"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -38,24 +37,22 @@ type frontendHandler struct {
 	config            *Config
 	namespaceRegistry namespace.Registry
 	endpointRegistry  commonnexus.EndpointRegistry
-	validator         *validator
+	validatorRegistry *validation.ValidatorRegistry
 }
 
 func NewFrontendHandler(
 	client nexusoperationpb.NexusOperationServiceClient,
 	config *Config,
-	logger log.Logger,
 	namespaceRegistry namespace.Registry,
 	endpointRegistry commonnexus.EndpointRegistry,
-	saMapperProvider searchattribute.MapperProvider,
-	saValidator *searchattribute.Validator,
+	validatorRegistry *validation.ValidatorRegistry,
 ) FrontendHandler {
 	return &frontendHandler{
 		client:            client,
 		config:            config,
 		namespaceRegistry: namespaceRegistry,
 		endpointRegistry:  endpointRegistry,
-		validator:         newValidator(config, logger, saMapperProvider, saValidator),
+		validatorRegistry: validatorRegistry,
 	}
 }
 
@@ -72,7 +69,7 @@ func (h *frontendHandler) StartNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := h.validator.validateAndNormalizeStartRequest(req); err != nil {
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
 		return nil, err
 	}
 
@@ -103,7 +100,7 @@ func (h *frontendHandler) DescribeNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := h.validator.validateAndNormalizeDescribeRequest(req, namespaceID.String()); err != nil {
+	if err := newDescribeNexusOperationExecutionRequestValidator(h.config, namespaceID.String()).ValidateAndNormalize(req); err != nil {
 		return nil, err
 	}
 
@@ -123,7 +120,7 @@ func (h *frontendHandler) PollNexusOperationExecution(
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
 
-	if err := h.validator.validateAndNormalizePollRequest(req); err != nil {
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
 		return nil, err
 	}
 
@@ -244,7 +241,7 @@ func (h *frontendHandler) RequestCancelNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := h.validator.validateAndNormalizeCancelRequest(req); err != nil {
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
 		return nil, err
 	}
 
@@ -272,7 +269,7 @@ func (h *frontendHandler) TerminateNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := h.validator.validateAndNormalizeTerminateRequest(req); err != nil {
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
 		return nil, err
 	}
 
@@ -300,7 +297,7 @@ func (h *frontendHandler) DeleteNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := h.validator.validateAndNormalizeDeleteRequest(req); err != nil {
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
 		return nil, err
 	}
 

@@ -22,9 +22,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func newTestValidator(config *Config) *validator {
-	return newValidator(config, log.NewNoopLogger(), nil, nil)
-}
+const errInvalidRunID = "run_id is not a valid UUID"
 
 func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -346,8 +344,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(req)
 			}
-			err := newValidator(config, log.NewNoopLogger(), nil, saValidator).
-				validateAndNormalizeStartRequest(req)
+			err := newStartNexusOperationExecutionRequestValidator(config, log.NewNoopLogger(), nil, saValidator).ValidateAndNormalize(req)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -443,7 +440,7 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeDescribeRequest(validReq, "test-namespace-id")
+			err := newDescribeNexusOperationExecutionRequestValidator(config, "test-namespace-id").ValidateAndNormalize(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -530,7 +527,7 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeCancelRequest(validReq)
+			err := newRequestCancelNexusOperationExecutionRequestValidator(config).ValidateAndNormalize(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -594,7 +591,7 @@ func TestValidateDeleteNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeDeleteRequest(validReq)
+			err := newDeleteNexusOperationExecutionRequestValidator(config).ValidateAndNormalize(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -681,7 +678,7 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeTerminateRequest(validReq)
+			err := newTerminateNexusOperationExecutionRequestValidator(config).ValidateAndNormalize(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -774,7 +771,7 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizePollRequest(validReq)
+			err := newPollNexusOperationExecutionRequestValidator(config).ValidateAndNormalize(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
