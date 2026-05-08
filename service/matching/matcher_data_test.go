@@ -215,7 +215,7 @@ func (s *MatcherDataSuite) TestMatchTaskImmediatelyDisabledBacklog() {
 	s.md.EnqueueTaskNoWait(s.newBacklogTask(123, 10*time.Minute, nil))
 
 	t := s.newSyncTask(nil)
-	s.Equal(syncMatchBacklogged, s.md.MatchTaskImmediately(t))
+	s.Equal(syncMatchBacklogPresent, s.md.MatchTaskImmediately(t))
 }
 
 func (s *MatcherDataSuite) TestQuery() {

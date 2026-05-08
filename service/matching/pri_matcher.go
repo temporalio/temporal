@@ -385,7 +385,7 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMa
 	finish := func() (syncMatchOutcome, error) {
 		res, ok := task.getResponse()
 		if !softassert.That(tm.logger, ok, "expected a sync match task") {
-			return syncMatchNoPoller, nil
+			return syncMatchUnspecified, nil
 		}
 		if res.forwarded {
 			if res.forwardErr == nil {
@@ -410,19 +410,19 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMa
 	// Forwarding happens here if we match with the task forwarding poller.
 	task.forwardCtx = ctx
 	outcome := tm.data.MatchTaskImmediately(task)
-	if outcome == syncMatchSuccess {
+	switch outcome {
+	case syncMatchSuccess:
 		return finish()
-	}
-	if outcome == syncMatchBacklogged {
+	case syncMatchBacklogPresent:
 		return outcome, nil
-	}
-
-	// We only block if we are the root and the task is forwarded from a backlog.
-	// Otherwise, stop here.
-	if tm.isForwardingAllowed() ||
-		task.source != enumsspb.TASK_SOURCE_DB_BACKLOG ||
-		!task.isForwarded() {
-		return outcome, nil
+	default:
+		// We only block if we are the root and the task is forwarded from a backlog.
+		// Otherwise, stop here.
+		if tm.isForwardingAllowed() ||
+			task.source != enumsspb.TASK_SOURCE_DB_BACKLOG ||
+			!task.isForwarded() {
+			return outcome, nil
+		}
 	}
 
 	res := tm.data.EnqueueTaskAndWait([]context.Context{ctx, tm.tqCtx}, task)

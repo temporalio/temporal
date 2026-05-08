@@ -38,7 +38,7 @@ const (
 	// The task was sync-matched successfully.
 	syncMatchSuccess
 	// Sync match was not attempted because the backlog is too deep.
-	syncMatchBacklogged
+	syncMatchBacklogPresent
 	// Sync match was attempted but no poller was available.
 	syncMatchNoPoller
 )
@@ -384,7 +384,7 @@ func (d *matcherData) MatchTaskImmediately(task *internalTask) syncMatchOutcome 
 		// poller to become available. In presence of a backlog the chance of a poller being available when sync match
 		// request comes is almost zero.
 		// This check is mostly effective for the sync match requests that come from child partitions for spooled tasks.
-		return syncMatchBacklogged
+		return syncMatchBacklogPresent
 	}
 
 	task.initMatch(d)
