@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -89,6 +90,17 @@ func (b *SpecBuilder) NewCompiledSpec(spec *schedulepb.ScheduleSpec) (*CompiledS
 
 // CleanSpec sets default values in ranges.
 func CleanSpec(spec *schedulepb.ScheduleSpec) {
+	for _, structured := range spec.StructuredCalendar {
+		cleanCalendar(structured)
+	}
+	for _, structured := range spec.ExcludeStructuredCalendar {
+		cleanCalendar(structured)
+	}
+}
+
+// cleanCalendar normalizes range defaults on a single StructuredCalendarSpec
+// in place: End defaults to Start when less than Start, Step defaults to 1.
+func cleanCalendar(structured *schedulepb.StructuredCalendarSpec) {
 	cleanRanges := func(ranges []*schedulepb.Range) {
 		for _, r := range ranges {
 			if r.End < r.Start {
@@ -99,21 +111,41 @@ func CleanSpec(spec *schedulepb.ScheduleSpec) {
 			}
 		}
 	}
-	cleanCal := func(structured *schedulepb.StructuredCalendarSpec) {
-		cleanRanges(structured.Second)
-		cleanRanges(structured.Minute)
-		cleanRanges(structured.Hour)
-		cleanRanges(structured.DayOfMonth)
-		cleanRanges(structured.Month)
-		cleanRanges(structured.Year)
-		cleanRanges(structured.DayOfWeek)
+	cleanRanges(structured.Second)
+	cleanRanges(structured.Minute)
+	cleanRanges(structured.Hour)
+	cleanRanges(structured.DayOfMonth)
+	cleanRanges(structured.Month)
+	cleanRanges(structured.Year)
+	cleanRanges(structured.DayOfWeek)
+}
+
+// deduplicateStructuredCalendars removes duplicate StructuredCalendarSpec
+// entries by normalizing range defaults before comparing with proto.Equal.
+// Entries that differ only in proto default representation (e.g. Step 0 vs
+// 1, End unset vs End==Start) are treated as equal.
+func deduplicateStructuredCalendars(entries []*schedulepb.StructuredCalendarSpec) []*schedulepb.StructuredCalendarSpec {
+	if len(entries) <= 1 {
+		return entries
 	}
-	for _, structured := range spec.StructuredCalendar {
-		cleanCal(structured)
+	out := make([]*schedulepb.StructuredCalendarSpec, 0, len(entries))
+	seen := make([]*schedulepb.StructuredCalendarSpec, 0, len(entries))
+	for _, e := range entries {
+		normalized := common.CloneProto(e)
+		cleanCalendar(normalized)
+		duplicate := false
+		for _, s := range seen {
+			if proto.Equal(normalized, s) {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			out = append(out, e)
+			seen = append(seen, normalized)
+		}
 	}
-	for _, structured := range spec.ExcludeStructuredCalendar {
-		cleanCal(structured)
-	}
+	return out
 }
 
 //revive:disable-next-line:cognitive-complexity
@@ -186,6 +218,12 @@ func canonicalizeSpec(spec *schedulepb.ScheduleSpec) (*schedulepb.ScheduleSpec, 
 			return nil, err
 		}
 	}
+
+	// deduplicate structured calendars after validation, so that entries
+	// differing only in proto default representation (e.g. Step 0 vs 1,
+	// End unset vs End==Start) are collapsed.
+	spec.StructuredCalendar = deduplicateStructuredCalendars(spec.StructuredCalendar)
+	spec.ExcludeStructuredCalendar = deduplicateStructuredCalendars(spec.ExcludeStructuredCalendar)
 
 	return spec, nil
 }
