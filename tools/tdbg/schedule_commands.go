@@ -13,6 +13,8 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 )
 
@@ -55,9 +57,6 @@ func AdminScheduleMissedTimes(c *cli.Context, clientFactory ClientFactory) error
 
 	wfClient := clientFactory.WorkflowClient(c)
 
-	ctx, cancel := newContext(c)
-	defer cancel()
-
 	// Resolve namespace ID for jitter seed computation.
 	nsID, err := getNamespaceID(c, clientFactory, namespace.Name(nsName))
 	if err != nil {
@@ -68,7 +67,9 @@ func AdminScheduleMissedTimes(c *cli.Context, clientFactory ClientFactory) error
 
 	var allMissed []missedTime
 	for _, scheduleID := range scheduleIDs {
+		ctx, cancel := newContext(c)
 		missed, err := findMissedTimes(ctx, wfClient, specBuilder, nsName, nsID.String(), scheduleID, lookbackStart, now)
+		cancel()
 		if err != nil {
 			return fmt.Errorf("error processing schedule %q: %w", scheduleID, err)
 		}
@@ -132,11 +133,6 @@ func findMissedTimes(
 		return nil, nil // No spec means no expected times.
 	}
 
-	baseWorkflowID := schedule.GetAction().GetStartWorkflow().GetWorkflowId()
-	if baseWorkflowID == "" {
-		return nil, fmt.Errorf("schedule has no StartWorkflow action with a workflow ID")
-	}
-
 	catchupWindow := schedule.GetPolicies().GetCatchupWindow().AsDuration()
 	if catchupWindow == 0 {
 		// Server default is 365 days.
@@ -167,7 +163,7 @@ func findMissedTimes(
 	}
 
 	// 3. List actual workflow executions for this schedule in the time range.
-	actualNominals, err := listActualNominalTimes(ctx, wfClient, nsName, scheduleID, baseWorkflowID, start, end)
+	actualNominals, err := listActualNominalTimes(ctx, wfClient, nsName, scheduleID, start, end)
 	if err != nil {
 		return nil, err
 	}
@@ -204,17 +200,16 @@ func findMissedTimes(
 }
 
 // listActualNominalTimes queries ListWorkflowExecutions for workflows started by the given schedule
-// and extracts the nominal time from each workflow ID.
+// and extracts the nominal time from the TemporalScheduledStartTime search attribute.
 func listActualNominalTimes(
 	ctx context.Context,
 	wfClient workflowservice.WorkflowServiceClient,
 	nsName string,
 	scheduleID string,
-	baseWorkflowID string,
 	start, end time.Time,
 ) ([]time.Time, error) {
 	query := fmt.Sprintf(
-		`TemporalScheduledById = %q AND StartTime >= %q AND StartTime <= %q`,
+		`TemporalScheduledById = %q AND TemporalScheduledStartTime >= %q AND TemporalScheduledStartTime <= %q`,
 		scheduleID,
 		start.UTC().Format(time.RFC3339Nano),
 		end.UTC().Format(time.RFC3339Nano),
@@ -222,7 +217,6 @@ func listActualNominalTimes(
 
 	var nominals []time.Time
 	var nextPageToken []byte
-	prefix := baseWorkflowID + "-"
 
 	for {
 		resp, err := wfClient.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
@@ -235,14 +229,17 @@ func listActualNominalTimes(
 		}
 
 		for _, exec := range resp.GetExecutions() {
-			wfID := exec.GetExecution().GetWorkflowId()
-			if !strings.HasPrefix(wfID, prefix) {
+			sa := exec.GetSearchAttributes().GetIndexedFields()
+			if sa == nil {
 				continue
 			}
-			timeSuffix := wfID[len(prefix):]
-			nominal, err := time.Parse(time.RFC3339, timeSuffix)
-			if err != nil {
-				continue // Skip IDs we can't parse.
+			p, ok := sa[sadefs.TemporalScheduledStartTime]
+			if !ok {
+				continue
+			}
+			var nominal time.Time
+			if err := payload.Decode(p, &nominal); err != nil {
+				continue // Skip executions with unparseable search attributes.
 			}
 			nominals = append(nominals, nominal)
 		}
