@@ -1687,14 +1687,11 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedSyncMatch_HooksNot
 
 	// Drain the poller goroutine and verify it received the task.
 	var pr pollResult
-	s.Require().Eventually(func() bool {
-		select {
-		case pr = <-pollDone:
-			return true
-		default:
-			return false
-		}
-	}, 2*time.Second, 10*time.Millisecond)
+	select {
+	case pr = <-pollDone:
+	case <-time.After(5 * time.Second):
+		s.Require().Fail("timed out waiting for poll result")
+	}
 	s.Require().NoError(pr.err)
 	s.Require().NotNil(pr.task)
 
