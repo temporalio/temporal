@@ -632,7 +632,11 @@ var (
 		"service_errors",
 		WithDescription("The number of unexpected service request errors."),
 	)
-	ServicePanic         = NewCounterDef("service_panics")
+	ServicePanic                            = NewCounterDef("service_panics")
+	ServiceRequestsNamespaceFairnessDemoted = NewCounterDef(
+		"service_requests_namespace_fairness_demoted",
+		WithDescription("The number of requests demoted by the history namespace fairness mechanism (over-share). Tagged with namespace and original caller type."),
+	)
 	ServiceErrorWithType = NewCounterDef(
 		"service_error_with_type",
 		WithDescription("The number of all service request errors by error type."),
