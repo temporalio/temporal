@@ -118,12 +118,9 @@ func (s *FunctionalClustersTestSuite) TestNamespaceFailover() {
 	s.NotNil(we.GetRunId())
 }
 
-// TestNamespaceFailover_ReplicationStateIsNormalOnBothClusters verifies that after a
-// forceful failover (UpdateNamespace with only ActiveClusterName set), both the
-// failover-receiving cluster and the previously-active cluster end up with
-// ReplicationConfig.State = REPLICATION_STATE_NORMAL. This guards against the
-// regression where State was dropped on the wire for UPDATE replication tasks,
-// leaving the non-receiving cluster's State stuck at UNSPECIFIED.
+// TestNamespaceFailover_ReplicationStateIsNormalOnBothClusters guards against
+// State being dropped on the wire for UPDATE replication tasks, which left the
+// non-receiving cluster stuck at UNSPECIFIED after a force-failover.
 func (s *FunctionalClustersTestSuite) TestNamespaceFailover_ReplicationStateIsNormalOnBothClusters() {
 	namespace := s.createGlobalNamespace()
 

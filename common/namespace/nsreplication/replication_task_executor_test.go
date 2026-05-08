@@ -733,9 +733,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Nil(err)
 }
 
-// TestExecute_UpdateNamespaceTask_FailoverPropagatesNormalState verifies that a failover
-// replication task carrying ReplicationConfig.State=NORMAL writes the state into persistence,
-// which is how a standby that previously had UNSPECIFIED self-heals on the next failover.
+// TestExecute_UpdateNamespaceTask_FailoverPropagatesNormalState verifies the
+// self-heal path: a standby stuck at UNSPECIFIED gets State=NORMAL written from
+// the next failover task.
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_FailoverPropagatesNormalState() {
 	id := uuid.NewString()
 	name := "some random namespace test name"

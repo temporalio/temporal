@@ -109,8 +109,7 @@ func (r *replicator) HandleTransmissionTask(
 		},
 	}
 
-	// Only NORMAL is propagated: HANDOVER is local to the active cluster, and
-	// emitting UNSPECIFIED would clobber the receiver's state on the next failover.
+	// Only replicate on Create operation, and only if state is Normal
 	if replicationConfig.State == enumspb.REPLICATION_STATE_NORMAL {
 		task.NamespaceTaskAttributes.ReplicationConfig.State = replicationConfig.State
 	}

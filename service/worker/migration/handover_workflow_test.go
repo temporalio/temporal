@@ -51,11 +51,8 @@ func TestHandoverWorkflow(t *testing.T) {
 	env.AssertExpectations(t)
 }
 
-// TestHandoverWorkflow_CancelAfterHandoverState_ResetsToNormal verifies that when the
-// workflow is cancelled after Step 4 has set the namespace to HANDOVER, the deferred
-// reset still runs and returns the namespace to NORMAL. This guards against the prior
-// bug where the defer was registered after the HANDOVER activity, so a cancel during
-// Step 4 left the namespace stuck in HANDOVER.
+// TestHandoverWorkflow_CancelAfterHandoverState_ResetsToNormal guards against the
+// regression where a cancel after the HANDOVER write skipped the deferred reset.
 func TestHandoverWorkflow_CancelAfterHandoverState_ResetsToNormal(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
