@@ -65,6 +65,7 @@ type (
 		flowController          SenderFlowController
 		sendLock                sync.Mutex
 		ssRateLimiter           ServerSchedulerRateLimiter
+		catchupRateLimiter      quotas.RateLimiter
 	}
 )
 
@@ -101,12 +102,15 @@ func NewStreamSender(
 		clientClusterShardCount: clientClusterShardCount,
 		recvSignalChan:          make(chan struct{}, 1),
 		shutdownChan:            channel.NewShutdownOnce(),
-		config:                  config,
-		isTieredStackEnabled:    config.EnableReplicationTaskTieredProcessing(),
-		readerGroup:             newReaderGroupIfEnabled(config, shardContext, clientShardKey),
-		nsIsolation:             newNsIsolationIfEnabled(config),
-		flowController:          NewSenderFlowController(config, logger),
-		ssRateLimiter:           ssRateLimiter,
+		config:              config,
+		isTieredStackEnabled: config.EnableReplicationTaskTieredProcessing(),
+		readerGroup:         newReaderGroupIfEnabled(config, shardContext, clientShardKey),
+		nsIsolation:         newNsIsolationIfEnabled(config),
+		flowController:      NewSenderFlowController(config, logger),
+		ssRateLimiter:       ssRateLimiter,
+		catchupRateLimiter: quotas.NewDefaultOutgoingRateLimiter(func() float64 {
+			return float64(config.ReplicationStreamSenderLowPriorityQPS()) * config.ReplicationStreamSenderCatchupQPSRatio()
+		}),
 	}
 }
 
@@ -262,7 +266,7 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		s.flowController.RefreshReceiverFlowControlInfo(attr)
 	}
 	if s.nsIsolation != nil && s.isTieredStackEnabled {
-		s.syncNamespaceIsolation(attr.GetThrottledNamespaceIds())
+		s.syncNamespaceIsolation(attr.GetPauseNamespaceIds(), attr.GetNamespaceCatchupQps())
 	}
 
 	if s.readerGroup != nil {
@@ -798,31 +802,51 @@ func (s *StreamSenderImpl) defaultLowNsFilter(priority enumsspb.TaskPriority) fu
 
 // syncNamespaceIsolation reconciles the sender's namespace reader state against the
 // set of throttled namespace IDs received from the receiver's ack.
-func (s *StreamSenderImpl) syncNamespaceIsolation(throttledNamespaceIDs []string) {
+//
+// Newly throttled namespaces are registered as paused — the default LOW reader skips
+// them but no goroutine starts yet. When a namespace leaves the throttled list,
+// a rate-limited catchup goroutine is launched to send the skipped tasks before
+// re-admitting the namespace to the default LOW reader.
+func (s *StreamSenderImpl) syncNamespaceIsolation(throttledNamespaceIDs []string, catchupQPS map[string]float64) {
 	start, drain := s.nsIsolation.Sync(throttledNamespaceIDs)
-	for _, ns := range drain {
-		s.nsIsolation.CheckAndRemoveIfCaughtUp(ns)
-	}
+
 	for _, ns := range start {
-		ctx, startCursor, ok := s.nsIsolation.ThrottleNamespace(s.server.Context(), ns)
-		if !ok {
-			continue
+		s.nsIsolation.ThrottleNamespace(ns)
+	}
+
+	for _, ns := range drain {
+		ctx, startCursor, ok := s.nsIsolation.BeginCatchup(s.server.Context(), ns)
+		if ok {
+			// First time this namespace leaves the throttled list: start catchup.
+			rl := s.catchupRateLimiterFor(ns, catchupQPS)
+			go func() {
+				err := s.sendNamespaceEventLoop(ctx, ns, startCursor, rl)
+				s.nsIsolation.Remove(ns)
+				if err != nil && ctx.Err() == nil {
+					s.Stop()
+				}
+			}()
+		} else {
+			// Already catching up: check whether it has reached the default cursor.
+			s.nsIsolation.CheckAndRemoveIfCaughtUp(ns)
 		}
-		go func() {
-			err := s.sendNamespaceEventLoop(ctx, ns, startCursor)
-			s.nsIsolation.Remove(ns)
-			if err != nil && ctx.Err() == nil {
-				s.Stop()
-			}
-		}()
 	}
 }
 
-// sendNamespaceEventLoop runs the dedicated LOW reader for a single throttled namespace.
-// It runs as a live reader until the context is cancelled — either by
-// CheckAndRemoveIfCaughtUp when the receiver un-throttles the namespace and the
-// cursor has caught up, or by stream shutdown via the parent context.
-func (s *StreamSenderImpl) sendNamespaceEventLoop(ctx context.Context, namespaceID string, startCursor int64) error {
+// catchupRateLimiterFor returns a rate limiter for the catchup reader of the given
+// namespace. If the receiver specified a per-namespace QPS, a dedicated limiter is
+// created for it; otherwise the shared default catchup limiter is returned.
+func (s *StreamSenderImpl) catchupRateLimiterFor(namespaceID string, catchupQPS map[string]float64) quotas.RateLimiter {
+	if qps, ok := catchupQPS[namespaceID]; ok && qps > 0 {
+		return quotas.NewDefaultOutgoingRateLimiter(func() float64 { return qps })
+	}
+	return s.catchupRateLimiter
+}
+
+// sendNamespaceEventLoop runs the rate-limited dedicated LOW reader for a single
+// namespace in catchup mode. It runs until the context is cancelled — either by
+// CheckAndRemoveIfCaughtUp once the cursor has caught up, or by stream shutdown.
+func (s *StreamSenderImpl) sendNamespaceEventLoop(ctx context.Context, namespaceID string, startCursor int64, rateLimiter quotas.RateLimiter) error {
 	newTaskNotificationChan, subscriberID := s.historyEngine.SubscribeReplicationNotification(s.clientClusterName)
 	defer s.historyEngine.UnsubscribeReplicationNotification(subscriberID)
 
@@ -833,6 +857,10 @@ func (s *StreamSenderImpl) sendNamespaceEventLoop(ctx context.Context, namespace
 	nsFilter := func(nsID string) bool { return nsID == namespaceID }
 
 	for {
+		if err := rateLimiter.Wait(ctx); err != nil {
+			return nil // context cancelled or shutdown
+		}
+
 		end := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 		if err := s.sendTasks(enumsspb.TASK_PRIORITY_LOW, cursor, end, nsFilter); err != nil {
 			return err

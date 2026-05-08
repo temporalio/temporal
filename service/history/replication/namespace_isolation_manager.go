@@ -7,11 +7,11 @@ import (
 )
 
 // namespaceIsolationManager coordinates per-namespace dedicated LOW readers on
-// the sender. When the receiver signals a namespace is throttled, a dedicated
-// goroutine is created for it and the default LOW reader skips that namespace.
-// When the namespace is no longer throttled and its dedicated reader has caught
-// up to defaultLowCursor, the reader is atomically removed so the default LOW
-// reader resumes without a gap.
+// the sender. When the receiver signals a namespace is throttled, the default
+// LOW reader skips that namespace but no goroutine is started yet (pause phase).
+// When the namespace leaves the throttled list, a rate-limited dedicated goroutine
+// is created to catch up (catchup phase). Once caught up to defaultLowCursor, the
+// reader is atomically removed so the default LOW reader resumes without a gap.
 //
 // All fields are protected by mu. nsReaderHandle.cursor is an atomic because it
 // is written by the dedicated reader goroutine and read by the recv-loop goroutine
@@ -24,8 +24,9 @@ type namespaceIsolationManager struct {
 }
 
 type nsReaderHandle struct {
-	cancel context.CancelFunc
-	cursor atomic.Int64 // written by dedicated reader goroutine; read under mu
+	cancel   context.CancelFunc
+	cursor   atomic.Int64 // written by dedicated reader goroutine; read under mu
+	catching bool         // true once BeginCatchup has been called; protected by m.mu
 }
 
 func newNamespaceIsolationManager() *namespaceIsolationManager {
@@ -85,32 +86,48 @@ func (m *namespaceIsolationManager) IsDefaultLowExcluded(namespaceID string) boo
 	return ok
 }
 
-// ThrottleNamespace creates a dedicated reader entry for namespaceID and returns a child
-// context (derived from parentCtx) and the cursor at which the reader should start.
-// Returns (nil, 0, false) if a reader already exists for the namespace.
-func (m *namespaceIsolationManager) ThrottleNamespace(parentCtx context.Context, namespaceID string) (context.Context, int64, bool) {
+// ThrottleNamespace registers namespaceID for dedicated handling and excludes it
+// from the default LOW reader. No goroutine is started; the namespace is simply
+// paused until BeginCatchup is called. Returns true if newly registered, false if
+// already registered.
+func (m *namespaceIsolationManager) ThrottleNamespace(namespaceID string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.readers[namespaceID]; ok {
+		return false
+	}
+	h := &nsReaderHandle{cancel: func() {}}
+	h.cursor.Store(m.defaultLowCursor)
+	m.readers[namespaceID] = h
+	return true
+}
+
+// BeginCatchup transitions namespaceID from paused to catching up. It creates a
+// child context (derived from parentCtx) and returns the cursor at which the
+// dedicated reader should start. Returns (nil, 0, false) if the namespace is not
+// registered or is already catching up.
+func (m *namespaceIsolationManager) BeginCatchup(parentCtx context.Context, namespaceID string) (context.Context, int64, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	h, ok := m.readers[namespaceID]
+	if !ok || h.catching {
 		return nil, 0, false
 	}
-	startCursor := m.defaultLowCursor
 	ctx, cancel := context.WithCancel(parentCtx)
-	h := &nsReaderHandle{cancel: cancel}
-	h.cursor.Store(startCursor)
-	m.readers[namespaceID] = h
-	return ctx, startCursor, true
+	h.cancel = cancel
+	h.catching = true
+	return ctx, h.cursor.Load(), true
 }
 
 // CheckAndRemoveIfCaughtUp atomically checks whether the dedicated reader for
 // namespaceID has reached defaultLowCursor and, if so, cancels it and removes it
 // from the exclusion set so the default LOW reader resumes without a gap.
-// Returns true if the reader was removed. If the reader is still behind, it
-// continues running; the caller should retry on the next receiver ack.
+// Returns true if the reader was removed. Returns false if the reader is still
+// behind, has not yet started catchup, or is not registered.
 func (m *namespaceIsolationManager) CheckAndRemoveIfCaughtUp(namespaceID string) bool {
 	m.mu.Lock()
 	h, ok := m.readers[namespaceID]
-	if !ok || h.cursor.Load() < m.defaultLowCursor {
+	if !ok || !h.catching || h.cursor.Load() < m.defaultLowCursor {
 		m.mu.Unlock()
 		return false
 	}
@@ -133,8 +150,8 @@ func (m *namespaceIsolationManager) Remove(namespaceID string) {
 }
 
 // Sync reconciles manager state against the new throttled set from the receiver ack.
-// Returns namespaces to start dedicated readers for (start) and namespaces whose
-// dedicated readers should be checked for catch-up removal (drain).
+// Returns namespaces to register as paused (start) and namespaces whose throttling
+// has been lifted and should begin or continue catchup (drain).
 func (m *namespaceIsolationManager) Sync(newThrottled []string) (start, drain []string) {
 	newSet := make(map[string]struct{}, len(newThrottled))
 	for _, ns := range newThrottled {

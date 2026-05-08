@@ -312,6 +312,7 @@ type Config struct {
 	ReplicationReceiverSlowSubmissionLatencyThreshold   dynamicconfig.DurationPropertyFn
 	ReplicationReceiverSlowSubmissionWindow             dynamicconfig.DurationPropertyFn
 	EnableReplicationReceiverSlowSubmissionFlowControl  dynamicconfig.BoolPropertyFn
+	ReplicationStreamSenderCatchupQPSRatio             dynamicconfig.FloatPropertyFn
 	ReplicationResendMaxBatchCount                      dynamicconfig.IntPropertyFn
 	ReplicationProgressCacheMaxSize                     dynamicconfig.IntPropertyFn
 	ReplicationProgressCacheTTL                         dynamicconfig.DurationPropertyFn
@@ -621,6 +622,7 @@ func NewConfig(
 		ReplicationReceiverSlowSubmissionLatencyThreshold:   dynamicconfig.ReplicationReceiverSlowSubmissionLatencyThreshold.Get(dc),
 		ReplicationReceiverSlowSubmissionWindow:             dynamicconfig.ReplicationReceiverSlowSubmissionWindow.Get(dc),
 		EnableReplicationReceiverSlowSubmissionFlowControl:  dynamicconfig.EnableReplicationReceiverSlowSubmissionFlowControl.Get(dc),
+		ReplicationStreamSenderCatchupQPSRatio:             dynamicconfig.ReplicationStreamSenderCatchupQPSRatio.Get(dc),
 		ReplicationResendMaxBatchCount:                      dynamicconfig.ReplicationResendMaxBatchCount.Get(dc),
 		ReplicationProgressCacheMaxSize:                     dynamicconfig.ReplicationProgressCacheMaxSize.Get(dc),
 		ReplicationProgressCacheTTL:                         dynamicconfig.ReplicationProgressCacheTTL.Get(dc),

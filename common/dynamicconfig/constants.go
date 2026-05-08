@@ -2725,6 +2725,11 @@ that task will be sent to DLQ.`,
 		false,
 		`Enable slow submission flow control check in replication receiver`,
 	)
+	ReplicationStreamSenderCatchupQPSRatio = NewGlobalFloatSetting(
+		"history.ReplicationStreamSenderCatchupQPSRatio",
+		0.1,
+		`Fraction of ReplicationStreamSenderLowPriorityQPS to use when a namespace is catching up after being throttled`,
+	)
 	ReplicationResendMaxBatchCount = NewGlobalIntSetting(
 		"history.ReplicationResendMaxBatchCount",
 		10,

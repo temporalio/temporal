@@ -283,9 +283,18 @@ func (r *StreamReceiverImpl) ackMessage(
 		return 0, NewStreamError("InclusiveLowWaterMark is not set", serviceerror.NewInternal("Invalid inclusive low watermark"))
 	}
 
-	var throttledNamespaceIDs []string
+	var pauseNamespaceIDs []string
+	var namespaceCatchupQPS map[string]float64
 	if receiverMode == ReceiverModeTieredStack {
-		throttledNamespaceIDs = r.NamespaceThrottler.ThrottledNamespaceIDs()
+		pauseNamespaceIDs = r.NamespaceThrottler.ThrottledNamespaceIDs()
+		for _, ns := range pauseNamespaceIDs {
+			if qps := r.NamespaceThrottler.CatchupQPS(ns); qps > 0 {
+				if namespaceCatchupQPS == nil {
+					namespaceCatchupQPS = make(map[string]float64, len(pauseNamespaceIDs))
+				}
+				namespaceCatchupQPS[ns] = qps
+			}
+		}
 	}
 	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
@@ -294,7 +303,8 @@ func (r *StreamReceiverImpl) ackMessage(
 				InclusiveLowWatermarkTime: timestamppb.New(inclusiveLowWaterMarkTime),
 				HighPriorityState:         highPriorityWatermark,
 				LowPriorityState:          lowPriorityWatermark,
-				ThrottledNamespaceIds:     throttledNamespaceIDs,
+				PauseNamespaceIds:         pauseNamespaceIDs,
+				NamespaceCatchupQps:       namespaceCatchupQPS,
 			},
 		},
 	}); err != nil {
