@@ -13,7 +13,6 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -30,6 +29,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	hsmcallbacks "go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
@@ -129,32 +129,24 @@ func startFakeExternalService(ctx context.Context, c workflowservice.WorkflowSer
 }
 
 func TestStandaloneCallbackSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(StandaloneCallbackSuite))
+	parallelsuite.Run(t, &StandaloneCallbackSuite{})
 }
 
 type StandaloneCallbackSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*StandaloneCallbackSuite]
 }
 
-// Expose a helper to enable "require" assertions, to fail the test immediately instead of
-// allowing cascading failures. e.g. s.Require().NotNil(err, "unable to do critical thing")
-func (s *StandaloneCallbackSuite) Require() *require.Assertions {
-	return require.New(s.T())
-}
+func (s *StandaloneCallbackSuite) newEnv() *testcore.TestEnv {
+	return testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+		testcore.WithDynamicConfig(callback.EnableStandaloneExecutions, true),
 
-func (s *StandaloneCallbackSuite) SetupSuite() {
-	s.SetupSuiteWithCluster(
-		testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
-			dynamicconfig.EnableChasm.Key():           true,
-			dynamicconfig.EnableCHASMCallbacks.Key():  true,
-			callback.EnableStandaloneExecutions.Key(): true,
-
-			// QUIRK: The configuration for setting the callback allow list
-			// is in the HSM code.
-			hsmcallbacks.AllowedAddresses.Key(): []any{
-				map[string]any{"Pattern": "*", "AllowInsecure": true},
-			},
+		// QUIRK: The configuration for setting the callback allow list
+		// is in the HSM code. The chasm/lib/callback AllowedAddresses
+		// field isn't used.
+		testcore.WithDynamicConfig(hsmcallbacks.AllowedAddresses, []any{
+			map[string]any{"Pattern": "*", "AllowInsecure": true},
 		}),
 	)
 }
@@ -168,6 +160,7 @@ func (s *StandaloneCallbackSuite) SetupSuite() {
 // aways result in timing out.
 func (s *StandaloneCallbackSuite) callStartCallbackExecutionToBogusCallback(
 	ctx context.Context,
+	env *testcore.TestEnv,
 	callbackID string,
 	timeout time.Duration,
 ) *workflowservice.StartCallbackExecutionResponse {
@@ -186,12 +179,13 @@ func (s *StandaloneCallbackSuite) callStartCallbackExecutionToBogusCallback(
 		},
 	}
 
-	return s.callStartCallbackExecution(ctx, callbackID, cb, completion, timeout)
+	return s.callStartCallbackExecution(ctx, env, callbackID, cb, completion, timeout)
 }
 
 // Call the StartCallbackExecution API with the given parameters.
 func (s *StandaloneCallbackSuite) callStartCallbackExecution(
 	ctx context.Context,
+	env *testcore.TestEnv,
 	callbackID string,
 	cb *commonpb.Callback,
 	completion *callbackpb.CallbackExecutionCompletion,
@@ -199,8 +193,11 @@ func (s *StandaloneCallbackSuite) callStartCallbackExecution(
 ) *workflowservice.StartCallbackExecutionResponse {
 	s.T().Helper()
 
-	resp, err := s.FrontendClient().StartCallbackExecution(ctx, &workflowservice.StartCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
+	frontend := env.FrontendClient()
+	namespace := env.Namespace()
+
+	resp, err := frontend.StartCallbackExecution(ctx, &workflowservice.StartCallbackExecutionRequest{
+		Namespace:  namespace.String(),
 		Identity:   "startCallbackExecution",
 		RequestId:  uuid.NewString(),
 		CallbackId: callbackID,
@@ -210,7 +207,7 @@ func (s *StandaloneCallbackSuite) callStartCallbackExecution(
 		},
 		ScheduleToCloseTimeout: durationpb.New(timeout),
 	})
-	s.Require().NoError(err, "Error calling StartCallbackExecution to bogus callback")
+	s.NoError(err, "Error calling StartCallbackExecution to bogus callback")
 
 	return resp
 }
@@ -237,6 +234,8 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 	// Takes a CallbackExecutionCompletion to be reported by the external service, and a
 	// verification function to test the calling Workflow behaved as expected.
 	runStandaloneCallbackScenario := func(
+		s *StandaloneCallbackSuite,
+		env *testcore.TestEnv,
 		ctx context.Context,
 		completionResult *callbackpb.CallbackExecutionCompletion,
 		workflowRunVerificationFn func(client.WorkflowRun),
@@ -247,7 +246,7 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 		//
 		// Start a fake external service to handle async requests, and report
 		// their results to Temporal.
-		fakeSvc := startFakeExternalService(ctx, s.FrontendClient())
+		fakeSvc := startFakeExternalService(ctx, env.FrontendClient())
 
 		// Nexus Handler
 		//
@@ -272,7 +271,7 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 
 				// Send the request to the external service to do the work.
 				fakeSvc.incommingRequests <- externalRequestInfo{
-					Namespace: s.Namespace().String(),
+					Namespace: env.Namespace().String(),
 					Token:     options.CallbackHeader.Get(commonnexus.CallbackTokenHeader),
 					URL:       options.CallbackURL,
 
@@ -303,8 +302,8 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 				},
 			},
 		}
-		_, err := s.OperatorClient().CreateNexusEndpoint(ctx, createNexusEndpointReq)
-		s.Require().NoError(err, "Error registering Nexus endpoint")
+		_, err := env.OperatorClient().CreateNexusEndpoint(ctx, createNexusEndpointReq)
+		s.NoError(err, "Error registering Nexus endpoint")
 
 		// Calling Workflow
 		//
@@ -323,17 +322,17 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 		// Run the Test
 		//
 		// Construct and start the calling workflow Worker. Then wait for completion.
-		callerWfWorker := worker.New(s.SdkClient(), taskQueue, worker.Options{})
+		callerWfWorker := worker.New(env.SdkClient(), taskQueue, worker.Options{})
 		callerWfWorker.RegisterWorkflow(callerWf)
-		s.Require().NoError(callerWfWorker.Start(), "Error starting calling workflow Worker")
+		s.NoError(callerWfWorker.Start(), "Error starting calling workflow Worker")
 		defer callerWfWorker.Stop()
 
 		// Start
 		startOpts := client.StartWorkflowOptions{
 			TaskQueue: taskQueue,
 		}
-		callerWfRun, err := s.SdkClient().ExecuteWorkflow(ctx, startOpts, callerWf)
-		s.Require().NoError(err, "Error running the caller Workflow")
+		callerWfRun, err := env.SdkClient().ExecuteWorkflow(ctx, startOpts, callerWf)
+		s.NoError(err, "Error running the caller Workflow")
 
 		// Defer to a caller-supplied verification function to wait on the caller
 		// workflow's result and verify the success/failure as applicable.
@@ -342,23 +341,23 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 		// If the fake service was called correctly, we expect to see the result
 		// of it doing the out-of-band work.
 		fakeSvcResult := <-fakeSvc.requestResults
-		s.Require().NoError(fakeSvcResult.Error)
+		s.NoError(fakeSvcResult.Error)
 
 		// Additional Verification
 		//
 		// Use the Describe and Poll APIs to fetch the callback execution.
-		descResp, err := s.FrontendClient().DescribeCallbackExecution(ctx, &workflowservice.DescribeCallbackExecutionRequest{
-			Namespace:      s.Namespace().String(),
+		descResp, err := env.FrontendClient().DescribeCallbackExecution(ctx, &workflowservice.DescribeCallbackExecutionRequest{
+			Namespace:      env.Namespace().String(),
 			CallbackId:     fakeSvcResult.CallbackID,
 			IncludeInput:   true,
 			IncludeOutcome: false,
 		})
-		s.Require().NoError(err, "Error describing the callback execution")
+		s.NoError(err, "Error describing the callback execution")
 		s.True(proto.Equal(completionResult, descResp.Input))
 		s.Nil(descResp.Outcome)
 
 		gotInfo := descResp.GetInfo()
-		s.Require().NotNil(gotInfo, "Got nil Info in response")
+		s.NotNil(gotInfo, "Got nil Info in response")
 		s.Equal(fakeSvcResult.CallbackID, gotInfo.GetCallbackId())
 		s.NotNil(gotInfo.GetCreateTime())
 
@@ -368,14 +367,14 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 		s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, gotInfo.GetState())
 
 		// Poll to verify the outcome as well.
-		pollResp, err := s.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
-			Namespace:  s.Namespace().String(),
+		pollResp, err := env.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
+			Namespace:  env.Namespace().String(),
 			CallbackId: fakeSvcResult.CallbackID,
 		})
-		s.Require().NoError(err, "Error polling completed callback execution")
+		s.NoError(err, "Error polling completed callback execution")
 
 		outcome := pollResp.GetOutcome()
-		s.Require().NotNil(outcome, "Got nil Outcome")
+		s.NotNil(outcome, "Got nil Outcome")
 
 		// Confirm the outcome of the callback was a successful delivery.
 		// (Even if it was for a failed completion.)
@@ -383,7 +382,8 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 		s.Nil(outcome.GetFailure())
 	}
 
-	s.Run("success", func() {
+	s.Run("success", func(s *StandaloneCallbackSuite) {
+		env := s.newEnv()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
@@ -400,10 +400,11 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 			s.Equal(wantPayloadStr, gotPayload)
 		}
 
-		runStandaloneCallbackScenario(ctx, successCompletion, verifyWorkflowRunFn)
+		runStandaloneCallbackScenario(s, env, ctx, successCompletion, verifyWorkflowRunFn)
 	})
 
-	s.Run("failure", func() {
+	s.Run("failure", func(s *StandaloneCallbackSuite) {
+		env := s.newEnv()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
@@ -440,7 +441,7 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 			s.Contains(noe.Error(), "operation failed from standalone callback")
 		}
 
-		runStandaloneCallbackScenario(ctx, failureCompletion, verifyWorkflowRunFn)
+		runStandaloneCallbackScenario(s, env, ctx, failureCompletion, verifyWorkflowRunFn)
 	})
 }
 
@@ -448,39 +449,41 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 // of a callback execution. It returns an empty response when the poll times out, and
 // the CallbackExecutionOutcome when the callback reaches a terminal state.
 func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	env := s.newEnv()
 
-	s.Run("returns_empty_for_non_terminal", func() {
+	s.Run("returns_empty_for_non_terminal", func(s *StandaloneCallbackSuite) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
 		callbackID := "poll-test-" + uuid.NewString()
 
 		// Report the result of a non-existent, non-routable callback. The CallbackExecution
 		// will linger for 1m before timing out.
-		s.callStartCallbackExecutionToBogusCallback(ctx, callbackID, time.Minute)
+		s.callStartCallbackExecutionToBogusCallback(ctx, env, callbackID, time.Minute)
 
 		// Poll a non-terminal callback with a short timeout. Should return an empty response.
 		// NOTE: Passing a shorter timeout like 1s will cause failure with "Workflow is busy."
 		shortCtx, shortCancel := context.WithTimeout(ctx, 2*time.Second)
 		defer shortCancel()
-		pollResp, err := s.FrontendClient().PollCallbackExecution(shortCtx, &workflowservice.PollCallbackExecutionRequest{
-			Namespace:  s.Namespace().String(),
+		pollResp, err := env.FrontendClient().PollCallbackExecution(shortCtx, &workflowservice.PollCallbackExecutionRequest{
+			Namespace:  env.Namespace().String(),
 			CallbackId: callbackID,
 		})
 		s.NoError(err)
 		s.Nil(pollResp.GetOutcome())
 
 		// Terminate the CallbackExecution resource, then poll should return the outcome.
-		_, err = s.FrontendClient().TerminateCallbackExecution(ctx, &workflowservice.TerminateCallbackExecutionRequest{
-			Namespace:  s.Namespace().String(),
+		_, err = env.FrontendClient().TerminateCallbackExecution(ctx, &workflowservice.TerminateCallbackExecutionRequest{
+			Namespace:  env.Namespace().String(),
 			CallbackId: callbackID,
 			Identity:   s.T().Name(),
 			RequestId:  uuid.NewString(),
 			Reason:     "testing poll behavior",
 		})
-		s.Require().NoError(err, "Unable to terminate CallbackExecution")
+		s.NoError(err, "Unable to terminate CallbackExecution")
 
-		pollResp, err = s.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
-			Namespace:  s.Namespace().String(),
+		pollResp, err = env.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
+			Namespace:  env.Namespace().String(),
 			CallbackId: callbackID,
 		})
 		s.NoError(err)
@@ -488,9 +491,12 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 		s.Equal("testing poll behavior", pollResp.GetOutcome().GetFailure().GetMessage())
 	})
 
-	s.Run("blocks_until_complete", func() {
+	s.Run("blocks_until_complete", func(s *StandaloneCallbackSuite) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
 		callbackID := "poll-blocks-" + uuid.NewString()
-		s.callStartCallbackExecutionToBogusCallback(ctx, callbackID, time.Minute)
+		s.callStartCallbackExecutionToBogusCallback(ctx, env, callbackID, time.Minute)
 
 		// Start a long-poll in a goroutine.
 		type pollResult struct {
@@ -499,8 +505,8 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 		}
 		resultCh := make(chan pollResult, 1)
 		go func() {
-			resp, err := s.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
-				Namespace:  s.Namespace().String(),
+			resp, err := env.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
+				Namespace:  env.Namespace().String(),
 				CallbackId: callbackID,
 			})
 			resultCh <- pollResult{resp: resp, err: err}
@@ -514,8 +520,8 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 		}
 
 		// Terminate the CallbackExecution. Confirm that the poll result (from Goroutine) has completed.
-		_, err := s.FrontendClient().TerminateCallbackExecution(ctx, &workflowservice.TerminateCallbackExecutionRequest{
-			Namespace:  s.Namespace().String(),
+		_, err := env.FrontendClient().TerminateCallbackExecution(ctx, &workflowservice.TerminateCallbackExecutionRequest{
+			Namespace:  env.Namespace().String(),
 			CallbackId: callbackID,
 			Identity:   "test",
 			RequestId:  uuid.NewString(),
@@ -529,15 +535,18 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 		s.Equal("testing poll blocks", result.resp.GetOutcome().GetFailure().GetMessage())
 	})
 
-	s.Run("returns_run_id", func() {
+	s.Run("returns_run_id", func(s *StandaloneCallbackSuite) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
 		callbackID := "poll-runid-" + uuid.NewString()
-		startResp := s.callStartCallbackExecutionToBogusCallback(ctx, callbackID, time.Minute)
+		startResp := s.callStartCallbackExecutionToBogusCallback(ctx, env, callbackID, time.Minute)
 
 		gotRunID := startResp.GetRunId()
 
 		// Terminate so poll returns immediately.
-		_, err := s.FrontendClient().TerminateCallbackExecution(ctx, &workflowservice.TerminateCallbackExecutionRequest{
-			Namespace:  s.Namespace().String(),
+		_, err := env.FrontendClient().TerminateCallbackExecution(ctx, &workflowservice.TerminateCallbackExecutionRequest{
+			Namespace:  env.Namespace().String(),
 			CallbackId: callbackID,
 			Identity:   "test",
 			RequestId:  uuid.NewString(),
@@ -546,8 +555,8 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 		s.NoError(err)
 
 		// Confirm the Poll result includes the RunID of the initial StartCallbackExecution request.
-		pollResp, err := s.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
-			Namespace:  s.Namespace().String(),
+		pollResp, err := env.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
+			Namespace:  env.Namespace().String(),
 			CallbackId: callbackID,
 		})
 		s.NoError(err)
@@ -555,10 +564,13 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 		s.NotNil(pollResp.GetOutcome().GetFailure())
 	})
 
-	s.Run("poll_after_timeout", func() {
+	s.Run("poll_after_timeout", func(s *StandaloneCallbackSuite) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
 		callbackID := "poll-timeout-" + uuid.NewString()
 		// Start with a very short schedule-to-close timeout so it times out quickly.
-		s.callStartCallbackExecutionToBogusCallback(ctx, callbackID, 500*time.Millisecond)
+		s.callStartCallbackExecutionToBogusCallback(ctx, env, callbackID, 500*time.Millisecond)
 
 		// Wait for the callback to time out, then poll for the outcome.
 		const (
@@ -566,8 +578,8 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 			checkInterval = 200 * time.Millisecond
 		)
 		s.EventuallyWithT(func(t *assert.CollectT) {
-			pollResp, err := s.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
-				Namespace:  s.Namespace().String(),
+			pollResp, err := env.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
+				Namespace:  env.Namespace().String(),
 				CallbackId: callbackID,
 			})
 			require.NoError(t, err)
@@ -578,29 +590,24 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 			require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, pollResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 		}, waitUpTo, checkInterval)
 	})
-
-	// Context: The tests are failing because I'm not tracking the terminal failure.
-	// Part of that is because I don't understand the PR feedback, asking to put it
-	// in a "separate data field" from
-	// package temporal.server.chasm.lib.callbacks.proto.v1;
-	// CallbackState.Failure
 }
 
 // TestDeleteCallbackExecution verifies that a standalone callback execution can be deleted.
 // Delete terminates the callback if it's still running, then marks it for cleanup.
 func (s *StandaloneCallbackSuite) TestDeleteCallbackExecution() {
+	env := s.newEnv()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// Create a callback that points to a non-existent URL so it won't complete on its own.
 	// The callback will be in SCHEDULED/BACKING_OFF state when we delete it.
 	callbackID := "delete-test-" + uuid.NewString()
-	startResp := s.callStartCallbackExecutionToBogusCallback(ctx, callbackID, time.Minute)
+	startResp := s.callStartCallbackExecutionToBogusCallback(ctx, env, callbackID, time.Minute)
 	runID := startResp.GetRunId()
 
 	// Describe using run_id to verify it was created.
-	descResp, err := s.FrontendClient().DescribeCallbackExecution(ctx, &workflowservice.DescribeCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
+	descResp, err := env.FrontendClient().DescribeCallbackExecution(ctx, &workflowservice.DescribeCallbackExecutionRequest{
+		Namespace:  env.Namespace().String(),
 		CallbackId: callbackID,
 		RunId:      runID,
 	})
@@ -610,16 +617,16 @@ func (s *StandaloneCallbackSuite) TestDeleteCallbackExecution() {
 	s.Equal(enumspb.CALLBACK_EXECUTION_STATUS_RUNNING, descResp.GetInfo().GetStatus())
 
 	// Delete with wrong run_id should fail.
-	_, err = s.FrontendClient().DeleteCallbackExecution(ctx, &workflowservice.DeleteCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
+	_, err = env.FrontendClient().DeleteCallbackExecution(ctx, &workflowservice.DeleteCallbackExecutionRequest{
+		Namespace:  env.Namespace().String(),
 		CallbackId: callbackID,
 		RunId:      uuid.NewString(),
 	})
 	s.ErrorContains(err, fmt.Sprintf("callback not found for ID: %s", callbackID))
 
 	// Delete the callback execution using correct run_id.
-	_, err = s.FrontendClient().DeleteCallbackExecution(ctx, &workflowservice.DeleteCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
+	_, err = env.FrontendClient().DeleteCallbackExecution(ctx, &workflowservice.DeleteCallbackExecutionRequest{
+		Namespace:  env.Namespace().String(),
 		CallbackId: callbackID,
 		RunId:      runID,
 	})
@@ -631,8 +638,8 @@ func (s *StandaloneCallbackSuite) TestDeleteCallbackExecution() {
 		checkInterval = 100 * time.Millisecond
 	)
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		_, err := s.FrontendClient().DescribeCallbackExecution(ctx, &workflowservice.DescribeCallbackExecutionRequest{
-			Namespace:  s.Namespace().String(),
+		_, err := env.FrontendClient().DescribeCallbackExecution(ctx, &workflowservice.DescribeCallbackExecutionRequest{
+			Namespace:  env.Namespace().String(),
 			CallbackId: callbackID,
 			RunId:      runID,
 		})
@@ -642,8 +649,7 @@ func (s *StandaloneCallbackSuite) TestDeleteCallbackExecution() {
 
 // TestStartCallbackExecution_InvalidArguments verifies request validation.
 func (s *StandaloneCallbackSuite) TestStartCallbackExecution_InvalidArguments() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
+	env := s.newEnv()
 
 	validCallback := &commonpb.Callback{
 		Variant: &commonpb.Callback_Nexus_{
@@ -734,9 +740,12 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_InvalidArguments() 
 	}
 
 	for _, tc := range tests {
-		s.Run(tc.name, func() {
+		s.Run(tc.name, func(s *StandaloneCallbackSuite) {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+
 			req := &workflowservice.StartCallbackExecutionRequest{
-				Namespace:              s.Namespace().String(),
+				Namespace:              env.Namespace().String(),
 				Identity:               "test",
 				RequestId:              uuid.NewString(),
 				CallbackId:             "validation-test-" + uuid.NewString(),
@@ -745,7 +754,7 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_InvalidArguments() 
 				ScheduleToCloseTimeout: durationpb.New(time.Minute),
 			}
 			tc.mutate(req)
-			_, err := s.FrontendClient().StartCallbackExecution(ctx, req)
+			_, err := env.FrontendClient().StartCallbackExecution(ctx, req)
 			s.Error(err)
 			s.Contains(err.Error(), tc.errMsg)
 		})
@@ -756,6 +765,7 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_InvalidArguments() 
 // an already-used callback_id returns an AlreadyExists error with a different request_id,
 // and that the same request_id is idempotent (returns the existing run_id without error).
 func (s *StandaloneCallbackSuite) TestStartCallbackExecution_DuplicateID() {
+	env := s.newEnv()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -764,7 +774,7 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_DuplicateID() {
 
 	// Build the request explicitly so we can reuse the same request_id.
 	req := &workflowservice.StartCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
+		Namespace:  env.Namespace().String(),
 		Identity:   "test",
 		RequestId:  requestID,
 		CallbackId: callbackID,
@@ -784,19 +794,19 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_DuplicateID() {
 	}
 
 	// First call succeeds.
-	startResp, err := s.FrontendClient().StartCallbackExecution(ctx, req)
+	startResp, err := env.FrontendClient().StartCallbackExecution(ctx, req)
 	s.NoError(err)
 	existingRunID := startResp.GetRunId()
 	s.NotEmpty(existingRunID)
 
 	// Same callback_id + same request_id should be idempotent (return existing run_id).
-	dupResp, err := s.FrontendClient().StartCallbackExecution(ctx, req)
+	dupResp, err := env.FrontendClient().StartCallbackExecution(ctx, req)
 	s.NoError(err)
 	s.Equal(existingRunID, dupResp.GetRunId())
 
 	// Same callback_id + different request_id should fail with serviceerror.CallbackExecutionAlreadyStarted.
 	req.RequestId = uuid.NewString()
-	_, err = s.FrontendClient().StartCallbackExecution(ctx, req)
+	_, err = env.FrontendClient().StartCallbackExecution(ctx, req)
 	s.Error(err)
 	s.Contains(err.Error(), "callback execution already started")
 }
@@ -804,6 +814,7 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_DuplicateID() {
 // TestListAndCountCallbackExecutions tests that standalone callback executions
 // can be listed and counted via the visibility APIs, and verifies the returned data.
 func (s *StandaloneCallbackSuite) TestListAndCountCallbackExecutions() {
+	env := s.newEnv()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
 	defer cancel()
 
@@ -811,7 +822,7 @@ func (s *StandaloneCallbackSuite) TestListAndCountCallbackExecutions() {
 	callbackIDs := make([]string, 2)
 	for i := range 2 {
 		callbackIDs[i] = fmt.Sprintf("list-test-%d-%s", i, uuid.NewString())
-		s.callStartCallbackExecutionToBogusCallback(ctx, callbackIDs[i], time.Minute)
+		s.callStartCallbackExecutionToBogusCallback(ctx, env, callbackIDs[i], time.Minute)
 	}
 
 	// List callback executions. Visibility indexing happens be async, so use EventuallyWithT.
@@ -822,8 +833,8 @@ func (s *StandaloneCallbackSuite) TestListAndCountCallbackExecutions() {
 
 	// Verify returned data includes our callback IDs and has valid fields.
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		listResp, err := s.FrontendClient().ListCallbackExecutions(ctx, &workflowservice.ListCallbackExecutionsRequest{
-			Namespace: s.Namespace().String(),
+		listResp, err := env.FrontendClient().ListCallbackExecutions(ctx, &workflowservice.ListCallbackExecutionsRequest{
+			Namespace: env.Namespace().String(),
 			PageSize:  10,
 		})
 		require.NoError(t, err)
@@ -843,8 +854,8 @@ func (s *StandaloneCallbackSuite) TestListAndCountCallbackExecutions() {
 
 	// List with ExecutionStatus query filter — newly started callbacks should be "Running".
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		listResp, err := s.FrontendClient().ListCallbackExecutions(ctx, &workflowservice.ListCallbackExecutionsRequest{
-			Namespace: s.Namespace().String(),
+		listResp, err := env.FrontendClient().ListCallbackExecutions(ctx, &workflowservice.ListCallbackExecutionsRequest{
+			Namespace: env.Namespace().String(),
 			PageSize:  10,
 			Query:     fmt.Sprintf(`ExecutionStatus = "Running" AND CallbackId = %q`, callbackIDs[0]),
 		})
@@ -854,8 +865,8 @@ func (s *StandaloneCallbackSuite) TestListAndCountCallbackExecutions() {
 	}, waitUpTo, checkInterval, "Didn't find Running callback")
 
 	// Terminate one callback to test filtering by terminal status.
-	_, err := s.FrontendClient().TerminateCallbackExecution(ctx, &workflowservice.TerminateCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
+	_, err := env.FrontendClient().TerminateCallbackExecution(ctx, &workflowservice.TerminateCallbackExecutionRequest{
+		Namespace:  env.Namespace().String(),
 		CallbackId: callbackIDs[1],
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
@@ -865,8 +876,8 @@ func (s *StandaloneCallbackSuite) TestListAndCountCallbackExecutions() {
 
 	// List with ExecutionStatus = "Terminated" should find the terminated callback.
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		listResp, err := s.FrontendClient().ListCallbackExecutions(ctx, &workflowservice.ListCallbackExecutionsRequest{
-			Namespace: s.Namespace().String(),
+		listResp, err := env.FrontendClient().ListCallbackExecutions(ctx, &workflowservice.ListCallbackExecutionsRequest{
+			Namespace: env.Namespace().String(),
 			PageSize:  10,
 			Query:     fmt.Sprintf(`ExecutionStatus = "Terminated" AND CallbackId = %q`, callbackIDs[1]),
 		})
@@ -877,8 +888,8 @@ func (s *StandaloneCallbackSuite) TestListAndCountCallbackExecutions() {
 
 	// Count callback executions.
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		countResp, err := s.FrontendClient().CountCallbackExecutions(ctx, &workflowservice.CountCallbackExecutionsRequest{
-			Namespace: s.Namespace().String(),
+		countResp, err := env.FrontendClient().CountCallbackExecutions(ctx, &workflowservice.CountCallbackExecutionsRequest{
+			Namespace: env.Namespace().String(),
 		})
 		require.NoError(t, err)
 		require.GreaterOrEqual(t, countResp.GetCount(), int64(2))
@@ -886,8 +897,8 @@ func (s *StandaloneCallbackSuite) TestListAndCountCallbackExecutions() {
 
 	// Count with ExecutionStatus filter should only count scheduled callbacks.
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		countResp, err := s.FrontendClient().CountCallbackExecutions(ctx, &workflowservice.CountCallbackExecutionsRequest{
-			Namespace: s.Namespace().String(),
+		countResp, err := env.FrontendClient().CountCallbackExecutions(ctx, &workflowservice.CountCallbackExecutionsRequest{
+			Namespace: env.Namespace().String(),
 			Query:     `ExecutionStatus = "Running"`,
 		})
 		require.NoError(t, err)
@@ -898,14 +909,15 @@ func (s *StandaloneCallbackSuite) TestListAndCountCallbackExecutions() {
 // TestStartCallbackExecution_SearchAttributes tests that search attributes provided at start
 // are persisted and can be used to query callback executions via list filtering.
 func (s *StandaloneCallbackSuite) TestStartCallbackExecution_SearchAttributes() {
+	env := s.newEnv()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	callbackID := "sa-test-" + uuid.NewString()
 	saValue := "sa-test-value-" + uuid.NewString()
 
-	_, err := s.FrontendClient().StartCallbackExecution(ctx, &workflowservice.StartCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
+	_, err := env.FrontendClient().StartCallbackExecution(ctx, &workflowservice.StartCallbackExecutionRequest{
+		Namespace:  env.Namespace().String(),
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 		CallbackId: callbackID,
@@ -932,8 +944,8 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_SearchAttributes() 
 
 	// Verify the search attribute is queryable via list.
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		listResp, err := s.FrontendClient().ListCallbackExecutions(ctx, &workflowservice.ListCallbackExecutionsRequest{
-			Namespace: s.Namespace().String(),
+		listResp, err := env.FrontendClient().ListCallbackExecutions(ctx, &workflowservice.ListCallbackExecutionsRequest{
+			Namespace: env.Namespace().String(),
 			PageSize:  10,
 			Query:     fmt.Sprintf(`CustomKeywordField = %q AND CallbackId = %q`, saValue, callbackID),
 		})
@@ -945,19 +957,20 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_SearchAttributes() 
 
 // TestTerminateCallbackExecution tests terminate, run_id validation, and request ID idempotency.
 func (s *StandaloneCallbackSuite) TestTerminateCallbackExecution() {
+	env := s.newEnv()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 	defer cancel()
 
 	callbackID := "terminate-test-" + uuid.NewString()
-	startResp := s.callStartCallbackExecutionToBogusCallback(ctx, callbackID, time.Minute)
+	startResp := s.callStartCallbackExecutionToBogusCallback(ctx, env, callbackID, time.Minute)
 	requestID := uuid.NewString()
 	runID := startResp.GetRunId()
 
 	// Wrong run_id should fail for describe, poll, and terminate.
 	wrongRunID := uuid.NewString()
 
-	_, err := s.FrontendClient().DescribeCallbackExecution(ctx, &workflowservice.DescribeCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
+	_, err := env.FrontendClient().DescribeCallbackExecution(ctx, &workflowservice.DescribeCallbackExecutionRequest{
+		Namespace:  env.Namespace().String(),
 		CallbackId: callbackID,
 		RunId:      wrongRunID,
 	})
@@ -965,15 +978,15 @@ func (s *StandaloneCallbackSuite) TestTerminateCallbackExecution() {
 
 	shortCtx, shortCancel := context.WithTimeout(ctx, time.Second*2)
 	defer shortCancel()
-	_, err = s.FrontendClient().PollCallbackExecution(shortCtx, &workflowservice.PollCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
+	_, err = env.FrontendClient().PollCallbackExecution(shortCtx, &workflowservice.PollCallbackExecutionRequest{
+		Namespace:  env.Namespace().String(),
 		CallbackId: callbackID,
 		RunId:      wrongRunID,
 	})
 	s.Error(err)
 
-	_, err = s.FrontendClient().TerminateCallbackExecution(ctx, &workflowservice.TerminateCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
+	_, err = env.FrontendClient().TerminateCallbackExecution(ctx, &workflowservice.TerminateCallbackExecutionRequest{
+		Namespace:  env.Namespace().String(),
 		CallbackId: callbackID,
 		RunId:      wrongRunID,
 		Identity:   "test",
@@ -983,8 +996,8 @@ func (s *StandaloneCallbackSuite) TestTerminateCallbackExecution() {
 	s.Error(err)
 
 	// Terminate with correct run_id and known request ID.
-	_, err = s.FrontendClient().TerminateCallbackExecution(ctx, &workflowservice.TerminateCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
+	_, err = env.FrontendClient().TerminateCallbackExecution(ctx, &workflowservice.TerminateCallbackExecutionRequest{
+		Namespace:  env.Namespace().String(),
 		CallbackId: callbackID,
 		RunId:      runID,
 		Identity:   "test",
@@ -994,8 +1007,8 @@ func (s *StandaloneCallbackSuite) TestTerminateCallbackExecution() {
 	s.NoError(err)
 
 	// Describe after terminate — should be TERMINATED with correct run_id.
-	descResp, err := s.FrontendClient().DescribeCallbackExecution(ctx, &workflowservice.DescribeCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
+	descResp, err := env.FrontendClient().DescribeCallbackExecution(ctx, &workflowservice.DescribeCallbackExecutionRequest{
+		Namespace:  env.Namespace().String(),
 		CallbackId: callbackID,
 		RunId:      runID,
 	})
@@ -1006,8 +1019,8 @@ func (s *StandaloneCallbackSuite) TestTerminateCallbackExecution() {
 	s.Equal(runID, descResp.GetInfo().GetRunId())
 
 	// Poll to verify the outcome.
-	pollResp, err := s.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
+	pollResp, err := env.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
+		Namespace:  env.Namespace().String(),
 		CallbackId: callbackID,
 		RunId:      runID,
 	})
@@ -1016,8 +1029,8 @@ func (s *StandaloneCallbackSuite) TestTerminateCallbackExecution() {
 	s.Equal("testing terminate", pollResp.GetOutcome().GetFailure().GetMessage())
 
 	// Same request ID should be a no-op (idempotent).
-	_, err = s.FrontendClient().TerminateCallbackExecution(ctx, &workflowservice.TerminateCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
+	_, err = env.FrontendClient().TerminateCallbackExecution(ctx, &workflowservice.TerminateCallbackExecutionRequest{
+		Namespace:  env.Namespace().String(),
 		CallbackId: callbackID,
 		Identity:   "test",
 		RequestId:  requestID,
@@ -1026,8 +1039,8 @@ func (s *StandaloneCallbackSuite) TestTerminateCallbackExecution() {
 	s.NoError(err)
 
 	// Different request ID should return FailedPrecondition.
-	_, err = s.FrontendClient().TerminateCallbackExecution(ctx, &workflowservice.TerminateCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
+	_, err = env.FrontendClient().TerminateCallbackExecution(ctx, &workflowservice.TerminateCallbackExecutionRequest{
+		Namespace:  env.Namespace().String(),
 		CallbackId: callbackID,
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
@@ -1040,6 +1053,7 @@ func (s *StandaloneCallbackSuite) TestTerminateCallbackExecution() {
 // TestCallbackExecutionFailedOutcome tests that when a callback fails with a non-retryable error
 // (e.g., a 400 response from the target), the poll outcome contains the failure details.
 func (s *StandaloneCallbackSuite) TestCallbackExecutionFailedOutcome() {
+	env := s.newEnv()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
@@ -1060,11 +1074,11 @@ func (s *StandaloneCallbackSuite) TestCallbackExecutionFailedOutcome() {
 			Success: testcore.MustToPayload(s.T(), "some-result"),
 		},
 	}
-	s.callStartCallbackExecution(ctx, callbackID, cb, completion, time.Minute)
+	s.callStartCallbackExecution(ctx, env, callbackID, cb, completion, time.Minute)
 
 	// Poll for the outcome — the callback should eventually fail with a non-retryable error.
-	pollResp, err := s.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
+	pollResp, err := env.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
+		Namespace:  env.Namespace().String(),
 		CallbackId: callbackID,
 	})
 	s.NoError(err)
@@ -1086,6 +1100,7 @@ func (s *StandaloneCallbackSuite) TestCallbackExecutionFailedOutcome() {
 //  4. The operation can be completed from SCHEDULED state directly, so the workflow
 //     receives the result regardless of the start handler timing.
 func (s *StandaloneCallbackSuite) TestNexusOperationCompletionBeforeStartHandlerReturns() {
+	env := s.newEnv()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
 	defer cancel()
 
@@ -1121,7 +1136,7 @@ func (s *StandaloneCallbackSuite) TestNexusOperationCompletionBeforeStartHandler
 					Success: testcore.MustToPayload(s.T(), "result-before-start-returns"),
 				},
 			}
-			s.callStartCallbackExecution(ctx, callbackID, cb, completion, time.Minute)
+			s.callStartCallbackExecution(ctx, env, callbackID, cb, completion, time.Minute)
 
 			// Now return the async result — the completion has already been
 			// delivered and the operation should already be completed.
@@ -1133,7 +1148,7 @@ func (s *StandaloneCallbackSuite) TestNexusOperationCompletionBeforeStartHandler
 	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
-	_, err := s.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+	_, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: endpointName,
 			Target: &nexuspb.EndpointTarget{
@@ -1156,13 +1171,13 @@ func (s *StandaloneCallbackSuite) TestNexusOperationCompletionBeforeStartHandler
 		return result, err
 	}
 
-	w := worker.New(s.SdkClient(), taskQueue, worker.Options{})
+	w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
 	w.RegisterWorkflow(callerWf)
 	s.NoError(w.Start())
 	defer w.Stop()
 
 	// Start the caller workflow.
-	run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
 	}, callerWf)
 	s.NoError(err)
@@ -1175,8 +1190,8 @@ func (s *StandaloneCallbackSuite) TestNexusOperationCompletionBeforeStartHandler
 	s.Equal("result-before-start-returns", result)
 
 	// Verify the operation token is recorded in the caller workflow's history.
-	histResp, err := s.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.Namespace().String(),
+	histResp, err := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: run.GetID(),
 			RunId:      run.GetRunID(),
@@ -1193,16 +1208,17 @@ func (s *StandaloneCallbackSuite) TestNexusOperationCompletionBeforeStartHandler
 // TestScheduleToCloseTimeout verifies that a callback execution transitions to FAILED
 // when its schedule-to-close timeout expires before the callback succeeds.
 func (s *StandaloneCallbackSuite) TestScheduleToCloseTimeout() {
+	env := s.newEnv()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	// Short timeout so it fires quickly during the test.
 	callbackID := "timeout-test-" + uuid.NewString()
-	s.callStartCallbackExecutionToBogusCallback(ctx, callbackID, 2*time.Second)
+	s.callStartCallbackExecutionToBogusCallback(ctx, env, callbackID, 2*time.Second)
 
 	// Poll until the callback reaches a terminal state due to timeout.
-	pollResp, err := s.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
-		Namespace:  s.Namespace().String(),
+	pollResp, err := env.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
+		Namespace:  env.Namespace().String(),
 		CallbackId: callbackID,
 	})
 	s.NoError(err)
@@ -1213,8 +1229,8 @@ func (s *StandaloneCallbackSuite) TestScheduleToCloseTimeout() {
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, pollResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 
 	// Describe should show FAILED state with timeout failure.
-	descResp, err := s.FrontendClient().DescribeCallbackExecution(ctx, &workflowservice.DescribeCallbackExecutionRequest{
-		Namespace:      s.Namespace().String(),
+	descResp, err := env.FrontendClient().DescribeCallbackExecution(ctx, &workflowservice.DescribeCallbackExecutionRequest{
+		Namespace:      env.Namespace().String(),
 		CallbackId:     callbackID,
 		IncludeOutcome: true,
 	})
