@@ -711,6 +711,9 @@ func (s *Scheduler) Delete(
 	ctx chasm.MutableContext,
 	req *schedulerpb.DeleteScheduleRequest,
 ) (*schedulerpb.DeleteScheduleResponse, error) {
+	if s.Closed {
+		return nil, ErrClosed
+	}
 	if s.Sentinel {
 		return nil, ErrSentinel
 	}

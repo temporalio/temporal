@@ -1000,7 +1000,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleUpdateAfterDelete() {
 	)
 	s.ErrorAs(err, &failedPreconditionErr)
 
-	// Delete again is idempotent in CHASM — sets Closed=true again.
+	// Delete on an already-closed CHASM schedule returns ErrClosed.
 	_, err = env.GetTestCluster().SchedulerClient().DeleteSchedule(
 		ctx,
 		&schedulerpb.DeleteScheduleRequest{
@@ -1012,7 +1012,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleUpdateAfterDelete() {
 			},
 		},
 	)
-	s.NoError(err)
+	s.ErrorAs(err, &failedPreconditionErr)
 }
 
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
