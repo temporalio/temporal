@@ -262,6 +262,10 @@ func CreateSchedulerFromMigration(
 	}
 	sched.setNullableFields()
 
+	// These components won't start with any tasks, as stale running workflow entries
+	// can cause immediate computation after migration to drop actions due to overlap
+	// policy. Instead, SchedulerCallbacksTask fires both tasks after ensuring cached
+	// running workflow state is up-to-date.
 	sched.Invoker = chasm.NewComponentField(ctx, newInvokerWithState(ctx, state.GetInvokerState()))
 	sched.Generator = chasm.NewComponentField(ctx, newGeneratorWithState(ctx, state.GetGeneratorState()))
 
