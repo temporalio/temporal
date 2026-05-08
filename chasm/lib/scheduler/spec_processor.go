@@ -152,6 +152,10 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			droppedCount++
 			continue
 		}
+		if !manual {
+			metricsHandler.Timer(metrics.ScheduleGenerateLatency.Name()).
+				Record(end.Sub(next.Next))
+		}
 		bufferedStarts = append(bufferedStarts, &schedulespb.BufferedStart{
 			NominalTime:   timestamppb.New(next.Nominal),
 			ActualTime:    timestamppb.New(next.Next),
