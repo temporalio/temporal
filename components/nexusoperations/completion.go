@@ -16,6 +16,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// ErrOperationNotStarted is returned when a completion arrives before the operation has
+// started and no operation token is provided. This error is used by the callback invocation
+// layer to detect this specific condition and retry without triggering the circuit breaker.
+var ErrOperationNotStarted = serviceerror.NewFailedPrecondition("nexus operation not started")
+
 func handleSuccessfulOperationResult(
 	node *hsm.Node,
 	operation Operation,
@@ -134,6 +139,14 @@ func fabricateStartedEventIfMissing(
 	// The operation was already started, ignore.
 	if !TransitionStarted.Possible(operation) {
 		return nil
+	}
+
+	// If the operation hasn't started yet and the completion doesn't include an operation token,
+	// reject the request. This handles the race where a completion arrives before the start
+	// handler returns with the operation token. The caller will retry and by then the start
+	// handler will have returned and recorded the token.
+	if operationToken == "" {
+		return ErrOperationNotStarted
 	}
 
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)

@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/components/nexusoperations"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 )
@@ -28,7 +29,22 @@ type invocableOutbound struct {
 	attempt           int32
 }
 
+func (n invocableOutbound) isSystemCallback() bool {
+	c := n.callback
+	if c == nil {
+		return false
+	}
+	return c.Url == commonnexus.SystemCallbackURL
+}
+
 func (n invocableOutbound) WrapError(result invocationResult, err error) error {
+	// If the error is due to a completion of a Nexus operation being delivered before the
+	// operation has officially started, we want to avoid triggering the circuit breakers.
+	// Since the actual destination is working fine, and the failure is due to a data race.
+	if errors.Is(err, nexusoperations.ErrOperationNotStarted) {
+		return err
+	}
+
 	if retry, ok := result.(invocationResultRetry); ok {
 		return queueserrors.NewDestinationDownError(retry.err.Error(), err)
 	}
@@ -88,6 +104,15 @@ func (n invocableOutbound) Invoke(
 	if err != nil {
 		retryable := isRetryableCallError(err)
 		h.logger.Error("Callback request failed", tag.Error(err), tag.Bool("retryable", retryable))
+
+		// If the error from trying to resolve a Nexus operation that hasn't yet been marked
+		// as started, it is safe to retry. (n.WrapError will ensure repeated failures of this
+		// kind won't cause the SystemCallback to trip the circuit breaker.)
+		isErrNotStarted := errors.Is(err, nexusoperations.ErrOperationNotStarted)
+		if n.isSystemCallback() && isErrNotStarted {
+			retryable = true
+		}
+
 		if retryable {
 			return invocationResultRetry{err}
 		}
