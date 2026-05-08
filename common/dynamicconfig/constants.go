@@ -1539,6 +1539,11 @@ Don't change this on a live cluster without using the gradual change mechanism.
 		true,
 		`EnableReplicationStream turn on replication stream`,
 	)
+	EnableCloseInboundReplicationStreamOnShutdown = NewGlobalBoolSetting(
+		"history.enableCloseInboundReplicationStreamOnShutdown",
+		true,
+		`EnableCloseInboundReplicationStreamOnShutdown closes inbound replication streams on shutdown, signaling the remote sender to stop. Disable if this causes unexpected issues during rolling restarts.`,
+	)
 	EnableSeparateReplicationEnableFlag = NewGlobalBoolSetting(
 		"history.enableSeparateReplicationEnableFlag",
 		false,
@@ -2914,7 +2919,7 @@ instead of the existing (V1) implementation.`,
 
 	EnableCHASMSchedulerRouting = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerRouting",
-		false,
+		true,
 		`EnableCHASMSchedulerRouting controls whether schedule RPCs are routed to the CHASM (V2) implementation
 first (with fallback to V1), excluding CreateSchedule.`,
 	)
@@ -2928,7 +2933,7 @@ to the CHASM (V2) implementation on active scheduler workflows.`,
 
 	EnableCHASMSchedulerSentinels = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerSentinels",
-		false,
+		true,
 		`EnableCHASMSchedulerSentinels enables ID-space collision sentinels, and must be enabled and propagated in advance of EnableCHASMSchedulerCreation.`,
 	)
 
@@ -3232,6 +3237,12 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"limit.userMetadataDetailsSize",
 		20000,
 		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
+	)
+
+	MaxServiceErrorMessageLength = NewGlobalIntSetting(
+		"system.maxServiceErrorMessageLength",
+		4000,
+		"MaxServiceErrorMessageLength is the max length of service error message. If it's longer, it will be truncated.",
 	)
 
 	LogAllReqErrors = NewNamespaceBoolSetting(

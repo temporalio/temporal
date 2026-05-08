@@ -84,12 +84,8 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		EagerExecutionAccepted:       req.GetRequestEagerExecution(),
 		InheritedAutoUpgradeInfo:     request.InheritedAutoUpgradeInfo,
 		DeclinedTargetVersionUpgrade: request.DeclinedTargetVersionUpgrade,
-	}
-	if req.TimeSkippingConfig != nil {
-		attributes.TimeSkippingConfig = req.TimeSkippingConfig
-	}
-	if request.GetInitialSkippedDuration() != nil {
-		attributes.InitialSkippedDuration = request.GetInitialSkippedDuration()
+		TimeSkippingConfig:           req.GetTimeSkippingConfig(),
+		InitialSkippedDuration:       request.GetInitialSkippedDuration(),
 	}
 
 	parentInfo := request.ParentExecutionInfo
@@ -1092,6 +1088,10 @@ func (b *EventFactory) createHistoryEvent(
 	return historyEvent
 }
 
+// CreateWorkflowExecutionTimeSkippingTransitionedEvent creates a workflow execution time skipping transitioned event.
+// If no time needs to be skipped, the targetTime should be zero time.
+// If the time skipping shouldn't be disabled, triggeredDisable should be false.
+// This method shouldn't be generated when there is no time to skip and no need to disable time skipping.
 func (b *EventFactory) CreateWorkflowExecutionTimeSkippingTransitionedEvent(
 	targetTime time.Time,
 	triggeredDisable bool,

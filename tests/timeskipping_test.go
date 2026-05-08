@@ -13,6 +13,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -493,6 +494,90 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_TimerAndActivity() {
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED),
 		"time-skipping transitioned event expected")
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED), "workflow must complete")
+}
+
+// TestTimeSkipping_StartWithDelay_NoBound verifies that time-skipping with no
+// bound shifts a WorkflowStartDelay backoff into the near-now wall-clock window:
+// the first WT becomes available immediately instead of waiting wallStart + 1h.
+//
+// Sequence:
+//
+//	Start workflow with WorkflowStartDelay = 1h, TimeSkippingConfig{Enabled: true},
+//	no bound. On the close transaction of WorkflowExecutionStarted,
+//	calculateTimeSkippingTransition picks the backoff (only candidate;
+//	!HadOrHasWorkflowTask && ExecutionTime > StartTime), skips by 1h,
+//	accumulated = 1h. RegenerateTimerTasksForTimeSkipping step (4) re-emits the
+//	WorkflowBackoffTimerTask with VisibilityTimestamp ≈ wallStart
+//	(= virtual_executionTime − accumulated = (wallStart + 1h) − 1h).
+//	WT1 → complete workflow.
+//
+// Assertions:
+//
+//  1. WT1 polled in < 5min wall (would block 1h without skip, exceeding long-poll).
+//  2. At least two WorkflowBackoffTimerTask writes (initial + regenerated).
+//  3. All backoff tasks are typed WORKFLOW_BACKOFF_TYPE_DELAY_START
+//     (no cron, attempt == 1).
+//  4. The latest task's VisibilityTimestamp is ≈ wallStart, not wallStart + 1h.
+func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWithDelay() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+
+	const (
+		startDelay = time.Hour
+		shiftTol   = 5 * time.Second
+	)
+	wallStart := time.Now()
+
+	startResp, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &workflowpb.TimeSkippingConfig{Enabled: true},
+		WorkflowStartDelay:  durationpb.New(startDelay),
+	})
+	s.NoError(err)
+	runID := startResp.RunId
+
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.NoError(err)
+
+	elapsed := time.Since(wallStart)
+	s.Less(elapsed, shiftTol, "skip should have shifted the 1h start delay into near-now wall-clock; took %v", elapsed)
+
+	recorder := env.GetTestCluster().GetTaskQueueRecorder()
+	s.NotNil(recorder)
+	recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
+		NamespaceID: env.NamespaceID().String(),
+		WorkflowID:  tv.WorkflowID(),
+		RunID:       runID,
+	})
+	var backoffTasks []*historytasks.WorkflowBackoffTimerTask
+	for _, rec := range recorded {
+		if t, ok := rec.Task.(*historytasks.WorkflowBackoffTimerTask); ok {
+			backoffTasks = append(backoffTasks, t)
+		}
+	}
+	s.GreaterOrEqual(len(backoffTasks), 2, "expected initial + regenerated WorkflowBackoffTimerTask (two writes)")
+	for _, t := range backoffTasks {
+		s.Equal(enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START, t.WorkflowBackoffType,
+			"all backoff tasks for start-with-delay must have type DELAY_START")
+	}
+	if len(backoffTasks) >= 1 {
+		latest := backoffTasks[len(backoffTasks)-1]
+		s.Less(latest.VisibilityTimestamp.Sub(wallStart), shiftTol,
+			"regenerated backoff task VisibilityTime must be ≈ wallStart (= virtual exec − accum), got %v vs wallStart %v",
+			latest.VisibilityTimestamp, wallStart)
+	}
 }
 
 // TestWorkflowLifecycle_VirtualTimeContract is an end-to-end regression test

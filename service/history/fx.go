@@ -9,7 +9,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
-	chasmnexusworkflow "go.temporal.io/server/chasm/lib/nexusoperation/workflow"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	commoncache "go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -66,6 +66,7 @@ var Module = fx.Options(
 	ChasmEngineModule,
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
+	fx.Provide(ServiceErrorInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
@@ -101,7 +102,7 @@ var Module = fx.Options(
 	fx.Invoke(hsmnexusworkflow.RegisterCommandHandlers),
 	activity.HistoryModule,
 	chasmnexus.Module,
-	chasmnexusworkflow.Module,
+	chasmworkflow.Module,
 )
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
@@ -195,6 +196,14 @@ func ConfigProvider(
 	return configs.NewConfig(
 		dc,
 		persistenceConfig.NumHistoryShards,
+	)
+}
+
+func ServiceErrorInterceptorProvider(
+	dc *dynamicconfig.Collection,
+) *interceptor.ServiceErrorInterceptor {
+	return interceptor.NewServiceErrorInterceptor(
+		dynamicconfig.MaxServiceErrorMessageLength.Get(dc),
 	)
 }
 

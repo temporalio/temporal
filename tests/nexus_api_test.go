@@ -325,6 +325,20 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 		s.Subset(latency[0].Tags, map[string]string{"namespace": env.Namespace().String(), "method": "StartNexusOperation", "outcome": tc.outcome})
 		s.Contains(latency[0].Tags, "nexus_endpoint")
 
+		// Verify error counter is emitted for error outcomes and absent for success.
+		errorRequests := capture.Metric("nexus_request_errors")
+		if tc.outcome == "sync_success" || tc.outcome == "async_success" {
+			s.Empty(errorRequests)
+		} else {
+			s.Len(errorRequests, 1)
+			s.Subset(errorRequests[0].Tags, map[string]string{
+				"namespace": env.Namespace().String(),
+				"method":    "StartNexusOperation",
+				"outcome":   tc.outcome,
+			})
+			s.Equal(int64(1), errorRequests[0].Value)
+		}
+
 		// Ensure that StartOperation request is tracked as part of normal service telemetry metrics
 		s.Condition(func() bool {
 			for _, m := range capture.Metric("service_requests") {
@@ -396,7 +410,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims(useTemporalFailures b
 	testFn := func(s *NexusApiTestSuite, tc testcase, dispatchOnlyByEndpoint bool) {
 		// This still needs a dedicated cluster because of SetOnAuthorize/SetOnGetClaims.
 		env := newNexusTestEnv(s.T(), useTemporalFailures, testcore.WithDedicatedCluster())
-		env.GetTestCluster().Host().SetOnAuthorize(func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
+		env.SetOnAuthorize(func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
 			if ct.APIName == configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName && (c == nil || c.Subject != "test") {
 				return authorization.Result{Decision: authorization.DecisionDeny}, nil
 			}
@@ -405,14 +419,12 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims(useTemporalFailures b
 			}
 			return authorization.Result{Decision: authorization.DecisionAllow}, nil
 		})
-		defer env.GetTestCluster().Host().SetOnAuthorize(nil)
-		env.GetTestCluster().Host().SetOnGetClaims(func(ai *authorization.AuthInfo) (*authorization.Claims, error) {
+		env.SetOnGetClaims(func(ai *authorization.AuthInfo) (*authorization.Claims, error) {
 			if ai.AuthToken != "Bearer test" {
 				return nil, errors.New("invalid auth token")
 			}
 			return &authorization.Claims{Subject: "test"}, nil
 		})
-		defer env.GetTestCluster().Host().SetOnGetClaims(nil)
 
 		testEndpoint := env.createNexusEndpoint(env.Context(), s.T(), testcore.RandomizeStr("test-endpoint"), taskQueue)
 		var dispatchURL string
@@ -579,6 +591,20 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 		s.Subset(latency[0].Tags, map[string]string{"namespace": env.Namespace().String(), "method": "CancelNexusOperation", "outcome": tc.outcome})
 		s.Contains(latency[0].Tags, "nexus_endpoint")
 
+		// Verify error counter is emitted for error outcomes and absent for success.
+		errorRequests := capture.Metric("nexus_request_errors")
+		if tc.outcome == "success" {
+			s.Empty(errorRequests)
+		} else {
+			s.Len(errorRequests, 1)
+			s.Subset(errorRequests[0].Tags, map[string]string{
+				"namespace": env.Namespace().String(),
+				"method":    "CancelNexusOperation",
+				"outcome":   tc.outcome,
+			})
+			s.Equal(int64(1), errorRequests[0].Value)
+		}
+
 		// Ensure that CancelOperation request is tracked as part of normal service telemetry metrics
 		s.Condition(func() bool {
 			for _, m := range capture.Metric("service_requests") {
@@ -602,7 +628,6 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 
 func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_SupportsVersioning(useTemporalFailures bool) {
 	env := newNexusTestEnv(s.T(), useTemporalFailures,
-		testcore.WithDedicatedCluster(),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs, true),
 		// UpdateWorkerBuildIdCompatibility is the v0.1 (Version Set-based) API gated by DataAPIs.
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningDataAPIs, true),

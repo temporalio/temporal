@@ -85,6 +85,7 @@ func (env *NexusTestEnv) createRandomExternalNexusServer(ctx context.Context, t 
 		},
 	})
 	require.NoError(t, err)
+
 	// Using a fresh context here in case 'ctx' is tied to a test's lifetime which could cancel this deletion request.
 	t.Cleanup(func() {
 		_, _ = env.OperatorClient().DeleteNexusEndpoint(testcore.NewContext(), &operatorservice.DeleteNexusEndpointRequest{

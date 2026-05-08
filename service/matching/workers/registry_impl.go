@@ -10,12 +10,15 @@ import (
 	"sync/atomic"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workerpb "go.temporal.io/api/worker/v1"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.uber.org/fx"
 )
 
@@ -29,10 +32,11 @@ type listWorkersPageToken struct {
 type (
 	// entry wraps a WorkerHeartbeat along with its namespace and eviction metadata.
 	entry struct {
-		nsID     namespace.ID
-		hb       *workerpb.WorkerHeartbeat
-		lastSeen time.Time
-		elem     *list.Element
+		nsID           namespace.ID
+		hb             *workerpb.WorkerHeartbeat
+		lastSeen       time.Time
+		elem           *list.Element
+		isSystemWorker bool
 	}
 	// bucket holds part of the keyspace: a map from namespace → (map of instanceKey → entry),
 	// plus a recency list for eviction.
@@ -80,7 +84,7 @@ func newBucket() *bucket {
 // upsertHeartbeats inserts or refreshes a WorkerHeartbeat under the given namespace.
 // Returns the count of added and removed entries separately.
 // Workers with WORKER_STATUS_SHUTDOWN are immediately removed from the registry.
-func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) (added int64, removed int64) {
+func (b *bucket) upsertHeartbeats(nsID namespace.ID, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) (added int64, removed int64) {
 	now := time.Now()
 
 	b.mu.Lock()
@@ -105,16 +109,20 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.Work
 			continue
 		}
 
+		isSystemWorker := isSystemWorker(principal, hb.GetTaskQueue())
+
 		// Normal upsert
 		if e, exists := mp[key]; exists {
 			e.hb = hb
 			e.lastSeen = now
+			e.isSystemWorker = isSystemWorker
 			b.order.MoveToBack(e.elem)
 		} else {
 			e = &entry{
-				nsID:     nsID,
-				hb:       hb,
-				lastSeen: now,
+				nsID:           nsID,
+				hb:             hb,
+				lastSeen:       now,
+				isSystemWorker: isSystemWorker,
 			}
 			e.elem = b.order.PushBack(e)
 			mp[key] = e
@@ -126,9 +134,11 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.Work
 }
 
 // filterWorkers returns all WorkerHeartbeats in a namespace
-// for which predicate(hb) returns true.
+// for which predicate(hb) returns true. System workers are excluded
+// unless includeSystemWorkers is true.
 func (b *bucket) filterWorkers(
 	nsID namespace.ID,
+	includeSystemWorkers bool,
 	predicate func(*workerpb.WorkerHeartbeat) bool,
 ) []*workerpb.WorkerHeartbeat {
 	b.mu.Lock()
@@ -140,6 +150,9 @@ func (b *bucket) filterWorkers(
 	}
 	out := make([]*workerpb.WorkerHeartbeat, 0, len(mp))
 	for _, e := range mp {
+		if !includeSystemWorkers && e.isSystemWorker {
+			continue
+		}
 		if predicate(e.hb) {
 			out = append(out, e.hb)
 		}
@@ -246,9 +259,9 @@ func (m *registryImpl) getBucket(nsID namespace.ID) *bucket {
 
 // upsertHeartbeat records or refreshes a WorkerHeartbeat under the given namespace.
 // New entries increment the global counter.
-func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) {
+func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) {
 	b := m.getBucket(nsID)
-	added, removed := b.upsertHeartbeats(nsID, heartbeats)
+	added, removed := b.upsertHeartbeats(nsID, principal, heartbeats)
 	m.total.Add(added - removed)
 	if added > 0 {
 		metrics.WorkerRegistryWorkersAdded.With(m.metricsHandler).Record(added)
@@ -280,9 +293,11 @@ func (m *registryImpl) recordEvictionMetric() {
 }
 
 // filterWorkers returns all WorkerHeartbeats in a namespace
-// for which predicate(hb) returns true.
+// for which predicate(hb) returns true. System workers are excluded
+// unless includeSystemWorkers is true.
 func (m *registryImpl) filterWorkers(
 	nsID namespace.ID,
+	includeSystemWorkers bool,
 	predicate func(*workerpb.WorkerHeartbeat) bool,
 ) []*workerpb.WorkerHeartbeat {
 	b := m.getBucket(nsID)
@@ -290,7 +305,7 @@ func (m *registryImpl) filterWorkers(
 	if b == nil {
 		return nil
 	}
-	return b.filterWorkers(nsID, predicate)
+	return b.filterWorkers(nsID, includeSystemWorkers, predicate)
 }
 
 // evictLoop periodically triggers TTL and capacity-based eviction.
@@ -362,8 +377,8 @@ func (m *registryImpl) Stop() {
 	close(m.quit)
 }
 
-func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespace.Name, workerHeartbeat []*workerpb.WorkerHeartbeat) {
-	m.upsertHeartbeats(nsID, workerHeartbeat)
+func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespace.Name, principal *commonpb.Principal, workerHeartbeat []*workerpb.WorkerHeartbeat) {
+	m.upsertHeartbeats(nsID, principal, workerHeartbeat)
 	m.metricsEmitter.emit(nsID, nsName, workerHeartbeat)
 }
 
@@ -384,7 +399,7 @@ func (m *registryImpl) ListWorkers(nsID namespace.ID, params ListWorkersParams) 
 	}
 
 	// Get all matching workers and paginate
-	workers := m.filterWorkers(nsID, predicate)
+	workers := m.filterWorkers(nsID, params.IncludeSystemWorkers, predicate)
 	return paginateWorkers(workers, params.PageSize, params.NextPageToken)
 }
 
@@ -463,4 +478,15 @@ func (m *registryImpl) DescribeWorker(nsID namespace.ID, workerInstanceKey strin
 		return nil, serviceerror.NewNotFoundf("namespace not found: %s", nsID.String())
 	}
 	return b.getWorkerHeartbeat(nsID, workerInstanceKey)
+}
+
+// isSystemWorker determines if a worker is a system worker.
+// If a principal is available, it checks whether the principal identifies
+// the Temporal server itself (type="temporal", name="internal"). Otherwise,
+// it falls back to checking the task queue name prefix.
+func isSystemWorker(principal *commonpb.Principal, taskQueue string) bool {
+	if principal != nil {
+		return principal.GetType() == authorization.InternalPrincipalType && principal.GetName() == authorization.InternalPrincipalName
+	}
+	return primitives.IsInternalTaskQueue(taskQueue)
 }

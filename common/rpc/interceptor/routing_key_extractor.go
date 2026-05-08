@@ -1,3 +1,5 @@
+//go:generate go run ../../../cmd/tools/genroutingkeyextractor -out .
+
 package interceptor
 
 import (
@@ -5,9 +7,6 @@ import (
 	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
-	deploymentpb "go.temporal.io/api/deployment/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/namespace"
@@ -24,8 +23,9 @@ func NewRoutingKeyExtractor() RoutingKeyExtractor {
 	}
 }
 
-// WorkflowServiceExtractor returns a RoutingKeyExtractorFunc that extracts business ID
-// from WorkflowService API requests using the provided RoutingKeyExtractor.
+// WorkflowServiceExtractor returns a RoutingKeyExtractorFunc that extracts the
+// routing key from WorkflowService API requests using the provided
+// RoutingKeyExtractor.
 func WorkflowServiceExtractor(extractor RoutingKeyExtractor) RoutingKeyExtractorFunc {
 	return func(_ context.Context, req any, fullMethod string) namespace.RoutingKey {
 		// Only process WorkflowService APIs
@@ -33,6 +33,14 @@ func WorkflowServiceExtractor(extractor RoutingKeyExtractor) RoutingKeyExtractor
 			return namespace.RoutingKey{}
 		}
 
+		// Prefer the generated extractor driven by temporal-resource-id proto
+		// annotations.
+		if key := workflowServiceRequestRoutingKey(req); key.ID != "" {
+			return key
+		}
+
+		// Fall back to pattern-based logic as a compatibility path for methods
+		// whose callers haven't populated the resource_id field yet.
 		methodName := api.MethodName(fullMethod)
 		pattern, hasPattern := methodToPattern[methodName]
 		if !hasPattern {
@@ -49,10 +57,6 @@ type (
 		GetWorkflowId() string
 	}
 
-	workflowExecutionGetter interface {
-		GetWorkflowExecution() *commonpb.WorkflowExecution
-	}
-
 	executionGetter interface {
 		GetExecution() *commonpb.WorkflowExecution
 	}
@@ -61,56 +65,22 @@ type (
 		GetTaskToken() []byte
 	}
 
-	taskQueueNameGetter interface {
-		GetTaskQueue() string
-	}
-
-	taskQueueNameFromMessageGetter interface {
-		GetTaskQueue() *taskqueuepb.TaskQueue
-	}
-
-	deploymentNameGetter interface {
-		GetDeploymentName() string
-	}
-
-	deploymentVersionGetter interface {
-		GetDeploymentVersion() *deploymentpb.WorkerDeploymentVersion
-	}
-
-	pollerGroupIDGetter interface {
-		GetPollerGroupId() string
-	}
-
 	namespaceGetter interface {
 		GetNamespace() string
-	}
-
-	updateRefGetter interface {
-		GetUpdateRef() *updatepb.UpdateRef
 	}
 )
 
 // Extract extracts routing key from the request using the specified pattern.
 // Returns a zero-value namespace.RoutingKey if not found.
-//
-//nolint:revive // cognitive-complexity
 func (e RoutingKeyExtractor) Extract(req any, pattern RoutingKeyPattern) namespace.RoutingKey {
 	if req == nil {
 		return namespace.RoutingKey{}
 	}
 
-	//nolint:revive // identical-switch-branches: PatternNone and default both fall through intentionally
 	switch pattern {
 	case PatternWorkflowID:
 		if getter, ok := req.(workflowIDGetter); ok {
 			return namespace.RoutingKey{ID: getter.GetWorkflowId()}
-		}
-
-	case PatternWorkflowExecution:
-		if getter, ok := req.(workflowExecutionGetter); ok {
-			if exec := getter.GetWorkflowExecution(); exec != nil {
-				return namespace.RoutingKey{ID: exec.GetWorkflowId()}
-			}
 		}
 
 	case PatternExecution:
@@ -132,43 +102,9 @@ func (e RoutingKeyExtractor) Extract(req any, pattern RoutingKeyPattern) namespa
 	case PatternMultiOperation:
 		return e.extractMultiOperation(req)
 
-	case PatternTaskQueueName:
-		if getter, ok := req.(taskQueueNameGetter); ok {
-			return namespace.RoutingKey{ID: getter.GetTaskQueue()}
-		}
-
-	case PatternTaskQueueNameFromMessage:
-		if getter, ok := req.(taskQueueNameFromMessageGetter); ok {
-			if tq := getter.GetTaskQueue(); tq != nil {
-				return namespace.RoutingKey{ID: tq.GetName()}
-			}
-		}
-
-	case PatternDeploymentName:
-		if getter, ok := req.(deploymentNameGetter); ok {
-			return namespace.RoutingKey{ID: getter.GetDeploymentName()}
-		}
-
-	case PatternDeploymentVersion:
-		if getter, ok := req.(deploymentVersionGetter); ok {
-			if dv := getter.GetDeploymentVersion(); dv != nil {
-				return namespace.RoutingKey{ID: dv.GetDeploymentName()}
-			}
-		}
-
-	case PatternPollerGroupID:
-		if getter, ok := req.(pollerGroupIDGetter); ok {
-			return namespace.RoutingKey{ID: getter.GetPollerGroupId(), Strategy: namespace.RoutingStrategyPollerGroup}
-		}
-
 	case PatternNamespace:
 		if getter, ok := req.(namespaceGetter); ok {
 			return namespace.RoutingKey{ID: getter.GetNamespace()}
-		}
-
-	case PatternUpdateRef:
-		if getter, ok := req.(updateRefGetter); ok {
-			return namespace.RoutingKey{ID: getter.GetUpdateRef().GetWorkflowExecution().GetWorkflowId()}
 		}
 
 	case PatternNone:
@@ -210,4 +146,11 @@ func (e RoutingKeyExtractor) extractMultiOperation(req any) namespace.RoutingKey
 	}
 
 	return namespace.RoutingKey{ID: startWorkflow.GetWorkflowId()}
+}
+
+// routingIDFromResourceID extracts the routing ID from a resource_id field value.
+// The resource_id field has the format "prefix:<routingID>".
+func routingIDFromResourceID(resourceID string) string {
+	_, routingID, _ := strings.Cut(resourceID, ":")
+	return routingID
 }
