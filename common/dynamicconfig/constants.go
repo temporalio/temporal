@@ -1573,8 +1573,9 @@ If value less or equal to 0, will fall back to HistoryRPS`,
 		"history.enableNamespaceFairness",
 		false,
 		`EnableHistoryNamespaceFairness turns on per-namespace fair-share demotion in the history host RPS rate limiter.
-When the host hits its RPS limit, requests from namespaces exceeding their fair share (computed from scaleFactor and the namespace's
-frontend cluster-wide RPS budget) are demoted to lower priorities`,
+Requests from namespaces exceeding their fair share (computed from scaleFactor and the namespace's frontend cluster-wide
+RPS budget) are routed to a lower-priority bucket; the demotion is recorded regardless of whether the host is currently
+RPS-saturated, but only takes effect — i.e. actually delays/rejects traffic — when the host hits its RPS limit`,
 	)
 	HistoryNamespaceFairShareMultiplier = NewGlobalFloatSetting(
 		"history.namespaceFairShareMultiplier",
