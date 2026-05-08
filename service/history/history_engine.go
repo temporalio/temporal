@@ -541,7 +541,6 @@ func (e *historyEngineImpl) GetWorkflowExecutionResult(
 		request,
 		e.shardContext,
 		e.workflowConsistencyChecker,
-		e.config.GetWorkflowExecutionResultMaxCANChainDepth(),
 	)
 }
 

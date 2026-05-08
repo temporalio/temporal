@@ -203,7 +203,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
 	case *workflowservice.GetWorkflowExecutionResultResponse:
-		return nil
+		return []tag.Tag{
+			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetExecution().GetRunId()),
+		}
 	case *workflowservice.ListActivityExecutionsRequest:
 		return nil
 	case *workflowservice.ListActivityExecutionsResponse:

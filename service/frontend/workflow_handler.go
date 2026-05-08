@@ -7415,14 +7415,14 @@ func (wh *WorkflowHandler) GetWorkflowExecutionResult(ctx context.Context, reque
 		return nil, err
 	}
 
-	if err := wh.callbackValidator.Validate(string(namespaceName), request.GetCallbacks()); err != nil {
+	if err := wh.callbackValidator.Validate(string(namespaceName), request.GetCompletionCallbacks()); err != nil {
 		return nil, err
 	}
 
-	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCallbacks())
-	allLinks := make([]*commonpb.Link, 0, len(request.GetLinks())+len(request.GetCallbacks()))
+	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCompletionCallbacks())
+	allLinks := make([]*commonpb.Link, 0, len(request.GetLinks())+len(request.GetCompletionCallbacks()))
 	allLinks = append(allLinks, request.GetLinks()...)
-	for _, cb := range request.GetCallbacks() {
+	for _, cb := range request.GetCompletionCallbacks() {
 		allLinks = append(allLinks, cb.GetLinks()...)
 	}
 	if err := wh.validateLinks(namespaceName, allLinks); err != nil {

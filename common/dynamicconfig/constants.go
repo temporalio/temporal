@@ -2982,12 +2982,6 @@ instead of the previous HSM backed implementation.`,
 		`ExternalPayloadsEnabled controls whether external payload features are enabled for a namespace.`,
 	)
 
-	GetWorkflowExecutionResultMaxCANChainDepth = NewGlobalIntSetting(
-		"history.GetWorkflowExecutionResultMaxCANChainDepth",
-		100,
-		`Max number of CAN chain depth to follow when getting a workflow execution result. This prevents infinitely following CAN chain to protect server resources`,
-	)
-
 	// keys for worker
 
 	WorkerPersistenceMaxQPS = NewGlobalIntSetting(

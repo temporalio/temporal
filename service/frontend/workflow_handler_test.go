@@ -4851,14 +4851,12 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionResult() {
 				s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.ID(s.testNamespaceID), nil).Times(1)
 				expectedResp := &historyservice.GetWorkflowExecutionResultResponse{
 					Response: &workflowservice.GetWorkflowExecutionResultResponse{
-						Completion: &workflowservice.GetWorkflowExecutionResultResponse_Completed_{
-							Completed: &workflowservice.GetWorkflowExecutionResultResponse_Completed{
-								Execution: &commonpb.WorkflowExecution{
-									WorkflowId: testWorkflowID,
-									RunId:      testRunID,
-								},
-								Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-							},
+						Execution: &commonpb.WorkflowExecution{
+							WorkflowId: testWorkflowID,
+							RunId:      testRunID,
+						},
+						CompletionStatus: &workflowservice.GetWorkflowExecutionResultResponse_Success_{
+							Success: &workflowservice.GetWorkflowExecutionResultResponse_Success{},
 						},
 					},
 				}
@@ -4871,8 +4869,7 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionResult() {
 			assert: func(s *WorkflowHandlerSuite) {
 				s.NoError(err)
 				s.NotNil(resp)
-				s.NotNil(resp.GetCompleted())
-				s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetCompleted().GetStatus())
+				s.NotNil(resp.GetSuccess())
 			},
 		},
 	}

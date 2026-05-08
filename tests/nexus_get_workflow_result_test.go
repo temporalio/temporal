@@ -51,7 +51,9 @@ func (s *NexusGetWorkflowResultTestSuite) TestGetResult_FeatureFlagDisabled() {
 	cfg := newGetResultNexusConfig(s.T())
 
 	// Any wfID works - the API rejects on the feature flag before looking up the workflow.
-	endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), makeGetResultHandlerFor(env, cfg.targetWfID, ""))
+	endpointName := env.createRandomExternalNexusServer(
+		env.Context(), s.T(), makeGetResultHandlerFor(env, cfg.targetWfID),
+	)
 
 	w := worker.New(env.SdkClient(), cfg.taskQueue, worker.Options{})
 	w.RegisterWorkflowWithOptions(callerWF, workflow.RegisterOptions{Name: callerWFName})
@@ -79,7 +81,9 @@ func (s *NexusGetWorkflowResultTestSuite) TestGetResult_InvalidExecution() {
 	cfg := newGetResultNexusConfig(s.T())
 
 	// Empty wfID baked into the handler - the API rejects with InvalidArgument.
-	endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), makeGetResultHandlerFor(env, "", ""))
+	endpointName := env.createRandomExternalNexusServer(
+		env.Context(), s.T(), makeGetResultHandlerFor(env, ""),
+	)
 
 	w := worker.New(env.SdkClient(), cfg.taskQueue, worker.Options{})
 	w.RegisterWorkflowWithOptions(callerWF, workflow.RegisterOptions{Name: callerWFName})
@@ -156,7 +160,7 @@ func newGetResultNexusConfig(t *testing.T) *getResultNexusConfig {
 
 // makeGetResultHandlerFor returns a Nexus handler that calls GetWorkflowExecutionResult
 // on the (workflowID, runID) provided by the user.
-func makeGetResultHandlerFor(env *NexusTestEnv, workflowID, runID string) nexustest.Handler {
+func makeGetResultHandlerFor(env *NexusTestEnv, workflowID string) nexustest.Handler {
 	return nexustest.Handler{
 		OnStartOperation: func(
 			ctx context.Context,
@@ -168,10 +172,10 @@ func makeGetResultHandlerFor(env *NexusTestEnv, workflowID, runID string) nexust
 			resp, err := env.FrontendClient().GetWorkflowExecutionResult(
 				ctx, &workflowservice.GetWorkflowExecutionResultRequest{
 					Namespace: env.Namespace().String(),
-					Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+					Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
 					RequestId: uuid.NewString(),
 					Identity:  "test",
-					Callbacks: []*commonpb.Callback{
+					CompletionCallbacks: []*commonpb.Callback{
 						{
 							Variant: &commonpb.Callback_Nexus_{
 								Nexus: &commonpb.Callback_Nexus{Url: options.CallbackURL, Header: options.CallbackHeader},
@@ -184,22 +188,25 @@ func makeGetResultHandlerFor(env *NexusTestEnv, workflowID, runID string) nexust
 				return nil, &nexus.OperationError{State: nexus.OperationStateFailed, Message: err.Error()}
 			}
 
-			// Sync completion: workflow was already terminal at API call time.
-			if completed := resp.GetCompleted(); completed != nil {
-				if failure := completed.GetFailure(); failure != nil {
-					return nil, &nexus.OperationError{State: nexus.OperationStateFailed, Message: failure.GetMessage()}
-				}
-				if result := completed.GetResult(); result != nil && len(result.GetPayloads()) > 0 {
-					var s string
-					if err := json.Unmarshal(result.GetPayloads()[0].GetData(), &s); err == nil {
-						return &nexus.HandlerStartOperationResultSync[any]{Value: s}, nil
-					}
-				}
-				return &nexus.HandlerStartOperationResultSync[any]{Value: nil}, nil
+			if notCompleted := resp.GetNotCompleted(); notCompleted != nil {
+				// Async: callback registered, will fire when target completes.
+				return &nexus.HandlerStartOperationResultAsync{OperationToken: "get-result-async"}, nil
 			}
-
-			// Async: callback registered, will fire when target completes.
-			return &nexus.HandlerStartOperationResultAsync{OperationToken: "get-result-async"}, nil
+			if success := resp.GetSuccess(); success != nil {
+				result := success.GetResult()
+				var s string
+				if err := json.Unmarshal(result.GetPayloads()[0].GetData(), &s); err == nil {
+					return &nexus.HandlerStartOperationResultSync[any]{Value: s}, nil
+				}
+			}
+			if failure := resp.GetFailure(); failure != nil {
+				return nil, &nexus.OperationError{
+					State: nexus.OperationStateFailed, Message: failure.GetFailure().GetMessage(),
+				}
+			}
+			return nil, &nexus.OperationError{
+				State: nexus.OperationStateFailed, Message: fmt.Sprintf("Unknown response %v", resp),
+			}
 		},
 	}
 }
@@ -278,13 +285,10 @@ func callerWF(ctx workflow.Context, endpointName string) (string, error) {
 
 // setupTargetWFAndWaitReady starts a worker (registering both target and caller
 // workflows), spawns the target via the SDK, and waits for the target to be in the
-// state the spec expects before returning the original RunID.
-//
-// Returning the original RunID here ensures that tests that later queries GetWorkflowExecutionResult
-// will have to walk the entire CAN chain.
+// state the spec expects before returning.
 func setupTargetWFAndWaitReady(
 	s *NexusGetWorkflowResultTestSuite, env *NexusTestEnv, cfg *getResultNexusConfig, spec *targetWFSpec,
-) string {
+) {
 	w := worker.New(env.SdkClient(), cfg.taskQueue, worker.Options{})
 	w.RegisterWorkflowWithOptions(targetWF, workflow.RegisterOptions{Name: targetWFName})
 	w.RegisterWorkflowWithOptions(callerWF, workflow.RegisterOptions{Name: callerWFName})
@@ -311,6 +315,7 @@ func setupTargetWFAndWaitReady(
 			require.NoError(t, err)
 			currentRunID := desc.GetWorkflowExecutionInfo().GetExecution().GetRunId()
 			if spec.DoCAN {
+				// If we want to exercsise a CAN-ed workflow, wait until the workflow continues-as-new
 				require.NotEqual(t, origRunID, currentRunID, "workflow continue-as-new hasn't happened")
 			}
 			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, desc.GetWorkflowExecutionInfo().GetStatus())
@@ -325,7 +330,6 @@ func setupTargetWFAndWaitReady(
 			require.True(t, hasCompletedWFT, "target's first WFT not yet completed")
 		}, 10*time.Second, 100*time.Millisecond)
 	}
-	return origRunID
 }
 
 // runViaCallerWF runs the scenario via a caller workflow that uses
@@ -334,15 +338,11 @@ func setupTargetWFAndWaitReady(
 func runViaCallerWF(s *NexusGetWorkflowResultTestSuite, spec *targetWFSpec) {
 	env := newGetResultNexusEnv(s.T())
 	cfg := newGetResultNexusConfig(s.T())
-	origRunID := setupTargetWFAndWaitReady(s, env, cfg, spec)
+	endpointName := env.createRandomExternalNexusServer(
+		env.Context(), s.T(), makeGetResultHandlerFor(env, cfg.targetWfID),
+	)
 
-	var pinRunID string
-	if spec.DoCAN {
-		pinRunID = origRunID
-	}
-	endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(),
-		makeGetResultHandlerFor(env, cfg.targetWfID, pinRunID))
-
+	setupTargetWFAndWaitReady(s, env, cfg, spec)
 	callerRun, err := env.SdkClient().ExecuteWorkflow(env.Context(), sdkclient.StartWorkflowOptions{
 		TaskQueue:                cfg.taskQueue,
 		WorkflowExecutionTimeout: 30 * time.Second,
@@ -381,16 +381,11 @@ func runViaCallerWF(s *NexusGetWorkflowResultTestSuite, spec *targetWFSpec) {
 func runViaStandalone(s *NexusGetWorkflowResultTestSuite, spec *targetWFSpec) {
 	env := newStandaloneEnv(s.T())
 	cfg := newGetResultNexusConfig(s.T())
+	endpointName := env.createRandomExternalNexusServer(
+		env.Context(), s.T(), makeGetResultHandlerFor(env, cfg.targetWfID),
+	)
 
-	origRunID := setupTargetWFAndWaitReady(s, env, cfg, spec)
-
-	var pinRunID string
-	if spec.DoCAN {
-		pinRunID = origRunID
-	}
-	endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(),
-		makeGetResultHandlerFor(env, cfg.targetWfID, pinRunID))
-
+	setupTargetWFAndWaitReady(s, env, cfg, spec)
 	opID := testcore.RandomizeStr("op")
 	resp, err := env.startStandaloneNexusOp(&workflowservice.StartNexusOperationExecutionRequest{
 		OperationId: opID,
