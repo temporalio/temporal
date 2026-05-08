@@ -3,7 +3,6 @@ package callback
 import (
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
-	"go.temporal.io/server/common/namespace"
 	"google.golang.org/grpc"
 )
 
@@ -12,7 +11,7 @@ type componentOnlyLibrary struct {
 	chasm.UnimplementedLibrary
 }
 
-func newComponentOnlyLibrary(config *Config, namespaceRegistry namespace.Registry) *componentOnlyLibrary {
+func newComponentOnlyLibrary() *componentOnlyLibrary {
 	return &componentOnlyLibrary{}
 }
 

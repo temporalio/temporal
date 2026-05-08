@@ -64,7 +64,6 @@ var TransitionAttemptFailed = chasm.NewTransition(
 	func(cb *Callback, ctx chasm.MutableContext, event EventAttemptFailed) error {
 		now := ctx.Now(cb)
 		cb.recordAttempt(now)
-		cb.CloseTime = timestamppb.New(now)
 
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
 		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(cb.Attempt), event.Err)
