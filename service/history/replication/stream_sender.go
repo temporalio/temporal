@@ -801,7 +801,7 @@ func (s *StreamSenderImpl) defaultLowNsFilter(priority enumsspb.TaskPriority) fu
 func (s *StreamSenderImpl) syncNamespaceIsolation(throttledNamespaceIDs []string) {
 	start, drain := s.nsIsolation.Sync(throttledNamespaceIDs)
 	for _, ns := range drain {
-		s.nsIsolation.BeginDrain(ns)
+		s.nsIsolation.CheckAndRemoveIfCaughtUp(ns)
 	}
 	for _, ns := range start {
 		ctx, startCursor, ok := s.nsIsolation.ThrottleNamespace(s.server.Context(), ns)
@@ -819,8 +819,9 @@ func (s *StreamSenderImpl) syncNamespaceIsolation(throttledNamespaceIDs []string
 }
 
 // sendNamespaceEventLoop runs the dedicated LOW reader for a single throttled namespace.
-// It sends tasks for namespaceID starting at startCursor until the namespace is drained
-// to the recorded cursor, then exits.
+// It runs as a live reader until the context is cancelled — either by
+// CheckAndRemoveIfCaughtUp when the receiver un-throttles the namespace and the
+// cursor has caught up, or by stream shutdown via the parent context.
 func (s *StreamSenderImpl) sendNamespaceEventLoop(ctx context.Context, namespaceID string, startCursor int64) error {
 	newTaskNotificationChan, subscriberID := s.historyEngine.SubscribeReplicationNotification(s.clientClusterName)
 	defer s.historyEngine.UnsubscribeReplicationNotification(subscriberID)
@@ -832,33 +833,12 @@ func (s *StreamSenderImpl) sendNamespaceEventLoop(ctx context.Context, namespace
 	nsFilter := func(nsID string) bool { return nsID == namespaceID }
 
 	for {
-		drainAt, draining := s.nsIsolation.DrainTarget(namespaceID)
-
-		var end int64
-		if draining {
-			// Drain to the further of drainAt and the current default LOW cursor, so tasks
-			// that default LOW scanned (with this namespace excluded) are not left unsent.
-			defaultLow := s.nsIsolation.DefaultLowCursor()
-			if defaultLow > drainAt {
-				end = defaultLow
-			} else {
-				end = drainAt
-			}
-			if cursor >= end {
-				return nil
-			}
-		} else {
-			end = s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
-		}
-
+		end := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 		if err := s.sendTasks(enumsspb.TASK_PRIORITY_LOW, cursor, end, nsFilter); err != nil {
 			return err
 		}
 		cursor = end
-
-		if draining && cursor >= s.nsIsolation.DefaultLowCursor() {
-			return nil
-		}
+		s.nsIsolation.UpdateDedicatedCursor(namespaceID, cursor)
 
 		if !timer.Stop() {
 			select {
