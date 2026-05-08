@@ -319,6 +319,30 @@ func newAdminScheduleCommands(clientFactory ClientFactory) []*cli.Command {
 				return AdminMigrateSchedule(c, clientFactory)
 			},
 		},
+		{
+			Name:  "missed-times",
+			Usage: "List scheduled times that did not result in a workflow execution",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    FlagScheduleID,
+					Aliases: FlagScheduleIDAlias,
+					Usage:   "Schedule ID (or pipe IDs via stdin)",
+				},
+				&cli.StringFlag{
+					Name:     FlagLookback,
+					Usage:    "How far back to look (e.g. 1h, 24h, 7d)",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:  FlagOutput,
+					Usage: "Output format: table, jsonl",
+					Value: "table",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminScheduleMissedTimes(c, clientFactory)
+			},
+		},
 	}
 }
 
