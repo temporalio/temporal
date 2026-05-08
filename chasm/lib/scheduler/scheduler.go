@@ -628,6 +628,9 @@ func (s *Scheduler) Describe(
 	info.RunningWorkflows = invoker.runningWorkflowExecutions()
 	info.RecentActions = invoker.recentActions()
 	info.FutureActionTimes = generator.GetFutureActionTimes()
+	// BufferedStarts holds waiting, running, and recently-completed entries; only the
+	// waiting portion (those not yet surfaced via RecentActions) counts as buffered.
+	info.BufferSize = int64(len(invoker.GetBufferedStarts()) - len(info.RecentActions))
 
 	return &schedulerpb.DescribeScheduleResponse{
 		FrontendResponse: &workflowservice.DescribeScheduleResponse{
