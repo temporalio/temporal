@@ -106,6 +106,12 @@ func (m *StreamReceiverMonitorImpl) Stop() {
 		stream.Stop()
 		delete(m.outboundStreams, serverKey)
 	}
+	if m.Config.EnableCloseInboundReplicationStreamOnShutdown() {
+		for clientKey, stream := range m.inboundStreams {
+			stream.Stop()
+			delete(m.inboundStreams, clientKey)
+		}
+	}
 	m.Logger.Info("StreamReceiverMonitor stopped.")
 }
 

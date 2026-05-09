@@ -60,7 +60,7 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 		{
 			name: "record worker in existing namespace",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "existing-worker",
 				}})
 			},
@@ -74,7 +74,7 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 		{
 			name: "update existing worker",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
 					TaskQueue:         "tq1",
 				}})
@@ -97,7 +97,7 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 			r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 			tt.setup(r)
 
-			r.RecordWorkerHeartbeats(tt.nsID, namespace.Name(tt.nsID+"_name"), []*workerpb.WorkerHeartbeat{tt.workerHeartbeat})
+			r.RecordWorkerHeartbeats(tt.nsID, namespace.Name(tt.nsID+"_name"), nil /* principal */, []*workerpb.WorkerHeartbeat{tt.workerHeartbeat})
 
 			// Check if namespace exists
 			nsBuket := r.getBucket(tt.nsID)
@@ -145,7 +145,7 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 		{
 			name: "list single worker",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
 				}})
 			},
@@ -156,13 +156,13 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 		{
 			name: "list multiple workers",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
 				}})
-				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker2",
 				}})
-				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker3",
 				}})
 			},
@@ -174,11 +174,11 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 			name: "list workers from specific namespace only",
 			setup: func(r *registryImpl) {
 				// Setup namespace1
-				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
 				}})
 				// Setup namespace2
-				r.upsertHeartbeats("namespace2", []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace2", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker2",
 				}})
 			},
@@ -235,7 +235,7 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 		{
 			name: "valid query - basic filtering",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{
+				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{
 					{WorkerInstanceKey: "worker1", TaskQueue: "queue1"},
 					{WorkerInstanceKey: "worker2", TaskQueue: "queue2"},
 				})
@@ -248,7 +248,7 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 		{
 			name: "valid compound query - multiple conditions",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{
+				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{
 					{WorkerInstanceKey: "worker1", TaskQueue: "queue1"},
 					{WorkerInstanceKey: "worker2", TaskQueue: "queue2"},
 				})
@@ -261,7 +261,7 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 		{
 			name: "valid query - no matches",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{
+				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{
 					{WorkerInstanceKey: "worker1", TaskQueue: "queue1"},
 				})
 			},
@@ -273,7 +273,7 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 		{
 			name: "invalid query - malformed SQL",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{
+				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{
 					{WorkerInstanceKey: "worker1"},
 				})
 			},
@@ -295,11 +295,11 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 			name: "query returns requested namespace only",
 			setup: func(r *registryImpl) {
 				// Add workers to namespace1
-				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{
+				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{
 					{WorkerInstanceKey: "worker1", TaskQueue: "queue"},
 				})
 				// Add workers to namespace2
-				r.upsertHeartbeats("namespace2", []*workerpb.WorkerHeartbeat{
+				r.upsertHeartbeats("namespace2", nil /* principal */, []*workerpb.WorkerHeartbeat{
 					{WorkerInstanceKey: "worker2", TaskQueue: "queue"},
 				})
 			},
@@ -366,7 +366,7 @@ func TestRegistryImpl_DescribeWorker(t *testing.T) {
 		{
 			name: "list empty worker",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
 				}})
 			},
@@ -377,7 +377,7 @@ func TestRegistryImpl_DescribeWorker(t *testing.T) {
 		{
 			name: "list single worker, doesn't exist",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
 				}})
 			},
@@ -388,7 +388,7 @@ func TestRegistryImpl_DescribeWorker(t *testing.T) {
 		{
 			name: "list single worker",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
 				}})
 			},
@@ -399,11 +399,11 @@ func TestRegistryImpl_DescribeWorker(t *testing.T) {
 			name: "list workers from specific namespace only",
 			setup: func(r *registryImpl) {
 				// Setup namespace1
-				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace1", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
 				}})
 				// Setup namespace2
-				r.upsertHeartbeats("namespace2", []*workerpb.WorkerHeartbeat{{
+				r.upsertHeartbeats("namespace2", nil /* principal */, []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker2",
 				}})
 			},
@@ -434,7 +434,7 @@ func TestRegistryImpl_ListWorkersPagination(t *testing.T) {
 	r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 
 	// Add 5 workers in non-sorted order to verify sorting works
-	r.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{
+	r.upsertHeartbeats("ns1", nil /* principal */, []*workerpb.WorkerHeartbeat{
 		{WorkerInstanceKey: "worker-c"},
 		{WorkerInstanceKey: "worker-a"},
 		{WorkerInstanceKey: "worker-e"},
@@ -529,7 +529,7 @@ func TestRegistryImpl_ListWorkersPaginationWithDeletedCursor(t *testing.T) {
 func TestRegistryImpl_ListWorkersNoPagination(t *testing.T) {
 	r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 
-	r.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{
+	r.upsertHeartbeats("ns1", nil /* principal */, []*workerpb.WorkerHeartbeat{
 		{WorkerInstanceKey: "worker-a"},
 		{WorkerInstanceKey: "worker-b"},
 		{WorkerInstanceKey: "worker-c"},
@@ -545,13 +545,64 @@ func TestRegistryImpl_ListWorkersNoPagination(t *testing.T) {
 func TestRegistryImpl_ListWorkersInvalidPageToken(t *testing.T) {
 	r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 
-	r.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{
+	r.upsertHeartbeats("ns1", nil /* principal */, []*workerpb.WorkerHeartbeat{
 		{WorkerInstanceKey: "worker-a"},
 	})
 
 	_, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2, NextPageToken: []byte("invalid-json")})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid next_page_token")
+}
+
+func TestRegistryImpl_ListWorkersExcludesSystemWorkers(t *testing.T) {
+	r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
+
+	// Add workers on a user task queue and a system (internal) task queue.
+	r.upsertHeartbeats("ns1", nil /* principal */, []*workerpb.WorkerHeartbeat{
+		{WorkerInstanceKey: "user-worker-1", TaskQueue: "my-queue"},
+		{WorkerInstanceKey: "user-worker-2", TaskQueue: "my-queue"},
+		{WorkerInstanceKey: "sys-worker-1", TaskQueue: "temporal-sys-per-ns-tq"},
+	})
+
+	t.Run("excludes system workers by default", func(t *testing.T) {
+		resp, err := r.ListWorkers("ns1", ListWorkersParams{})
+		require.NoError(t, err)
+		require.Len(t, resp.Workers, 2, "should only return user workers")
+
+		workerKeys := make([]string, len(resp.Workers))
+		for i, w := range resp.Workers {
+			workerKeys[i] = w.WorkerInstanceKey
+		}
+		require.ElementsMatch(t, []string{"user-worker-1", "user-worker-2"}, workerKeys)
+	})
+
+	t.Run("includes system workers when requested", func(t *testing.T) {
+		resp, err := r.ListWorkers("ns1", ListWorkersParams{IncludeSystemWorkers: true})
+		require.NoError(t, err)
+		require.Len(t, resp.Workers, 3, "should return all workers including system")
+
+		workerKeys := make([]string, len(resp.Workers))
+		for i, w := range resp.Workers {
+			workerKeys[i] = w.WorkerInstanceKey
+		}
+		require.ElementsMatch(t, []string{"user-worker-1", "user-worker-2", "sys-worker-1"}, workerKeys)
+	})
+
+	t.Run("pagination excludes system workers from page counts", func(t *testing.T) {
+		// Page 1 (sorted: "user-worker-1" comes first)
+		resp1, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 1})
+		require.NoError(t, err)
+		require.Len(t, resp1.Workers, 1)
+		require.Equal(t, "user-worker-1", resp1.Workers[0].WorkerInstanceKey)
+		require.NotNil(t, resp1.NextPageToken)
+
+		// Page 2
+		resp2, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 1, NextPageToken: resp1.NextPageToken})
+		require.NoError(t, err)
+		require.Len(t, resp2.Workers, 1)
+		require.Equal(t, "user-worker-2", resp2.Workers[0].WorkerInstanceKey)
+		require.Nil(t, resp2.NextPageToken)
+	})
 }
 
 func TestRegistryImpl_RecordStorageDriverMetric(t *testing.T) {

@@ -120,7 +120,7 @@ func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(
 	if err != nil {
 		return nil, err
 	}
-	businessID := GetBusinessIDFromContext(ctx)
+	businessID := GetRoutingKeyFromContext(ctx).ID
 	if namespaceData.ReplicationState(businessID) == enumspb.REPLICATION_STATE_HANDOVER {
 		cbID := uuid.New()
 		waitReplicationStateUpdate := make(chan struct{})

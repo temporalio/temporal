@@ -90,6 +90,10 @@ message ActivityState {
 
   // Set if the activity was terminated
   ActivityTerminateState terminate_state = 12;
+
+  // Amount of time to wait before dispatching the activity task to the task queue for the first time. If the activity
+  // has a retry policy, retry attempts will not have start delay applied.
+  google.protobuf.Duration start_delay = 13;
 }
 
 message ActivityCancelState {
@@ -158,6 +162,8 @@ message ActivityHeartbeatState {
   temporal.api.common.v1.Payloads details = 1;
   // Time the last heartbeat was recorded.
   google.protobuf.Timestamp recorded_time = 2;
+  // Total number of heartbeats recorded across all attempts of this activity, including retries.
+  int64 total_heartbeat_count = 3;
 }
 
 message ActivityRequestData {

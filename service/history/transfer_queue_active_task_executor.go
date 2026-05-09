@@ -54,7 +54,7 @@ type (
 
 		workflowResetter        ndc.WorkflowResetter
 		parentClosePolicyClient parentclosepolicy.Client
-		versionMembershipCache  worker_versioning.VersionMembershipCache
+		versionCache            worker_versioning.VersionMembershipAndReactivationStatusCache
 	}
 )
 
@@ -69,7 +69,7 @@ func newTransferQueueActiveTaskExecutor(
 	matchingRawClient resource.MatchingRawClient,
 	visibilityManager manager.VisibilityManager,
 	chasmEngine chasm.Engine,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 ) queues.Executor {
 	return &transferQueueActiveTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
@@ -93,7 +93,7 @@ func newTransferQueueActiveTaskExecutor(
 			sdkClientFactory,
 			config.NumParentClosePolicySystemWorkflows(),
 		),
-		versionMembershipCache: versionMembershipCache,
+		versionCache: versionCache,
 	}
 }
 
@@ -925,7 +925,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		if attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit pinned version if child is in a different namespace
 			inheritedPinnedVersion = nil
 		} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
-			newTQInPinnedVersion, err = worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient, t.versionMembershipCache)(ctx, attributes.GetNamespaceId(), newTQ, inheritedPinnedVersion)
+			newTQInPinnedVersion, err = worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient, t.versionCache)(ctx, attributes.GetNamespaceId(), newTQ, inheritedPinnedVersion)
 			if err != nil {
 				return fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
 			}
@@ -964,7 +964,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			if attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit auto upgrade info if child is in a different namespace
 				inheritedAutoUpgradeInfo = nil
 			} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
-				TQInSourceDeploymentVersion, err := worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient, t.versionMembershipCache)(ctx, attributes.GetNamespaceId(), newTQ, inheritedAutoUpgradeInfo.GetSourceDeploymentVersion())
+				TQInSourceDeploymentVersion, err := worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient, t.versionCache)(ctx, attributes.GetNamespaceId(), newTQ, inheritedAutoUpgradeInfo.GetSourceDeploymentVersion())
 				if err != nil {
 					return fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
 				}
@@ -1633,15 +1633,17 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
 
 		// Use the same request ID to dedupe StartWorkflowExecution calls
-		RequestId:             childRequestID,
-		WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
-		RetryPolicy:           attributes.RetryPolicy,
-		CronSchedule:          attributes.CronSchedule,
-		Memo:                  attributes.Memo,
-		SearchAttributes:      attributes.SearchAttributes,
-		UserMetadata:          userMetadata,
-		VersioningOverride:    inheritedPinnedOverride,
-		Priority:              priority,
+		RequestId:                childRequestID,
+		WorkflowIdReusePolicy:    attributes.WorkflowIdReusePolicy,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		RetryPolicy:              attributes.RetryPolicy,
+		CronSchedule:             attributes.CronSchedule,
+		Memo:                     attributes.Memo,
+		SearchAttributes:         attributes.SearchAttributes,
+		UserMetadata:             userMetadata,
+		VersioningOverride:       inheritedPinnedOverride,
+		Priority:                 priority,
+		TimeSkippingConfig:       attributes.GetTimeSkippingConfig(),
 	}
 
 	request := common.CreateHistoryStartWorkflowRequest(
@@ -1665,6 +1667,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	request.SourceVersionStamp = sourceVersionStamp
 	request.InheritedBuildId = inheritedBuildId
 	request.InheritedPinnedVersion = inheritedPinnedVersion
+	request.InitialSkippedDuration = attributes.GetInitialSkippedDuration()
 
 	// Only set the AutoUpgrade info if the Pinned version is not set.
 	if request.InheritedPinnedVersion == nil {

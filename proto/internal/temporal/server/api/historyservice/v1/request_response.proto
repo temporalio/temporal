@@ -104,6 +104,11 @@ message StartWorkflowExecutionRequest {
   // directly from the started event. Written onto the new run's
   // WorkflowExecutionStartedEvent.
   temporal.api.history.v1.DeclinedTargetVersionUpgrade declined_target_version_upgrade = 17;
+
+  // If a workflow execution is started by a previous execution (parent-child workflow or continue-as-new)
+  // that has already skipped some time, the accumulated skipped duration from that execution
+  // can be passed to the new workflow execution through this field.
+  google.protobuf.Duration initial_skipped_duration = 18;
 }
 
 message StartWorkflowExecutionResponse {
@@ -1205,6 +1210,13 @@ message CompleteNexusOperationChasmRequest {
   }
   // Time when the operation was closed.
   google.protobuf.Timestamp close_time = 4;
+  // Links from the Nexus completion callback (e.g. references to the handler workflow).
+  repeated temporal.api.common.v1.Link links = 5;
+  // Async operation token from the callback request, used to synthesize a started event when
+  // completion arrives before the worker's start response.
+  string operation_token = 6;
+  // Time when the operation was started. Used when completion is received before the started response.
+  google.protobuf.Timestamp start_time = 7;
 }
 
 message CompleteNexusOperationChasmResponse {}

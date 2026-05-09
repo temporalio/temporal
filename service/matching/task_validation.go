@@ -91,7 +91,7 @@ func (v *taskValidatorImpl) preValidate(
 		// if cannot find the namespace entry, treat task as active
 		return v.preValidateActive(task)
 	}
-	if v.clusterMetadata.GetCurrentClusterName() == namespaceEntry.ActiveClusterName(task.Data.WorkflowId) {
+	if v.clusterMetadata.GetCurrentClusterName() == namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: task.Data.WorkflowId}) {
 		return v.preValidateActive(task)
 	}
 	return v.preValidatePassive(task)

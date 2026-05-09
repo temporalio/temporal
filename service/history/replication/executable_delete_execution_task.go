@@ -107,7 +107,10 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
 
-	archetypeID, _ := e.ArchetypeID(nil)
+	archetypeID, err := e.ArchetypeID(e.ChasmRegistry)
+	if err != nil {
+		return err
+	}
 	switch archetypeID {
 	case chasm.WorkflowArchetypeID:
 		return e.deleteWorkflowExecution(ctx)

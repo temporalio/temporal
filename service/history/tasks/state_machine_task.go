@@ -16,7 +16,7 @@ type StateMachineTask struct {
 	Info                *persistencespb.StateMachineTaskInfo
 }
 
-var _ HasStateMachineTaskType = &StateMachineTask{}
+var _ HasOutboundTaskGroup = &StateMachineTask{}
 
 func (t *StateMachineTask) GetTaskID() int64 {
 	return t.TaskID
@@ -34,7 +34,7 @@ func (t *StateMachineTask) SetVisibilityTime(timestamp time.Time) {
 	t.VisibilityTimestamp = timestamp
 }
 
-func (t *StateMachineTask) StateMachineTaskType() string {
+func (t *StateMachineTask) OutboundTaskGroup() string {
 	return t.Info.Type
 }
 
