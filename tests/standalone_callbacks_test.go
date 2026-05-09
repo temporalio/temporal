@@ -66,8 +66,8 @@ type externalRequestResult struct {
 // service will then notify Temporal the work is done (via StartCallbackExecution), and
 // then put metadata into the `requestResults` channel.
 type fakeExternalService struct {
-	incommingRequests chan<- externalRequestInfo
-	requestResults    <-chan externalRequestResult
+	incomingRequests chan<- externalRequestInfo
+	requestResults   <-chan externalRequestResult
 }
 
 // startFakeExternalService starts a new fake service Goroutine, using the supplied client.
@@ -85,27 +85,27 @@ func startFakeExternalService(ctx context.Context, c workflowservice.WorkflowSer
 
 		for {
 			select {
-			case incommingRequest := <-input:
+			case incomingRequest := <-input:
 				// Uniquely identify the callback execution.
 				callbackID := "faux-svc-callback-" + uuid.NewString()
 
 				targetCallback := &commonpb.Callback{
 					Variant: &commonpb.Callback_Nexus_{
 						Nexus: &commonpb.Callback_Nexus{
-							Url:   incommingRequest.URL,
-							Token: incommingRequest.Token,
+							Url:   incomingRequest.URL,
+							Token: incomingRequest.Token,
 						},
 					},
 				}
 
 				resp, err := c.StartCallbackExecution(ctx, &workflowservice.StartCallbackExecutionRequest{
-					Namespace:  incommingRequest.Namespace,
+					Namespace:  incomingRequest.Namespace,
 					Identity:   "faux-external-service",
 					RequestId:  uuid.NewString(),
 					CallbackId: callbackID,
 					Callback:   targetCallback,
 					Input: &workflowservice.StartCallbackExecutionRequest_Completion{
-						Completion: incommingRequest.Result,
+						Completion: incomingRequest.Result,
 					},
 					ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 				})
@@ -123,8 +123,8 @@ func startFakeExternalService(ctx context.Context, c workflowservice.WorkflowSer
 	}()
 
 	return &fakeExternalService{
-		incommingRequests: input,
-		requestResults:    output,
+		incomingRequests: input,
+		requestResults:   output,
 	}
 }
 
@@ -270,7 +270,7 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 				s.Equal(nexusSvcOp, operation)
 
 				// Send the request to the external service to do the work.
-				fakeSvc.incommingRequests <- externalRequestInfo{
+				fakeSvc.incomingRequests <- externalRequestInfo{
 					Namespace: env.Namespace().String(),
 					Token:     options.CallbackHeader.Get(commonnexus.CallbackTokenHeader),
 					URL:       options.CallbackURL,
@@ -674,7 +674,7 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_InvalidArguments() 
 			mutate: func(req *workflowservice.StartCallbackExecutionRequest) {
 				req.CallbackId = ""
 			},
-			errMsg: "CallbackId is not set",
+			errMsg: "CallbackId is required",
 		},
 		{
 			name: "missing callback",

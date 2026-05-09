@@ -50,6 +50,7 @@ type Callback struct {
 
 	// Persisted internal state
 	*callbackspb.CallbackState
+
 	// Failure from an external termination (timeout or terminate), stored separately because
 	// of its potential size, and to not overload CallbackState::LastAttemptFailure.
 	TerminalFailure chasm.Field[*failurepb.Failure]
@@ -245,7 +246,7 @@ func (c *Callback) saveResult(
 	// If the callback was terminated while the invocation was in-flight,
 	// the result is no longer relevant. We'll just drop it silently.
 	//
-	// This shouldn't happen outside of tests, since the Nexus machinary
+	// This shouldn't happen outside of tests, since the Nexus machinery
 	// would prevent an invalid transition anyways. (e.g. terminating
 	// an already terminated Callback.)
 	if c.LifecycleState(ctx).IsClosed() {

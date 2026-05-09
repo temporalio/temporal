@@ -23,9 +23,9 @@ func TestRequiredFields(t *testing.T) {
 		{"Field1", ""},
 		{"Field2", ""},
 	}
-	require.ErrorContains(t, negativeTests.Validate(), "Field1 is not set on request.")
+	require.ErrorContains(t, negativeTests.Validate(), "Field1 is required")
 	for _, negativeTest := range negativeTests {
-		wantErr := fmt.Sprintf("%s is not set on request.", negativeTest.FieldName)
+		wantErr := fmt.Sprintf("%s is required", negativeTest.FieldName)
 		require.ErrorContains(t, negativeTest.Validate(), wantErr)
 	}
 
@@ -38,5 +38,5 @@ func TestRequiredFields(t *testing.T) {
 		{"Mixed Field4", "ok"},
 		{"Mixed Field5", ""},
 	}
-	require.ErrorContains(t, mixedTests.Validate(), "Mixed Field2 is not set on request.")
+	require.ErrorContains(t, mixedTests.Validate(), "Mixed Field2 is required")
 }

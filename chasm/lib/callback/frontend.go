@@ -19,9 +19,6 @@ import (
 
 var ErrStandaloneCallbacksDisabled = serviceerror.NewUnimplemented("standalone callback executions are not enabled")
 
-// FrontendHandler defines the frontend interface for standalone callback execution RPCs,
-// in which the Frontend microservice receives requests from the Temporal SDK and proxies
-// them to the implementation of the CHASM component running in the History service.
 type FrontendHandler interface {
 	StartCallbackExecution(context.Context, *workflowservice.StartCallbackExecutionRequest) (*workflowservice.StartCallbackExecutionResponse, error)
 	DescribeCallbackExecution(context.Context, *workflowservice.DescribeCallbackExecutionRequest) (*workflowservice.DescribeCallbackExecutionResponse, error)
@@ -77,7 +74,6 @@ func (h *frontendHandler) getTargetNamespace(requestProto Namespacer) (namespace
 	return namespaceID, nil
 }
 
-// Checks if standalone callback executions are supported in the target namespace.
 func (h *frontendHandler) checkFeatureEnabled(requestProto Namespacer) error {
 	// Confirm CHASM is enabled.
 	targetNamespaceName := requestProto.GetNamespace()

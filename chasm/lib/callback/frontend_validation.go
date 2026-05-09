@@ -17,28 +17,28 @@ import (
 
 // Returns a serviceerror.InvalidArgument error for a missing required field.
 func missingRequiredFieldError(fieldName string) error {
-	msg := fmt.Sprintf("%s is not set on request.", fieldName)
+	msg := fmt.Sprintf("%s is required", fieldName)
 	return serviceerror.NewInvalidArgument(msg)
 }
 
-type RequestIDer interface {
+type requestIder interface {
 	GetRequestId() string
 }
 
-func verifyRequestIDLength(reqProto RequestIDer, config *Config) error {
+func verifyRequestIDLength(reqProto requestIder, config *Config) error {
 	l := len(reqProto.GetRequestId())
 	maxLen := config.MaxIDLength()
 	if l > maxLen {
-		return serviceerror.NewInvalidArgumentf("callback ID exceeds length limit. Length=%d Limit=%d", l, maxLen)
+		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d", l, maxLen)
 	}
 	return nil
 }
 
-type CallbackIDer interface {
+type callbackIder interface {
 	GetCallbackId() string
 }
 
-func verifyCallbackIDLength(reqProto CallbackIDer, config *Config) error {
+func verifyCallbackIDLength(reqProto callbackIder, config *Config) error {
 	l := len(reqProto.GetCallbackId())
 	maxLen := config.MaxIDLength()
 	if l > maxLen {
@@ -73,9 +73,9 @@ func (fields requiredFields) Validate() error {
 	return nil
 }
 
-// frontendRequestValidator bundles the configuration data for validating an incomming request.
+// frontendRequestValidator bundles the configuration data for validating an incoming request.
 //
-// IMPORTANT: Validation methods MAY mutate the incomming request, in order to ensure they all have
+// IMPORTANT: Validation methods MAY mutate the incoming request, in order to ensure they all have
 // a valid RunID (if one was not specified already).
 type frontendRequestValidator struct {
 	config           *Config
