@@ -289,6 +289,16 @@ func (c *clientImpl) DescribeWorkflowRule(
 	return c.client.DescribeWorkflowRule(ctx, request, opts...)
 }
 
+func (c *clientImpl) Echo(
+	ctx context.Context,
+	request *workflowservice.EchoRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.EchoResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.Echo(ctx, request, opts...)
+}
+
 func (c *clientImpl) ExecuteMultiOperation(
 	ctx context.Context,
 	request *workflowservice.ExecuteMultiOperationRequest,
