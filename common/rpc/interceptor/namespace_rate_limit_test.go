@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/service/frontend/configs"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -231,6 +232,79 @@ func (s *namespaceRateLimitInterceptorSuite) TestIntercept_PollMethod_WaitEnable
 		return nil, nil
 	})
 	s.ErrorIs(err, ErrNamespaceRateLimitServerBusy)
+}
+
+func TestMapToLongPollingRequest(t *testing.T) {
+	emptyToken := []byte{}
+	validToken := []byte("long-poll-token")
+
+	tests := []struct {
+		name       string
+		req        any
+		wantMethod string
+		wantOk     bool
+	}{
+		// GetWorkflowExecutionHistory
+		{
+			name:       "GetWorkflowExecutionHistory(WaitNewEvent=true)",
+			req:        &workflowservice.GetWorkflowExecutionHistoryRequest{WaitNewEvent: true},
+			wantMethod: configs.PollWorkflowHistoryAPIName,
+			wantOk:     true,
+		},
+		{
+			name:       "GetWorkflowExecutionHistory(WaitNewEvent=false)",
+			req:        &workflowservice.GetWorkflowExecutionHistoryRequest{WaitNewEvent: false},
+			wantMethod: configs.PollWorkflowHistoryAPIName,
+			wantOk:     false,
+		},
+		// DescribeActivityExecution
+		{
+			name:       "DescribeActivityExecution(LongPollToken='')",
+			req:        &workflowservice.DescribeActivityExecutionRequest{LongPollToken: emptyToken},
+			wantMethod: configs.PollActivityExecutionAPIName,
+			wantOk:     false,
+		},
+		{
+			name:       "DescribeActivityExecution(LongPollToken='...')",
+			req:        &workflowservice.DescribeActivityExecutionRequest{LongPollToken: validToken},
+			wantMethod: configs.PollActivityExecutionAPIName,
+			wantOk:     true,
+		},
+		// DescribeCallbackExecution
+		{
+			name:       "DescribeCallbackExecution(LongPollToken='')",
+			req:        &workflowservice.DescribeCallbackExecutionRequest{LongPollToken: emptyToken},
+			wantMethod: configs.PollCallbackExecutionAPIName,
+			wantOk:     false,
+		},
+		{
+			name:       "DescribeCallbackExecution(LongPollToken='...')",
+			req:        &workflowservice.DescribeCallbackExecutionRequest{LongPollToken: validToken},
+			wantMethod: configs.PollCallbackExecutionAPIName,
+			wantOk:     true,
+		},
+		// Other
+		{
+			name:       "Unrelated request type",
+			req:        &workflowservice.StartWorkflowExecutionRequest{},
+			wantMethod: "",
+			wantOk:     false,
+		},
+		{
+			name:       "Nil request",
+			req:        nil,
+			wantMethod: "",
+			wantOk:     false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotMethod, gotOk := mapToLongPollingRequest(tc.req)
+			require.Equal(t, tc.wantMethod, gotMethod)
+			require.Equal(t, tc.wantOk, gotOk)
+		})
+	}
 }
 
 // noopHeaderGetter implements headers.HeaderGetter with empty values.

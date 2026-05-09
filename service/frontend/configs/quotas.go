@@ -20,8 +20,11 @@ const (
 	CompleteNexusOperation                          = "/temporal.api.nexusservice.v1.NexusService/CompleteNexusOperation"
 	// PollWorkflowHistoryAPIName is used instead of GetWorkflowExecutionHistory if WaitNewEvent is true in request.
 	PollWorkflowHistoryAPIName = "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionHistory"
-	// PollActivityExecutionAPIName is used instead of DescribeActivityExecution if LongPollToken is set in request.
+
+	// Poll{resource}ExecutionAPIName is used instead of Describe{resource}Execution if LongPollToken is set in request,
+	// since that impacts how the operation would get billed.
 	PollActivityExecutionAPIName = "/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecutionDescription"
+	PollCallbackExecutionAPIName = "/temporal.api.workflowservice.v1.WorkflowService/PollCallbackExecutionDescription"
 )
 
 var (
@@ -29,11 +32,13 @@ var (
 	// from their corresponding quota, which is determined by
 	// dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance. If the value is not set,
 	// then the method is not considered a long-running request and the number of concurrent
-	// requests will not be throttled. The Poll* methods here are long-running because they block
-	// until there is a task available. GetWorkflowExecutionHistory and DescribeActivityExecution
-	// methods are blocking only if WaitNewEvent/LongPollToken are set, otherwise they are not
-	// long-running. The QueryWorkflow and UpdateWorkflowExecution methods are long-running because
-	// they both block until a background WFT is complete.
+	// requests will not be throttled.
+	//
+	// The Poll* methods here are long-running because they block until there is a task available.
+	// Other methods, like GetWorkflowExecutionHistory or DescribeActivityExecution, are blocking only
+	// if WaitNewEvent/LongPollToken are set, otherwise they are not long-running. The QueryWorkflow
+	// and UpdateWorkflowExecution methods are long-running because they both block until a background
+	// WFT is complete.
 	ExecutionAPICountLimitOverride = map[string]int{
 		// These methods here are long-running because they block until there is a task available.
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":       1,
@@ -42,8 +47,9 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusOperationExecution": 1,
 
-		// Long-running if activity outcome is not already available
+		// Long-running if the outcome is the resources isn't in a terminal state.
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollCallbackExecution": 1,
 
 		// These methods are long-running because they block until a background WFT is complete.
 		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":           1,
@@ -53,6 +59,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeNexusOperationExecution": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory":     1,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution":       1,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeCallbackExecution":       1,
 
 		// Potentially long-running, depending on the operations.
 		"/temporal.api.workflowservice.v1.WorkflowService/ExecuteMultiOperation": 1,
@@ -200,10 +207,12 @@ var (
 
 		// P5: Low priority APIs
 		// GetWorkflowExecutionHistory with WaitNewEvent set to true is a long poll API.
-		// Similarly, DescribeActivityExecution is a long poll API if LongPollToken is set.
+		// Similarly, `Describe{resource}Execution` are a long poll API if LongPollToken is set.
 		// Treat these as long-poll but lower priority (5) so spikes don’t block Poll* APIs.
 		PollWorkflowHistoryAPIName:   5,
 		PollActivityExecutionAPIName: 5,
+		PollCallbackExecutionAPIName: 5,
+
 		// Informational API that aren't required for the temporal service to function
 		OpenAPIV3APIName: 5,
 		OpenAPIV2APIName: 5,
