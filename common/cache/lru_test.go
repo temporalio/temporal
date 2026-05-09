@@ -698,6 +698,64 @@ func TestCache_ItemSizeChangeBeforeRelease(t *testing.T) {
 	assert.Equal(t, 2, cache.Size())
 }
 
+// Regression test for #9954: pinnedSize (and the cache_pinned_usage metric)
+// could go negative when a pinned entry's underlying CacheSize() grew while
+// the entry was held. The increment happens at the 0→1 ref-count transition
+// using entry.Size() at that moment, but the matching decrement at the 1→0
+// transition used entry.Size() at release time. Release also recomputes
+// entry.size from getSize(entry.value) on every call (regardless of refCount),
+// so a non-zero-going-down release earlier in the sequence is enough to
+// poison the value subtracted by the final release.
+func TestCache_PinnedSizeNotNegativeWhenPinnedEntryGrows(t *testing.T) {
+	t.Parallel()
+
+	metricsHandler := metricstest.NewCaptureHandler()
+	cache := NewWithMetrics(100,
+		&Options{
+			Pin: true,
+		},
+		metricsHandler,
+	)
+
+	key := "k"
+	entry := &testEntryWithCacheSize{cacheSize: 3}
+
+	capture := metricsHandler.StartCapture()
+
+	// First insert: refCount 0→1, pinnedSize += 3.
+	_, err := cache.PutIfNotExist(key, entry)
+	require.NoError(t, err)
+
+	// Acquire a second reference: refCount 1→2 (pinnedSize untouched).
+	cache.Get(key)
+
+	// The held value is mutated externally so its reported CacheSize grows.
+	// Several callers in temporal store pointer-typed values whose contents
+	// (and therefore CacheSize) grow while held — this is the scenario that
+	// motivated #9954.
+	entry.cacheSize = 10
+
+	// First release: refCount 2→1. The if-block at refCount==0 does NOT fire,
+	// but Release still recomputes entry.size from the new CacheSize.
+	cache.Release(key)
+	// Second release: refCount 1→0. The if-block fires; before the fix it
+	// subtracted the (now-larger) entry.Size(), driving pinnedSize negative.
+	cache.Release(key)
+
+	snapshot := capture.Snapshot()
+	pinnedRecords := snapshot[metrics.CachePinnedUsage.Name()]
+	require.NotEmpty(t, pinnedRecords, "expected at least one cache_pinned_usage record")
+	for _, r := range pinnedRecords {
+		assert.GreaterOrEqual(t, r.Value, float64(0),
+			"cache_pinned_usage must never be negative; got %v in series %v", r.Value, pinnedRecords)
+	}
+	// After all references are released, pinnedSize must be exactly 0 — every
+	// pinned byte that was added has been removed.
+	final := pinnedRecords[len(pinnedRecords)-1].Value
+	assert.Equal(t, float64(0), final,
+		"after releasing all refs pinnedSize must return to 0; got %v", final)
+}
+
 func TestCache_InvokeLifecycleCallbacks(t *testing.T) {
 	t.Parallel()
 
