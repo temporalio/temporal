@@ -49,7 +49,7 @@ func httpCallerProviderProvider(
 
 // FrontendModule just contains the CHASM components, but not their implementation.
 var FrontendModule = fx.Module(
-	"callback-frontend",
+	"chasm.lib.callback.frontend",
 	fx.Provide(callbackspb.NewCallbackServiceLayeredClient),
 	fx.Provide(ConfigProvider),
 	fx.Provide(NewFrontendHandler),
@@ -67,7 +67,7 @@ var HistoryModule = fx.Module(
 	fx.Provide(newInvocationTaskHandler),
 	fx.Provide(newBackoffTaskHandler),
 	fx.Provide(newCallbackHandler),
-	fx.Provide(NewCompletionScheduleToCloseTimeoutTaskHandler),
+	fx.Provide(newCompletionScheduleToCloseTimeoutTaskHandler),
 
 	fx.Provide(newLibrary),
 	fx.Invoke(func(registry *chasm.Registry, library *library) error {

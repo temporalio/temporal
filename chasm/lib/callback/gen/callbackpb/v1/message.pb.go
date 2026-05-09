@@ -139,7 +139,7 @@ type CallbackState struct {
 	// The time when the callback reached a terminal state.
 	CloseTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
 	// (standalone only) User-supplied business ID set when StartCallbackExecution() is
-	// called. Used to identify the callback for operations like Describe- or  Terminate-.
+	// called. Used to identify the callback for operations like Describe- or Terminate-.
 	CallbackId string `protobuf:"bytes,12,opt,name=callback_id,json=callbackId,proto3" json:"callback_id,omitempty"`
 	// (standalone only) Schedule-to-close timeout from when StartCallbackExecution()
 	// is called to when the result gets delivered.

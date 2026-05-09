@@ -35,14 +35,14 @@ type library struct {
 
 	InvocationTaskHandler                       *invocationTaskHandler
 	BackoffTaskHandler                          *backoffTaskHandler
-	CompletionScheduleToCloseTimeoutTaskHandler *CompletionScheduleToCloseTimeoutTaskHandler
+	CompletionScheduleToCloseTimeoutTaskHandler *completionScheduleToCloseTimeoutTaskHandler
 	callbackSvcHandler                          *callbackHandler
 }
 
 func newLibrary(
 	InvocationTaskHandler *invocationTaskHandler,
 	BackoffTaskHandler *backoffTaskHandler,
-	CompletionScheduleToCloseTimeoutTaskHandler *CompletionScheduleToCloseTimeoutTaskHandler,
+	CompletionScheduleToCloseTimeoutTaskHandler *completionScheduleToCloseTimeoutTaskHandler,
 	callbackSvcHandler *callbackHandler,
 ) *library {
 	return &library{
