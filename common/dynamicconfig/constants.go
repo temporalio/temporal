@@ -1069,6 +1069,11 @@ to allow waiting on the "Accepted" lifecycle stage.`,
 		false,
 		`FrontendEnableWorkerVersioningRuleAPIs enables worker versioning in workflow progress APIs.`,
 	)
+	FrontendEnableDraftAPIExample = NewNamespaceBoolSetting(
+		"frontend.enableDraftAPIExample",
+		false,
+		`FrontendEnableDraftAPIExample enables example guarded usage of draft API fields.`,
+	)
 
 	DeleteNamespaceDeleteActivityRPS = NewGlobalIntSetting(
 		"frontend.deleteNamespaceDeleteActivityRPS",

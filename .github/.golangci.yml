@@ -19,7 +19,12 @@ linters:
     - godox
     - iotamixing
     - testifylint
+    - draft-api
   settings:
+    custom:
+      draft-api:
+        type: module
+        description: Reports draft API fields and enum values mixed into stable API types.
     staticcheck:
       checks:
         - "all"

@@ -602,6 +602,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) DescribeWorkflowRule(ctx, in an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowRule", reflect.TypeOf((*MockWorkflowServiceClient)(nil).DescribeWorkflowRule), varargs...)
 }
 
+// Echo mocks base method.
+func (m *MockWorkflowServiceClient) Echo(ctx context.Context, in *workflowservice.EchoRequest, opts ...grpc.CallOption) (*workflowservice.EchoResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Echo", varargs...)
+	ret0, _ := ret[0].(*workflowservice.EchoResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Echo indicates an expected call of Echo.
+func (mr *MockWorkflowServiceClientMockRecorder) Echo(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Echo", reflect.TypeOf((*MockWorkflowServiceClient)(nil).Echo), varargs...)
+}
+
 // ExecuteMultiOperation mocks base method.
 func (m *MockWorkflowServiceClient) ExecuteMultiOperation(ctx context.Context, in *workflowservice.ExecuteMultiOperationRequest, opts ...grpc.CallOption) (*workflowservice.ExecuteMultiOperationResponse, error) {
 	m.ctrl.T.Helper()

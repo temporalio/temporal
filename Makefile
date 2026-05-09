@@ -27,7 +27,7 @@ clean: clean-bins clean-tools clean-test-output
 proto: lint-protos lint-api protoc proto-codegen
 ########################################################################
 
-.PHONY: proto protoc install bins ci-build-misc clean
+.PHONY: proto protoc binpb build-custom-golangci-lint install bins ci-build-misc clean
 
 ##### Arguments ######
 GOOS        ?= $(shell go env GOOS)
@@ -47,6 +47,7 @@ VISIBILITY_DB ?= temporal_visibility
 # The `disable_grpc_modules` build tag excludes gRPC dependencies from cloud.google.com/go/storage,
 # reducing binary size by 16MB since we only use the REST client (storage.NewClient), not the
 # gRPC client (storage.NewGRPCClient). Related issue: https://github.com/googleapis/google-cloud-go/issues/12343
+#
 ALL_BUILD_TAGS := disable_grpc_modules,$(BUILD_TAG)
 ALL_TEST_TAGS := $(ALL_BUILD_TAGS),test_dep,$(TEST_TAG)
 BUILD_TAG_FLAG := -tags $(ALL_BUILD_TAGS)
@@ -172,9 +173,15 @@ $(LOCALBIN):
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
 GOLANGCI_LINT_VERSION := v2.9.0
-GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
-$(GOLANGCI_LINT): $(LOCALBIN)
-	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-custom-$(GOLANGCI_LINT_VERSION)
+
+build-custom-golangci-lint: $(GOLANGCI_LINT)
+
+$(GOLANGCI_LINT): $(LOCALBIN) $(shell find cmd/tools/lint-draft-api tools/lint-draft-api -name "*.go" 2>/dev/null)
+	@printf $(COLOR) "Build custom golangci-lint..."
+	@go build \
+		-ldflags="-s -w -X main.version=$(GOLANGCI_LINT_VERSION)" \
+		-o $(ROOT)/$(GOLANGCI_LINT) ./cmd/tools/lint-draft-api
 
 # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
 GCI_VERSION := v0.13.6
@@ -312,6 +319,8 @@ $(CHASM_BINPB): $(API_BINPB) $(INTERNAL_BINPB) $(CHASM_PROTO_FILES)
 	@printf $(COLOR) "Generate CHASM proto image..."
 	@protoc --descriptor_set_in=$(API_BINPB):$(INTERNAL_BINPB) -I=. $(CHASM_PROTO_FILES) -o $@
 
+binpb: $(API_BINPB) $(INTERNAL_BINPB) $(CHASM_BINPB)
+
 protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB) $(LOCALBIN)/protoc-gen-go-chasm
 	@go run ./cmd/tools/protogen \
 		-root=$(ROOT) \
@@ -393,7 +402,7 @@ lint-actions: $(ACTIONLINT)
 	@printf $(COLOR) "Linting GitHub actions..."
 	@$(ACTIONLINT)
 
-lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
+lint-code: $(GOLANGCI_LINT) $(ERRORTYPE) binpb
 	@printf $(COLOR) "Linting code..."
 	@$(GOLANGCI_LINT) run --verbose --build-tags $(ALL_TEST_TAGS) --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.github/.golangci.yml
 	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false ./...

@@ -401,6 +401,20 @@ func (c *metricClient) DescribeWorkflowRule(
 	return c.client.DescribeWorkflowRule(ctx, request, opts...)
 }
 
+func (c *metricClient) Echo(
+	ctx context.Context,
+	request *workflowservice.EchoRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.EchoResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientEcho")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.Echo(ctx, request, opts...)
+}
+
 func (c *metricClient) ExecuteMultiOperation(
 	ctx context.Context,
 	request *workflowservice.ExecuteMultiOperationRequest,

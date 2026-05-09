@@ -143,6 +143,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.DescribeWorkflowRuleResponse:
 		return nil
+	case *workflowservice.EchoRequest:
+		return nil
+	case *workflowservice.EchoResponse:
+		return nil
 	case *workflowservice.ExecuteMultiOperationRequest:
 		return nil
 	case *workflowservice.ExecuteMultiOperationResponse:

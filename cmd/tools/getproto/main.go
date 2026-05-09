@@ -85,6 +85,9 @@ func genFileList(protoImports []string) {
 			base := strings.TrimSuffix(filepath.Base(i), ".proto") + "pb"
 			base = strings.ReplaceAll(base, "field_mask", "fieldmask")
 			goImport := "google.golang.org/protobuf/types/known/" + base
+			if i == "google/protobuf/descriptor.proto" {
+				goImport = "google.golang.org/protobuf/types/descriptorpb"
+			}
 			goImportsMap[goImport] = base
 			protoToPackage[i] = base
 		}

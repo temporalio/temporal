@@ -6,6 +6,7 @@ package main
 import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	api "go.temporal.io/api"
 	activity "go.temporal.io/api/activity/v1"
 	batch "go.temporal.io/api/batch/v1"
 	callback "go.temporal.io/api/callback/v1"
@@ -31,6 +32,7 @@ import (
 	worker "go.temporal.io/api/worker/v1"
 	workflow "go.temporal.io/api/workflow/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
+	descriptorpb "google.golang.org/protobuf/types/descriptorpb"
 	anypb "google.golang.org/protobuf/types/known/anypb"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
@@ -42,6 +44,7 @@ import (
 func init() {
 	importMap = make(map[string]protoreflect.FileDescriptor)
 	importMap["google/protobuf/any.proto"] = anypb.File_google_protobuf_any_proto
+	importMap["google/protobuf/descriptor.proto"] = descriptorpb.File_google_protobuf_descriptor_proto
 	importMap["google/protobuf/duration.proto"] = durationpb.File_google_protobuf_duration_proto
 	importMap["google/protobuf/empty.proto"] = emptypb.File_google_protobuf_empty_proto
 	importMap["google/protobuf/field_mask.proto"] = fieldmaskpb.File_google_protobuf_field_mask_proto
@@ -71,6 +74,7 @@ func init() {
 	importMap["temporal/api/enums/v1/task_queue.proto"] = enums.File_temporal_api_enums_v1_task_queue_proto
 	importMap["temporal/api/enums/v1/update.proto"] = enums.File_temporal_api_enums_v1_update_proto
 	importMap["temporal/api/enums/v1/workflow.proto"] = enums.File_temporal_api_enums_v1_workflow_proto
+	importMap["temporal/api/draft.proto"] = api.File_temporal_api_draft_proto
 	importMap["temporal/api/failure/v1/message.proto"] = failure.File_temporal_api_failure_v1_message_proto
 	importMap["temporal/api/filter/v1/message.proto"] = filter.File_temporal_api_filter_v1_message_proto
 	importMap["temporal/api/history/v1/message.proto"] = history.File_temporal_api_history_v1_message_proto
