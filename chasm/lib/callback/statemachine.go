@@ -126,6 +126,7 @@ var TransitionSucceeded = chasm.NewTransition(
 	func(cb *Callback, ctx chasm.MutableContext, event EventSucceeded) error {
 		now := ctx.Now(cb)
 		cb.recordAttempt(now)
+		cb.CloseTime = timestamppb.New(now)
 		cb.LastAttemptFailure = nil
 		cb.TerminalFailure = chasm.NewDataField[*failurepb.Failure](ctx, nil)
 		return nil

@@ -2,6 +2,7 @@ package callback
 
 import (
 	"context"
+	"time"
 
 	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -273,12 +274,20 @@ func (h *frontendHandler) ListCallbackExecutions(
 		statusStr, _ := chasm.SearchAttributeValue(exec.ChasmSearchAttributes, executionStatusSearchAttribute)
 		status, _ := enumspb.CallbackExecutionStatusFromString(statusStr)
 
+		// Map time.Time(0) to nil, e.g. for running Callbacks.
+		convertTime := func(t time.Time) *timestamppb.Timestamp {
+			if !t.IsZero() {
+				return timestamppb.New(t)
+			}
+			return nil
+		}
+
 		info := callbackpb.CallbackExecutionListInfo{
 			CallbackId:           exec.BusinessID,
 			RunId:                exec.RunID,
 			Status:               status,
-			CreateTime:           timestamppb.New(exec.StartTime),
-			CloseTime:            timestamppb.New(exec.CloseTime),
+			CreateTime:           convertTime(exec.StartTime),
+			CloseTime:            convertTime(exec.CloseTime),
 			SearchAttributes:     &commonpb.SearchAttributes{IndexedFields: exec.CustomSearchAttributes},
 			StateTransitionCount: exec.StateTransitionCount,
 		}

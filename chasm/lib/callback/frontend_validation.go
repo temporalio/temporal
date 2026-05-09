@@ -47,6 +47,32 @@ func verifyCallbackIDLength(reqProto CallbackIDer, config *Config) error {
 	return nil
 }
 
+// requiredField is a tuple of a required field name and its value.
+// Used instead of a map[string]string to provide deterministic
+// errors if multiple fields aren't set.
+type requiredField struct {
+	FieldName string
+	Value     string
+}
+
+func (rf requiredField) Validate() error {
+	if rf.Value == "" {
+		return missingRequiredFieldError(rf.FieldName)
+	}
+	return nil
+}
+
+type requiredFields []requiredField
+
+func (fields requiredFields) Validate() error {
+	for _, rf := range fields {
+		if err := rf.Validate(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // frontendRequestValidator bundles the configuration data for validating an incomming request.
 //
 // IMPORTANT: Validation methods MAY mutate the incomming request, in order to ensure they all have
@@ -65,17 +91,15 @@ func (rv *frontendRequestValidator) ValidateStartCallbackExecution(req *workflow
 		req.RequestId = uuid.NewString()
 	}
 
-	// Required fields.
-	requiredFields := map[string]string{
-		"Namespace":  req.GetNamespace(),
-		"Identity":   req.GetIdentity(),
-		"RequestId":  req.GetRequestId(),
-		"CallbackId": req.GetCallbackId(),
+	// Check required fields each have a value.
+	requiredFields := requiredFields{
+		{"Namespace", req.GetNamespace()},
+		{"Identity", req.GetIdentity()},
+		{"RequestId", req.GetRequestId()},
+		{"CallbackId", req.GetCallbackId()},
 	}
-	for k, v := range requiredFields {
-		if v == "" {
-			return missingRequiredFieldError(k)
-		}
+	if err := requiredFields.Validate(); err != nil {
+		return err
 	}
 
 	// Field lengths
@@ -162,15 +186,13 @@ func (rv *frontendRequestValidator) validateSearchAttributes(req Namespacer, saT
 }
 
 func (rv *frontendRequestValidator) ValidateDescribeCallbackExecution(req *workflowservice.DescribeCallbackExecutionRequest) error {
-	// Required fields.
-	requiredFields := map[string]string{
-		"Namespace":  req.GetNamespace(),
-		"CallbackId": req.GetCallbackId(),
+	// Check required fields each have a value.
+	requiredFields := requiredFields{
+		{"Namespace", req.GetNamespace()},
+		{"CallbackId", req.GetCallbackId()},
 	}
-	for k, v := range requiredFields {
-		if v == "" {
-			return missingRequiredFieldError(k)
-		}
+	if err := requiredFields.Validate(); err != nil {
+		return err
 	}
 
 	// Field lengths
@@ -187,15 +209,13 @@ func (rv *frontendRequestValidator) ValidateDescribeCallbackExecution(req *workf
 }
 
 func (rv *frontendRequestValidator) ValidatePollCallbackExecution(req *workflowservice.PollCallbackExecutionRequest) error {
-	// Required fields.
-	requiredFields := map[string]string{
-		"Namespace":  req.GetNamespace(),
-		"CallbackId": req.GetCallbackId(),
+	// Check required fields each have a value.
+	requiredFields := requiredFields{
+		{"Namespace", req.GetNamespace()},
+		{"CallbackId", req.GetCallbackId()},
 	}
-	for k, v := range requiredFields {
-		if v == "" {
-			return missingRequiredFieldError(k)
-		}
+	if err := requiredFields.Validate(); err != nil {
+		return err
 	}
 
 	// Field lengths
@@ -208,19 +228,16 @@ func (rv *frontendRequestValidator) ValidateTerminateCallbackExecution(req *work
 		req.RequestId = uuid.NewString()
 	}
 
-	// Required fields.
-	requiredFields := map[string]string{
-		"RequestId":  req.GetRequestId(),
-		"Namespace":  req.GetNamespace(),
-		"CallbackId": req.GetCallbackId(),
-
-		// NOTE: We don't require the Identity or Reason fields to be set,
-		// and just set reasonable defaults.
+	// Check required fields each have a value.
+	// NOTE: We don't require the Identity or Reason fields to be set,
+	// and just set reasonable defaults.
+	requiredFields := requiredFields{
+		{"RequestId", req.GetRequestId()},
+		{"Namespace", req.GetNamespace()},
+		{"CallbackId", req.GetCallbackId()},
 	}
-	for k, v := range requiredFields {
-		if v == "" {
-			return missingRequiredFieldError(k)
-		}
+	if err := requiredFields.Validate(); err != nil {
+		return err
 	}
 
 	// Field lengths
@@ -231,15 +248,13 @@ func (rv *frontendRequestValidator) ValidateTerminateCallbackExecution(req *work
 }
 
 func (rv *frontendRequestValidator) ValidateDeleteCallbackExecution(req *workflowservice.DeleteCallbackExecutionRequest) error {
-	// Required fields.
-	requiredFields := map[string]string{
-		"Namespace":  req.GetNamespace(),
-		"CallbackId": req.GetCallbackId(),
+	// Check required fields each have a value.
+	requiredFields := requiredFields{
+		{"Namespace", req.GetNamespace()},
+		{"CallbackId", req.GetCallbackId()},
 	}
-	for k, v := range requiredFields {
-		if v == "" {
-			return missingRequiredFieldError(k)
-		}
+	if err := requiredFields.Validate(); err != nil {
+		return err
 	}
 
 	// Field lengths

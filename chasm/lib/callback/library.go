@@ -33,7 +33,6 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 type library struct {
 	componentOnlyLibrary
 
-	config                                      *Config
 	InvocationTaskHandler                       *invocationTaskHandler
 	BackoffTaskHandler                          *backoffTaskHandler
 	CompletionScheduleToCloseTimeoutTaskHandler *CompletionScheduleToCloseTimeoutTaskHandler

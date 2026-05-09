@@ -50,6 +50,7 @@ func TestValidTransitions(t *testing.T) {
 		require.Less(t, dt, time.Millisecond*200)
 
 		// Because of the retry policy, the first failure isn't terminal.
+		require.Nil(t, callback.CloseTime)
 		_, hasTermFailure := callback.TerminalFailure.TryGet(mctx)
 		require.False(t, hasTermFailure)
 
@@ -71,6 +72,7 @@ func TestValidTransitions(t *testing.T) {
 		require.Equal(t, int32(1), callback.Attempt)
 		require.Equal(t, "error message", callback.LastAttemptFailure.Message)
 		require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
+		require.Nil(t, callback.CloseTime)
 		require.Nil(t, callback.NextAttemptScheduleTime)
 		_, hasTermFailure := callback.TerminalFailure.TryGet(mctx)
 		require.False(t, hasTermFailure)
@@ -100,6 +102,7 @@ func TestValidTransitions(t *testing.T) {
 		require.Nil(t, callback.LastAttemptFailure)
 		require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
 		require.Nil(t, callback.NextAttemptScheduleTime)
+		require.Equal(t, currentTime, callback.CloseTime.AsTime())
 
 		// TerminalFailure may explicitly be set to nil.
 		termFailureValue, hasTermFailure := callback.TerminalFailure.TryGet(mctx)
@@ -128,6 +131,7 @@ func TestValidTransitions(t *testing.T) {
 		require.True(t, callback.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
 		require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
 		require.Nil(t, callback.NextAttemptScheduleTime)
+		require.Equal(t, currentTime, callback.CloseTime.AsTime())
 
 		// Check the TerminalFailure field is set.
 		require.NotNil(t, callback.TerminalFailure, "TerminalFailure not set")

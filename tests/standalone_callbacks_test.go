@@ -861,7 +861,10 @@ func (s *StandaloneCallbackSuite) TestListAndCountCallbackExecutions() {
 		})
 		require.NoError(t, err)
 		require.Len(t, listResp.GetExecutions(), 1)
-		require.Equal(t, callbackIDs[0], listResp.GetExecutions()[0].GetCallbackId())
+		gotCb := listResp.GetExecutions()[0]
+		require.Equal(t, callbackIDs[0], gotCb.GetCallbackId())
+		require.NotNil(t, gotCb.CreateTime)
+		require.Nil(t, gotCb.CloseTime) // Not in terminal state.
 	}, waitUpTo, checkInterval, "Didn't find Running callback")
 
 	// Terminate one callback to test filtering by terminal status.
@@ -883,7 +886,13 @@ func (s *StandaloneCallbackSuite) TestListAndCountCallbackExecutions() {
 		})
 		require.NoError(t, err)
 		require.Len(t, listResp.GetExecutions(), 1)
-		require.Equal(t, callbackIDs[1], listResp.GetExecutions()[0].GetCallbackId())
+		gotCb := listResp.GetExecutions()[0]
+		require.Equal(t, callbackIDs[1], gotCb.GetCallbackId())
+		require.NotNil(t, gotCb.CreateTime)
+		require.NotNil(t, gotCb.CloseTime)
+		// If Created and CloseTime are within 1ns, either the system is crazy-fast
+		// or there is a bug where we are not fetching the current time twice.
+		require.Greater(t, gotCb.CloseTime.AsTime(), gotCb.CreateTime.AsTime())
 	}, waitUpTo, checkInterval, "Didn't find Terminated callbacks")
 
 	// Count callback executions.
