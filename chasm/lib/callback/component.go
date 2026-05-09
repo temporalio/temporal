@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -11,6 +12,7 @@ import (
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/backoff"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"google.golang.org/protobuf/proto"
@@ -215,6 +217,15 @@ func (c *Callback) loadInvocationArgs(
 		return nil, queueserrors.NewUnprocessableTaskError(
 			fmt.Sprintf("unprocessable callback variant: %v", callback),
 		)
+	}
+
+	// Setup the completion's headers.
+	completion.Header = callback.Header
+	if callback.GetToken() != "" {
+		if completion.Header == nil {
+			completion.Header = nexus.Header{}
+		}
+		completion.Header.Set(commonnexus.CallbackTokenHeader, callback.GetToken())
 	}
 
 	if callback.Url == chasm.NexusCompletionHandlerURL {
