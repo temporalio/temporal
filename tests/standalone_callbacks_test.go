@@ -681,7 +681,7 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_InvalidArguments() 
 			mutate: func(req *workflowservice.StartCallbackExecutionRequest) {
 				req.Callback = nil
 			},
-			errMsg: "Callback is not set",
+			errMsg: "invalid callback: not set",
 		},
 		{
 			name: "missing callback URL",
@@ -692,7 +692,7 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_InvalidArguments() 
 					},
 				}
 			},
-			errMsg: "Callback URL is not set",
+			errMsg: "invalid callback url: not set",
 		},
 		{
 			name: "invalid callback URL scheme",

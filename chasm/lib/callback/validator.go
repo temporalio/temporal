@@ -48,16 +48,12 @@ func (v *validator) Validate(_ context.Context, namespaceName string, cbs []*com
 
 	for _, cb := range cbs {
 		if cb == nil {
-			return serviceerror.NewInvalidArgument("Callback is not set")
+			return serviceerror.NewInvalidArgument("invalid callback: not set")
 		}
 
 		switch variant := cb.GetVariant().(type) {
 		case *commonpb.Callback_Nexus_:
 			rawURL := variant.Nexus.GetUrl()
-			if rawURL == "" {
-				return serviceerror.NewInvalidArgument("Callback URL is not set")
-			}
-
 			if len(rawURL) > v.urlMaxLength(namespaceName) {
 				return serviceerror.NewInvalidArgumentf(
 					"invalid url: url length longer than max length allowed of %d", v.urlMaxLength(namespaceName),

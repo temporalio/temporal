@@ -36,6 +36,18 @@ func TestValidateCallbacks(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("NoURL", func(t *testing.T) {
+		cbs := []*commonpb.Callback{
+			{Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{
+					Url: "",
+				},
+			}},
+		}
+		err := v.Validate("ns", cbs)
+		require.ErrorContains(t, err, "invalid callback url: not set")
+	})
+
 	t.Run("TooManyCallbacks", func(t *testing.T) {
 		v := NewValidator(
 			func(string) int { return 1 },
