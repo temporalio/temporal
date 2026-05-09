@@ -146,12 +146,14 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 		results[start.RequestId] = result
 	}
 
-	// Apply results to the invoker's BufferedStarts.
+	// Apply results to the invoker's BufferedStarts and fire tasks.
 	_, _, err = chasm.UpdateComponent(
 		ctx,
 		schedulerRef,
 		func(s *Scheduler, ctx chasm.MutableContext, _ any) (chasm.NoValue, error) {
+			generator := s.Generator.Get(ctx)
 			invoker := s.Invoker.Get(ctx)
+
 			for _, start := range invoker.BufferedStarts {
 				if result, ok := results[start.RequestId]; ok {
 					start.HasCallback = true
@@ -160,6 +162,12 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 					}
 				}
 			}
+
+			// Now that running workflow state has been refreshed, scheduler tasks can be
+			// fired.
+			invoker.addTasks(ctx)
+			generator.Generate(ctx)
+
 			return nil, nil
 		},
 		nil,

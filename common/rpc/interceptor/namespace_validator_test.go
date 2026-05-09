@@ -64,7 +64,8 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_NamespaceNotSet(
 	nvi := NewNamespaceValidatorInterceptor(
 		s.mockRegistry,
 		dynamicconfig.GetBoolPropertyFn(false),
-		dynamicconfig.GetIntPropertyFn(100))
+		dynamicconfig.GetIntPropertyFn(100),
+		nil)
 	serverInfo := &grpc.UnaryServerInfo{
 		FullMethod: "/temporal/random",
 	}
@@ -115,7 +116,8 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_NamespaceNotFoun
 	nvi := NewNamespaceValidatorInterceptor(
 		s.mockRegistry,
 		dynamicconfig.GetBoolPropertyFn(false),
-		dynamicconfig.GetIntPropertyFn(100))
+		dynamicconfig.GetIntPropertyFn(100),
+		nil)
 	serverInfo := &grpc.UnaryServerInfo{
 		FullMethod: "/temporal/random",
 	}
@@ -390,7 +392,8 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamesp
 			nvi := NewNamespaceValidatorInterceptor(
 				s.mockRegistry,
 				dynamicconfig.GetBoolPropertyFn(false),
-				dynamicconfig.GetIntPropertyFn(100))
+				dynamicconfig.GetIntPropertyFn(100),
+				nil)
 			serverInfo := &grpc.UnaryServerInfo{
 				FullMethod: testCase.method,
 			}
@@ -466,7 +469,8 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromToken(
 		nvi := NewNamespaceValidatorInterceptor(
 			s.mockRegistry,
 			dynamicconfig.GetBoolPropertyFn(false),
-			dynamicconfig.GetIntPropertyFn(100))
+			dynamicconfig.GetIntPropertyFn(100),
+			nil)
 		serverInfo := &grpc.UnaryServerInfo{
 			FullMethod: testCase.method,
 		}
@@ -491,7 +495,8 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_DescribeNamespac
 	nvi := NewNamespaceValidatorInterceptor(
 		s.mockRegistry,
 		dynamicconfig.GetBoolPropertyFn(false),
-		dynamicconfig.GetIntPropertyFn(100))
+		dynamicconfig.GetIntPropertyFn(100),
+		nil)
 	serverInfo := &grpc.UnaryServerInfo{
 		FullMethod: "/temporal/random",
 	}
@@ -521,7 +526,8 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_GetClusterInfo()
 	nvi := NewNamespaceValidatorInterceptor(
 		s.mockRegistry,
 		dynamicconfig.GetBoolPropertyFn(false),
-		dynamicconfig.GetIntPropertyFn(100))
+		dynamicconfig.GetIntPropertyFn(100),
+		nil)
 	serverInfo := &grpc.UnaryServerInfo{
 		FullMethod: "/temporal/random",
 	}
@@ -542,7 +548,8 @@ func (s *namespaceValidatorSuite) Test_Intercept_RegisterNamespace() {
 	nvi := NewNamespaceValidatorInterceptor(
 		s.mockRegistry,
 		dynamicconfig.GetBoolPropertyFn(false),
-		dynamicconfig.GetIntPropertyFn(100))
+		dynamicconfig.GetIntPropertyFn(100),
+		nil)
 	serverInfo := &grpc.UnaryServerInfo{
 		FullMethod: "/temporal/random",
 	}
@@ -655,7 +662,8 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_TokenNamespaceEn
 		nvi := NewNamespaceValidatorInterceptor(
 			s.mockRegistry,
 			dynamicconfig.GetBoolPropertyFn(testCase.enableTokenNamespaceEnforcement),
-			dynamicconfig.GetIntPropertyFn(100))
+			dynamicconfig.GetIntPropertyFn(100),
+			nil)
 		serverInfo := &grpc.UnaryServerInfo{
 			FullMethod: api.WorkflowServicePrefix + "RandomMethod",
 		}
@@ -700,6 +708,7 @@ func (s *namespaceValidatorSuite) Test_Intercept_DescribeHistoryHostRequests() {
 			s.mockRegistry,
 			dynamicconfig.GetBoolPropertyFn(false),
 			dynamicconfig.GetIntPropertyFn(100),
+			nil,
 		)
 		serverInfo := &grpc.UnaryServerInfo{
 			FullMethod: api.WorkflowServicePrefix + "random",
@@ -785,6 +794,7 @@ func (s *namespaceValidatorSuite) Test_Intercept_SearchAttributeRequests() {
 			s.mockRegistry,
 			dynamicconfig.GetBoolPropertyFn(false),
 			dynamicconfig.GetIntPropertyFn(100),
+			nil,
 		)
 		serverInfo := &grpc.UnaryServerInfo{
 			FullMethod: api.WorkflowServicePrefix + "random",
@@ -809,7 +819,8 @@ func (s *namespaceValidatorSuite) Test_NamespaceValidateIntercept() {
 	nvi := NewNamespaceValidatorInterceptor(
 		s.mockRegistry,
 		dynamicconfig.GetBoolPropertyFn(false),
-		dynamicconfig.GetIntPropertyFn(10))
+		dynamicconfig.GetIntPropertyFn(10),
+		nil)
 	serverInfo := &grpc.UnaryServerInfo{
 		FullMethod: api.WorkflowServicePrefix + "random",
 	}
@@ -878,6 +889,7 @@ func (s *namespaceValidatorSuite) TestSetNamespace() {
 		s.mockRegistry,
 		dynamicconfig.GetBoolPropertyFn(false),
 		dynamicconfig.GetIntPropertyFn(10),
+		nil,
 	)
 
 	queryReq := &workflowservice.RespondQueryTaskCompletedRequest{}

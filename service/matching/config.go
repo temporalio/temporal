@@ -47,6 +47,7 @@ type (
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		MetadataUpdateOnAppendInterval           dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MaxTaskQueueIdleTime                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		NumTaskqueueWritePartitions              dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		NumTaskqueueReadPartitions               dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -96,11 +97,12 @@ type (
 		MaxFairnessKeyWeightOverrides dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
-		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueFilter
-		BacklogTaskForwardTimeout  dynamicconfig.DurationPropertyFnWithTaskQueueFilter
-		MinTaskThrottlingBurstSize dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		MaxTaskDeleteBatchSize     dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		TaskDeleteInterval         dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		LongPollExpirationInterval  dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		BacklogTaskForwardTimeout   dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		ForwardPollRetryMaxInterval dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		MinTaskThrottlingBurstSize  dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		MaxTaskDeleteBatchSize      dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		TaskDeleteInterval          dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 
 		// taskWriter configuration
 		OutstandingTaskAppendsThreshold dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -153,25 +155,27 @@ type (
 		QueryPollerUnavailableWindow  func() time.Duration
 		EmitTaskDispatchLatencyAtPoll func() bool
 		// Time to hold a poll request before returning an empty response if there are no tasks
-		LongPollExpirationInterval func() time.Duration
-		BacklogTaskForwardTimeout  func() time.Duration
-		RangeSize                  int64
-		NewMatcher                 bool
-		NewMatcherSub              func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
-		EnableFairness             bool
-		EnableFairnessSub          func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
-		EnableMigration            func() bool
-		AutoEnableV2               func() bool
-		AutoEnableV2Sub            func(func(bool)) (bool, func())
-		GetTasksBatchSize          func() int
-		GetTasksReloadAt           func() int
-		UpdateAckInterval          func() time.Duration
-		MaxTaskQueueIdleTime       func() time.Duration
-		MinTaskThrottlingBurstSize func() int
-		MaxTaskDeleteBatchSize     func() int
-		TaskDeleteInterval         func() time.Duration
-		PriorityLevels             priorityKey
-		DefaultPriorityKey         priorityKey
+		LongPollExpirationInterval     func() time.Duration
+		BacklogTaskForwardTimeout      func() time.Duration
+		ForwardPollRetryMaxInterval    func() time.Duration
+		RangeSize                      int64
+		NewMatcher                     bool
+		NewMatcherSub                  func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
+		EnableFairness                 bool
+		EnableFairnessSub              func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
+		EnableMigration                func() bool
+		AutoEnableV2                   func() bool
+		AutoEnableV2Sub                func(func(bool)) (bool, func())
+		GetTasksBatchSize              func() int
+		GetTasksReloadAt               func() int
+		UpdateAckInterval              func() time.Duration
+		MetadataUpdateOnAppendInterval func() time.Duration
+		MaxTaskQueueIdleTime           func() time.Duration
+		MinTaskThrottlingBurstSize     func() int
+		MaxTaskDeleteBatchSize         func() int
+		TaskDeleteInterval             func() time.Duration
+		PriorityLevels                 priorityKey
+		DefaultPriorityKey             priorityKey
 
 		GetUserDataLongPollTimeout dynamicconfig.DurationPropertyFn
 		GetUserDataMinWaitTime     time.Duration
@@ -279,9 +283,11 @@ func NewConfig(
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
 		GetTasksReloadAt:                         dynamicconfig.MatchingGetTasksReloadAt.Get(dc),
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
+		MetadataUpdateOnAppendInterval:           dynamicconfig.MatchingMetadataUpdateOnAppendInterval.Get(dc),
 		MaxTaskQueueIdleTime:                     dynamicconfig.MatchingMaxTaskQueueIdleTime.Get(dc),
 		LongPollExpirationInterval:               dynamicconfig.MatchingLongPollExpirationInterval.Get(dc),
 		BacklogTaskForwardTimeout:                dynamicconfig.MatchingBacklogTaskForwardTimeout.Get(dc),
+		ForwardPollRetryMaxInterval:              dynamicconfig.MatchingForwardPollRetryMaxInterval.Get(dc),
 		MinTaskThrottlingBurstSize:               dynamicconfig.MatchingMinTaskThrottlingBurstSize.Get(dc),
 		MaxTaskDeleteBatchSize:                   dynamicconfig.MatchingMaxTaskDeleteBatchSize.Get(dc),
 		TaskDeleteInterval:                       dynamicconfig.MatchingTaskDeleteInterval.Get(dc),
@@ -399,6 +405,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		UpdateAckInterval: func() time.Duration {
 			return config.UpdateAckInterval(ns.String(), taskQueueName, taskType)
 		},
+		MetadataUpdateOnAppendInterval: func() time.Duration {
+			return config.MetadataUpdateOnAppendInterval(ns.String(), taskQueueName, taskType)
+		},
 		MaxTaskQueueIdleTime: func() time.Duration {
 			return config.MaxTaskQueueIdleTime(ns.String(), taskQueueName, taskType)
 		},
@@ -432,6 +441,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		BacklogTaskForwardTimeout: func() time.Duration {
 			return config.BacklogTaskForwardTimeout(ns.String(), taskQueueName, taskType)
+		},
+		ForwardPollRetryMaxInterval: func() time.Duration {
+			return config.ForwardPollRetryMaxInterval(ns.String(), taskQueueName, taskType)
 		},
 		MaxTaskDeleteBatchSize: func() int {
 			return config.MaxTaskDeleteBatchSize(ns.String(), taskQueueName, taskType)

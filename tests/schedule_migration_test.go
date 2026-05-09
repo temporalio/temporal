@@ -1000,7 +1000,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleUpdateAfterDelete() {
 	)
 	s.ErrorAs(err, &failedPreconditionErr)
 
-	// Delete again is idempotent in CHASM — sets Closed=true again.
+	// Delete on an already-closed CHASM schedule returns ErrClosed.
 	_, err = env.GetTestCluster().SchedulerClient().DeleteSchedule(
 		ctx,
 		&schedulerpb.DeleteScheduleRequest{
@@ -1012,7 +1012,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleUpdateAfterDelete() {
 			},
 		},
 	)
-	s.NoError(err)
+	s.ErrorAs(err, &failedPreconditionErr)
 }
 
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
@@ -1193,6 +1193,9 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 	}
 	env.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
 
+	// Disable CHASM to create V1 schedule.
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, false)
+
 	// Create a V1 schedule with an immediate trigger.
 	sched := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
@@ -1302,4 +1305,314 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 		SignalName:        resumeSignal,
 	})
 	require.NoError(t, err)
+}
+
+// TestDeleteScheduleClearsBothStacks verifies that when a schedule exists in
+// both the CHASM (V2) and workflow-backed (V1) stacks for the same scheduleId
+// — as can happen during dual-stack migration — a single frontend
+// DeleteSchedule call removes it from both stacks.
+func (s *ScheduleMigrationTestSuite) TestDeleteScheduleClearsBothStacks() {
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
+	)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sched-delete-both-stacks")
+	wid := testcore.RandomizeStr("sched-delete-both-stacks-wf")
+	wt := testcore.RandomizeStr("sched-delete-both-stacks-wt")
+	tq := testcore.RandomizeStr("tq")
+
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+	sched := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	// Create the CHASM schedule directly.
+	_, err := env.GetTestCluster().SchedulerClient().CreateSchedule(
+		ctx,
+		&schedulerpb.CreateScheduleRequest{
+			NamespaceId: nsID,
+			FrontendRequest: &workflowservice.CreateScheduleRequest{
+				Namespace:  nsName,
+				ScheduleId: sid,
+				Schedule:   sched,
+				Identity:   "test",
+				RequestId:  testcore.RandomizeStr("request-id"),
+			},
+		},
+	)
+	s.NoError(err)
+
+	// Create the V1 (workflow-backed) scheduler directly with the same ID.
+	startArgs := &schedulespb.StartScheduleArgs{
+		Schedule: sched,
+		State: &schedulespb.InternalState{
+			Namespace:     nsName,
+			NamespaceId:   nsID,
+			ScheduleId:    sid,
+			ConflictToken: scheduler.InitialConflictToken,
+		},
+	}
+	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(startArgs)
+	s.NoError(err)
+	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:                nsName,
+		WorkflowId:               v1WorkflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: scheduler.WorkflowType},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Input:                    inputPayloads,
+		Identity:                 "test",
+		RequestId:                testcore.RandomizeStr("request-id"),
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+	}
+	_, err = env.GetTestCluster().HistoryClient().StartWorkflowExecution(
+		ctx,
+		common.CreateHistoryStartWorkflowRequest(nsID, startReq, nil, nil, time.Now().UTC()),
+	)
+	s.NoError(err)
+
+	// Sanity-check: both stacks have an entry for this scheduleId.
+	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(
+		ctx,
+		&schedulerpb.DescribeScheduleRequest{
+			NamespaceId:     nsID,
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+		},
+	)
+	s.NoError(err)
+	v1Desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
+		ctx,
+		&historyservice.DescribeWorkflowExecutionRequest{
+			NamespaceId: nsID,
+			Request: &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: nsName,
+				Execution: &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
+			},
+		},
+	)
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, v1Desc.GetWorkflowExecutionInfo().GetStatus())
+
+	// Single frontend DeleteSchedule call should clear both stacks.
+	_, err = env.FrontendClient().DeleteSchedule(ctx, &workflowservice.DeleteScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Identity:   "test",
+	})
+	s.NoError(err)
+
+	// CHASM side: the scheduler is marked closed; direct describe rejects with
+	// FailedPrecondition (ErrClosed).
+	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(
+		ctx,
+		&schedulerpb.DescribeScheduleRequest{
+			NamespaceId:     nsID,
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+		},
+	)
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPreconditionErr)
+
+	// V1 side: the workflow is terminated.
+	s.Eventually(func() bool {
+		desc, descErr := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
+			ctx,
+			&historyservice.DescribeWorkflowExecutionRequest{
+				NamespaceId: nsID,
+				Request: &workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: nsName,
+					Execution: &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
+				},
+			},
+		)
+		if descErr != nil {
+			return false
+		}
+		return desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
+	}, 10*time.Second, 200*time.Millisecond, "V1 schedule workflow should be terminated")
+
+	// Frontend describe should also report the schedule as gone.
+	var notFoundErr *serviceerror.NotFound
+	s.Eventually(func() bool {
+		_, descErr := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  nsName,
+			ScheduleId: sid,
+		})
+		return errors.As(descErr, &notFoundErr)
+	}, 10*time.Second, 200*time.Millisecond, "frontend DescribeSchedule should return NotFound")
+}
+
+// TestScheduleMigration_StaleRunningDoesNotSkipPending guards the race fix in
+// CreateSchedulerFromMigration. Without the fix, a "running" BufferedStart
+// migrated from V1 (RunId set, Completed=nil, HasCallback=false) is treated as
+// live by InvokerProcessBufferTask if it fires before SchedulerCallbacksTask
+// has a chance to refresh it. With SCHEDULE_OVERLAP_POLICY_SKIP that causes a
+// concurrently-pending start to be silently dropped (Info.OverlapSkipped++).
+//
+// The test sends a tailored CreateFromMigrationStateRequest directly to the
+// CHASM scheduler API, bypassing V1 and the migration activity:
+//   - One pending BufferedStart for a recent nominal time.
+//   - One stale "running" BufferedStart whose underlying workflow has already
+//     completed by the time the request is sent.
+//
+// SchedulerCallbacksTask must run first, observe the workflow as completed,
+// stamp Completed, and only then fire ProcessBuffer (which then sees
+// isRunning=false and does not apply SKIP).
+func TestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
+	env := testcore.NewEnv(
+		t,
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+	)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sched-stale-running")
+	pendingWid := testcore.RandomizeStr("sched-stale-running-pending-wf")
+	runningWid := testcore.RandomizeStr("sched-stale-running-running-wf")
+	wt := testcore.RandomizeStr("sched-stale-running-wt")
+
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	workflowFn := func(workflow.Context) error { return nil }
+	env.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	// Start the workflow that will appear as a stale "running" entry in the
+	// migration state, and wait for it to complete.
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    nsName,
+		WorkflowId:   runningWid,
+		WorkflowType: &commonpb.WorkflowType{Name: wt},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:     "test",
+		RequestId:    uuid.NewString(),
+	})
+	require.NoError(t, err)
+	runningRunID := startResp.GetRunId()
+	require.Eventually(t, func() bool {
+		desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: nsName,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: runningWid, RunId: runningRunID},
+		})
+		return err == nil && desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 10*time.Second, 200*time.Millisecond)
+
+	sched := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   pendingWid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+			CatchupWindow: durationpb.New(time.Hour),
+		},
+	}
+
+	// Two BufferedStarts:
+	//   - Pending (Attempt=0, no RunId): SKIP-eligible if isRunning=true.
+	//   - Running (Attempt=1, RunId set, Completed=nil, HasCallback=false):
+	//     mirrors convertRunningWorkflowsToBufferedStarts, but the underlying
+	//     workflow has already finished -- the stale state SchedulerCallbacksTask
+	//     must refresh before ProcessBuffer runs.
+	now := time.Now().UTC()
+	pendingNominal := now.Add(-30 * time.Second)
+	state := &schedulerpb.SchedulerMigrationState{
+		SchedulerState: &schedulerpb.SchedulerState{
+			Namespace:     nsName,
+			NamespaceId:   nsID,
+			ScheduleId:    sid,
+			Schedule:      sched,
+			Info:          &schedulepb.ScheduleInfo{},
+			ConflictToken: scheduler.InitialConflictToken,
+		},
+		GeneratorState: &schedulerpb.GeneratorState{
+			LastProcessedTime: timestamppb.New(now),
+		},
+		InvokerState: &schedulerpb.InvokerState{
+			LastProcessedTime: timestamppb.New(now),
+			BufferedStarts: []*schedulespb.BufferedStart{
+				{
+					NominalTime:   timestamppb.New(pendingNominal),
+					ActualTime:    timestamppb.New(pendingNominal),
+					RequestId:     "sched-migrated-pending-" + uuid.NewString(),
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+					WorkflowId:    pendingWid + "-" + pendingNominal.Format(time.RFC3339Nano),
+					Attempt:       0,
+				},
+				{
+					NominalTime:   timestamppb.New(now),
+					ActualTime:    timestamppb.New(now),
+					StartTime:     timestamppb.New(now),
+					RequestId:     "sched-migrated-running-" + runningRunID,
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+					WorkflowId:    runningWid,
+					RunId:         runningRunID,
+					Attempt:       1,
+					HasCallback:   false,
+				},
+			},
+		},
+	}
+
+	_, err = env.GetTestCluster().SchedulerClient().CreateFromMigrationState(
+		ctx,
+		&schedulerpb.CreateFromMigrationStateRequest{
+			NamespaceId: nsID,
+			State:       state,
+		},
+	)
+	require.NoError(t, err)
+
+	// Wait for both actions to surface in RecentActions:
+	//   - The original running workflow, refreshed to Completed by
+	//     SchedulerCallbacksTask.
+	//   - The pending start, kicked off by ProcessBuffer once isRunning
+	//     resolves to false, then run to completion by the SDK worker.
+	var lastDesc *schedulerpb.DescribeScheduleResponse
+	require.Eventually(t, func() bool {
+		desc, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
+			ctx,
+			&schedulerpb.DescribeScheduleRequest{
+				NamespaceId:     nsID,
+				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+			},
+		)
+		if err != nil {
+			return false
+		}
+		lastDesc = desc
+		return len(desc.GetFrontendResponse().GetInfo().GetRecentActions()) >= 2
+	}, 30*time.Second, 500*time.Millisecond, "expected both running and pending starts to surface in RecentActions")
+
+	// Load-bearing assertion: the pending start must NOT have been dropped
+	// under SKIP overlap policy.
+	require.Equal(t, int64(0), lastDesc.GetFrontendResponse().GetInfo().GetOverlapSkipped(),
+		"stale running entry must not cause the pending start to be dropped under SKIP overlap policy")
 }

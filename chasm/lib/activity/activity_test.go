@@ -249,3 +249,59 @@ func TestActivityTerminate(t *testing.T) {
 		})
 	}
 }
+
+func TestContextMetadata(t *testing.T) {
+	t.Run("returns activity type and task queue", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				ActivityType: &commonpb.ActivityType{Name: "my-activity"},
+				TaskQueue:    &taskqueuepb.TaskQueue{Name: "my-task-queue"},
+			},
+		}
+
+		md := activity.ContextMetadata(ctx)
+		require.Equal(t, map[string]string{
+			"standalone-activity-type":       "my-activity",
+			"standalone-activity-task-queue": "my-task-queue",
+		}, md)
+	})
+
+	t.Run("returns only activity type when task queue is empty", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				ActivityType: &commonpb.ActivityType{Name: "my-activity"},
+			},
+		}
+
+		md := activity.ContextMetadata(ctx)
+		require.Equal(t, map[string]string{
+			"standalone-activity-type": "my-activity",
+		}, md)
+	})
+
+	t.Run("returns only task queue when activity type is empty", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				TaskQueue: &taskqueuepb.TaskQueue{Name: "my-task-queue"},
+			},
+		}
+
+		md := activity.ContextMetadata(ctx)
+		require.Equal(t, map[string]string{
+			"standalone-activity-task-queue": "my-task-queue",
+		}, md)
+	})
+
+	t.Run("returns nil when both are empty", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{},
+		}
+
+		md := activity.ContextMetadata(ctx)
+		require.Nil(t, md)
+	})
+}

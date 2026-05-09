@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -123,6 +124,8 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		err = t.executeChasmPureTimerTask(ctx, task)
 	case *tasks.ChasmTask:
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
+	case *tasks.TimeSkippingTimerTask:
+		err = t.executeTimeSkippingTimerTask(ctx, task)
 	default:
 		err = queueserrors.NewUnprocessableTaskError("unknown task type")
 	}
@@ -157,7 +160,7 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	}
 
 	timerSequence := t.getTimerSequence(mutableState)
-	referenceTime := t.Now()
+	referenceTime := mutableState.Now()
 	timerFired := false
 Loop:
 	for _, timerSequenceID := range timerSequence.LoadAndSortUserTimers() {
@@ -168,6 +171,8 @@ Loop:
 			return serviceerror.NewInternal(errString)
 		}
 
+		// when time-skipping happens, the task.FireTime is way before the timerSequenceID.Timestamp,
+		// but using the virtual time of ms as the reference time, this function will still return true.
 		if !queues.IsTimeExpired(task, referenceTime, timerSequenceID.Timestamp) {
 			// Timer sequence IDs are sorted; once we encounter a timer whose
 			// sequence ID has not expired, all subsequent timers will not have
@@ -221,7 +226,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	}
 
 	timerSequence := t.getTimerSequence(mutableState)
-	referenceTime := t.Now()
+	referenceTime := mutableState.Now()
 	updateMutableState := false
 	scheduleWorkflowTask := false
 
@@ -683,7 +688,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	initiator := enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED
 
 	wfExpTime := mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime
-	if wfExpTime == nil || wfExpTime.AsTime().IsZero() || wfExpTime.AsTime().After(t.Now()) {
+	if wfExpTime == nil || wfExpTime.AsTime().IsZero() || wfExpTime.AsTime().After(mutableState.Now()) {
 		backoffInterval, retryState = mutableState.GetRetryBackoffDuration(timeoutFailure)
 		if backoffInterval != backoff.NoBackoff {
 			// We have a retry policy and we should retry.
@@ -726,6 +731,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
+	// TODO@time-skipping: if time skipping happened, the virtual time is
+	// propagated to the new mutable state, need to check the bound works correctly in the retry.
 	newMutableState, err := workflow.NewMutableStateInChain(
 		t.shardContext,
 		t.shardContext.GetEventsCache(),
@@ -733,7 +740,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		mutableState.GetNamespaceEntry(),
 		mutableState.GetWorkflowKey().WorkflowID,
 		newRunID,
-		t.Now(),
+		mutableState.Now(),
 		mutableState,
 	)
 	if err != nil {
@@ -896,6 +903,66 @@ func (t *timerQueueActiveTaskExecutor) getTimerSequence(
 	return workflow.NewTimerSequence(mutableState)
 }
 
+// executeTimeSkippingTimerTask fires when the elapsed-duration bound is hit. It emits the
+// disable transition directly so the bound is honored even if the workflow has accumulated
+// in-flight work since the bound was configured. The bound's wake-up cue is wall-clock-anchored,
+// so by the time we get here the user-visible elapsed budget is genuinely exhausted.
+func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
+	ctx context.Context,
+	task *tasks.TimeSkippingTimerTask,
+) (retError error) {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
+	if err != nil {
+		return err
+	}
+	if mutableState == nil {
+		release(nil)
+		return consts.ErrWorkflowExecutionNotFound
+	}
+
+	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil)
+		return consts.ErrWorkflowCompleted
+	}
+
+	if !timeSkippingBoundTaskIsLive(mutableState, task) {
+		release(nil)
+		return errNoTimerFired
+	}
+
+	_, err = mutableState.AddWorkflowExecutionTimeSkippingTransitionedEvent(
+		ctx, time.Time{}, true)
+	if err != nil {
+		return err
+	}
+	return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
+}
+
+// timeSkippingBoundTaskIsLive returns false when the task should be dropped silently —
+// either time skipping has been disabled since the task was emitted, or the bound this
+// task was associated with has been superseded (different SourceEventId) or already fired
+// (HasReached=true). Dropping is harmless: the new bound, if any, has its own wake-up task.
+func timeSkippingBoundTaskIsLive(mutableState historyi.MutableState, task *tasks.TimeSkippingTimerTask) bool {
+	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	if tsi == nil || !tsi.GetConfig().GetEnabled() {
+		return false
+	}
+	boundInfo := tsi.GetCurrentElapsedDurationBound()
+	if boundInfo == nil || boundInfo.GetTargetTime() == nil || boundInfo.GetSourceEventId() == 0 || boundInfo.GetHasReached() {
+		return false
+	}
+	return boundInfo.GetSourceEventId() == task.EventID
+}
+
 func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 	ctx context.Context,
 	wfContext historyi.WorkflowContext,
@@ -1024,6 +1091,7 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 	ctx context.Context,
 	task *tasks.ChasmTaskPure,
 ) error {
+	// TODO@time-skipping: if time skipping happened, check if virtual time is needed here.
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 

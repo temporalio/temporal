@@ -8,6 +8,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
@@ -266,6 +267,39 @@ func TestCancellationBackoffTaskHandler_Execute(t *testing.T) {
 	require.Len(t, ctx.Tasks, 1)
 	_, ok := ctx.Tasks[0].Payload.(*nexusoperationpb.CancellationTask)
 	require.True(t, ok, "expected CancellationTask")
+}
+
+func TestCancellationLoadArgs_StandaloneFallsBackToRequestData(t *testing.T) {
+	now := time.Now().UTC()
+	input := &commonpb.Payload{Data: []byte("test-input")}
+	headers := map[string]string{"test-header": "test-value"}
+
+	op := NewOperation(&nexusoperationpb.OperationState{
+		Service:                "test-service",
+		Operation:              "test-operation",
+		OperationToken:         "test-operation-token",
+		RequestId:              "test-request-id",
+		Endpoint:               "test-endpoint",
+		EndpointId:             "test-endpoint-id",
+		ScheduledTime:          timestamppb.New(now.Add(-2 * time.Minute)),
+		StartedTime:            timestamppb.New(now.Add(-1 * time.Minute)),
+		ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
+		StartToCloseTimeout:    durationpb.New(5 * time.Minute),
+	})
+	op.RequestData = chasm.NewDataField(nil, &nexusoperationpb.OperationRequestData{
+		Input:       input,
+		NexusHeader: headers,
+	})
+
+	cancellation := newCancellation(&nexusoperationpb.CancellationState{})
+	cancellation.Operation = chasm.NewMockParentPtr(op)
+
+	args, err := cancellation.loadArgs(&chasm.MockContext{
+		HandleNow: func(chasm.Component) time.Time { return now },
+	}, nil)
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, input, args.payload)
+	require.Equal(t, headers, args.headers)
 }
 
 func TestCancellationInvocationTaskHandler_HTTP(t *testing.T) {
