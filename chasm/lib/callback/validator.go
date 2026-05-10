@@ -11,7 +11,11 @@ import (
 )
 
 // Validator validates completion callbacks attached to executions (workflows and standalone activities).
-type Validator struct {
+type Validator interface {
+	Validate(namespaceName string, cbs []*commonpb.Callback) error
+}
+
+type validator struct {
 	maxCallbacksPerExecution dynamicconfig.IntPropertyFnWithNamespaceFilter
 	urlMaxLength             dynamicconfig.IntPropertyFnWithNamespaceFilter
 	headerMaxSize            dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -23,8 +27,8 @@ func NewValidator(
 	urlMaxLength dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	headerMaxSize dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	endpointRules dynamicconfig.TypedPropertyFnWithNamespaceFilter[AddressMatchRules],
-) *Validator {
-	return &Validator{
+) Validator {
+	return &validator{
 		maxCallbacksPerExecution: maxCallbacksPerExecution,
 		urlMaxLength:             urlMaxLength,
 		headerMaxSize:            headerMaxSize,
@@ -34,7 +38,7 @@ func NewValidator(
 
 // Validate validates completion callbacks: count, URL length, endpoint allowlist, header size, and normalizes header
 // keys to lowercase.
-func (v *Validator) Validate(namespaceName string, cbs []*commonpb.Callback) error {
+func (v *validator) Validate(namespaceName string, cbs []*commonpb.Callback) error {
 	if len(cbs) > v.maxCallbacksPerExecution(namespaceName) {
 		return serviceerror.NewInvalidArgumentf(
 			"cannot attach more than %d callbacks to an execution", v.maxCallbacksPerExecution(namespaceName),

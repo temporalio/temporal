@@ -35,6 +35,7 @@ var Module = fx.Options(
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ThrottledLoggerRpsFnProvider),
+	fx.Provide(ServiceErrorInterceptorProvider),
 	fx.Provide(ContextMetadataInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
@@ -60,6 +61,14 @@ func ConfigProvider(
 	persistenceConfig config.Persistence,
 ) *Config {
 	return NewConfig(dc)
+}
+
+func ServiceErrorInterceptorProvider(
+	dc *dynamicconfig.Collection,
+) *interceptor.ServiceErrorInterceptor {
+	return interceptor.NewServiceErrorInterceptor(
+		dynamicconfig.MaxServiceErrorMessageLength.Get(dc),
+	)
 }
 
 func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {

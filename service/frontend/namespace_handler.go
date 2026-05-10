@@ -4,6 +4,7 @@ package frontend
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,6 +39,7 @@ type (
 	namespaceHandler struct {
 		logger                 log.Logger
 		metadataMgr            persistence.MetadataManager
+		namespaceRegistry      namespace.Registry
 		clusterMetadata        cluster.Metadata
 		namespaceReplicator    nsreplication.Replicator
 		namespaceAttrValidator *nsmanager.Validator
@@ -66,6 +68,7 @@ var (
 func newNamespaceHandler(
 	logger log.Logger,
 	metadataMgr persistence.MetadataManager,
+	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
 	namespaceReplicator nsreplication.Replicator,
 	archivalMetadata archiver.ArchivalMetadata,
@@ -76,6 +79,7 @@ func newNamespaceHandler(
 	return &namespaceHandler{
 		logger:                 logger,
 		metadataMgr:            metadataMgr,
+		namespaceRegistry:      namespaceRegistry,
 		clusterMetadata:        clusterMetadata,
 		namespaceReplicator:    namespaceReplicator,
 		namespaceAttrValidator: nsmanager.NewValidator(clusterMetadata),
@@ -317,6 +321,10 @@ func (d *namespaceHandler) DescribeNamespace(
 	describeRequest *workflowservice.DescribeNamespaceRequest,
 ) (*workflowservice.DescribeNamespaceResponse, error) {
 
+	if describeRequest.GetWeakConsistency() {
+		return d.describeNamespaceFromRegistry(describeRequest)
+	}
+
 	// TODO, we should migrate the non global namespace to new table, see #773
 	req := &persistence.GetNamespaceRequest{
 		Name: describeRequest.GetNamespace(),
@@ -333,6 +341,35 @@ func (d *namespaceHandler) DescribeNamespace(
 	}
 	response.NamespaceInfo, response.Config, response.ReplicationConfig, response.FailoverHistory =
 		d.createResponse(resp.Namespace.Info, resp.Namespace.Config, resp.Namespace.ReplicationConfig)
+	return response, nil
+}
+
+// describeNamespaceFromRegistry serves DescribeNamespace from the in-memory namespace registry. The response may be stale,
+// and may return NamespaceNotFound for namespaces created within the registry's refresh window.
+func (d *namespaceHandler) describeNamespaceFromRegistry(request *workflowservice.DescribeNamespaceRequest) (*workflowservice.DescribeNamespaceResponse, error) {
+	opts := namespace.GetNamespaceOptions{DisableReadthrough: true}
+	var ns *namespace.Namespace
+	var err error
+	switch {
+	case request.GetId() != "" && request.GetNamespace() != "":
+		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed. Both ID and Name specified in request.")
+	case request.GetId() != "":
+		ns, err = d.namespaceRegistry.GetNamespaceByIDWithOptions(namespace.ID(request.GetId()), opts)
+	case request.GetNamespace() != "":
+		ns, err = d.namespaceRegistry.GetNamespaceWithOptions(namespace.Name(request.GetNamespace()), opts)
+	default:
+		return nil, errNamespaceNotSet
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	response := &workflowservice.DescribeNamespaceResponse{
+		IsGlobalNamespace: ns.IsGlobalNamespace(),
+		FailoverVersion:   ns.FailoverVersion(namespace.EmptyBusinessID),
+	}
+	response.NamespaceInfo, response.Config, response.ReplicationConfig, response.FailoverHistory =
+		d.createResponse(ns.Info(), ns.Config(), ns.ReplicationConfig())
 	return response, nil
 }
 
@@ -867,6 +904,7 @@ func (d *namespaceHandler) createResponse(
 			WorkflowPause:                   d.config.WorkflowPauseEnabled(info.Name),
 			StandaloneActivities:            d.config.Activity.Enabled(info.Name),
 			WorkerPollCompleteOnShutdown:    d.config.EnableCancelWorkerPollsOnShutdown(info.Name),
+			WorkerCommands:                  d.config.WorkerCommandsEnabled(info.Name),
 			PollerAutoscaling:               true,
 		},
 		Limits: &namespacepb.NamespaceInfo_Limits{
@@ -946,13 +984,19 @@ func (d *namespaceHandler) upsertCustomSearchAttributesAliases(
 	upsert map[string]string,
 ) (map[string]string, error) {
 	result := util.CloneMapNonNil(current)
+	currentAliasToField := util.InverseMap(current)
 	for key, value := range upsert {
 		if value == "" {
 			delete(result, key)
-		} else if _, ok := current[key]; !ok {
-			result[key] = value
-		} else {
+		} else if _, aliasExists := currentAliasToField[value]; aliasExists {
+			d.logger.Warn(
+				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, value),
+				tag.String("visibility-search-attribute", value),
+			)
+		} else if _, ok := current[key]; ok {
 			return nil, errCustomSearchAttributeFieldAlreadyAllocated
+		} else {
+			result[key] = value
 		}
 	}
 	return result, nil
