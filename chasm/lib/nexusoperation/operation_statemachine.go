@@ -7,6 +7,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -242,10 +243,17 @@ var TransitionCanceled = chasm.NewTransition(
 		if event.CompleteTime != nil {
 			closeTime = *event.CompleteTime
 		}
+		failure := event.Failure
+		if cancellation, ok := o.Cancellation.TryGet(ctx); ok {
+			if canceledInfo := failure.GetCanceledFailureInfo(); canceledInfo != nil && canceledInfo.Identity == "" {
+				failure = common.CloneProto(event.Failure)
+				failure.GetCanceledFailureInfo().Identity = cancellation.GetIdentity()
+			}
+		}
 		o.emitOnCanceledMetrics(ctx, closeTime)
 		// Attempts only execute in SCHEDULED, so that status identifies attempt-originated cancels.
 		fromAttempt := o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED
-		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime, fromAttempt)
+		return o.resolveUnsuccessfully(ctx, failure, closeTime, fromAttempt)
 	},
 )
 

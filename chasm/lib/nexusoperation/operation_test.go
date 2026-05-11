@@ -236,6 +236,30 @@ func TestHandleNexusCompletion(t *testing.T) {
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_CANCELED, op.GetStatus())
 		})
 
+		t.Run("AfterRequestCancel", func(t *testing.T) {
+			ctx := newCtx()
+			op := newStartedOp(t, ctx)
+			require.NoError(t, op.RequestCancel(ctx, &nexusoperationpb.CancellationState{
+				RequestId: "cancel-request-id",
+				Identity:  "test-identity",
+			}))
+			err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				RequestId: op.GetRequestId(),
+				Outcome: &persistencespb.ChasmNexusCompletion_Failure{
+					Failure: &failurepb.Failure{
+						Message: "canceled",
+						FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+							CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+						},
+					},
+				},
+			})
+			require.NoError(t, err)
+			require.Equal(t, nexusoperationpb.OPERATION_STATUS_CANCELED, op.GetStatus())
+			stored := op.Outcome.Get(ctx).GetFailed().GetFailure()
+			require.Equal(t, "test-identity", stored.GetCanceledFailureInfo().GetIdentity())
+		})
+
 		t.Run("CompletionBeforeStart", func(t *testing.T) {
 			ctx := newCtx()
 			op := newScheduledTestOperation(t, ctx)

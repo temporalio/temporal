@@ -546,6 +546,12 @@ func TestTransitionFailed(t *testing.T) {
 func TestTransitionCanceled(t *testing.T) {
 	customCompleteTime := defaultTime.Add(time.Minute)
 	failure := &failurepb.Failure{Message: "canceled"}
+	failureWithInfo := &failurepb.Failure{
+		Message: "canceled",
+		FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+			CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+		},
+	}
 
 	for _, tc := range []struct {
 		name       string
@@ -586,6 +592,94 @@ func TestTransitionCanceled(t *testing.T) {
 			event:      EventCanceled{Failure: failure, CompleteTime: &customCompleteTime},
 			assert: func(t *testing.T, ctx *chasm.MockMutableContext, operation *Operation) {
 				require.Equal(t, customCompleteTime, operation.ClosedTime.AsTime())
+			},
+		},
+		{
+			name:       "adds cancellation identity",
+			fromStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
+			event:      EventCanceled{Failure: failureWithInfo},
+			prepare: func(operation *Operation) {
+				cancellation := newCancellation(&nexusoperationpb.CancellationState{
+					Status:    nexusoperationpb.CANCELLATION_STATUS_SCHEDULED,
+					RequestId: "cancel-request-id",
+					Identity:  "test-identity",
+				})
+				cancellation.Operation = chasm.NewMockParentPtr[*Operation](operation)
+				operation.Cancellation = chasm.NewComponentField[*Cancellation](nil, cancellation)
+			},
+			assert: func(t *testing.T, ctx *chasm.MockMutableContext, operation *Operation) {
+				stored := operation.Outcome.Get(ctx).GetFailed().GetFailure()
+				require.Equal(t, "test-identity", stored.GetCanceledFailureInfo().GetIdentity())
+				require.Empty(t, failureWithInfo.GetCanceledFailureInfo().GetIdentity())
+				require.NotSame(t, failureWithInfo, stored)
+			},
+		},
+		{
+			name:       "stamps cancellation identity onto LastAttemptFailure",
+			fromStatus: nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+			event: EventCanceled{
+				Failure: &failurepb.Failure{
+					Message: "canceled",
+					FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+						CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+					},
+				},
+			},
+			prepare: func(operation *Operation) {
+				cancellation := newCancellation(&nexusoperationpb.CancellationState{
+					Status:    nexusoperationpb.CANCELLATION_STATUS_SCHEDULED,
+					RequestId: "cancel-request-id",
+					Identity:  "test-identity",
+				})
+				cancellation.Operation = chasm.NewMockParentPtr[*Operation](operation)
+				operation.Cancellation = chasm.NewComponentField[*Cancellation](nil, cancellation)
+			},
+			assert: func(t *testing.T, ctx *chasm.MockMutableContext, operation *Operation) {
+				require.Equal(t, "test-identity", operation.LastAttemptFailure.GetCanceledFailureInfo().GetIdentity())
+				require.Nil(t, operation.Outcome.Get(ctx).GetVariant())
+			},
+		},
+		{
+			name:       "no CanceledFailureInfo leaves cancellation identity unset",
+			fromStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
+			event:      EventCanceled{Failure: failure},
+			prepare: func(operation *Operation) {
+				cancellation := newCancellation(&nexusoperationpb.CancellationState{
+					Status:    nexusoperationpb.CANCELLATION_STATUS_SCHEDULED,
+					RequestId: "cancel-request-id",
+					Identity:  "test-identity",
+				})
+				cancellation.Operation = chasm.NewMockParentPtr[*Operation](operation)
+				operation.Cancellation = chasm.NewComponentField[*Cancellation](nil, cancellation)
+			},
+			assert: func(t *testing.T, ctx *chasm.MockMutableContext, operation *Operation) {
+				stored := operation.Outcome.Get(ctx).GetFailed().GetFailure()
+				require.Nil(t, stored.GetCanceledFailureInfo())
+			},
+		},
+		{
+			name:       "preserves caller-provided identity on CanceledFailureInfo",
+			fromStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
+			event: EventCanceled{
+				Failure: &failurepb.Failure{
+					Message: "canceled",
+					FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+						CanceledFailureInfo: &failurepb.CanceledFailureInfo{Identity: "upstream-identity"},
+					},
+				},
+			},
+			prepare: func(operation *Operation) {
+				cancellation := newCancellation(&nexusoperationpb.CancellationState{
+					Status:    nexusoperationpb.CANCELLATION_STATUS_SCHEDULED,
+					RequestId: "cancel-request-id",
+					Identity:  "test-identity",
+				})
+				cancellation.Operation = chasm.NewMockParentPtr[*Operation](operation)
+				operation.Cancellation = chasm.NewComponentField[*Cancellation](nil, cancellation)
+			},
+			assert: func(t *testing.T, ctx *chasm.MockMutableContext, operation *Operation) {
+				stored := operation.Outcome.Get(ctx).GetFailed().GetFailure()
+				require.Equal(t, "upstream-identity", stored.GetCanceledFailureInfo().GetIdentity())
 			},
 		},
 	} {
