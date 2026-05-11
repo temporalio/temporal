@@ -532,10 +532,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		case m.ms.executionInfo.GetDeclinedTargetVersionUpgrade() != nil &&
 			targetRevisionNumber <= m.ms.executionInfo.GetDeclinedTargetVersionUpgrade().GetRevisionNumber():
 		default:
-			// Stale matching reports (revision <= highestSeenRevNumber) are suppressed to avoid
-			// corrupting state with outdated data. This also handles the inline WFT
-			// path in RespondWorkflowTaskCompleted, which passes revision 0.
-			if targetRevisionNumber <= highestSeenRevNumber {
+			// Strict `<` (not `<=`) so legitimate same-revision re-firings (e.g., transient retries, repeated updates) still fire; inline path uses revision=-1 sentinel to be caught here.
+			if targetRevisionNumber < highestSeenRevNumber {
 				break
 			}
 			// Otherwise — target changed + did not decline to upgrade on CaN/retry. Signal the SDK.
