@@ -65,8 +65,8 @@ type (
 		// GetFairnessWeightOverrides returns current fairness weight overrides for this queue.
 		GetFairnessWeightOverrides() fairnessWeightOverrides
 		UpdateRemotePriorityBacklogs(remotePriorityBacklogSet)
-		// RecordTaskDispatched records the outcome of a task add to this physical queue using
+		// RecordTaskAdd records the outcome of a task add to this physical queue using
 		// the queue's tagged metrics handler, so all per-physical-queue labels are included.
-		RecordTaskDispatched(result string, forwarded bool, behavior enumspb.VersioningBehavior)
+		RecordTaskAdd(result string, forwarded bool, behavior enumspb.VersioningBehavior)
 	}
 )

@@ -46,7 +46,7 @@ const (
 	replicationTaskType                            = "replicationTaskType"
 	replicationTaskPriority                        = "replicationTaskPriority"
 	taskExpireStage                                = "task_expire_stage"
-	taskDispatchResult                             = "dispatch_result"
+	taskAddResult                                  = "task_add_result"
 	versioningBehavior                             = "versioning_behavior"
 	continueAsNewVersioningBehavior                = "continue_as_new_versioning_behavior"
 	suggestContinueAsNewReasonTooManyUpdates       = "suggest_continue_as_new_reason_too_many_updates"
@@ -317,14 +317,14 @@ func ForwardedTag(forwarded bool) Tag {
 }
 
 const (
-	TaskDispatchResultSyncMatch = "sync_match"
-	TaskDispatchResultBacklog   = "backlog"
-	TaskDispatchResultThrottled = "throttled"
-	TaskDispatchResultFailure   = "failure"
+	TaskAddResultSyncMatch = "sync_match"
+	TaskAddResultBacklog   = "backlog"
+	TaskAddResultThrottled = "throttled"
+	TaskAddResultFailure   = "failure"
 )
 
-func TaskDispatchResultTag(result string) Tag {
-	return Tag{Key: taskDispatchResult, Value: result}
+func TaskAddResultTag(result string) Tag {
+	return Tag{Key: taskAddResult, Value: result}
 }
 
 func MatchingTaskPriorityTag(value int32) Tag {

@@ -447,11 +447,22 @@ reredirectTask:
 		if syncMatched && !pm.shouldBacklogSyncMatchTaskOnError(err) {
 			// Only fire hooks for non-forwarded tasks. Forwarded tasks already had hooks fired
 			// on the child partition that originally received the task.
-			if params.forwardInfo == nil {
+			if !forwarded {
 				pm.processTaskAddHooks(ctx, targetVersion, syncMatched)
 			}
 
-			syncMatchQueue.RecordTaskDispatched(metrics.TaskDispatchResultSyncMatch, forwarded, behavior)
+			var syncMatchResult string
+			if err != nil {
+				var resourceExhausted *serviceerror.ResourceExhausted
+				if errors.As(err, &resourceExhausted) {
+					syncMatchResult = metrics.TaskAddResultThrottled
+				} else {
+					syncMatchResult = metrics.TaskAddResultFailure
+				}
+			} else {
+				syncMatchResult = metrics.TaskAddResultSyncMatch
+			}
+			syncMatchQueue.RecordTaskAdd(syncMatchResult, forwarded, behavior)
 
 			// Build ID is not returned for sync match. The returned build ID is used by History to update
 			// mutable state (and visibility) when the first workflow task is spooled.
@@ -480,14 +491,14 @@ reredirectTask:
 
 	err = spoolQueue.SpoolTask(params.taskInfo)
 	if err == nil {
-		spoolQueue.RecordTaskDispatched(metrics.TaskDispatchResultBacklog, forwarded, behavior)
+		spoolQueue.RecordTaskAdd(metrics.TaskAddResultBacklog, forwarded, behavior)
 		pm.processTaskAddHooks(ctx, targetVersion, false)
 	} else {
 		var resourceExhausted *serviceerror.ResourceExhausted
 		if errors.As(err, &resourceExhausted) {
-			spoolQueue.RecordTaskDispatched(metrics.TaskDispatchResultThrottled, forwarded, behavior)
+			spoolQueue.RecordTaskAdd(metrics.TaskAddResultThrottled, forwarded, behavior)
 		} else {
-			spoolQueue.RecordTaskDispatched(metrics.TaskDispatchResultFailure, forwarded, behavior)
+			spoolQueue.RecordTaskAdd(metrics.TaskAddResultFailure, forwarded, behavior)
 		}
 	}
 
