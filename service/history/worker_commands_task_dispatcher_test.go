@@ -144,7 +144,7 @@ func TestExecute_DispatchSuccess(t *testing.T) {
 
 	var capturedReq *matchingservice.DispatchNexusTaskRequest
 	mockClient.EXPECT().DispatchNexusTask(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, req *matchingservice.DispatchNexusTaskRequest, _ ...interface{}) (*matchingservice.DispatchNexusTaskResponse, error) {
+		func(_ context.Context, req *matchingservice.DispatchNexusTaskRequest, _ ...any) (*matchingservice.DispatchNexusTaskResponse, error) {
 			capturedReq = req
 			return &matchingservice.DispatchNexusTaskResponse{
 				Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
