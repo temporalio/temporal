@@ -405,7 +405,7 @@ func (h *cancelCommandDispatchTaskHandler) dispatchToWorker(
 		NamespaceId: namespaceID,
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: controlQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
 		},
 		Request: nexusRequest,
 	})
