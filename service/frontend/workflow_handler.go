@@ -7391,4 +7391,3 @@ func (wh *WorkflowHandler) UnpauseWorkflowExecution(ctx context.Context, request
 
 	return &workflowservice.UnpauseWorkflowExecutionResponse{}, nil
 }
-
