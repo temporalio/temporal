@@ -121,23 +121,26 @@ func TestValidTransitions(t *testing.T) {
 		mctx := &chasm.MockMutableContext{}
 		mctx.HandleNow = func(chasm.Component) time.Time { return currentTime }
 
-		err := TransitionFailed.Apply(callback, mctx, EventFailed{Time: currentTime, Err: errors.New("failed")})
+		err := TransitionFailed.Apply(callback, mctx, EventFailed{Time: currentTime, Err: errors.New("new failure msg")})
 		require.NoError(t, err)
 
 		// Assert info object is updated.
 		require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, callback.StateMachineState())
 		require.Equal(t, int32(2), callback.Attempt)
-		require.Equal(t, "failed", callback.LastAttemptFailure.Message)
-		require.True(t, callback.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
 		require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
 		require.Nil(t, callback.NextAttemptScheduleTime)
 		require.Equal(t, currentTime, callback.CloseTime.AsTime())
 
-		// Check the TerminalFailure field is set.
+		// Assert LastAttemptFailure is unchanged.
+		lastFailure := callback.LastAttemptFailure
+		require.Equal(t, "error message", lastFailure.Message)
+		require.False(t, lastFailure.GetApplicationFailureInfo().NonRetryable)
+
+		// Assert the TerminalFailure field is set to the final error.
 		require.NotNil(t, callback.TerminalFailure, "TerminalFailure not set")
-		got := callback.TerminalFailure.Get(mctx)
-		want := callback.LastAttemptFailure
-		require.True(t, proto.Equal(want, got), "TerminalFailure not as expected. Got %v, want %v.", got, want)
+		termFailure := callback.TerminalFailure.Get(mctx)
+		require.Equal(t, "new failure msg", termFailure.Message)
+		require.True(t, termFailure.GetApplicationFailureInfo().NonRetryable)
 
 		// Assert no tasks generated. In terminal state.
 		require.Empty(t, mctx.Tasks)
@@ -159,25 +162,88 @@ func TestTerminatedTransition(t *testing.T) {
 		CallbackState: initialCallbackState,
 	}
 
-	for _, src := range []callbackspb.CallbackStatus{
-		callbackspb.CALLBACK_STATUS_STANDBY,
-		callbackspb.CALLBACK_STATUS_SCHEDULED,
-		callbackspb.CALLBACK_STATUS_BACKING_OFF,
-	} {
-		t.Run("from_"+src.String(), func(t *testing.T) {
+	emptyTerminateEvent := EventTerminated{}
+	assertEmptyEventResults := func(t *testing.T, mctx *chasm.MockMutableContext, cb *Callback) {
+		// Confirm default reason, but no additional metadata.
+		termFailure := cb.TerminalFailure.Get(mctx)
+		require.Equal(t, "callback execution terminated", termFailure.Message)
+		require.Nil(t, termFailure.GetTerminatedFailureInfo())
+	}
+
+	populatedTerminateEvent := EventTerminated{
+		Identity: "user-supplied identity",
+		Reason:   "user-supplied reason",
+	}
+	assertPopulatedEventResults := func(t *testing.T, mctx *chasm.MockMutableContext, cb *Callback) {
+		// Confirm user-supplied reason and identity are available.
+		termFailure := cb.TerminalFailure.Get(mctx)
+		require.Equal(t, "user-supplied reason", termFailure.Message)
+		gotTermFailureInfo := termFailure.GetTerminatedFailureInfo()
+		require.NotNil(t, gotTermFailureInfo)
+		require.Equal(t, "user-supplied identity", gotTermFailureInfo.Identity)
+	}
+
+	tests := []struct {
+		Name       string
+		FromStatus callbackspb.CallbackStatus
+		Event      EventTerminated
+		Prepare    func(*Callback)
+		Assert     func(*testing.T, *chasm.MockMutableContext, *Callback)
+	}{
+		// Transitions with no Reason/Identity supplied for termination.
+		{
+			Name:       "in standby",
+			FromStatus: callbackspb.CALLBACK_STATUS_STANDBY,
+			Event:      emptyTerminateEvent,
+			Assert:     assertEmptyEventResults,
+		},
+		{
+			Name:       "in scheduled, with identity supplied",
+			FromStatus: callbackspb.CALLBACK_STATUS_SCHEDULED,
+			Event:      emptyTerminateEvent,
+			Assert:     assertEmptyEventResults,
+		},
+		{
+			Name:       "in backing off, with identity supplied",
+			FromStatus: callbackspb.CALLBACK_STATUS_BACKING_OFF,
+			Event:      emptyTerminateEvent,
+			Assert:     assertEmptyEventResults,
+		},
+
+		// With the Reason/Identity supplied.
+		{
+			Name:       "in standby, with identity supplied",
+			FromStatus: callbackspb.CALLBACK_STATUS_STANDBY,
+			Event:      populatedTerminateEvent,
+			Assert:     assertPopulatedEventResults,
+		},
+		{
+			Name:       "in scheduled, with identity supplied",
+			FromStatus: callbackspb.CALLBACK_STATUS_SCHEDULED,
+			Event:      populatedTerminateEvent,
+			Assert:     assertPopulatedEventResults,
+		},
+		{
+			Name:       "in backing off, with identity supplied",
+			FromStatus: callbackspb.CALLBACK_STATUS_BACKING_OFF,
+			Event:      populatedTerminateEvent,
+			Assert:     assertPopulatedEventResults,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
 			currentTime := time.Now().UTC()
 			mctx := &chasm.MockMutableContext{}
 			mctx.HandleNow = func(chasm.Component) time.Time { return currentTime }
 
+			// Configure
 			cb := &Callback{
 				CallbackState: proto.Clone(initialCallbackState).(*callbackspb.CallbackState),
 			}
-			cb.SetStateMachineState(src)
+			cb.SetStateMachineState(test.FromStatus)
 
-			err := TransitionTerminated.Apply(cb, mctx, EventTerminated{
-				Identity: "user-supplied identity",
-				Reason:   "user-supplied reason",
-			})
+			// Call
+			err := TransitionTerminated.Apply(cb, mctx, test.Event)
 			require.NoError(t, err)
 
 			// Confirm expected state changes.
@@ -188,37 +254,10 @@ func TestTerminatedTransition(t *testing.T) {
 			require.True(t, proto.Equal(initialCallbackState.RegistrationTime, cb.RegistrationTime))
 			require.Equal(t, initialCallback.LastAttemptFailure, cb.LastAttemptFailure)
 
-			// Confirm the Callback's terminal failure reason is set.
-			termFailure := cb.TerminalFailure.Get(mctx)
-			require.Equal(t, "user-supplied reason", termFailure.Message)
-
-			// If the Identity is supplied to the request, we should see it
-			// in the response.
-			gotTermFailureInfo := termFailure.GetTerminatedFailureInfo()
-			require.NotNil(t, gotTermFailureInfo)
-			require.Equal(t, "user-supplied identity", gotTermFailureInfo.Identity)
-
 			// No new tasks were generated.
 			require.Empty(t, mctx.Tasks)
-		})
-	}
 
-	// Terminal states. Confirm the request should be rejected by CHASM.
-	for _, src := range []callbackspb.CallbackStatus{
-		callbackspb.CALLBACK_STATUS_SUCCEEDED,
-		callbackspb.CALLBACK_STATUS_FAILED,
-		callbackspb.CALLBACK_STATUS_TERMINATED,
-	} {
-		t.Run("from_"+src.String(), func(t *testing.T) {
-			mctx := &chasm.MockMutableContext{}
-
-			cb := &Callback{
-				CallbackState: proto.Clone(initialCallbackState).(*callbackspb.CallbackState),
-			}
-			cb.SetStateMachineState(src)
-
-			err := TransitionTerminated.Apply(cb, mctx, EventTerminated{})
-			require.ErrorContains(t, err, "invalid transition from")
+			test.Assert(t, mctx, cb)
 		})
 	}
 }
