@@ -328,8 +328,7 @@ func (h *cancelCommandDispatchTaskHandler) Validate(
 }
 
 const (
-	cancelCommandDispatchTimeout    = time.Second * 10 * debug.TimeoutMultiplier
-	cancelCommandDispatchMaxAttempt = 3
+	cancelCommandDispatchTimeout = time.Second * 10 * debug.TimeoutMultiplier
 
 	workerCommandsServiceName   = "temporal.api.nexusservices.workerservice.v1.WorkerService"
 	workerCommandsOperationName = "ExecuteCommands"
@@ -438,6 +437,7 @@ func (h *cancelCommandDispatchTaskHandler) dispatchToWorker(
 }
 
 // cancelCommandDispatchResponseToError converts a DispatchNexusTaskResponse into a Go error.
+// TODO: consolidate with service/history.dispatchResponseToError into a shared package.
 func cancelCommandDispatchResponseToError(resp *matchingservice.DispatchNexusTaskResponse) error {
 	switch t := resp.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_Failure:
