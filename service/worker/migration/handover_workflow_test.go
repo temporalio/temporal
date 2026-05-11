@@ -60,10 +60,10 @@ func TestHandoverWorkflow_CancelAfterHandoverState_ResetsToNormal(t *testing.T) 
 
 	namespaceID := uuid.NewString()
 
-	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).
-		Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
+	env.OnActivity(a.GetMetadata, mock.Anything, MetadataRequest{Namespace: "test-ns"}).
+		Return(&MetadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 	env.OnActivity(a.GetMaxReplicationTaskIDs, mock.Anything).
-		Return(&replicationStatus{MaxReplicationTaskIds: map[int32]int64{1: 100}}, nil)
+		Return(&ReplicationStatus{MaxReplicationTaskIds: map[int32]int64{1: 100}}, nil)
 	env.OnActivity(a.WaitReplication, mock.Anything, mock.Anything).Return(nil)
 
 	var stateUpdates []enumspb.ReplicationState
