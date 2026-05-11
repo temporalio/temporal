@@ -174,7 +174,10 @@ func TestTerminatedTransition(t *testing.T) {
 			}
 			cb.SetStateMachineState(src)
 
-			err := TransitionTerminated.Apply(cb, mctx, EventTerminated{})
+			err := TransitionTerminated.Apply(cb, mctx, EventTerminated{
+				Identity: "user-supplied identity",
+				Reason:   "user-supplied reason",
+			})
 			require.NoError(t, err)
 
 			// Confirm expected state changes.
@@ -187,7 +190,13 @@ func TestTerminatedTransition(t *testing.T) {
 
 			// Confirm the Callback's terminal failure reason is set.
 			termFailure := cb.TerminalFailure.Get(mctx)
-			require.Equal(t, "callback execution terminated", termFailure.Message)
+			require.Equal(t, "user-supplied reason", termFailure.Message)
+
+			// If the Identity is supplied to the request, we should see it
+			// in the response.
+			gotTermFailureInfo := termFailure.GetTerminatedFailureInfo()
+			require.NotNil(t, gotTermFailureInfo)
+			require.Equal(t, "user-supplied identity", gotTermFailureInfo.Identity)
 
 			// No new tasks were generated.
 			require.Empty(t, mctx.Tasks)

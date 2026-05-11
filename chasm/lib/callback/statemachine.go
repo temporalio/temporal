@@ -1,6 +1,7 @@
 package callback
 
 import (
+	"cmp"
 	"fmt"
 	"net/url"
 	"time"
@@ -135,7 +136,8 @@ var TransitionSucceeded = chasm.NewTransition(
 
 // EventTerminated is triggered when the callback is forcefully terminated.
 type EventTerminated struct {
-	Reason string
+	Identity string
+	Reason   string
 }
 
 var TransitionTerminated = chasm.NewTransition(
@@ -149,14 +151,18 @@ var TransitionTerminated = chasm.NewTransition(
 		now := ctx.Now(cb)
 		cb.CloseTime = timestamppb.New(now)
 
-		reason := event.Reason
-		if reason == "" {
-			reason = "callback execution terminated"
+		reason := cmp.Or(event.Reason, "callback execution terminated")
+		var failureInfo *failurepb.TerminatedFailureInfo
+		if event.Identity != "" {
+			failureInfo = &failurepb.TerminatedFailureInfo{
+				Identity: event.Identity,
+			}
 		}
-
 		failure := &failurepb.Failure{
-			Message:     reason,
-			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
+			Message: reason,
+			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+				TerminatedFailureInfo: failureInfo,
+			},
 		}
 		cb.TerminalFailure = chasm.NewDataField(ctx, failure)
 
