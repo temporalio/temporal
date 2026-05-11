@@ -953,6 +953,7 @@ var (
 	WorkflowExecutionUpdateSentToWorkerAgain         = NewCounterDef("workflow_update_sent_to_worker_again")
 	WorkflowExecutionUpdateWaitStageAccepted         = NewCounterDef("workflow_update_wait_stage_accepted")
 	WorkflowExecutionUpdateWaitStageCompleted        = NewCounterDef("workflow_update_wait_stage_completed")
+	UpdatePayloadSize                                = NewCounterDef("update_payload_size", WithDescription("Size of workflow Update payloads (args) in bytes."))
 	WorkflowExecutionUpdateClientTimeout             = NewCounterDef("workflow_update_client_timeout")
 	WorkflowExecutionUpdateServerTimeout             = NewCounterDef("workflow_update_server_timeout")
 	SpeculativeWorkflowTaskCommits                   = NewCounterDef("speculative_workflow_task_commits")
