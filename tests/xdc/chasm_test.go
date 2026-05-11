@@ -381,10 +381,6 @@ func (s *ChasmSuite) TestActivityDispatchTaskStandbySpillover() {
 // TestDeleteExecution_ReplicatedToStandby verifies that deleting a non-workflow Chasm execution
 // (PayloadStore) on the active cluster replicates the deletion to the standby cluster.
 func (s *ChasmSuite) TestDeleteExecution_ReplicatedToStandby() {
-	for _, cluster := range s.clusters {
-		cluster.OverrideDynamicConfig(s.T(), dynamicconfig.EnableDeleteWorkflowExecutionReplication, true)
-	}
-
 	nsName := s.createGlobalNamespace()
 
 	nsResp, err := s.clusters[0].FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{

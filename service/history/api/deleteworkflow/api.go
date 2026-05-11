@@ -43,9 +43,9 @@ func Invoke(
 	//
 	// Close workflow execution is deleted using DeleteExecutionTask.
 	//
-	// DeleteWorkflowExecution is not replicated automatically. Workflow executions must be deleted separately in each cluster.
-	// Although running workflows in active cluster are terminated first and the termination event might be replicated.
-	// In passive cluster, workflow executions are just deleted in regardless of its state.
+	// DeleteWorkflowExecution on an active multi-cluster namespace creates a delete execution replication task.
+	// Running workflows in active cluster are terminated first, and deletion happens while processing the close task.
+	// In passive cluster, workflow executions are deleted regardless of state.
 
 	if workflowLease.GetMutableState().IsWorkflowExecutionRunning() {
 		if request.GetClosedWorkflowOnly() {
