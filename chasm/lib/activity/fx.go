@@ -12,6 +12,7 @@ var HistoryModule = fx.Module(
 	fx.Provide(
 		ConfigProvider,
 		newActivityDispatchTaskHandler,
+		newCancelCommandDispatchTaskHandler,
 		newScheduleToStartTimeoutTaskHandler,
 		newScheduleToCloseTimeoutTaskHandler,
 		newStartToCloseTimeoutTaskHandler,

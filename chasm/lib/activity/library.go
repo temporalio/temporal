@@ -77,17 +77,19 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 type library struct {
 	componentOnlyLibrary
 
-	handler                           *handler
-	activityDispatchTaskHandler       *activityDispatchTaskHandler
-	scheduleToStartTimeoutTaskHandler *scheduleToStartTimeoutTaskHandler
-	scheduleToCloseTimeoutTaskHandler *scheduleToCloseTimeoutTaskHandler
-	startToCloseTimeoutTaskHandler    *startToCloseTimeoutTaskHandler
-	heartbeatTimeoutTaskHandler       *heartbeatTimeoutTaskHandler
+	handler                            *handler
+	activityDispatchTaskHandler        *activityDispatchTaskHandler
+	cancelCommandDispatchTaskHandler   *cancelCommandDispatchTaskHandler
+	scheduleToStartTimeoutTaskHandler  *scheduleToStartTimeoutTaskHandler
+	scheduleToCloseTimeoutTaskHandler  *scheduleToCloseTimeoutTaskHandler
+	startToCloseTimeoutTaskHandler     *startToCloseTimeoutTaskHandler
+	heartbeatTimeoutTaskHandler        *heartbeatTimeoutTaskHandler
 }
 
 func newLibrary(
 	handler *handler,
 	activityDispatchTaskHandler *activityDispatchTaskHandler,
+	cancelCommandDispatchTaskHandler *cancelCommandDispatchTaskHandler,
 	scheduleToStartTimeoutTaskHandler *scheduleToStartTimeoutTaskHandler,
 	scheduleToCloseTimeoutTaskHandler *scheduleToCloseTimeoutTaskHandler,
 	startToCloseTimeoutTaskHandler *startToCloseTimeoutTaskHandler,
@@ -96,13 +98,14 @@ func newLibrary(
 	namespaceRegistry namespace.Registry,
 ) *library {
 	return &library{
-		componentOnlyLibrary:              *newComponentOnlyLibrary(config, namespaceRegistry),
-		handler:                           handler,
-		activityDispatchTaskHandler:       activityDispatchTaskHandler,
-		scheduleToStartTimeoutTaskHandler: scheduleToStartTimeoutTaskHandler,
-		scheduleToCloseTimeoutTaskHandler: scheduleToCloseTimeoutTaskHandler,
-		startToCloseTimeoutTaskHandler:    startToCloseTimeoutTaskHandler,
-		heartbeatTimeoutTaskHandler:       heartbeatTimeoutTaskHandler,
+		componentOnlyLibrary:               *newComponentOnlyLibrary(config, namespaceRegistry),
+		handler:                            handler,
+		activityDispatchTaskHandler:        activityDispatchTaskHandler,
+		cancelCommandDispatchTaskHandler:   cancelCommandDispatchTaskHandler,
+		scheduleToStartTimeoutTaskHandler:  scheduleToStartTimeoutTaskHandler,
+		scheduleToCloseTimeoutTaskHandler:  scheduleToCloseTimeoutTaskHandler,
+		startToCloseTimeoutTaskHandler:     startToCloseTimeoutTaskHandler,
+		heartbeatTimeoutTaskHandler:        heartbeatTimeoutTaskHandler,
 	}
 }
 
@@ -131,6 +134,10 @@ func (l *library) Tasks() []*chasm.RegistrableTask {
 		chasm.NewRegistrablePureTask(
 			"heartbeatTimer",
 			l.heartbeatTimeoutTaskHandler,
+		),
+		chasm.NewRegistrableSideEffectTask(
+			"cancelCommandDispatch",
+			l.cancelCommandDispatchTaskHandler,
 		),
 	}
 }

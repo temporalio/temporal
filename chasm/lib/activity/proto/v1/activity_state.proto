@@ -155,6 +155,10 @@ message ActivityAttemptState {
   // The request ID that came from matching's RecordActivityTaskStarted API call. Used to make this API idempotent in
   // case of implicit retries.
   string start_request_id = 9;
+
+  // The worker's control task queue for sending commands (e.g. cancel) via Nexus.
+  // Set when the worker reports it during poll. Empty if the worker doesn't support worker commands.
+  string worker_control_task_queue = 10;
 }
 
 message ActivityHeartbeatState {
