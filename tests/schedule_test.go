@@ -1822,11 +1822,6 @@ func testCreatesWorkflowSentinel(t *testing.T, newContext contextFactory) {
 	s.Equal(int64(1), countResp.Count)
 }
 
-// testStateSizeBytesReported verifies that the CHASM scheduler wires
-// chasm.Context.ExecutionInfo().ApproximateStateSize through to both
-// ScheduleInfo.StateSizeBytes (Describe) and ScheduleListInfo.StateSizeBytes
-// (List). The size calculation itself is covered by ApproximateStateSize unit
-// tests; this test only exercises the wiring.
 func testStateSizeBytesReported(t *testing.T, newContext contextFactory) {
 	s := testcore.NewEnv(t, scheduleCommonOpts()...)
 
