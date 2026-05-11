@@ -59,8 +59,7 @@ func (h *callbackHandler) StartCallbackExecution(
 		}
 	}
 
-	// Create the CHASM Callback in so-called "standalone" mode, where it will be the root
-	// of the CHASM execution.
+	// Create the Callback in standalone mode, where it will be the root of the CHASM execution.
 	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
@@ -110,7 +109,7 @@ func (h *callbackHandler) DescribeCallbackExecution(
 		ctx chasm.Context,
 		c *Callback,
 	) (*callbackspb.DescribeCallbackExecutionResponse, error) {
-		info, err := c.Describe(ctx)
+		info, err := c.describe(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -122,7 +121,7 @@ func (h *callbackHandler) DescribeCallbackExecution(
 			resp.Input = c.SuppliedCompletion.Get(ctx)
 		}
 		if req.FrontendRequest.GetIncludeOutcome() {
-			resp.Outcome = c.Outcome(ctx)
+			resp.Outcome = c.outcome(ctx)
 		}
 
 		return &callbackspb.DescribeCallbackExecutionResponse{
@@ -230,7 +229,7 @@ func (h *callbackHandler) PollCallbackExecution(
 		return &callbackspb.PollCallbackExecutionResponse{
 			FrontendResponse: &workflowservice.PollCallbackExecutionResponse{
 				RunId:   ctx.ExecutionKey().RunID,
-				Outcome: c.Outcome(ctx),
+				Outcome: c.outcome(ctx),
 			},
 		}, true, nil
 	}, req)
@@ -310,7 +309,7 @@ type createStandaloneCallbackInput struct {
 	SearchAttributes                 map[string]*commonpb.Payload
 }
 
-// createStandaloneCallback constructs a new Callback component in "standalone" mode.
+// createStandaloneCallback constructs a new Callback component in standalone mode.
 // The Callback is immediately transitioned to SCHEDULED state to begin invocation.
 func createStandaloneCallback(
 	ctx chasm.MutableContext,

@@ -674,7 +674,7 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_InvalidArguments() 
 			mutate: func(req *workflowservice.StartCallbackExecutionRequest) {
 				req.CallbackId = ""
 			},
-			errMsg: "CallbackId is required",
+			errMsg: "callback_id is required",
 		},
 		{
 			name: "missing callback",
@@ -721,21 +721,21 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_InvalidArguments() 
 			mutate: func(req *workflowservice.StartCallbackExecutionRequest) {
 				req.Input = nil
 			},
-			errMsg: "Completion is not set",
+			errMsg: "completion is not set",
 		},
 		{
 			name: "empty completion",
 			mutate: func(req *workflowservice.StartCallbackExecutionRequest) {
 				req.Input = &workflowservice.StartCallbackExecutionRequest_Completion{Completion: &callbackpb.CallbackExecutionCompletion{}}
 			},
-			errMsg: "Completion must have either success or failure set",
+			errMsg: "completion must have either success or failure set",
 		},
 		{
-			name: "missing schedule_to_close_timeout",
+			name: "negative schedule_to_close_timeout",
 			mutate: func(req *workflowservice.StartCallbackExecutionRequest) {
-				req.ScheduleToCloseTimeout = nil
+				req.ScheduleToCloseTimeout = durationpb.New(-time.Second)
 			},
-			errMsg: "ScheduleToCloseTimeout must be set",
+			errMsg: "schedule_to_close_timeout must be positive",
 		},
 	}
 

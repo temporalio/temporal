@@ -76,11 +76,6 @@ type Config struct {
 
 	// NOTE: The configuration setting defining the allowlist of supported callback
 	// addresses is defined in components/callbacks/config.go, via AllowedAddresses.
-	//
-	// Similarly, MaxPerExecution is missing. It is used by `Validator` and is loaded there.
-	// Once HSM callbacks (components/callbacks) are removed, the callbackValidatorProvider in
-	// frontend/fx.go can be moved into this package. And at that time, we can simply have the
-	// callback.Validator inject callback.Config. (And have a single location for all config.)
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {

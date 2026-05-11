@@ -96,7 +96,7 @@ func (h *frontendHandler) StartCallbackExecution(
 	if err := h.checkFeatureEnabled(request); err != nil {
 		return nil, err
 	}
-	if err := h.reqValidator.ValidateStartCallbackExecution(request); err != nil {
+	if err := h.reqValidator.ValidateAndNormalizeStartCallbackExecution(request); err != nil {
 		return nil, err
 	}
 
@@ -126,15 +126,17 @@ func (h *frontendHandler) DescribeCallbackExecution(
 	if err := h.checkFeatureEnabled(request); err != nil {
 		return nil, err
 	}
-	if err := h.reqValidator.ValidateDescribeCallbackExecution(request); err != nil {
-		return nil, err
-	}
 
-	// Execute
+	// Get the Namespace ID to confirm the optional long-poll token matches.
 	namespaceID, err := h.getTargetNamespace(request)
 	if err != nil {
 		return nil, err
 	}
+	if err := h.reqValidator.ValidateDescribeCallbackExecution(request, namespaceID); err != nil {
+		return nil, err
+	}
+
+	// Execute
 	resp, err := h.client.DescribeCallbackExecution(ctx, &callbackspb.DescribeCallbackExecutionRequest{
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: request,
@@ -183,7 +185,7 @@ func (h *frontendHandler) TerminateCallbackExecution(
 	if err := h.checkFeatureEnabled(request); err != nil {
 		return nil, err
 	}
-	if err := h.reqValidator.ValidateTerminateCallbackExecution(request); err != nil {
+	if err := h.reqValidator.ValidateAndNormalizeTerminateCallbackExecution(request); err != nil {
 		return nil, err
 	}
 
