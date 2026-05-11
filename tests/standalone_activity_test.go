@@ -15,6 +15,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
@@ -6326,5 +6327,146 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
+	})
+}
+
+func (s *standaloneActivityTestSuite) TestDispatchCancelCommandToWorker() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	s.OverrideDynamicConfig(dynamicconfig.EnableCancelActivityWorkerCommand, true)
+
+	controlQueueName := s.tv.ControlQueueName(s.Namespace().String())
+
+	tokenSerializer := tasktoken.NewSerializer()
+
+	// assertCancelTokenMatchesPoll verifies the cancel command's task token identifies the same
+	// activity as the poll response's token. The tokens won't be byte-identical because:
+	// 1. Matching builds poll tokens with additional fields (Clock, Version, etc.)
+	// 2. The ComponentRef version advances after state mutations (cancel/terminate)
+	// We compare the stable identity fields that the SDK uses to find the running activity.
+	assertCancelTokenMatchesPoll := func(t *testing.T, pollToken, cancelToken []byte) {
+		t.Helper()
+		pollTask, err := tokenSerializer.Deserialize(pollToken)
+		require.NoError(t, err)
+		cancelTask, err := tokenSerializer.Deserialize(cancelToken)
+		require.NoError(t, err)
+		require.Equal(t, pollTask.GetActivityId(), cancelTask.GetActivityId())
+		require.Equal(t, pollTask.GetNamespaceId(), cancelTask.GetNamespaceId())
+		require.Equal(t, pollTask.GetActivityType(), cancelTask.GetActivityType())
+		require.Equal(t, pollTask.GetAttempt(), cancelTask.GetAttempt())
+		require.NotEmpty(t, cancelTask.GetComponentRef(), "cancel token must have a ComponentRef")
+	}
+
+	// pollNexusControlQueue polls the worker commands control queue for a cancel command and
+	// returns the decoded ExecuteCommandsRequest. Returns nil if no task is received.
+	pollNexusControlQueue := func() *workerservicepb.ExecuteCommandsRequest {
+		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer pollCancel()
+		resp, err := s.FrontendClient().PollNexusTaskQueue(pollCtx, &workflowservice.PollNexusTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: controlQueueName, Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS},
+			Identity:  s.tv.WorkerIdentity(),
+		})
+		if err != nil || resp == nil || resp.Request == nil {
+			return nil
+		}
+		startOp := resp.Request.GetStartOperation()
+		if startOp == nil {
+			return nil
+		}
+		var executeReq workerservicepb.ExecuteCommandsRequest
+		if err := payload.Decode(startOp.Payload, &executeReq); err != nil {
+			return nil
+		}
+		return &executeReq
+	}
+
+	t.Run("CancelRequest", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		// Poll with a worker control task queue so the activity stores it.
+		pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
+			Identity:               s.tv.WorkerIdentity(),
+			WorkerInstanceKey:      s.tv.WorkerInstanceKey(),
+			WorkerControlTaskQueue: controlQueueName,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, pollTaskResp.TaskToken)
+
+		// Request cancellation — should dispatch cancel command to the control queue.
+		_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "canceller",
+			RequestId:  s.tv.RequestID(),
+			Reason:     "test cancel",
+		})
+		require.NoError(t, err)
+
+		var executeReq *workerservicepb.ExecuteCommandsRequest
+		s.Eventually(func() bool {
+			executeReq = pollNexusControlQueue()
+			return executeReq != nil
+		}, 15*time.Second, 100*time.Millisecond, "cancel command not received on control queue")
+
+		require.Len(t, executeReq.Commands, 1)
+		cancelCmd := executeReq.Commands[0].GetCancelActivity()
+		require.NotNil(t, cancelCmd, "expected CancelActivity command")
+		assertCancelTokenMatchesPoll(t, pollTaskResp.TaskToken, cancelCmd.TaskToken)
+	})
+
+	t.Run("Terminate", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		// Poll with a worker control task queue.
+		pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
+			Identity:               s.tv.WorkerIdentity(),
+			WorkerInstanceKey:      s.tv.WorkerInstanceKey(),
+			WorkerControlTaskQueue: controlQueueName,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, pollTaskResp.TaskToken)
+
+		// Terminate — should dispatch cancel command to the control queue.
+		_, err = s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Reason:     "test terminate",
+			Identity:   "terminator",
+		})
+		require.NoError(t, err)
+
+		var executeReq *workerservicepb.ExecuteCommandsRequest
+		s.Eventually(func() bool {
+			executeReq = pollNexusControlQueue()
+			return executeReq != nil
+		}, 15*time.Second, 100*time.Millisecond, "cancel command not received on control queue after terminate")
+
+		require.Len(t, executeReq.Commands, 1)
+		cancelCmd := executeReq.Commands[0].GetCancelActivity()
+		require.NotNil(t, cancelCmd, "expected CancelActivity command")
+		assertCancelTokenMatchesPoll(t, pollTaskResp.TaskToken, cancelCmd.TaskToken)
 	})
 }
