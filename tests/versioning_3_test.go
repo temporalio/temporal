@@ -6517,14 +6517,14 @@ func (s *Versioning3Suite) TestStalePartition_RevisionSuppressesTrampolining() {
 // when a buffered signal arrives during WFT processing).
 //
 // Flow:
-// 1. Start pinned workflow on v1; set v1 as current (stable routing).
-// 2. Trigger a regular WFT via a first signal.
-// 3. During that WFT's processing, send a second signal → gets buffered →
-//    server creates an inline WFT to deliver it.
-// 4. Poll the inline WFT and assert:
-//      - requestId == "request-from-RespondWorkflowTaskCompleted" (self-check
-//        that we actually exercised the inline path)
-//      - targetWorkerDeploymentVersionChanged == false (the bug being fixed)
+//  1. Start pinned workflow on v1; set v1 as current (stable routing).
+//  2. Trigger a regular WFT via a first signal.
+//  3. During that WFT's processing, send a second signal → gets buffered →
+//     server creates an inline WFT to deliver it.
+//  4. Poll the inline WFT and assert:
+//     - requestId == "request-from-RespondWorkflowTaskCompleted" (self-check
+//     that we actually exercised the inline path)
+//     - targetWorkerDeploymentVersionChanged == false (the bug being fixed)
 func (s *Versioning3Suite) TestInlinePath_StableRouting_NoSpuriousFlag() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
