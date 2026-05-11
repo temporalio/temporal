@@ -6544,7 +6544,7 @@ func (s *Versioning3Suite) TestInlinePath_StableRouting_NoSpuriousFlag() {
 
 	runID := s.startWorkflow(tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
-	s.WaitForChannel(ctx, wftCompleted)
+	s.WaitForChannel(ctx, wftCompleted) //nolint:staticcheck // SA1019: matches pattern used throughout versioning_3_test.go
 	s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), nil, nil)
 
 	// Trigger a regular WFT via a first signal.
