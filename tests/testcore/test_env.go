@@ -88,7 +88,6 @@ type TestOption func(*testOptions)
 type testOptions struct {
 	dedicatedCluster      bool
 	dynamicConfigSettings []dynamicConfigOverride
-	timeout               time.Duration
 }
 
 type dynamicConfigOverride struct {
@@ -122,15 +121,6 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 			o.dedicatedCluster = true
 		}
 		o.dynamicConfigSettings = append(o.dynamicConfigSettings, dynamicConfigOverride{setting: setting, value: value})
-	}
-}
-
-// WithTimeout sets a custom timeout for the test. The test will fail if it runs longer
-// than this duration. The timeout is multiplied by debug.TimeoutMultiplier when debugging.
-// The TEMPORAL_TEST_TIMEOUT environment variable can also set the default timeout in seconds.
-func WithTimeout(duration time.Duration) TestOption {
-	return func(o *testOptions) {
-		o.timeout = duration
 	}
 }
 
@@ -187,7 +177,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
 		t:                  t,
 		tv:                 testvars.New(t),
-		ctx:                setupTestTimeoutWithContext(t, options.timeout),
+		ctx:                setupTestTimeoutWithContext(t),
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 		dedicatedGuard:     dedicatedGuard,
 	}
