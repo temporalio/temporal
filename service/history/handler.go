@@ -2185,6 +2185,11 @@ func (h *Handler) CompleteNexusOperationChasm(
 			return nil, c.HandleNexusCompletion(ctx, completion)
 		},
 		completion)
+	if errors.Is(err, consts.ErrEventsAterWorkflowFinish) {
+		// The workflow execution is already closed. Convert to NOT_FOUND so the callback is
+		// permanently failed rather than retried.
+		err = consts.ErrWorkflowCompleted
+	}
 	if err != nil {
 		return nil, h.convertError(err)
 	}
