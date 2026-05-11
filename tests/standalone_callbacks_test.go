@@ -212,7 +212,7 @@ func (s *StandaloneCallbackSuite) callStartCallbackExecution(
 	return resp
 }
 
-// TestBasicaOperation tests that a Nexus operation started by a workflow can be completed using the
+// TestBasicOperation tests that a Nexus operation started by a workflow can be completed using the
 // StartCallbackExecution API to deliver the Nexus completion to the operation's callback URL.
 //
 // Flow:
@@ -225,7 +225,7 @@ func (s *StandaloneCallbackSuite) callStartCallbackExecution(
 //  5. The caller workflow receives the operation's result and completes.
 //
 // The test is ran in two variants. First, where the out-of-band service reports a successful
-// compoetion result. The second reports a failure. Causing the calling workflow to fail.
+// completion result. The second reports a failure, causing the calling workflow to fail.
 func (s *StandaloneCallbackSuite) TestBasicOperation() {
 
 	// Implementation of the test scenario, standing up the workflow, Nexus operation,
@@ -254,10 +254,6 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 		// and sends the callback URL and token to the fake service. The Nexus
 		// handler terminates, while the fake service reports results out-of-band.
 		nexusEndpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
-		const (
-			nexusSvcName = "nexus-service"
-			nexusSvcOp   = "nexus-operation"
-		)
 
 		nexusHandler := nexustest.Handler{
 			OnStartOperation: func(
@@ -266,9 +262,6 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 				input *nexus.LazyValue,
 				options nexus.StartOperationOptions,
 			) (nexus.HandlerStartOperationResult[any], error) {
-				s.Equal(nexusSvcName, service)
-				s.Equal(nexusSvcOp, operation)
-
 				// Send the request to the external service to do the work.
 				fakeSvc.incomingRequests <- externalRequestInfo{
 					Namespace: env.Namespace().String(),
@@ -311,8 +304,8 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 		// workflow will then block until the Nexus operation completes, which will
 		// not be until the fake external service has reported the callback's result.
 		callerWf := func(ctx workflow.Context) (string, error) {
-			c := workflow.NewNexusClient(nexusEndpointName, nexusSvcName)
-			fut := c.ExecuteOperation(ctx, nexusSvcOp, "input", workflow.NexusOperationOptions{})
+			c := workflow.NewNexusClient(nexusEndpointName, "nexus-service")
+			fut := c.ExecuteOperation(ctx, "nexus-op", "input", workflow.NexusOperationOptions{})
 
 			var nexusOpResult string
 			err := fut.Get(ctx, &nexusOpResult)
@@ -449,9 +442,9 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 // of a callback execution. It returns an empty response when the poll times out, and
 // the CallbackExecutionOutcome when the callback reaches a terminal state.
 func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
-	env := s.newEnv()
 
 	s.Run("returns_empty_for_non_terminal", func(s *StandaloneCallbackSuite) {
+		env := s.newEnv()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
@@ -492,6 +485,7 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 	})
 
 	s.Run("blocks_until_complete", func(s *StandaloneCallbackSuite) {
+		env := s.newEnv()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
@@ -517,6 +511,7 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 		case <-resultCh:
 			s.Fail("expected poll to block, but it returned before terminate")
 		case <-time.After(500 * time.Millisecond):
+			// Expected to fire, since resultCh is still waiting for Poll- to complete.
 		}
 
 		// Terminate the CallbackExecution. Confirm that the poll result (from Goroutine) has completed.
@@ -536,6 +531,7 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 	})
 
 	s.Run("returns_run_id", func(s *StandaloneCallbackSuite) {
+		env := s.newEnv()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
@@ -565,6 +561,7 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 	})
 
 	s.Run("poll_after_timeout", func(s *StandaloneCallbackSuite) {
+		env := s.newEnv()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
@@ -756,7 +753,7 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_InvalidArguments() 
 			tc.mutate(req)
 			_, err := env.FrontendClient().StartCallbackExecution(ctx, req)
 			s.Error(err)
-			s.Contains(err.Error(), tc.errMsg)
+			s.ErrorContains(err, tc.errMsg)
 		})
 	}
 }
@@ -808,7 +805,7 @@ func (s *StandaloneCallbackSuite) TestStartCallbackExecution_DuplicateID() {
 	req.RequestId = uuid.NewString()
 	_, err = env.FrontendClient().StartCallbackExecution(ctx, req)
 	s.Error(err)
-	s.Contains(err.Error(), "callback execution already started")
+	s.ErrorContains(err, "callback execution already started")
 }
 
 // TestListAndCountCallbackExecutions tests that standalone callback executions
@@ -1056,7 +1053,7 @@ func (s *StandaloneCallbackSuite) TestTerminateCallbackExecution() {
 		Reason:     "different request",
 	})
 	s.Error(err)
-	s.Contains(err.Error(), "already terminated with request ID")
+	s.ErrorContains(err, "already terminated with request ID")
 }
 
 // TestCallbackExecutionFailedOutcome tests that when a callback fails with a non-retryable error

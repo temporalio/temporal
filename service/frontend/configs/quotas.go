@@ -47,7 +47,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusOperationExecution": 1,
 
-		// Long-running if the outcome is the resources isn't in a terminal state.
+		// Long-running if the resources isn't in a terminal state.
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollCallbackExecution": 1,
 

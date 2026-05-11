@@ -163,35 +163,6 @@ func (a AddressMatchRule) Allow(u *url.URL) (bool, error) {
 	return true, nil
 }
 
-func allowedAddressConverter(val any) (AddressMatchRules, error) {
-	type entry struct {
-		Pattern       string
-		AllowInsecure bool
-	}
-	intermediate, err := dynamicconfig.ConvertStructure[[]entry](nil)(val)
-	if err != nil {
-		return AddressMatchRules{}, err
-	}
-
-	configs := []AddressMatchRule{}
-	for _, e := range intermediate {
-		if e.Pattern == "" {
-			// Skip configs with missing / unparsable Pattern
-			continue
-		}
-		re, err := regexp.Compile(addressPatternToRegexp(e.Pattern))
-		if err != nil {
-			// Skip configs with malformed Pattern
-			continue
-		}
-		configs = append(configs, AddressMatchRule{
-			Regexp:        re,
-			AllowInsecure: e.AllowInsecure,
-		})
-	}
-	return AddressMatchRules{Rules: configs}, nil
-}
-
 func addressPatternToRegexp(pattern string) string {
 	var result strings.Builder
 	result.WriteString("^")

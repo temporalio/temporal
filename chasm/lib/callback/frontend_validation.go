@@ -23,52 +23,16 @@ func missingRequiredFieldError(fieldName string) error {
 	return serviceerror.NewInvalidArgument(msg)
 }
 
-type callbackIder interface {
-	GetCallbackId() string
-}
-
-func verifyCallbackIDLength(reqProto callbackIder, config *Config) error {
-	l := len(reqProto.GetCallbackId())
-	maxLen := config.MaxIDLength()
-	if l > maxLen {
-		return serviceerror.NewInvalidArgumentf("callback_id exceeds length limit. Length=%d Limit=%d", l, maxLen)
+func verifyFieldLength(fieldName, fieldValue string, maxLen int) error {
+	if l := len(fieldValue); l > maxLen {
+		return serviceerror.NewInvalidArgumentf("%s exceeds length limit. Length=%d Limit=%d", fieldName, l, maxLen)
 	}
 	return nil
 }
 
-type identityer interface {
-	GetIdentity() string
-}
-
-func verifyIdentityLength(reqProto identityer, config *Config) error {
-	l := len(reqProto.GetIdentity())
-	maxLen := config.MaxIDLength()
-	if l > maxLen {
-		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d", l, maxLen)
-	}
-	return nil
-}
-
-type requestIder interface {
-	GetRequestId() string
-}
-
-func verifyRequestIDLength(reqProto requestIder, config *Config) error {
-	l := len(reqProto.GetRequestId())
-	maxLen := config.MaxIDLength()
-	if l > maxLen {
-		return serviceerror.NewInvalidArgumentf("request_id exceeds length limit. Length=%d Limit=%d", l, maxLen)
-	}
-	return nil
-}
-
-type runIder interface {
-	GetRunId() string
-}
-
-func verifyRunIDIsUUID(reqProto runIder) error {
-	if err := uuid.Validate(reqProto.GetRunId()); err != nil {
-		return serviceerror.NewInvalidArgument("invalid run_id: must be a valid UUID")
+func verifyIsUUID(fieldName, fieldValue string) error {
+	if err := uuid.Validate(fieldValue); err != nil {
+		return serviceerror.NewInvalidArgumentf("invalid %s: must be a valid UUID", fieldName)
 	}
 	return nil
 }
@@ -102,7 +66,7 @@ func (fields requiredFields) Validate() error {
 // frontendRequestValidator bundles the configuration data for validating an incoming request.
 //
 // In addition some operations may *mutate* the request object too, e.g. to ensure a valid RunID
-// is avaliable if one wasn't supplied by the caller.
+// is available if one wasn't supplied by the caller.
 type frontendRequestValidator struct {
 	config           *Config
 	cbValidator      Validator
@@ -128,13 +92,14 @@ func (rv *frontendRequestValidator) ValidateAndNormalizeStartCallbackExecution(r
 	}
 
 	// Field lengths
-	if err := verifyCallbackIDLength(req, rv.config); err != nil {
+	maxLen := rv.config.MaxIDLength()
+	if err := verifyFieldLength("callback_id", req.GetCallbackId(), maxLen); err != nil {
 		return err
 	}
-	if err := verifyIdentityLength(req, rv.config); err != nil {
+	if err := verifyFieldLength("identity", req.GetIdentity(), maxLen); err != nil {
 		return err
 	}
-	if err := verifyRequestIDLength(req, rv.config); err != nil {
+	if err := verifyFieldLength("request_id", req.GetRequestId(), maxLen); err != nil {
 		return err
 	}
 
@@ -145,19 +110,19 @@ func (rv *frontendRequestValidator) ValidateAndNormalizeStartCallbackExecution(r
 
 	// ScheduleToCloseTimeout
 	if req.GetScheduleToCloseTimeout() != nil && req.GetScheduleToCloseTimeout().AsDuration() <= 0 {
-		return serviceerror.NewInvalidArgument("schedule_to_close_timeout must be positive.")
+		return serviceerror.NewInvalidArgument("schedule_to_close_timeout must be positive")
 	}
 
 	// Validate the input data to deliver to the callback URL, currently only one kind is supported (Completion).
 	completion := req.GetCompletion()
 	if completion == nil {
-		return serviceerror.NewInvalidArgument("completion is not set on request.")
+		return serviceerror.NewInvalidArgument("completion is not set on request")
 	}
 	if completion.GetSuccess() == nil && completion.GetFailure() == nil {
-		return serviceerror.NewInvalidArgument("completion must have either success or failure set.")
+		return serviceerror.NewInvalidArgument("completion must have either success or failure set")
 	}
 	if completion.GetSuccess() != nil && completion.GetFailure() != nil {
-		return serviceerror.NewInvalidArgument("completion must have exactly one of success or failure set, not both.")
+		return serviceerror.NewInvalidArgument("completion must have exactly one of success or failure set, not both")
 	}
 	if err := rv.validateCompletionSize(req, completion); err != nil {
 		return err
@@ -173,7 +138,7 @@ func (rv *frontendRequestValidator) ValidateAndNormalizeStartCallbackExecution(r
 	return nil
 }
 
-func (rv *frontendRequestValidator) validateCompletionSize(req Namespacer, completion *callbackpb.CallbackExecutionCompletion) error {
+func (rv *frontendRequestValidator) validateCompletionSize(req namespacer, completion *callbackpb.CallbackExecutionCompletion) error {
 	ns := req.GetNamespace()
 
 	sizeWarnLimit := rv.config.BlobSizeLimitWarn(ns)
@@ -181,7 +146,7 @@ func (rv *frontendRequestValidator) validateCompletionSize(req Namespacer, compl
 
 	blobSize := proto.Size(completion)
 	if blobSize > sizeWarnLimit {
-		rv.logger.Warn("completion blob size exceeds the warning limit.",
+		rv.logger.Warn("completion blob size exceeds the warning limit",
 			tag.WorkflowNamespace(ns),
 			tag.BlobSize(int64(blobSize)))
 	}
@@ -193,7 +158,7 @@ func (rv *frontendRequestValidator) validateCompletionSize(req Namespacer, compl
 	return nil
 }
 
-func (rv *frontendRequestValidator) validateSearchAttributes(req Namespacer, saToValidate *commonpb.SearchAttributes) error {
+func (rv *frontendRequestValidator) validateSearchAttributes(req namespacer, saToValidate *commonpb.SearchAttributes) error {
 	namespaceName := req.GetNamespace()
 
 	// Unalias search attributes for validation.
@@ -224,13 +189,13 @@ func (rv *frontendRequestValidator) ValidateDescribeCallbackExecution(req *workf
 
 	// RunID (if set)
 	if req.GetRunId() != "" {
-		if err := verifyRunIDIsUUID(req); err != nil {
+		if err := verifyIsUUID("run_id", req.GetRunId()); err != nil {
 			return err
 		}
 	}
 
 	// Field lengths
-	if err := verifyCallbackIDLength(req, rv.config); err != nil {
+	if err := verifyFieldLength("callback_id", req.GetCallbackId(), rv.config.MaxIDLength()); err != nil {
 		return err
 	}
 
@@ -264,13 +229,13 @@ func (rv *frontendRequestValidator) ValidatePollCallbackExecution(req *workflows
 
 	// RunID (if set)
 	if req.GetRunId() != "" {
-		if err := verifyRunIDIsUUID(req); err != nil {
+		if err := verifyIsUUID("run_id", req.GetRunId()); err != nil {
 			return err
 		}
 	}
 
 	// Field lengths
-	return verifyCallbackIDLength(req, rv.config)
+	return verifyFieldLength("callback_id", req.GetCallbackId(), rv.config.MaxIDLength())
 }
 
 func (rv *frontendRequestValidator) ValidateAndNormalizeTerminateCallbackExecution(req *workflowservice.TerminateCallbackExecutionRequest) error {
@@ -292,28 +257,25 @@ func (rv *frontendRequestValidator) ValidateAndNormalizeTerminateCallbackExecuti
 
 	// RunID (if set)
 	if req.GetRunId() != "" {
-		if err := verifyRunIDIsUUID(req); err != nil {
+		if err := verifyIsUUID("run_id", req.GetRunId()); err != nil {
 			return err
 		}
 	}
 
-	// Field lengths
-	if err := verifyCallbackIDLength(req, rv.config); err != nil {
+	// Field lengths.
+	maxLen := rv.config.MaxIDLength()
+	if err := verifyFieldLength("callback_id", req.GetCallbackId(), maxLen); err != nil {
 		return err
 	}
-	if err := verifyIdentityLength(req, rv.config); err != nil {
+	if err := verifyFieldLength("identity", req.GetIdentity(), maxLen); err != nil {
 		return err
 	}
-	if err := verifyRequestIDLength(req, rv.config); err != nil {
+	if err := verifyFieldLength("request_id", req.GetRequestId(), maxLen); err != nil {
 		return err
 	}
 
 	// Capping reason to "MaxIDLength", despite it not really being an ID.
-	reasonLen := len(req.GetReason())
-	if reasonLen > rv.config.MaxIDLength() {
-		return serviceerror.NewInvalidArgumentf("reason exceeds length limit. Length=%d Limit=%d", reasonLen, rv.config.MaxIDLength())
-	}
-	return nil
+	return verifyFieldLength("reason", req.GetReason(), maxLen)
 }
 
 func (rv *frontendRequestValidator) ValidateDeleteCallbackExecution(req *workflowservice.DeleteCallbackExecutionRequest) error {
@@ -327,7 +289,7 @@ func (rv *frontendRequestValidator) ValidateDeleteCallbackExecution(req *workflo
 	}
 
 	// Field lengths
-	return verifyCallbackIDLength(req, rv.config)
+	return verifyFieldLength("callback_id", req.GetCallbackId(), rv.config.MaxIDLength())
 }
 
 func (rv *frontendRequestValidator) ValidateListCallbackExecutions(req *workflowservice.ListCallbackExecutionsRequest) error {

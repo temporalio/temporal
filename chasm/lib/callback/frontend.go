@@ -62,10 +62,10 @@ func NewFrontendHandler(
 	}
 }
 
-type Namespacer interface{ GetNamespace() string }
+type namespacer interface{ GetNamespace() string }
 
 // Looks up the namespace ID from the user-supplied namespace name in the request proto.
-func (h *frontendHandler) getTargetNamespace(requestProto Namespacer) (namespace.ID, error) {
+func (h *frontendHandler) getTargetNamespace(requestProto namespacer) (namespace.ID, error) {
 	targetNamespaceName := namespace.Name(requestProto.GetNamespace())
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(targetNamespaceName)
 	if err != nil {
@@ -74,7 +74,7 @@ func (h *frontendHandler) getTargetNamespace(requestProto Namespacer) (namespace
 	return namespaceID, nil
 }
 
-func (h *frontendHandler) checkFeatureEnabled(requestProto Namespacer) error {
+func (h *frontendHandler) checkFeatureEnabled(requestProto namespacer) error {
 	// Confirm CHASM is enabled.
 	targetNamespaceName := requestProto.GetNamespace()
 	if !h.config.CHASMEnabled(targetNamespaceName) || !h.config.CHASMCallbacksEnabled(targetNamespaceName) {
@@ -176,7 +176,7 @@ func (h *frontendHandler) PollCallbackExecution(
 }
 
 // TerminateCallbackExecution forcefully stops a running callback execution.
-// No-op if already in a terminal state.
+// Fails if already in a terminate state and on a different Request ID.
 func (h *frontendHandler) TerminateCallbackExecution(
 	ctx context.Context,
 	request *workflowservice.TerminateCallbackExecutionRequest,

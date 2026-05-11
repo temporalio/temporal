@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/contextutil"
-	"go.temporal.io/server/common/log"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -21,13 +20,11 @@ type callbackHandler struct {
 	callbackspb.UnimplementedCallbackServiceServer
 
 	config *Config
-	logger log.Logger
 }
 
-func newCallbackHandler(config *Config, logger log.Logger) *callbackHandler {
+func newCallbackHandler(config *Config) *callbackHandler {
 	return &callbackHandler{
 		config: config,
-		logger: logger,
 	}
 }
 
@@ -168,7 +165,7 @@ func (h *callbackHandler) DescribeCallbackExecution(
 	longpollReadFn := func(
 		c *Callback,
 		ctx chasm.Context,
-		req *callbackspb.DescribeCallbackExecutionRequest) (*callbackspb.DescribeCallbackExecutionResponse, bool, error) {
+		_ *callbackspb.DescribeCallbackExecutionRequest) (*callbackspb.DescribeCallbackExecutionResponse, bool, error) {
 		changed, err := chasm.ExecutionStateChanged(c, ctx, token)
 		if err != nil {
 			if errors.Is(err, chasm.ErrMalformedComponentRef) {
@@ -234,7 +231,7 @@ func (h *callbackHandler) PollCallbackExecution(
 		}, true, nil
 	}, req)
 
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+	if err != nil && ctx.Err() != nil {
 		// Send an empty non-error response as an invitation to resubmit the long-poll.
 		return &callbackspb.PollCallbackExecutionResponse{
 			FrontendResponse: &workflowservice.PollCallbackExecutionResponse{},
