@@ -13,7 +13,6 @@ import (
 	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workerpb "go.temporal.io/api/worker/v1"
-	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
@@ -21,6 +20,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
@@ -416,7 +416,7 @@ func (h *cancelCommandDispatchTaskHandler) dispatchToWorker(
 		return err
 	}
 
-	nexusErr := cancelCommandDispatchResponseToError(resp)
+	nexusErr := commonnexus.DispatchResponseToError(resp)
 	if nexusErr == nil {
 		metrics.WorkerCommandsSent.With(h.opts.MetricsHandler).Record(1, metrics.OutcomeTag("success"))
 		return nil
@@ -434,27 +434,4 @@ func (h *cancelCommandDispatchTaskHandler) dispatchToWorker(
 
 	metrics.WorkerCommandsSent.With(h.opts.MetricsHandler).Record(1, metrics.OutcomeTag("transport_error"))
 	return nexusErr
-}
-
-// cancelCommandDispatchResponseToError converts a DispatchNexusTaskResponse into a Go error.
-// TODO: consolidate with service/history.dispatchResponseToError into a shared package.
-func cancelCommandDispatchResponseToError(resp *matchingservice.DispatchNexusTaskResponse) error {
-	switch t := resp.GetOutcome().(type) {
-	case *matchingservice.DispatchNexusTaskResponse_Failure:
-		return temporal.GetDefaultFailureConverter().FailureToError(t.Failure)
-	case *matchingservice.DispatchNexusTaskResponse_RequestTimeout:
-		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
-	case *matchingservice.DispatchNexusTaskResponse_Response:
-		startResp := t.Response.GetStartOperation()
-		switch startResp.GetVariant().(type) {
-		case *nexuspb.StartOperationResponse_SyncSuccess, *nexuspb.StartOperationResponse_AsyncSuccess:
-			return nil
-		case *nexuspb.StartOperationResponse_Failure:
-			return temporal.GetDefaultFailureConverter().FailureToError(startResp.GetFailure())
-		default:
-			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "unknown start operation response")
-		}
-	default:
-		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "empty or unknown dispatch outcome")
-	}
 }
