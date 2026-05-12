@@ -40,8 +40,8 @@ import (
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
-	matchingclient "go.temporal.io/server/client/matching"
 	"go.temporal.io/server/client/frontend"
+	matchingclient "go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -3161,7 +3161,10 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 	// routing; the matching engine cancels all pollers for the workerInstanceKey on that host
 	// regardless of partition. Sending one RPC per host instead of one per partition reduces
 	// RPCs from numPartitions*taskTypes to numHosts*taskTypes.
-	routingClient, _ := wh.matchingClient.(matchingclient.RoutingClient)
+	routingClient, ok := wh.matchingClient.(matchingclient.RoutingClient)
+	if !ok {
+		routingClient = nil
+	}
 
 	var waitGroup sync.WaitGroup
 	var totalCancelled atomic.Int32
