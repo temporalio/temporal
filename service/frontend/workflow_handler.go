@@ -3161,7 +3161,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 	// routing; the matching engine cancels all pollers for the workerInstanceKey on that host
 	// regardless of partition. Sending one RPC per host instead of one per partition reduces
 	// RPCs from numPartitions*taskTypes to numHosts*taskTypes.
-	rc, _ := wh.matchingClient.(matchingclient.RoutingClient)
+	routingClient, _ := wh.matchingClient.(matchingclient.RoutingClient)
 
 	var waitGroup sync.WaitGroup
 	var totalCancelled atomic.Int32
@@ -3174,20 +3174,23 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 		}
 
 		tq := tqFamily.TaskQueue(taskType)
+		// Skip partitions that route to an already-visited matching host.
 		seenHosts := make(map[string]bool)
 		for partitionID := range numPartitions {
 			partition := tq.NormalPartition(partitionID)
 
-			// Skip if we've already sent an RPC to this host.
-			if rc != nil {
-				host, err := rc.Route(partition)
-				if err == nil && seenHosts[host] {
+			if routingClient != nil {
+				host, err := routingClient.Route(partition)
+				if err != nil {
+					wh.logger.Warn("Failed to resolve matching host for poll cancellation dedup, sending RPC anyway.",
+						tag.WorkflowNamespaceID(namespaceID),
+						tag.WorkflowTaskQueueName(partition.RpcName()),
+						tag.Error(err))
+				} else if seenHosts[host] {
 					continue
-				}
-				if err == nil {
+				} else {
 					seenHosts[host] = true
 				}
-				// On Route() error, fall through and send the RPC anyway.
 			}
 
 			waitGroup.Go(func() {
