@@ -4156,6 +4156,8 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 //   - RequestCancelActivity routing through CHASM instead of legacy ActivityInfo lookup
 //   - RespondActivityTaskFailed / RespondActivityTaskTimedOut CHASM branches
 //   - Cross-cluster replication of the CHASM activity sub-tree
+//
+// immediate todo: let's move the parts that we can out of the mutableStateImpl and into the CHASM addScheduledActivity component
 func (ms *MutableStateImpl) AddActivityTaskScheduledEventCHASM(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.ScheduleActivityTaskCommandAttributes,

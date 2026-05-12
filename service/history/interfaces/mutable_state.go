@@ -66,6 +66,7 @@ type (
 		AddActivityTaskScheduledEvent(int64, *commandpb.ScheduleActivityTaskCommandAttributes, bool) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error)
 		// AddActivityTaskScheduledEventCHASM schedules an activity via the CHASM framework.
 		// Returns the scheduled event ID. See mutable_state_impl.go for details.
+		// question: can we remove these CHASM hooks and instead use an idiomatic CHASM registry?
 		AddActivityTaskScheduledEventCHASM(int64, *commandpb.ScheduleActivityTaskCommandAttributes) (int64, error)
 		AddActivityTaskStartedEvent(
 			*persistencespb.ActivityInfo,

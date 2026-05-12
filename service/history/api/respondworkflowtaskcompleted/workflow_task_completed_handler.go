@@ -288,8 +288,7 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 	// all the way down but it requires a bigger refactor of the mutable state interface.
 	switch command.GetCommandType() {
 	case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
-		historyEvent, response, err = handler.handleCommandScheduleActivity(ctx, command.GetScheduleActivityTaskCommandAttributes())
-
+		historyEvent, response, err = handler.handleActivityScheduleWithMigrationSwitch(ctx, command, msgs)
 	case enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION:
 		historyEvent, err = handler.handleCommandCompleteWorkflow(ctx, command.GetCompleteWorkflowExecutionCommandAttributes())
 
@@ -540,41 +539,6 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	if handler.mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		bypassActivityTaskGeneration = true
 		eagerStartActivity = false
-	}
-
-	// TODO(david.porter): Will not merge — prototype only.
-	// CHASM-based activity dispatch is not yet production-ready. Missing:
-	//   - Retry on failure.
-	//   - Heartbeat timeout resets.
-	//   - Replication.
-	//   - Deduplication via activity ID (currently only event-ID keyed).
-	//   - Per-execution sticky bit: for production, the routing decision (CHASM vs legacy) must be
-	//     stamped on ExecutionInfo when the first CHASM activity is scheduled, not re-evaluated from
-	//     the dynamic config on every operation. This ensures flag toggling mid-execution does not
-	//     split activities across both storage paths, and allows safe rollback (new executions revert;
-	//     existing executions keep routing via their stamped bit until completion).
-	//
-	// Branch: use CHASM activity scheduling if EnableCHASMActivityPrototype is enabled for this namespace
-	// AND the CHASM tree is active for this execution (ChasmEnabled). Without the latter guard, the
-	// CHASM path would be entered even when EnableChasm=false, causing a panic in ChasmWorkflowComponent.
-	// CHASM activities live in the chasmTree as sub-components; no legacy ActivityInfo is created.
-	if handler.config.EnableCHASMActivityPrototype(namespace) && handler.mutableState.ChasmEnabled() {
-		handler.logger.Info("[CHASM prototype] routing ScheduleActivity command through CHASM",
-			tag.WorkflowNamespaceID(handler.mutableState.GetWorkflowKey().NamespaceID),
-			tag.WorkflowID(handler.mutableState.GetWorkflowKey().WorkflowID),
-			tag.WorkflowRunID(handler.mutableState.GetWorkflowKey().RunID),
-		)
-		scheduledEventID, err := handler.mutableState.AddActivityTaskScheduledEventCHASM(
-			handler.workflowTaskCompletedID,
-			attr,
-		)
-		if err != nil {
-			return nil, nil, handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_SCHEDULE_ACTIVITY_DUPLICATE_ID, err)
-		}
-		// TODO(activity-chasm): support eager activity execution for CHASM-scheduled activities.
-		// For now, return a synthetic event with only EventId set (enough for the SDK to correlate).
-		syntheticEvent := &historypb.HistoryEvent{EventId: scheduledEventID}
-		return syntheticEvent, &handleCommandResponse{}, nil
 	}
 
 	event, _, err := handler.mutableState.AddActivityTaskScheduledEvent(
@@ -1658,6 +1622,48 @@ func (handler *workflowTaskCompletedHandler) terminateWorkflow(
 	//  It is important to clear returned error if WT needs to be failed to properly add WTFailed and FailWorkflow events.
 	//  Handler will rely on stopProcessing flag and workflowTaskFailedCause field.
 	return nil
+}
+
+func (handler *workflowTaskCompletedHandler) handleActivityScheduleWithMigrationSwitch(
+	ctx context.Context,
+	command *commandpb.Command,
+	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
+) (*historypb.HistoryEvent, *handleCommandResponse, error) {
+	executionInfo := handler.mutableState.GetExecutionInfo()
+	ns, err := handler.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
+	if err != nil {
+		// todo (david.porter) Need to make this a nonfatal error, fatal for development only error
+		handler.logger.Fatal("programmatic error in resolving the namespace by ID for activity migration")
+		return handler.handleCommandScheduleActivity(ctx, command.GetScheduleActivityTaskCommandAttributes())
+	}
+
+	// if we don't support CHASM or it's not enabled for handling activities, bail out
+	// via the legacy path
+	if !handler.config.EnableChasm(string(ns.Name())) || !handler.config.EnableCHASMActivityPrototype(string(ns.Name())) {
+		return handler.handleCommandScheduleActivity(ctx, command.GetScheduleActivityTaskCommandAttributes())
+	}
+
+	handlerOpts := chasmworkflow.CommandHandlerOptions{
+		WorkflowTaskCompletedEventID: handler.workflowTaskCompletedID,
+	}
+	validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
+
+	chasmHandler, ok := handler.chasmWorkflowRegistry.CommandHandler(command.GetCommandType())
+	if !ok {
+		handler.logger.Fatal("not able to handle this command for scheduling an activity, this is a programmatic error")
+	}
+	handler.mutableState.EnsureChasmWorkflowComponent(ctx)
+	chasmWorkflow, chasmCtx, chasmErr := handler.mutableState.ChasmWorkflowComponent(ctx)
+	if chasmErr != nil {
+		return nil, nil, chasmErr
+	}
+
+	// implement the rest of this either here or in the CHASMWorkflow activity schedule component
+	// let's avoid touching the mutable state at all if possible.
+	chasmWorkflow.AddScheduledActivity(... )
+
+	err = chasmHandler(chasmCtx, chasmWorkflow, validator, command, handlerOpts)
+	return nil, nil, err
 }
 
 func newWorkflowTaskFailedCause(failedCause enumspb.WorkflowTaskFailedCause, causeErr error, terminatesWorkflow bool) *workflowTaskFailedCause {
