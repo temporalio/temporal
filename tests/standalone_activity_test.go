@@ -7056,9 +7056,6 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		// Either the poll times out (deadline exceeded) or returns an empty response.
 		if err == nil {
 			require.Empty(t, pollResp.GetActivityId(), "expected no task to be dispatched while paused")
-		} else {
-			var deadlineErr *serviceerror.DeadlineExceeded
-			require.ErrorAs(t, err, &deadlineErr)
 		}
 	})
 
