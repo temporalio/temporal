@@ -321,11 +321,29 @@ message WorkflowExecutionInfo {
 }
 
 message TimeSkippingInfo {
-  // Current time-skipping configuration for the workflow.
+  // Current time-skipping configuration applied to the workflow.
   temporal.api.workflow.v1.TimeSkippingConfig config = 1;
 
-  // Runtime history of time skipping for the workflow.
-  google.protobuf.Duration accumulated_skipped_duration = 2;
+  // Total skipped duration for the current workflow execution run, including any
+  ./* inherited skipped duration carried over from a preceding execution that started this run. */google.protobuf.Duration accumulated_skipped_duration = 2;
+
+  // The current bound based on elapsed duration for time skipping.
+  TimeSkippingBoundInfo current_elapsed_duration_bound = 3;
+}
+
+message TimeSkippingBoundInfo {
+  // Target time for a bound, expressed in virtual time.
+  google.protobuf.Timestamp target_time = 1;
+
+  // Indicates whether this bound has already been reached, used for idempotency checks.
+  bool has_reached = 2;
+
+  // Event ID of the WorkflowExecutionStartedEvent (always 1) or the most recent
+  // WorkflowExecutionOptionsUpdatedEvent that introduced the current time-skipping
+  // configuration. This is used as the task event ID for the time-skipping timer task,
+  // enabling reset and replication-conflict resolution to identify obsolete bound tasks
+  // via the standard staleness check.
+  int64 source_event_id = 3;
 }
 
 // Internal wrapper message to distinguish "never notified" (nil wrapper) from

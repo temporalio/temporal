@@ -39,7 +39,6 @@ func newInvokerWithState(ctx chasm.MutableContext, state *schedulerpb.InvokerSta
 	i := &Invoker{
 		InvokerState: state,
 	}
-	i.addTasks(ctx)
 	return i
 }
 

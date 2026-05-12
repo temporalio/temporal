@@ -65,6 +65,9 @@ enum TaskType {
 
   // A task to send worker commands via Nexus.
   TASK_TYPE_WORKER_COMMANDS = 35;
+
+  // A timer task that fires when an elapsed-duration time-skipping bound is reached.
+  TASK_TYPE_TIMESKIPPING_TIMER = 36;
 }
 
 // TaskPriority is only used for replication task as of May 2024

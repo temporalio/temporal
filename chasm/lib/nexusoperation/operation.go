@@ -2,6 +2,7 @@ package nexusoperation
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,7 @@ import (
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/softassert"
@@ -44,6 +46,13 @@ var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancel
 // ErrOperationAlreadyCompleted is returned when trying to cancel an operation that has already completed.
 var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation already completed")
 
+const (
+	// standaloneOperationWorkflowTypeName is the workflow type for tagging standalone operations.
+	// Used as the WorkflowTypeTag in metrics emitted from standalone operations.
+	// Do not change. It is exposed in metrics.
+	standaloneOperationWorkflowTypeName = "__temporal_standalone_nexus_operation__"
+)
+
 // InvocationData contains data needed to invoke a Nexus operation.
 type InvocationData struct {
 	// Input is the operation input payload.
@@ -69,6 +78,7 @@ type OperationStore interface {
 	OnNexusOperationCancellationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	// NexusOperationInvocationData loads invocation data (Input, Header, NexusLinks) from the scheduled history event.
 	NexusOperationInvocationData(ctx chasm.Context, operation *Operation) (InvocationData, error)
+	WorkflowTypeName() string
 }
 
 // Operation is a CHASM component that represents a Nexus operation.
@@ -117,7 +127,6 @@ func newStandaloneOperation(
 		UserMetadata: frontendReq.GetUserMetadata(),
 		Identity:     frontendReq.GetIdentity(),
 	})
-	op.Outcome = chasm.NewDataField(ctx, &nexusoperationpb.OperationOutcome{})
 	op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibilityWithData(
 		ctx,
 		frontendReq.GetSearchAttributes().GetIndexedFields(),
@@ -398,7 +407,10 @@ func (o *Operation) Terminate(
 		}
 		return chasm.TerminateComponentResponse{}, nil
 	}
-	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(o, ctx, EventTerminated{TerminateComponentRequest: req})
+
+	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(o, ctx, EventTerminated{
+		TerminateComponentRequest: req,
+	})
 }
 
 func (o *Operation) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {
@@ -549,6 +561,98 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 	}
 
 	return info
+}
+
+// metricsHandler returns a metrics handler enriched with nexus operation tags.
+func (o *Operation) metricsHandler(ctx chasm.Context) metrics.Handler {
+	namespaceName := ctx.NamespaceEntry().Name().String()
+
+	wftt := standaloneOperationWorkflowTypeName
+	if store, ok := o.Store.TryGet(ctx); ok {
+		wftt = store.WorkflowTypeName()
+	}
+	tags := []metrics.Tag{
+		metrics.NamespaceTag(namespaceName),
+		metrics.NexusEndpointTag(o.GetEndpoint()),
+		metrics.WorkflowTypeTag(wftt),
+	}
+
+	opCtx, ok := ctx.Value(OperationContextKey).(*OperationContext)
+	if !ok {
+		softassert.Fail(ctx.Logger(), "operation context missing")
+	} else {
+		conf := opCtx.MetricTagConfig()
+		if conf.IncludeServiceTag {
+			tags = append(tags, metrics.NexusServiceTag(o.GetService()))
+		}
+		if conf.IncludeOperationTag {
+			tags = append(tags, metrics.NexusOperationTag(o.GetOperation()))
+		}
+	}
+
+	return ctx.MetricsHandler().WithTags(tags...)
+}
+
+func (o *Operation) emitOnSucceededMetrics(ctx chasm.Context, closeTime time.Time) {
+	outcomeTag := metrics.OutcomeTag(
+		strings.ToLower(nexusoperationpb.OPERATION_STATUS_SUCCEEDED.String()),
+	)
+	handler := o.metricsHandler(ctx)
+	NexusOperationSuccessCount.With(handler).Record(1)
+	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
+}
+
+func (o *Operation) emitOnFailedMetrics(ctx chasm.Context, closeTime time.Time) {
+	outcomeTag := metrics.OutcomeTag(
+		strings.ToLower(nexusoperationpb.OPERATION_STATUS_FAILED.String()),
+	)
+	handler := o.metricsHandler(ctx)
+	NexusOperationFailedCount.With(handler).Record(1)
+	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
+}
+
+func (o *Operation) emitOnCanceledMetrics(ctx chasm.Context, closeTime time.Time) {
+	outcomeTag := metrics.OutcomeTag(
+		strings.ToLower(nexusoperationpb.OPERATION_STATUS_CANCELED.String()),
+	)
+	handler := o.metricsHandler(ctx)
+	NexusOperationCancelCount.With(handler).Record(1)
+	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
+}
+
+func (o *Operation) emitOnTimedOutMetrics(ctx chasm.Context, closeTime time.Time, timeoutType string) {
+	outcomeTag := metrics.OutcomeTag(
+		strings.ToLower(nexusoperationpb.OPERATION_STATUS_TIMED_OUT.String()),
+	)
+	handler := o.metricsHandler(ctx)
+	NexusOperationTimeoutCount.With(handler).Record(1, metrics.TimeoutTypeTag(timeoutType))
+	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
+}
+
+func (o *Operation) emitOnTerminatedMetrics(ctx chasm.Context, closeTime time.Time) {
+	outcomeTag := metrics.OutcomeTag(
+		strings.ToLower(nexusoperationpb.OPERATION_STATUS_TERMINATED.String()),
+	)
+	handler := o.metricsHandler(ctx)
+	NexusOperationTerminateCount.With(handler).Record(1)
+	o.emitLatencyMetrics(handler, closeTime, outcomeTag)
+}
+
+// emitLatencyMetrics emits schedule-to-close, schedule-to-start, and start-to-close latencies.
+func (o *Operation) emitLatencyMetrics(handler metrics.Handler, closeTime time.Time, outcomeTag metrics.Tag) {
+	scheduledTime := o.GetScheduledTime().AsTime()
+	NexusOperationScheduleToCloseLatency.With(handler).Record(closeTime.Sub(scheduledTime), outcomeTag)
+
+	startedTime := o.GetStartedTime()
+	if startedTime != nil {
+		// Async operation that was started.
+		// Schedule-to-start latency is emitted in TransitionStarted.
+		NexusOperationStartToCloseLatency.With(handler).Record(closeTime.Sub(startedTime.AsTime()), outcomeTag)
+	} else {
+		// Sync operation or operation that never started.
+		// For sync ops, schedule-to-start equals schedule-to-close.
+		NexusOperationScheduleToStartLatency.With(handler).Record(closeTime.Sub(scheduledTime))
+	}
 }
 
 func (o *Operation) closeTime(ctx chasm.Context) *timestamppb.Timestamp {

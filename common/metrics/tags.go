@@ -571,3 +571,7 @@ func PersistenceDBKindTag(kind string) Tag {
 func HeaderCallsiteTag(kind string) Tag {
 	return Tag{Key: headerCallsiteTagName, Value: kind}
 }
+
+func TimeoutTypeTag(timeoutType string) Tag {
+	return Tag{Key: timeoutTypeTagName, Value: timeoutType}
+}

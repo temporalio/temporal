@@ -52,7 +52,7 @@ func (s *PrematureEosTestSuite) Test_SpeculativeWFTEventsLostAfterSignalMidHisto
 	// leaving batches [6] and [7] for the second page.
 	const maxBatchesPerPage = 3
 
-	env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
+	env := testcore.NewEnv(s.T())
 	tv := env.Tv()
 	runID := mustStartWorkflow(env, tv)
 	wfExecution := &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID}

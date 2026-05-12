@@ -3,6 +3,7 @@ package workflow
 import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.uber.org/fx"
 )
 
@@ -11,8 +12,17 @@ var Module = fx.Module(
 	fx.Provide(NewConfig),
 	fx.Provide(NewRegistry),
 	fx.Provide(newLibrary),
-	fx.Invoke(func(registry *chasm.Registry, library *library) error {
-		return registry.Register(library)
+	fx.Invoke(func(
+		chasmRegistry *chasm.Registry,
+		library *library,
+		config *nexusoperation.Config,
+	) error {
+		if err := library.registry.Register(
+			newNexusLibrary(config, chasmRegistry.NexusEndpointProcessor),
+		); err != nil {
+			return err
+		}
+		return chasmRegistry.Register(library)
 	}),
 	fx.Invoke(func(library *library, historyHandler historyservice.HistoryServiceServer) {
 		library.workflowServiceNexusHandler.setHistoryHandler(historyHandler)
