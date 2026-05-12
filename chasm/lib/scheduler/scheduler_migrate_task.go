@@ -77,7 +77,19 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 	schedulerRef chasm.ComponentRef,
 	_ chasm.TaskAttributes,
 	_ *schedulerpb.SchedulerMigrateToWorkflowTask,
-) error {
+) (retErr error) {
+	metricsHandler := h.metricsHandler.WithTags(
+		metrics.StringTag(metrics.ScheduleMigrationDirectionTag, metrics.ScheduleMigrationDirectionToWorkflow),
+	)
+	metricsHandler.Counter(metrics.ScheduleMigrationStarted.Name()).Record(1)
+	defer func() {
+		if retErr != nil {
+			metricsHandler.Counter(metrics.ScheduleMigrationFailed.Name()).Record(1)
+		} else {
+			metricsHandler.Counter(metrics.ScheduleMigrationCompleted.Name()).Record(1)
+		}
+	}()
+
 	// Read state and convert to V1 args inside the ReadComponent callback,
 	// where we have access to the CHASM context for consistent time.
 	type readResult struct {
