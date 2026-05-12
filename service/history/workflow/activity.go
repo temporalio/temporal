@@ -76,6 +76,7 @@ func UpdateActivityInfoForRetries(
 	ai.StartVersion = common.EmptyVersion
 	ai.RequestId = ""
 	ai.StartedTime = nil
+	ai.StartedClock = nil
 	// Mark per-attempt timers for recreation.
 	ai.TimerTaskStatus &^= TimerTaskStatusCreatedHeartbeat | TimerTaskStatusCreatedStartToClose | TimerTaskStatusCreatedScheduleToStart
 	ai.RetryLastWorkerIdentity = ai.StartedIdentity

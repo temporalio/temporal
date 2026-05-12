@@ -6434,6 +6434,7 @@ func (ms *MutableStateImpl) RetryActivity(
 			activityInfo.StartedEventId = common.EmptyEventID
 			activityInfo.StartVersion = common.EmptyVersion
 			activityInfo.StartedTime = nil
+			activityInfo.StartedClock = nil
 			activityInfo.RequestId = ""
 			activityInfo.RetryLastFailure = ms.truncateRetryableActivityFailure(activityFailure)
 			activityInfo.Attempt++
