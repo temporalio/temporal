@@ -1539,6 +1539,11 @@ Don't change this on a live cluster without using the gradual change mechanism.
 		true,
 		`EnableReplicationStream turn on replication stream`,
 	)
+	EnableCloseInboundReplicationStreamOnShutdown = NewGlobalBoolSetting(
+		"history.enableCloseInboundReplicationStreamOnShutdown",
+		true,
+		`EnableCloseInboundReplicationStreamOnShutdown closes inbound replication streams on shutdown, signaling the remote sender to stop. Disable if this causes unexpected issues during rolling restarts.`,
+	)
 	EnableSeparateReplicationEnableFlag = NewGlobalBoolSetting(
 		"history.enableSeparateReplicationEnableFlag",
 		false,
@@ -1566,8 +1571,21 @@ execution is deleted. When enabled, workflow deletions on the active cluster wil
 	HistoryNamespaceRPS = NewNamespaceIntSetting(
 		"history.namespaceRPS",
 		0,
-		`HistoryNamespaceRPS is namespace rate limit per second for each history host. 
+		`HistoryNamespaceRPS is namespace rate limit per second for each history host.
 If value less or equal to 0, will fall back to HistoryRPS`,
+	)
+	EnableHistoryNamespaceFairness = NewGlobalBoolSetting(
+		"history.enableNamespaceFairness",
+		false,
+		`EnableHistoryNamespaceFairness turns on per-namespace fair-share demotion in the history host RPS rate limiter.
+Requests from namespaces exceeding their fair share (computed from scaleFactor and the namespace's frontend cluster-wide
+RPS budget) are routed to a lower-priority bucket`,
+	)
+	HistoryNamespaceFairShareMultiplier = NewGlobalFloatSetting(
+		"history.namespaceFairShareMultiplier",
+		1.0,
+		`HistoryNamespaceFairShareMultiplier scales the per-namespace fair share used by the history host RPS rate limiter.
+share(ns) = scaleFactor * FrontendGlobalNamespaceRPS(ns) * HistoryNamespaceFairShareMultiplier`,
 	)
 	HistoryPersistenceMaxQPS = NewGlobalIntSetting(
 		"history.persistenceMaxQPS",
@@ -2900,7 +2918,7 @@ instead of the existing (V1) implementation.`,
 
 	EnableCHASMSchedulerRouting = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerRouting",
-		false,
+		true,
 		`EnableCHASMSchedulerRouting controls whether schedule RPCs are routed to the CHASM (V2) implementation
 first (with fallback to V1), excluding CreateSchedule.`,
 	)
@@ -2914,7 +2932,7 @@ to the CHASM (V2) implementation on active scheduler workflows.`,
 
 	EnableCHASMSchedulerSentinels = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerSentinels",
-		false,
+		true,
 		`EnableCHASMSchedulerSentinels enables ID-space collision sentinels, and must be enabled and propagated in advance of EnableCHASMSchedulerCreation.`,
 	)
 
@@ -3227,6 +3245,12 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"limit.userMetadataDetailsSize",
 		20000,
 		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
+	)
+
+	MaxServiceErrorMessageLength = NewGlobalIntSetting(
+		"system.maxServiceErrorMessageLength",
+		4000,
+		"MaxServiceErrorMessageLength is the max length of service error message. If it's longer, it will be truncated.",
 	)
 
 	LogAllReqErrors = NewNamespaceBoolSetting(

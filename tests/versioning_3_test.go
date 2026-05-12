@@ -6511,6 +6511,106 @@ func (s *Versioning3Suite) TestStalePartition_RevisionSuppressesTrampolining() {
 		})
 }
 
+// TestInlinePath_StableRouting_NoSpuriousFlag verifies that a PINNED workflow
+// on stable routing does NOT receive targetWorkerDeploymentVersionChanged=true
+// on WFTs created via the inline path in RespondWorkflowTaskCompleted (e.g.,
+// when a buffered signal arrives during WFT processing).
+//
+// Flow:
+//  1. Start pinned workflow on v1; set v1 as current (stable routing).
+//  2. Trigger a regular WFT via a first signal.
+//  3. During that WFT's processing, send a second signal → gets buffered →
+//     server creates an inline WFT to deliver it.
+//  4. Poll the inline WFT and assert:
+//     - requestId == "request-from-RespondWorkflowTaskCompleted" (self-check
+//     that we actually exercised the inline path)
+//     - targetWorkerDeploymentVersionChanged == false (the bug being fixed)
+func (s *Versioning3Suite) TestInlinePath_StableRouting_NoSpuriousFlag() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// Async poller for first WFT, declares pinned behavior
+	wftCompleted := make(chan struct{})
+	s.pollWftAndHandle(tv1, false, wftCompleted,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tv1, false, vbPinned), nil
+		})
+
+	s.waitForDeploymentDataPropagation(tv1, versionStatusInactive, false, tqTypeWf)
+	s.setCurrentDeployment(tv1)
+
+	runID := s.startWorkflow(tv1, nil)
+	execution := tv1.WithRunID(runID).WorkflowExecution()
+	s.WaitForChannel(ctx, wftCompleted) //nolint:staticcheck // SA1019: matches pattern used throughout versioning_3_test.go
+	s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), nil, nil)
+
+	// Trigger a regular WFT via a first signal.
+	_, err := s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         s.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv1.WorkflowID()},
+		SignalName:        "first-signal",
+		Identity:          tv1.WorkerIdentity(),
+	})
+	s.NoError(err)
+
+	// Process the WFT for the first signal; during processing send a second signal
+	// that will be buffered. Set ReturnNewWorkflowTask=true so the server takes the
+	// bypassTaskGeneration path and embeds the inline follow-up WFT in the response.
+	poller, resp := s.pollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			_, err := s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+				Namespace:         s.Namespace().String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv1.WorkflowID()},
+				SignalName:        "buffered-signal",
+				Identity:          tv1.WorkerIdentity(),
+			})
+			s.NoError(err)
+			reply := respondEmptyWft(tv1, false, vbPinned)
+			reply.ReturnNewWorkflowTask = true
+			return reply, nil
+		})
+
+	// The inline follow-up WFT should be embedded in the response.
+	s.NotNil(resp)
+	inlineTask := resp.GetWorkflowTask()
+	s.NotNil(inlineTask, "expected inline follow-up WFT in RespondWorkflowTaskCompletedResponse")
+
+	// Self-verification: WFT-Started event from the inline path carries the marker requestId.
+	var lastStarted *historypb.HistoryEvent
+	for _, e := range inlineTask.GetHistory().GetEvents() {
+		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+			lastStarted = e
+		}
+	}
+	s.NotNil(lastStarted)
+	s.Equal("request-from-RespondWorkflowTaskCompleted",
+		lastStarted.GetWorkflowTaskStartedEventAttributes().GetRequestId(),
+		"inline WFT-Started event should carry the marker requestId (test exercises inline path)")
+	// Core assertion.
+	s.False(lastStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+		"inline WFT on stable routing must NOT fire targetWorkerDeploymentVersionChanged=true")
+
+	// Complete the inline WFT to finish the workflow.
+	_, err = poller.HandleWorkflowTask(tv1, inlineTask,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return respondCompleteWorkflow(tv1, vbPinned), nil
+		})
+	s.NoError(err)
+
+	// Sanity: full history should have no WFT-Started event with the flag.
+	events := s.GetHistory(s.Namespace().String(), execution)
+	for _, e := range events {
+		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+			s.False(e.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+				"no WFT-Started event should have flag=true on stable routing (event %d)", e.GetEventId())
+		}
+	}
+}
+
 // TestRetryOfDeclinedCaN_SignalsOnNewTarget verifies that when a CaN'd run
 // ,which declined to upgrade, fails and is retried by the server, the retry
 // run inherits NotificationSuppressedTargetVersion from the original CaN

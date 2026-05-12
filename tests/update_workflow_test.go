@@ -44,17 +44,17 @@ func speculativeWorkflowTaskOutcomes(
 	return
 }
 
-func clearUpdateRegistryAndAbortPendingUpdates(s testcore.Env, tv *testvars.TestVars) {
+func clearUpdateRegistryAndAbortPendingUpdates(s *testcore.TestEnv, tv *testvars.TestVars) {
 	closeShard(s, tv.WorkflowID())
 }
 
-func loseUpdateRegistryAndAbandonPendingUpdates(s testcore.Env, tv *testvars.TestVars) {
+func loseUpdateRegistryAndAbandonPendingUpdates(s *testcore.TestEnv, tv *testvars.TestVars) {
 	cleanup := s.OverrideDynamicConfig(dynamicconfig.ShardFinalizerTimeout, 0)
 	defer cleanup()
 	closeShard(s, tv.WorkflowID())
 }
 
-func closeShard(s testcore.Env, wid string) {
+func closeShard(s *testcore.TestEnv, wid string) {
 	s.T().Helper()
 
 	resp, err := s.FrontendClient().DescribeNamespace(testcore.NewContext(s.Context()), &workflowservice.DescribeNamespaceRequest{

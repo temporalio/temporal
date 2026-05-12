@@ -344,6 +344,7 @@ func NewWorkflowHandler(
 		namespaceHandler: newNamespaceHandler(
 			logger,
 			persistenceMetadataManager,
+			namespaceRegistry,
 			clusterMetadata,
 			nsreplication.NewReplicator(namespaceReplicationQueue, logger),
 			archivalMetadata,
@@ -1531,6 +1532,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
 	// Else this should be a validation error.
 	var componentRef []byte
+	var attempt int32 = 1
 	if workflowID == "" {
 		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
 			return nil, errWorkflowIDNotSet
@@ -1546,6 +1548,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		if err != nil {
 			return nil, err
 		}
+		attempt = activity.ByIDTokenAttempt
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1555,7 +1558,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		common.EmptyEventID,
 		activityID,
 		"",
-		1,
+		attempt,
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
@@ -1726,6 +1729,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
 	// Else this should be a validation error.
 	var componentRef []byte
+	var attempt int32 = 1
 	if workflowID == "" {
 		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
 			return nil, errWorkflowIDNotSet
@@ -1741,6 +1745,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		if err != nil {
 			return nil, err
 		}
+		attempt = activity.ByIDTokenAttempt
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1750,7 +1755,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		common.EmptyEventID,
 		activityID,
 		"",
-		1,
+		attempt,
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
@@ -1934,6 +1939,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
 	// Else this should be a validation error.
 	var componentRef []byte
+	var attempt int32 = 1
 	if workflowID == "" {
 		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
 			return nil, errWorkflowIDNotSet
@@ -1949,6 +1955,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		if err != nil {
 			return nil, err
 		}
+		attempt = activity.ByIDTokenAttempt
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1958,7 +1965,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		common.EmptyEventID,
 		activityID,
 		"",
-		1,
+		attempt,
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
@@ -2134,6 +2141,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
 	// Else this should be a validation error.
 	var componentRef []byte
+	var attempt int32 = 1
 	if workflowID == "" {
 		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
 			return nil, errWorkflowIDNotSet
@@ -2149,6 +2157,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		if err != nil {
 			return nil, err
 		}
+		attempt = activity.ByIDTokenAttempt
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -2158,7 +2167,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		common.EmptyEventID,
 		activityID,
 		"",
-		1,
+		attempt,
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
@@ -4942,18 +4951,29 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 		return nil, errSchedulesNotAllowed
 	}
 
-	// Prefer CHASM scheduler if enabled.
-	if wh.chasmSchedulerEnabled(ctx, request.Namespace) {
-		res, err := wh.deleteScheduleCHASM(ctx, request)
-		if err == nil {
-			return res, nil
-		}
-		if !isSchedulerErrorLegacyRoutable(err) {
-			return nil, err
-		}
+	// Always attempt deletion in both stacks. A schedule may exist in either or
+	// both during dual-stack migration (and a V1 sentinel may linger after a
+	// CHASM-only create). Surface an error only when neither stack succeeded.
+	chasmEnabled := wh.chasmSchedulerEnabled(ctx, request.Namespace)
+
+	var chasmErr error
+	if chasmEnabled {
+		_, chasmErr = wh.deleteScheduleCHASM(ctx, request)
+	}
+	_, v1Err := wh.deleteScheduleWorkflow(ctx, request)
+
+	// At least one side actually deleted → success.
+	if (chasmEnabled && chasmErr == nil) || v1Err == nil {
+		return &workflowservice.DeleteScheduleResponse{}, nil
 	}
 
-	return wh.deleteScheduleWorkflow(ctx, request)
+	// Neither side deleted. Surface a real (non-routable) CHASM failure first;
+	// otherwise return the V1 error (which is either a real failure or the
+	// canonical NotFound when neither stack had the schedule).
+	if chasmEnabled && chasmErr != nil && !isSchedulerErrorLegacyRoutable(chasmErr) {
+		return nil, chasmErr
+	}
+	return nil, v1Err
 }
 
 func (wh *WorkflowHandler) deleteScheduleCHASM(ctx context.Context, request *workflowservice.DeleteScheduleRequest) (*workflowservice.DeleteScheduleResponse, error) {
@@ -7370,4 +7390,20 @@ func (wh *WorkflowHandler) UnpauseWorkflowExecution(ctx context.Context, request
 	}
 
 	return &workflowservice.UnpauseWorkflowExecutionResponse{}, nil
+}
+
+func (wh *WorkflowHandler) PauseActivityExecution(context.Context, *workflowservice.PauseActivityExecutionRequest) (*workflowservice.PauseActivityExecutionResponse, error) {
+	return nil, serviceerror.NewUnimplemented("PauseActivityExecution not implemented")
+}
+
+func (wh *WorkflowHandler) ResetActivityExecution(context.Context, *workflowservice.ResetActivityExecutionRequest) (*workflowservice.ResetActivityExecutionResponse, error) {
+	return nil, serviceerror.NewUnimplemented("ResetActivityExecution not implemented")
+}
+
+func (wh *WorkflowHandler) UnpauseActivityExecution(context.Context, *workflowservice.UnpauseActivityExecutionRequest) (*workflowservice.UnpauseActivityExecutionResponse, error) {
+	return nil, serviceerror.NewUnimplemented("UnpauseActivityExecution not implemented")
+}
+
+func (wh *WorkflowHandler) UpdateActivityExecutionOptions(context.Context, *workflowservice.UpdateActivityExecutionOptionsRequest) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
+	return nil, serviceerror.NewUnimplemented("UpdateActivityExecutionOptions not implemented")
 }

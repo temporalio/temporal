@@ -106,6 +106,9 @@ func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context,
 	// Record Nexus-specific metrics
 	metrics.NexusRequests.With(c.metricsHandler).Record(1)
 	metrics.NexusLatency.With(c.metricsHandler).Record(time.Since(c.requestStartTime))
+	if *errPtr != nil {
+		metrics.NexusRequestErrors.With(c.metricsHandler).Record(1)
+	}
 
 	// Record general telemetry metrics
 	metrics.ServiceRequests.With(c.metricsHandlerForInterceptors).Record(1)

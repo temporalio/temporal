@@ -188,3 +188,7 @@ func (w *Workflow) HasIncomingSignalEvent(_ chasm.Context, requestID string) boo
 func (w *Workflow) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool {
 	return w.MSPointer.HasAnyBufferedEvent(filter)
 }
+
+func (w *Workflow) WorkflowTypeName() string {
+	return w.GetWorkflowTypeName()
+}
