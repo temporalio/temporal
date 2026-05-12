@@ -14,8 +14,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	commonclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
@@ -163,6 +165,24 @@ func (s *retryActivitySuite) TestRetryActivity_should_be_scheduled_when_next_bac
 	s.Equal(scheduledTime, s.activity.ScheduledTime.AsTime(), "Activity scheduled time is incorrect")
 	// s.Equal(s.nextBackoffStub.expected, s.nextBackoffStub.recorded)
 	s.assertTruncateFailureCalled()
+}
+
+func (s *retryActivitySuite) TestRetryActivity_should_clear_per_attempt_fields() {
+	s.mutableState.timeSource = s.timeSource
+	taskGeneratorMock := NewMockTaskGenerator(s.controller)
+	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity)
+	s.mutableState.taskGenerator = taskGeneratorMock
+
+	// Set per-attempt fields that should be cleared on retry.
+	s.activity.StartedClock = &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 42}
+	s.activity.StartedTime = timestamppb.Now()
+
+	_, err := s.mutableState.RetryActivity(s.activity, s.failure)
+	s.NoError(err)
+
+	s.Nil(s.activity.StartedClock, "StartedClock should be cleared on retry")
+	s.Nil(s.activity.StartedTime, "StartedTime should be cleared on retry")
+	s.Equal(common.EmptyEventID, s.activity.StartedEventId, "StartedEventId should be reset to EmptyEventID")
 }
 
 // TestRetryActivity_should_be_scheduled_when_next_retry_delay_is_set asserts that the activity is retried after NextRetryDelay period specified in the application failure.
