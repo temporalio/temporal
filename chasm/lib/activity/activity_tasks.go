@@ -422,16 +422,42 @@ func (h *cancelCommandDispatchTaskHandler) dispatchToWorker(
 		return nil
 	}
 
-	// Non-retryable errors are dropped — the activity will eventually time out.
+	return h.handleDispatchError(nexusErr, controlQueue)
+}
+
+func (h *cancelCommandDispatchTaskHandler) handleDispatchError(nexusErr error, controlQueue string) error {
 	var handlerErr *nexus.HandlerError
-	if errors.As(nexusErr, &handlerErr) && !handlerErr.Retryable() {
-		h.opts.Logger.Error("Cancel command non-retryable error",
+	if errors.As(nexusErr, &handlerErr) {
+		// Handler-level error (transport, timeout, internal).
+		if handlerErr.Type == nexus.HandlerErrorTypeUpstreamTimeout {
+			h.opts.Logger.Warn("No worker polling control queue",
+				tag.NewStringTag("control_queue", controlQueue))
+			metrics.WorkerCommandsSent.With(h.opts.MetricsHandler).Record(1, metrics.OutcomeTag("no_poller"))
+			return nexusErr
+		}
+
+		if !handlerErr.Retryable() {
+			h.opts.Logger.Error("Cancel command non-retryable handler error",
+				tag.NewStringTag("control_queue", controlQueue),
+				tag.Error(nexusErr))
+			metrics.WorkerCommandsSent.With(h.opts.MetricsHandler).Record(1, metrics.OutcomeTag("non_retryable_error"))
+			return nil
+		}
+
+		h.opts.Logger.Warn("Cancel command transport failure",
 			tag.NewStringTag("control_queue", controlQueue),
 			tag.Error(nexusErr))
-		metrics.WorkerCommandsSent.With(h.opts.MetricsHandler).Record(1, metrics.OutcomeTag("non_retryable_error"))
-		return nil
+		metrics.WorkerCommandsSent.With(h.opts.MetricsHandler).Record(1, metrics.OutcomeTag("transport_error"))
+		return nexusErr
 	}
 
-	metrics.WorkerCommandsSent.With(h.opts.MetricsHandler).Record(1, metrics.OutcomeTag("transport_error"))
-	return nexusErr
+	// Worker-returned failure (ApplicationError, CanceledError, etc.). The worker received
+	// and processed the request but returned an error. Permanent — the worker contract
+	// requires success for all defined commands, so this indicates a bug or version
+	// incompatibility. Retrying won't help.
+	h.opts.Logger.Error("Worker returned failure for cancel command",
+		tag.NewStringTag("control_queue", controlQueue),
+		tag.Error(nexusErr))
+	metrics.WorkerCommandsSent.With(h.opts.MetricsHandler).Record(1, metrics.OutcomeTag("worker_error"))
+	return nil
 }

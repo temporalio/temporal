@@ -202,7 +202,8 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 }
 
 // buildCancelCommandTaskToken builds the serialized task token for a cancel command.
-// This token matches what the worker received when the activity was dispatched.
+// This token identifies the same activity as the poll response token but is not byte-identical —
+// matching builds poll tokens with additional fields (Clock, Version, etc.).
 func (a *Activity) buildCancelCommandTaskToken(ctx chasm.Context, activityRef chasm.ComponentRef) ([]byte, error) {
 	componentRefBytes, err := ctx.Ref(a)
 	if err != nil {
