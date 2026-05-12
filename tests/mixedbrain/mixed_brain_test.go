@@ -8,11 +8,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/temporalio/omes/devserver"
+	"go.temporal.io/server/common/headers"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -69,88 +73,98 @@ var scenarios = []omesScenario{
 	},
 }
 
-// TestMixedBrain starts two servers in parallel, one using the current branch's binary
-// and the other using the latest release binary. It then runs the Omes
-// throughput_stress and scheduler_stress scenarios to ensure that the mixed
-// brain works correctly.
-// Uses SQLite locally; and a dedicated database in CI for better concurrency.
+// TestMixedBrain starts two servers in parallel — one built from the current
+// branch's source tree and the other from the latest release tag of the
+// previous minor — joined into a single logical cluster, and runs Omes
+// scenarios through a round-robin TCP proxy to exercise both.
+// Server lifecycle (clone + build + config + process) is delegated to
+// github.com/temporalio/omes/devserver.
 func TestMixedBrain(t *testing.T) {
 	tmpDir := t.TempDir()
 	logRoot := logDir(t)
 
-	currentBinary := filepath.Join(tmpDir, "temporal-server-current")
-	releaseBinary := filepath.Join(tmpDir, "temporal-server-release")
 	omesBinary := filepath.Join(tmpDir, "omes-bin")
 
-	currentLog := filepath.Join(logRoot, "mixedbrain_process-current.log")
-	releaseLog := filepath.Join(logRoot, "mixedbrain_process-release.log")
-
+	var releaseTag string
 	t.Run("setup", func(t *testing.T) {
-		t.Run("build current server", func(t *testing.T) {
+		t.Run("resolve release tag", func(t *testing.T) {
 			t.Parallel()
-			buildServer(t, sourceRoot(), currentBinary)
+			releaseTag = fetchPreviousMinorTag(t)
+			t.Logf("Release tag: %s (current server version: %s)", releaseTag, headers.ServerVersion)
 		})
-		t.Run("download and build release server", func(t *testing.T) {
+		t.Run("build omes binary", func(t *testing.T) {
 			t.Parallel()
-			downloadAndBuildReleaseServer(t, releaseBinary)
-		})
-		t.Run("download and build Omes", func(t *testing.T) {
-			t.Parallel()
-			downloadAndBuildOmes(t, tmpDir)
+			downloadAndBuildOmes(t, tmpDir, omesBinary)
 		})
 	})
 	if t.Failed() {
 		return
 	}
 
-	var portsCurrent, portsRelease portSet
-	if os.Getenv("CI") != "" {
-		portsCurrent = portSetA
-		portsRelease = portSetB
-	} else {
-		portsCurrent = newRandPortSet()
-		portsRelease = newRandPortSet()
+	persistence := persistenceFromEnv()
+	// postgres' cluster_membership.rpc_port is SMALLINT (max 32767); ephemeral
+	// ports overflow. Pin two non-overlapping low bases when not on sqlite.
+	currentBase, releaseBase := 0, 0
+	if persistence.Driver != "" && persistence.Driver != "sqlite" {
+		currentBase, releaseBase = 7230, 7240
 	}
 
-	configCurrent := generateConfig(t, tmpDir, portsCurrent, portsCurrent)
-	configRelease := generateConfig(t, tmpDir, portsRelease, portsCurrent)
-
-	var procCurrent, procRelease *serverProcess
-	var conn *grpc.ClientConn
-	var proxy *frontendProxy
-	runID := fmt.Sprintf("mixed-brain-%d", time.Now().Unix())
-
-	t.Run("start current server", func(st *testing.T) {
-		// Server processes use the parent t so their context survives this sub-test.
-		procCurrent = startServerProcess(t, "current", currentBinary, configCurrent, currentLog)
-
-		var err error
-		conn, err = grpc.NewClient(portsCurrent.frontendAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
-		require.NoError(st, err)
-
-		// This ensures the current server is fully booted before starting the release
-		// server. Registering every scenario's namespace here gives them the full
-		// cluster-formation window to propagate to all services before Omes connects.
-		for _, s := range scenarios {
-			registerNamespace(st, conn, s.namespace)
-		}
+	// Start the current-source server first so the release server can target
+	// its frontend in cluster metadata.
+	currentLogger, currentLog := serverLogger(t, "current", logRoot)
+	t.Cleanup(func() { _ = currentLog.Close() })
+	currentSrv, err := devserver.Start(t.Context(), devserver.Options{
+		SourceDir:   sourceRoot(),
+		PortBase:    currentBase,
+		Persistence: persistence,
+		Stdout:      currentLog,
+		Stderr:      currentLog,
+		Logger:      currentLogger,
 	})
-	if t.Failed() {
-		return
+	require.NoError(t, err, "start current server")
+	var stopCurrent sync.Once
+	stopCurrentServer := func() {
+		stopCurrent.Do(func() { _ = currentSrv.Stop() })
 	}
-	t.Cleanup(procCurrent.stop)
+	t.Cleanup(stopCurrentServer)
+
+	conn, err := grpc.NewClient(currentSrv.FrontendHostPort(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
 	defer func() { _ = conn.Close() }()
 
-	t.Run("start release server", func(_ *testing.T) {
-		procRelease = startServerProcess(t, "release", releaseBinary, configRelease, releaseLog)
-	})
-	if t.Failed() {
-		return
+	// This ensures the current server is fully booted before starting the release
+	// server. Registering every scenario's namespace here gives them the full
+	// cluster-formation window to propagate to all services before Omes connects.
+	for _, s := range scenarios {
+		registerNamespace(t, conn, s.namespace)
 	}
-	t.Cleanup(procRelease.stop)
+
+	releaseLogger, releaseLog := serverLogger(t, "release", logRoot)
+	t.Cleanup(func() { _ = releaseLog.Close() })
+	releaseSrv, err := devserver.Start(t.Context(), devserver.Options{
+		Ref:         releaseTag,
+		PortBase:    releaseBase,
+		Persistence: persistence,
+		ClusterEndpoint: devserver.ClusterEndpoint{
+			RPCAddress: currentSrv.FrontendHostPort(),
+		},
+		Stdout: releaseLog,
+		Stderr: releaseLog,
+		Logger: releaseLogger,
+	})
+	require.NoError(t, err, "start release server")
+	var stopRelease sync.Once
+	stopReleaseServer := func() {
+		stopRelease.Do(func() { _ = releaseSrv.Stop() })
+	}
+	t.Cleanup(stopReleaseServer)
+
+	runID := fmt.Sprintf("mixed-brain-%d", time.Now().Unix())
+	var proxy *frontendProxy
 
 	t.Run("form cluster", func(st *testing.T) {
-		waitForClusterFormation(st, conn, 90*time.Second, portsCurrent, portsRelease)
+		// Two physical servers, each running frontend/history/matching/worker.
+		waitForClusterFormation(st, conn, 90*time.Second, 2)
 	})
 	if t.Failed() {
 		return
@@ -162,7 +176,7 @@ func TestMixedBrain(t *testing.T) {
 		throughput := scenarios[0]
 		createNexusEndpoint(st, conn, nexusEndpoint, throughput.namespace, "omes-"+runID+"-"+throughput.name)
 
-		proxy = startFrontendProxy(st, portsCurrent.frontendAddr(), portsRelease.frontendAddr())
+		proxy = startFrontendProxy(st, currentSrv.FrontendHostPort(), releaseSrv.FrontendHostPort())
 
 		for _, scenario := range scenarios {
 			st.Run(scenario.name, func(sst *testing.T) {
@@ -178,9 +192,6 @@ func TestMixedBrain(t *testing.T) {
 	t.Cleanup(proxy.stop)
 
 	t.Run("verify", func(st *testing.T) {
-		procCurrent.requireAlive(st)
-		procRelease.requireAlive(st)
-
 		for i, backend := range []string{"current", "release"} {
 			count := proxy.connCount[i].Load()
 			st.Logf("Proxy connections to %s: %d", backend, count)
@@ -192,11 +203,13 @@ func TestMixedBrain(t *testing.T) {
 	// panics, soft-assertion failures, and other problems that don't surface as
 	// a process exit. Runs regardless of whether "verify" failed, since a crashed
 	// server's log is exactly what we want to inspect.
-	procCurrent.stop()
-	procRelease.stop()
+	stopCurrentServer()
+	stopReleaseServer()
+	require.NoError(t, currentLog.Close())
+	require.NoError(t, releaseLog.Close())
 
 	t.Run("scan server logs", func(st *testing.T) {
-		problems, err := scanServerLogs(serverLogValidators, currentLog, releaseLog)
+		problems, err := scanServerLogs(serverLogValidators, currentLog.Name(), releaseLog.Name())
 		require.NoError(st, err)
 		for _, p := range problems {
 			st.Error(p)
@@ -250,4 +263,25 @@ func runOmes(t *testing.T, binary, serverAddr, logPath string, duration time.Dur
 		require.NoError(t, err, "Omes scenario failed, check %s", logPath)
 		return
 	}
+}
+
+func persistenceFromEnv() devserver.PersistenceOptions {
+	driver := os.Getenv("PERSISTENCE_DRIVER")
+	if driver == "" || driver == "sqlite" {
+		return devserver.PersistenceOptions{} // default sqlite
+	}
+	return devserver.PersistenceOptions{
+		Driver:      driver,
+		ConnectAddr: "127.0.0.1:5432",
+		User:        "temporal",
+		Password:    "temporal",
+	}
+}
+
+func serverLogger(t *testing.T, name, logRoot string) (*zap.SugaredLogger, *os.File) {
+	t.Helper()
+	logPath := filepath.Join(logRoot, fmt.Sprintf("mixedbrain_process-%s.log", name))
+	f, err := os.Create(logPath)
+	require.NoError(t, err)
+	return zap.NewNop().Sugar().With("server", name), f
 }
