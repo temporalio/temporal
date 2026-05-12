@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -15,7 +17,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/tests/testcore"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // TestDispatchCancelToWorker tests that when an activity cancellation is requested,
@@ -572,10 +573,10 @@ func TestDispatchCancelOnContinueAsNew(t *testing.T) {
 						CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 						Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
 							ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-								WorkflowType:           tv.WorkflowType(),
-								TaskQueue:              tv.TaskQueue(),
-								WorkflowTaskTimeout:    durationpb.New(10 * time.Second),
-								WorkflowRunTimeout:     durationpb.New(60 * time.Second),
+								WorkflowType:        tv.WorkflowType(),
+								TaskQueue:           tv.TaskQueue(),
+								WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+								WorkflowRunTimeout:  durationpb.New(60 * time.Second),
 							},
 						},
 					},
