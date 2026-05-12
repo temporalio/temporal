@@ -1128,6 +1128,7 @@ message DeleteExecutionRequest {
   // (-- api-linter: core::0141::forbidden-types=disabled --)
   uint32 archetype_id = 3;
   string reason = 4;
+  string identity = 5;
 }
 
 message DeleteExecutionResponse {}

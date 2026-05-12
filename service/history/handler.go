@@ -2028,6 +2028,10 @@ func (h *Handler) DeleteExecution(
 	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
 		return nil, err
 	}
+	h.logger.Info("DeleteExecution requested",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowID(request.GetExecution().GetWorkflowId()),
+		tag.WorkflowRunID(request.GetExecution().GetRunId()))
 	return deleteexecution.Invoke(ctx, h.chasmEngine, request)
 }
 

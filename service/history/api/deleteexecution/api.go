@@ -20,7 +20,8 @@ func Invoke(
 	ref := chasm.NewComponentRefByArchetypeID(key, request.GetArchetypeId())
 	if err := chasmEngine.DeleteExecution(ctx, ref, chasm.DeleteExecutionRequest{
 		TerminateComponentRequest: chasm.TerminateComponentRequest{
-			Reason: request.GetReason(),
+			Reason:   request.GetReason(),
+			Identity: request.GetIdentity(),
 		},
 	}); err != nil {
 		return nil, err

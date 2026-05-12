@@ -8111,6 +8111,7 @@ type DeleteExecutionRequest struct {
 	// (-- api-linter: core::0141::forbidden-types=disabled --)
 	ArchetypeId   uint32 `protobuf:"varint,3,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
 	Reason        string `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	Identity      string `protobuf:"bytes,5,opt,name=identity,proto3" json:"identity,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8169,6 +8170,13 @@ func (x *DeleteExecutionRequest) GetArchetypeId() uint32 {
 func (x *DeleteExecutionRequest) GetReason() string {
 	if x != nil {
 		return x.Reason
+	}
+	return ""
+}
+
+func (x *DeleteExecutionRequest) GetIdentity() string {
+	if x != nil {
+		return x.Identity
 	}
 	return ""
 }
@@ -11193,12 +11201,13 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\farchetype_id\x18\x03 \x01(\rR\varchetypeId\x12]\n" +
 	"\arequest\x18\x02 \x01(\v2C.temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequestR\arequest:#\x92\xc4\x03\x1f*\x1drequest.execution.workflow_id\"\x88\x01\n" +
 	"$ForceDeleteWorkflowExecutionResponse\x12`\n" +
-	"\bresponse\x18\x01 \x01(\v2D.temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponseR\bresponse\"\xdc\x01\n" +
+	"\bresponse\x18\x01 \x01(\v2D.temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponseR\bresponse\"\xf8\x01\n" +
 	"\x16DeleteExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12!\n" +
 	"\farchetype_id\x18\x03 \x01(\rR\varchetypeId\x12\x16\n" +
-	"\x06reason\x18\x04 \x01(\tR\x06reason:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"\x19\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\x12\x1a\n" +
+	"\bidentity\x18\x05 \x01(\tR\bidentity:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"\x19\n" +
 	"\x17DeleteExecutionResponse\"\xa8\x01\n" +
 	"\x12GetDLQTasksRequest\x12E\n" +
 	"\adlq_key\x18\x01 \x01(\v2,.temporal.server.api.common.v1.HistoryDLQKeyR\x06dlqKey\x12\x1b\n" +

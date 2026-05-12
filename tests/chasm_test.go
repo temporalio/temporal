@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	operatorservice "go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -58,8 +58,9 @@ func TestChasmTestSuite(t *testing.T) {
 func (s *ChasmTestSuite) SetupSuite() {
 	s.FunctionalTestBase.SetupSuiteWithCluster(
 		testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
-			dynamicconfig.EnableChasm.Key():                           true,
-			dynamicconfig.VisibilityEnableUnifiedQueryConverter.Key(): s.enableUnifiedQueryConverter,
+			dynamicconfig.EnableChasm.Key():                            true,
+			dynamicconfig.VisibilityEnableUnifiedQueryConverter.Key():  s.enableUnifiedQueryConverter,
+			dynamicconfig.DeleteNamespaceUseChasmDeleteExecution.Key(): true,
 		}),
 	)
 
@@ -1048,7 +1049,7 @@ func (s *ChasmTestSuite) TestNamespaceDelete_WithChasmExecutions() {
 				Query:     visQuery,
 			})
 			require.NoError(t, err)
-			assert.Len(t, resp.Executions, numExecutions)
+			assert.Len(t, resp.Executions, numExecutions) //nolint:forbidigo
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
@@ -1073,7 +1074,7 @@ func (s *ChasmTestSuite) TestNamespaceDelete_WithChasmExecutions() {
 				return // namespace fully deleted is also acceptable
 			}
 			require.NoError(t, err)
-			assert.Empty(t, resp.Executions)
+			assert.Empty(t, resp.Executions) //nolint:forbidigo
 		},
 		20*time.Second*debug.TimeoutMultiplier,
 		time.Second,
