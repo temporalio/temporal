@@ -199,7 +199,7 @@ func (s *LinksSuite) TestSignalWorkflowExecution_LinksAttachedToEvent() {
 
 // TestSignalWorkflowExecution_BacklinkSurvivesReset verifies that after a workflow is reset,
 // the new run's CHASM IncomingSignals map is rebuilt from history so that DescribeWorkflow
-// continues to return a valid requestID → event-ID backlink for signals that occurred before
+// continues to return a valid requestID -> event-ID backlink for signals that occurred before
 // the reset point.
 //
 // This exercises the rebuild/replay path through ApplyWorkflowExecutionSignaled, which uses
@@ -235,22 +235,19 @@ func (s *LinksSuite) TestSignalWorkflowExecution_BacklinkSurvivesReset() {
 	s.NoError(err)
 
 	// Poll and complete the WFT so the signal is flushed to history with a real event ID.
-	s.Eventually(func() bool {
-		pollResp, pollErr := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: env.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			Identity:  "test",
-		})
-		if pollErr != nil || pollResp.GetTaskToken() == nil {
-			return false
-		}
-		_, completeErr := env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Namespace: env.Namespace().String(),
-			Identity:  "test",
-			TaskToken: pollResp.TaskToken,
-		})
-		return completeErr == nil
-	}, 20*time.Second, 200*time.Millisecond)
+	pollResp, pollErr := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:  "test",
+	})
+	s.NoError(pollErr)
+	s.NotNil(pollResp.GetTaskToken())
+	_, completeErr := env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+	})
+	s.NoError(completeErr)
 
 	// Find the WFT completed event ID in the original run's history.
 	var wftCompletedEventID int64
@@ -281,23 +278,18 @@ func (s *LinksSuite) TestSignalWorkflowExecution_BacklinkSurvivesReset() {
 	newRunID := resetResp.RunId
 	s.NotEmpty(newRunID)
 
-	// Wait for DescribeWorkflow on the new run to return the signal backlink.
 	// During reset, ApplyWorkflowExecutionSignaled rebuilds the CHASM IncomingSignals map
 	// from history, so the backlink should be present once the new run is created.
-	s.Eventually(func() bool {
-		descResp, descErr := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: env.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: newRunID},
-		})
-		if descErr != nil {
-			return false
-		}
-		_, ok := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()[signalRequestID]
-		return ok
-	}, 20*time.Second, 200*time.Millisecond)
+	descResp, descErr := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: newRunID},
+	})
+	s.NoError(descErr)
+	_, signalExists := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()[signalRequestID]
+	s.True(signalExists)
 
 	// Verify the backlink on the new run points to a real (non-buffered) SIGNALED event.
-	descResp, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+	descResp, err = env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: newRunID},
 	})
@@ -308,6 +300,81 @@ func (s *LinksSuite) TestSignalWorkflowExecution_BacklinkSurvivesReset() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, info.GetEventType())
 	s.Positive(info.GetEventId(), "backlink event ID must be a real, non-buffered event ID in the new run's history")
 	s.False(info.GetBuffered())
+}
+
+// TestSignalWorkflowExecution_BufferedDuringWorkflowTask verifies that when a signal arrives
+// while a workflow task is being processed, DescribeWorkflow reports the backlink as buffered.
+// Once the workflow task completes and the signal is flushed to history, the backlink must
+// reflect a real (non-buffered) event ID.
+func (s *LinksSuite) TestSignalWorkflowExecution_BufferedDuringWorkflowTask() {
+	env := testcore.NewEnv(s.T(), enableSignalBacklinkOpts()...)
+
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	workflowID := testcore.RandomizeStr(s.T().Name())
+
+	run, err := env.SdkClient().ExecuteWorkflow(env.Context(), client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: taskQueue,
+		// Use a really long WFT timeout to avoid flakiness when we're checking that the signal is buffered.
+		WorkflowTaskTimeout: 60 * time.Second,
+	}, "dont-care")
+	s.NoError(err)
+	runID := run.GetRunID()
+
+	// Poll to move the WFT into "started" state to have the server wait for us to complete it.
+	// This will force the signal to stay in the buffer until the task is finished.
+	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(env.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:  "test",
+	})
+	s.NoError(err)
+	s.NotNil(pollResp.GetTaskToken())
+
+	// This signal will be buffered since there is a WFT in-flight.
+	signalRequestID := uuid.NewString()
+	_, err = env.FrontendClient().SignalWorkflowExecution(env.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+		SignalName:        "dont-care",
+		Identity:          "test",
+		RequestId:         signalRequestID,
+		Links:             links,
+	})
+	s.NoError(err)
+
+	// WFT is still running: backlink must be present and marked buffered.
+	descResp, err := env.FrontendClient().DescribeWorkflowExecution(env.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+	})
+	s.NoError(err)
+	requestIDInfos := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()
+	s.Contains(requestIDInfos, signalRequestID)
+	info := requestIDInfos[signalRequestID]
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, info.GetEventType())
+	s.True(info.GetBuffered(), "backlink must be buffered while WFT is in progress")
+
+	// Complete the WFT, which flushes the signal to DB with a concrete EventID.
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+	})
+	s.NoError(err)
+
+	// After WFT completion the backlink must resolve to a real, non-buffered event.
+	descResp, err = env.FrontendClient().DescribeWorkflowExecution(env.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+	})
+	s.NoError(err)
+	requestIDInfos = descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()
+	s.Contains(requestIDInfos, signalRequestID)
+	info = requestIDInfos[signalRequestID]
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, info.GetEventType())
+	s.False(info.GetBuffered(), "backlink must not be buffered after WFT completion")
+	s.Positive(info.GetEventId(), "backlink must reference a real event ID after WFT completion")
 }
 
 func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToRelevantEvents() {

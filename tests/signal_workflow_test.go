@@ -35,25 +35,21 @@ type SignalWorkflowTestSuite struct {
 }
 
 func TestSignalWorkflowTestSuiteLegacy(t *testing.T) {
-	parallelsuite.Run(t, &SignalWorkflowTestSuite{}, false)
+	parallelsuite.Run(t, &SignalWorkflowTestSuite{}, []testcore.TestOption{})
 }
 
 func TestSignalWorkflowTestSuiteChasm(t *testing.T) {
-	parallelsuite.Run(t, &SignalWorkflowTestSuite{}, true)
+	parallelsuite.Run(
+		t,
+		&SignalWorkflowTestSuite{},
+		[]testcore.TestOption{
+			testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+			testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSignalBacklinks, true),
+		},
+	)
 }
 
-func chasmSignalOpts() []testcore.TestOption {
-	return []testcore.TestOption{
-		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
-		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSignalBacklinks, true),
-	}
-}
-
-func (s *SignalWorkflowTestSuite) TestSignalWorkflow(chasmEnabled bool) {
-	opts := []testcore.TestOption{}
-	if chasmEnabled {
-		opts = chasmSignalOpts()
-	}
+func (s *SignalWorkflowTestSuite) TestSignalWorkflow(opts []testcore.TestOption) {
 	env := testcore.NewEnv(s.T(), opts...)
 	id := "functional-signal-workflow-test"
 	wt := "functional-signal-workflow-test-type"
@@ -246,11 +242,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow(chasmEnabled bool) {
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
-func (s *SignalWorkflowTestSuite) TestSignalWorkflow_DuplicateRequest(chasmEnabled bool) {
-	opts := []testcore.TestOption{}
-	if chasmEnabled {
-		opts = chasmSignalOpts()
-	}
+func (s *SignalWorkflowTestSuite) TestSignalWorkflow_DuplicateRequest(opts []testcore.TestOption) {
 	env := testcore.NewEnv(s.T(), opts...)
 	id := "functional-signal-workflow-test-duplicate"
 	wt := "functional-signal-workflow-test-duplicate-type"
@@ -391,13 +383,15 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_DuplicateRequest(chasmEnabl
 	s.Equal(0, numOfSignaledEvent)
 }
 
-func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand(chasmEnabled bool) {
-	opts := []testcore.TestOption{testcore.WithDedicatedCluster()}
-	if chasmEnabled {
-		opts = append(opts, chasmSignalOpts()...)
-	}
+func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand(opts []testcore.TestOption) {
+	// Explicitly enable cross namespace commands for this test,
+	// need a dedicated cluster to enable cross namespace commands
+	opts = append(
+		opts,
+		testcore.WithDedicatedCluster(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true),
+	)
 	env := testcore.NewEnv(s.T(), opts...)
-	env.OverrideDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true) // explicitly enable cross namespace commands for this test
 	id := "functional-signal-external-workflow-test"
 	wt := "functional-signal-external-workflow-test-type"
 	tl := "functional-signal-external-workflow-test-taskqueue"
@@ -613,11 +607,7 @@ CheckHistoryLoopForSignalSent:
 	s.Equal("history-service", signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 }
 
-func (s *SignalWorkflowTestSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated(chasmEnabled bool) {
-	opts := []testcore.TestOption{}
-	if chasmEnabled {
-		opts = chasmSignalOpts()
-	}
+func (s *SignalWorkflowTestSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated(opts []testcore.TestOption) {
 	env := testcore.NewEnv(s.T(), opts...)
 	id := "functional-signal-workflow-test-cron"
 	wt := "functional-signal-workflow-test-cron-type"
@@ -694,11 +684,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated(
 	s.Greater(workflowTaskDelay, time.Second*2)
 }
 
-func (s *SignalWorkflowTestSuite) TestSignalWorkflow_WorkflowCloseAttempted(chasmEnabled bool) {
-	opts := []testcore.TestOption{}
-	if chasmEnabled {
-		opts = chasmSignalOpts()
-	}
+func (s *SignalWorkflowTestSuite) TestSignalWorkflow_WorkflowCloseAttempted(opts []testcore.TestOption) {
 	env := testcore.NewEnv(s.T(), opts...)
 	id := "functional-signal-workflow-workflow-close-attempted-test"
 	wt := "functional-signal-workflow-workflow-close-attempted-test-type"
@@ -782,13 +768,15 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_WorkflowCloseAttempted(chas
 	s.NoError(err)
 }
 
-func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID(chasmEnabled bool) {
-	opts := []testcore.TestOption{testcore.WithDedicatedCluster()}
-	if chasmEnabled {
-		opts = append(opts, chasmSignalOpts()...)
-	}
+func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID(opts []testcore.TestOption) {
+	// Explicitly enable cross namespace commands for this test,
+	// need a dedicated cluster to enable cross namespace commands
+	opts = append(
+		opts,
+		testcore.WithDedicatedCluster(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true),
+	)
 	env := testcore.NewEnv(s.T(), opts...)
-	env.OverrideDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true) // explicitly enable cross namespace commands for this test
 	id := "functional-signal-external-workflow-test-without-run-id"
 	wt := "functional-signal-external-workflow-test-without-run-id-type"
 	tl := "functional-signal-external-workflow-test-without-run-id-taskqueue"
@@ -1000,13 +988,15 @@ CheckHistoryLoopForSignalSent:
 	s.Equal("history-service", signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 }
 
-func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_UnKnownTarget(chasmEnabled bool) {
-	opts := []testcore.TestOption{testcore.WithDedicatedCluster()}
-	if chasmEnabled {
-		opts = append(opts, chasmSignalOpts()...)
-	}
+func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_UnKnownTarget(opts []testcore.TestOption) {
+	// Explicitly enable cross namespace commands for this test,
+	// need a dedicated cluster to enable cross namespace commands
+	opts = append(
+		opts,
+		testcore.WithDedicatedCluster(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true),
+	)
 	env := testcore.NewEnv(s.T(), opts...)
-	env.OverrideDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true) // explicitly enable cross namespace commands for this test
 	id := "functional-signal-unknown-workflow-command-test"
 	wt := "functional-signal-unknown-workflow-command-test-type"
 	tl := "functional-signal-unknown-workflow-command-test-taskqueue"
@@ -1128,11 +1118,7 @@ CheckHistoryLoopForCancelSent:
  12 WorkflowTaskScheduled`, we.RunId), historyEvents)
 }
 
-func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_SignalSelf(chasmEnabled bool) {
-	opts := []testcore.TestOption{}
-	if chasmEnabled {
-		opts = chasmSignalOpts()
-	}
+func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_SignalSelf(opts []testcore.TestOption) {
 	env := testcore.NewEnv(s.T(), opts...)
 	id := "functional-signal-self-workflow-command-test"
 	wt := "functional-signal-self-workflow-command-test-type"
@@ -1255,11 +1241,7 @@ CheckHistoryLoopForCancelSent:
  12 WorkflowTaskScheduled`, we.RunId, id), historyEvents)
 }
 
-func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow(chasmEnabled bool) {
-	opts := []testcore.TestOption{}
-	if chasmEnabled {
-		opts = chasmSignalOpts()
-	}
+func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow(opts []testcore.TestOption) {
 	env := testcore.NewEnv(s.T(), opts...)
 	id := "functional-signal-with-start-workflow-test"
 	wt := "functional-signal-with-start-workflow-test-type"
@@ -1535,11 +1517,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow(chasmEnabled bool)
 	s.Len(listClosedResp.Executions, 1)
 }
 
-func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_ResolveIDDeduplication(chasmEnabled bool) {
-	opts := []testcore.TestOption{}
-	if chasmEnabled {
-		opts = chasmSignalOpts()
-	}
+func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_ResolveIDDeduplication(opts []testcore.TestOption) {
 	env := testcore.NewEnv(s.T(), opts...)
 
 	// setting this to 0 to be sure we are terminating the current workflow
@@ -1734,11 +1712,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_ResolveIDDeduplica
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
 }
 
-func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_StartDelay(chasmEnabled bool) {
-	opts := []testcore.TestOption{}
-	if chasmEnabled {
-		opts = chasmSignalOpts()
-	}
+func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_StartDelay(opts []testcore.TestOption) {
 	env := testcore.NewEnv(s.T(), opts...)
 	id := "functional-signal-with-start-workflow-start-delay-test"
 	wt := "functional-signal-with-start-workflow-start-delay-test-type"

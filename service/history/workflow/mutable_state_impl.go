@@ -2438,15 +2438,23 @@ func (ms *MutableStateImpl) IsWorkflowCloseAttempted() bool {
 func (ms *MutableStateImpl) IsSignalRequested(
 	requestID string,
 ) bool {
+	// First check CHASM map, then fallback to existing set fields -- will be cleaned up once we
+	// fully ramp the writes to CHASM only.
+	signalExists := false
 	if ms.ChasmSignalBacklinksEnabled() {
 		wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
-		if err != nil {
-			return false
+		// TODO(long-nt-tran): Handle error from CHASM once fully rolled out and we clean up the fallback
+		// to mutableState set fields
+		if err == nil {
+			signalExists = wf.HasIncomingSignalEvent(chasmCtx, requestID)
 		}
-		return wf.HasIncomingSignalEvent(chasmCtx, requestID)
 	}
-	_, ok := ms.pendingSignalRequestedIDs[requestID]
-	return ok
+
+	// TODO(long-nt-tran): Remove fallback to existing map once we fully roll out writes to CHASM signals map
+	if !signalExists {
+		_, signalExists = ms.pendingSignalRequestedIDs[requestID]
+	}
+	return signalExists
 }
 
 func (ms *MutableStateImpl) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
@@ -5852,8 +5860,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionSignaled(
 	}
 	requestID := signalEventAttrs.WorkflowExecutionSignaledEventAttributes.GetRequestId()
 	if requestID != "" && ms.ChasmSignalBacklinksEnabled() {
-		ms.EnsureChasmWorkflowComponent(context.Background())
-		wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
+		ctx := context.Background()
+		ms.EnsureChasmWorkflowComponent(ctx)
+		wf, chasmCtx, err := ms.ChasmWorkflowComponent(ctx)
 		if err != nil {
 			return err
 		}
@@ -8965,10 +8974,7 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 }
 
 func (ms *MutableStateImpl) applySignalRequestedIds(signalRequestedIds []string, incomingExecutionInfo *persistencespb.WorkflowExecutionInfo) {
-	if ms.ChasmSignalBacklinksEnabled() {
-		// Signal IDs are replicated as part of the CHASM tree; skip legacy SignalRequestedIds sync.
-		return
-	}
+	// TODO(long-nt-tran): Deprecate this function once we fully ramp up writing signals to workflow CHASM component
 	if transitionhistory.Compare(
 		incomingExecutionInfo.SignalRequestIdsLastUpdateVersionedTransition,
 		ms.executionInfo.SignalRequestIdsLastUpdateVersionedTransition,

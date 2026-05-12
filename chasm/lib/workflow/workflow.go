@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
@@ -139,7 +138,10 @@ func addAndApplyHistoryEvent[D EventDefinition](
 
 // AddIncomingSignalEvent adds an entry for the signal requestID -> eventID mapping to
 // track all signals that have been received by the workflow.
-// Returns error if this requestID already exists in the map -- use UpdateIncomingSignalEvent to update existing entries.
+// Note that since signals are buffered, the eventID may the common.BufferedEventID, which
+// will be updated to a concrete eventID once this signal is flushed to the DB.
+// If caller tries to add an already-existing eventID, this function will ignore and silently return
+// instead of overwriting -- use UpdateIncomingSignalEvent to update existing entries.
 func (w *Workflow) AddIncomingSignalEvent(
 	ctx chasm.MutableContext,
 	requestID string,
@@ -149,14 +151,12 @@ func (w *Workflow) AddIncomingSignalEvent(
 		w.IncomingSignals = make(chasm.Map[string, *chasmworkflowpb.IncomingSignalData])
 	}
 	if w.HasIncomingSignalEvent(ctx, requestID) {
-		return serviceerror.NewInvalidArgumentf(
-			"signal request ID %s already exists, use UpdateIncomingSignalEvent to update it instead",
-			requestID,
-		)
+		return nil
 	}
 	w.IncomingSignals[requestID] = chasm.NewDataField(ctx, &chasmworkflowpb.IncomingSignalData{
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		EventId:   eventID,
+		// This might be common.BufferedEventID, which will be updated via UpdateIncomingSignalEvent
+		// once this signal is flushed to DB.
+		EventId: eventID,
 	})
 	return nil
 }
@@ -173,12 +173,13 @@ func (w *Workflow) UpdateIncomingSignalEvent(
 		return nil
 	}
 	w.IncomingSignals[requestID] = chasm.NewDataField(ctx, &chasmworkflowpb.IncomingSignalData{
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		EventId:   eventID,
+		EventId: eventID,
 	})
 	return nil
 }
 
+// HasIncomingSignalEvent returns true if a signal with this requestID is already persisted
+// in this CHASM tree.
 func (w *Workflow) HasIncomingSignalEvent(_ chasm.Context, requestID string) bool {
 	_, exists := w.IncomingSignals[requestID]
 	return exists

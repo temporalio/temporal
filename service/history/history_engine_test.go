@@ -5032,8 +5032,8 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 			}
 
 			if tc.chasmEnabled {
-				s.config.EnableChasm = func(string) bool { return true }
-				s.config.EnableCHASMSignalBacklinks = func(string) bool { return true }
+				s.config.EnableChasm = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+				s.config.EnableCHASMSignalBacklinks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 				reg := s.mockShard.ChasmRegistry()
 				s.NoError(reg.Register(&chasm.CoreLibrary{}))
 				s.NoError(reg.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
@@ -5117,8 +5117,8 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest_Completed() {
 			}
 
 			if tc.chasmEnabled {
-				s.config.EnableChasm = func(string) bool { return true }
-				s.config.EnableCHASMSignalBacklinks = func(string) bool { return true }
+				s.config.EnableChasm = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+				s.config.EnableCHASMSignalBacklinks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 				reg := s.mockShard.ChasmRegistry()
 				s.NoError(reg.Register(&chasm.CoreLibrary{}))
 				s.NoError(reg.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))

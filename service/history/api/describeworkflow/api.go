@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/sony/gobreaker"
 	commonpb "go.temporal.io/api/common/v1"
@@ -263,14 +264,18 @@ func Invoke(
 	if mutableState.ChasmEnabled() {
 		wf, chasmCtx, err := mutableState.ChasmWorkflowComponentReadOnly(ctx)
 		if err != nil {
+			requestID := generateRequestID(req)
 			shard.GetLogger().Error(
 				"failed to get workflow component from CHASM tree",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(executionInfo.WorkflowId),
 				tag.WorkflowRunID(executionState.RunId),
 				tag.Error(err),
+				tag.RequestID(requestID),
 			)
-			return nil, serviceerror.NewInternal("failed to construct describe response")
+			return nil, serviceerror.NewInternal(
+				fmt.Sprintf("failed to construct describe response for requestID: %d", requestID),
+			)
 		}
 		chasmCallbackInfos, err := buildCallbackInfosFromChasm(
 			ctx,
@@ -287,12 +292,12 @@ func Invoke(
 		}
 		result.Callbacks = append(result.Callbacks, chasmCallbackInfos...)
 
-		if mutableState.ChasmSignalBacklinksEnabled() {
+		if wf.IncomingSignals != nil {
 			for requestID, incomingSignalDataField := range wf.IncomingSignals {
 				incomingSignalData := incomingSignalDataField.Get(chasmCtx)
 				buffered := incomingSignalData.EventId == common.BufferedEventID
 				info := &workflowpb.RequestIdInfo{
-					EventType: incomingSignalData.EventType,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 					Buffered:  buffered,
 				}
 				if !buffered {
@@ -300,10 +305,10 @@ func Invoke(
 				}
 				result.WorkflowExtendedInfo.RequestIdInfos[requestID] = info
 			}
-			if n := int64(len(wf.IncomingSignals)); n > 0 {
+			if n := len(wf.IncomingSignals); n > 0 {
 				metrics.DescribeWorkflowSignalBacklinksCount.With(
 					shard.GetMetricsHandler().WithTags(metrics.NamespaceTag(namespaceName)),
-				).Record(n)
+				).Record(int64(n))
 			}
 		}
 	}
@@ -489,6 +494,7 @@ func buildCallbackInfosFromHSM(
 }
 
 // buildCallbackInfosFromChasm reads callbacks from the CHASM workflow component and converts them to API format.
+// TODO(long-nt-tran): move this to chasm/lib/workflow/workflow.go to be within the CHASM workflow context.
 func buildCallbackInfosFromChasm(
 	ctx context.Context,
 	namespaceID namespace.ID,
@@ -758,4 +764,15 @@ func buildNexusOperationCancellationInfo(
 		NextAttemptScheduleTime: cancelation.NextAttemptScheduleTime,
 		BlockedReason:           blockedReason,
 	}, nil
+}
+
+func generateRequestID(req *historyservice.DescribeWorkflowExecutionRequest) string {
+	descReq := req.GetRequest()
+	return fmt.Sprintf(
+		"desc-wf-%s-%s-%s-%d",
+		descReq.GetNamespace(),
+		descReq.GetExecution().GetWorkflowId(),
+		descReq.GetExecution().GetRunId(),
+		time.Now().UnixMilli(),
+	)
 }
