@@ -77,13 +77,13 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 type library struct {
 	componentOnlyLibrary
 
-	handler                            *handler
-	activityDispatchTaskHandler        *activityDispatchTaskHandler
-	cancelCommandDispatchTaskHandler   *cancelCommandDispatchTaskHandler
-	scheduleToStartTimeoutTaskHandler  *scheduleToStartTimeoutTaskHandler
-	scheduleToCloseTimeoutTaskHandler  *scheduleToCloseTimeoutTaskHandler
-	startToCloseTimeoutTaskHandler     *startToCloseTimeoutTaskHandler
-	heartbeatTimeoutTaskHandler        *heartbeatTimeoutTaskHandler
+	handler                           *handler
+	activityDispatchTaskHandler       *activityDispatchTaskHandler
+	cancelCommandDispatchTaskHandler  *cancelCommandDispatchTaskHandler
+	scheduleToStartTimeoutTaskHandler *scheduleToStartTimeoutTaskHandler
+	scheduleToCloseTimeoutTaskHandler *scheduleToCloseTimeoutTaskHandler
+	startToCloseTimeoutTaskHandler    *startToCloseTimeoutTaskHandler
+	heartbeatTimeoutTaskHandler       *heartbeatTimeoutTaskHandler
 }
 
 func newLibrary(
@@ -98,14 +98,14 @@ func newLibrary(
 	namespaceRegistry namespace.Registry,
 ) *library {
 	return &library{
-		componentOnlyLibrary:               *newComponentOnlyLibrary(config, namespaceRegistry),
-		handler:                            handler,
-		activityDispatchTaskHandler:        activityDispatchTaskHandler,
-		cancelCommandDispatchTaskHandler:   cancelCommandDispatchTaskHandler,
-		scheduleToStartTimeoutTaskHandler:  scheduleToStartTimeoutTaskHandler,
-		scheduleToCloseTimeoutTaskHandler:  scheduleToCloseTimeoutTaskHandler,
-		startToCloseTimeoutTaskHandler:     startToCloseTimeoutTaskHandler,
-		heartbeatTimeoutTaskHandler:        heartbeatTimeoutTaskHandler,
+		componentOnlyLibrary:              *newComponentOnlyLibrary(config, namespaceRegistry),
+		handler:                           handler,
+		activityDispatchTaskHandler:       activityDispatchTaskHandler,
+		cancelCommandDispatchTaskHandler:  cancelCommandDispatchTaskHandler,
+		scheduleToStartTimeoutTaskHandler: scheduleToStartTimeoutTaskHandler,
+		scheduleToCloseTimeoutTaskHandler: scheduleToCloseTimeoutTaskHandler,
+		startToCloseTimeoutTaskHandler:    startToCloseTimeoutTaskHandler,
+		heartbeatTimeoutTaskHandler:       heartbeatTimeoutTaskHandler,
 	}
 }
 

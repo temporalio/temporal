@@ -321,9 +321,9 @@ func TestTransitionStartedStoresWorkerControlTaskQueue(t *testing.T) {
 	attemptState := &activitypb.ActivityAttemptState{Count: 1, Stamp: 1}
 	a := &Activity{
 		ActivityState: &activitypb.ActivityState{
-			ActivityType:       &commonpb.ActivityType{Name: "test-type"},
-			Status:             activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-			TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-queue"},
+			ActivityType:        &commonpb.ActivityType{Name: "test-type"},
+			Status:              activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-queue"},
 			StartToCloseTimeout: durationpb.New(3 * time.Minute),
 		},
 		LastAttempt: chasm.NewDataField(ctx, attemptState),
@@ -348,9 +348,9 @@ func TestCancelRequestDispatchesCancelCommand(t *testing.T) {
 	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	testCases := []struct {
-		name              string
-		activityStatus    activitypb.ActivityExecutionStatus
-		controlQueue      string
+		name               string
+		activityStatus     activitypb.ActivityExecutionStatus
+		controlQueue       string
 		expectDispatchTask bool
 	}{
 		{
