@@ -456,8 +456,11 @@ type ActivityAttemptState struct {
 	// The request ID that came from matching's RecordActivityTaskStarted API call. Used to make this API idempotent in
 	// case of implicit retries.
 	StartRequestId string `protobuf:"bytes,9,opt,name=start_request_id,json=startRequestId,proto3" json:"start_request_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The worker's control task queue for sending commands (e.g. cancel) via Nexus.
+	// Set when the worker reports it during poll. Empty if the worker doesn't support worker commands.
+	WorkerControlTaskQueue string `protobuf:"bytes,10,opt,name=worker_control_task_queue,json=workerControlTaskQueue,proto3" json:"worker_control_task_queue,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *ActivityAttemptState) Reset() {
@@ -549,6 +552,13 @@ func (x *ActivityAttemptState) GetLastDeploymentVersion() *v12.WorkerDeploymentV
 func (x *ActivityAttemptState) GetStartRequestId() string {
 	if x != nil {
 		return x.StartRequestId
+	}
+	return ""
+}
+
+func (x *ActivityAttemptState) GetWorkerControlTaskQueue() string {
+	if x != nil {
+		return x.WorkerControlTaskQueue
 	}
 	return ""
 }
@@ -934,7 +944,7 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\x06reason\x18\x04 \x01(\tR\x06reason\"7\n" +
 	"\x16ActivityTerminateState\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x01 \x01(\tR\trequestId\"\xe8\x05\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\"\xa3\x06\n" +
 	"\x14ActivityAttemptState\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x05R\x05count\x12O\n" +
 	"\x16current_retry_interval\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x14currentRetryInterval\x12=\n" +
@@ -944,7 +954,9 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\x05stamp\x18\x06 \x01(\x05R\x05stamp\x120\n" +
 	"\x14last_worker_identity\x18\a \x01(\tR\x12lastWorkerIdentity\x12k\n" +
 	"\x17last_deployment_version\x18\b \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x15lastDeploymentVersion\x12(\n" +
-	"\x10start_request_id\x18\t \x01(\tR\x0estartRequestId\x1a\x80\x01\n" +
+	"\x10start_request_id\x18\t \x01(\tR\x0estartRequestId\x129\n" +
+	"\x19worker_control_task_queue\x18\n" +
+	" \x01(\tR\x16workerControlTaskQueue\x1a\x80\x01\n" +
 	"\x12LastFailureDetails\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12:\n" +
 	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\"\xc9\x01\n" +

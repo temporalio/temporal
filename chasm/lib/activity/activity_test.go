@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
@@ -304,4 +305,215 @@ func TestContextMetadata(t *testing.T) {
 		md := activity.ContextMetadata(ctx)
 		require.Nil(t, md)
 	})
+}
+
+func TestTransitionStartedStoresWorkerControlTaskQueue(t *testing.T) {
+	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return testTime },
+			HandleExecutionKey: func() chasm.ExecutionKey {
+				return chasm.ExecutionKey{BusinessID: "test-activity-id", RunID: "test-run-id"}
+			},
+		},
+	}
+
+	attemptState := &activitypb.ActivityAttemptState{Count: 1, Stamp: 1}
+	a := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			ActivityType:        &commonpb.ActivityType{Name: "test-type"},
+			Status:              activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-queue"},
+			StartToCloseTimeout: durationpb.New(3 * time.Minute),
+		},
+		LastAttempt: chasm.NewDataField(ctx, attemptState),
+		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{}),
+		Outcome:     chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+	}
+
+	request := &historyservice.RecordActivityTaskStartedRequest{
+		Stamp:     1,
+		RequestId: "req-1",
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			WorkerControlTaskQueue: "test-control-queue",
+		},
+	}
+
+	_, err := a.HandleStarted(ctx, request)
+	require.NoError(t, err)
+	require.Equal(t, "test-control-queue", a.LastAttempt.Get(ctx).GetWorkerControlTaskQueue())
+}
+
+func TestCancelRequestDispatchesCancelCommand(t *testing.T) {
+	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	testCases := []struct {
+		name               string
+		activityStatus     activitypb.ActivityExecutionStatus
+		controlQueue       string
+		expectDispatchTask bool
+	}{
+		{
+			name:               "started with control queue dispatches cancel task",
+			activityStatus:     activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			controlQueue:       "test-control-queue",
+			expectDispatchTask: true,
+		},
+		{
+			name:               "started without control queue does not dispatch",
+			activityStatus:     activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			controlQueue:       "",
+			expectDispatchTask: false,
+		},
+		{
+			name:               "scheduled cancels immediately, no dispatch",
+			activityStatus:     activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			controlQueue:       "",
+			expectDispatchTask: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			nsRegistry := namespace.NewMockRegistry(ctrl)
+			nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-ns"), nil).AnyTimes()
+
+			ctx := &chasm.MockMutableContext{
+				MockContext: chasm.MockContext{
+					HandleNow: func(chasm.Component) time.Time { return testTime },
+					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
+						config: &Config{
+							BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+						},
+						namespaceRegistry: nsRegistry,
+					}),
+				},
+			}
+
+			a := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					ActivityType:           &commonpb.ActivityType{Name: "test-type"},
+					Status:                 tc.activityStatus,
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-queue"},
+					ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
+					StartToCloseTimeout:    durationpb.New(3 * time.Minute),
+				},
+				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+					Count:                  1,
+					Stamp:                  1,
+					WorkerControlTaskQueue: tc.controlQueue,
+				}),
+				Outcome: chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+			}
+
+			req := &activitypb.RequestCancelActivityExecutionRequest{
+				FrontendRequest: &workflowservice.RequestCancelActivityExecutionRequest{
+					RequestId: "cancel-req-1",
+					Identity:  "test-identity",
+				},
+			}
+			_, err := a.handleCancellationRequested(ctx, req)
+			require.NoError(t, err)
+
+			hasCancelTask := false
+			for _, task := range ctx.Tasks {
+				if _, ok := task.Payload.(*activitypb.CancelCommandDispatchTask); ok {
+					hasCancelTask = true
+					require.Equal(t, tc.controlQueue, task.Attributes.Destination)
+				}
+			}
+			require.Equal(t, tc.expectDispatchTask, hasCancelTask,
+				"expected dispatch task: %v, but found: %v", tc.expectDispatchTask, hasCancelTask)
+		})
+	}
+}
+
+func TestTerminateDispatchesCancelCommand(t *testing.T) {
+	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	testCases := []struct {
+		name               string
+		activityStatus     activitypb.ActivityExecutionStatus
+		controlQueue       string
+		expectDispatchTask bool
+	}{
+		{
+			name:               "started with control queue dispatches cancel task",
+			activityStatus:     activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			controlQueue:       "test-control-queue",
+			expectDispatchTask: true,
+		},
+		{
+			name:               "cancel_requested with control queue dispatches cancel task",
+			activityStatus:     activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+			controlQueue:       "test-control-queue",
+			expectDispatchTask: true,
+		},
+		{
+			name:               "started without control queue does not dispatch",
+			activityStatus:     activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			controlQueue:       "",
+			expectDispatchTask: false,
+		},
+		{
+			name:               "scheduled does not dispatch",
+			activityStatus:     activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			controlQueue:       "",
+			expectDispatchTask: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			nsRegistry := namespace.NewMockRegistry(ctrl)
+			nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-ns"), nil).AnyTimes()
+
+			ctx := &chasm.MockMutableContext{
+				MockContext: chasm.MockContext{
+					HandleNow: func(chasm.Component) time.Time { return testTime },
+					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
+						config: &Config{
+							BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+						},
+						namespaceRegistry: nsRegistry,
+					}),
+				},
+			}
+
+			a := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					ActivityType:           &commonpb.ActivityType{Name: "test-type"},
+					Status:                 tc.activityStatus,
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-queue"},
+					ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
+					StartToCloseTimeout:    durationpb.New(3 * time.Minute),
+				},
+				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+					Count:                  1,
+					Stamp:                  1,
+					WorkerControlTaskQueue: tc.controlQueue,
+				}),
+				Outcome: chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+			}
+
+			_, err := a.Terminate(ctx, chasm.TerminateComponentRequest{
+				Reason: "test terminate",
+			})
+			require.NoError(t, err)
+
+			hasCancelTask := false
+			for _, task := range ctx.Tasks {
+				if _, ok := task.Payload.(*activitypb.CancelCommandDispatchTask); ok {
+					hasCancelTask = true
+					require.Equal(t, tc.controlQueue, task.Attributes.Destination)
+				}
+			}
+			require.Equal(t, tc.expectDispatchTask, hasCancelTask,
+				"expected dispatch task: %v, but found: %v", tc.expectDispatchTask, hasCancelTask)
+		})
+	}
 }
