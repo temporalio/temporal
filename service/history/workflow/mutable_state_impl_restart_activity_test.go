@@ -205,7 +205,7 @@ func (s *retryActivitySuite) TestRetryActivity_should_clear_per_attempt_fields()
 	s.activity.StartedTime = timestamppb.Now()
 
 	_, err := s.mutableState.RetryActivity(s.activity, s.failure)
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	s.Nil(s.activity.StartedClock, "StartedClock should be cleared on retry")
 	s.Nil(s.activity.StartedTime, "StartedTime should be cleared on retry")
