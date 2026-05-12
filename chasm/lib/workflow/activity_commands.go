@@ -7,6 +7,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/chasm"
+	activitypb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/payloads"
 )
 
 type activityCommandHandler struct{}
@@ -62,3 +65,73 @@ func (h *activityCommandHandler) handleScheduleCommand(
 	})
 	return err
 }
+
+func (h *activityCommandHandler) handleRequestCancelCommand(
+	ctx chasm.MutableContext,
+	wf *Workflow,
+	_ Validator,
+	cmd *commandpb.Command,
+	opts CommandHandlerOptions,
+) error {
+	attrs := cmd.GetRequestCancelActivityTaskCommandAttributes()
+	if attrs == nil {
+		return FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES,
+			Message: "empty RequestCancelActivityTaskCommandAttributes",
+		}
+	}
+	scheduledEventID := attrs.GetScheduledEventId()
+
+	act := wf.FindActivityByScheduledEventID(ctx, scheduledEventID)
+	if act == nil {
+		return FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES,
+			Message: fmt.Sprintf("activity with scheduled event ID %d not found in CHASM tree", scheduledEventID),
+		}
+	}
+
+	wasNotStarted := act.Status == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
+
+	cancelReqEvent, err := addAndApplyHistoryEvent[ActivityTaskCancelRequestedEventDefinition](wf, ctx, func(he *historypb.HistoryEvent) {
+		he.Attributes = &historypb.HistoryEvent_ActivityTaskCancelRequestedEventAttributes{
+			ActivityTaskCancelRequestedEventAttributes: &historypb.ActivityTaskCancelRequestedEventAttributes{
+				ScheduledEventId:             scheduledEventID,
+				WorkflowTaskCompletedEventId: opts.WorkflowTaskCompletedEventID,
+			},
+		}
+		he.UserMetadata = cmd.UserMetadata
+	})
+	if err != nil {
+		return err
+	}
+	if opts.CancelRequestedEventID != nil {
+		*opts.CancelRequestedEventID = cancelReqEvent.GetEventId()
+	}
+
+	if wasNotStarted {
+		_, err = addAndApplyHistoryEvent[ActivityTaskCanceledEventDefinition](wf, ctx, func(he *historypb.HistoryEvent) {
+			he.Attributes = &historypb.HistoryEvent_ActivityTaskCanceledEventAttributes{
+				ActivityTaskCanceledEventAttributes: &historypb.ActivityTaskCanceledEventAttributes{
+					ScheduledEventId:              scheduledEventID,
+					StartedEventId:                common.EmptyEventID,
+					LatestCancelRequestedEventId:  cancelReqEvent.GetEventId(),
+					Details:                       payloads.EncodeString("ACTIVITY_ID_NOT_STARTED"),
+					Identity:                      opts.Identity,
+				},
+			}
+		})
+	}
+	return err
+}
+
+// FindActivityIDByScheduledEventID returns the Activities map key for the activity with the
+// given scheduled event ID, or ("", false) if no such activity exists in the CHASM tree.
+func FindActivityIDByScheduledEventID(ctx chasm.Context, wf *Workflow, scheduledEventID int64) (string, bool) {
+	for id, field := range wf.Activities {
+		if field.Get(ctx).GetScheduledEventId() == scheduledEventID {
+			return id, true
+		}
+	}
+	return "", false
+}
+

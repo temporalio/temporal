@@ -193,12 +193,10 @@ func (w *Workflow) OnActivityTimedOut(ctx chasm.MutableContext, act *activity.Ac
 // OnActivityCanceled implements ActivityStore for workflow-embedded activities.
 // When needsStartedEvent is true (activity was started before being canceled), writes
 // ActivityTaskStarted + ActivityTaskCanceled history events; Apply() handles cleanup.
-// When needsStartedEvent is false (activity was never started), the caller is responsible
-// for writing the ActivityTaskCanceled event (via AddActivityTaskCanceledEventCHASM).
+// When needsStartedEvent is false (not-started case), the ActivityTaskCanceled event was
+// already written by the cancel command handler; just clean up the activity and schedule a WFT.
 func (w *Workflow) OnActivityCanceled(ctx chasm.MutableContext, act *activity.Activity, needsStartedEvent bool) error {
 	if !needsStartedEvent {
-		// Not-started case: ActivityTaskCanceled is written by AddActivityTaskCanceledEventCHASM.
-		// Just clean up the activity and schedule a WFT.
 		activityID := act.GetActivityId()
 		delete(w.Activities, activityID)
 		return w.ScheduleWorkflowTask()

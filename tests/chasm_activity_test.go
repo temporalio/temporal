@@ -176,8 +176,8 @@ func (s *ChasmActivitySuite) TestChasmActivity_WorkflowIdRunIdFix() {
 // TestChasmActivity_CancellationFix verifies Fix 2:
 //
 // When a CHASM-scheduled activity is cancelled via COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
-// AddActivityTaskCancelRequestedEventCHASM is called (instead of the legacy path which would
-// fail to find the activity in the ActivityInfo map), and the resulting history contains
+// the CHASM cancel command handler is invoked (instead of the legacy path which would fail to
+// find the activity in the ActivityInfo map), and the resulting history contains
 // EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED followed by EVENT_TYPE_ACTIVITY_TASK_CANCELED
 // (since the activity was never started).
 //
@@ -248,9 +248,9 @@ func (s *ChasmActivitySuite) TestChasmActivity_CancellationFix() {
 	s.Positive(scheduledEventID)
 
 	// Step 3: Complete second WFT with REQUEST_CANCEL_ACTIVITY_TASK.
-	// This exercises AddActivityTaskCancelRequestedEventCHASM (Fix 2).
+	// This exercises the CHASM cancel command handler (handleCancelActivityWithMigrationSwitch).
 	// Since the activity was never polled/started, wasNotStarted=true and
-	// AddActivityTaskCanceledEvent is also called in the same WFT.
+	// ActivityTaskCanceled is also written in the same WFT.
 	_, err = env.TaskPoller().PollAndHandleWorkflowTask(
 		tv,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {

@@ -117,11 +117,6 @@ var (
 	ErrMissingSignalInitiatedEvent = serviceerror.NewInternal("unable to get signal initiated event")
 	// ErrPinnedWorkflowCannotTransition indicates attempt to start a transition on a pinned workflow
 	ErrPinnedWorkflowCannotTransition = serviceerror.NewInternal("unable to start transition on pinned workflows")
-	// ErrCHASMActivityNotFound is returned by AddActivityTaskCancelRequestedEventCHASM when the
-	// activity at scheduledEventID is not present in the CHASM tree (e.g., it was scheduled via the
-	// legacy ActivityInfo path). Callers should fall back to AddActivityTaskCancelRequestedEvent.
-	ErrCHASMActivityNotFound = errors.New("CHASM activity not found in chasmTree; was scheduled via legacy path")
-
 	timeZeroUTC = time.Unix(0, 0).UTC()
 )
 
@@ -2273,28 +2268,6 @@ func (ms *MutableStateImpl) GetPendingActivityInfos() map[int64]*persistencespb.
 	return ms.pendingActivityInfoIDs
 }
 
-// GetCHASMActivityComponentRefByActivityID implements historyi.MutableState. It searches the CHASM
-// activities map for an activity with the given activity ID string and returns its serialized
-// component ref. Returns (nil, false) if no CHASM activity with that ID exists.
-func (ms *MutableStateImpl) GetCHASMActivityComponentRefByActivityID(activityID string) ([]byte, bool) {
-	if !ms.ChasmEnabled() {
-		return nil, false
-	}
-	wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
-	if err != nil {
-		return nil, false
-	}
-	actField, ok := wf.Activities[activityID]
-	if !ok {
-		return nil, false
-	}
-	act := actField.Get(chasmCtx)
-	refBytes, err := chasmCtx.Ref(act)
-	if err != nil || len(refBytes) == 0 {
-		return nil, false
-	}
-	return refBytes, true
-}
 
 func (ms *MutableStateImpl) GetNumCHASMPendingActivities() int {
 	if !ms.ChasmEnabled() {
@@ -4578,99 +4551,6 @@ func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 	return actCancelReqEvent, ai, nil
 }
 
-// AddActivityTaskCancelRequestedEventCHASM handles RequestCancelActivity for CHASM-managed activities.
-// It looks up the activity in the CHASM tree by scheduledEventID, writes the history event, and
-// applies the appropriate cancel transitions. Returns (event, wasNotStarted, error).
-//
-// TODO(david.porter): Will not merge — prototype only. Does not handle the WorkerControlTaskQueue
-// (cancellation via Nexus worker control tasks) or cross-cluster replication.
-func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEventCHASM(
-	workflowTaskCompletedEventID int64,
-	scheduledEventID int64,
-	identity string,
-) (*historypb.HistoryEvent, bool, error) {
-	opTag := tag.WorkflowActionActivityTaskCancelRequested
-	if err := ms.checkMutability(opTag); err != nil {
-		return nil, false, err
-	}
-
-	wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
-	if err != nil {
-		return nil, false, err
-	}
-
-	wasNotStarted, found, err := wf.RequestCancelEmbeddedActivity(chasmCtx, scheduledEventID, identity)
-	if err != nil {
-		return nil, false, err
-	}
-	if !found {
-		// Return ErrCHASMActivityNotFound so the caller can fall back to the legacy
-		// AddActivityTaskCancelRequestedEvent path (backwards-compat guard for executions
-		// that scheduled the activity before EnableCHASMActivityPrototype was enabled).
-		return nil, false, ErrCHASMActivityNotFound
-	}
-
-	actCancelReqEvent := ms.hBuilder.AddActivityTaskCancelRequestedEvent(workflowTaskCompletedEventID, scheduledEventID)
-
-	// Caller is responsible for writing ActivityTaskCanceled when wasNotStarted is true,
-	// following the same pattern as the legacy AddActivityTaskCancelRequestedEvent path.
-	return actCancelReqEvent, wasNotStarted, nil
-}
-
-// AddActivityTaskCanceledEventCHASM writes an ActivityTaskCanceled history event for a
-// CHASM-managed activity without requiring the activity to be present in the legacy
-// ActivityInfo map. Used when wasNotStarted=true from AddActivityTaskCancelRequestedEventCHASM.
-//
-// TODO(david.porter): Will not merge — prototype only.
-func (ms *MutableStateImpl) AddActivityTaskCanceledEventCHASM(
-	scheduledEventID int64,
-	latestCancelRequestedEventID int64,
-	details *commonpb.Payloads,
-	identity string,
-) (*historypb.HistoryEvent, error) {
-	opTag := tag.WorkflowActionActivityTaskCanceled
-	if err := ms.checkMutability(opTag); err != nil {
-		return nil, err
-	}
-
-	// Write the history event directly without the legacy ActivityInfo lookup.
-	event := ms.hBuilder.AddActivityTaskCanceledEvent(
-		scheduledEventID,
-		common.EmptyEventID, // not started
-		latestCancelRequestedEventID,
-		details,
-		identity,
-	)
-
-	// DeleteActivity is a no-op for CHASM activities (no legacy ActivityInfo entry),
-	// but it cleans up any stale timer/sync entries if they exist.
-	_ = ms.DeleteActivity(scheduledEventID)
-
-	return event, nil
-}
-
-// RespondCHASMActivityCompletedByID implements historyi.MutableState. It force-completes a
-// CHASM-managed workflow-embedded activity identified by its activity ID string.
-// Returns (false, nil) if no CHASM activity with that ID is found (caller should try legacy path).
-// TODO(david.porter): Will not merge — prototype only.
-func (ms *MutableStateImpl) RespondCHASMActivityCompletedByID(activityID string, result *commonpb.Payloads, identity string) (bool, error) {
-	if !ms.ChasmEnabled() {
-		return false, nil
-	}
-	wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
-	if err != nil {
-		return false, err
-	}
-	metricsHandler := ms.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope))
-	req := &historyservice.RespondActivityTaskCompletedRequest{
-		NamespaceId: ms.GetNamespaceEntry().ID().String(),
-		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
-			Result:   result,
-			Identity: identity,
-		},
-	}
-	return wf.CompleteEmbeddedActivityByID(chasmCtx, activityID, req, metricsHandler)
-}
 
 func (ms *MutableStateImpl) AddWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error {
 	return ms.taskGenerator.GenerateWorkerCommandsTasks(commands, controlQueue)

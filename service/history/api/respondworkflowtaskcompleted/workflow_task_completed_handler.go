@@ -302,7 +302,7 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		historyEvent, err = handler.handleCommandStartTimer(ctx, command.GetStartTimerCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK:
-		historyEvent, err = handler.handleCommandRequestCancelActivity(ctx, command.GetRequestCancelActivityTaskCommandAttributes())
+		historyEvent, err = handler.handleCancelActivityWithMigrationSwitch(ctx, command)
 
 	case enumspb.COMMAND_TYPE_CANCEL_TIMER:
 		historyEvent, err = handler.handleCommandCancelTimer(ctx, command.GetCancelTimerCommandAttributes())
@@ -657,10 +657,11 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 	}, nil
 }
 
-func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
-	_ context.Context,
-	attr *commandpb.RequestCancelActivityTaskCommandAttributes,
+func (handler *workflowTaskCompletedHandler) handleCancelActivityWithMigrationSwitch(
+	ctx context.Context,
+	command *commandpb.Command,
 ) (*historypb.HistoryEvent, error) {
+	attr := command.GetRequestCancelActivityTaskCommandAttributes()
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.ValidateActivityCancelAttributes(attr)
@@ -669,51 +670,58 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 		return nil, err
 	}
 
-	scheduledEventID := attr.GetScheduledEventId()
-
 	namespaceName := handler.mutableState.GetNamespaceEntry().Name().String()
-
-	// CHASM branch: activities scheduled via CHASM live in the chasmTree, not in legacy ActivityInfo.
-	// TODO(david.porter): Will not merge — prototype only.
-	// Missing: WorkerControlTaskQueue handling for Nexus in-band cancellation.
-	//
-	// Backwards-compat guard: ChasmEnabled() ensures the CHASM tree is active for this execution.
-	// If AddActivityTaskCancelRequestedEventCHASM returns ErrCHASMActivityNotFound the activity was
-	// scheduled via the legacy path (e.g., EnableCHASMActivityPrototype was toggled on mid-execution);
-	// fall through to the legacy path below instead of failing the workflow task.
-	// For a production implementation, the per-execution sticky bit (see schedule TODO above) would
-	// make this fallback unnecessary by guaranteeing routing consistency.
-	if handler.config.EnableCHASMActivityPrototype(namespaceName) && handler.mutableState.ChasmEnabled() {
-		actCancelReqEvent, wasNotStarted, err := handler.mutableState.AddActivityTaskCancelRequestedEventCHASM(
-			handler.workflowTaskCompletedID,
-			scheduledEventID,
-			handler.identity,
-		)
-		if errors.Is(err, workflow.ErrCHASMActivityNotFound) {
-			// Activity is not in the CHASM tree; fall through to the legacy cancel path.
-		} else if err != nil {
-			return nil, handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES, err)
-		} else {
-			if wasNotStarted {
-				_, err = handler.mutableState.AddActivityTaskCanceledEventCHASM(
-					scheduledEventID,
-					actCancelReqEvent.GetEventId(),
-					payloads.EncodeString(activityCancellationMsgActivityNotStarted),
-					handler.identity,
-				)
-				if err != nil {
-					return nil, err
-				}
-				// RecordCompleted (called inside TransitionCanceled via ScheduleWorkflowTask) may have
-				// already scheduled a new WFT. Only set activityNotStartedCancelled if no WFT is pending;
-				// otherwise api.go would try to schedule a duplicate WFT and return an internal error.
-				if !handler.mutableState.HasPendingWorkflowTask() {
-					handler.activityNotStartedCancelled = true
-				}
-			}
-			return actCancelReqEvent, nil
-		}
+	if !handler.config.EnableChasm(namespaceName) || !handler.config.EnableCHASMActivityPrototype(namespaceName) || !handler.mutableState.ChasmEnabled() {
+		return handler.handleCommandRequestCancelActivity(ctx, attr)
 	}
+
+	chasmHandler, ok := handler.chasmWorkflowRegistry.CommandHandler(command.GetCommandType())
+	if !ok {
+		return handler.handleCommandRequestCancelActivity(ctx, attr)
+	}
+
+	chasmWorkflow, chasmCtx, err := handler.mutableState.ChasmWorkflowComponent(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Pre-check: if the activity isn't in the CHASM tree it was scheduled via the legacy path;
+	// fall back so executions started before EnableCHASMActivityPrototype continue to work.
+	activityID, found := chasmworkflow.FindActivityIDByScheduledEventID(chasmCtx, chasmWorkflow, attr.GetScheduledEventId())
+	if !found {
+		return handler.handleCommandRequestCancelActivity(ctx, attr)
+	}
+
+	var cancelRequestedEventID int64
+	handlerOpts := chasmworkflow.CommandHandlerOptions{
+		WorkflowTaskCompletedEventID: handler.workflowTaskCompletedID,
+		Identity:                     handler.identity,
+		CancelRequestedEventID:       &cancelRequestedEventID,
+	}
+	validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
+
+	if err := chasmHandler(chasmCtx, chasmWorkflow, validator, command, handlerOpts); err != nil {
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
+		if errors.As(err, &failWFTErr) {
+			return nil, handler.failWorkflowTask(failWFTErr.Cause, failWFTErr)
+		}
+		return nil, err
+	}
+
+	// If the activity is no longer in the tree it was canceled inline (not-started case).
+	_, stillPresent := chasmWorkflow.Activities[activityID]
+	if !stillPresent && !handler.mutableState.HasPendingWorkflowTask() {
+		handler.activityNotStartedCancelled = true
+	}
+
+	return &historypb.HistoryEvent{EventId: cancelRequestedEventID}, nil
+}
+
+func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
+	_ context.Context,
+	attr *commandpb.RequestCancelActivityTaskCommandAttributes,
+) (*historypb.HistoryEvent, error) {
+	scheduledEventID := attr.GetScheduledEventId()
 
 	actCancelReqEvent, ai, err := handler.mutableState.AddActivityTaskCancelRequestedEvent(
 		handler.workflowTaskCompletedID,

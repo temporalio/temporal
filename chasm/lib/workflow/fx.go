@@ -35,7 +35,8 @@ type activityEventLibrary struct{}
 func (activityEventLibrary) CommandHandlers() map[enumspb.CommandType]CommandHandler {
 	h := &activityCommandHandler{}
 	return map[enumspb.CommandType]CommandHandler{
-		enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK: h.handleScheduleCommand,
+		enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:        h.handleScheduleCommand,
+		enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK:  h.handleRequestCancelCommand,
 	}
 }
 
