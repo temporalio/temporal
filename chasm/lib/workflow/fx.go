@@ -24,7 +24,11 @@ var Module = fx.Module(
 		}
 		return chasmRegistry.Register(library)
 	}),
-	fx.Invoke(func(library *library, historyHandler historyservice.HistoryServiceServer) {
-		library.workflowServiceNexusHandler.setHistoryHandler(historyHandler)
-	}),
 )
+
+// HistoryHandlerModule wires the workflow library's Nexus handler to the
+// history service. Only include this in services that provide
+// historyservice.HistoryServiceServer (the history service).
+var HistoryHandlerModule = fx.Invoke(func(library *library, historyHandler historyservice.HistoryServiceServer) {
+	library.workflowServiceNexusHandler.setHistoryHandler(historyHandler)
+})
