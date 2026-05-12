@@ -582,7 +582,6 @@ type ActivityAttemptState struct {
 	// previous attempt or pre-update state are discarded.
 	// Note: ScheduleToCloseTimeoutTask uses a separate ActivityState.schedule_to_close_stamp because
 	// it spans the full activity lifetime and must not be invalidated on retry.
-	// TODO: also invalidate on pause and reset when those are supported.
 	Stamp              int32  `protobuf:"varint,6,opt,name=stamp,proto3" json:"stamp,omitempty"`
 	LastWorkerIdentity string `protobuf:"bytes,7,opt,name=last_worker_identity,json=lastWorkerIdentity,proto3" json:"last_worker_identity,omitempty"`
 	// The Worker Deployment Version this activity was dispatched to most recently.
