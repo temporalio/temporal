@@ -40,6 +40,7 @@ import (
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	matchingclient "go.temporal.io/server/client/matching"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -3148,7 +3149,6 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 		}
 	}
 
-	// The partition is only used for routing; the matching engine cancels all pollers for the workerInstanceKey.
 	tqFamily, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	if err != nil {
 		wh.logger.Warn("Invalid task queue name for poll cancellation.",
@@ -3156,6 +3156,12 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 			tag.Error(err))
 		return
 	}
+
+	// Deduplicate partitions by destination matching host. The partition is only used for
+	// routing; the matching engine cancels all pollers for the workerInstanceKey on that host
+	// regardless of partition. Sending one RPC per host instead of one per partition reduces
+	// RPCs from numPartitions*taskTypes to numHosts*taskTypes.
+	rc, _ := wh.matchingClient.(matchingclient.RoutingClient)
 
 	var waitGroup sync.WaitGroup
 	var totalCancelled atomic.Int32
@@ -3168,8 +3174,22 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 		}
 
 		tq := tqFamily.TaskQueue(taskType)
+		seenHosts := make(map[string]bool)
 		for partitionID := range numPartitions {
 			partition := tq.NormalPartition(partitionID)
+
+			// Skip if we've already sent an RPC to this host.
+			if rc != nil {
+				host, err := rc.Route(partition)
+				if err == nil && seenHosts[host] {
+					continue
+				}
+				if err == nil {
+					seenHosts[host] = true
+				}
+				// On Route() error, fall through and send the RPC anyway.
+			}
+
 			waitGroup.Go(func() {
 				resp, err := wh.matchingClient.CancelOutstandingWorkerPolls(ctx, &matchingservice.CancelOutstandingWorkerPollsRequest{
 					NamespaceId: namespaceID,
