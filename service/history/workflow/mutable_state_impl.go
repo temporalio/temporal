@@ -4538,8 +4538,7 @@ func (ms *MutableStateImpl) AddWorkerCommandsTasks(commands []*workerpb.WorkerCo
 }
 
 // GenerateActivityCancelCommandsForClose generates WorkerCommandsTasks to cancel all
-// in-flight activities that have a worker control queue. Called from GenerateWorkflowCloseTasks
-// on every workflow close path to proactively notify workers.
+// in-flight activities that have a worker control queue.
 func (ms *MutableStateImpl) GenerateActivityCancelCommandsForClose() error {
 	if !ms.config.EnableCancelActivityWorkerCommand() {
 		return nil
