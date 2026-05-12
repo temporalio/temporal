@@ -34,8 +34,8 @@ var Enabled = dynamicconfig.NewNamespaceBoolSetting(
 	`Toggles standalone Nexus operation functionality on the server.`,
 )
 
-var EnableChasmNexus = dynamicconfig.NewNamespaceBoolSetting(
-	"nexusoperation.enableChasm",
+var EnableChasmWorkflowOperations = dynamicconfig.NewNamespaceBoolSetting(
+	"nexusoperation.enableChasmWorkflowOperations",
 	false,
 	`Feature flag that controls whether the legacy HSM-based implementation (when flag is false; default) or the newer
 CHASM-based implementation of Nexus will be used when scheduling new Nexus Operations.`,
@@ -218,7 +218,7 @@ Added for safety. Defaults to true. Likely to be removed in future server versio
 type Config struct {
 	Enabled                             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasm                         dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableChasmNexus                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableChasmNexusWorkflowOperations  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NumHistoryShards                    int32
 	LongPollBuffer                      dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	LongPollTimeout                     dynamicconfig.DurationPropertyFnWithNamespaceFilter
@@ -247,7 +247,7 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 	return &Config{
 		Enabled:                            Enabled.Get(dc),
 		EnableChasm:                        dynamicconfig.EnableChasm.Get(dc),
-		EnableChasmNexus:                   EnableChasmNexus.Get(dc),
+		EnableChasmNexusWorkflowOperations: EnableChasmWorkflowOperations.Get(dc),
 		NumHistoryShards:                   cfg.NumHistoryShards,
 		LongPollBuffer:                     LongPollBuffer.Get(dc),
 		LongPollTimeout:                    LongPollTimeout.Get(dc),
