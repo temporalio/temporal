@@ -100,8 +100,7 @@ func TimeoutWorkflow(
 		return err
 	}
 
-	// Proactively cancel in-flight activities so they don't run uselessly after the workflow is closed.
-	return mutableState.GenerateActivityCancelCommandsForClose()
+	return nil
 }
 
 // TerminateWorkflow will write a WorkflowExecutionTerminated event with a fresh
@@ -152,8 +151,7 @@ func TerminateWorkflow(
 		return err
 	}
 
-	// Proactively cancel in-flight activities so they don't run uselessly after the workflow is closed.
-	return mutableState.GenerateActivityCancelCommandsForClose()
+	return nil
 }
 
 // FindAutoResetPoint returns the auto reset point
