@@ -391,6 +391,7 @@ func processActivityWorkflowRules(
 		activityInfo.StartedEventId = common.EmptyEventID
 		activityInfo.StartVersion = common.EmptyVersion
 		activityInfo.StartedTime = nil
+		activityInfo.StartedClock = nil
 		activityInfo.RequestId = ""
 		return nil
 	}); err != nil {
