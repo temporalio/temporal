@@ -440,7 +440,7 @@ func TestRequestIDGeneratedWhenMissing(t *testing.T) {
 			StartToCloseTimeout: durationpb.New(10 * time.Second),
 			RetryPolicy:         &commonpb.RetryPolicy{},
 		}
-		_, err := h.validateAndPopulateStartRequest(req, namespace.ID(defaultNamespaceID))
+		_, err := h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
 		require.NoError(t, err)
 		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
 		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
