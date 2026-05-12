@@ -799,7 +799,7 @@ func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activityp
 		if newReqID != "" && existingReqID == newReqID {
 			return &activitypb.PauseActivityExecutionResponse{}, nil
 		}
-		return &activitypb.PauseActivityExecutionResponse{}, serviceerror.NewFailedPrecondition("activity is already paused")
+		return nil, serviceerror.NewFailedPrecondition("activity is already paused")
 	}
 
 	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityPausedScope)

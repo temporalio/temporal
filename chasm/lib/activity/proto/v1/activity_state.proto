@@ -183,7 +183,6 @@ message ActivityAttemptState {
   // previous attempt or pre-update state are discarded.
   // Note: ScheduleToCloseTimeoutTask uses a separate ActivityState.schedule_to_close_stamp because
   // it spans the full activity lifetime and must not be invalidated on retry.
-  // TODO: also invalidate on pause and reset when those are supported.
   int32 stamp = 6;
 
   string last_worker_identity = 7;
