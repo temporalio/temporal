@@ -274,7 +274,7 @@ func Invoke(
 				tag.RequestID(requestID),
 			)
 			return nil, serviceerror.NewInternal(
-				fmt.Sprintf("failed to construct describe response for requestID: %d", requestID),
+				fmt.Sprintf("failed to construct describe response for requestID: %s", requestID),
 			)
 		}
 		chasmCallbackInfos, err := buildCallbackInfosFromChasm(
