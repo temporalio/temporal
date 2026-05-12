@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/migration"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives"
@@ -82,11 +83,20 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 		metrics.StringTag(metrics.ScheduleMigrationDirectionTag, metrics.ScheduleMigrationDirectionToWorkflow),
 	)
 	metricsHandler.Counter(metrics.ScheduleMigrationStarted.Name()).Record(1)
+
+	// logger is initialized after ReadComponent, once namespace/scheduleID are known.
+	var logger log.Logger
 	defer func() {
 		if retErr != nil {
 			metricsHandler.Counter(metrics.ScheduleMigrationFailed.Name()).Record(1)
+			if logger != nil {
+				logger.Error("schedule migration to workflow failed", tag.Error(retErr))
+			}
 		} else {
 			metricsHandler.Counter(metrics.ScheduleMigrationCompleted.Name()).Record(1)
+			if logger != nil {
+				logger.Info("schedule migration to workflow succeeded")
+			}
 		}
 	}()
 
@@ -155,6 +165,13 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 	if err != nil {
 		return fmt.Errorf("failed to read scheduler state: %w", err)
 	}
+
+	logger = log.With(
+		h.baseLogger,
+		tag.WorkflowNamespace(result.namespace),
+		tag.ScheduleID(result.scheduleID),
+	)
+	logger.Info("schedule migration to workflow started")
 
 	// Serialize the V1 workflow input.
 	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(result.args)
