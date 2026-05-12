@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
 	commandpb "go.temporal.io/api/command/v1"
@@ -56,6 +57,32 @@ type (
 		timeSource      *commonclock.EventTimeSource
 	}
 )
+
+func TestClearActivityStartedState(t *testing.T) {
+	ai := &persistencespb.ActivityInfo{
+		StartedEventId: 42,
+		StartVersion:   10,
+		RequestId:      "req-1",
+		StartedTime:    timestamppb.Now(),
+		StartedClock:   &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 99},
+		// Fields that should NOT be cleared.
+		ScheduledEventId: 7,
+		ActivityId:       "activity-1",
+		Attempt:          3,
+	}
+
+	ClearActivityStartedState(ai)
+
+	require.Equal(t, common.EmptyEventID, ai.StartedEventId)
+	require.Equal(t, common.EmptyVersion, ai.StartVersion)
+	require.Empty(t, ai.RequestId)
+	require.Nil(t, ai.StartedTime)
+	require.Nil(t, ai.StartedClock)
+	// Verify non-started fields are untouched.
+	require.Equal(t, int64(7), ai.ScheduledEventId)
+	require.Equal(t, "activity-1", ai.ActivityId)
+	require.Equal(t, int32(3), ai.Attempt)
+}
 
 func TestMutableStateRetryActivitySuite(t *testing.T) {
 	s := new(retryActivitySuite)
