@@ -505,7 +505,7 @@ functional-with-fault-injection-test: clean-test-output
 
 mixed-brain-test: clean-test-output
 	@printf $(COLOR) "Run mixed brain tests..."
-	@CGO_ENABLED=1 TEST_OUTPUT_ROOT=$(CURDIR)/$(TEST_OUTPUT_ROOT) go test -v $(MIXED_BRAIN_TEST_ROOT) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
+	@cd $(MIXED_BRAIN_TEST_ROOT) && CGO_ENABLED=1 TEST_OUTPUT_ROOT=$(CURDIR)/$(TEST_OUTPUT_ROOT) go test -v ./... $(COMPILED_TEST_ARGS) 2>&1 | tee -a $(CURDIR)/test.log
 	@$(MAKE) verify-test-log
 
 verify-test-log:
