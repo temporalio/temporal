@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/primitives"
@@ -182,6 +183,19 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 				},
 			}
 		},
+	)
+	saValidator := searchattribute.NewValidator(
+		s.mockResource.GetSearchAttributesProvider(),
+		s.mockResource.GetSearchAttributesMapperProvider(),
+		config.SearchAttributesNumberOfKeysLimit,
+		config.SearchAttributesSizeOfValueLimit,
+		config.SearchAttributesTotalSizeLimit,
+		s.mockResource.GetVisibilityManager(),
+		visibility.AllowListForValidation(
+			s.mockResource.GetVisibilityManager().GetStoreNames(),
+			config.VisibilityAllowList,
+		),
+		config.SuppressErrorSetSystemSearchAttribute,
 	)
 	return NewWorkflowHandler(
 		cbValidator,
