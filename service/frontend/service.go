@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -200,7 +201,7 @@ type Config struct {
 	CallbackURLMaxLength    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackHeaderMaxSize   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
-	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[callbacks.AddressMatchRules]
+	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[callback.AddressMatchRules]
 
 	MaxNexusOperationTokenLength   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NexusRequestHeadersBlacklist   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
