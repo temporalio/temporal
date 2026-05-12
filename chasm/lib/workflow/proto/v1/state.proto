@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.workflow.proto.v1;
 
-
 option go_package = "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpb";
 
 // NexusOperationParentData contains workflow-specific data stored in a nexus operation's
