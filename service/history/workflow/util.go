@@ -96,11 +96,7 @@ func TimeoutWorkflow(
 		retryState,
 		continuedRunID,
 	)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // TerminateWorkflow will write a WorkflowExecutionTerminated event with a fresh
@@ -147,11 +143,7 @@ func TerminateWorkflow(
 		deleteAfterTerminate,
 		links,
 	)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // FindAutoResetPoint returns the auto reset point
