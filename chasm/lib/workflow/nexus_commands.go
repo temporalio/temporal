@@ -35,7 +35,7 @@ func (ch *nexusCommandHandler) handleScheduleCommand(
 	ns := ctx.NamespaceEntry()
 	nsName := ns.Name().String()
 
-	if !ch.config.EnableChasmNexus(nsName) {
+	if !ch.config.EnableChasmNexusWorkflowOperations(nsName) {
 		return ErrCommandNotSupported
 	}
 
@@ -234,7 +234,7 @@ func (ch *nexusCommandHandler) handleCancelCommand(
 	opts CommandHandlerOptions,
 ) error {
 	nsName := ctx.NamespaceEntry().Name().String()
-	if !ch.config.EnableChasmNexus(nsName) {
+	if !ch.config.EnableChasmNexusWorkflowOperations(nsName) {
 		return ErrCommandNotSupported
 	}
 

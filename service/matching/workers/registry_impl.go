@@ -482,11 +482,11 @@ func (m *registryImpl) DescribeWorker(nsID namespace.ID, workerInstanceKey strin
 
 // isSystemWorker determines if a worker is a system worker.
 // If a principal is available, it checks whether the principal identifies
-// the Temporal server itself (type="temporal", name="internal"). Otherwise,
-// it falls back to checking the task queue name prefix.
+// the Temporal server itself (type="temporal"). Otherwise, it falls back to
+// checking the task queue name prefix.
 func isSystemWorker(principal *commonpb.Principal, taskQueue string) bool {
 	if principal != nil {
-		return principal.GetType() == authorization.InternalPrincipalType && principal.GetName() == authorization.InternalPrincipalName
+		return principal.GetType() == authorization.InternalPrincipalType
 	}
 	return primitives.IsInternalTaskQueue(taskQueue)
 }

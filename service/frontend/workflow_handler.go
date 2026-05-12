@@ -4948,18 +4948,29 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 		return nil, errSchedulesNotAllowed
 	}
 
-	// Prefer CHASM scheduler if enabled.
-	if wh.chasmSchedulerEnabled(ctx, request.Namespace) {
-		res, err := wh.deleteScheduleCHASM(ctx, request)
-		if err == nil {
-			return res, nil
-		}
-		if !isSchedulerErrorLegacyRoutable(err) {
-			return nil, err
-		}
+	// Always attempt deletion in both stacks. A schedule may exist in either or
+	// both during dual-stack migration (and a V1 sentinel may linger after a
+	// CHASM-only create). Surface an error only when neither stack succeeded.
+	chasmEnabled := wh.chasmSchedulerEnabled(ctx, request.Namespace)
+
+	var chasmErr error
+	if chasmEnabled {
+		_, chasmErr = wh.deleteScheduleCHASM(ctx, request)
+	}
+	_, v1Err := wh.deleteScheduleWorkflow(ctx, request)
+
+	// At least one side actually deleted → success.
+	if (chasmEnabled && chasmErr == nil) || v1Err == nil {
+		return &workflowservice.DeleteScheduleResponse{}, nil
 	}
 
-	return wh.deleteScheduleWorkflow(ctx, request)
+	// Neither side deleted. Surface a real (non-routable) CHASM failure first;
+	// otherwise return the V1 error (which is either a real failure or the
+	// canonical NotFound when neither stack had the schedule).
+	if chasmEnabled && chasmErr != nil && !isSchedulerErrorLegacyRoutable(chasmErr) {
+		return nil, chasmErr
+	}
+	return nil, v1Err
 }
 
 func (wh *WorkflowHandler) deleteScheduleCHASM(ctx context.Context, request *workflowservice.DeleteScheduleRequest) (*workflowservice.DeleteScheduleResponse, error) {

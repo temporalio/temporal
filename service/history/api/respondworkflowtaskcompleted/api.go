@@ -603,7 +603,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
 				nil,
-				0,
+				-1, // sentinel: inline path didn't consult matching, has no routing revision
 			)
 			if err != nil {
 				return nil, err
@@ -729,7 +729,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			workflowLease.GetContext().UpdateRegistry(ctx),
 			false,
 			nil,
-			0,
+			-1, // sentinel: inline path didn't consult matching, has no routing revision
 		)
 		if err != nil {
 			return nil, err
