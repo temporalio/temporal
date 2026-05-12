@@ -4555,9 +4555,9 @@ func (ms *MutableStateImpl) GenerateActivityCancelCommandsForClose() error {
 			continue
 		}
 		if ai.StartedClock == nil {
-			// StartedClock may be nil for activities started before this feature was deployed.
-			// Skip cancel command; the activity will time out normally.
-			ms.logger.Debug("Skipping worker cancel command: activity missing StartedClock (pre-deploy)",
+			// StartedClock is nil when the activity is not currently started (e.g. in retry backoff)
+			// or was started before this feature was deployed. Skip cancel command.
+			ms.logger.Debug("Skipping worker cancel command: activity not currently started",
 				tag.WorkflowNamespaceID(wfKey.NamespaceID),
 				tag.WorkflowID(wfKey.WorkflowID),
 				tag.WorkflowRunID(wfKey.RunID),
