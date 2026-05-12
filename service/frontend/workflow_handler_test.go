@@ -4353,21 +4353,23 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerDeduplicatesByHost() {
 	taskQueue := "my-task-queue"
 	workerInstanceKey := "worker-instance-123"
 
-	// Wrap the mock matching client with a Route() implementation that maps all 4 partitions
-	// to 2 hosts: partitions 0,1 -> host-a, partitions 2,3 -> host-b.
+	// Wrap the mock matching client with a Route() that maps partitions to 2 hosts:
+	// root (partition 0) and partition 1 -> host-a, partitions 2 and 3 -> host-b.
 	routingClient := &routingMatchingClient{
 		MockMatchingServiceClient: s.mockMatchingClient,
 		routeFn: func(p tqid.Partition) (string, error) {
-			// All 4 partitions route to the same host.
+			if strings.Contains(p.RpcName(), "/2") || strings.Contains(p.RpcName(), "/3") {
+				return "host-b", nil
+			}
 			return "host-a", nil
 		},
 	}
 	wh.matchingClient = routingClient
 
-	// All 4 partitions map to 1 host x 2 task types = 2 RPCs (not 8).
+	// 4 partitions across 2 hosts x 2 task types = 4 RPCs (not 8).
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil).
-		Times(2)
+		Times(4)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
 
