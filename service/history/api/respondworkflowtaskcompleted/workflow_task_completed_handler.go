@@ -1627,20 +1627,38 @@ func (handler *workflowTaskCompletedHandler) terminateWorkflow(
 func (handler *workflowTaskCompletedHandler) handleActivityScheduleWithMigrationSwitch(
 	ctx context.Context,
 	command *commandpb.Command,
-	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
+	_ *collection.IndexedTakeList[string, *protocolpb.Message],
 ) (*historypb.HistoryEvent, *handleCommandResponse, error) {
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	ns, err := handler.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
-	if err != nil {
-		// todo (david.porter) Need to make this a nonfatal error, fatal for development only error
-		handler.logger.Fatal("programmatic error in resolving the namespace by ID for activity migration")
+	if err != nil || !handler.config.EnableChasm(string(ns.Name())) || !handler.config.EnableCHASMActivityPrototype(string(ns.Name())) {
 		return handler.handleCommandScheduleActivity(ctx, command.GetScheduleActivityTaskCommandAttributes())
 	}
 
-	// if we don't support CHASM or it's not enabled for handling activities, bail out
-	// via the legacy path
-	if !handler.config.EnableChasm(string(ns.Name())) || !handler.config.EnableCHASMActivityPrototype(string(ns.Name())) {
+	chasmHandler, ok := handler.chasmWorkflowRegistry.CommandHandler(command.GetCommandType())
+	if !ok {
 		return handler.handleCommandScheduleActivity(ctx, command.GetScheduleActivityTaskCommandAttributes())
+	}
+
+	// Normalize and validate attrs (retry policy, timeouts) before passing to the CHASM handler.
+	attr := command.GetScheduleActivityTaskCommandAttributes()
+	if err := handler.validateCommandAttr(
+		func() (enumspb.WorkflowTaskFailedCause, error) {
+			return handler.attrValidator.ValidateActivityScheduleAttributes(
+				namespace.ID(executionInfo.NamespaceId),
+				attr,
+				executionInfo.WorkflowRunTimeout,
+				executionInfo.TaskQueue,
+			)
+		},
+	); err != nil || handler.stopProcessing {
+		return nil, nil, err
+	}
+
+	handler.mutableState.EnsureChasmWorkflowComponent(ctx)
+	chasmWorkflow, chasmCtx, err := handler.mutableState.ChasmWorkflowComponent(ctx)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	handlerOpts := chasmworkflow.CommandHandlerOptions{
@@ -1648,22 +1666,24 @@ func (handler *workflowTaskCompletedHandler) handleActivityScheduleWithMigration
 	}
 	validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
 
-	chasmHandler, ok := handler.chasmWorkflowRegistry.CommandHandler(command.GetCommandType())
+	if err := chasmHandler(chasmCtx, chasmWorkflow, validator, command, handlerOpts); err != nil {
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
+		if errors.As(err, &failWFTErr) {
+			if failWFTErr.TerminateWorkflow {
+				return nil, nil, handler.terminateWorkflow(failWFTErr.Cause, failWFTErr)
+			}
+			return nil, nil, handler.failWorkflowTask(failWFTErr.Cause, failWFTErr)
+		}
+		return nil, nil, err
+	}
+
+	activityID := command.GetScheduleActivityTaskCommandAttributes().GetActivityId()
+	actField, ok := chasmWorkflow.Activities[activityID]
 	if !ok {
-		handler.logger.Fatal("not able to handle this command for scheduling an activity, this is a programmatic error")
+		return nil, nil, serviceerror.NewInternal("activity not found in CHASM tree after scheduling")
 	}
-	handler.mutableState.EnsureChasmWorkflowComponent(ctx)
-	chasmWorkflow, chasmCtx, chasmErr := handler.mutableState.ChasmWorkflowComponent(ctx)
-	if chasmErr != nil {
-		return nil, nil, chasmErr
-	}
-
-	// implement the rest of this either here or in the CHASMWorkflow activity schedule component
-	// let's avoid touching the mutable state at all if possible.
-	chasmWorkflow.AddScheduledActivity(... )
-
-	err = chasmHandler(chasmCtx, chasmWorkflow, validator, command, handlerOpts)
-	return nil, nil, err
+	scheduledEventID := actField.Get(chasmCtx).GetScheduledEventId()
+	return &historypb.HistoryEvent{EventId: scheduledEventID}, &handleCommandResponse{}, nil
 }
 
 func newWorkflowTaskFailedCause(failedCause enumspb.WorkflowTaskFailedCause, causeErr error, terminatesWorkflow bool) *workflowTaskFailedCause {

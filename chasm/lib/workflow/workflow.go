@@ -108,7 +108,7 @@ func (w *Workflow) OnActivityCompleted(ctx chasm.MutableContext, act *activity.A
 
 // OnActivityFailed implements ActivityStore for workflow-embedded activities.
 // Writes ActivityTaskStarted + ActivityTaskFailed history events; Apply() handles cleanup.
-func (w *Workflow) OnActivityFailed(ctx chasm.MutableContext, act *activity.Activity) error {
+func (w *Workflow) OnActivityFailed(ctx chasm.MutableContext, act *activity.Activity, retryState enumspb.RetryState) error {
 	scheduledEventID := act.GetScheduledEventId()
 	attempt := act.LastAttempt.Get(ctx)
 	startedEvent, err := addAndApplyHistoryEvent[ActivityTaskStartedEventDefinition](w, ctx, func(e *historypb.HistoryEvent) {
@@ -130,7 +130,7 @@ func (w *Workflow) OnActivityFailed(ctx chasm.MutableContext, act *activity.Acti
 				ScheduledEventId: scheduledEventID,
 				StartedEventId:   startedEvent.GetEventId(),
 				Failure:          act.Outcome.Get(ctx).GetFailed().GetFailure(),
-				RetryState:       enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
+				RetryState:       retryState,
 				Identity:         attempt.GetLastWorkerIdentity(),
 			},
 		}
@@ -164,13 +164,26 @@ func (w *Workflow) OnActivityTimedOut(ctx chasm.MutableContext, act *activity.Ac
 		}
 		startedEventID = startedEvent.GetEventId()
 	}
+
+	// Compute the correct retry state based on the timeout type.
+	// SCHEDULE_TO_CLOSE (and SCHEDULE_TO_START) timeouts are deadline-driven: the activity
+	// ran out of its allotted time window, so RETRY_STATE_TIMEOUT is the correct signal.
+	// All other timeout types mean retries were exhausted or no retry policy was configured.
+	retryState := enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
+	switch timeoutFailure.GetTimeoutFailureInfo().GetTimeoutType() {
+	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
+		retryState = enumspb.RETRY_STATE_TIMEOUT
+	}
+	if act.GetRetryPolicy() == nil {
+		retryState = enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET
+	}
 	_, err := addAndApplyHistoryEvent[ActivityTaskTimedOutEventDefinition](w, ctx, func(e *historypb.HistoryEvent) {
 		e.Attributes = &historypb.HistoryEvent_ActivityTaskTimedOutEventAttributes{
 			ActivityTaskTimedOutEventAttributes: &historypb.ActivityTaskTimedOutEventAttributes{
 				ScheduledEventId: scheduledEventID,
 				StartedEventId:   startedEventID,
 				Failure:          timeoutFailure,
-				RetryState:       enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
+				RetryState:       retryState,
 			},
 		}
 	})

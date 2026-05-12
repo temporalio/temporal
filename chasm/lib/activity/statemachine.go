@@ -219,6 +219,9 @@ var TransitionCompleted = chasm.NewTransition(
 type failedEvent struct {
 	req            *historyservice.RespondActivityTaskFailedRequest
 	metricsHandler metrics.Handler
+	// retryState is the final retry state to record in the ActivityTaskFailed history event.
+	// It explains why the activity was not retried (e.g. max attempts reached, STC exceeded).
+	retryState enumspb.RetryState
 }
 
 // TransitionFailed transitions to Failed status.
@@ -250,7 +253,7 @@ var TransitionFailed = chasm.NewTransition(
 
 		a.emitOnFailedMetrics(ctx, event.metricsHandler)
 
-		return a.StoreOrSelf(ctx).OnActivityFailed(ctx, a)
+		return a.StoreOrSelf(ctx).OnActivityFailed(ctx, a, event.retryState)
 	},
 )
 
@@ -353,6 +356,10 @@ type timeoutEvent struct {
 	metricsHandler metrics.Handler
 	timeoutType    enumspb.TimeoutType
 	fromStatus     activitypb.ActivityExecutionStatus
+	// overrideFailure, when non-nil, is used as the terminal failure instead of building one
+	// from timeoutType. This is set by task handlers when they need a custom message (e.g.
+	// "Not enough time to schedule next retry…") while still routing through TransitionTimedOut.
+	overrideFailure *failurepb.Failure
 }
 
 // TransitionTimedOut transitions to TimedOut status.
@@ -371,29 +378,55 @@ var TransitionTimedOut = chasm.NewTransition(
 			timeoutFailure  *failurepb.Failure
 			needsStartedEvt bool
 		)
-		switch timeoutType {
-		case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
-			err = a.recordScheduleToStartOrCloseTimeoutFailure(ctx, timeoutType)
-			// Activity was never started — no ActivityTaskStarted event needed.
-			// Outcome already set by recordScheduleToStartOrCloseTimeoutFailure.
-			timeoutFailure = a.Outcome.Get(ctx).GetFailed().GetFailure()
-		case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-			timeoutFailure = createStartToCloseTimeoutFailure()
-			err = a.recordFailedAttempt(ctx, 0, timeoutFailure, ctx.Now(a), true)
-			// Activity was started but no ActivityTaskStarted event in history yet
-			// (it's written alongside the outcome event).
+
+		// When an override failure is provided (e.g. the "not enough time" SCHEDULE_TO_CLOSE
+		// failure synthesised by a task handler), use it directly and record a failed attempt.
+		if event.overrideFailure != nil {
+			timeoutFailure = event.overrideFailure
+			// The activity was running when the override failure was produced (start-to-close
+			// or heartbeat timeout converted to schedule-to-close), so we need a started event.
 			needsStartedEvt = true
-		case enumspb.TIMEOUT_TYPE_HEARTBEAT:
-			timeoutFailure = createHeartbeatTimeoutFailure()
 			err = a.recordFailedAttempt(ctx, 0, timeoutFailure, ctx.Now(a), true)
-			// Activity was started but no ActivityTaskStarted event in history yet.
-			needsStartedEvt = true
-		default:
-			err = fmt.Errorf("unhandled activity timeout: %v", timeoutType)
+		} else {
+			switch timeoutType {
+			case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+				enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
+				err = a.recordScheduleToStartOrCloseTimeoutFailure(ctx, timeoutType)
+				// Outcome already set by recordScheduleToStartOrCloseTimeoutFailure.
+				timeoutFailure = a.Outcome.Get(ctx).GetFailed().GetFailure()
+				// If the activity was already running when the STC timer fired (e.g. the
+				// schedule-to-close deadline expired mid-execution), we need to emit an
+				// ActivityTaskStarted event before ActivityTaskTimedOut.
+				needsStartedEvt = (timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE &&
+					event.fromStatus != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED)
+			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
+				timeoutFailure = createStartToCloseTimeoutFailure()
+				err = a.recordFailedAttempt(ctx, 0, timeoutFailure, ctx.Now(a), true)
+				// Activity was started but no ActivityTaskStarted event in history yet
+				// (it's written alongside the outcome event).
+				needsStartedEvt = true
+			case enumspb.TIMEOUT_TYPE_HEARTBEAT:
+				timeoutFailure = createHeartbeatTimeoutFailure()
+				err = a.recordFailedAttempt(ctx, 0, timeoutFailure, ctx.Now(a), true)
+				// Activity was started but no ActivityTaskStarted event in history yet.
+				needsStartedEvt = true
+			default:
+				err = fmt.Errorf("unhandled activity timeout: %v", timeoutType)
+			}
 		}
 		if err != nil {
 			return err
+		}
+
+		// Populate LastHeartbeatDetails on the timeout failure so the SDK can surface the last
+		// recorded heartbeat payload to the workflow. This mirrors the legacy path in
+		// timer_queue_active_task_executor.go where ai.LastHeartbeatDetails is set on the failure.
+		if timeoutFailure != nil {
+			if lastHB, ok := a.LastHeartbeat.TryGet(ctx); ok && lastHB.GetDetails() != nil {
+				if tfi := timeoutFailure.GetTimeoutFailureInfo(); tfi != nil {
+					tfi.LastHeartbeatDetails = lastHB.GetDetails()
+				}
+			}
 		}
 
 		a.emitOnTimedOutMetrics(ctx, event.metricsHandler, timeoutType, event.fromStatus)

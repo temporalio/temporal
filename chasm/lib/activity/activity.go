@@ -64,7 +64,8 @@ type ActivityStore interface {
 	// standby callbacks.
 	OnActivityCompleted(ctx chasm.MutableContext, act *Activity) error
 	// OnActivityFailed is called when an activity reaches the Failed terminal state.
-	OnActivityFailed(ctx chasm.MutableContext, act *Activity) error
+	// retryState explains why the activity was not retried (e.g. max attempts, STC deadline).
+	OnActivityFailed(ctx chasm.MutableContext, act *Activity, retryState enumspb.RetryState) error
 	// OnActivityTimedOut is called when an activity reaches the TimedOut terminal state.
 	// timeoutFailure is the failure to record in the history event.
 	// needsStartedEvent indicates whether an ActivityTaskStarted event must also be written
@@ -320,7 +321,7 @@ func (a *Activity) OnActivityCompleted(ctx chasm.MutableContext, _ *Activity) er
 }
 
 // OnActivityFailed implements ActivityStore for standalone activities.
-func (a *Activity) OnActivityFailed(ctx chasm.MutableContext, _ *Activity) error {
+func (a *Activity) OnActivityFailed(ctx chasm.MutableContext, _ *Activity, _ enumspb.RetryState) error {
 	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
 }
 
@@ -489,7 +490,8 @@ func (a *Activity) HandleFailed(
 		!slices.Contains(a.GetRetryPolicy().GetNonRetryableErrorTypes(), appFailure.GetType())
 
 	if isRetryable {
-		rescheduled, err := a.tryReschedule(ctx, appFailure.GetNextRetryDelay().AsDuration(), failure)
+		retryInterval := appFailure.GetNextRetryDelay().AsDuration()
+		rescheduled, err := a.tryReschedule(ctx, retryInterval, failure)
 		if err != nil {
 			return nil, err
 		}
@@ -503,6 +505,7 @@ func (a *Activity) HandleFailed(
 	if err := TransitionFailed.Apply(a, ctx, failedEvent{
 		req:            event.Request,
 		metricsHandler: metricsHandler,
+		retryState:     a.retryStateForFailedActivity(ctx, 0),
 	}); err != nil {
 		return nil, err
 	}
@@ -689,6 +692,34 @@ func (a *Activity) tryReschedule(
 	})
 }
 
+// retryStateForFailedActivity returns the RetryState to record in the ActivityTaskFailed history
+// event when the activity will not be retried. It mirrors the logic in the legacy
+// mutable_state_impl.go RetryActivity / getBackoffInterval path:
+//   - No retry policy → RETRY_STATE_RETRY_POLICY_NOT_SET
+//   - STC deadline would be exceeded → RETRY_STATE_TIMEOUT
+//   - Max attempts reached → RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
+func (a *Activity) retryStateForFailedActivity(ctx chasm.Context, overridingRetryInterval time.Duration) enumspb.RetryState {
+	if a.GetRetryPolicy() == nil {
+		return enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET
+	}
+	attempt := a.LastAttempt.Get(ctx)
+	retryPolicy := a.GetRetryPolicy()
+
+	enoughAttempts := retryPolicy.GetMaximumAttempts() == 0 || attempt.GetCount() < retryPolicy.GetMaximumAttempts()
+	enoughTime, _ := a.hasEnoughTimeForRetry(ctx, overridingRetryInterval)
+
+	// STC deadline takes priority: even if we're also out of attempts, the scheduler
+	// would have hit the deadline before getting another chance.
+	if !enoughTime {
+		return enumspb.RETRY_STATE_TIMEOUT
+	}
+	if !enoughAttempts {
+		return enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
+	}
+	// Fallback (shouldn't normally reach here — tryReschedule would have succeeded).
+	return enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
+}
+
 func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration) {
 	if !TransitionRescheduled.Possible(a) {
 		return false, 0
@@ -755,6 +786,33 @@ func createHeartbeatTimeoutFailure() *failurepb.Failure {
 			},
 		},
 	}
+}
+
+// createNotEnoughTimeForRetryFailure creates a SCHEDULE_TO_CLOSE timeout failure used when an
+// activity attempt times out (start-to-close or heartbeat) but there is not enough time
+// remaining in the schedule-to-close window to schedule the next retry. This mirrors the
+// legacy behaviour in timer_queue_active_task_executor.go.
+func createNotEnoughTimeForRetryFailure() *failurepb.Failure {
+	return &failurepb.Failure{
+		Message: "Not enough time to schedule next retry before activity ScheduleToClose timeout, giving up retrying",
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+				TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			},
+		},
+	}
+}
+
+// wouldExceedScheduleToClose returns true when the activity has a schedule-to-close timeout
+// configured and there is not enough time remaining to schedule another retry attempt. It is
+// used by timeout task handlers to decide whether to convert a start-to-close or heartbeat
+// timeout into a schedule-to-close timeout (matching legacy behaviour).
+func (a *Activity) wouldExceedScheduleToClose(ctx chasm.Context) bool {
+	if a.GetScheduleToCloseTimeout().AsDuration() == 0 {
+		return false
+	}
+	ok, _ := a.hasEnoughTimeForRetry(ctx, 0)
+	return !ok
 }
 
 // RecordHeartbeat records a heartbeat for the activity.

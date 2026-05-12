@@ -29,11 +29,14 @@ var Module = fx.Module(
 )
 
 // activityEventLibrary is a [Library] that registers activity task event definitions
-// with the workflow event registry. It has no command handlers.
+// and command handlers with the workflow event registry.
 type activityEventLibrary struct{}
 
 func (activityEventLibrary) CommandHandlers() map[enumspb.CommandType]CommandHandler {
-	return nil
+	h := &activityCommandHandler{}
+	return map[enumspb.CommandType]CommandHandler{
+		enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK: h.handleScheduleCommand,
+	}
 }
 
 func (activityEventLibrary) EventDefinitions() []EventDefinition {

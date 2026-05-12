@@ -193,11 +193,19 @@ func (h *startToCloseTimeoutTaskHandler) Execute(
 		return nil
 	}
 
-	return TransitionTimedOut.Apply(activity, ctx, timeoutEvent{
+	// When the activity cannot be retried because the schedule-to-close deadline would be
+	// exceeded (as opposed to max-attempts being reached), convert the failure to a
+	// SCHEDULE_TO_CLOSE timeout with the canonical "not enough time" message. This mirrors
+	// the legacy timer_queue_active_task_executor behaviour.
+	event := timeoutEvent{
 		timeoutType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		metricsHandler: metricsHandler,
 		fromStatus:     activity.GetStatus(),
-	})
+	}
+	if activity.wouldExceedScheduleToClose(ctx) {
+		event.overrideFailure = createNotEnoughTimeForRetryFailure()
+	}
+	return TransitionTimedOut.Apply(activity, ctx, event)
 }
 
 // HeartbeatTimeoutTask is a pure task that enforces heartbeat timeouts.
@@ -271,9 +279,15 @@ func (h *heartbeatTimeoutTaskHandler) Execute(
 		return nil
 	}
 
-	return TransitionTimedOut.Apply(activity, ctx, timeoutEvent{
+	// When the activity cannot be retried because the schedule-to-close deadline would be
+	// exceeded, convert to a SCHEDULE_TO_CLOSE timeout with the "not enough time" message.
+	event := timeoutEvent{
 		timeoutType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		metricsHandler: metricsHandler,
 		fromStatus:     activity.GetStatus(),
-	})
+	}
+	if activity.wouldExceedScheduleToClose(ctx) {
+		event.overrideFailure = createNotEnoughTimeForRetryFailure()
+	}
+	return TransitionTimedOut.Apply(activity, ctx, event)
 }
