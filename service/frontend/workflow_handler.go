@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/failure"
@@ -4960,7 +4961,11 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 	if chasmEnabled {
 		_, chasmErr = wh.deleteScheduleCHASM(ctx, request)
 	}
-	_, v1Err := wh.deleteScheduleWorkflow(ctx, request)
+	// Isolate V1's terminate call in a fresh metadata context so its trailers
+	// (from the sentinel/dummy workflow it terminates) don't overwrite the
+	// schedule's metadata set by the CHASM path.
+	v1Ctx := contextutil.WithMetadataContext(ctx)
+	_, v1Err := wh.deleteScheduleWorkflow(v1Ctx, request)
 
 	// At least one side actually deleted → success.
 	if (chasmEnabled && chasmErr == nil) || v1Err == nil {
