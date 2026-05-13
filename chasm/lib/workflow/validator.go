@@ -115,9 +115,6 @@ func (v *RequestValidator) ValidateWorkflowIdReusePolicy(
 		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
 		return errIncompatibleIDReusePolicyTerminateIfRunning
 	}
-	if conflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL {
-		return errConflictPolicyFailNotSupported
-	}
 	if conflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING &&
 		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE {
 		return errIncompatibleIDReusePolicyRejectDuplicate
@@ -240,6 +237,10 @@ func (v *RequestValidator) ValidateSignalWithStartRequest(request *workflowservi
 		request.WorkflowIdConflictPolicy,
 	); err != nil {
 		return err
+	}
+
+	if request.WorkflowIdConflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL {
+		return errConflictPolicyFailNotSupported
 	}
 
 	enums.SetDefaultWorkflowIDPolicies(&request.WorkflowIdReusePolicy, &request.WorkflowIdConflictPolicy, enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)

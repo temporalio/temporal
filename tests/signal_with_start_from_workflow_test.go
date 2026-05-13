@@ -608,35 +608,58 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_UseExisting(
 	s.Equal(originalRunID, resp.RunId)
 }
 
-// TestIDConflictPolicy_Fail verifies that SWS fails with WorkflowExecutionAlreadyStarted when
-// a workflow with the same ID is already running and the conflict policy is FAIL.
+// TestIDConflictPolicy_Fail verifies that SWS from a workflow rejects
+// WORKFLOW_ID_CONFLICT_POLICY_FAIL with the same validation error as the frontend
+// SignalWithStartWorkflowExecution API outside a workflow context: signal-with-required-start
+// is not a supported operation. The validation error surfaces here as a workflow task failure
+// on the ScheduleNexusOperation command (BadScheduleNexusOperationAttributes).
 func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_Fail() {
 	ctx := testcore.NewContext()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
 	targetWorkflowID := testcore.RandomizeStr(s.T().Name())
 
-	startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:    s.Namespace().String(),
-		WorkflowId:   targetWorkflowID,
-		WorkflowType: &commonpb.WorkflowType{Name: "target-workflow"},
-		TaskQueue:    &taskqueuepb.TaskQueue{Name: targetTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		RequestId:    uuid.NewString(),
-	})
+	callerRun, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: callerTaskQueue,
+	}, "caller-workflow")
+	s.NoError(err)
 	s.T().Cleanup(func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, startResp.RunId, "test cleanup")
+		_ = s.SdkClient().TerminateWorkflow(ctx, callerRun.GetID(), callerRun.GetRunID(), "test cleanup")
+	})
+
+	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: callerTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:  "test",
 	})
 	s.NoError(err)
 
-	_, failure := s.scheduleAndGetSWSResult(ctx, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	swsReq := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		WorkflowId:               targetWorkflowID,
 		SignalName:               "test-signal",
 		WorkflowType:             &commonpb.WorkflowType{Name: "target-workflow"},
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: targetTaskQueue},
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+	}
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  commonnexus.SystemEndpoint,
+						Service:   "WorkflowService",
+						Operation: "SignalWithStartWorkflowExecution",
+						Input:     payloads.MustEncodeSingle(swsReq),
+					},
+				},
+			},
+		},
 	})
-	s.NotNil(failure, "expected the Nexus operation to fail with CONFLICT_POLICY_FAIL")
-	s.Contains(failure.GetCause().GetMessage()+failure.GetMessage(), "WorkflowExecutionAlreadyStarted")
+	s.Error(err, "expected ScheduleNexusOperation to be rejected with CONFLICT_POLICY_FAIL")
+	s.Contains(err.Error(), "WORKFLOW_ID_CONFLICT_POLICY_FAIL is not supported")
 }
 
 // TestBothWorkflowsVisibleAfterSWSFromWorkflow verifies that when SignalWithStart is invoked
