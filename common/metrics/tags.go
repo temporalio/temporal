@@ -317,10 +317,11 @@ func ForwardedTag(forwarded bool) Tag {
 }
 
 const (
-	TaskAddResultSyncMatch = "sync_match"
-	TaskAddResultBacklog   = "backlog"
-	TaskAddResultThrottled = "throttled"
-	TaskAddResultFailure   = "failure"
+	TaskAddResultSyncMatch        = "sync_match"
+	TaskAddResultSyncMatchUnavail = "sync_match_unavailable"
+	TaskAddResultBacklog          = "backlog"
+	TaskAddResultThrottled        = "throttled"
+	TaskAddResultFailure          = "failure"
 )
 
 func TaskAddResultTag(result string) Tag {

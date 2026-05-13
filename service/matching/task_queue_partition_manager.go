@@ -451,16 +451,9 @@ reredirectTask:
 				pm.processTaskAddHooks(ctx, targetVersion, syncMatched)
 			}
 
-			var syncMatchResult string
+			syncMatchResult := metrics.TaskAddResultSyncMatch
 			if err != nil {
-				var resourceExhausted *serviceerror.ResourceExhausted
-				if errors.As(err, &resourceExhausted) {
-					syncMatchResult = metrics.TaskAddResultThrottled
-				} else {
-					syncMatchResult = metrics.TaskAddResultFailure
-				}
-			} else {
-				syncMatchResult = metrics.TaskAddResultSyncMatch
+				syncMatchResult = taskAddErrResult(err)
 			}
 			syncMatchQueue.RecordTaskAdd(syncMatchResult, forwarded, behavior)
 
@@ -479,7 +472,7 @@ reredirectTask:
 
 	if spoolQueue == nil {
 		// This means the task is being forwarded. Child partition will persist the task when sync match fails.
-		// No metric emitted here: the child partition will emit when it calls SpoolTask.
+		syncMatchQueue.RecordTaskAdd(metrics.TaskAddResultSyncMatchUnavail, forwarded, behavior)
 		return "", false, errRemoteSyncMatchFailed
 	}
 
@@ -494,12 +487,7 @@ reredirectTask:
 		spoolQueue.RecordTaskAdd(metrics.TaskAddResultBacklog, forwarded, behavior)
 		pm.processTaskAddHooks(ctx, targetVersion, false)
 	} else {
-		var resourceExhausted *serviceerror.ResourceExhausted
-		if errors.As(err, &resourceExhausted) {
-			spoolQueue.RecordTaskAdd(metrics.TaskAddResultThrottled, forwarded, behavior)
-		} else {
-			spoolQueue.RecordTaskAdd(metrics.TaskAddResultFailure, forwarded, behavior)
-		}
+		spoolQueue.RecordTaskAdd(taskAddErrResult(err), forwarded, behavior)
 	}
 
 	return assignedBuildId, false, err
@@ -512,6 +500,14 @@ func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context
 			IsSyncMatch:       syncMatched,
 		})
 	}
+}
+
+func taskAddErrResult(err error) string {
+	var resourceExhausted *serviceerror.ResourceExhausted
+	if errors.As(err, &resourceExhausted) {
+		return metrics.TaskAddResultThrottled
+	}
+	return metrics.TaskAddResultFailure
 }
 
 func (pm *taskQueuePartitionManagerImpl) shouldBacklogSyncMatchTaskOnError(err error) bool {
