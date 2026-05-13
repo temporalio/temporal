@@ -75,7 +75,6 @@ type (
 
 var Module = fx.Options(
 	fx.Provide(NewResult),
-	fx.Provide(NewSpecBuilder),
 )
 
 func NewResult(
