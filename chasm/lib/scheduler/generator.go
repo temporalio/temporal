@@ -23,17 +23,18 @@ type Generator struct {
 // NewGenerator returns an initialized Generator component, which should
 // be parented under a Scheduler root node.
 func NewGenerator(ctx chasm.MutableContext) *Generator {
-	return newGeneratorWithState(ctx, &schedulerpb.GeneratorState{
+	generator := newGeneratorWithState(ctx, &schedulerpb.GeneratorState{
 		LastProcessedTime: nil,
 	})
+	// Kick off initial generator run as an immediate task.
+	generator.Generate(ctx)
+	return generator
 }
 
 func newGeneratorWithState(ctx chasm.MutableContext, state *schedulerpb.GeneratorState) *Generator {
 	generator := &Generator{
 		GeneratorState: state,
 	}
-	// Kick off initial generator run as an immediate task.
-	generator.Generate(ctx)
 	return generator
 }
 

@@ -1972,6 +1972,21 @@ func (mr *MockMutableStateMockRecorder) FlushBufferedEvents() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FlushBufferedEvents", reflect.TypeOf((*MockMutableState)(nil).FlushBufferedEvents))
 }
 
+// GenerateEventLoadToken mocks base method.
+func (m *MockMutableState) GenerateEventLoadToken(event *history.HistoryEvent) ([]byte, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateEventLoadToken", event)
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GenerateEventLoadToken indicates an expected call of GenerateEventLoadToken.
+func (mr *MockMutableStateMockRecorder) GenerateEventLoadToken(event any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateEventLoadToken", reflect.TypeOf((*MockMutableState)(nil).GenerateEventLoadToken), event)
+}
+
 // GenerateMigrationTasks mocks base method.
 func (m *MockMutableState) GenerateMigrationTasks(targetClusters []string) ([]tasks.Task, int64, error) {
 	m.ctrl.T.Helper()
