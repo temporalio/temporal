@@ -1445,6 +1445,22 @@ second per poller by one physical queue manager`,
 		5,
 		`Number of simple priority levels (requires new matcher)`,
 	)
+	MatchingWorkflowAgingEnabled = NewTaskQueueBoolSetting(
+		"matching.workflowAgingEnabled",
+		false,
+		`If true, boost effectivePriority for tasks whose workflow has been observed longer.
+The boost is bounded below effectivePriorityFactor so it cannot cross a configured priority level.`,
+	)
+	MatchingWorkflowAgingFullBoostAfter = NewTaskQueueDurationSetting(
+		"matching.workflowAgingFullBoostAfter",
+		30*time.Minute,
+		`Workflow age at which the workflow-age boost saturates. The boost grows linearly with age up to this value.`,
+	)
+	MatchingWorkflowAgingTrackerSize = NewTaskQueueIntSetting(
+		"matching.workflowAgingTrackerSize",
+		10000,
+		`Maximum number of RunIds tracked per backlog manager for workflow-age aging. LRU-evicted when full.`,
+	)
 	MatchingBacklogTaskForwardTimeout = NewTaskQueueDurationSetting(
 		"matching.backlogTaskForwardTimeout",
 		60*time.Second,

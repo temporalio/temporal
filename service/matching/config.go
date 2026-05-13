@@ -91,6 +91,9 @@ type (
 		MembershipUnloadDelay                    dynamicconfig.DurationPropertyFn
 		TaskQueueInfoByBuildIdTTL                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PriorityLevels                           dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		WorkflowAgingEnabled                     dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+		WorkflowAgingFullBoostAfter              dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		WorkflowAgingTrackerSize                 dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
 		RateLimiterRefreshInterval    time.Duration
 		FairnessKeyRateLimitCacheSize dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -176,6 +179,9 @@ type (
 		TaskDeleteInterval             func() time.Duration
 		PriorityLevels                 priorityKey
 		DefaultPriorityKey             priorityKey
+		WorkflowAgingEnabled           func() bool
+		WorkflowAgingFullBoostAfter    func() time.Duration
+		WorkflowAgingTrackerSize       func() int
 
 		GetUserDataLongPollTimeout dynamicconfig.DurationPropertyFn
 		GetUserDataMinWaitTime     time.Duration
@@ -338,6 +344,9 @@ func NewConfig(
 		MembershipUnloadDelay:                    dynamicconfig.MatchingMembershipUnloadDelay.Get(dc),
 		TaskQueueInfoByBuildIdTTL:                dynamicconfig.TaskQueueInfoByBuildIdTTL.Get(dc),
 		PriorityLevels:                           dynamicconfig.MatchingPriorityLevels.Get(dc),
+		WorkflowAgingEnabled:                     dynamicconfig.MatchingWorkflowAgingEnabled.Get(dc),
+		WorkflowAgingFullBoostAfter:              dynamicconfig.MatchingWorkflowAgingFullBoostAfter.Get(dc),
+		WorkflowAgingTrackerSize:                 dynamicconfig.MatchingWorkflowAgingTrackerSize.Get(dc),
 		RateLimiterRefreshInterval:               time.Minute,
 		FairnessKeyRateLimitCacheSize:            dynamicconfig.MatchingFairnessKeyRateLimitCacheSize.Get(dc),
 		MaxFairnessKeyWeightOverrides:            dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
@@ -451,8 +460,17 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		TaskDeleteInterval: func() time.Duration {
 			return config.TaskDeleteInterval(ns.String(), taskQueueName, taskType)
 		},
-		PriorityLevels:             priorityLevels,
-		DefaultPriorityKey:         defaultPriorityKey,
+		PriorityLevels:     priorityLevels,
+		DefaultPriorityKey: defaultPriorityKey,
+		WorkflowAgingEnabled: func() bool {
+			return config.WorkflowAgingEnabled(ns.String(), taskQueueName, taskType)
+		},
+		WorkflowAgingFullBoostAfter: func() time.Duration {
+			return config.WorkflowAgingFullBoostAfter(ns.String(), taskQueueName, taskType)
+		},
+		WorkflowAgingTrackerSize: func() int {
+			return config.WorkflowAgingTrackerSize(ns.String(), taskQueueName, taskType)
+		},
 		GetUserDataLongPollTimeout: config.GetUserDataLongPollTimeout,
 		GetUserDataMinWaitTime:     1 * time.Second,
 		GetUserDataReturnBudget:    returnEmptyTaskTimeBudget,

@@ -57,6 +57,8 @@ type (
 		subqueuesByPriority map[priorityKey]subqueueIndex
 		priorityBySubqueue  map[subqueueIndex]priorityKey
 
+		ageTracker *workflowAgeTracker
+
 		logger           log.Logger
 		throttledLogger  log.ThrottledLogger
 		matchingClient   matchingservice.MatchingServiceClient
@@ -96,6 +98,7 @@ func newPriBacklogManager(
 		logger:              logger,
 		throttledLogger:     throttledLogger,
 		initializedError:    future.NewFuture[struct{}](),
+		ageTracker:          newWorkflowAgeTracker(config.WorkflowAgingTrackerSize),
 	}
 	bmg.taskWriter = newPriTaskWriter(bmg)
 	return bmg
@@ -436,4 +439,5 @@ func (c *priBacklogManagerImpl) setPriority(task *internalTask) {
 		// draining goes before active backlog so we're guaranteed to finish migration
 		task.effectivePriority -= effectivePriorityFactor * maxPriorityLevels
 	}
+	applyWorkflowAgeBoost(c.config, c.ageTracker, task)
 }

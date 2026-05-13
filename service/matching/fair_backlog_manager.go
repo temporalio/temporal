@@ -38,6 +38,8 @@ type (
 		subqueuesByPriority map[priorityKey]subqueueIndex
 		priorityBySubqueue  map[subqueueIndex]priorityKey
 
+		ageTracker *workflowAgeTracker
+
 		logger          log.Logger
 		throttledLogger log.ThrottledLogger
 		matchingClient  matchingservice.MatchingServiceClient
@@ -83,6 +85,7 @@ func newFairBacklogManager(
 		logger:              logger,
 		throttledLogger:     throttledLogger,
 		initializedError:    future.NewFuture[struct{}](),
+		ageTracker:          newWorkflowAgeTracker(config.WorkflowAgingTrackerSize),
 	}
 	bmg.taskWriter = newFairTaskWriter(bmg, bmg.newCounterForSubqueue)
 	return bmg
@@ -443,4 +446,5 @@ func (c *fairBacklogManagerImpl) setPriority(task *internalTask) {
 		// draining goes before active backlog so we're guaranteed to finish migration
 		task.effectivePriority -= effectivePriorityFactor * maxPriorityLevels
 	}
+	applyWorkflowAgeBoost(c.config, c.ageTracker, task)
 }
