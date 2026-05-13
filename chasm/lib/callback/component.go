@@ -16,7 +16,6 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -25,18 +24,14 @@ type CompletionSource interface {
 	GetNexusCompletion(ctx chasm.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
 }
 
-// CompletionSourceFn allows a function value to be used as a CompletionSource instance.
-type CompletionSourceFn func(chasm.Context, string) (nexusrpc.CompleteOperationOptions, error)
-
-func (csFunc CompletionSourceFn) GetNexusCompletion(ctx chasm.Context, requestID string) (nexusrpc.CompleteOperationOptions, error) {
-	return csFunc(ctx, requestID)
-}
-
 var (
 	_ chasm.RootComponent                            = (*Callback)(nil)
 	_ chasm.StateMachine[callbackspb.CallbackStatus] = (*Callback)(nil)
-	_ chasm.VisibilityMemoProvider                   = (*Callback)(nil)
 	_ chasm.VisibilitySearchAttributesProvider       = (*Callback)(nil)
+
+	// The Callback itself is a completion source. Either delegating to its parent
+	// or returning the user-supplied completion.
+	_ CompletionSource = (*Callback)(nil)
 )
 
 var executionStatusSearchAttribute = chasm.NewSearchAttributeKeyword(
@@ -125,20 +120,9 @@ func (c *Callback) ContextMetadata(ctx chasm.Context) map[string]string {
 
 // SearchAttributes implements chasm.VisibilitySearchAttributesProvider.
 func (c *Callback) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeKeyValue {
-	apiStatus := callbackStatusToAPIExecutionStatus(c.Status)
+	apiStatus := c.statusAsAPIExecutionStatus()
 	return []chasm.SearchAttributeKeyValue{
 		executionStatusSearchAttribute.Value(apiStatus.String()),
-	}
-}
-
-// Memo implements chasm.VisibilityMemoProvider. Returns the CallbackExecutionListInfo
-// as the memo for visibility queries.
-func (c *Callback) Memo(ctx chasm.Context) proto.Message {
-	return &callbackpb.CallbackExecutionListInfo{
-		CallbackId: ctx.ExecutionKey().BusinessID,
-		Status:     callbackStatusToAPIExecutionStatus(c.Status),
-		CreateTime: c.RegistrationTime,
-		CloseTime:  c.CloseTime,
 	}
 }
 
@@ -182,8 +166,7 @@ func (c *Callback) loadInvocationArgs(
 	_ chasm.NoValue,
 ) (invocable, error) {
 	// Get the completion result to be delivered.
-	completionSource := c.completionSource(ctx)
-	completion, err := completionSource.GetNexusCompletion(ctx, c.RequestId)
+	completion, err := c.GetNexusCompletion(ctx, c.RequestId)
 	if err != nil {
 		return nil, err
 	}
@@ -197,6 +180,9 @@ func (c *Callback) loadInvocationArgs(
 
 	// Setup the completion's headers.
 	completion.Header = callback.Header
+	// TODO(chrsmith):
+	// > Is this a behavior change for workflow callbacks?
+	// Yes? And I'm not sure if that's a good thing or not...
 	if callback.GetToken() != "" {
 		if completion.Header == nil {
 			completion.Header = nexus.Header{}
@@ -230,16 +216,6 @@ func (c *Callback) saveResult(
 	ctx chasm.MutableContext,
 	input saveResultInput,
 ) (chasm.NoValue, error) {
-	// If the callback was terminated while the invocation was in-flight,
-	// the result is no longer relevant. We'll just drop it silently.
-	//
-	// This shouldn't happen outside of tests, since the Nexus machinery
-	// would prevent an invalid transition anyways. (e.g. terminating
-	// an already terminated Callback.)
-	if c.LifecycleState(ctx).IsClosed() {
-		return nil, nil
-	}
-
 	switch r := input.result.(type) {
 	case invocationResultOK:
 		err := TransitionSucceeded.Apply(c, ctx, EventSucceeded{Time: ctx.Now(c)})
@@ -340,28 +316,19 @@ func callbackCompletionToNexusCompleteOperationOpts(
 	}
 }
 
-// completionSource returns the completionSource from the callback, which depends on whether it
-// is embedded or is running in standalone mode.
-func (c *Callback) completionSource(ctx chasm.Context) CompletionSource {
+// GetNexusCompletion returns the Nexus completion to be delivered for the callback.
+func (c *Callback) GetNexusCompletion(ctx chasm.Context, requestID string) (nexusrpc.CompleteOperationOptions, error) {
 	// Embedded callbacks use their parent component as a CompletionSource.
-	source, ok := c.ParentCompletionSource.TryGet(ctx)
-	if ok {
-		return source
+	if source, ok := c.ParentCompletionSource.TryGet(ctx); ok {
+		return source.GetNexusCompletion(ctx, requestID)
 	}
 
-	// For standalone completions, get the user-supplied value and convert it
-	// into the Nexus API type.
+	// For standalone completions, get the user-supplied value and convert it into the Nexus API type.
 	suppliedCompletion, ok := c.SuppliedCompletion.TryGet(ctx)
 	if !ok {
-		return CompletionSourceFn(func(_ chasm.Context, _ string) (nexusrpc.CompleteOperationOptions, error) {
-			return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternal("no completion available")
-		})
+		panic("no completion available")
 	}
-
-	convertOutcomeProtoFn := func(_ chasm.Context, _ string) (nexusrpc.CompleteOperationOptions, error) {
-		return callbackCompletionToNexusCompleteOperationOpts(c, suppliedCompletion)
-	}
-	return CompletionSourceFn(convertOutcomeProtoFn)
+	return callbackCompletionToNexusCompleteOperationOpts(c, suppliedCompletion)
 }
 
 // describe returns the CallbackExecutionInfo for the describe RPC. Only applies to standalone callbacks.
@@ -372,12 +339,13 @@ func (c *Callback) describe(ctx chasm.Context) (*callbackpb.CallbackExecutionInf
 	}
 
 	exInfo := ctx.ExecutionInfo()
+	exKey := ctx.ExecutionKey()
 	info := &callbackpb.CallbackExecutionInfo{
-		CallbackId:              ctx.ExecutionKey().BusinessID,
-		RunId:                   ctx.ExecutionKey().RunID,
+		CallbackId:              exKey.BusinessID,
+		RunId:                   exKey.RunID,
 		Callback:                apiCb,
-		Status:                  callbackStatusToAPIExecutionStatus(c.Status),
-		State:                   callbackStatusToAPIState(c.Status),
+		Status:                  c.statusAsAPIExecutionStatus(),
+		State:                   c.statusAsAPIState(),
 		Attempt:                 c.Attempt,
 		CreateTime:              c.RegistrationTime,
 		LastAttemptCompleteTime: c.LastAttemptCompleteTime,
@@ -416,9 +384,8 @@ func (c *Callback) outcome(ctx chasm.Context) *callbackpb.CallbackExecutionOutco
 	}
 }
 
-// callbackStatusToAPIExecutionStatus maps internal CallbackStatus to public API CallbackExecutionStatus.
-func callbackStatusToAPIExecutionStatus(status callbackspb.CallbackStatus) enumspb.CallbackExecutionStatus {
-	switch status {
+func (c *Callback) statusAsAPIExecutionStatus() enumspb.CallbackExecutionStatus {
+	switch c.Status {
 	case callbackspb.CALLBACK_STATUS_STANDBY,
 		callbackspb.CALLBACK_STATUS_SCHEDULED,
 		callbackspb.CALLBACK_STATUS_BACKING_OFF:
@@ -434,9 +401,8 @@ func callbackStatusToAPIExecutionStatus(status callbackspb.CallbackStatus) enums
 	}
 }
 
-// callbackStatusToAPIState maps internal CallbackStatus to public API CallbackState.
-func callbackStatusToAPIState(status callbackspb.CallbackStatus) enumspb.CallbackState {
-	switch status {
+func (c *Callback) statusAsAPIState() enumspb.CallbackState {
+	switch c.Status {
 	case callbackspb.CALLBACK_STATUS_STANDBY:
 		return enumspb.CALLBACK_STATE_STANDBY
 	case callbackspb.CALLBACK_STATUS_SCHEDULED:

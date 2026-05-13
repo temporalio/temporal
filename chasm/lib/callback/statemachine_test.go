@@ -261,20 +261,3 @@ func TestTerminatedTransition(t *testing.T) {
 		})
 	}
 }
-
-func TestSaveResult_TerminatedWhileInFlight(t *testing.T) {
-	// If the callback was terminated while an invocation was in-flight,
-	// saveResult should drop the result silently.
-	cb := &Callback{
-		CallbackState: &callbackspb.CallbackState{
-			Status: callbackspb.CALLBACK_STATUS_TERMINATED,
-		},
-	}
-	mctx := &chasm.MockMutableContext{}
-	_, err := cb.saveResult(mctx, saveResultInput{
-		result:      invocationResultOK{},
-		retryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
-	})
-	require.NoError(t, err)
-	require.Equal(t, callbackspb.CALLBACK_STATUS_TERMINATED, cb.StateMachineState())
-}
