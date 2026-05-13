@@ -36,11 +36,10 @@ func (h *callbackHandler) StartCallbackExecution(
 
 	// Gather all the data necessary to create the Callback component.
 	input := &createStandaloneCallbackInput{
-		CallbackID:                       frontendReq.GetCallbackId(),
-		RequestID:                        frontendReq.GetRequestId(),
-		CompletionScheduleToCloseTimeout: frontendReq.GetScheduleToCloseTimeout(),
-		Completion:                       frontendReq.GetCompletion(),
-		SearchAttributes:                 frontendReq.GetSearchAttributes().GetIndexedFields(),
+		RequestID:              frontendReq.GetRequestId(),
+		ScheduleToCloseTimeout: frontendReq.GetScheduleToCloseTimeout(),
+		Completion:             frontendReq.GetCompletion(),
+		SearchAttributes:       frontendReq.GetSearchAttributes().GetIndexedFields(),
 	}
 
 	// Convert the API Callback to internal Callback proto.
@@ -297,12 +296,11 @@ func (h *callbackHandler) DeleteCallbackExecution(
 
 // createStandaloneCallbackInput is the bundle of inputs to the CHASM execution.
 type createStandaloneCallbackInput struct {
-	RequestID                        string
-	Callback                         *callbackspb.Callback
-	CallbackID                       string
-	CompletionScheduleToCloseTimeout *durationpb.Duration
-	Completion                       *callbackpb.CallbackExecutionCompletion
-	SearchAttributes                 map[string]*commonpb.Payload
+	RequestID              string
+	Callback               *callbackspb.Callback
+	ScheduleToCloseTimeout *durationpb.Duration
+	Completion             *callbackpb.CallbackExecutionCompletion
+	SearchAttributes       map[string]*commonpb.Payload
 }
 
 // createStandaloneCallback constructs a new Callback component in standalone mode.
@@ -313,18 +311,13 @@ func createStandaloneCallback(
 ) (*Callback, error) {
 	now := timestamppb.Now()
 
-	// Create child Callback component.
-	opts := newStandaloneCallbackOpts{
-		RequestID:        input.RequestID,
-		RegistrationTime: now,
-		Callback:         input.Callback,
+	// Create Callback component.
+	cb := NewEmbeddedCallback(ctx, input.RequestID, now, input.Callback)
+	cb.ScheduleToCloseTimeout = input.ScheduleToCloseTimeout
+	cb.SuppliedCompletion = chasm.NewDataField(ctx, input.Completion)
 
-		CallbackID:             input.CallbackID,
-		ScheduleToCloseTimeout: input.CompletionScheduleToCloseTimeout,
-		Completion:             input.Completion,
-		SearchAttributes:       input.SearchAttributes,
-	}
-	cb := newStandaloneCallback(ctx, opts)
+	visibility := chasm.NewVisibilityWithData(ctx, input.SearchAttributes, nil)
+	cb.Visibility = chasm.NewComponentField(ctx, visibility)
 
 	// Immediately schedule the callback for invocation.
 	if err := TransitionScheduled.Apply(cb, ctx, EventScheduled{}); err != nil {
@@ -332,7 +325,7 @@ func createStandaloneCallback(
 	}
 
 	// Schedule the timeout as applicable.
-	if durationProto := input.CompletionScheduleToCloseTimeout; durationProto != nil {
+	if durationProto := input.ScheduleToCloseTimeout; durationProto != nil {
 		if duration := durationProto.AsDuration(); duration > 0 {
 			timeoutTime := now.AsTime().Add(duration)
 			ctx.AddTask(

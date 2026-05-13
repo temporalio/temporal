@@ -33,13 +33,10 @@ func (csFunc CompletionSourceFn) GetNexusCompletion(ctx chasm.Context, requestID
 }
 
 var (
-	_ chasm.Component                                = (*Callback)(nil)
+	_ chasm.RootComponent                            = (*Callback)(nil)
 	_ chasm.StateMachine[callbackspb.CallbackStatus] = (*Callback)(nil)
-
-	// Capabilities only supported/used for standalone callbacks.
-	_ chasm.RootComponent                      = (*Callback)(nil)
-	_ chasm.VisibilityMemoProvider             = (*Callback)(nil)
-	_ chasm.VisibilitySearchAttributesProvider = (*Callback)(nil)
+	_ chasm.VisibilityMemoProvider                   = (*Callback)(nil)
+	_ chasm.VisibilitySearchAttributesProvider       = (*Callback)(nil)
 )
 
 var executionStatusSearchAttribute = chasm.NewSearchAttributeKeyword(
@@ -58,11 +55,11 @@ type Callback struct {
 	// of its potential size, and to not overload CallbackState::LastAttemptFailure.
 	TerminalFailure chasm.Field[*failurepb.Failure]
 
-	// For most callbacks, the completion result is obtained from the parent component.
-	// e.g. the Workflow result to be delivered. However, for standalone callbacks, there
-	// is no parent and the user-supplied SuppliedCompletion will be used instead.
+	// For embedded callbacks, the completion result is obtained from the parent component.
+	// e.g. the Workflow result to be delivered.
 	ParentCompletionSource chasm.ParentPtr[CompletionSource]
-	SuppliedCompletion     chasm.Field[*callbackpb.CallbackExecutionCompletion]
+	// The user-supplied completion for standalone callbacks.
+	SuppliedCompletion chasm.Field[*callbackpb.CallbackExecutionCompletion]
 
 	// Visibility sub-component for search attributes and memo indexing.
 	Visibility chasm.Field[*chasm.Visibility]
@@ -83,7 +80,6 @@ func NewEmbeddedCallback(
 			Callback:         cb,
 			Status:           callbackspb.CALLBACK_STATUS_STANDBY,
 		},
-		TerminalFailure: chasm.NewDataField[*failurepb.Failure](ctx, nil),
 	}
 }
 
@@ -92,28 +88,9 @@ type newStandaloneCallbackOpts struct {
 	RegistrationTime *timestamppb.Timestamp
 	Callback         *callbackspb.Callback
 
-	CallbackID             string
 	ScheduleToCloseTimeout *durationpb.Duration
 	Completion             *callbackpb.CallbackExecutionCompletion
 	SearchAttributes       map[string]*commonpb.Payload
-}
-
-// newStandaloneCallback returns a new Callback component which will deliver the supplied
-// completion result.
-func newStandaloneCallback(
-	ctx chasm.MutableContext,
-	opts newStandaloneCallbackOpts,
-) *Callback {
-	cb := NewEmbeddedCallback(ctx, opts.RequestID, opts.RegistrationTime, opts.Callback)
-
-	// Add standalone-specific fields.
-	cb.ScheduleToCloseTimeout = opts.ScheduleToCloseTimeout
-	cb.SuppliedCompletion = chasm.NewDataField(ctx, opts.Completion)
-
-	visibility := chasm.NewVisibilityWithData(ctx, opts.SearchAttributes, nil)
-	cb.Visibility = chasm.NewComponentField(ctx, visibility)
-
-	return cb
 }
 
 func (c *Callback) LifecycleState(_ chasm.Context) chasm.LifecycleState {

@@ -130,7 +130,6 @@ var TransitionSucceeded = chasm.NewTransition(
 		cb.recordAttempt(now)
 		cb.CloseTime = timestamppb.New(now)
 		cb.LastAttemptFailure = nil
-		cb.TerminalFailure = chasm.NewDataField[*failurepb.Failure](ctx, nil)
 		return nil
 	},
 )

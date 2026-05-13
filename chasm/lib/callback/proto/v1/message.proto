@@ -56,8 +56,11 @@ enum CallbackStatus {
   CALLBACK_STATUS_FAILED = 4;
   // Callback has succeeded.
   CALLBACK_STATUS_SUCCEEDED = 5;
-  // Callback was terminated by request.
+  // Callback was terminated by request. Only relevant for standalone callbacks.
   CALLBACK_STATUS_TERMINATED = 6;
+  // Callback exceeded the schedule-to-close timeout.
+  CALLBACK_STATUS_TIMED_OUT = 7;
+  // TODO(chrsmith): Wire this new state in.
 }
 
 message Callback {
