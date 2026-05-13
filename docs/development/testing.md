@@ -163,6 +163,7 @@ will ultimately fail the test.
 ### protorequire package
 
 Use `protorequire.ProtoEqual` to compare proto messages with proto semantics.
+Prefer a single `ProtoEqual` call over asserting fields one-by-one, since it catches unexpected field changes and keeps the expected value next to the assertion.
 
 To ignore specific fields on the top-level message (e.g. non-deterministic timestamps), pass `protorequire.IgnoreFields`:
 
