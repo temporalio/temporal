@@ -37,13 +37,9 @@ message CallbackState {
   // The time when the callback reached a terminal state.
   google.protobuf.Timestamp close_time = 11;
 
-  // (standalone only) User-supplied business ID set when StartCallbackExecution() is
-  // called. Used to identify the callback for operations like Describe- or Terminate-.
-  string callback_id = 12;
-
   // (standalone only) Schedule-to-close timeout from when StartCallbackExecution()
   // is called to when the result gets delivered.
-  google.protobuf.Duration schedule_to_close_timeout = 13;
+  google.protobuf.Duration schedule_to_close_timeout = 12;
 }
 
 // Status of a callback.

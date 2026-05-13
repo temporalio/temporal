@@ -107,7 +107,6 @@ func newStandaloneCallback(
 	cb := NewEmbeddedCallback(ctx, opts.RequestID, opts.RegistrationTime, opts.Callback)
 
 	// Add standalone-specific fields.
-	cb.CallbackId = opts.CallbackID
 	cb.ScheduleToCloseTimeout = opts.ScheduleToCloseTimeout
 	cb.SuppliedCompletion = chasm.NewDataField(ctx, opts.Completion)
 
@@ -140,11 +139,11 @@ func (c *Callback) SetStateMachineState(status callbackspb.CallbackStatus) {
 	c.Status = status
 }
 
-func (c *Callback) ContextMetadata(_ chasm.Context) map[string]string {
+func (c *Callback) ContextMetadata(ctx chasm.Context) map[string]string {
 	return map[string]string{
 		"RequestID": c.RequestId,
 		// Only set for standalone callbacks.
-		"CallbackID": c.CallbackId,
+		"CallbackID": ctx.ExecutionKey().BusinessID,
 	}
 }
 
@@ -160,7 +159,7 @@ func (c *Callback) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeKe
 // as the memo for visibility queries.
 func (c *Callback) Memo(ctx chasm.Context) proto.Message {
 	return &callbackpb.CallbackExecutionListInfo{
-		CallbackId: c.CallbackId,
+		CallbackId: ctx.ExecutionKey().BusinessID,
 		Status:     callbackStatusToAPIExecutionStatus(c.Status),
 		CreateTime: c.RegistrationTime,
 		CloseTime:  c.CloseTime,
@@ -398,7 +397,7 @@ func (c *Callback) describe(ctx chasm.Context) (*callbackpb.CallbackExecutionInf
 
 	exInfo := ctx.ExecutionInfo()
 	info := &callbackpb.CallbackExecutionInfo{
-		CallbackId:              c.CallbackId,
+		CallbackId:              ctx.ExecutionKey().BusinessID,
 		RunId:                   ctx.ExecutionKey().RunID,
 		Callback:                apiCb,
 		Status:                  callbackStatusToAPIExecutionStatus(c.Status),

@@ -138,12 +138,9 @@ type CallbackState struct {
 	TerminateRequestId string `protobuf:"bytes,10,opt,name=terminate_request_id,json=terminateRequestId,proto3" json:"terminate_request_id,omitempty"`
 	// The time when the callback reached a terminal state.
 	CloseTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
-	// (standalone only) User-supplied business ID set when StartCallbackExecution() is
-	// called. Used to identify the callback for operations like Describe- or Terminate-.
-	CallbackId string `protobuf:"bytes,12,opt,name=callback_id,json=callbackId,proto3" json:"callback_id,omitempty"`
 	// (standalone only) Schedule-to-close timeout from when StartCallbackExecution()
 	// is called to when the result gets delivered.
-	ScheduleToCloseTimeout *durationpb.Duration `protobuf:"bytes,13,opt,name=schedule_to_close_timeout,json=scheduleToCloseTimeout,proto3" json:"schedule_to_close_timeout,omitempty"`
+	ScheduleToCloseTimeout *durationpb.Duration `protobuf:"bytes,12,opt,name=schedule_to_close_timeout,json=scheduleToCloseTimeout,proto3" json:"schedule_to_close_timeout,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -246,13 +243,6 @@ func (x *CallbackState) GetCloseTime() *timestamppb.Timestamp {
 		return x.CloseTime
 	}
 	return nil
-}
-
-func (x *CallbackState) GetCallbackId() string {
-	if x != nil {
-		return x.CallbackId
-	}
-	return ""
 }
 
 func (x *CallbackState) GetScheduleToCloseTimeout() *durationpb.Duration {
@@ -406,7 +396,7 @@ var File_temporal_server_chasm_lib_callback_proto_v1_message_proto protoreflect.
 
 const file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"9temporal/server/chasm/lib/callback/proto/v1/message.proto\x12,temporal.server.chasm.lib.callbacks.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\"\xa5\x06\n" +
+	"9temporal/server/chasm/lib/callback/proto/v1/message.proto\x12,temporal.server.chasm.lib.callbacks.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\"\x84\x06\n" +
 	"\rCallbackState\x12R\n" +
 	"\bcallback\x18\x01 \x01(\v26.temporal.server.chasm.lib.callbacks.proto.v1.CallbackR\bcallback\x12G\n" +
 	"\x11registration_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x10registrationTime\x12T\n" +
@@ -420,10 +410,8 @@ const file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc = "
 	"\x14terminate_request_id\x18\n" +
 	" \x01(\tR\x12terminateRequestId\x129\n" +
 	"\n" +
-	"close_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\x12\x1f\n" +
-	"\vcallback_id\x18\f \x01(\tR\n" +
-	"callbackId\x12T\n" +
-	"\x19schedule_to_close_timeout\x18\r \x01(\v2\x19.google.protobuf.DurationR\x16scheduleToCloseTimeout\"\xf4\x02\n" +
+	"close_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\x12T\n" +
+	"\x19schedule_to_close_timeout\x18\f \x01(\v2\x19.google.protobuf.DurationR\x16scheduleToCloseTimeout\"\xf4\x02\n" +
 	"\bCallback\x12T\n" +
 	"\x05nexus\x18\x02 \x01(\v2<.temporal.server.chasm.lib.callbacks.proto.v1.Callback.NexusH\x00R\x05nexus\x122\n" +
 	"\x05links\x18d \x03(\v2\x1c.temporal.api.common.v1.LinkR\x05links\x1a\xcc\x01\n" +
