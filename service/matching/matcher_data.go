@@ -43,6 +43,8 @@ const (
 	syncMatchNoPoller
 	// A poller was available but rate limiting blocked the match.
 	syncMatchRateLimited
+	// The task was matched to a poller but RecordTaskStarted failed (e.g. busy workflow).
+	syncMatchStartFailed
 )
 
 type taskForwarderType int32

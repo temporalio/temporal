@@ -443,7 +443,7 @@ reredirectTask:
 	if isActive {
 		outcome, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
 		syncMatched = outcome == syncMatchSuccess
-		if syncMatched && !pm.shouldBacklogSyncMatchTaskOnError(err) {
+		if syncMatched {
 			// Only fire hooks for non-forwarded tasks. Forwarded tasks already had hooks fired
 			// on the child partition that originally received the task.
 			if params.forwardInfo == nil {
@@ -494,6 +494,8 @@ func syncMatchOutcomeToHook(outcome syncMatchOutcome) hooks.SyncMatchOutcome {
 		return hooks.SyncMatchOutcomeNoPoller
 	case syncMatchRateLimited:
 		return hooks.SyncMatchOutcomeRateLimited
+	case syncMatchStartFailed:
+		return hooks.SyncMatchOutcomeStartFailed
 	}
 	return hooks.SyncMatchOutcomeUnspecified
 }
@@ -507,16 +509,6 @@ func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context
 			SyncMatchOutcome:  hookOutcome,
 		})
 	}
-}
-
-func (pm *taskQueuePartitionManagerImpl) shouldBacklogSyncMatchTaskOnError(err error) bool {
-	var resourceExhaustedErr *serviceerror.ResourceExhausted
-	if err != nil && errors.As(err, &resourceExhaustedErr) {
-		if resourceExhaustedErr.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
-			return true
-		}
-	}
-	return false
 }
 
 func (pm *taskQueuePartitionManagerImpl) isActiveInCluster() (bool, error) {
